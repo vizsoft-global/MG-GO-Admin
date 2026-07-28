@@ -1,0 +1,35 @@
+import {
+  AlertTriangle,
+  Bell,
+  Bike,
+  ClipboardCheck,
+  Inbox,
+  LayoutDashboard,
+  LifeBuoy,
+  MapPin,
+  Package,
+  Radar,
+  Settings,
+  Truck,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
+import type { NavIcon } from "@/config/navigation";
+
+export const NAV_ICON_MAP: Record<NavIcon, LucideIcon> = {
+  LayoutDashboard,
+  Users,
+  Radar,
+  Truck,
+  Package,
+  MapPin,
+  Bike,
+  ClipboardCheck,
+  Inbox,
+  AlertTriangle,
+  Wallet,
+  Bell,
+  LifeBuoy,
+  Settings,
+};

@@ -1,0 +1,1 @@
+-- Placeholder: applied on test remote (original migration was empty).

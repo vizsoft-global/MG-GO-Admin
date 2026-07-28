@@ -1,0 +1,14 @@
+# Copy to Pulumi.production.yaml and fill secrets via:
+#   bash scripts/setup-secrets.sh production
+config:
+  dpd-infra:environment: production
+  dpd-infra:supabaseProjectName: dpd-production
+  dpd-infra:supabaseOrganizationId: likgpozawcekbcqzsstb
+  dpd-infra:supabaseRegion: ap-south-1
+  dpd-infra:gcpProjectId: musallam-delivery-prod
+  dpd-infra:gcpOrgId: YOUR_GCP_ORG_ID
+  dpd-infra:gcpBillingAccount: YOUR_BILLING_ACCOUNT_ID
+  dpd-infra:r2BucketName: dpd-private-prod
+  dpd-infra:cloudflareAccountId: 04c485faa34d67d1758b61465202e9ce
+  dpd-infra:vercelProjectName: dpdadmin-prod
+  dpd-infra:vercelTeamId: team_54JuMptqR0dmTTbGza0Iawbx

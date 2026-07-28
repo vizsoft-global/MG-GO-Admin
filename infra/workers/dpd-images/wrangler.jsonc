@@ -1,0 +1,29 @@
+{
+  "name": "dpd-images",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-01",
+  "account_id": "04c485faa34d67d1758b61465202e9ce",
+  "images": {
+    "binding": "IMAGES"
+  },
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "dpd-private-prod"
+    }
+  ],
+  "env": {
+    "testing": {
+      "name": "dpd-images-testing",
+      "images": {
+        "binding": "IMAGES"
+      },
+      "r2_buckets": [
+        {
+          "binding": "R2",
+          "bucket_name": "dpd-private"
+        }
+      ]
+    }
+  }
+}

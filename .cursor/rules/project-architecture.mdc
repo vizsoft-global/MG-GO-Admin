@@ -1,0 +1,253 @@
+---
+description: DPD Control Tower — living architecture reference. Read before structural changes; update on every module PR.
+alwaysApply: true
+---
+
+# DPD Control Tower — Architecture (living reference)
+
+> **Maintain this file.** Append to **Change log** on every structural change. Tag entries `[admin+app]` when mobile handoff must update too.
+
+**Product:** Enterprise rider workforce Control Tower (Musallam / DPD).  
+**Admin:** Next.js 16 · `dpdadmin/` · https://dpdadmin.vercel.app  
+**Driver app:** Separate repo/session — paste [`docs/DRIVER_APP_HANDOFF.md`](../docs/DRIVER_APP_HANDOFF.md)  
+**Backend:** Supabase `ytfmsgckjatiserpgdbz` (Postgres + Auth + Storage + Realtime)
+
+---
+
+## System context
+
+```mermaid
+flowchart LR
+  DriverApp["Driver App mobile"] -->|"OTP auth, deliveries, requests, chat"| Supabase["Supabase"]
+  AdminPanel["Admin Panel web"] -->|"verify, approve, monitor"| Supabase
+  Partners["Talabat / DoorDash / UberEats"] -->|"external orders"| DriverApp
+  Supabase -->|"realtime"| AdminPanel
+  Supabase -->|"push"| DriverApp
+```
+
+Order allocation is **external** (partner apps). We own: monitoring, compliance, payroll, support.
+
+---
+
+## Admin modules (build order)
+
+| # | Route | Permission | Driver app counterpart |
+|---|-------|------------|----------------------|
+| 1 | `/dashboard` | `dashboard.view` | Home |
+| 2 | `/drivers`, `/drivers/[id]`, `/drivers/new` | `drivers.view` / `drivers.manage` | Profile |
+| 3 | `/deliveries`, `/zones` | `deliveries.view`, `zones.view` | Deliveries + zone geofence (map CRUD at `/zones`) |
+| 4 | `/vehicles`, `/vehicles/[id]` | `vehicles.view` | Vehicle |
+| 5 | `/attendance` | `attendance.view` / `attendance.manage` | Auto check-in / geofence |
+| 6 | `/requests` | `requests.view` / `requests.manage` | Loan, Leave, Fuel, Complaint |
+| 7 | `/wrong-actions` | `wrong_actions.view` | Wrong action details |
+| 8 | `/earnings`, `/earnings-calculation` | `earnings.view` / `earnings.manage` | Earnings + bumper bonus |
+| — | `/settings/logs` | `audit.view` / `audit.export` | — |
+| — | `/delivery-rules`, `/incentive-rules`, `/earnings-calculation` | `earnings.view` / `earnings.manage` | Rules & calc (`/dpd` redirects) |
+| 9 | `/notifications` | `notifications.view` | Notifications + hygiene tasks |
+| 10 | `/support` | `support.view` | Chat, SOS, Appointments |
+| — | `/settings` | `settings.view` | — |
+| — | `/settings/menu-editor` | super admin | Per-role sidebar layout (DB + registry merge) |
+| — | `/settings/languages` | super admin | Locales table + translation editor |
+| — | `/restaurants` | `restaurants.view` / `restaurants.manage` | Restaurant directory (not under DPD) |
+| — | `/delivery-rules`, `/incentive-rules`, `/earnings-calculation` | `earnings.view` / `earnings.manage` | DPD rules & earnings recalc |
+
+**Next implementation:** Drivers → Vehicles & Zones → Live Deliveries (ops first).
+
+---
+
+## Directory map
+
+| Path | Purpose |
+|------|---------|
+| `src/app/[locale]/(dashboard)/` | All admin routes |
+| `src/features/<domain>/` | Domain actions + forms |
+| `src/components/dashboard/` | `KpiCard`, `TabBar`, `StatusPill` (legacy shells re-export from `src/components/app/`) |
+| `src/lib/audit/` | `logAdminActivity`, audit list/export actions |
+| `src/lib/query/` | TanStack Query: `makeQueryClient`, `queryKeys`, server `getServerQueryClient` |
+| `src/components/providers/` | `QueryProvider`, devtools (dev only) |
+| `src/config/navigation.ts` | Legacy nav seeds (superseded at runtime by menu merge) |
+| `src/lib/menu/menu-registry.ts` | `MENU_REGISTRY`, icons, default groups |
+| `src/lib/menu/menu-merge.ts` | `mergeMenu`, `resolveForSidebar` |
+| `src/services/menu-config-service.ts` | Supabase CRUD for `menu_configs` |
+| `src/hooks/use-sidebar-menu.ts` | Sidebar menu load + cache invalidation |
+| `docs/DESIGN_SYSTEM.md` | UI rules (shadcn + app components) |
+| `src/components/app/` | AppPage, AppListCard, AppSettingsLayout, etc. |
+| `docs/DRIVER_APP_HANDOFF.md` | **Mobile app single-file handoff** |
+| `supabase/migrations/` | Schema |
+
+---
+
+## Data fetching (RSC + TanStack Query)
+
+| Layer | Use when |
+|-------|-----------|
+| **Server Components** | Auth, static shells, first paint, SEO-safe reads (Supabase server client) |
+| **TanStack Query** (`@tanstack/react-query`) | Live lists, filters, pagination, polling, mutations + cache invalidation in **Client Components** |
+| **Server Actions** | Mutations that must stay on server (already used for settings/auth) |
+
+- Provider: `QueryProvider` in `src/app/[locale]/layout.tsx` (one client per browser tab).
+- Defaults: `staleTime` 60s, `gcTime` 5m, `refetchOnWindowFocus: false` (override per query for realtime UIs).
+- Keys: `src/lib/query/query-keys.ts` — always invalidate via factories, not raw arrays.
+- SSR prefetch (optional later): `getServerQueryClient` + `dehydrate` / `HydrationBoundary` around a client subtree.
+
+**Future-friendly adds (evaluate when building data-heavy modules):**
+
+- **TanStack Table** — large sortable/filterable admin grids (pairs well with Query).
+- **nuqs** — URL-backed filter state (shareable/bookmarkable list views).
+- **Supabase Realtime** — subscribe in a client hook; invalidate relevant `queryKeys` on events.
+
+---
+
+## Auth (do not bypass)
+
+1. `src/middleware.ts` — intl + session; maintenance; pending; claim redirect
+2. `(dashboard)/layout.tsx` — `requireAuth` → approved + `admin_role_id`
+3. Each page — `requirePermission(locale, "...")` (DB-backed permission set)
+
+**Panel access:** `profiles.role = staff`, `approval_status = approved`, `admin_role_id` set, not archived.  
+**Sign up:** `/signup` → pending (or `/setup/claim-super-admin` if `app_settings.super_admin_claimed` is false).  
+**Super admin:** `admin_roles.is_super_admin` — claim once via `claim_super_admin()` or seeded on existing prod.  
+**Drivers:** `profiles.role = rider` — **no admin panel access**.
+
+Auth routes: `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/pending-approval`, `/maintenance`, `/setup/claim-super-admin`.
+
+---
+
+## Permissions (`src/lib/auth/permissions.ts`)
+
+Pattern: `<module>.view` and `<module>.manage` where applicable. Slugs in TypeScript; **assignments in DB**.
+
+| Table | Purpose |
+|-------|---------|
+| `admin_permissions` | Slug, label, category (seeded) |
+| `admin_roles` | `super_admin`, `administrator`, `operator` + custom |
+| `admin_role_permissions` | Role ↔ permission junction |
+| `profiles.admin_role_id` | Panel role per user |
+
+`hasPermissionInSet(permissions, slug, isSuperAdmin)` — super admin bypasses all checks.  
+Cache: `getAllAdminRoles()` tag `admin-roles`. Settings matrix invalidates on save.
+
+When adding a permission: seed slug in migration, add to `PERMISSIONS`, `navigation.ts`, messages, **and** `DRIVER_APP_HANDOFF.md` if app-facing.
+
+---
+
+## Database schema (core tables)
+
+Migrations: `20260518000000_dpd_core_schema.sql`, `20260518120000_app_settings.sql`, `20260519000000_rbac_approval_setup.sql`, `20260520120000_menu_configs_locales.sql`
+
+| Admin / ops | Tables / columns |
+|-------------|------------------|
+| RBAC | `admin_permissions`, `admin_roles`, `admin_role_permissions` |
+| Approval | `profiles.approval_status`, `approved_at`, `approved_by` |
+| Ops flags | `app_settings.maintenance_mode`, `super_admin_claimed`, `super_admin_user_id` |
+| Menu editor | `menu_configs` (per `admin_roles.slug`, JSON tree) |
+| Locales | `locales` (enabled/default/dir; translations in `src/messages/{locale}.json`) |
+
+| Group | Tables |
+|-------|--------|
+| Workforce | `partners`, `zones`, `drivers`, `driver_documents`, `driver_assets` |
+| Fleet | `vehicles` |
+| Ops | `deliveries`, `attendance_logs`, `driver_sessions` |
+| Compliance | `wrong_actions`, `hygiene_tasks`, `hygiene_submissions` |
+| HR | `requests`, `loan_terms` |
+| Payroll | `offers` (legacy), `incentive_rules`, `driver_earnings_daily`, `driver_wallet_entries`, `delivery_rules`, `restaurants` |
+| Audit | `admin_activity_logs` (staff read/insert; view/read/auth/export actions) |
+| Comms | `notifications`, `support_*`, `appointment_slots`, `appointments` |
+
+**RLS:** Staff = `is_admin_panel_user()` on all tables. Driver policies added per mobile module (see handoff doc).
+
+**Enums:** `driver_status`, `delivery_status`, `request_type`, `request_status`, `severity_level`, etc. — see migration file.
+
+---
+
+## UI conventions
+
+- Design: `docs/DESIGN_SYSTEM.md`, `.cursor/rules/ui-system.mdc`
+- List pages: `<ModuleListShell>` = PageHeader + KpiGrid + TabBar + DataTableShell
+- Theme tokens only — no raw hex
+- Table headers: `text-xs font-semibold text-accent`
+- i18n: `en` + `ar`, keys under `pages.<module>`
+
+---
+
+## Realtime channels (documented, wire per module)
+
+| Channel | Use |
+|---------|-----|
+| `deliveries:live` | Admin live map + verify queue |
+| `driver_sessions` | On/off duty status |
+| `support:thread:{id}` | Chat |
+| `notifications:driver:{id}` | In-app notification feed |
+
+---
+
+## Storage
+
+### Cloudflare R2 (private bucket — server env `R2_*`)
+
+| Prefix | Path pattern |
+|--------|----------------|
+| `drivers/intakes/{intake_id}/` | `{doc_type}.{ext}` — admin Add Driver |
+| `drivers/{driver_id}/` | `{doc_type}.{ext}` — post OTP link |
+| `partners/{partner_id}/` | `logo.{ext}` — `partners.logo_url` stores object key |
+
+Presigned GET for staff UI; see `src/lib/storage/r2-client.ts`.
+
+### Supabase Storage buckets
+
+| Bucket | App path pattern |
+|--------|------------------|
+| `branding` | `logo.{png\|jpg\|webp\|svg}` (admin panel logo; public read) |
+| `delivery-proofs` | `{driver_id}/{delivery_id}.jpg` |
+| `fuel-receipts` | `{driver_id}/{request_id}.jpg` |
+| `hygiene-photos` | `{driver_id}/{task_id}.jpg` |
+| `support-attachments` | `{thread_id}/{message_id}` |
+
+Deprecated (migrated to R2): `driver-intakes`, `partner-logos`, `driver-documents`.
+
+---
+
+## Mobile app synergy (required)
+
+Any change to **schema, enum, RLS, storage bucket, realtime channel, or push payload** must update [`docs/DRIVER_APP_HANDOFF.md`](../docs/DRIVER_APP_HANDOFF.md) in the **same change**.
+
+Change-log format:
+- `[admin+app] 2026-05-18 — Added deliveries.rejection_reason`
+- `[admin only] 2026-05-18 — Dashboard chart layout`
+
+---
+
+## Local dev
+
+- Node **20 LTS** (`.nvmrc`) — Node 25 breaks Next
+- `npm run dev` · `npm run bootstrap:admin` · `npm run new:page`
+
+---
+
+## Change log
+
+- `[admin only] 2026-06-18` — Delivery Orders Report on `/deliveries`: shift-start-day attribution via `report_delivery_orders` RPC (uses `driver_daily_shifts` windows + nearest-shift fallback), date-range modal, styled `.xlsx` matrix export with red zero-day cells. Migration `20260818120000_delivery_orders_report.sql`.
+- `[admin+app] 2026-06-18` — Document expiry tracking: `document_tracking` table, per-doc toggle + expiry date + lead-day notification chips on driver upload, `/document-expiry` admin compliance page (expired / 1 week / 1 month / 3 months), replace/update flows, `document_expiry` automation reads per-doc lead days. Permissions `documents.view`/`documents.manage`. Migration `20260818110000_document_expiry_tracking.sql`.
+- `[admin+app] 2026-06-18` — Rider employment category (`in_house` / `outsourced`) on `driver_intakes` + `drivers`; admin create/edit segment, list column, detail field; copied on approve. Migration `20260818100000_driver_rider_category.sql`.
+- `[admin+app] 2026-06-10` — Optional driver nationality (ISO alpha-2) on `driver_intakes` + `drivers`; searchable country picker on admin create/edit; copied on approve. Migration `20260810100000_driver_nationality.sql`.
+- `[admin only] 2026-07-04` — Assets inventory module at `/assets`: `asset_catalog` + `asset_assignments` (quantity-based stock), admin KPI/list/detail/CRUD, permissions `assets.view`/`assets.manage`; driver form reads catalog instead of hardcoded toggles; assignments sync on create/edit/approve. Migration `20260704100000_asset_inventory.sql`.
+- `[admin+app] 2026-05-26` — Restaurant delivery geofences: `restaurant_geofences` table (inclusion/exclusion polygon+circle per restaurant); full-page admin editor at `/restaurants/new` and `/restaurants/[id]/edit`; `driver_is_within_delivery_range` and `driver_get_delivery_proximity_context` extended. Migration `20260626900000_restaurant_geofences.sql`.
+- `[admin+app] 2026-05-26` — Admin-first driver approval: RPC `admin_approve_driver` (auth user + profile/drivers + passcode on approve); employee ID mandatory unique 1–8 digits on `driver_intakes` + `drivers`; bulk import at `/drivers` (upload → map → preview → apply, XLSX template, optional approve-immediately); UI **Verify & approve** on list + detail.
+- `[admin+app] 2026-05-25` — Notification Center v2: new `notification_*` schema (campaigns, templates, targeting snapshots, dispatch runs/items, provider events, automations, rate-limit/dedupe, analytics daily, remote config, timeline, device tokens), new admin routes (`/notifications`, `/notifications/new`, `/notifications/[id]`, `/notifications/history`, `/notifications/automations`, `/notifications/templates`, `/notifications/analytics`), priority-based approval permissions (`notifications.approve`, `notifications.send`, `notifications.export`), and Firebase provider integration contract (`FIREBASE_*` envs + versioned payload handoff in `docs/DRIVER_APP_HANDOFF.md`).
+- `[admin+app] 2026-06-19` — Attendance module `/attendance`: duty toggle writes `attendance_logs` via extended `driver_set_duty_state`; admin Live/Logs/Exceptions tabs; `admin_correct_attendance` RPC + `attendance.manage` permission; realtime on `attendance_logs`. Migration `20260619100000_attendance_module.sql`.
+- `[admin+app] 2026-06-15` — Flexible restaurants + driver activation gate: `restaurants.partner_id` / `driver_intakes.partner_id` + `zone_id` optional; unique name indexes (partner-scoped vs standalone); `driver_has_active_restaurant`, triggers blocking `drivers.status='active'` without published restaurants, RPC `set_driver_account_status`; admin account status control on `/drivers/[id]`; restaurant picker shows all published merchants. Migration `20260615100000_flexible_restaurants_driver_activation.sql`.
+- `[admin+app] 2026-05-23` — Earnings transparency: RPCs `recalculate_earnings_for_range`, `get_driver_earnings_detail`, `list_driver_earnings_daily`; data-backed `/earnings` + drilldown sheet; range recalc on `/earnings-calculation`. Wallet ledger `driver_wallet_entries` auto-syncs approved `earning_credit` on recalc. Admin activity logs `admin_activity_logs` + `/settings/logs` (`audit.view`/`audit.export`); instrumentation across server actions. Migrations `20260613110000_driver_delivery_proximity_gate.sql`, `20260614100000_earnings_wallet_audit.sql`.
+- `[admin+app] 2026-06-05` — Driver app settings page `/settings/app`: title, logo, splash, `driver_app_maintenance_mode` + message (independent of admin `maintenance_mode`). Storage `branding/driver-app/*`. Migration `20260605100000_driver_app_settings.sql`.
+- `[admin+app] 2026-06-04` — Driver codes: exactly 5 digits (`10001`–`99999`), renumber migration + updated `allocate_driver_code` / CHECK constraints. Config in `src/features/drivers/driver-code.ts`. Migration `20260604100000_driver_code_five_digits.sql`.
+- `[admin+app] 2026-06-03` — Driver codes: Postgres sequence `driver_code_seq` from `100001`, auto-assign on intake insert, backfill + format check. Soft-archive `archived_at` on `driver_intakes`/`drivers`, RPC `archive_driver_intake`. Admin UI: read-only ID, Archived tab, archive on detail. Migration `20260603100000_driver_code_sequence_archive.sql`.
+- `[admin+app] 2026-06-02` — Driver app passcode: 6-digit `drivers.app_passcode`, auto-minted on `status='active'` via `drivers_assign_passcode_on_active` trigger. Admin RPC `regenerate_driver_app_passcode(uuid)`, anon-callable login RPC `driver_app_lookup_by_passcode(driver_code, passcode)`. New passcode card on `/drivers/[id]` and masked column on `/drivers`. Migration `20260602100000_driver_app_passcode.sql`.
+- `[admin only] 2026-05-21` — Agent ops rule: auto `supabase db push` after migrations, auto local dev restart when needed (`.cursor/rules/ops-automation.mdc`).
+- `[admin+app] 2026-05-24` — DPD module `/dpd` (dedicated page): `restaurants`, `delivery_rules`, `incentive_rules`; `deliveries.restaurant_id`; RPC `recalculate_driver_earnings` + trigger on verify; migration `20260524100000_dpd_incentives_rules.sql`
+- `[admin+app] 2026-05-20` — Zones module at `/zones`: `zone_type` + `geometry` GeoJSON (polygon/circle), Leaflet map UI, shared `zone-geometry` validation; migration `20260520140000_zones_geometry.sql`
+- `[admin only] 2026-05-18` — Menu editor + Languages admin: `menu_configs` / `locales` tables; `/settings/menu-editor`, `/settings/languages`, `/settings/languages/[code]`; DB-driven grouped sidebar with per-role overrides; translation API writes `src/messages/{locale}.json`
+- `[admin only] 2026-05-18` — TanStack Query (`QueryProvider` in locale layout, `queryKeys`, server prefetch helpers); build-id polling via `useQuery`; devtools in development
+- `[admin only] 2026-05-18` — RBAC tables, sign-up approval, super-admin claim, maintenance mode, version refresh gate, password reset routes
+- `[infra] 2026-05-18` — `docs/CHANGELOG.md`, RUN_NOW migration/branding steps, README prod URL
+- `[admin only] 2026-05-18` — Full-width dashboard shell, dark sidebar tokens, `app_settings` branding table + Settings branding UI (name, logo PNG/SVG, font)
+- `[admin+app] 2026-05-18` — Base scaffold: 10 admin modules, core schema migration, nav/permissions/i18n, page shells, DRIVER_APP_HANDOFF.md
+- `2026-05-17` — Initial warm cream/coral design language + auth foundation

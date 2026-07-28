@@ -1,0 +1,41 @@
+{
+    "compilerOptions": {
+        // Output
+        "outDir": "bin",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "stripInternal": true,
+        // Environment
+        "target": "ES2022",
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "moduleDetection": "force",
+        "types": ["node"],
+        // Type Checking
+        "strict": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitReturns": true,
+        "skipLibCheck": true
+    },
+    "files": [
+        "apikey.ts",
+        "branch.ts",
+        "config/index.ts",
+        "config/vars.ts",
+        "edgeFunction.ts",
+        "edgeFunctionSecrets.ts",
+        "getApikeys.ts",
+        "getBranch.ts",
+        "getNetworkBans.ts",
+        "getPooler.ts",
+        "index.ts",
+        "project.ts",
+        "provider.ts",
+        "settings.ts",
+        "types/index.ts",
+        "types/input.ts",
+        "types/output.ts",
+        "utilities.ts"
+    ]
+}

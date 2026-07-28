@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "942102607123",
+    "project_id": "musallam-delivery-kw",
+    "storage_bucket": "musallam-delivery-kw.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:942102607123:android:2b709642cb7ab7a48096e6",
+        "android_client_info": {
+          "package_name": "kw.musallam.delivery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBeDbxBUMG6tOv6cwYVwvtWJ6dQPWsodH4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,239 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./themes.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-sans);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  /* Motion easing tokens — see docs/DESIGN_SYSTEM.md § Motion & animation.
+     Overrides Tailwind's weak default ease-out / ease-in-out and adds a drawer curve. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:root {
+  --font-sans: var(--font-inter);
+}
+
+html[data-font="inter"] {
+  --font-sans: var(--font-inter);
+}
+
+html[data-font="roboto"] {
+  --font-sans: var(--font-roboto);
+}
+
+html[data-font="open-sans"] {
+  --font-sans: var(--font-open-sans);
+}
+
+html[data-font="dm-sans"] {
+  --font-sans: var(--font-dm-sans);
+}
+
+html[data-font="plus-jakarta-sans"] {
+  --font-sans: var(--font-plus-jakarta-sans);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Reduced motion: keep opacity/color transitions, strip transform-based motion.
+   "Fewer and gentler, not zero" — preserves comprehension while removing movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Zones page background map: stay below sheets/modals (Leaflet defaults up to 1000) */
+.zones-background-map.leaflet-container {
+  z-index: 0 !important;
+}
+
+/* Draw map inside Add zone sheet */
+.zones-draw-map-wrapper {
+  position: relative;
+  z-index: 0;
+  height: 320px;
+  overflow: hidden;
+}
+
+.zones-draw-map-wrapper .zones-leaflet-map {
+  height: 320px;
+}
+
+/* Keep Leaflet + Geoman controls above tile/vector panes (panes use z-index 200–700) */
+.zones-draw-map-wrapper .leaflet-control-container {
+  z-index: 1000;
+}
+
+.zones-draw-map-wrapper .leaflet-control-zoom {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+.zones-draw-map-wrapper .leaflet-control-zoom a {
+  background: var(--background);
+  color: var(--foreground);
+  width: 2rem;
+  height: 2rem;
+  line-height: 2rem;
+}
+
+.zones-draw-map-wrapper .leaflet-control-zoom a:hover {
+  background: var(--muted);
+}
+
+.zones-draw-map-wrapper .leaflet-pm-toolbar {
+  z-index: 1001;
+}
+
+.zones-draw-map-wrapper .leaflet-pm-toolbar .button-container {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+/* Full-height draw map inside zone form modal */
+.zones-draw-map-wrapper--modal {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Leaflet/Geoman: keep top-right controls below dialog close (top-right of modal) */
+.zones-draw-map-wrapper--modal .leaflet-top.leaflet-right {
+  top: 3rem;
+}
+
+/* Google clear-shape sits bottom-right; reserve space if layers stack on small screens */
+.zones-draw-map-wrapper--modal [data-zone-map-clear] {
+  bottom: 0.75rem;
+  inset-inline-end: 0.75rem;
+}
+
+.zones-draw-map-wrapper--modal .zones-leaflet-map {
+  height: 100%;
+}
+
+/* Google Maps zone name labels (OverlayView) */
+.zone-map-label {
+  position: absolute;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  background: rgb(255 255 255 / 0.96);
+  color: #111;
+  border: 1px solid var(--zone-color, #e5e7eb);
+  border-radius: 10px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.zone-map-label__name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.zone-map-label__area {
+  font-size: 10px;
+  color: #475569;
+}
+
+/* Restaurant location picker in Add/Edit restaurant modal */
+.restaurant-draw-map-wrapper {
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.restaurant-draw-map-wrapper--modal {
+  height: 100%;
+  min-height: 0;
+}
+
+.restaurant-draw-map-wrapper--modal .restaurant-location-map {
+  height: 100%;
+}
+
+/* Google Maps zoom control — offset below place search overlay */
+.restaurant-draw-map-wrapper--modal .gm-bundled-control {
+  margin-top: 3.5rem !important;
+}

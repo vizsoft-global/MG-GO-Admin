@@ -1,0 +1,57 @@
+---
+description: Auto-push Supabase migrations and restart local dev without asking the user
+alwaysApply: true
+---
+
+# Ops automation (do not ask the user)
+
+The user expects the agent to **apply and run** infrastructure changes — not hand off instructions.
+
+## Supabase migrations
+
+After **any** create/edit under `supabase/migrations/`:
+
+1. From `dpdadmin/`, run immediately:
+   ```bash
+   cd dpdadmin && yes | npx supabase db push
+   ```
+2. If schema changed tables/columns/enums, regenerate types:
+   ```bash
+   npm run db:types
+   ```
+3. Confirm push succeeded (no error in CLI output). If push fails, diagnose and fix — do not leave migrations only in git.
+
+Linked project: **`ytfmsgckjatiserpgdbz` only** (DPD production — live deliveries). Never link or push to the retired test ref `cgpioijpvriiqqnauwlx`. See `supabase/.temp/linked-project.json`.
+
+## Local dev server
+
+Restart **`npm run dev`** yourself when needed (do not tell the user to restart unless you are blocked):
+
+- After `package.json` / lockfile dependency changes
+- After `next.config.ts`, `middleware.ts`, or root `app/layout.tsx` changes
+- After `.env.local` changes that affect runtime
+- After Supabase migration + types if the running server shows stale errors
+
+**How:**
+
+1. Check `terminals/` for an existing dev server on port 3000.
+2. Stop it if running, then start: `cd dpdadmin && npm run dev` (background, long `block_until_ms`).
+3. Verify the app responds (e.g. curl localhost:3000 or build passes).
+
+## Vercel / production
+
+- After completing a change set with **no other queued task**, deploy to Vercel production automatically — do not wait for the user to ask.
+- Run `vercel deploy --prod --yes` from `dpdadmin/`.
+- If the deploy fails, fix the error and redeploy before marking work done.
+
+## Git
+
+- After completing a change set with **no other queued task**, commit and push to git automatically — do not wait for the user to ask.
+- Stage all relevant changed files (never `.env.local`, credentials, or secrets).
+- Write a concise commit message focused on **why**.
+- Push to `origin` on the current branch (`git push`).
+
+## When to still ask the user
+
+- Missing Supabase login / credentials / link
+- Destructive DB ops they did not request (drop production data)

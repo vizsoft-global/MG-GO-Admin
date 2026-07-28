@@ -1,0 +1,17 @@
+name: dpd-infra
+description: DPD Control Tower — testing (existing) + clean production infrastructure
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+config:
+  pulumi:tags:
+    value:
+      project: dpd-infra
+      managed-by: pulumi
+packages:
+  supabase:
+    source: pulumi/pulumi/terraform-provider
+    version: 1.1.3
+    parameters:
+      - supabase/supabase

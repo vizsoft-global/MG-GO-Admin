@@ -1,0 +1,246 @@
+---
+description: Unified admin UI/UX rulebook — architecture, density, semantic color, footer-first modals
+alwaysApply: true
+---
+
+# Admin UI/UX rulebook (mandatory — read before any UI change)
+
+Read [`docs/DESIGN_SYSTEM.md`](../../docs/DESIGN_SYSTEM.md) once. This file is **always applied** in Cursor. Complete the pre-ship checklist (§11) before marking UI work done.
+
+Target: **14" laptop (~1366×768)**. Feel like Linear / Stripe / Ramp — dense, alive, single-viewport.
+
+---
+
+## 1. Foundations
+
+- **Styling**: shadcn semantic tokens + `@/components/ui/*`.
+- **Product layout**: `@/components/app/*` (`AppPage`, `AppListCard`, `AppModalFooter`, …).
+- **Polaris**: information architecture only. Never for colors or typography.
+- **Theme**: single locked Shopify-style shell — navy sidebar (light mode), green primary, flat neutral cards. No theme picker.
+- **Cards**: `rounded-xl border-border bg-card shadow-sm`.
+- **Tables**: `AppDataTable` + `TABLE_HEAD_CLASS` on every `TableHead`.
+
+---
+
+## 2. Density — fits one viewport
+
+- Inputs / selects / triggers: **`h-9`**. Never `h-10`/`h-11`.
+- Card padding: **`p-4`**. Modal body: **`px-5 py-4`**, **`space-y-3`**.
+- Dialog width: **`w-[min(1200px,96vw)]`**.
+
+**Vertical budget (footer-first modals — see §7):**
+Footer ≈ 72px + 14" usable ≈ 720px ⇒ body must fit in **≈ 648px**. **Inner scroll in a modal = failure.**
+
+---
+
+## 3. Layout
+
+- Pack identity fields on **one row** (avatar + name + phone + civil id + employee id + driver id).
+- Side-by-side cards: **`lg:items-stretch`** + **`h-full`** — no half-empty card.
+- Documents / assets: **`lg:grid-cols-4`** on desktop.
+- Helper text: **`text-[10px]`** inline; hide when redundant.
+
+### Standard spacing (mandatory — import `@/components/app/layout-spacing`)
+
+| Token | Class | Use |
+|-------|-------|-----|
+| Command page inset | `LAYOUT.commandPageInset` on dashboard `main` | All pages — **12px** (`p-3`) between secondary nav and content |
+| Panel gap | `LAYOUT.panelGap` (`gap-2`) | Sidebar ↔ main stage in split command layouts |
+| Stack gap | `LAYOUT.stackGap` (`gap-2`) | Vertical stacks inside a panel |
+| Panel section | `LAYOUT.panelSection` | Header rows inside `TrackingGlassCard` |
+| Panel block | `LAYOUT.panelBlock` | Filter / form blocks inside cards |
+| Map above fold | `LAYOUT.mapAboveFoldHeight` + `LAYOUT.mapAboveFoldMin` | **Any map stage that has widgets below** (insights, actions, tables, playback footer) |
+| Map stage wrapper | `TrackingMapStage` from `@/features/live-tracking/tracking-shell` | Map + optional footer widgets in document flow — **never absolute overlay on map bottom** |
+
+**Never** use arbitrary gaps like `gap-4`, `gap-6`, or `space-y-6` on command-center split layouts. Live and History must share the same **`TrackingGlassCard`** sidebar shell.
+
+---
+
+## 4. Iconography
+
+- Lucide icon on every chip, toggle, and semantic field label.
+- Section headers: **`SectionHeading`** with semantic icon chip tints (Identity=primary, Assignment=primary, Operations=warning, Documents=success).
+
+---
+
+## 5. Color — semantic, for STATE
+
+**Squint test:** In any group of toggles/chips, selected items must pop in under 1 second. If selected ≈ unselected, it fails.
+
+### Toggle chips & multi-select pills (assets, tags, filters)
+
+Use **`ToggleChip`** from `@/components/app/toggle-chip`. **Never `primary/10` for selected toggles.**
+
+| State | Classes |
+|-------|---------|
+| **Selected / on** | `border-emerald-500 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-400/50 font-semibold shadow-sm` + **`Check` icon** |
+| **Unselected / off** | `border-border bg-muted/30 text-muted-foreground` + category icon at 60% opacity |
+
+`primary/10` is for **metadata badges and links**, not toggle selection in a group.
+
+### Single-choice segments (Active / Inactive)
+
+- **Active / success option when selected:** same emerald stack as above (`SegmentOption variant="success"`).
+- **Other selected segment:** `border-primary bg-primary/15 text-primary`.
+- **Unselected:** muted outline.
+
+### Other state colors
+
+- **Uploaded document / success file row:** `border-emerald-200 bg-emerald-50 text-emerald-700`.
+- **Required fields:** red `*` via `text-destructive`.
+- **Avatar:** deterministic tint from name — never flat grey.
+- **Driver ID badge:** `bg-primary/10 text-primary border-primary/20`.
+
+Grey-on-grey everywhere = dead UI. **If the user provided a reference with green selected chips, match it exactly.**
+
+When color intent is ambiguous, **ask** — do not default to muted primary.
+
+---
+
+## 6. Navigation — view page + add/edit modal
+
+| Action | Pattern |
+|--------|---------|
+| **View / detail** (history, GPS, earnings, tabs) | Full page `/resource/[id]`. **List row click → detail page.** |
+| **Add** | Modal on list via `?add=1` |
+| **Edit** | Modal only — from detail page **Edit** button or `?edit=1` on detail URL. **Never from row click.** |
+
+- `/resource/new` → redirect to list `?add=1`.
+- **Do NOT** redirect `/resource/[id]` to the list.
+
+List row: show subtle **"View details"** link under the name.
+
+---
+
+## 7. Footer-first modals (mandatory)
+
+**Do not waste a top header band** for title/subtitle. Reclaim vertical space for content.
+
+- **No top header** in modals. Content starts immediately (`pt-4`).
+- **Close button: top-right, outside the modal frame** — use `DialogContent` with `showCloseButton` + `closeOutside` (floating circular X at `-end-3 -top-3`). **Never put Close in the footer.**
+- **`AppModalFooter`** (`@/components/app/app-modal-footer`):
+  - **Left**: **title** + **subtitle** (one line) + optional meta.
+  - **Right**: Cancel + primary action.
+- Title/subtitle use `DialogTitle` / `DialogDescription` for a11y.
+- Large modals: `overflow-visible` on `DialogContent` when `closeOutside`; scroll only the inner body.
+
+---
+
+## 8. Action differentiation (mandatory)
+
+Adjacent actions must never look identical. Users must instantly see **neutral vs destructive vs primary**.
+
+| Action type | Style | Icon |
+|-------------|-------|------|
+| **View / open / link** | `text-primary hover:bg-primary/10` | `ExternalLink` |
+| **Remove / delete / archive** | `text-destructive hover:bg-destructive/10` | `Trash2` |
+| **Primary submit** | solid default button | — |
+| **Cancel** | `variant="outline"` | — |
+
+Never pair two plain `variant="ghost"` text buttons with the same size/color side by side.
+
+---
+
+## 9. No chrome inside modals
+
+- No progress steppers, completion %, scroll-spy.
+- Footer meta (e.g. draft saved) only when meaningful.
+
+---
+
+## 10. Reference images
+
+Match density, column count, and architecture from user-provided screenshots. Ask before diverging.
+
+---
+
+## 11. Pre-ship checklist
+
+- [ ] One viewport on 14" laptop — no inner scroll
+- [ ] Footer-first modal: title in footer left, **Close top-right outside** (`closeOutside`)
+- [ ] View vs Remove (or similar pairs) visually distinct with icons
+- [ ] **Toggle chips:** selected = emerald green + check; unselected = muted (squint test)
+- [ ] Section icon chips + tinted avatar + primary Driver ID badge
+- [ ] Row click → detail page; edit → modal only
+- [ ] Add via `?add=1` modal on list
+- [ ] **Map above fold:** if any widgets/tables/actions sit below the map, use `TrackingMapStage` + `LAYOUT.mapAboveFoldHeight` — map must not overlap footer content
+- [ ] Map markers and zones follow §12, including deselect paths
+- [ ] Motion follows §14: no `transition-all`, durations ≤300ms, origin-aware popovers, reduced-motion respected
+
+---
+
+## 12. Maps & overlays
+
+### Above-the-fold map stages (mandatory when widgets exist below)
+
+If **anything** renders below the map — insights panels, quick actions, event tables, playback footers, KPI strips tied to the map — the map is a **stage**, not a full-page canvas.
+
+| Rule | Detail |
+|------|--------|
+| **Use `TrackingMapStage`** | Map children inside the frame; footer widgets as the `footer` prop in normal document flow |
+| **Cap map height** | `LAYOUT.mapAboveFoldHeight` + `LAYOUT.mapAboveFoldMin` (dynamic viewport fit; no fixed 560px cap) |
+| **No bottom overlays** | Never `absolute bottom-*` widget grids on the map when those widgets can sit in `footer` |
+| **Map fills frame only** | Inner map: `mapHeightClass="h-full min-h-0"` — do not add extra `min-h-[480px]` on the map itself |
+| **Fullscreen exception** | Command fullscreen / map-only fullscreen may use `flex-1 h-full`; footer still below map, not overlaid |
+| **Inline maps exempt** | Small contextual maps in sheets, tabs, or dashboard widgets (`h-44`–`h-64`) — fixed compact height is fine |
+| **Side-by-side exempt** | Zone editor / list+map split views where the map shares a row with a sidebar — not a footer stack |
+
+**Anti-patterns:** `min-h-[560px] flex-1` on a map frame with footer widgets; Fleet insights / Quick actions floating over the map bottom; history map taller than viewport while events table is below.
+
+### Map behavior
+
+- **Marker shape + icon:** use lucide-style vehicle icon inside a colored teardrop marker; status color comes from `pinStatus`.
+- **Unknown vehicle default:** if vehicle type is missing, default to `bike`; never infer vehicle type from tracking status.
+- **Zones:** render zone polygons/circles using the zone palette at `0.22` fill opacity and show a DOM label overlay (zone name + optional driver-count chip).
+- **Driver deselect:** always support all three paths: popup close `X`, map background click, and clicking the same marker again.
+- **Coming soon pills:** use small sentence-case `Coming soon` badges (`bg-amber-100 text-amber-800 border-amber-200`) only for missing backend-backed map/filter features.
+
+---
+
+## 13. Selects & Search
+
+- Use `Select` only for small, fixed enums (status, tabs, static modes), typically <=30 options.
+- Use `SearchSelect` for dynamic datasets (drivers, zones, partners, restaurants, users, and any list that can grow large).
+- `SearchSelect` must provide:
+  - contextual keywords (`name`, codes, IDs, mobile/email where relevant),
+  - a `recentsKey` so the last 5-10 picks appear first on open,
+  - contextual search placeholder text.
+- Do not allow raw IDs in dropdown triggers. Triggers must always display a human-readable label.
+
+---
+
+## 14. Motion & animation
+
+Reference: [`docs/DESIGN_SYSTEM.md` § Motion & Animation](../../docs/DESIGN_SYSTEM.md#motion--animation), [`docs/UI_MOTION_AUDIT.md`](../../docs/UI_MOTION_AUDIT.md). For polish reviews, invoke the on-demand skill [`.cursor/skills/emil-design-eng/SKILL.md`](../skills/emil-design-eng/SKILL.md).
+
+### Tokens & timing
+
+- Use easing tokens from `globals.css` — never raw `ease-in` on UI enter animations.
+- UI interactions stay **under 300ms** (buttons 100–160ms, dropdowns/tooltips 125–200ms, modals/sheets 200–250ms).
+- **Never `transition-all`.** Specify exact properties (`transition-colors`, `transition-transform`, etc.).
+
+### Origin & entry
+
+- **Popovers, dropdowns, tooltips, selects:** `origin-(--transform-origin)` — scale from trigger, not center.
+- **Modals / dialogs / sheets:** center origin is correct; enter with `scale-95` + opacity — never `scale(0)`.
+
+### Frequency rules
+
+| Frequency | Examples | Rule |
+|-----------|----------|------|
+| 100+/day | Sidebar nav, keyboard list nav, SearchSelect | **No animation** |
+| Tens/day | Filter dropdowns, tab switches, row hover | Color/opacity only, ≤150ms |
+| Occasional | Modals, sheets, toasts, wizard steps | Standard enter/exit, ease-out |
+| Rare | Onboarding, empty states | Stagger optional (30–80ms between items) |
+
+- **Never animate keyboard-initiated actions.**
+
+### Accessibility
+
+- Respect `prefers-reduced-motion`: keep opacity/color transitions; remove transform-based motion.
+- Gate hover transforms behind `@media (hover: hover) and (pointer: fine)`.
+
+### Press feedback
+
+- Pressable controls should feel responsive (`active:scale-[0.97]` or existing `translate-y-px` on buttons is acceptable).
+- Only animate **transform** and **opacity** for motion — not width, height, margin, or padding.

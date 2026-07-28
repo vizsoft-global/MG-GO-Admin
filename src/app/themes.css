@@ -1,0 +1,90 @@
+/* Theme — single locked Shopify-style admin shell (navy sidebar + green accent) */
+
+html,
+html[data-theme],
+html[data-theme="shopify"] {
+  --radius: 0.5rem;
+  --success: oklch(0.55 0.16 155);
+  --success-bg: oklch(0.94 0.04 155);
+  --warning: oklch(0.75 0.14 75);
+  --warning-bg: oklch(0.96 0.04 85);
+  --danger: oklch(0.55 0.2 25);
+  --danger-bg: oklch(0.94 0.04 25);
+
+  /* Light mode — flat neutral content, navy sidebar */
+  --background: oklch(0.985 0.002 250);
+  --foreground: oklch(0.2 0.01 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.01 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.01 250);
+  --primary: oklch(0.45 0.14 155);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0.005 250);
+  --secondary-foreground: oklch(0.25 0.01 250);
+  --muted: oklch(0.96 0.005 250);
+  --muted-foreground: oklch(0.5 0.01 250);
+  --accent: oklch(0.94 0.02 155);
+  --accent-foreground: oklch(0.35 0.1 155);
+  --destructive: oklch(0.55 0.2 25);
+  --border: oklch(0.9 0.005 250);
+  --input: oklch(0.9 0.005 250);
+  --ring: oklch(0.45 0.14 155);
+  --chart-1: oklch(0.55 0.18 150);
+  --chart-2: oklch(0.65 0.12 200);
+  --chart-3: oklch(0.6 0.1 280);
+  --chart-4: oklch(0.7 0.08 60);
+  --chart-5: oklch(0.55 0.14 25);
+
+  /* Navy sidebar (light mode) */
+  --sidebar: oklch(0.22 0.03 255);
+  --sidebar-foreground: oklch(0.92 0.01 250);
+  --sidebar-primary: oklch(0.45 0.14 155);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.28 0.025 255);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(0.32 0.025 255);
+  --sidebar-ring: oklch(0.45 0.14 155);
+}
+
+html.dark,
+html[data-theme].dark,
+html[data-theme="shopify"].dark {
+  --background: oklch(0.16 0.01 250);
+  --foreground: oklch(0.95 0.01 250);
+  --card: oklch(0.2 0.01 250);
+  --card-foreground: oklch(0.95 0.01 250);
+  --popover: oklch(0.2 0.01 250);
+  --popover-foreground: oklch(0.95 0.01 250);
+  --primary: oklch(0.55 0.16 155);
+  --primary-foreground: oklch(0.12 0.01 250);
+  --secondary: oklch(0.24 0.01 250);
+  --secondary-foreground: oklch(0.95 0.01 250);
+  --muted: oklch(0.24 0.01 250);
+  --muted-foreground: oklch(0.65 0.01 250);
+  --accent: oklch(0.28 0.04 155);
+  --accent-foreground: oklch(0.75 0.12 155);
+  --destructive: oklch(0.6 0.18 25);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.55 0.16 155);
+  --chart-1: oklch(0.65 0.18 150);
+  --chart-2: oklch(0.7 0.12 200);
+  --chart-3: oklch(0.65 0.1 280);
+  --chart-4: oklch(0.75 0.08 60);
+  --chart-5: oklch(0.65 0.14 25);
+  --sidebar: oklch(0.14 0.015 250);
+  --sidebar-foreground: oklch(0.9 0.01 250);
+  --sidebar-primary: oklch(0.55 0.16 155);
+  --sidebar-primary-foreground: oklch(0.12 0.01 250);
+  --sidebar-accent: oklch(0.22 0.02 250);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.55 0.16 155);
+  --success: oklch(0.65 0.15 155);
+  --success-bg: oklch(0.22 0.04 155);
+  --warning: oklch(0.78 0.14 75);
+  --warning-bg: oklch(0.22 0.04 75);
+  --danger: oklch(0.6 0.18 25);
+  --danger-bg: oklch(0.22 0.04 25);
+}

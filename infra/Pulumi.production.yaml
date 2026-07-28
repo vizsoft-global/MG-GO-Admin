@@ -1,0 +1,34 @@
+config:
+  dpd-infra:environment: production
+  # Names for resources Pulumi will create
+  dpd-infra:supabaseProjectName: dpd-production
+  dpd-infra:supabaseOrganizationId: likgpozawcekbcqzsstb
+  dpd-infra:supabaseRegion: eu-central-1
+  dpd-infra:supabaseProjectRef: eoksxkdssptgyqyywdju
+  dpd-infra:supabaseInstanceSize: micro
+  dpd-infra:gcpProjectId: musallam-delivery-prod
+  dpd-infra:gcpProjectName: Musallam Delivery Production
+  dpd-infra:firebaseAndroidPackage: kw.musallam.delivery
+  dpd-infra:firebaseIosBundleId: kw.musallam.delivery
+  dpd-infra:r2BucketName: dpd-private-prod
+  dpd-infra:cloudflareAccountId: 04c485faa34d67d1758b61465202e9ce
+  dpd-infra:vercelProjectName: dpdadmin-prod
+  dpd-infra:vercelTeamId: team_54JuMptqR0dmTTbGza0Iawbx
+  dpd-infra:vercelGitRepo: dpdadmin
+  dpd-infra:vercelGitOrg: Vizsoft
+  dpd-infra:vercelFramework: nextjs
+  dpd-infra:vercelRootDirectory: ""
+  # Optional — copy from testing if reusing same map keys
+  # dpd-infra:googleMapsApiKey:
+  # dpd-infra:maptilerApiKey:
+  # Secrets (set via: pulumi config set --secret <key> <value>)
+  # dpd-infra:supabaseAccessToken:
+  # dpd-infra:supabaseDatabasePassword:
+  # dpd-infra:cloudflareApiToken:
+  # dpd-infra:gcpCredentials:
+  # dpd-infra:gcpBillingAccount:
+  # dpd-infra:gcpOrgId:
+  # dpd-infra:vercelApiToken:
+  # dpd-infra:firebaseServiceAccountJson:
+  # dpd-infra:googleMapsApiKey:
+  # dpd-infra:maptilerApiKey:

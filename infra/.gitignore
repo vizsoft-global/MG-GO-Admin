@@ -1,0 +1,5 @@
+node_modules/
+bin/
+.pulumi/
+*.log
+Pulumi.*.yaml.bak

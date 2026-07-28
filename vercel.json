@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/storage-uploads-cleanup",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/notifications-dispatch",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/locations-cleanup",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/notifications-automations",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
