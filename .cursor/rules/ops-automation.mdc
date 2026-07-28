@@ -28,7 +28,7 @@ Linked project: **`ytfmsgckjatiserpgdbz` only** (DPD production — live deliver
 Restart **`npm run dev`** yourself when needed (do not tell the user to restart unless you are blocked):
 
 - After `package.json` / lockfile dependency changes
-- After `next.config.ts`, `middleware.ts`, or root `app/layout.tsx` changes
+- After `next.config.ts`, `proxy.ts` (or legacy `middleware.ts`), or root `app/layout.tsx` changes
 - After `.env.local` changes that affect runtime
 - After Supabase migration + types if the running server shows stale errors
 

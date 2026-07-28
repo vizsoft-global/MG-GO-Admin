@@ -57,7 +57,7 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const intlResponse = intlMiddleware(request);
   const response = await updateSession(request, intlResponse);
   const { pathname } = request.nextUrl;

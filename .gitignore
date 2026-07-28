@@ -53,3 +53,5 @@ next-env.d.ts
 
 # Graphify generated knowledge graph (regenerated locally)
 graphify-out/
+
+.vercel
