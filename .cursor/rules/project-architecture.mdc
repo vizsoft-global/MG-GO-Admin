@@ -100,7 +100,7 @@ Order allocation is **external** (partner apps). We own: monitoring, compliance,
 
 ## Auth (do not bypass)
 
-1. `src/middleware.ts` — intl + session; maintenance; pending; claim redirect
+1. `src/proxy.ts` — intl + session; maintenance; pending; claim redirect (Next.js 16 Node runtime; was `middleware.ts`)
 2. `(dashboard)/layout.tsx` — `requireAuth` → approved + `admin_role_id`
 3. Each page — `requirePermission(locale, "...")` (DB-backed permission set)
 
@@ -226,6 +226,7 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-07-28` — Renamed `src/middleware.ts` → `src/proxy.ts` (Next.js 16 Node runtime) to fix Edge sandbox Supabase `fetch failed` in local auth.
 - `[admin only] 2026-06-18` — Delivery Orders Report on `/deliveries`: shift-start-day attribution via `report_delivery_orders` RPC (uses `driver_daily_shifts` windows + nearest-shift fallback), date-range modal, styled `.xlsx` matrix export with red zero-day cells. Migration `20260818120000_delivery_orders_report.sql`.
 - `[admin+app] 2026-06-18` — Document expiry tracking: `document_tracking` table, per-doc toggle + expiry date + lead-day notification chips on driver upload, `/document-expiry` admin compliance page (expired / 1 week / 1 month / 3 months), replace/update flows, `document_expiry` automation reads per-doc lead days. Permissions `documents.view`/`documents.manage`. Migration `20260818110000_document_expiry_tracking.sql`.
 - `[admin+app] 2026-06-18` — Rider employment category (`in_house` / `outsourced`) on `driver_intakes` + `drivers`; admin create/edit segment, list column, detail field; copied on approve. Migration `20260818100000_driver_rider_category.sql`.
