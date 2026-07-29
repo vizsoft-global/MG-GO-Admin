@@ -56,8 +56,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useHasMounted } from "@/hooks/use-has-mounted";
-import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
 import { cn } from "@/lib/utils";
+import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
+import { customFieldColumnId } from "@/lib/custom-fields/types";
+import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
+import { useDriversListColumns } from "./use-drivers-list-columns";
 import { useDriverFormOptions } from "./use-driver-form-options";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -147,7 +150,10 @@ function applyDriversListFilters(
   });
 }
 
-function exportDriversCsv(rows: DriverListRow[]) {
+function exportDriversCsv(
+  rows: DriverListRow[],
+  customKeys: { key: string; label: string }[] = [],
+) {
   const header = [
     "id",
     "driver_code",
@@ -162,6 +168,7 @@ function exportDriversCsv(rows: DriverListRow[]) {
     "workflow_status",
     "linked",
     "app_passcode",
+    ...customKeys.map((c) => c.key),
   ];
   const escape = (v: string | number | boolean) => {
     const s = String(v);
@@ -184,6 +191,10 @@ function exportDriversCsv(rows: DriverListRow[]) {
         r.workflow_status,
         r.linked ? "yes" : "no",
         r.app_passcode ?? "",
+        ...customKeys.map((c) => {
+          const v = r.custom_fields?.[c.key];
+          return v == null ? "" : String(v);
+        }),
       ]
         .map(escape)
         .join(","),
@@ -210,8 +221,14 @@ function DriversPageSkeleton() {
 
 function DriversPageContent() {
   const t = useTranslations("pages.drivers");
+  const tCommon = useTranslations("common");
   const { can } = useAuth();
   const canManage = can("drivers.manage");
+  const { data: customFieldDefs = [] } = useCustomFieldDefinitions();
+  const activeCustomDefs = useMemo(
+    () => customFieldDefs.filter((d) => d.is_active && !d.archived_at),
+    [customFieldDefs],
+  );
   const approveDriver = useApproveDriverIntake();
   const restoreDriver = useRestoreDriverIntake();
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -405,49 +422,76 @@ function DriversPageContent() {
       { id: "status", label: t("colStatus") },
       { id: "attendance", label: t("colAttendance") },
       { id: "passcode", label: t("colPasscode") },
+      ...activeCustomDefs.map((d) => ({
+        id: customFieldColumnId(d.key),
+        label: d.label,
+        defaultVisible: false as const,
+      })),
       { id: "actions", label: t("colActions"), locked: true as const },
     ],
-    [t],
+    [t, activeCustomDefs],
   );
 
   const {
     isVisible: isColumnVisible,
     toggle: toggleColumn,
-    reset: resetColumns,
+    move: moveColumn,
+    resetToRoleDefault: resetColumns,
     pickerOptions: columnPickerOptions,
+    orderedVisibleIds,
     hiddenToggleableCount,
-  } = useTableColumnVisibility("dpd:drivers:list-columns", columnVisibilityOptions);
+    source: columnSource,
+  } = useDriversListColumns(columnVisibilityOptions);
 
-  const tableColumns = useMemo(
-    () =>
-      [
-        {
-          id: "select",
-          label: (
-            <Checkbox
-              checked={allVisibleSelected}
-              onCheckedChange={toggleSelectAll}
-              aria-label={t("selectAll")}
-              className="cursor-pointer"
-            />
-          ),
-          className: "w-10",
-        },
-        { id: "driverId", label: t("colDriverId") },
-        { id: "employeeId", label: t("colEmployeeId") },
-        { id: "riderCategory", label: t("colRiderCategory") },
-        { id: "name", label: t("colName") },
-        { id: "phone", label: t("colPhone") },
-        { id: "restaurants", label: t("colRestaurants") },
-        { id: "zone", label: t("colZone") },
-        { id: "todayDeliveries", label: t("colTodayDeliveries") },
-        { id: "status", label: t("colStatus") },
-        { id: "attendance", label: t("colAttendance") },
-        { id: "passcode", label: t("colPasscode") },
-        { id: "actions", label: t("colActions"), className: "w-[88px] text-end" },
-      ].filter((col) => isColumnVisible(col.id)),
-    [allVisibleSelected, isColumnVisible, t, toggleSelectAll],
-  );
+  const columnSourceLabel =
+    columnSource === "user"
+      ? tCommon("columnSourceUser")
+      : columnSource === "role"
+        ? tCommon("columnSourceRole")
+        : tCommon("columnSourceSystem");
+
+  const tableColumns = useMemo(() => {
+    const defs: { id: string; label: ReactNode; className?: string }[] = [
+      {
+        id: "select",
+        label: (
+          <Checkbox
+            checked={allVisibleSelected}
+            onCheckedChange={toggleSelectAll}
+            aria-label={t("selectAll")}
+            className="cursor-pointer"
+          />
+        ),
+        className: "w-10",
+      },
+      { id: "driverId", label: t("colDriverId") },
+      { id: "employeeId", label: t("colEmployeeId") },
+      { id: "riderCategory", label: t("colRiderCategory") },
+      { id: "name", label: t("colName") },
+      { id: "phone", label: t("colPhone") },
+      { id: "restaurants", label: t("colRestaurants") },
+      { id: "zone", label: t("colZone") },
+      { id: "todayDeliveries", label: t("colTodayDeliveries") },
+      { id: "status", label: t("colStatus") },
+      { id: "attendance", label: t("colAttendance") },
+      { id: "passcode", label: t("colPasscode") },
+      ...activeCustomDefs.map((d) => ({
+        id: customFieldColumnId(d.key),
+        label: d.label,
+      })),
+      { id: "actions", label: t("colActions"), className: "w-[88px] text-end" },
+    ];
+    const byId = new Map(defs.map((c) => [c.id, c]));
+    return orderedVisibleIds
+      .map((id) => byId.get(id))
+      .filter((c): c is { id: string; label: ReactNode; className?: string } => Boolean(c));
+  }, [
+    allVisibleSelected,
+    orderedVisibleIds,
+    t,
+    toggleSelectAll,
+    activeCustomDefs,
+  ]);
 
   const visibleColumnCount = tableColumns.length;
 
@@ -625,7 +669,9 @@ function DriversPageContent() {
                 options={columnPickerOptions}
                 isVisible={isColumnVisible}
                 onToggle={toggleColumn}
+                onMove={moveColumn}
                 onReset={resetColumns}
+                sourceLabel={columnSourceLabel}
                 hiddenCount={hiddenToggleableCount}
               />
 
@@ -706,7 +752,12 @@ function DriversPageContent() {
                       variant="outline"
                       size="icon"
                       className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
-                      onClick={() => exportDriversCsv(sorted)}
+                      onClick={() =>
+                        exportDriversCsv(
+                          sorted,
+                          activeCustomDefs.map((d) => ({ key: d.key, label: d.label })),
+                        )
+                      }
                       disabled={sorted.length === 0}
                       aria-label={t("export")}
                     >
@@ -909,6 +960,20 @@ function DriversPageContent() {
                         >
                           <PasscodeCell passcode={driver.app_passcode} />
                         </VisibleTableCell>
+                        {activeCustomDefs.map((def) => {
+                          const colId = customFieldColumnId(def.key);
+                          const raw = driver.custom_fields?.[def.key] ?? null;
+                          return (
+                            <VisibleTableCell
+                              key={colId}
+                              columnId={colId}
+                              isVisible={isColumnVisible}
+                              className="text-sm text-muted-foreground"
+                            >
+                              {formatCustomFieldDisplay(def.field_type, raw, def.options) || "—"}
+                            </VisibleTableCell>
+                          );
+                        })}
                         <VisibleTableCell
                           columnId="actions"
                           isVisible={isColumnVisible}

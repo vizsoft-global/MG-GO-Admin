@@ -167,6 +167,7 @@ export type DriverListRow = {
   avatar_url: string | null;
   avatar_display_url: string | null;
   rider_category: DriverRiderCategory;
+  custom_fields: Record<string, string | number | boolean | null>;
 };
 
 export type DriverAssignedAsset = {
@@ -215,6 +216,7 @@ export type DriverDetailModel = {
   blocked_at: string | null;
   archived_at: string | null;
   documents: Partial<Record<DriverDocumentType, DriverRemoteDocument>>;
+  custom_fields: Record<string, string | number | boolean | null>;
 };
 
 export const DRIVER_IMPORT_FIELDS = [
@@ -228,7 +230,9 @@ export const DRIVER_IMPORT_FIELDS = [
   "restaurant_ids",
 ] as const;
 
-export type DriverImportTargetField = (typeof DRIVER_IMPORT_FIELDS)[number];
+export type DriverImportStandardField = (typeof DRIVER_IMPORT_FIELDS)[number];
+/** Standard field or `cf:<key>` for custom fields */
+export type DriverImportTargetField = DriverImportStandardField | `cf:${string}`;
 
 export type DriverImportPreviewStatus =
   | "ok"
@@ -250,6 +254,7 @@ export type DriverImportMappedRow = {
   phone: string | null;
   civil_id: string | null;
   employee_id: string | null;
+  custom_fields: Record<string, string | null>;
   /** Optional partner UUID from the spreadsheet. */
   partner_id: string | null;
   /** Optional zone UUID from the spreadsheet. */
@@ -270,4 +275,5 @@ export type DriverImportPreviewRow = Omit<
   restaurant_ids: string[];
   restaurant_names: string[];
   skip?: boolean;
+  custom_fields: Record<string, string | null>;
 };

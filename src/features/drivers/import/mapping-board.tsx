@@ -19,11 +19,13 @@ export function DriverMappingBoard({
   sampleRow,
   mapping,
   onMappingChange,
+  customFields = [],
 }: {
   headers: string[];
   sampleRow: string[];
   mapping: Partial<Record<DriverImportTargetField, string>>;
   onMappingChange: (next: Partial<Record<DriverImportTargetField, string>>) => void;
+  customFields?: { key: string; label: string }[];
 }) {
   const t = useTranslations("pages.drivers.import");
 
@@ -62,9 +64,18 @@ export function DriverMappingBoard({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("targetFields")}
         </p>
-        {DRIVER_IMPORT_FIELDS.map((field) => (
+        {[
+          ...DRIVER_IMPORT_FIELDS.map((field) => ({
+            field: field as DriverImportTargetField,
+            label: t(`fields.${field}`),
+          })),
+          ...customFields.map((cf) => ({
+            field: `cf:${cf.key}` as DriverImportTargetField,
+            label: cf.label,
+          })),
+        ].map(({ field, label }) => (
           <div key={field} className="space-y-1">
-            <Label className="text-xs">{t(`fields.${field}`)}</Label>
+            <Label className="text-xs">{label}</Label>
             <Select
               items={headerItems}
               value={mapping[field] ?? NONE}

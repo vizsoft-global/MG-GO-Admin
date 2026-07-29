@@ -32,6 +32,7 @@ import {
 } from "./parse";
 import { DRIVER_IMPORT_TEMPLATE_PATH } from "./template";
 import type { DriverImportTargetField } from "../types";
+import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
 
 type Step = "upload" | "map" | "preview";
 
@@ -71,6 +72,15 @@ export function DriverBulkImportDialog({
 
   const resolvePreview = useResolveDriverImportPreview();
   const applyBatch = useApplyDriverImportBatch();
+  const { data: customFieldDefs = [] } = useCustomFieldDefinitions();
+  const customFields = useMemo(
+    () =>
+      customFieldDefs
+        .filter((d) => d.is_active && !d.archived_at)
+        .map((d) => ({ key: d.key, label: d.label })),
+    [customFieldDefs],
+  );
+  const customFieldKeys = useMemo(() => customFields.map((c) => c.key), [customFields]);
 
   const summary = useMemo(() => {
     const ready = preview.filter((r) => r.status === "ok" && !r.skip).length;
@@ -99,7 +109,7 @@ export function DriverBulkImportDialog({
     setHeaderSignature(parsed.headerSignature);
     setFileName(file.name);
     const stored = loadStoredMapping(parsed.headerSignature);
-    const guessed = guessColumnMapping(parsed.headers);
+    const guessed = guessColumnMapping(parsed.headers, customFieldKeys);
     setMapping({ ...guessed, ...stored });
     setStep("map");
   };
@@ -107,7 +117,7 @@ export function DriverBulkImportDialog({
   const goPreview = () => {
     if (!headers.length) return;
     saveStoredMapping(headerSignature, mapping);
-    const mapped = mapRowsFromSheet(headers, rows, mapping);
+    const mapped = mapRowsFromSheet(headers, rows, mapping, customFieldKeys);
     startTransition(async () => {
       try {
         const result = await resolvePreview.mutateAsync(mapped);
@@ -219,6 +229,7 @@ export function DriverBulkImportDialog({
               sampleRow={rows[0] ?? []}
               mapping={mapping}
               onMappingChange={setMapping}
+              customFields={customFields}
             />
           ) : null}
 

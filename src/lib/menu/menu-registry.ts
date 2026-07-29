@@ -25,6 +25,7 @@ import {
   Wallet,
   Cloud,
   Download,
+  FormInput,
   ScrollText,
   Radar,
   Timer,
@@ -76,6 +77,7 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   Timer,
   Trash2,
   Download,
+  FormInput,
 };
 
 export const ICON_NAMES = Object.keys(ICON_MAP);
@@ -319,6 +321,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Settings",
     defaultOrder: 3,
     permission: "attendance.manage",
+  },
+  {
+    id: "driver-fields",
+    defaultLabel: "Driver custom fields",
+    defaultIcon: "FormInput",
+    href: "/settings/driver-fields",
+    defaultGroup: "Settings",
+    defaultOrder: 3,
+    permission: "drivers.manage",
   },
   {
     id: "app-releases",

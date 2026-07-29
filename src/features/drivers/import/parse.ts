@@ -6,11 +6,13 @@ import {
 import { normalizeCivilId, normalizeKuwaitPhone } from "../driver-phone";
 import { normalizeEmployeeId } from "../driver-errors";
 import type { DriverImportMappedRow, DriverImportTargetField } from "../types";
+import { customFieldColumnId } from "@/lib/custom-fields/types";
 
 export function mapRowsFromSheet(
   headers: string[],
   rows: string[][],
   mapping: Partial<Record<DriverImportTargetField, string>>,
+  customFieldKeys: string[] = [],
 ): DriverImportMappedRow[] {
   const headerIndex = new Map(headers.map((h, i) => [cleanCell(h), i]));
 
@@ -28,6 +30,12 @@ export function mapRowsFromSheet(
       const phoneRaw = get("phone");
       const civilRaw = get("civil_id");
       const empRaw = get("employee_id");
+      const custom_fields: Record<string, string | null> = {};
+      for (const key of customFieldKeys) {
+        const cfKey = customFieldColumnId(key) as DriverImportTargetField;
+        if (!mapping[cfKey]) continue;
+        custom_fields[key] = get(cfKey);
+      }
 
       return {
         rowIndex,
@@ -39,6 +47,7 @@ export function mapRowsFromSheet(
         zone_id: get("zone_id"),
         vehicle_label: get("vehicle_label"),
         restaurant_ids: get("restaurant_ids"),
+        custom_fields,
       };
     })
     .filter(
@@ -49,12 +58,14 @@ export function mapRowsFromSheet(
         r.employee_id ||
         r.restaurant_ids ||
         r.partner_id ||
-        r.zone_id,
+        r.zone_id ||
+        Object.values(r.custom_fields).some(Boolean),
     );
 }
 
 export function guessColumnMapping(
   headers: string[],
+  customFieldKeys: string[] = [],
 ): Partial<Record<DriverImportTargetField, string>> {
   const lower = headers.map((h) => ({ raw: h, key: cleanCell(h).toLowerCase() }));
   const find = (...needles: string[]) => {
@@ -62,7 +73,7 @@ export function guessColumnMapping(
     return hit?.raw;
   };
 
-  return {
+  const mapping: Partial<Record<DriverImportTargetField, string>> = {
     full_name: find("full name", "name", "driver name"),
     phone: find("phone", "mobile", "tel"),
     civil_id: find("civil", "national id", "nid"),
@@ -79,6 +90,13 @@ export function guessColumnMapping(
       "merchant id",
     ),
   };
+
+  for (const key of customFieldKeys) {
+    const hit = find(key.replace(/_/g, " "), key);
+    if (hit) mapping[customFieldColumnId(key) as DriverImportTargetField] = hit;
+  }
+
+  return mapping;
 }
 
 export const MAPPING_STORAGE_PREFIX = "dpd-driver-import-mapping:";
