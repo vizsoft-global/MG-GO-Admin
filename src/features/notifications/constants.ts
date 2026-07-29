@@ -91,6 +91,6 @@ export function requiresApproval(input: {
 }
 
 export const DEFAULT_TIMEZONE = "Asia/Kuwait";
-export const PAYLOAD_VERSION = 1;
+export const PAYLOAD_VERSION = 2;
 
 export const NOTIFICATIONS_CAMPAIGNS_PAGE_SIZE = 20;

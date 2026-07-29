@@ -95,6 +95,10 @@ export type NotificationCampaignRow = {
   failed_count: number;
   import_spec?: NotificationImportSpec;
   track_engagement?: boolean;
+  /** Tri-state: null = inherit template, true = force on, false = force off */
+  screenshot_restricted_override: boolean | null;
+  /** Resolved stamp sent to driver app */
+  screenshot_restricted: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -111,9 +115,21 @@ export type NotificationTemplateRow = {
   action_type: NotificationActionType;
   action_params: Record<string, unknown>;
   payload_version: number;
+  screenshot_restricted: boolean;
   is_archived: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type NotificationScreenshotEventRow = {
+  id: string;
+  campaign_id: string;
+  dispatch_item_id: string | null;
+  driver_id: string;
+  occurred_at: string;
+  metadata: Record<string, unknown>;
+  driver_code?: string | null;
+  driver_name?: string | null;
 };
 
 export type NotificationAutomationRow = {
@@ -200,6 +216,8 @@ export type SaveCampaignInput = {
   sendLimit?: number | null;
   importSpec?: NotificationImportSpec;
   trackEngagement?: boolean;
+  /** Tri-state: null/undefined = inherit template */
+  screenshotRestrictedOverride?: boolean | null;
 };
 
 export type SaveTemplateInput = {
@@ -212,6 +230,7 @@ export type SaveTemplateInput = {
   variableSchema?: unknown[];
   actionType: NotificationActionType;
   actionParams?: Record<string, unknown>;
+  screenshotRestricted?: boolean;
 };
 
 export type SaveAutomationInput = {

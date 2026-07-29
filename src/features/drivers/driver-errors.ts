@@ -23,6 +23,7 @@ export const DRIVER_ERROR_KEYS = [
   "insufficient_stock",
   "save_failed",
   "expiry_date_required",
+  "invalid_custom_fields",
 ] as const;
 
 export type DriverErrorKey = (typeof DRIVER_ERROR_KEYS)[number];

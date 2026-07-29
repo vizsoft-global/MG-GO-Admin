@@ -5,13 +5,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Copy, Send, ShieldCheck, ShieldX, XCircle } from "lucide-react";
+import { Loader2, Copy, Send, ShieldCheck, ShieldOff, ShieldX, XCircle } from "lucide-react";
+import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppListCard } from "@/components/app/app-list-card";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
 import {
@@ -21,13 +30,29 @@ import {
   dispatchNotificationCampaign,
   rejectNotificationCampaign,
 } from "./notifications-actions";
-import { useNotificationCampaign, useNotificationDispatchItems } from "./use-notifications";
+import {
+  useCampaignScreenshotEvents,
+  useNotificationCampaign,
+  useNotificationDispatchItems,
+} from "./use-notifications";
 import { previewPayloadSchema, buildActionPayload } from "./payload-contract";
 import { pickNotificationMediaByRole } from "./notification-media";
 import { NotificationMediaPreview } from "./notification-media-preview";
 import { NotificationMobilePreview } from "./notification-mobile-preview";
 import { NotificationEngagementReport } from "./notification-engagement-report";
 import { invalidateNotificationCaches } from "./invalidate-notification-caches";
+
+function formatEventTime(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("en", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Kuwait",
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
 
 export function NotificationDetailPageShell({ campaignId }: { campaignId: string }) {
   const t = useTranslations("pages.notifications");
@@ -38,6 +63,7 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
   const [pending, startTransition] = useTransition();
   const { data: campaign, isLoading, refetch } = useNotificationCampaign(campaignId);
   const { data: dispatchItems, refetch: refetchDispatch } = useNotificationDispatchItems(campaignId);
+  const { data: screenshotEvents } = useCampaignScreenshotEvents(campaignId);
 
   const canSend = auth.can("notifications.send");
   const canApprove = auth.can("notifications.approve");
@@ -67,6 +93,7 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
       campaignId: campaign.id,
     }),
     campaign.media,
+    campaign.screenshot_restricted,
   );
   const bannerMedia = pickNotificationMediaByRole(campaign.media, "banner");
   const pushImageMedia = pickNotificationMediaByRole(campaign.media, "image");
@@ -200,6 +227,12 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
             <StatusPill variant="neutral">{campaign.category}</StatusPill>
             <StatusPill variant="neutral">{campaign.priority}</StatusPill>
             <StatusPill variant="warning">{campaign.status.replace("_", " ")}</StatusPill>
+            {campaign.screenshot_restricted ? (
+              <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                <ShieldOff className="size-3" aria-hidden />
+                {t("screenshotRestrictedBadge")}
+              </span>
+            ) : null}
           </div>
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <p>
@@ -228,6 +261,49 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
               trackEngagement={campaign.track_engagement ?? true}
             />
           ) : null}
+          <div className="space-y-2 rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-accent">{t("screenshotAttemptsTitle")}</p>
+              <span className="text-xs text-muted-foreground">
+                {t("screenshotAttemptsCount", { count: screenshotEvents?.length ?? 0 })}
+              </span>
+            </div>
+            {!screenshotEvents?.length ? (
+              <p className="text-xs text-muted-foreground">{t("screenshotAttemptsEmpty")}</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("screenshotColDriver")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("screenshotColPlatform")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("screenshotColTime")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {screenshotEvents.map((event) => {
+                    const platform =
+                      typeof event.metadata?.platform === "string"
+                        ? event.metadata.platform
+                        : "—";
+                    return (
+                      <TableRow key={event.id}>
+                        <TableCell className="text-sm">
+                          {event.driver_code ?? "—"}
+                          {event.driver_name ? (
+                            <span className="block text-xs text-muted-foreground">
+                              {event.driver_name}
+                            </span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-sm capitalize">{platform}</TableCell>
+                        <TableCell className="text-sm">{formatEventTime(event.occurred_at)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
           <NotificationMobilePreview
             title={campaign.title}
             body={campaign.body}

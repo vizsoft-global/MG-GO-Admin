@@ -1,6 +1,6 @@
 "use client";
 
-import { Columns3 } from "lucide-react";
+import { ArrowDown, ArrowUp, Columns3 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +26,8 @@ export function AppTableColumnPicker({
   isVisible,
   onToggle,
   onReset,
+  onMove,
+  sourceLabel,
   hiddenCount = 0,
   className,
 }: {
@@ -33,6 +35,8 @@ export function AppTableColumnPicker({
   isVisible: (id: string) => boolean;
   onToggle: (id: string) => void;
   onReset: () => void;
+  onMove?: (id: string, dir: -1 | 1) => void;
+  sourceLabel?: string;
   hiddenCount?: number;
   className?: string;
 }) {
@@ -62,18 +66,56 @@ export function AppTableColumnPicker({
         />
         <TooltipContent>{t("columnsTooltip")}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>{t("columns")}</DropdownMenuLabel>
+          <DropdownMenuLabel>
+            {t("columns")}
+            {sourceLabel ? (
+              <span className="ms-1 font-normal text-muted-foreground">
+                · {sourceLabel}
+              </span>
+            ) : null}
+          </DropdownMenuLabel>
           {options.map((option) => (
-            <DropdownMenuCheckboxItem
-              key={option.id}
-              checked={isVisible(option.id)}
-              onCheckedChange={() => onToggle(option.id)}
-              className="cursor-pointer"
-            >
-              {option.label}
-            </DropdownMenuCheckboxItem>
+            <div key={option.id} className="flex items-center gap-0.5 pe-1">
+              <DropdownMenuCheckboxItem
+                checked={isVisible(option.id)}
+                onCheckedChange={() => onToggle(option.id)}
+                className="min-w-0 flex-1 cursor-pointer"
+              >
+                {option.label}
+              </DropdownMenuCheckboxItem>
+              {onMove ? (
+                <div className="flex shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onMove(option.id, -1);
+                    }}
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onMove(option.id, 1);
+                    }}
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           ))}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

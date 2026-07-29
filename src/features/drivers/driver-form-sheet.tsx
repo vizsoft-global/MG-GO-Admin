@@ -42,8 +42,16 @@ import { DriverFormDocumentsGrid } from "./form/driver-form-documents-grid";
 import { DriverFormFooter } from "./form/driver-form-footer";
 import { DriverFormIdentitySection } from "./form/driver-form-identity-section";
 import { DriverFormOperationsCard } from "./form/driver-form-operations-card";
+import { DriverFormCustomFieldsSection } from "./form/driver-form-custom-fields-section";
 import { useDriverFormDraft } from "./form/use-driver-form-draft";
 import type { DriverErrorKey } from "./driver-errors";
+import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
+import {
+  defaultsFromDefinitions,
+  validateCustomFieldValues,
+} from "@/lib/custom-fields/validate";
+import type { CustomFieldValues } from "@/lib/custom-fields/types";
+import { customFieldsToFormEntries } from "@/lib/custom-fields/serialize";
 
 type DriverFormMode = "create" | "edit";
 
@@ -105,6 +113,13 @@ export function DriverFormSheet({
     isEdit ? intakeIdForDocs || null : null,
     open,
   );
+  const { data: customFieldDefs = [] } = useCustomFieldDefinitions({
+    includeInactive: false,
+  });
+  const activeCustomDefs = useMemo(
+    () => customFieldDefs.filter((d) => d.is_active && !d.archived_at),
+    [customFieldDefs],
+  );
 
   useEffect(() => {
     if (!open || assetCatalogLoading || !isEdit) return;
@@ -138,6 +153,8 @@ export function DriverFormSheet({
   const [removeAvatar, setRemoveAvatar] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<DriverFormErrors>({});
   const [showErrors, setShowErrors] = useState(false);
+  const [customFieldValues, setCustomFieldValues] = useState<CustomFieldValues>({});
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
   const wasOpenRef = useRef(false);
 
   useEffect(() => {
@@ -172,6 +189,8 @@ export function DriverFormSheet({
       setRemoveAvatar(false);
       setFieldErrors({});
       setShowErrors(false);
+      setCustomFieldValues(activeDriver.custom_fields ?? {});
+      setCustomFieldErrors({});
       return;
     }
     if (!justOpened) return;
@@ -194,7 +213,21 @@ export function DriverFormSheet({
     setRemoveAvatar(false);
     setFieldErrors({});
     setShowErrors(false);
+    setCustomFieldValues(defaultsFromDefinitions(activeCustomDefs));
+    setCustomFieldErrors({});
   }, [open, isEdit, activeDriver]);
+
+  useEffect(() => {
+    if (!open || isEdit) return;
+    setCustomFieldValues((prev) => {
+      const defaults = defaultsFromDefinitions(activeCustomDefs);
+      const next = { ...defaults };
+      for (const [k, v] of Object.entries(prev)) {
+        if (v !== null && v !== undefined && v !== "") next[k] = v;
+      }
+      return next;
+    });
+  }, [open, isEdit, activeCustomDefs]);
 
   useEffect(() => {
     if (!open || !isEdit || !fetchedDocuments) return;
@@ -343,9 +376,19 @@ export function DriverFormSheet({
     });
     setShowErrors(true);
     setFieldErrors(validation);
+    const cfResult = validateCustomFieldValues(activeCustomDefs, customFieldValues);
+    const cfErrMap: Record<string, string> = {};
+    for (const err of cfResult.errors) {
+      cfErrMap[err.key] = tNew("errors.invalid_custom_fields");
+    }
+    setCustomFieldErrors(cfErrMap);
     if (hasValidationErrors(validation)) {
       const firstKey = Object.values(validation)[0];
       toast.error(driverErrorToast(tNew, firstKey));
+      return;
+    }
+    if (cfResult.errors.length > 0) {
+      toast.error(driverErrorToast(tNew, "invalid_custom_fields"));
       return;
     }
     if (needsR2ForSubmit) {
@@ -379,6 +422,9 @@ export function DriverFormSheet({
       }
       if (avatarFile) formData.append("avatar", avatarFile);
       if (removeAvatar) formData.append("removeAvatar", "true");
+      for (const [k, v] of customFieldsToFormEntries(cfResult.values)) {
+        formData.append(k, v);
+      }
 
       if (isEdit && activeDriver && intakeId) {
         formData.append("intakeId", intakeId);
@@ -566,6 +612,23 @@ export function DriverFormSheet({
                 disabled={isPending}
               />
             </div>
+
+            <DriverFormCustomFieldsSection
+              definitions={activeCustomDefs}
+              values={customFieldValues}
+              onChange={(key, value) => {
+                setCustomFieldValues((prev) => ({ ...prev, [key]: value }));
+                setCustomFieldErrors((prev) => {
+                  if (!prev[key]) return prev;
+                  const next = { ...prev };
+                  delete next[key];
+                  return next;
+                });
+              }}
+              errors={showErrors ? customFieldErrors : undefined}
+              disabled={isPending}
+              title={tNew("sections.customFields")}
+            />
 
             <DriverFormDocumentsGrid
               isEdit={isEdit}

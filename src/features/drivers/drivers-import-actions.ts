@@ -14,6 +14,8 @@ import type {
   DriverImportPreviewRow,
   DriverImportPreviewStatus,
 } from "./types";
+import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
+import { validateCustomFieldValues } from "@/lib/custom-fields/validate";
 
 const IMPORT_CHUNK = 200;
 
@@ -381,6 +383,7 @@ export async function applyDriverImportBatch(payload: {
   let applied = 0;
   let approved = 0;
   const failures: Array<{ rowIndex: number; reason: string }> = [];
+  const customFieldDefs = await listCustomFieldDefinitions("driver");
 
   for (let i = 0; i < ready.length; i += IMPORT_CHUNK) {
     const chunk = ready.slice(i, i + IMPORT_CHUNK);
@@ -463,6 +466,24 @@ export async function applyDriverImportBatch(payload: {
         }
 
         const newId = crypto.randomUUID();
+        const mappedCustom = row.custom_fields ?? {};
+        // Import: only validate keys present in the mapping; do not fail on unmapped required defs
+        const defsForRow = customFieldDefs.map((d) => ({
+          ...d,
+          required:
+            d.required && Object.prototype.hasOwnProperty.call(mappedCustom, d.key),
+        }));
+        const { values: customValues, errors: customErrors } = validateCustomFieldValues(
+          defsForRow,
+          mappedCustom,
+        );
+        if (customErrors.length > 0) {
+          failures.push({
+            rowIndex: row.rowIndex,
+            reason: `custom_fields: ${customErrors.map((e) => e.key).join(",")}`,
+          });
+          continue;
+        }
         const { error: insErr } = await supabase.from("driver_intakes").insert({
           id: newId,
           phone,
@@ -477,6 +498,7 @@ export async function applyDriverImportBatch(payload: {
           workflow_status: "pending",
           linked: false,
           assets_issued: {},
+          custom_fields: customValues as unknown as import("@/types/database").Json,
         });
 
         if (insErr) {

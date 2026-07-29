@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import {
@@ -69,6 +69,8 @@ import { isDriverErrorKey } from "./driver-errors";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { queryKeys } from "@/lib/query/query-keys";
 import { DriverDetailGroups } from "./driver-detail-groups";
+import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
+import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
 
 type DetailTabId =
   | "attendance"
@@ -240,6 +242,16 @@ function DriverDetailContent({ id }: { id: string }) {
   const { can } = useAuth();
   const canManage = can("drivers.manage");
   const { data: driver, isLoading, isError } = useDriverDetail(id);
+  const { data: customFieldDefs = [] } = useCustomFieldDefinitions({
+    includeInactive: true,
+  });
+  const customFieldLabelByKey = useMemo(() => {
+    const m = new Map<string, { label: string; field_type: (typeof customFieldDefs)[number]["field_type"]; options: (typeof customFieldDefs)[number]["options"] }>();
+    for (const d of customFieldDefs) {
+      m.set(d.key, { label: d.label, field_type: d.field_type, options: d.options });
+    }
+    return m;
+  }, [customFieldDefs]);
   const searchParams = useSearchParams();
   const archiveDriver = useArchiveDriverIntake();
   const restoreDriver = useRestoreDriverIntake();
@@ -418,6 +430,17 @@ function DriverDetailContent({ id }: { id: string }) {
     },
     { label: t("fieldBike"), value: driver.vehicle_label ?? "—" },
     { label: t("fieldJoined"), value: driver.joined_at ?? "—" },
+    ...Object.entries(driver.custom_fields ?? {}).map(([key, value]) => {
+      const def = customFieldLabelByKey.get(key);
+      return {
+        label: def?.label ?? key,
+        value: def
+          ? formatCustomFieldDisplay(def.field_type, value, def.options) || "—"
+          : value == null || value === ""
+            ? "—"
+            : String(value),
+      };
+    }),
   ];
 
   const renderTabPanel = () => {

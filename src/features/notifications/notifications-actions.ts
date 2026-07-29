@@ -15,6 +15,7 @@ import {
 import { uploadNotificationMediaFile } from "./notification-media-storage";
 import { sendPushBatch } from "@/lib/firebase/fcm-provider";
 import { interpolateTemplate } from "./interpolate-template";
+import { resolveScreenshotRestricted } from "./screenshot-restriction";
 import type {
   NotificationActionError,
   NotificationAnalyticsDailyRow,
@@ -23,6 +24,7 @@ import type {
   NotificationCategory,
   NotificationDashboardKpis,
   NotificationListFilters,
+  NotificationScreenshotEventRow,
   NotificationTemplateRow,
   SaveAutomationInput,
   SaveCampaignInput,
@@ -182,6 +184,9 @@ function mapCampaign(row: Record<string, unknown>): NotificationCampaignRow {
   return {
     ...(row as unknown as NotificationCampaignRow),
     media: parseNotificationMedia(row.media),
+    screenshot_restricted_override:
+      (row.screenshot_restricted_override as boolean | null | undefined) ?? null,
+    screenshot_restricted: Boolean(row.screenshot_restricted),
   };
 }
 
@@ -435,6 +440,19 @@ export async function uploadNotificationMedia(
   return { objectKey: result.objectKey };
 }
 
+async function loadTemplateScreenshotFlag(
+  supabase: Awaited<ReturnType<typeof notificationsDb>>,
+  templateId: string | null | undefined,
+): Promise<boolean> {
+  if (!templateId) return false;
+  const { data } = await supabase
+    .from("notification_templates")
+    .select("screenshot_restricted")
+    .eq("id", templateId)
+    .maybeSingle();
+  return Boolean(data?.screenshot_restricted);
+}
+
 export async function saveNotificationCampaign(
   input: SaveCampaignInput,
   campaignId?: string | null,
@@ -459,6 +477,13 @@ export async function saveNotificationCampaign(
     input.importSpec,
   );
 
+  const override =
+    input.screenshotRestrictedOverride === undefined
+      ? null
+      : input.screenshotRestrictedOverride;
+  const templateFlag = await loadTemplateScreenshotFlag(supabase, input.templateId);
+  const screenshotRestricted = resolveScreenshotRestricted(override, templateFlag);
+
   const row = {
     title: input.title.trim(),
     body: input.body.trim(),
@@ -480,6 +505,8 @@ export async function saveNotificationCampaign(
     send_limit: input.sendLimit ?? null,
     requires_approval: needsApproval,
     estimated_audience_count: audience,
+    screenshot_restricted_override: override,
+    screenshot_restricted: screenshotRestricted,
     updated_by: session.id,
   };
 
@@ -782,6 +809,7 @@ async function executeNotificationDispatch(
           action,
           category: campaign.category,
           priority: campaign.priority,
+          screenshotRestricted: Boolean(campaign.screenshot_restricted),
           media: campaignMedia,
           imageUrl: pushImageUrl,
         }),
@@ -912,6 +940,8 @@ export async function cloneNotificationCampaign(
       timezone: source.timezone,
       requires_approval: source.requires_approval,
       estimated_audience_count: source.estimated_audience_count,
+      screenshot_restricted_override: source.screenshot_restricted_override ?? null,
+      screenshot_restricted: Boolean(source.screenshot_restricted),
       cloned_from_id: campaignId,
       status: "draft",
       created_by: session.id,
@@ -1404,6 +1434,7 @@ export async function saveNotificationTemplate(
       variable_schema: input.variableSchema ?? [],
       action_type: input.actionType,
       action_params: input.actionParams ?? {},
+      screenshot_restricted: Boolean(input.screenshotRestricted),
       created_by: session.id,
     })
     .select("id")
@@ -1430,6 +1461,7 @@ export async function updateNotificationTemplate(
     return { error: "invalid_input" };
   }
 
+  const screenshotRestricted = Boolean(input.screenshotRestricted);
   const supabase = await notificationsDb();
   const { data, error } = await supabase
     .from("notification_templates")
@@ -1443,6 +1475,7 @@ export async function updateNotificationTemplate(
       variable_schema: input.variableSchema ?? [],
       action_type: input.actionType,
       action_params: input.actionParams ?? {},
+      screenshot_restricted: screenshotRestricted,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
@@ -1450,6 +1483,17 @@ export async function updateNotificationTemplate(
     .select("id")
     .maybeSingle();
   if (error || !data) return { error: "not_found" };
+
+  // Refresh stamp on editable campaigns that inherit this template.
+  await supabase
+    .from("notification_campaigns")
+    .update({
+      screenshot_restricted: screenshotRestricted,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("template_id", id)
+    .is("screenshot_restricted_override", null)
+    .in("status", ["draft", "pending_approval", "scheduled"]);
 
   await logAdminMutation({
     action: "update",
@@ -1459,6 +1503,63 @@ export async function updateNotificationTemplate(
     context: { name: input.name },
   });
   return { id: data.id };
+}
+
+export async function listCampaignScreenshotEvents(
+  campaignId: string,
+): Promise<NotificationScreenshotEventRow[]> {
+  await requireNotificationsView();
+  const supabase = await notificationsDb();
+  const { data, error } = await supabase
+    .from("notification_events")
+    .select("id, campaign_id, dispatch_item_id, driver_id, occurred_at, metadata")
+    .eq("campaign_id", campaignId)
+    .eq("event_type", "screenshot_taken")
+    .order("occurred_at", { ascending: false })
+    .limit(100);
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    campaign_id: string;
+    dispatch_item_id: string | null;
+    driver_id: string;
+    occurred_at: string;
+    metadata: Record<string, unknown> | null;
+  }>;
+  if (rows.length === 0) return [];
+
+  const driverIds = [...new Set(rows.map((r) => r.driver_id))];
+  const { data: drivers } = await supabase
+    .from("drivers")
+    .select("id, driver_code, profiles(full_name)")
+    .in("id", driverIds);
+  const byId = new Map(
+    (
+      (drivers ?? []) as Array<{
+        id: string;
+        driver_code: string | null;
+        profiles?: { full_name?: string | null } | Array<{ full_name?: string | null }> | null;
+      }>
+    ).map((d) => {
+      const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
+      return [d.id, { driver_code: d.driver_code, full_name: profile?.full_name ?? null }] as const;
+    }),
+  );
+
+  return rows.map((row) => {
+    const driver = byId.get(row.driver_id);
+    return {
+      id: row.id,
+      campaign_id: row.campaign_id,
+      dispatch_item_id: row.dispatch_item_id,
+      driver_id: row.driver_id,
+      occurred_at: row.occurred_at,
+      metadata: row.metadata ?? {},
+      driver_code: driver?.driver_code ?? null,
+      driver_name: driver?.full_name ?? null,
+    };
+  });
 }
 
 export async function archiveNotificationTemplate(
@@ -1919,6 +2020,17 @@ async function runAutomationForDrivers(
     return { matched: driverIds.length, sent: 0, failed: 0, campaignId: null };
   }
 
+  let templateScreenshot = false;
+  if (automation.template_id) {
+    const { data: templateRow } = await service
+      .from("notification_templates")
+      .select("screenshot_restricted")
+      .eq("id", automation.template_id)
+      .maybeSingle();
+    templateScreenshot = Boolean(templateRow?.screenshot_restricted);
+  }
+  const screenshotRestricted = resolveScreenshotRestricted(null, templateScreenshot);
+
   const targetSpec: TargetSpec = { mode: "custom", driver_ids: eligible };
   const { data: campaign, error: campaignError } = await service
     .from("notification_campaigns")
@@ -1938,6 +2050,8 @@ async function runAutomationForDrivers(
       timezone: KUWAIT_TZ,
       requires_approval: false,
       estimated_audience_count: eligible.length,
+      screenshot_restricted_override: null,
+      screenshot_restricted: screenshotRestricted,
       status: "queued",
       approved_at: new Date().toISOString(),
     })

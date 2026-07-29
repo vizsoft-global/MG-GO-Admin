@@ -52,6 +52,10 @@ import {
   type DriverRiderCategory,
   type DriverWorkflowStatus,
 } from "./types";
+import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
+import { parseCustomFieldsFromFormData } from "@/lib/custom-fields/serialize";
+import { parseCustomFieldsJson } from "@/lib/custom-fields/validate";
+import type { Json } from "@/types/database";
 
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const ALLOWED_DOC_MIME = new Set([
@@ -294,6 +298,14 @@ export async function createDriverIntake(
   const civilIdNormalized = normalizeCivilId(civilId);
   if (!civilIdNormalized) return { error: "invalid_civil_id" };
 
+  const customFieldDefs = await listCustomFieldDefinitions("driver", {
+    includeInactive: true,
+  });
+  const customParsed = parseCustomFieldsFromFormData(formData, customFieldDefs);
+  if (customParsed.errors.length > 0) {
+    return { error: "invalid_custom_fields" };
+  }
+
   const restaurantIds = parseRestaurantIds(formData);
   const supabase = await createClient();
   const intakeId = crypto.randomUUID();
@@ -380,6 +392,7 @@ export async function createDriverIntake(
       status: "awaiting_app_link",
       workflow_status: normalizeIntakeWorkflowStatus(false, workflowStatus),
       linked: false,
+      custom_fields: customParsed.values as unknown as Json,
     })
     .select("id, driver_code")
     .single();
@@ -444,6 +457,7 @@ type IntakeListRow = {
   archived_at: string | null;
   avatar_url: string | null;
   rider_category: DriverRiderCategory;
+  custom_fields: Json;
   partners:
     | { name: string; logo_url: string | null }
     | { name: string; logo_url: string | null }[]
@@ -527,6 +541,7 @@ export async function fetchDriversForAdmin(options?: {
       workflow_status,
       linked,
       archived_at,
+      custom_fields,
       partners (name, logo_url),
       zones (name)
     `,
@@ -727,6 +742,7 @@ export async function fetchDriversForAdmin(options?: {
         avatar_url: row.avatar_url,
         avatar_display_url,
         rider_category: row.rider_category ?? "in_house",
+        custom_fields: parseCustomFieldsJson(row.custom_fields),
       };
     }),
   );
@@ -862,6 +878,14 @@ export async function updateDriverIntake(
   const hasAvatarUpload = avatarFile instanceof File && avatarFile.size > 0;
   const removeAvatar = formData.get("removeAvatar") === "true";
 
+  const customFieldDefs = await listCustomFieldDefinitions("driver", {
+    includeInactive: true,
+  });
+  const customParsed = parseCustomFieldsFromFormData(formData, customFieldDefs);
+  if (customParsed.errors.length > 0) {
+    return { error: "invalid_custom_fields" };
+  }
+
   if (!intakeId || !fullName || !phoneRaw || !civilId || !employeeId) {
     return { error: "missing_fields" };
   }
@@ -955,6 +979,7 @@ export async function updateDriverIntake(
       vehicle_id: vehicleId || null,
       avatar_url: intakeAvatarPath,
       workflow_status: resolvedWorkflowStatus,
+      custom_fields: customParsed.values as unknown as Json,
       updated_at: new Date().toISOString(),
     })
     .eq("id", intakeId);
@@ -1008,6 +1033,7 @@ export async function updateDriverIntake(
           employee_id: employeeId,
           nationality,
           rider_category: riderCategory,
+          custom_fields: customParsed.values as unknown as Json,
           updated_at: new Date().toISOString(),
         })
         .eq("id", linkedProfileId),
@@ -1069,6 +1095,7 @@ export async function fetchDriverDetail(
       vehicle_id,
       avatar_url,
       assets_issued,
+      custom_fields,
       created_at,
       archived_at,
       partners (name),
@@ -1190,6 +1217,7 @@ export async function fetchDriverDetail(
       blocked_at: linkedDriver?.blocked_at ?? null,
       archived_at: intake.archived_at,
       documents: {},
+      custom_fields: parseCustomFieldsJson(intake.custom_fields),
     };
   }
 
@@ -1215,6 +1243,7 @@ export async function fetchDriverDetail(
       blocked_reason,
       blocked_at,
       archived_at,
+      custom_fields,
       partners (name),
       zones (name, code)
     `,
@@ -1302,6 +1331,7 @@ export async function fetchDriverDetail(
     blocked_at: driverRow.blocked_at ?? null,
     archived_at: intakeForDriver?.archived_at ?? driverRow.archived_at,
     documents: {},
+    custom_fields: parseCustomFieldsJson(driverRow.custom_fields),
   };
 }
 

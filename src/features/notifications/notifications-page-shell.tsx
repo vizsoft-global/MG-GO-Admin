@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { Bell, Copy, Loader2, Plus, RefreshCw, Send } from "lucide-react";
+import { Bell, Copy, Loader2, Plus, RefreshCw, Send, ShieldOff } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
   AppDataTable,
@@ -142,12 +142,20 @@ export function NotificationsPageShell() {
                 {campaigns.map((row) => (
                   <AppDataTableRow key={row.id}>
                     <TableCell>
-                      <Link
-                        href={`/${locale}/notifications/${row.id}`}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {row.title}
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Link
+                          href={`/${locale}/notifications/${row.id}`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {row.title}
+                        </Link>
+                        {row.screenshot_restricted ? (
+                          <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                            <ShieldOff className="size-3" aria-hidden />
+                            {t("screenshotRestrictedBadge")}
+                          </span>
+                        ) : null}
+                      </div>
                       <p className="text-xs text-muted-foreground line-clamp-1">{row.body}</p>
                     </TableCell>
                     <TableCell className="capitalize">{row.category.replace("_", " ")}</TableCell>

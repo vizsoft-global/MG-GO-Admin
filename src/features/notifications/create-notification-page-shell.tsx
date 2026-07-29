@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Loader2, Save, Send } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Save, Send, ShieldOff } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { SegmentOption } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
 import { AppFormSection } from "@/components/app";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import {
   NOTIFICATION_PRIORITIES,
 } from "./constants";
 import { previewPayloadSchema, buildActionPayload } from "./payload-contract";
+import { resolveScreenshotRestricted } from "./screenshot-restriction";
 import {
   buildMediaFromKeys,
   NotificationMediaFields,
@@ -37,6 +39,7 @@ import {
   scheduleNotificationCampaign,
   submitNotificationForApproval,
 } from "./notifications-actions";
+import { useNotificationTemplates } from "./use-notifications";
 import {
   buildActionParams,
   NotificationActionFields,
@@ -77,6 +80,7 @@ export function CreateNotificationPageShell() {
   const locale = useLocale();
   const router = useRouter();
   const auth = useAuth();
+  const canManage = auth.can("notifications.manage");
   const queryClient = useQueryClient();
   const [step, setStep] = useState<WizardStepId>("audience");
   const [pending, startTransition] = useTransition();
@@ -106,6 +110,23 @@ export function CreateNotificationPageShell() {
   const [importOkCount, setImportOkCount] = useState<number | null>(null);
   const [bannerObjectKey, setBannerObjectKey] = useState<string | null>(null);
   const [pushImageObjectKey, setPushImageObjectKey] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  /** null = inherit, true = force on, false = force off */
+  const [screenshotOverride, setScreenshotOverride] = useState<boolean | null>(null);
+
+  const { data: templates } = useNotificationTemplates();
+  const selectedTemplate = useMemo(
+    () => templates?.find((tpl) => tpl.id === templateId) ?? null,
+    [templates, templateId],
+  );
+  const resolvedScreenshotRestricted = useMemo(
+    () =>
+      resolveScreenshotRestricted(
+        screenshotOverride,
+        selectedTemplate?.screenshot_restricted ?? false,
+      ),
+    [screenshotOverride, selectedTemplate?.screenshot_restricted],
+  );
 
   const campaignMedia = useMemo(
     () => buildMediaFromKeys({ bannerObjectKey, imageObjectKey: pushImageObjectKey }),
@@ -136,8 +157,9 @@ export function CreateNotificationPageShell() {
       previewPayloadSchema(
         buildActionPayload({ actionType: resolvedAction.actionType, actionParams }),
         campaignMedia,
+        resolvedScreenshotRestricted,
       ),
-    [resolvedAction.actionType, actionParams, campaignMedia],
+    [resolvedAction.actionType, actionParams, campaignMedia, resolvedScreenshotRestricted],
   );
 
   const needsApproval = campaignNeedsApproval({ category, priority, targetMode });
@@ -207,12 +229,14 @@ export function CreateNotificationPageShell() {
       body,
       category,
       priority,
+      templateId,
       targetSpec,
       importSpec: targetMode === "import" ? importSpec ?? undefined : undefined,
       trackEngagement,
       actionType: resolvedAction.actionType,
       actionParams,
       media: campaignMedia,
+      screenshotRestrictedOverride: screenshotOverride,
       scheduleSpec: {
         mode: scheduleMode,
         scheduled_for: scheduledIso,
@@ -413,6 +437,57 @@ export function CreateNotificationPageShell() {
                 <RequiredLabel required>{t("fieldBody")}</RequiredLabel>
                 <Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
               </div>
+              <div className="space-y-1">
+                <Label>{t("fieldLinkedTemplate")}</Label>
+                <Select
+                  value={templateId ?? "__none__"}
+                  onValueChange={(v) => setTemplateId(v === "__none__" ? null : v)}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder={t("selectTemplateOptional")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">{t("noTemplate")}</SelectItem>
+                    {(templates ?? []).map((tpl) => (
+                      <SelectItem key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {canManage ? (
+                <div className="space-y-1.5">
+                  <Label>{t("fieldScreenshotRestricted")}</Label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <SegmentOption
+                      selected={screenshotOverride === null}
+                      onClick={() => setScreenshotOverride(null)}
+                    >
+                      {t("screenshotInherit")}
+                    </SegmentOption>
+                    <SegmentOption
+                      selected={screenshotOverride === true}
+                      onClick={() => setScreenshotOverride(true)}
+                      variant="success"
+                    >
+                      {t("screenshotForceOn")}
+                    </SegmentOption>
+                    <SegmentOption
+                      selected={screenshotOverride === false}
+                      onClick={() => setScreenshotOverride(false)}
+                    >
+                      {t("screenshotForceOff")}
+                    </SegmentOption>
+                  </div>
+                  <p className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <ShieldOff className="size-3 shrink-0" aria-hidden />
+                    {resolvedScreenshotRestricted
+                      ? t("screenshotWillRestrict")
+                      : t("screenshotWontRestrict")}
+                  </p>
+                </div>
+              ) : null}
               <NotificationMediaFields
                 bannerObjectKey={bannerObjectKey}
                 imageObjectKey={pushImageObjectKey}

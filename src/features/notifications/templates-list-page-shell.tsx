@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, ShieldOff } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { AppListCard } from "@/components/app/app-list-card";
 import { AppPage } from "@/components/app/app-page";
@@ -73,12 +73,20 @@ export function TemplatesListPageShell() {
                 {data.map((tpl) => (
                   <TableRow key={tpl.id} className="cursor-pointer hover:bg-muted/30">
                     <TableCell>
-                      <Link
-                        href={`/${locale}/notifications/templates/${tpl.id}`}
-                        className="font-medium text-accent hover:underline"
-                      >
-                        {tpl.name}
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Link
+                          href={`/${locale}/notifications/templates/${tpl.id}`}
+                          className="font-medium text-accent hover:underline"
+                        >
+                          {tpl.name}
+                        </Link>
+                        {tpl.screenshot_restricted ? (
+                          <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                            <ShieldOff className="size-3" aria-hidden />
+                            {t("screenshotRestrictedBadge")}
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="capitalize">{t(`categories.${tpl.category}`)}</TableCell>
                     <TableCell className="capitalize">{t(`priorities.${tpl.priority}`)}</TableCell>
