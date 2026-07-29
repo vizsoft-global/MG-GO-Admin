@@ -119,7 +119,6 @@
     "sendResetLink": "إرسال الرابط",
     "sendingReset": "جاري الإرسال...",
     "resetEmailSent": "إذا وُجد حساب لهذا البريد، ستصلك رسالة قريباً.",
-    "backToSignIn": "العودة لتسجيل الدخول",
     "resetTitle": "كلمة مرور جديدة",
     "resetSubtitle": "أدخل كلمة مرور جديدة لحسابك",
     "newPassword": "كلمة المرور الجديدة",
@@ -2398,6 +2397,8 @@
       "colDate": "التاريخ",
       "colCheckIn": "دخول",
       "colCheckOut": "خروج",
+      "colWorkingHours": "ساعات العمل",
+      "autoCheckoutBadge": "خروج تلقائي",
       "colStatus": "الحالة",
       "colOnDuty": "في الخدمة",
       "colActions": "إجراءات",
@@ -2410,7 +2411,7 @@
       "toDate": "إلى تاريخ",
       "to": "إلى",
       "refresh": "تحديث",
-      "export": "تصدير CSV",
+      "export": "تصدير",
       "onDuty": "في الخدمة",
       "offDuty": "خارج الخدمة",
       "rowActions": "إجراءات الصف",
@@ -2445,6 +2446,21 @@
       "sortDateDesc": "التاريخ (الأحدث)",
       "sortDateAsc": "التاريخ (الأقدم)",
       "sortNameAsc": "اسم السائق (أ–ي)",
+      "sortNameDesc": "اسم السائق (ي–أ)",
+      "sortProblemsFirst": "المشاكل أولاً",
+      "sortLastSeen": "آخر ظهور",
+      "sortLastSeenAsc": "آخر ظهور ↓",
+      "sortLastSeenDesc": "آخر ظهور ↑",
+      "sortStatusAsc": "الحالة أ–ي",
+      "sortStatusDesc": "الحالة ي–أ",
+      "sortCheckInAsc": "تسجيل الدخول ↑",
+      "sortCheckInDesc": "تسجيل الدخول ↓",
+      "sortCheckOutAsc": "تسجيل الخروج ↑",
+      "sortCheckOutDesc": "تسجيل الخروج ↓",
+      "sortWorkingHoursAsc": "ساعات العمل ↑",
+      "sortWorkingHoursDesc": "ساعات العمل ↓",
+      "sortOnDutyAsc": "خارج الخدمة أولاً",
+      "sortOnDutyDesc": "في الخدمة أولاً",
       "sortStatus": "الحالة",
       "viewOnMap": "عرض على الخريطة",
       "colValidation": "التحقق",
@@ -2459,11 +2475,15 @@
       "kpiOnline": "متصل",
       "kpiProblems": "مشاكل",
       "filters": "تصفية",
+      "sortBy": "ترتيب حسب",
       "resolve": "حل",
       "viewDetail": "عرض التفاصيل",
+      "exploreDetail": "عرض تفاصيل الصف",
+      "collapseDetail": "طي تفاصيل الصف",
       "emptyToday": "لا يوجد سائقون اليوم",
       "emptyHistory": "لا سجلات في هذا النطاق",
       "emptyProblems": "لا مشاكل اليوم",
+      "showingCount": "عرض {visible} من {total}",
       "paginationSummary": "{from}–{to} من {total}",
       "prevPage": "السابق",
       "nextPage": "التالي"
@@ -2481,7 +2501,9 @@
       "save": "حفظ",
       "saving": "جاري الحفظ…",
       "saved": "تم الحفظ",
-      "saveFailed": "تعذر الحفظ"
+      "saveFailed": "تعذر الحفظ",
+      "autoCheckout": "خروج تلقائي (دقائق)",
+      "autoCheckoutHint": "مدة الاتصال أو خارج المنطقة المستمرة قبل الخروج التلقائي (الافتراضي 45)."
     },
     "driverShifts": {
       "title": "ورديات السائقين",
@@ -3142,7 +3164,6 @@
       "importStatusDuplicate": "مكرر",
       "placeholderCopied": "تم نسخ {{name}}",
       "colEmployeeId": "رقم الموظف",
-      "colStatus": "الحالة",
       "fieldTapAction": "عند النقر على الإشعار",
       "fieldTrackEngagement": "تتبع من فتح الإشعار",
       "fieldTrackEngagementHint": "ستظهر تقرير «شوهد / لم يُشاهد» بعد الإرسال.",
@@ -3172,7 +3193,7 @@
       "previewCollapsed": "إشعار الدفع",
       "previewExpanded": "التفاصيل داخل التطبيق",
       "previewTitlePlaceholder": "عنوان الإشعار",
-      "previewBodyPlaceholder": "سيظهر نصك هنا…",
+      "previewBodyPlaceholder": "نص الإشعار",
       "previewNow": "الآن",
       "engagementReportTitle": "تقرير التسليم والتفاعل",
       "exportRecipients": "تصدير المستلمين",
@@ -3223,8 +3244,6 @@
       "scheduleLater": "جدولة لاحقاً",
       "previewMessage": "معاينة الرسالة",
       "previewPayload": "معاينة مخطط الحمولة",
-      "previewTitlePlaceholder": "عنوان الإشعار",
-      "previewBodyPlaceholder": "نص الإشعار",
       "saveDraft": "حفظ مسودة",
       "sendNow": "إرسال الآن",
       "scheduleSend": "جدولة الإرسال",
@@ -3357,7 +3376,9 @@
         "reject": "رفض",
         "approved": "تمت الموافقة",
         "rejected": "تم الرفض",
-        "errors": { "saveFailed": "تعذر الحفظ." }
+        "errors": {
+          "saveFailed": "تعذر الحفظ."
+        }
       },
       "roles": {
         "title": "الأدوار والصلاحيات",
@@ -3456,7 +3477,9 @@
         "disable": "إيقاف الصيانة",
         "turnedOn": "تم تفعيل الصيانة",
         "turnedOff": "تم إيقاف الصيانة",
-        "errors": { "saveFailed": "تعذر تحديث وضع الصيانة." }
+        "errors": {
+          "saveFailed": "تعذر تحديث وضع الصيانة."
+        }
       },
       "dataCleanup": {
         "title": "تنظيف البيانات",
@@ -3470,7 +3493,15 @@
         "clearSelection": "مسح التحديد",
         "empty": "لا توجد سجلات مطابقة.",
         "selectedCount": "{count} محدد",
-        "preview": "معاينة",
+        "preview": {
+          "title": "معاينة الحذف",
+          "description": "تقدير الصفوف المرتبطة وملفات التخزين لكل عنصر.",
+          "blocked": "محظور",
+          "noRelatedRows": "لا صفوف مرتبطة",
+          "storageKeys": "~{count} ملف(ات) تخزين",
+          "blockersWarning": "بعض العناصر لديها عوائق. أزل التبعيات أو استبعدها من التحديد.",
+          "close": "إغلاق"
+        },
         "deleteSelected": "حذف المحدد",
         "partialPurge": "تم حذف {deleted}. بعض الأخطاء: {errors}",
         "purgeSuccess": "تم الحذف النهائي لـ {count} سجل.",
@@ -3495,15 +3526,6 @@
           "incentiveRules": "DELETE {count} INCENTIVE RULES",
           "assets": "DELETE {count} ASSETS",
           "deliveries": "DELETE {count} DELIVERIES"
-        },
-        "preview": {
-          "title": "معاينة الحذف",
-          "description": "تقدير الصفوف المرتبطة وملفات التخزين لكل عنصر.",
-          "blocked": "محظور",
-          "noRelatedRows": "لا صفوف مرتبطة",
-          "storageKeys": "~{count} ملف(ات) تخزين",
-          "blockersWarning": "بعض العناصر لديها عوائق. أزل التبعيات أو استبعدها من التحديد.",
-          "close": "إغلاق"
         },
         "deleteDialog": {
           "title": "حذف نهائي",

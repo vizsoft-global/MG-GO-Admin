@@ -22,6 +22,7 @@ export function AttendanceSettingsPanel() {
   const [lateGrace, setLateGrace] = useState("10");
   const [earlyOutGrace, setEarlyOutGrace] = useState("5");
   const [offlineAlert, setOfflineAlert] = useState("5");
+  const [autoCheckout, setAutoCheckout] = useState("45");
   const [gpsStale, setGpsStale] = useState("10");
   const [gpsAccuracy, setGpsAccuracy] = useState("100");
 
@@ -30,6 +31,7 @@ export function AttendanceSettingsPanel() {
     setLateGrace(String(data.attendance_late_grace_minutes));
     setEarlyOutGrace(String(data.attendance_early_out_grace_minutes));
     setOfflineAlert(String(data.attendance_offline_alert_minutes));
+    setAutoCheckout(String(data.attendance_auto_checkout_minutes));
     setGpsStale(String(data.attendance_gps_stale_minutes));
     setGpsAccuracy(String(data.attendance_gps_min_accuracy_meters));
   }, [data]);
@@ -40,6 +42,7 @@ export function AttendanceSettingsPanel() {
         attendance_late_grace_minutes: Number(lateGrace),
         attendance_early_out_grace_minutes: Number(earlyOutGrace),
         attendance_offline_alert_minutes: Number(offlineAlert),
+        attendance_auto_checkout_minutes: Number(autoCheckout),
         attendance_gps_stale_minutes: Number(gpsStale),
         attendance_gps_min_accuracy_meters: Number(gpsAccuracy),
       });
@@ -93,6 +96,17 @@ export function AttendanceSettingsPanel() {
               value={offlineAlert}
               onChange={(e) => setOfflineAlert(e.target.value)}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="auto-checkout">{t("autoCheckout")}</Label>
+            <Input
+              id="auto-checkout"
+              type="number"
+              min={1}
+              value={autoCheckout}
+              onChange={(e) => setAutoCheckout(e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground">{t("autoCheckoutHint")}</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="gps-stale">{t("gpsStale")}</Label>

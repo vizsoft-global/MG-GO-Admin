@@ -275,16 +275,20 @@ Admin RPCs (staff): `get_driver_earnings_detail`, `list_driver_earnings_daily`, 
 - Updated by RPC `driver_set_duty_state(p_is_on_duty, p_is_online)` when the Home duty toggle changes.
 
 ### `attendance_logs`
-- One row per `(driver_id, log_date)` where `log_date` uses **Asia/Kuwait** calendar date.
-- **Check-in / check-out:** the Home **duty toggle ON** upserts today's row (`check_in_at`, `status = present` unless `on_leave`); **toggle OFF** sets `check_out_at`.
+- One row per `(driver_id, log_date)` where `log_date` uses **Asia/Kuwait** calendar date of **check-in**.
+- **Check-in / check-out:** the Home **duty toggle ON** upserts today's row (`check_in_at`, `status = present` unless `on_leave`); **toggle OFF** sets `check_out_at` with `check_out_reason = manual`.
+- Checkout finds the latest **open** log (`check_in_at` set, `check_out_at` null) — not only “today” — so overnight shifts that span midnight keep hours on the check-in day.
+- `check_out_reason`: `manual` | `auto_offline` | `auto_out_of_zone` | `admin` (null until checked out).
 - Written by `driver_set_duty_state` (same RPC as sessions) — no separate attendance button in v1.
+- **Auto-checkout (server cron):** if the driver stays **on duty** and is continuously **offline** (`driver_sessions.went_offline_at`) **or** continuously **outside assigned zone** (`driver_locations.out_of_zone_since`, maintained from `drivers.zone_id` geometry on location upserts) for `app_settings.attendance_auto_checkout_minutes` (default **45**), RPC `admin_run_attendance_auto_checkout` checks them out with reason `auto_offline` / `auto_out_of_zone`. Returning online or in-zone before the threshold **resets** that timer (no checkout). Cron: `/api/cron/attendance-auto-checkout` every 5 minutes (`CRON_SECRET`).
+- **Driver app (MG-GO):** `remoteDutyMonitorProvider` listens to `drivers` realtime/poll via `liveDbRefreshCoordinator`, patches home duty UI off, refreshes dashboard, and shows snackbar for `auto_offline` / `auto_out_of_zone`. Local duty-off / client zone timeout suppress that toast. Client idle outside-zone countdown is **45 minutes** (aligned with server default).
 - `zone_compliance`: `inside` | `outside` (geofence reporting — future writer).
-- `admin_note`: set when staff corrects a record via admin panel RPC `admin_correct_attendance`.
-- Driver **SELECT** own rows (`driver_id = auth.uid()`). Admin module: `/attendance` (Live / Logs / Exceptions tabs).
+- `admin_note`: set when staff corrects a record via admin panel RPC `admin_correct_attendance` (sets `check_out_reason = admin` when checkout is written).
+- Driver **SELECT** own rows (`driver_id = auth.uid()`). Admin module: `/attendance` (today / history / problems / analytics).
 
 **Driver read (today's log):**
 ```sql
-select id, log_date, check_in_at, check_out_at, status, zone_compliance
+select id, log_date, check_in_at, check_out_at, check_out_reason, status, zone_compliance
   from public.attendance_logs
  where driver_id = auth.uid()
    and log_date = (now() at time zone 'Asia/Kuwait')::date;
@@ -293,9 +297,11 @@ select id, log_date, check_in_at, check_out_at, status, zone_compliance
 **Duty toggle (check-in/out):**
 ```sql
 select public.driver_set_duty_state(p_is_on_duty := true, p_is_online := true);  -- check in
-select public.driver_set_duty_state(p_is_on_duty := false, p_is_online := false); -- check out
+select public.driver_set_duty_state(p_is_on_duty := false, p_is_online := false); -- check out (manual)
 ```
 Returns full home dashboard payload (`driver_get_home_dashboard()` shape).
+
+**Working hours:** wall-clock `check_out_at - check_in_at` (admin list uses reporting `duty_seconds`). Midnight-spanning shifts are one continuous interval on the check-in `log_date`.
 
 ---
 

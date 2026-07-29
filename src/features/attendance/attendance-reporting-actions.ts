@@ -61,6 +61,8 @@ function parseDailyRow(raw: Record<string, unknown>): AttendanceDailyRow {
       raw.attendance_log_id != null ? String(raw.attendance_log_id) : null,
     check_in_at: raw.check_in_at != null ? String(raw.check_in_at) : null,
     check_out_at: raw.check_out_at != null ? String(raw.check_out_at) : null,
+    check_out_reason:
+      raw.check_out_reason != null ? String(raw.check_out_reason) : null,
     attendance_status: String(raw.attendance_status ?? "absent"),
     online_seconds: Number(raw.online_seconds ?? 0),
     duty_seconds: Number(raw.duty_seconds ?? 0),
@@ -233,7 +235,7 @@ export async function fetchAttendanceThresholdSettings(): Promise<AttendanceThre
   const { data, error } = await supabase
     .from("app_settings")
     .select(
-      "attendance_late_grace_minutes, attendance_early_out_grace_minutes, attendance_offline_alert_minutes, attendance_gps_stale_minutes, attendance_gps_min_accuracy_meters",
+      "attendance_late_grace_minutes, attendance_early_out_grace_minutes, attendance_offline_alert_minutes, attendance_auto_checkout_minutes, attendance_gps_stale_minutes, attendance_gps_min_accuracy_meters",
     )
     .eq("id", 1)
     .maybeSingle();
@@ -243,6 +245,8 @@ export async function fetchAttendanceThresholdSettings(): Promise<AttendanceThre
     attendance_early_out_grace_minutes:
       data?.attendance_early_out_grace_minutes ?? 5,
     attendance_offline_alert_minutes: data?.attendance_offline_alert_minutes ?? 5,
+    attendance_auto_checkout_minutes:
+      data?.attendance_auto_checkout_minutes ?? 45,
     attendance_gps_stale_minutes: data?.attendance_gps_stale_minutes ?? 10,
     attendance_gps_min_accuracy_meters:
       data?.attendance_gps_min_accuracy_meters ?? 100,
@@ -289,6 +293,7 @@ export async function exportAttendanceDailyCsv(
     "Status",
     "Check In",
     "Check Out",
+    "Check Out Reason",
     "Duty (min)",
     "Online (min)",
     "Late (min)",
@@ -304,6 +309,7 @@ export async function exportAttendanceDailyCsv(
       r.live_status,
       r.check_in_at ?? "",
       r.check_out_at ?? "",
+      r.check_out_reason ?? "",
       Math.round(r.duty_seconds / 60),
       Math.round(r.online_seconds / 60),
       r.minutes_late,

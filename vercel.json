@@ -17,6 +17,10 @@
     {
       "path": "/api/cron/notifications-automations",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/attendance-auto-checkout",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
