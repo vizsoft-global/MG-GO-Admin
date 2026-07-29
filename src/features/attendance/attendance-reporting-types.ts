@@ -5,8 +5,20 @@ export type AttendanceSortKey =
   | "name_asc"
   | "name_desc"
   | "last_seen"
+  | "last_seen_asc"
+  | "last_seen_desc"
   | "date_desc"
-  | "date_asc";
+  | "date_asc"
+  | "status_asc"
+  | "status_desc"
+  | "check_in_asc"
+  | "check_in_desc"
+  | "check_out_asc"
+  | "check_out_desc"
+  | "duty_seconds_asc"
+  | "duty_seconds_desc"
+  | "on_duty_asc"
+  | "on_duty_desc";
 
 export type AttendanceListFilters = {
   search?: string;
@@ -40,6 +52,7 @@ export type AttendanceDailyRow = {
   attendance_log_id: string | null;
   check_in_at: string | null;
   check_out_at: string | null;
+  check_out_reason: string | null;
   attendance_status: string;
   online_seconds: number;
   duty_seconds: number;
@@ -87,6 +100,7 @@ export type AttendanceThresholdSettings = {
   attendance_late_grace_minutes: number;
   attendance_early_out_grace_minutes: number;
   attendance_offline_alert_minutes: number;
+  attendance_auto_checkout_minutes: number;
   attendance_gps_stale_minutes: number;
   attendance_gps_min_accuracy_meters: number;
 };

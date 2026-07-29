@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -15,7 +15,15 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppEmptyState,
+  AppListCard,
+  AppPage,
+  AppPageHeader,
+  AppTableColumnPicker,
+  SortableTableHeadLabel,
+  VisibleTableCell,
+} from "@/components/app";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -39,10 +47,11 @@ import {
 } from "@/components/ui/select";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
+import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 import { AttendanceAnalyticsPanel } from "./attendance-analytics-panel";
 import { AttendanceCorrectionSheet } from "./attendance-correction-sheet";
-import { AttendanceDetailDrawer } from "./attendance-detail-drawer";
+import { AttendanceDriverExplorePanel } from "./attendance-driver-explore-panel";
 import {
   AttendanceFiltersButton,
   AttendanceFiltersSheet,
@@ -54,27 +63,37 @@ import {
   EXCEPTION_TYPE_LABEL_KEYS,
   LIVE_STATUS_LABEL_KEYS,
   addDays,
+  attendanceSortDirection,
   dailyRowToListRow,
   formatDateTimeKuwait,
   formatDurationSeconds,
   formatTimeKuwait,
   groupDailyRows,
   kuwaitToday,
+  nextAttendanceSortKey,
+  sortAttendanceDailyRows,
+  type AttendanceSortColumn,
   type HistoryGroupKey,
 } from "./attendance-list-utils";
 import { AttendanceResolveSheet } from "./attendance-resolve-sheet";
 import { AttendancePaginationFooter, AttendanceTableShell } from "./attendance-table-shell";
+import { isAutoCheckoutReason } from "./auto-checkout-rules";
 import { exportAttendanceDailyCsv } from "./attendance-reporting-actions";
 import type {
   AttendanceDailyRow,
   AttendanceExceptionRow,
   AttendanceHubTab,
+  AttendanceSortKey,
 } from "./attendance-reporting-types";
 import {
   useAttendanceDailyList,
   useAttendanceExceptionsList,
   useAttendanceReportingKpis,
 } from "./use-attendance-table";
+import {
+  formatWorkingHoursList,
+  resolveWorkingSeconds,
+} from "./working-hours";
 
 const PAGE_SIZE = 50;
 
@@ -105,18 +124,19 @@ function AttendancePageContent() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filters, setFilters] = useState<AttendanceFiltersState>(DEFAULT_ATTENDANCE_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [sortKey, setSortKey] = useState(ATTENDANCE_SORT_OPTIONS[0].value);
+  const [sortKey, setSortKey] = useState<AttendanceSortKey>(
+    ATTENDANCE_SORT_OPTIONS[0].value,
+  );
   const [page, setPage] = useState(0);
   const [fromDate, setFromDate] = useState(addDays(today, -6));
   const [toDate, setToDate] = useState(today);
   const [kpiFilter, setKpiFilter] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<HistoryGroupKey>("none");
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const [detailRow, setDetailRow] = useState<AttendanceDailyRow | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [expandedRowKey, setExpandedRowKey] = useState<string | null>(null);
+  const [exploreDate, setExploreDate] = useState("");
   const [resolveRow, setResolveRow] = useState<AttendanceExceptionRow | null>(null);
   const [resolveOpen, setResolveOpen] = useState(false);
   const [correctionRow, setCorrectionRow] = useState<AttendanceDailyRow | null>(null);
@@ -129,7 +149,18 @@ function AttendancePageContent() {
 
   useEffect(() => {
     setPage(0);
+    setExpandedRowKey(null);
   }, [tab, debouncedSearch, filters, sortKey, fromDate, toDate, kpiFilter]);
+
+  useEffect(() => {
+    setExpandedRowKey(null);
+  }, [page]);
+
+  useEffect(() => {
+    if (tab !== "history" && (sortKey === "date_asc" || sortKey === "date_desc")) {
+      setSortKey("problems_first");
+    }
+  }, [tab, sortKey]);
 
   const statusFilter = kpiFilter ?? (filters.status !== "all" ? filters.status : undefined);
 
@@ -211,6 +242,36 @@ function AttendancePageContent() {
     label: t(o.labelKey),
   }));
 
+  const columnVisibilityOptions = useMemo(
+    () => [
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "date", label: t("colDate") },
+      { id: "status", label: t("colStatus") },
+      { id: "checkIn", label: t("colCheckIn") },
+      { id: "checkOut", label: t("colCheckOut") },
+      { id: "workingHours", label: t("colWorkingHours") },
+      { id: "onDuty", label: t("colOnDuty") },
+      { id: "lastSeen", label: t("colLastSeen") },
+      { id: "actions", label: t("colActions"), locked: true },
+    ],
+    [t],
+  );
+  const {
+    isVisible: isColumnVisible,
+    toggle: toggleColumn,
+    reset: resetColumns,
+    pickerOptions: columnPickerOptions,
+  } = useTableColumnVisibility(
+    "dpd:attendance:list-columns",
+    columnVisibilityOptions,
+  );
+  const availableColumnPickerOptions = columnPickerOptions.filter(
+    (option) => tab === "history" || option.id !== "date",
+  );
+  const availableHiddenColumnCount = availableColumnPickerOptions.filter(
+    (option) => !isColumnVisible(option.id),
+  ).length;
+
   const tabItems = [
     { id: "today", label: t("tabToday"), icon: CalendarDays },
     { id: "history", label: t("tabHistory"), icon: History },
@@ -289,29 +350,42 @@ function AttendancePageContent() {
     }
   }
 
-  function toggleExpanded(key: string) {
-    setExpandedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  function toggleExplore(row: AttendanceDailyRow) {
+    const key = `${row.driver_id}:${row.log_date}`;
+    if (expandedRowKey === key) {
+      setExpandedRowKey(null);
+      return;
+    }
+    setExpandedRowKey(key);
+    setExploreDate(row.log_date);
   }
 
   function renderDailyRow(row: AttendanceDailyRow) {
     const rowKey = `${row.driver_id}:${row.log_date}`;
-    const expanded = expandedKeys.has(rowKey);
+    const expanded = expandedRowKey === rowKey;
     const liveLabelKey = LIVE_STATUS_LABEL_KEYS[row.live_status] ?? "livePresent";
+    const colSpan =
+      2 +
+      [
+        ...(tab === "history" ? ["date"] : []),
+        "status",
+        "checkIn",
+        "checkOut",
+        "workingHours",
+        "onDuty",
+        "lastSeen",
+      ].filter(isColumnVisible).length;
 
     return (
-      <>
-        <AppDataTableRow key={rowKey}>
+      <Fragment key={rowKey}>
+        <AppDataTableRow>
           <TableCell>
             <button
               type="button"
-              className="me-2 inline-flex align-middle text-muted-foreground"
-              onClick={() => toggleExpanded(rowKey)}
+              className="me-2 inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.97]"
+              onClick={() => toggleExplore(row)}
               aria-expanded={expanded}
+              aria-label={expanded ? t("collapseDetail") : t("exploreDetail")}
             >
               {expanded ? (
                 <ChevronDown className="h-4 w-4" />
@@ -319,39 +393,83 @@ function AttendancePageContent() {
                 <ChevronRight className="h-4 w-4" />
               )}
             </button>
-            <div>
+            <div className="inline-block align-middle">
               <p className="font-medium">{row.driver_name}</p>
               <p className="text-xs text-muted-foreground">{row.driver_code}</p>
             </div>
           </TableCell>
           {tab === "history" ? (
-            <TableCell className="whitespace-nowrap">{row.log_date}</TableCell>
+            <VisibleTableCell
+              columnId="date"
+              isVisible={isColumnVisible}
+              className="whitespace-nowrap"
+            >
+              {row.log_date}
+            </VisibleTableCell>
           ) : null}
-          <TableCell>
+          <VisibleTableCell columnId="status" isVisible={isColumnVisible}>
             <StatusPill variant={resolveStatusVariant(row.live_status)}>
               {t(liveLabelKey)}
             </StatusPill>
-          </TableCell>
-          <TableCell className="whitespace-nowrap">{formatTimeKuwait(row.check_in_at)}</TableCell>
-          <TableCell>
+          </VisibleTableCell>
+          <VisibleTableCell
+            columnId="checkIn"
+            isVisible={isColumnVisible}
+            className="whitespace-nowrap"
+          >
+            {formatTimeKuwait(row.check_in_at)}
+          </VisibleTableCell>
+          <VisibleTableCell
+            columnId="checkOut"
+            isVisible={isColumnVisible}
+            className="whitespace-nowrap"
+          >
+            <div className="flex flex-col gap-0.5">
+              <span>{formatTimeKuwait(row.check_out_at)}</span>
+              {isAutoCheckoutReason(row.check_out_reason) ? (
+                <span className="w-fit rounded border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                  {t("autoCheckoutBadge")}
+                </span>
+              ) : null}
+            </div>
+          </VisibleTableCell>
+          <VisibleTableCell
+            columnId="workingHours"
+            isVisible={isColumnVisible}
+            className="whitespace-nowrap tabular-nums"
+          >
+            {formatWorkingHoursList(
+              resolveWorkingSeconds({
+                dutySeconds: row.duty_seconds,
+                checkInAt: row.check_in_at,
+                checkOutAt: row.check_out_at,
+              }),
+              formatDurationSeconds,
+            )}
+          </VisibleTableCell>
+          <VisibleTableCell columnId="onDuty" isVisible={isColumnVisible}>
             {row.is_on_duty ? (
               <StatusPill variant="success">{t("onDuty")}</StatusPill>
             ) : (
               <span className="text-muted-foreground">{t("offDuty")}</span>
             )}
-          </TableCell>
-          <TableCell className="whitespace-nowrap text-muted-foreground">
+          </VisibleTableCell>
+          <VisibleTableCell
+            columnId="lastSeen"
+            isVisible={isColumnVisible}
+            className="whitespace-nowrap text-muted-foreground"
+          >
             {formatDateTimeKuwait(row.last_seen_at)}
-          </TableCell>
+          </VisibleTableCell>
           <TableCell>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => {
-                  setDetailRow(row);
-                  setDetailOpen(true);
-                }}
+                className="text-primary hover:bg-primary/10"
+                render={
+                  <Link href={`/attendance/drivers/${row.driver_id}?date=${row.log_date}`} />
+                }
                 aria-label={t("viewDetail")}
               >
                 <ExternalLink className="h-4 w-4" />
@@ -374,70 +492,69 @@ function AttendancePageContent() {
         </AppDataTableRow>
         {expanded ? (
           <AppDataTableRow className="bg-muted/20 hover:bg-muted/20">
-            <TableCell colSpan={tab === "history" ? 7 : 6}>
-              <div className="grid gap-2 py-2 text-sm sm:grid-cols-3">
-                <div>
-                  <span className="text-muted-foreground">{t("colScheduledShift")}: </span>
-                  {row.scheduled_start_at
-                    ? `${formatTimeKuwait(row.scheduled_start_at)} – ${formatTimeKuwait(row.scheduled_end_at)}`
-                    : "—"}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">{t("colOnline")}: </span>
-                  {formatDurationSeconds(row.online_seconds)}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">{t("kpiCompliance")}: </span>
-                  {row.compliance_score != null ? `${row.compliance_score}%` : "—"}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">{t("filterPartner")}: </span>
-                  {row.partner_name ?? "—"}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">{t("filterZone")}: </span>
-                  {row.zone_name ?? "—"}
-                </div>
-                <div>
-                  <Button variant="link" size="sm" className="h-auto p-0" render={
-                    <Link href={`/attendance/drivers/${row.driver_id}?date=${row.log_date}`}>
-                      {t("viewDetail")}
-                    </Link>
-                  } />
-                </div>
+            <TableCell colSpan={colSpan} className="p-0">
+              <div className="border-t border-border px-4 py-3">
+                <AttendanceDriverExplorePanel
+                  driverId={row.driver_id}
+                  date={exploreDate || row.log_date}
+                  onDateChange={setExploreDate}
+                  className="max-w-5xl"
+                />
               </div>
             </TableCell>
           </AppDataTableRow>
         ) : null}
-      </>
+      </Fragment>
     );
   }
 
-  const dailyRows = dailyData?.rows ?? [];
+  const dailyRows = useMemo(
+    () => sortAttendanceDailyRows(dailyData?.rows ?? [], sortKey),
+    [dailyData?.rows, sortKey],
+  );
   const groupedSections =
     tab === "history" && groupBy !== "none"
       ? groupDailyRows(dailyRows, groupBy)
       : [{ key: "all", label: "", rows: dailyRows }];
 
-  const dailyColumns =
+  const sortColumnHeader = (column: AttendanceSortColumn, label: string) => (
+    <SortableTableHeadLabel
+      label={label}
+      direction={attendanceSortDirection(sortKey, column)}
+      onSort={() => setSortKey((prev) => nextAttendanceSortKey(prev, column))}
+    />
+  );
+
+  const dailyColumns = (
     tab === "history"
       ? [
-          { id: "driver", label: t("colDriver") },
-          { id: "date", label: t("colDate") },
-          { id: "status", label: t("colStatus") },
-          { id: "checkIn", label: t("colCheckIn") },
-          { id: "onDuty", label: t("colOnDuty") },
-          { id: "lastSeen", label: t("colLastSeen") },
+          { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
+          { id: "date", label: sortColumnHeader("date", t("colDate")) },
+          { id: "status", label: sortColumnHeader("status", t("colStatus")) },
+          { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
+          { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
+          {
+            id: "workingHours",
+            label: sortColumnHeader("duty_seconds", t("colWorkingHours")),
+          },
+          { id: "onDuty", label: sortColumnHeader("on_duty", t("colOnDuty")) },
+          { id: "lastSeen", label: sortColumnHeader("last_seen", t("colLastSeen")) },
           { id: "actions", label: t("colActions") },
         ]
       : [
-          { id: "driver", label: t("colDriver") },
-          { id: "status", label: t("colStatus") },
-          { id: "checkIn", label: t("colCheckIn") },
-          { id: "onDuty", label: t("colOnDuty") },
-          { id: "lastSeen", label: t("colLastSeen") },
+          { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
+          { id: "status", label: sortColumnHeader("status", t("colStatus")) },
+          { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
+          { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
+          {
+            id: "workingHours",
+            label: sortColumnHeader("duty_seconds", t("colWorkingHours")),
+          },
+          { id: "onDuty", label: sortColumnHeader("on_duty", t("colOnDuty")) },
+          { id: "lastSeen", label: sortColumnHeader("last_seen", t("colLastSeen")) },
           { id: "actions", label: t("colActions") },
-        ];
+        ]
+  ).filter((column) => isColumnVisible(column.id));
 
   const problemsColumns = [
     { id: "driver", label: t("colDriver") },
@@ -536,12 +653,27 @@ function AttendancePageContent() {
                   onSearchChange={setSearch}
                   searchPlaceholder={t("searchPlaceholder")}
                   sortValue={sortKey}
-                  onSortChange={(v) => setSortKey(v as typeof sortKey)}
+                  onSortChange={(v) => {
+                    if (!v) return;
+                    setSortKey(v as AttendanceSortKey);
+                  }}
                   sortItems={sortItems}
+                  sortVariant="menu"
+                  sortLabel={t("sortBy")}
+                  resultSummary={t("showingCount", {
+                    visible:
+                      tab === "problems"
+                        ? (exceptionsData?.rows.length ?? 0)
+                        : dailyRows.length,
+                    total: totalCount,
+                  })}
                   onRefresh={() => void handleRefresh()}
                   isRefreshing={isRefreshing}
+                  refreshLabel={t("refresh")}
                   onExport={() => void handleExport()}
                   exportDisabled={isExporting}
+                  exportLabel={t("export")}
+                  showExportLabel
                   dateSlot={
                     tab === "history" ? (
                       <div className="flex flex-wrap items-center gap-2">
@@ -591,6 +723,15 @@ function AttendancePageContent() {
                         activeCount={countActiveFilters(filters)}
                         onClick={() => setFiltersOpen(true)}
                       />
+                      {dailyEnabled ? (
+                        <AppTableColumnPicker
+                          options={availableColumnPickerOptions}
+                          isVisible={isColumnVisible}
+                          onToggle={toggleColumn}
+                          onReset={resetColumns}
+                          hiddenCount={availableHiddenColumnCount}
+                        />
+                      ) : null}
                       {tab === "history" ? (
                         <Select
                           value={groupBy}
@@ -703,7 +844,6 @@ function AttendancePageContent() {
         onApply={setFilters}
         showStatus={tab !== "problems"}
       />
-      <AttendanceDetailDrawer row={detailRow} open={detailOpen} onOpenChange={setDetailOpen} />
       <AttendanceResolveSheet row={resolveRow} open={resolveOpen} onOpenChange={setResolveOpen} />
       <AttendanceCorrectionSheet
         row={correctionRow ? dailyRowToListRow(correctionRow) : null}

@@ -294,6 +294,7 @@ export type Database = {
         Row: {
           app_name: string
           app_subtitle: string
+          attendance_auto_checkout_minutes: number
           attendance_early_out_grace_minutes: number
           attendance_gps_min_accuracy_meters: number
           attendance_gps_stale_minutes: number
@@ -322,6 +323,7 @@ export type Database = {
         Insert: {
           app_name?: string
           app_subtitle?: string
+          attendance_auto_checkout_minutes?: number
           attendance_early_out_grace_minutes?: number
           attendance_gps_min_accuracy_meters?: number
           attendance_gps_stale_minutes?: number
@@ -350,6 +352,7 @@ export type Database = {
         Update: {
           app_name?: string
           app_subtitle?: string
+          attendance_auto_checkout_minutes?: number
           attendance_early_out_grace_minutes?: number
           attendance_gps_min_accuracy_meters?: number
           attendance_gps_stale_minutes?: number
@@ -659,6 +662,7 @@ export type Database = {
           admin_note: string | null
           check_in_at: string | null
           check_out_at: string | null
+          check_out_reason: string | null
           created_at: string
           distance_meters: number | null
           driver_id: string
@@ -672,6 +676,7 @@ export type Database = {
           admin_note?: string | null
           check_in_at?: string | null
           check_out_at?: string | null
+          check_out_reason?: string | null
           created_at?: string
           distance_meters?: number | null
           driver_id: string
@@ -687,6 +692,7 @@ export type Database = {
           admin_note?: string | null
           check_in_at?: string | null
           check_out_at?: string | null
+          check_out_reason?: string | null
           created_at?: string
           distance_meters?: number | null
           driver_id?: string
@@ -1057,6 +1063,63 @@ export type Database = {
             columns: ["restaurant_id"]
             isOneToOne: false
             referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_tracking: {
+        Row: {
+          created_at: string
+          doc_type: Database["public"]["Enums"]["document_type"]
+          driver_id: string | null
+          expires_at: string | null
+          id: string
+          intake_id: string | null
+          notify_enabled: boolean
+          notify_lead_days: number[]
+          object_key: string | null
+          track_expiry: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          doc_type: Database["public"]["Enums"]["document_type"]
+          driver_id?: string | null
+          expires_at?: string | null
+          id?: string
+          intake_id?: string | null
+          notify_enabled?: boolean
+          notify_lead_days?: number[]
+          object_key?: string | null
+          track_expiry?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          doc_type?: Database["public"]["Enums"]["document_type"]
+          driver_id?: string | null
+          expires_at?: string | null
+          id?: string
+          intake_id?: string | null
+          notify_enabled?: boolean
+          notify_lead_days?: number[]
+          object_key?: string | null
+          track_expiry?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_tracking_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_tracking_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "driver_intakes"
             referencedColumns: ["id"]
           },
         ]
@@ -1440,63 +1503,6 @@ export type Database = {
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      document_tracking: {
-        Row: {
-          created_at: string
-          doc_type: Database["public"]["Enums"]["document_type"]
-          driver_id: string | null
-          expires_at: string | null
-          id: string
-          intake_id: string | null
-          notify_enabled: boolean
-          notify_lead_days: number[]
-          object_key: string | null
-          track_expiry: boolean
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          doc_type: Database["public"]["Enums"]["document_type"]
-          driver_id?: string | null
-          expires_at?: string | null
-          id?: string
-          intake_id?: string | null
-          notify_enabled?: boolean
-          notify_lead_days?: number[]
-          object_key?: string | null
-          track_expiry?: boolean
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          doc_type?: Database["public"]["Enums"]["document_type"]
-          driver_id?: string | null
-          expires_at?: string | null
-          id?: string
-          intake_id?: string | null
-          notify_enabled?: boolean
-          notify_lead_days?: number[]
-          object_key?: string | null
-          track_expiry?: boolean
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "document_tracking_driver_id_fkey"
-            columns: ["driver_id"]
-            isOneToOne: false
-            referencedRelation: "drivers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "document_tracking_intake_id_fkey"
-            columns: ["intake_id"]
-            isOneToOne: false
-            referencedRelation: "driver_intakes"
             referencedColumns: ["id"]
           },
         ]
@@ -1918,6 +1924,7 @@ export type Database = {
           location_provider: string | null
           longitude: number
           network_type: string | null
+          out_of_zone_since: string | null
           speed_mps: number | null
           tracking_status: string
           updated_at: string
@@ -1938,6 +1945,7 @@ export type Database = {
           location_provider?: string | null
           longitude: number
           network_type?: string | null
+          out_of_zone_since?: string | null
           speed_mps?: number | null
           tracking_status: string
           updated_at?: string
@@ -1958,6 +1966,7 @@ export type Database = {
           location_provider?: string | null
           longitude?: number
           network_type?: string | null
+          out_of_zone_since?: string | null
           speed_mps?: number | null
           tracking_status?: string
           updated_at?: string
@@ -4569,6 +4578,7 @@ export type Database = {
           attendance_status: string | null
           check_in_at: string | null
           check_out_at: string | null
+          check_out_reason: string | null
           compliance_score: number | null
           driver_code: string | null
           driver_id: string | null
@@ -4647,6 +4657,7 @@ export type Database = {
           attendance_status: string | null
           check_in_at: string | null
           check_out_at: string | null
+          check_out_reason: string | null
           compliance_score: number | null
           driver_code: string | null
           driver_id: string | null
@@ -4692,6 +4703,15 @@ export type Database = {
     }
     Functions: {
       _admin_purge_require_super_admin: { Args: never; Returns: undefined }
+      _attendance_apply_checkout: {
+        Args: {
+          p_distance_meters?: number
+          p_driver_id: string
+          p_now?: string
+          p_reason: string
+        }
+        Returns: string
+      }
       _driver_assert_active_on_duty: {
         Args: { p_uid: string }
         Returns: {
@@ -4957,6 +4977,7 @@ export type Database = {
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
+      admin_run_attendance_auto_checkout: { Args: never; Returns: number }
       admin_upsert_exception_action: {
         Args: {
           p_action?: string
@@ -5391,18 +5412,6 @@ export type Database = {
       next_restaurant_code: { Args: never; Returns: string }
       normalize_external_order_id: { Args: { p_raw: string }; Returns: string }
       preview_driver_earnings: { Args: { p_earn_date: string }; Returns: Json }
-      report_delivery_orders: {
-        Args: { p_from: string; p_to: string }
-        Returns: {
-          delivery_count: number
-          driver_code: string
-          driver_id: string
-          employee_id: string
-          full_name: string
-          shift_date: string
-          store_name: string
-        }[]
-      }
       recalculate_driver_earnings: {
         Args: {
           p_approved_by?: string
@@ -5440,6 +5449,18 @@ export type Database = {
       register_or_sync_rider_profile: {
         Args: { p_full_name: string }
         Returns: Json
+      }
+      report_delivery_orders: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          delivery_count: number
+          driver_code: string
+          driver_id: string
+          employee_id: string
+          full_name: string
+          shift_date: string
+          store_name: string
+        }[]
       }
       resolve_import_driver_ids: {
         Args: { p_import_spec: Json }
@@ -5912,7 +5933,6 @@ export const Constants = {
     },
   },
 } as const
-
 export type AppRole = Database["public"]["Enums"]["app_role"];
 export type AdminApprovalStatus = Database["public"]["Enums"]["admin_approval_status"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];

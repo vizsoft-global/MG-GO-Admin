@@ -159,11 +159,18 @@ export function AttendanceFiltersButton({
 }) {
   const t = useTranslations("pages.attendance");
   return (
-    <Button type="button" variant="outline" size="sm" onClick={onClick}>
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className="relative h-9 w-9 shrink-0 rounded-lg"
+      onClick={onClick}
+      aria-label={t("filters")}
+      title={t("filters")}
+    >
       <SlidersHorizontal className="h-4 w-4" />
-      {t("filters")}
       {activeCount > 0 ? (
-        <span className="ms-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+        <span className="absolute -end-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-[9px] font-semibold leading-4 text-primary-foreground">
           {activeCount}
         </span>
       ) : null}

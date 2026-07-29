@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test:geo": "node --import tsx --test src/lib/geo/zone-geometry.test.ts",
     "test:permissions": "node --import tsx --test src/lib/auth/permission-catalog.test.ts",
+    "test:attendance": "node --import tsx --test src/features/attendance/working-hours.test.ts src/features/attendance/auto-checkout-rules.test.ts src/features/attendance/attendance-sort.test.ts",
     "new:page": "node scripts/scaffold-page.mjs",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "migrate:storage-r2": "node scripts/migrate-storage-to-r2.mjs",
