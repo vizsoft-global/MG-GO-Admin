@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -11,6 +11,31 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -140,6 +165,38 @@ export type Database = {
           },
         ]
       }
+      admin_role_ui_defaults: {
+        Row: {
+          preference_key: string
+          role_id: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          preference_key: string
+          role_id: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Update: {
+          preference_key?: string
+          role_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_role_ui_defaults_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "admin_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_roles: {
         Row: {
           created_at: string
@@ -164,6 +221,27 @@ export type Database = {
           is_system?: boolean
           name?: string
           slug?: string
+        }
+        Relationships: []
+      }
+      admin_ui_preferences: {
+        Row: {
+          preference_key: string
+          updated_at: string
+          user_id: string
+          value: Json
+        }
+        Insert: {
+          preference_key: string
+          updated_at?: string
+          user_id: string
+          value?: Json
+        }
+        Update: {
+          preference_key?: string
+          updated_at?: string
+          user_id?: string
+          value?: Json
         }
         Relationships: []
       }
@@ -729,6 +807,54 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+        }
+        Relationships: []
+      }
+      custom_field_definitions: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          default_value: Json | null
+          entity_type: string
+          field_type: string
+          id: string
+          is_active: boolean
+          key: string
+          label: string
+          options: Json
+          required: boolean
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          default_value?: Json | null
+          entity_type: string
+          field_type: string
+          id?: string
+          is_active?: boolean
+          key: string
+          label: string
+          options?: Json
+          required?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          default_value?: Json | null
+          entity_type?: string
+          field_type?: string
+          id?: string
+          is_active?: boolean
+          key?: string
+          label?: string
+          options?: Json
+          required?: boolean
+          sort_order?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1719,6 +1845,7 @@ export type Database = {
           avatar_url: string | null
           civil_id: string
           created_at: string
+          custom_fields: Json
           driver_code: string
           employee_id: string
           full_name: string
@@ -1743,6 +1870,7 @@ export type Database = {
           avatar_url?: string | null
           civil_id: string
           created_at?: string
+          custom_fields?: Json
           driver_code: string
           employee_id: string
           full_name: string
@@ -1767,6 +1895,7 @@ export type Database = {
           avatar_url?: string | null
           civil_id?: string
           created_at?: string
+          custom_fields?: Json
           driver_code?: string
           employee_id?: string
           full_name?: string
@@ -2303,6 +2432,7 @@ export type Database = {
           current_app_version_name: string | null
           current_lat: number | null
           current_lng: number | null
+          custom_fields: Json
           driver_code: string
           employee_id: string
           id: string
@@ -2338,6 +2468,7 @@ export type Database = {
           current_app_version_name?: string | null
           current_lat?: number | null
           current_lng?: number | null
+          custom_fields?: Json
           driver_code: string
           employee_id: string
           id: string
@@ -2373,6 +2504,7 @@ export type Database = {
           current_app_version_name?: string | null
           current_lat?: number | null
           current_lng?: number | null
+          custom_fields?: Json
           driver_code?: string
           employee_id?: string
           id?: string
@@ -3160,6 +3292,8 @@ export type Database = {
           requires_approval: boolean
           schedule_spec: Json
           scheduled_for: string | null
+          screenshot_restricted: boolean
+          screenshot_restricted_override: boolean | null
           send_limit: number | null
           sent_at: string | null
           status: Database["public"]["Enums"]["notification_campaign_status"]
@@ -3201,6 +3335,8 @@ export type Database = {
           requires_approval?: boolean
           schedule_spec?: Json
           scheduled_for?: string | null
+          screenshot_restricted?: boolean
+          screenshot_restricted_override?: boolean | null
           send_limit?: number | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["notification_campaign_status"]
@@ -3242,6 +3378,8 @@ export type Database = {
           requires_approval?: boolean
           schedule_spec?: Json
           scheduled_for?: string | null
+          screenshot_restricted?: boolean
+          screenshot_restricted_override?: boolean | null
           send_limit?: number | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["notification_campaign_status"]
@@ -3603,6 +3741,7 @@ export type Database = {
           name: string
           payload_version: number
           priority: Database["public"]["Enums"]["notification_priority"]
+          screenshot_restricted: boolean
           title_template: string
           updated_at: string
           variable_schema: Json
@@ -3620,6 +3759,7 @@ export type Database = {
           name: string
           payload_version?: number
           priority?: Database["public"]["Enums"]["notification_priority"]
+          screenshot_restricted?: boolean
           title_template: string
           updated_at?: string
           variable_schema?: Json
@@ -3637,6 +3777,7 @@ export type Database = {
           name?: string
           payload_version?: number
           priority?: Database["public"]["Enums"]["notification_priority"]
+          screenshot_restricted?: boolean
           title_template?: string
           updated_at?: string
           variable_schema?: Json
@@ -4734,6 +4875,7 @@ export type Database = {
           current_app_version_name: string | null
           current_lat: number | null
           current_lng: number | null
+          custom_fields: Json
           driver_code: string
           employee_id: string
           id: string
@@ -5610,6 +5752,7 @@ export type Database = {
         | "failed"
         | "cancelled"
         | "expired"
+        | "screenshot_taken"
       notification_priority: "low" | "normal" | "high" | "critical"
       notification_status: "draft" | "scheduled" | "sent"
       offer_status: "draft" | "active" | "ended"
@@ -5772,6 +5915,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       admin_activity_action: [
@@ -5886,6 +6032,7 @@ export const Constants = {
         "failed",
         "cancelled",
         "expired",
+        "screenshot_taken",
       ],
       notification_priority: ["low", "normal", "high", "critical"],
       notification_status: ["draft", "scheduled", "sent"],
@@ -5933,6 +6080,8 @@ export const Constants = {
     },
   },
 } as const
+
 export type AppRole = Database["public"]["Enums"]["app_role"];
 export type AdminApprovalStatus = Database["public"]["Enums"]["admin_approval_status"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+

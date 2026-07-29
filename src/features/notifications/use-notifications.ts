@@ -9,6 +9,7 @@ import {
   getNotificationDashboardKpis,
   getNotificationTemplate,
   getNotificationTargetingOptions,
+  listCampaignScreenshotEvents,
   listNotificationAnalyticsDaily,
   listNotificationAutomations,
   listNotificationAutomationRuns,
@@ -58,6 +59,14 @@ export function useNotificationDispatchItems(campaignId: string | null) {
   return useQuery({
     queryKey: queryKeys.notifications.dispatchItems(campaignId ?? ""),
     queryFn: () => getNotificationDispatchItems(campaignId!),
+    enabled: Boolean(campaignId),
+  });
+}
+
+export function useCampaignScreenshotEvents(campaignId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.notifications.screenshotEvents(campaignId ?? ""),
+    queryFn: () => listCampaignScreenshotEvents(campaignId!),
     enabled: Boolean(campaignId),
   });
 }

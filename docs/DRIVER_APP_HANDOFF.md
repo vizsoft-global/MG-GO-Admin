@@ -356,25 +356,73 @@ supabase.channel(`notifications:driver:${driverId}`).on(...)
 
 Admin now sends via `notification_campaigns` + `notification_dispatch_items` (FCM provider), not direct inserts to legacy `notifications`.
 
-### FCM data payload (version 1)
+### FCM data payload (version 2)
 
 Admin dispatch sends FCM with notification title/body plus a flat string `data` map:
 
 ```json
 {
   "campaign_id": "uuid",
-  "payload_version": "1",
+  "payload_version": "2",
   "action_type": "open_screen | open_module | open_record | open_workflow | open_url | custom_payload | silent_update_trigger",
   "action_params": "{\"screen\":\"home\",\"delivery_id\":\"optional-uuid\"}",
   "category": "incentive | reminder | compliance | attendance | salary | emergency | announcement | operations | system_alert",
   "priority": "low | normal | high | critical",
+  "screenshot_restricted": "true | false",
   "deep_link": "optional musallam://...",
   "image_url": "optional HTTPS URL for rich push thumbnail (7-day signed URL at send time)",
   "media": "[{\"role\":\"banner|image\",\"type\":\"image\",\"object_key\":\"notifications/assets/...\"}]"
 }
 ```
 
-Parse `action_params` and `media` as JSON on the client. Unknown keys must be ignored for forward compatibility.
+Parse `action_params` and `media` as JSON on the client. Parse `screenshot_restricted` as a boolean (`"true"` → true). Unknown keys must be ignored for forward compatibility.
+
+`driver_list_notifications` also returns `screenshot_restricted` (boolean) on each inbox item — **prefer the inbox/RPC value over a stale push payload** on next sync.
+
+#### Screenshot restriction (sensitive notifications)
+
+Admin stamps `notification_campaigns.screenshot_restricted` at save/dispatch (template default + optional campaign override). The driver app must enforce OS-level protection **only** while that notification’s detail (or full-screen media for the same campaign) is visible — not globally.
+
+**Local cache (fail-safe):** Persist last known `screenshot_restricted` keyed by `campaign_id` + `dispatch_item_id`. Offline open uses last known. Never treat as unrestricted if last known was restricted. Missing flag on legacy v1 rows → default `false`.
+
+**Android (notification detail Activity / Flutter route only):**
+
+```kotlin
+// On enter restricted detail:
+window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+// On leave / dispose:
+window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+```
+
+`FLAG_SECURE` blocks screenshots and blanks the app-switcher preview for that window.
+
+**iOS (notification detail route only):** iOS cannot block screenshots. Implement:
+
+1. **Screen recording / Capture:** observe `UIScreen.capturedDidChangeNotification` / `UIScreen.main.isCaptured`. When `isCaptured == true`, blur or hide the notification body (and media). Restore when capture ends.
+2. **Screenshot detect:** observe `UIApplication.userDidTakeScreenshotNotification`. When fired on a restricted screen, POST client event `screenshot_taken` (see below).
+3. **App switcher:** on `willResignActive` / `didEnterBackground` while restricted detail is mounted, obscure the sensitive body (overlay / hide text) so the snapshot is not readable.
+
+Example Flutter/iOS wiring sketch:
+
+```dart
+// FLAG_SECURE via a MethodChannel on Android when restricted detail mounts.
+// iOS: WidgetsBindingObserver + platform channel for screenshot/capture notifications.
+```
+
+**Screenshot event (iOS — required for compliance audit):**
+
+```json
+POST /api/notifications/events
+{
+  "campaign_id": "uuid",
+  "dispatch_item_id": "uuid",
+  "event_type": "screenshot_taken",
+  "event_at": "ISO timestamp",
+  "meta": { "app_version": "1.0.0", "platform": "ios" }
+}
+```
+
+Does not change delivery lifecycle status. Admin sees attempts on the campaign detail page.
 
 ### Personalized content (import campaigns)
 
@@ -418,13 +466,15 @@ POST `https://dpdadmin.vercel.app/api/notifications/events` with rider session:
 {
   "campaign_id": "uuid",
   "dispatch_item_id": "uuid",
-  "event_type": "delivered | opened | clicked | failed | token_invalid",
+  "event_type": "delivered | opened | clicked | failed | token_invalid | screenshot_taken",
   "event_at": "ISO timestamp",
   "meta": { "app_version": "1.0.0", "platform": "ios|android" }
 }
 ```
 
 Alternatively call RPC `record_notification_client_event(p_campaign_id, p_dispatch_item_id, p_event_type, p_event_at, p_metadata)` as the authenticated rider.
+
+`screenshot_taken` is audit-only (insert into `notification_events`); it does not advance `notification_dispatch_items` status.
 
 ### Push token registration
 

@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { Archive, Loader2, Save } from "lucide-react";
+import { Archive, Loader2, Save, ShieldOff } from "lucide-react";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,7 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
   const [variablesJson, setVariablesJson] = useState("[]");
   const [actionType, setActionType] = useState<NotificationActionType>("open_screen");
   const [actionParamsJson, setActionParamsJson] = useState('{"screen":"home"}');
+  const [screenshotRestricted, setScreenshotRestricted] = useState(false);
 
   useEffect(() => {
     if (!existing) return;
@@ -72,6 +74,7 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
     setVariablesJson(JSON.stringify(existing.variable_schema ?? [], null, 2));
     setActionType(existing.action_type);
     setActionParamsJson(JSON.stringify(existing.action_params ?? {}, null, 2));
+    setScreenshotRestricted(Boolean(existing.screenshot_restricted));
   }, [existing]);
 
   const actionParams = useMemo(() => {
@@ -94,8 +97,10 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
     () =>
       previewPayloadSchema(
         buildActionPayload({ actionType, actionParams }),
+        undefined,
+        screenshotRestricted,
       ),
-    [actionType, actionParams],
+    [actionType, actionParams, screenshotRestricted],
   );
 
   function buildInput() {
@@ -109,6 +114,7 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
       variableSchema,
       actionType,
       actionParams,
+      screenshotRestricted,
     };
   }
 
@@ -249,6 +255,23 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
                   placeholder={t("templatePlaceholderHint")}
                 />
               </div>
+              {canManage ? (
+                <div className="space-y-1">
+                  <Label>{t("fieldScreenshotRestricted")}</Label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ToggleChip
+                      selected={screenshotRestricted}
+                      onClick={() => setScreenshotRestricted((v) => !v)}
+                      icon={ShieldOff}
+                    >
+                      {t("restrictScreenshot")}
+                    </ToggleChip>
+                    <span className="text-[10px] text-muted-foreground">
+                      {t("restrictScreenshotHint")}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
             </>
           ) : null}
 

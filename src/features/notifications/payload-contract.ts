@@ -1,4 +1,5 @@
 import { PAYLOAD_VERSION } from "./constants";
+import { screenshotRestrictedToFcmValue } from "./screenshot-restriction";
 import type { ActionPayload, NotificationActionType } from "./types";
 
 export function buildActionPayload(input: {
@@ -22,6 +23,7 @@ export function buildFcmDataPayload(input: {
   action: ActionPayload;
   category: string;
   priority: string;
+  screenshotRestricted?: boolean;
   media?: Array<{ role: string; type: string; object_key: string; alt?: string }>;
   imageUrl?: string | null;
 }): Record<string, string> {
@@ -32,6 +34,9 @@ export function buildFcmDataPayload(input: {
     action_params: JSON.stringify(input.action.action_params),
     category: input.category,
     priority: input.priority,
+    screenshot_restricted: screenshotRestrictedToFcmValue(
+      Boolean(input.screenshotRestricted),
+    ),
     ...(input.action.deep_link ? { deep_link: input.action.deep_link } : {}),
     ...(input.dispatchItemId ? { dispatch_item_id: input.dispatchItemId } : {}),
   };
@@ -49,6 +54,7 @@ export function buildFcmDataPayload(input: {
 export function previewPayloadSchema(
   action: ActionPayload,
   media?: Array<{ role: string; type: string; object_key: string; alt?: string }>,
+  screenshotRestricted?: boolean,
 ): string {
   return JSON.stringify(
     {
@@ -56,6 +62,9 @@ export function previewPayloadSchema(
       action_type: action.action_type,
       action_params: action.action_params,
       deep_link: action.deep_link,
+      screenshot_restricted: screenshotRestrictedToFcmValue(
+        Boolean(screenshotRestricted),
+      ),
       ...(media && media.length > 0 ? { media } : {}),
     },
     null,

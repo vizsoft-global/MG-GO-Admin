@@ -226,6 +226,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-07-29` — Screenshot restriction for sensitive notifications: `screenshot_restricted` on templates + campaign override/stamp; FCM/inbox `screenshot_restricted`; client event `screenshot_taken`; Admin UI toggle/tri-state/list badge/detail attempts. Migration `20260820110000_notification_screenshot_restriction.sql`. Payload version 2. Driver native enforcement in handoff §7.
+- `[admin only] 2026-07-29` — Driver dynamic custom fields: `custom_field_definitions` + `custom_fields` jsonb on `driver_intakes`/`drivers`; hybrid list column prefs (`admin_role_ui_defaults` + `admin_ui_preferences`); settings `/settings/driver-fields`; Add/Edit/list/import/export wiring. Migration `20260820100000_driver_custom_fields.sql`.
 - `[admin+app] 2026-07-29` — Driver app: `remoteDutyMonitorProvider` syncs UI + snackbar on server auto-checkout; client outside-zone idle timeout aligned to 45 minutes.
 - `[admin+app] 2026-07-29` — Attendance list check-out + working hours columns; `attendance_logs.check_out_reason`; assigned-zone `driver_locations.out_of_zone_since`; `attendance_auto_checkout_minutes` (default 45); RPC `admin_run_attendance_auto_checkout` + cron `/api/cron/attendance-auto-checkout`; midnight-safe open-log checkout. Migration `20260819100000_attendance_auto_checkout.sql`.
 - `[admin only] 2026-07-28` — Renamed `src/middleware.ts` → `src/proxy.ts` (Next.js 16 Node runtime) to fix Edge sandbox Supabase `fetch failed` in local auth.

@@ -175,6 +175,7 @@ export const queryKeys = {
       ["notifications", "list", filters] as const,
     detail: (id: string) => ["notifications", "detail", id] as const,
     dispatchItems: (id: string) => ["notifications", "dispatch-items", id] as const,
+    screenshotEvents: (id: string) => ["notifications", "screenshot-events", id] as const,
     templates: () => ["notifications", "templates"] as const,
     templateDetail: (id: string) => ["notifications", "templates", id] as const,
     automations: () => ["notifications", "automations"] as const,
@@ -194,5 +195,15 @@ export const queryKeys = {
   documentExpiry: {
     all: () => ["document-expiry"] as const,
     dashboard: () => ["document-expiry", "dashboard"] as const,
+  },
+  customFields: {
+    all: () => ["custom-fields"] as const,
+    list: (entityType: string, includeInactive = false) =>
+      ["custom-fields", entityType, includeInactive] as const,
+  },
+  uiPreferences: {
+    effective: (key: string) => ["ui-preferences", "effective", key] as const,
+    roleDefault: (roleId: string, key: string) =>
+      ["ui-preferences", "role", roleId, key] as const,
   },
 } as const;
