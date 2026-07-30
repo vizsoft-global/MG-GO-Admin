@@ -5,12 +5,22 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { getPresignedGetUrl } from "@/lib/storage/r2-client";
 import { isAllowedStorageKey } from "@/lib/storage/r2-keys";
 
+/** `drivers/{uuid}/login_verification/...` — readable with drivers.view */
+const LOGIN_VERIFICATION_KEY =
+  /^drivers\/[0-9a-f-]{36}\/login_verification\//i;
+
 function canReadStorageKey(
   key: string,
   permissions: Set<string>,
   isSuperAdmin: boolean,
 ): boolean {
   if (key.startsWith("drivers/")) {
+    if (LOGIN_VERIFICATION_KEY.test(key)) {
+      return (
+        hasPermissionInSet(permissions, "drivers.view", isSuperAdmin) ||
+        hasPermissionInSet(permissions, "drivers.manage", isSuperAdmin)
+      );
+    }
     return hasPermissionInSet(permissions, "drivers.manage", isSuperAdmin);
   }
   if (key.startsWith("partners/")) {

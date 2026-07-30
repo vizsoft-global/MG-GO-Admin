@@ -1595,6 +1595,38 @@ export type Database = {
           },
         ]
       }
+      driver_login_verifications: {
+        Row: {
+          id: string
+          driver_id: string
+          object_key: string
+          captured_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          driver_id: string
+          object_key: string
+          captured_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          driver_id?: string
+          object_key?: string
+          captured_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_login_verifications_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_documents: {
         Row: {
           created_at: string
@@ -5470,6 +5502,10 @@ export type Database = {
         Returns: Json
       }
       driver_update_avatar: { Args: { p_object_key: string }; Returns: Json }
+      driver_record_login_verification: {
+        Args: { p_object_key: string }
+        Returns: Json
+      }
       enqueue_notification_automation_event: {
         Args: {
           p_driver_id?: string

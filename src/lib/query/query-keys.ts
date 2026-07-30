@@ -19,6 +19,12 @@ export const queryKeys = {
     assignSearch: (query: string) => ["drivers", "assign", "search", query] as const,
     documents: (intakeId: string, profileId: string | null) =>
       ["drivers", "documents", intakeId, profileId] as const,
+    loginVerifications: (
+      driverId: string,
+      startDate: string | null,
+      endDate: string | null,
+    ) =>
+      ["drivers", "login-verifications", driverId, startDate, endDate] as const,
   },
   liveTracking: {
     all: () => ["live-tracking"] as const,

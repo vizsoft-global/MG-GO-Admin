@@ -17,6 +17,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Camera,
   FileText,
   Loader2,
   MapPin,
@@ -42,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { DriverAccountStatusEditor } from "./driver-account-status-editor";
 import { DriverBlockEditor } from "./driver-block-editor";
 import { DriverDocumentsTab } from "./driver-documents-tab";
+import { DriverLoginVerificationTab } from "./driver-login-verification-tab";
 import { DriverDevicesTab } from "./driver-devices-tab";
 import { DriverLocationTab } from "./driver-location-tab";
 import { DriverAttendanceTab } from "./driver-attendance-tab";
@@ -76,6 +78,7 @@ type DetailTabId =
   | "attendance"
   | "location"
   | "documents"
+  | "login-verification"
   | "devices"
   | "assets"
   | "earnings"
@@ -309,6 +312,12 @@ function DriverDetailContent({ id }: { id: string }) {
     if (tab === "devices") {
       setActiveTab("devices");
     }
+    if (tab === "login-verification") {
+      setActiveTab("login-verification");
+    }
+    if (tab === "documents") {
+      setActiveTab("documents");
+    }
   }, [searchParams, driver?.linked_profile_id]);
 
   const handleEditOpenChange = (open: boolean) => {
@@ -324,6 +333,7 @@ function DriverDetailContent({ id }: { id: string }) {
       ? [{ id: "location" as const, label: t("tabLocation"), icon: MapPin }]
       : []),
     { id: "documents", label: t("tabDocuments"), icon: FileText },
+    { id: "login-verification", label: t("tabLoginVerification"), icon: Camera },
     { id: "devices", label: t("tabDevices"), icon: Smartphone },
     { id: "assets", label: t("tabAssets"), icon: Package },
     { id: "earnings", label: t("tabEarnings"), icon: Wallet },
@@ -478,6 +488,25 @@ function DriverDetailContent({ id }: { id: string }) {
           canManage={canManage}
           onEdit={openEditSheet}
         />
+      );
+    }
+
+    if (activeTab === "login-verification" && driver.linked_profile_id) {
+      return (
+        <DriverLoginVerificationTab driverId={driver.linked_profile_id} />
+      );
+    }
+
+    if (activeTab === "login-verification") {
+      return (
+        <div className="rounded-xl border border-border bg-card shadow-sm">
+          <div className="py-12">
+            <AppEmptyState
+              title={t("loginVerificationNeedsLinkTitle")}
+              description={t("loginVerificationNeedsLinkDescription")}
+            />
+          </div>
+        </div>
       );
     }
 

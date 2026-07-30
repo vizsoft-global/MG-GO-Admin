@@ -744,9 +744,13 @@ Driver images and documents use the **same private R2 bucket** as the admin pane
 |------------|----------|---------------|
 | `driver_doc` | 10 MB | `image/*`, `application/pdf` |
 | `driver_selfie` | 5 MB | `image/*` |
+| `driver_avatar` | 2 MB | `image/*` |
 | `order_proof` | 10 MB | `image/*`, `application/pdf` |
+| `login_verification` | 5 MB | `image/*` |
 
 Object keys are server-generated: `drivers/{driverId}/{entityType}/{date}/{uuid}.{ext}`.
+
+Login identity selfies use `login_verification`. After confirm, the app calls `driver_record_login_verification` to write `driver_login_verifications`. See **`docs/LOGIN_VERIFICATION_HANDOFF.md`**. Admin viewing UI is a separate task.
 
 ### CORS
 
