@@ -382,6 +382,7 @@ export type Database = {
           driver_app_icon_url: string | null
           driver_app_login_hint: string
           driver_app_logo_url: string | null
+          driver_app_login_verification_exempt_all: boolean
           driver_app_maintenance_message: string
           driver_app_maintenance_mode: boolean
           driver_app_splash_url: string | null
@@ -411,6 +412,7 @@ export type Database = {
           driver_app_icon_url?: string | null
           driver_app_login_hint?: string
           driver_app_logo_url?: string | null
+          driver_app_login_verification_exempt_all?: boolean
           driver_app_maintenance_message?: string
           driver_app_maintenance_mode?: boolean
           driver_app_splash_url?: string | null
@@ -440,6 +442,7 @@ export type Database = {
           driver_app_icon_url?: string | null
           driver_app_login_hint?: string
           driver_app_logo_url?: string | null
+          driver_app_login_verification_exempt_all?: boolean
           driver_app_maintenance_message?: string
           driver_app_maintenance_mode?: boolean
           driver_app_splash_url?: string | null
@@ -1602,6 +1605,8 @@ export type Database = {
           object_key: string
           captured_at: string
           created_at: string
+          liveness_passed: boolean
+          liveness_method: string | null
         }
         Insert: {
           id?: string
@@ -1609,6 +1614,8 @@ export type Database = {
           object_key: string
           captured_at?: string
           created_at?: string
+          liveness_passed?: boolean
+          liveness_method?: string | null
         }
         Update: {
           id?: string
@@ -1616,6 +1623,8 @@ export type Database = {
           object_key?: string
           captured_at?: string
           created_at?: string
+          liveness_passed?: boolean
+          liveness_method?: string | null
         }
         Relationships: [
           {
@@ -2471,6 +2480,7 @@ export type Database = {
           is_blocked: boolean
           is_on_duty: boolean
           joined_at: string | null
+          login_verification_exempt: boolean
           nationality: string | null
           partner_id: string | null
           restaurant_id: string | null
@@ -2507,6 +2517,7 @@ export type Database = {
           is_blocked?: boolean
           is_on_duty?: boolean
           joined_at?: string | null
+          login_verification_exempt?: boolean
           nationality?: string | null
           partner_id?: string | null
           restaurant_id?: string | null
@@ -2543,6 +2554,7 @@ export type Database = {
           is_blocked?: boolean
           is_on_duty?: boolean
           joined_at?: string | null
+          login_verification_exempt?: boolean
           nationality?: string | null
           partner_id?: string | null
           restaurant_id?: string | null

@@ -461,6 +461,23 @@ export async function setDriverAppMaintenanceMode(
   return { success: true };
 }
 
+export async function setDriverAppLoginVerificationExemptAll(
+  enabled: boolean,
+): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+  const auth = await requireSettingsManager();
+  if ("error" in auth) return auth;
+
+  const result = await patchAppSettings(
+    "setDriverAppLoginVerificationExemptAll",
+    { driver_app_login_verification_exempt_all: enabled },
+    auth.session.id,
+  );
+  if (result.error) return result;
+
+  updateTag("app-settings");
+  return { success: true };
+}
+
 export async function resetDriverAppSettings(
   locale: string,
 ): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
@@ -483,6 +500,7 @@ export async function resetDriverAppSettings(
       driver_app_maintenance_mode: false,
       driver_app_maintenance_message:
         DEFAULT_DRIVER_APP_SETTINGS.driver_app_maintenance_message,
+      driver_app_login_verification_exempt_all: false,
       driver_app_delivery_proximity_meters:
         DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
     },

@@ -42,6 +42,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { DriverAccountStatusEditor } from "./driver-account-status-editor";
 import { DriverBlockEditor } from "./driver-block-editor";
+import { DriverLoginVerificationExemptEditor } from "./driver-login-verification-exempt-editor";
 import { DriverDocumentsTab } from "./driver-documents-tab";
 import { DriverLoginVerificationTab } from "./driver-login-verification-tab";
 import { DriverDevicesTab } from "./driver-devices-tab";
@@ -837,6 +838,23 @@ function DriverDetailContent({ id }: { id: string }) {
                   isBlocked={driver.is_blocked}
                   blockedReason={driver.blocked_reason}
                   blockedAt={driver.blocked_at}
+                  canManage={canManage}
+                />
+              </div>
+            </div>
+          ) : null}
+          {driver.linked_profile_id && !isArchived && canManage ? (
+            <div className="rounded-xl border border-border bg-card shadow-sm">
+              <div className="border-b border-border px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">
+                  {t("loginVerificationExemptTitle")}
+                </p>
+              </div>
+              <div className="px-4 py-4">
+                <DriverLoginVerificationExemptEditor
+                  driverId={driver.linked_profile_id}
+                  intakeId={driver.intake_id ?? driver.id}
+                  exempt={driver.login_verification_exempt}
                   canManage={canManage}
                 />
               </div>

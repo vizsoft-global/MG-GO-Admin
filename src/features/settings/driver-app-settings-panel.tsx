@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   resetDriverAppSettings,
+  setDriverAppLoginVerificationExemptAll,
   setDriverAppMaintenanceMode,
   updateDriverAppDeliveryProximity,
   updateDriverAppMaintenanceMessage,
@@ -34,6 +35,7 @@ type DriverAppSettingsPanelProps = {
   driverAppIconUrl: string | null;
   driverAppMaintenanceMode: boolean;
   driverAppMaintenanceMessage: string;
+  driverAppLoginVerificationExemptAll: boolean;
   driverAppDeliveryProximityMeters: number;
 };
 
@@ -117,6 +119,7 @@ export function DriverAppSettingsPanel({
   driverAppIconUrl,
   driverAppMaintenanceMode,
   driverAppMaintenanceMessage,
+  driverAppLoginVerificationExemptAll,
   driverAppDeliveryProximityMeters,
 }: DriverAppSettingsPanelProps) {
   const t = useTranslations("pages.settings.driverApp");
@@ -130,6 +133,9 @@ export function DriverAppSettingsPanel({
   const [splashPreview, setSplashPreview] = useState<string | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [maintenanceMode, setMaintenanceMode] = useState(driverAppMaintenanceMode);
+  const [loginVerificationExemptAll, setLoginVerificationExemptAll] = useState(
+    driverAppLoginVerificationExemptAll,
+  );
   const [proximityMeters, setProximityMeters] = useState(
     String(driverAppDeliveryProximityMeters),
   );
@@ -376,6 +382,61 @@ export function DriverAppSettingsPanel({
                   </Button>
                 </div>
               </form>
+          </AppFormSection>
+
+          <AppFormSection
+            title={t("loginVerificationExemptTitle")}
+            description={t("loginVerificationExemptSubtitle")}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/10 p-3">
+              <div className="space-y-1">
+                <span
+                  className={cn(
+                    "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+                    loginVerificationExemptAll
+                      ? "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {loginVerificationExemptAll
+                    ? t("loginVerificationExemptOn")
+                    : t("loginVerificationExemptOff")}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  {loginVerificationExemptAll
+                    ? t("loginVerificationExemptOnHint")
+                    : t("loginVerificationExemptOffHint")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="driverAppLoginVerificationExemptAll" className="text-sm">
+                  {t("loginVerificationExemptToggle")}
+                </Label>
+                <Switch
+                  id="driverAppLoginVerificationExemptAll"
+                  checked={loginVerificationExemptAll}
+                  disabled={isPending}
+                  onCheckedChange={(checked) => {
+                    startTransition(async () => {
+                      setError(null);
+                      const result =
+                        await setDriverAppLoginVerificationExemptAll(checked);
+                      if (result.error) {
+                        toast.error(t("errors.saveFailed"));
+                        return;
+                      }
+                      setLoginVerificationExemptAll(checked);
+                      toast.success(
+                        checked
+                          ? t("loginVerificationExemptEnabled")
+                          : t("loginVerificationExemptDisabled"),
+                      );
+                      router.refresh();
+                    });
+                  }}
+                />
+              </div>
+            </div>
           </AppFormSection>
 
           <AppFormSection title={t("maintenanceTitle")} description={t("maintenanceSubtitle")}>

@@ -12,16 +12,17 @@
 After successful passcode login (`driver-passcode-login` → Supabase session), and **before** Home:
 
 1. Once per **device-local calendar day**, show a mandatory **Verify Identity** screen.
-2. Capture a **live front-camera selfie only** (no gallery / file picker).
+2. Capture a **live front-camera selfie only** after an on-device **blink liveness** challenge (`camera` + ML Kit). No gallery / file picker. Home is blocked until blink succeeds and the driver confirms the still.
 3. On confirm:
-   - Persist locally and allow navigation to Home immediately (even offline).
+   - Persist locally (including `liveness_passed` / `liveness_method`) and allow navigation to Home immediately (even offline).
    - Upload async via existing driver upload API:
      - `POST /api/driver-uploads/presign`
      - `PUT` to R2 (or `proxy` fallback)
      - `POST /api/driver-uploads/confirm`
    - `entityType`: **`login_verification`**
 4. After upload confirm succeeds, call RPC:
-   - `driver_record_login_verification(p_object_key text)`
+   - `driver_record_login_verification(p_object_key text, p_liveness_passed boolean DEFAULT false, p_liveness_method text DEFAULT NULL)`
+   - New APKs send `p_liveness_passed=true`, `p_liveness_method='mlkit_blink'`
 5. If a pending upload is older than **24 hours** without success, force re-capture on the next login/gate check.
 
 **Not using attendance tables** (`attendance_logs` / `driver_attendance`). This is a login-identity compliance audit, separate from shift check-in/out.
@@ -81,6 +82,8 @@ Suggested schema:
 | `object_key` | text NOT NULL | R2 key from upload confirm |
 | `captured_at` | timestamptz NOT NULL | Prefer app-supplied or `now()` at insert |
 | `created_at` | timestamptz NOT NULL | default `now()` |
+| `liveness_passed` | boolean NOT NULL | default `false`; Phase 1 soft (old APKs may insert false) |
+| `liveness_method` | text NULL | e.g. `mlkit_blink` |
 
 Indexes:
 
@@ -92,19 +95,22 @@ RLS:
 - Drivers: insert only via SECURITY DEFINER RPC (no direct client insert).
 - Admins: select via existing admin role patterns (for future UI).
 
-### New RPC: `driver_record_login_verification(p_object_key text)`
+### RPC: `driver_record_login_verification(...)` (Phase 1 soft)
 
 Mirror style of `driver_update_avatar`:
 
+- Signature: `(p_object_key text, p_liveness_passed boolean DEFAULT false, p_liveness_method text DEFAULT NULL)`
 - `SECURITY DEFINER`, `SET search_path = public`
 - `v_uid := auth.uid()`; reject if null / not a driver
 - Validate `p_object_key` non-empty and preferably prefix-matches  
   `drivers/{uid}/login_verification/`
-- `INSERT INTO driver_login_verifications (driver_id, object_key, captured_at) VALUES (...)`
-- Return `jsonb` e.g. `{ ok: true, id, object_key, created_at }`
+- Insert `object_key` + `COALESCE(p_liveness_passed, false)` + `p_liveness_method`
+- **Phase 1:** do **not** `RAISE 'liveness_required'` (old APKs must keep writing rows)
+- **Phase 2 (follow-up only):** hard-enforce after fleet adoption
+- Return `jsonb` including `liveness_passed` / `liveness_method`
 - `GRANT EXECUTE ... TO authenticated`
 
-Apply migration to **testing and prod** Supabase projects.
+Apply Phase-1 migration to **testing and prod** Supabase projects (`20260730120000_login_verification_liveness.sql`).
 
 ---
 
@@ -115,14 +121,15 @@ Driver App                          Admin API / Supabase
 ─────────                          ────────────────────
 Login OK (session JWT)
   → needs capture today?
-  → front camera selfie
+  → front camera + blink liveness → still
   → (offline OK) go Home
   → POST /api/driver-uploads/presign
        entityType=login_verification
   → PUT R2 / proxy
   → POST /api/driver-uploads/confirm
        → storage_uploads row (existing)
-  → rpc driver_record_login_verification(p_object_key)
+  → rpc driver_record_login_verification(
+         p_object_key, p_liveness_passed, p_liveness_method)
        → driver_login_verifications row
 ```
 
@@ -138,14 +145,19 @@ Auth: Bearer Supabase access token on upload routes (same as avatar / order_proo
 - Cursor pagination (page size 24) + date range filter on `captured_at`
 - Thumbnails via `getPresignedGetUrl` (keys under `drivers/*/login_verification/` readable with `drivers.view`)
 - Dialog lightbox (same pattern as Documents tab)
+- Badge: **Liveness verified** / **Not verified** from `liveness_passed`
+- **Exemptions (skip gate, no photo required):**
+  - Global: `app_settings.driver_app_login_verification_exempt_all` — Settings → Driver App
+  - Per-driver: `drivers.login_verification_exempt` — driver detail aside (`drivers.manage`)
+  - App skips `/login-verification` when **global OR per-driver** is true (cached; fail-closed if never fetched)
 
 **Still out of scope**
 
 - Global cross-driver Login Verification list / nav item
 - Retention / auto-delete of old photos
 - Linking verification photos to attendance screens
-- Liveness / blink detection
-- Separate permission slug beyond `drivers.view`
+- Phase-2 RPC hard-enforce (`RAISE liveness_required`)
+- Separate permission slug beyond `drivers.view` / settings.manage for toggles
 
 ---
 

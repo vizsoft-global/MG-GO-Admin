@@ -214,6 +214,7 @@ export type DriverDetailModel = {
   is_blocked: boolean;
   blocked_reason: string | null;
   blocked_at: string | null;
+  login_verification_exempt: boolean;
   archived_at: string | null;
   documents: Partial<Record<DriverDocumentType, DriverRemoteDocument>>;
   custom_fields: Record<string, string | number | boolean | null>;

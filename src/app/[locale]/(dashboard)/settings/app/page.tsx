@@ -22,6 +22,9 @@ export default async function DriverAppSettingsPage({
       driverAppIconUrl={settings.driverAppIconUrl}
       driverAppMaintenanceMode={settings.driverAppMaintenanceMode}
       driverAppMaintenanceMessage={settings.driverAppMaintenanceMessage}
+      driverAppLoginVerificationExemptAll={
+        settings.driverAppLoginVerificationExemptAll
+      }
       driverAppDeliveryProximityMeters={settings.driverAppDeliveryProximityMeters}
     />
   );
