@@ -34,10 +34,14 @@ function VerificationCard({
   item,
   locale,
   previewLabel,
+  livenessVerifiedLabel,
+  livenessNotVerifiedLabel,
 }: {
   item: LoginVerificationListItem;
   locale: string;
   previewLabel: string;
+  livenessVerifiedLabel: string;
+  livenessNotVerifiedLabel: string;
 }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const label = formatCapturedAt(item.capturedAt, locale);
@@ -46,6 +50,17 @@ function VerificationCard({
     <>
       <div className="flex min-h-[10rem] flex-col rounded-xl border border-border bg-card px-3 py-3 shadow-sm">
         <p className="text-sm font-medium text-foreground">{label}</p>
+        <span
+          className={
+            item.livenessPassed
+              ? "mt-1 inline-flex w-fit rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400"
+              : "mt-1 inline-flex w-fit rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground"
+          }
+        >
+          {item.livenessPassed
+            ? livenessVerifiedLabel
+            : livenessNotVerifiedLabel}
+        </span>
         <div className="mt-2 flex flex-1 flex-col">
           {item.signedUrl ? (
             <button
@@ -236,6 +251,10 @@ export function DriverLoginVerificationTab({ driverId }: { driverId: string }) {
                 item={item}
                 locale={locale}
                 previewLabel={t("loginVerificationPreview")}
+                livenessVerifiedLabel={t("loginVerificationLivenessVerified")}
+                livenessNotVerifiedLabel={t(
+                  "loginVerificationLivenessNotVerified",
+                )}
               />
             ))}
           </div>

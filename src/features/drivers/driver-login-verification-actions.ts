@@ -13,6 +13,8 @@ export type LoginVerificationListItem = {
   capturedAt: string;
   createdAt: string;
   signedUrl: string | null;
+  livenessPassed: boolean;
+  livenessMethod: string | null;
 };
 
 export type LoginVerificationCursor = {
@@ -59,7 +61,7 @@ export async function listDriverLoginVerifications(params: {
     const admin = createAdminClient();
     let query = admin
       .from("driver_login_verifications")
-      .select("id, object_key, captured_at, created_at")
+      .select("id, object_key, captured_at, created_at, liveness_passed, liveness_method")
       .eq("driver_id", driverId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
@@ -106,6 +108,8 @@ export async function listDriverLoginVerifications(params: {
           capturedAt: row.captured_at,
           createdAt: row.created_at,
           signedUrl,
+          livenessPassed: Boolean(row.liveness_passed),
+          livenessMethod: row.liveness_method ?? null,
         };
       }),
     );

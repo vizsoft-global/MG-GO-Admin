@@ -6,6 +6,7 @@ import {
   logAdminRead,
 } from "@/lib/audit/log-admin-activity";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { normalizeCountryCode } from "@/lib/geo/countries";
@@ -1123,6 +1124,7 @@ export async function fetchDriverDetail(
       is_blocked: boolean;
       blocked_reason: string | null;
       blocked_at: string | null;
+      login_verification_exempt: boolean;
     } | null = null;
     if (linkedId) {
       const [{ data: prof }, { data: drv }] = await Promise.all([
@@ -1133,7 +1135,7 @@ export async function fetchDriverDetail(
           .maybeSingle(),
         supabase
           .from("drivers")
-          .select("app_passcode, status, employee_id, nationality, rider_category, is_blocked, blocked_reason, blocked_at")
+          .select("app_passcode, status, employee_id, nationality, rider_category, is_blocked, blocked_reason, blocked_at, login_verification_exempt")
           .eq("id", linkedId)
           .maybeSingle(),
       ]);
@@ -1148,6 +1150,7 @@ export async function fetchDriverDetail(
             is_blocked: drv.is_blocked ?? false,
             blocked_reason: drv.blocked_reason ?? null,
             blocked_at: drv.blocked_at ?? null,
+            login_verification_exempt: drv.login_verification_exempt ?? false,
           }
         : null;
     }
@@ -1215,6 +1218,8 @@ export async function fetchDriverDetail(
       is_blocked: linkedDriver?.is_blocked ?? false,
       blocked_reason: linkedDriver?.blocked_reason ?? null,
       blocked_at: linkedDriver?.blocked_at ?? null,
+      login_verification_exempt:
+        linkedDriver?.login_verification_exempt ?? false,
       archived_at: intake.archived_at,
       documents: {},
       custom_fields: parseCustomFieldsJson(intake.custom_fields),
@@ -1242,6 +1247,7 @@ export async function fetchDriverDetail(
       is_blocked,
       blocked_reason,
       blocked_at,
+      login_verification_exempt,
       archived_at,
       custom_fields,
       partners (name),
@@ -1329,10 +1335,43 @@ export async function fetchDriverDetail(
     is_blocked: driverRow.is_blocked ?? false,
     blocked_reason: driverRow.blocked_reason ?? null,
     blocked_at: driverRow.blocked_at ?? null,
+    login_verification_exempt: driverRow.login_verification_exempt ?? false,
     archived_at: intakeForDriver?.archived_at ?? driverRow.archived_at,
     documents: {},
     custom_fields: parseCustomFieldsJson(driverRow.custom_fields),
   };
+}
+
+export async function setDriverLoginVerificationExempt(
+  driverId: string,
+  exempt: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+
+  if (!driverId) return { error: "missing_fields" };
+
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("drivers")
+      .update({ login_verification_exempt: exempt })
+      .eq("id", driverId);
+
+    if (error) return { error: "save_failed" };
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "driver",
+      entityId: driverId,
+      routeName: "setDriverLoginVerificationExempt",
+      after: { login_verification_exempt: exempt },
+    });
+
+    return { success: true };
+  } catch {
+    return { error: "save_failed" };
+  }
 }
 
 export type RegeneratePasscodeResult =

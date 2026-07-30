@@ -381,17 +381,25 @@ Parse `action_params` and `media` as JSON on the client. Parse `screenshot_restr
 
 #### Screenshot restriction (sensitive notifications)
 
-Admin stamps `notification_campaigns.screenshot_restricted` at save/dispatch (template default + optional campaign override). The driver app must enforce OS-level protection **only** while that notification’s detail (or full-screen media for the same campaign) is visible — not globally.
+Admin stamps `notification_campaigns.screenshot_restricted` at save/dispatch (template default + optional campaign override).
+
+**Interaction with app-wide secure mode:** The driver app may keep a global `FLAG_SECURE` after login (`SecurityGuardController`). Notification detail must still honor the campaign stamp:
+
+| Effective `screenshot_restricted` | While detail open | On close / dispose |
+|---|---|---|
+| `true` (Force ON / inherit restricted) | `beginSensitiveSession` — keep secure + iOS blur/detect + `screenshot_taken` | `endSensitiveSession` |
+| `false` (Force OFF / unrestricted) | `beginAllowScreenshotSession` — **clear** `FLAG_SECURE` temporarily; suppress global capture-blocked UI | `endAllowScreenshotSession` — **restore** global secure |
+
+Do not leave screenshots permanently allowed after Force OFF detail closes. On app resume, skip re-`enable()` of global secure while an allow session is active.
 
 **Local cache (fail-safe):** Persist last known `screenshot_restricted` keyed by `campaign_id` + `dispatch_item_id`. Offline open uses last known. Never treat as unrestricted if last known was restricted. Missing flag on legacy v1 rows → default `false`.
 
-**Android (notification detail Activity / Flutter route only):**
+**Android (notification detail Activity / Flutter route):**
 
 ```kotlin
-// On enter restricted detail:
-window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-// On leave / dispose:
-window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+// Restricted: ensure FLAG_SECURE on enter; leave global secure as-is on exit.
+// Unrestricted / Force OFF: clear FLAG_SECURE on enter; restore on exit
+// (global guard may re-apply FLAG_SECURE after allow session ends).
 ```
 
 `FLAG_SECURE` blocks screenshots and blanks the app-switcher preview for that window.
@@ -750,7 +758,7 @@ Driver images and documents use the **same private R2 bucket** as the admin pane
 
 Object keys are server-generated: `drivers/{driverId}/{entityType}/{date}/{uuid}.{ext}`.
 
-Login identity selfies use `login_verification`. After confirm, the app calls `driver_record_login_verification` to write `driver_login_verifications`. See **`docs/LOGIN_VERIFICATION_HANDOFF.md`**. Admin viewing UI is a separate task.
+Login identity selfies use `login_verification` after on-device blink liveness. After confirm, the app calls `driver_record_login_verification(p_object_key, p_liveness_passed, p_liveness_method)` to write `driver_login_verifications` (Phase 1 soft liveness — defaults allow old APKs). See **`docs/LOGIN_VERIFICATION_HANDOFF.md`**.
 
 ### CORS
 

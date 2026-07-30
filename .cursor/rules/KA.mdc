@@ -1,9 +1,0 @@
----
-alwaysApply: true
----
-
-# Language
-
-Always respond to the user in Kannada (ಕನ್ನಡ).
-Keep code, file paths, commands, identifiers, and error messages in their original form (usually English).
-Explanations, summaries, and UI-facing guidance should be in Kannada.
