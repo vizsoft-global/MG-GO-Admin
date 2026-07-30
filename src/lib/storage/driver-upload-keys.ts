@@ -5,6 +5,7 @@ export const DRIVER_UPLOAD_ENTITY_TYPES = [
   "driver_selfie",
   "driver_avatar",
   "order_proof",
+  "login_verification",
 ] as const;
 
 export type DriverUploadEntityType = (typeof DRIVER_UPLOAD_ENTITY_TYPES)[number];
@@ -28,6 +29,10 @@ const ENTITY_RULES: Record<
   order_proof: {
     maxBytes: 10 * 1024 * 1024,
     allowedMimePrefixes: ["image/", "application/pdf"],
+  },
+  login_verification: {
+    maxBytes: 5 * 1024 * 1024,
+    allowedMimePrefixes: ["image/"],
   },
 };
 
