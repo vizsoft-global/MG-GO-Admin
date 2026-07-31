@@ -650,7 +650,8 @@ select driver_app_title,
        driver_app_maintenance_mode,
        driver_app_maintenance_message,
        driver_app_login_hint,
-       driver_app_delivery_proximity_meters
+       driver_app_delivery_proximity_meters,
+       driver_app_sideload_updates_enabled
   from public.app_settings
  where id = 1;
 ```
@@ -662,6 +663,29 @@ select driver_app_title,
 - **App icon refresh:** subscribe to `app_settings` realtime (row `id = 1`) or poll `updated_at` / compare `driver_app_icon_url` on app resume. When the URL changes, download the new image and update the launcher icon (Expo: `expo-dynamic-app-icon` or platform-specific APIs).
 - `driver_app_title` is the mobile app display name (defaults to `Musallam Delivery`). Admin subtitle/login hint remain on `app_subtitle` / `driver_app_login_hint` (configured under Settings → Branding).
 - `driver_app_delivery_proximity_meters` (default 500): max meters outside zone boundary or from assigned restaurant to allow Add Delivery. `0` disables the gate. Loaded via `driver_get_delivery_proximity_context()` when opening Add Delivery (includes zone geometry + assigned restaurants).
+- **`driver_app_sideload_updates_enabled`** (default `true`): admin kill-switch for in-app APK OTA (Settings → Driver App). When `false`: do **not** show update dialogs; do **not** download/install APK; treat `GET /api/driver-app/active-release` as no update (server also returns `null`). When `true`: sideload flavor may run the normal OTA flow. Reuse the same `app_settings` realtime/poll path as maintenance.
+
+### 9a. Sideload OTA + Play Store flavors (required)
+
+Admin App Releases (`/app-releases`) serve Android sideload APKs. A remote flag **cannot** remove `REQUEST_INSTALL_PACKAGES` from a Play Store AAB — use two product flavors:
+
+| Flavor | Ship via | `REQUEST_INSTALL_PACKAGES` | In-app APK install / OTA UI |
+|--------|----------|----------------------------|-----------------------------|
+| `play` | Play Store AAB | **Absent** from merged manifest | Compile out / never register |
+| `sideload` | Admin App Releases APK | Present | Full OTA when `driver_app_sideload_updates_enabled` is true |
+
+**Driver app must:**
+
+1. Define Android `productFlavors` `play` and `sideload` (or equivalent).
+2. Declare `REQUEST_INSTALL_PACKAGES` only on the sideload manifest overlay; verify Play merged manifest has no such permission before upload.
+3. Gate Dart OTA code with a flavor/`dart-define` flag (`kSideloadOtaEnabled`); Play build = `false`.
+4. Still read `driver_app_sideload_updates_enabled` (extra kill-switch for sideload builds during review).
+5. Call `GET /api/driver-app/active-release?platform=android&channel=…&versionCode=…&versionName=…` with driver Bearer token only from sideload builds when OTA is enabled. Verify `apk_sha256` before install. Presigned `apk_url` TTL ≈ 15 minutes.
+6. Publish: Play Console ← **only** `play` AAB. Admin `/app-releases` ← **only** `sideload` release APKs.
+
+**Ops during Play review:** turn Sideload updates **OFF** in admin → submit `play` AAB → after approve turn **ON** and ship sideload APKs via App Releases.
+
+See also [`docs/APP_RELEASES_MODULE.md`](./APP_RELEASES_MODULE.md) and [`docs/APP_RELEASES_RUNBOOK.md`](./APP_RELEASES_RUNBOOK.md).
 
 ---
 
@@ -867,7 +891,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-07-29 — [admin+app] Ops audit: security events RPC, delivery idempotency, device-guard overload cleanup, published restaurant gate, period incentive accrual fix.*
+*Last synced: 2026-07-31 — [admin+app] Sideload OTA kill-switch `driver_app_sideload_updates_enabled` + Play Store vs sideload flavor contract (`REQUEST_INSTALL_PACKAGES` only on sideload). Migration `20260821000000_driver_app_sideload_updates_flag.sql`.*
+
+*Prior: 2026-07-29 — [admin+app] Ops audit: security events RPC, delivery idempotency, device-guard overload cleanup, published restaurant gate, period incentive accrual fix.*
 
 *Prior: 2026-05-26 — [admin+app] Restaurant delivery geofences: `restaurant_geofences` table, full-page admin editor at `/restaurants/[id]/edit`, updated `driver_is_within_delivery_range` and `driver_get_delivery_proximity_context`.*
 

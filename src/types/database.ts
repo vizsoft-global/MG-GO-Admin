@@ -385,6 +385,7 @@ export type Database = {
           driver_app_login_verification_exempt_all: boolean
           driver_app_maintenance_message: string
           driver_app_maintenance_mode: boolean
+          driver_app_sideload_updates_enabled: boolean
           driver_app_splash_url: string | null
           driver_app_title: string
           feature_two_stage_delivery: boolean
@@ -415,6 +416,7 @@ export type Database = {
           driver_app_login_verification_exempt_all?: boolean
           driver_app_maintenance_message?: string
           driver_app_maintenance_mode?: boolean
+          driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
           feature_two_stage_delivery?: boolean
@@ -445,6 +447,7 @@ export type Database = {
           driver_app_login_verification_exempt_all?: boolean
           driver_app_maintenance_message?: string
           driver_app_maintenance_mode?: boolean
+          driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
           feature_two_stage_delivery?: boolean

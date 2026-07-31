@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { withCors } from "@/lib/http/cors";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createBearerSupabaseClient } from "@/lib/supabase/bearer-client";
 import { requireDriverFromRequest } from "@/lib/storage/driver-upload-auth";
 import { resolveAppReleaseApkUrl } from "@/lib/storage/app-release-url";
@@ -70,6 +71,20 @@ async function handler(request: Request): Promise<Response> {
     if (recordError && process.env.NODE_ENV === "development") {
       console.warn("driver_record_app_version", recordError.message);
     }
+  }
+
+  try {
+    const admin = createAdminClient() as unknown as SupabaseClient;
+    const { data: settingsRow } = await admin
+      .from("app_settings")
+      .select("driver_app_sideload_updates_enabled")
+      .eq("id", 1)
+      .maybeSingle();
+    if (settingsRow?.driver_app_sideload_updates_enabled === false) {
+      return NextResponse.json(null);
+    }
+  } catch {
+    /* fail open to existing OTA behavior if settings unreadable */
   }
 
   const { data, error } = await driverDb.rpc("driver_get_active_app_release", {

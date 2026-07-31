@@ -20,6 +20,15 @@ Drivers install the app outside Play Store (sideload APK). Ops needs to:
 
 **Key rule:** Upload alone does nothing for drivers. Only an **Active** release on a channel is returned by the driver API.
 
+### Play Store review (two layers)
+
+| Layer | Control | Hides `REQUEST_INSTALL_PACKAGES`? |
+|-------|---------|-----------------------------------|
+| Admin flag `driver_app_sideload_updates_enabled` | Settings → Driver App. When `false`, all drivers get no OTA UI; `active-release` returns `null` | No |
+| Play vs sideload Android flavors | Play Store AAB must omit the permission; sideload APK keeps it + OTA | **Yes** (Play flavor only) |
+
+Ops: before Play submit → toggle Sideload updates **OFF** + upload **`play`** AAB. After approve → toggle **ON** + ship **`sideload`** APKs here. See handoff §9a.
+
 ---
 
 ## 2. How it is built (architecture)
