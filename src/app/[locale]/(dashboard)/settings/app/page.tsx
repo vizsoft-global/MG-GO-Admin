@@ -26,6 +26,7 @@ export default async function DriverAppSettingsPage({
         settings.driverAppLoginVerificationExemptAll
       }
       driverAppDeliveryProximityMeters={settings.driverAppDeliveryProximityMeters}
+      driverAppSideloadUpdatesEnabled={settings.driverAppSideloadUpdatesEnabled}
     />
   );
 }

@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  usePerformanceScoreWeights,
+  useUpdatePerformanceScoreWeights,
+} from "@/features/performance/use-performance";
+import {
   useAttendanceThresholdSettings,
   useUpdateAttendanceThresholdSettings,
 } from "./use-attendance-table";
@@ -17,7 +21,10 @@ export function AttendanceSettingsPanel() {
   const t = useTranslations("pages.attendanceSettings");
   const { data, isLoading } = useAttendanceThresholdSettings();
   const { mutateAsync } = useUpdateAttendanceThresholdSettings();
+  const { data: weights, isLoading: weightsLoading } = usePerformanceScoreWeights();
+  const { mutateAsync: saveWeights } = useUpdatePerformanceScoreWeights();
   const [isPending, startTransition] = useTransition();
+  const [weightsPending, startWeightsTransition] = useTransition();
 
   const [lateGrace, setLateGrace] = useState("10");
   const [earlyOutGrace, setEarlyOutGrace] = useState("5");
@@ -25,6 +32,10 @@ export function AttendanceSettingsPanel() {
   const [autoCheckout, setAutoCheckout] = useState("45");
   const [gpsStale, setGpsStale] = useState("10");
   const [gpsAccuracy, setGpsAccuracy] = useState("100");
+  const [wDelivery, setWDelivery] = useState("1");
+  const [wUtilization, setWUtilization] = useState("1");
+  const [wCompliance, setWCompliance] = useState("1");
+  const [wPenalty, setWPenalty] = useState("5");
 
   useEffect(() => {
     if (!data) return;
@@ -35,6 +46,14 @@ export function AttendanceSettingsPanel() {
     setGpsStale(String(data.attendance_gps_stale_minutes));
     setGpsAccuracy(String(data.attendance_gps_min_accuracy_meters));
   }, [data]);
+
+  useEffect(() => {
+    if (!weights) return;
+    setWDelivery(String(weights.delivery));
+    setWUtilization(String(weights.utilization));
+    setWCompliance(String(weights.compliance));
+    setWPenalty(String(weights.exception_penalty));
+  }, [weights]);
 
   function handleSave() {
     startTransition(async () => {
@@ -54,7 +73,23 @@ export function AttendanceSettingsPanel() {
     });
   }
 
-  if (isLoading) {
+  function handleSaveWeights() {
+    startWeightsTransition(async () => {
+      const result = await saveWeights({
+        delivery: Number(wDelivery),
+        utilization: Number(wUtilization),
+        compliance: Number(wCompliance),
+        exception_penalty: Number(wPenalty),
+      });
+      if (!result.success) {
+        toast.error(result.error ?? t("weightsSaveFailed"));
+        return;
+      }
+      toast.success(t("weightsSaved"));
+    });
+  }
+
+  if (isLoading || weightsLoading) {
     return (
       <div className="flex justify-center py-16">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -132,6 +167,70 @@ export function AttendanceSettingsPanel() {
         <div className="mt-6">
           <Button type="button" onClick={handleSave} disabled={isPending}>
             {isPending ? t("saving") : t("save")}
+          </Button>
+        </div>
+      </AppFormSection>
+
+      <AppFormSection title={t("weightsTitle")} description={t("weightsHint")}>
+        <p className="mb-3 text-[10px] text-amber-800">{t("weightsOpenItem")}</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="w-delivery">{t("weightDelivery")}</Label>
+            <Input
+              id="w-delivery"
+              type="number"
+              min={0}
+              step="0.1"
+              className="h-9"
+              value={wDelivery}
+              onChange={(e) => setWDelivery(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="w-utilization">{t("weightUtilization")}</Label>
+            <Input
+              id="w-utilization"
+              type="number"
+              min={0}
+              step="0.1"
+              className="h-9"
+              value={wUtilization}
+              onChange={(e) => setWUtilization(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="w-compliance">{t("weightCompliance")}</Label>
+            <Input
+              id="w-compliance"
+              type="number"
+              min={0}
+              step="0.1"
+              className="h-9"
+              value={wCompliance}
+              onChange={(e) => setWCompliance(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="w-penalty">{t("exceptionPenalty")}</Label>
+            <Input
+              id="w-penalty"
+              type="number"
+              min={0}
+              step="1"
+              className="h-9"
+              value={wPenalty}
+              onChange={(e) => setWPenalty(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="mt-6">
+          <Button
+            type="button"
+            className="h-9"
+            onClick={handleSaveWeights}
+            disabled={weightsPending}
+          >
+            {weightsPending ? t("weightsSaving") : t("weightsSave")}
           </Button>
         </div>
       </AppFormSection>

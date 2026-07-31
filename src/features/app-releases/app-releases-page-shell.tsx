@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Download,
   Loader2,
@@ -64,8 +65,13 @@ function shortSha256(value: string): string {
   return `${value.slice(0, 8)}…${value.slice(-8)}`;
 }
 
-export function AppReleasesPageShell() {
+export function AppReleasesPageShell({
+  sideloadUpdatesEnabled = true,
+}: {
+  sideloadUpdatesEnabled?: boolean;
+}) {
   const t = useTranslations("pages.appReleases");
+  const locale = useLocale();
   const [channel, setChannel] = useState<AppReleaseChannel>("production");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AppReleaseRow | null>(null);
@@ -211,6 +217,21 @@ export function AppReleasesPageShell() {
           </div>
         }
       />
+
+      {!sideloadUpdatesEnabled ? (
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-semibold">{t("reviewBannerTitle")}</p>
+            <p className="text-xs text-amber-800/90">{t("reviewBannerHint")}</p>
+          </div>
+          <Link
+            href={`/${locale}/settings/app`}
+            className="inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100"
+          >
+            {t("reviewBannerAction")}
+          </Link>
+        </div>
+      ) : null}
 
       <Tabs defaultValue="releases" className="space-y-4">
         <TabsList className="rounded-xl bg-muted/50 p-1">

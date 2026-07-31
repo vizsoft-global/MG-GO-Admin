@@ -1,0 +1,375 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Loader2, Percent } from "lucide-react";
+import {
+  AppEmptyState,
+  AppListCard,
+  AppPage,
+  AppPageHeader,
+} from "@/components/app";
+import {
+  AppDataTable,
+  AppDataTableRow,
+  TableCell,
+} from "@/components/app/app-data-table";
+import { KpiGrid } from "@/components/dashboard/kpi-grid";
+import { TabBar } from "@/components/dashboard/tab-bar";
+import { TrackingTableToolbar } from "@/features/driver-tracking/table-toolbar";
+import { Link } from "@/i18n/navigation";
+import { Input } from "@/components/ui/input";
+import { addDays, kuwaitToday, pct, rawPct } from "./performance-formulas";
+import { PerformanceDrilldownSheet } from "./performance-drilldown-sheet";
+import {
+  DEFAULT_PERFORMANCE_FILTERS,
+  PerformanceFiltersButton,
+  PerformanceFiltersSheet,
+  type PerformanceFiltersState,
+} from "./performance-filters-sheet";
+import { PerformanceLivePanel } from "./performance-live-panel";
+import type {
+  PerformanceDriverRow,
+  PerformanceHubTab,
+  PerformanceSortKey,
+} from "./performance-types";
+import { useDriverPerformanceList } from "./use-performance";
+
+const PAGE_SIZE = 50;
+
+const SORT_OPTIONS: { value: PerformanceSortKey; labelKey: string }[] = [
+  { value: "overall_desc", labelKey: "sortOverallDesc" },
+  { value: "overall_asc", labelKey: "sortOverallAsc" },
+  { value: "delivery_desc", labelKey: "sortDeliveryDesc" },
+  { value: "utilization_desc", labelKey: "sortUtilizationDesc" },
+  { value: "compliance_desc", labelKey: "sortComplianceDesc" },
+  { value: "name_asc", labelKey: "sortNameAsc" },
+];
+
+function countActiveFilters(filters: PerformanceFiltersState): number {
+  return [
+    filters.partnerId,
+    filters.zoneId,
+    filters.restaurantId,
+    filters.driverStatus !== "all" ? filters.driverStatus : "",
+  ].filter(Boolean).length;
+}
+
+function scoreTone(score: number): "success" | "warning" | "danger" | "neutral" {
+  if (score >= 80) return "success";
+  if (score >= 70) return "neutral";
+  if (score >= 50) return "warning";
+  return "danger";
+}
+
+export function PerformancePageShell() {
+  const t = useTranslations("pages.performance");
+  const today = kuwaitToday();
+
+  const [tab, setTab] = useState<PerformanceHubTab>("period");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [filters, setFilters] = useState<PerformanceFiltersState>(
+    DEFAULT_PERFORMANCE_FILTERS,
+  );
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sort, setSort] = useState<PerformanceSortKey>("overall_desc");
+  const [page, setPage] = useState(0);
+  const [fromDate, setFromDate] = useState(addDays(today, -6));
+  const [toDate, setToDate] = useState(today);
+  const [selected, setSelected] = useState<PerformanceDriverRow | null>(null);
+  const [drillOpen, setDrillOpen] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, filters, fromDate, toDate, sort]);
+
+  const listFilters = useMemo(
+    () => ({
+      search: debouncedSearch || undefined,
+      partnerId: filters.partnerId || undefined,
+      zoneId: filters.zoneId || undefined,
+      restaurantId: filters.restaurantId || undefined,
+      driverStatus: filters.driverStatus,
+      fromDate,
+      toDate,
+      sort,
+      page,
+      pageSize: PAGE_SIZE,
+    }),
+    [debouncedSearch, filters, fromDate, toDate, sort, page],
+  );
+
+  const { data, isLoading, isFetching, refetch } = useDriverPerformanceList(
+    listFilters,
+    { enabled: tab === "period" },
+  );
+
+  const rows = data?.rows ?? [];
+  const kpis = data?.kpis;
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  const columns = [
+    { id: "driver", label: t("colDriver"), className: "min-w-[160px]" },
+    { id: "partner", label: t("colPartner") },
+    { id: "zone", label: t("colZone") },
+    { id: "deliveries", label: t("colDeliveries"), className: "text-end" },
+    { id: "deliveryPct", label: t("colDeliveryPct"), className: "text-end" },
+    { id: "utilization", label: t("colUtilization"), className: "text-end" },
+    { id: "compliance", label: t("colCompliance"), className: "text-end" },
+    { id: "overall", label: t("colOverall"), className: "text-end" },
+  ];
+
+  return (
+    <AppPage>
+      <AppPageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={
+          tab === "period" ? (
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? t("refreshing") : t("refresh")}
+            </button>
+          ) : null
+        }
+      />
+
+      <TabBar
+        items={[
+          { id: "period", label: t("tabPeriod") },
+          { id: "live", label: t("tabLive") },
+        ]}
+        activeId={tab}
+        onSelect={(id) => setTab(id as PerformanceHubTab)}
+        className="mb-3"
+      />
+
+      {tab === "live" ? (
+        <PerformanceLivePanel />
+      ) : (
+        <>
+          <KpiGrid
+            items={[
+              {
+                label: t("kpiOverall"),
+                value: kpis?.avg_overall ?? "—",
+                accent: "primary",
+              },
+              {
+                label: t("kpiDelivery"),
+                value:
+                  kpis?.avg_delivery_pct != null
+                    ? `${kpis.avg_delivery_pct}%`
+                    : "—",
+              },
+              {
+                label: t("kpiUtilization"),
+                value:
+                  kpis?.avg_utilization_pct != null
+                    ? `${kpis.avg_utilization_pct}%`
+                    : "—",
+              },
+              {
+                label: t("kpiCompliance"),
+                value:
+                  kpis?.avg_compliance != null
+                    ? `${kpis.avg_compliance}%`
+                    : "—",
+                accent: "success",
+              },
+              {
+                label: t("kpiBelow"),
+                value: kpis?.below_threshold ?? 0,
+                accent:
+                  (kpis?.below_threshold ?? 0) > 0 ? "warning" : undefined,
+              },
+            ]}
+          />
+
+          <AppListCard className="p-4">
+            <TrackingTableToolbar
+              search={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={t("searchPlaceholder")}
+              sortValue={sort}
+              onSortChange={(v) => {
+                if (!v) return;
+                setSort(v as PerformanceSortKey);
+              }}
+              sortItems={SORT_OPTIONS.map((o) => ({
+                value: o.value,
+                label: t(o.labelKey),
+              }))}
+              sortLabel={t("sortBy")}
+              resultSummary={t("showingCount", {
+                visible: rows.length,
+                total: totalCount,
+              })}
+              onRefresh={() => void refetch()}
+              isRefreshing={isFetching}
+              refreshLabel={t("refresh")}
+              onExport={() => undefined}
+              exportDisabled
+              filterSlot={
+                <PerformanceFiltersButton
+                  activeCount={countActiveFilters(filters)}
+                  onClick={() => setFiltersOpen(true)}
+                />
+              }
+              dateSlot={
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="h-9 w-[140px]"
+                  />
+                  <Input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="h-9 w-[140px]"
+                  />
+                </div>
+              }
+            />
+
+            {isLoading ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : rows.length === 0 ? (
+              <AppEmptyState
+                title={t("emptyTitle")}
+                description={t("emptyHint")}
+              />
+            ) : (
+              <>
+                <AppDataTable columns={columns}>
+                  {rows.map((row) => (
+                    <AppDataTableRow
+                      key={row.driver_id}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setSelected(row);
+                        setDrillOpen(true);
+                      }}
+                    >
+                      <TableCell>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {row.driver_name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {row.driver_code}
+                          </p>
+                          <Link
+                            href={`/drivers/${row.driver_id}`}
+                            className="text-[10px] text-primary hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {t("viewDetails")}
+                          </Link>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {row.partner_name ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {row.zone_name ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-end tabular-nums text-sm">
+                        {row.actual_deliveries}/{row.target_deliveries}
+                      </TableCell>
+                      <TableCell className="text-end tabular-nums text-sm">
+                        {rawPct(row.delivery_efficiency_raw, 0)}
+                      </TableCell>
+                      <TableCell className="text-end tabular-nums text-sm">
+                        {pct(row.utilization, 0)}
+                      </TableCell>
+                      <TableCell className="text-end tabular-nums text-sm">
+                        {Math.round(row.compliance_score)}%
+                      </TableCell>
+                      <TableCell className="text-end">
+                        <span
+                          className={
+                            scoreTone(row.overall_score) === "success"
+                              ? "inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800"
+                              : scoreTone(row.overall_score) === "warning"
+                                ? "inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"
+                                : scoreTone(row.overall_score) === "danger"
+                                  ? "inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive"
+                                  : "inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-0.5 text-xs font-semibold"
+                          }
+                        >
+                          <Percent className="size-3 opacity-60" />
+                          {row.overall_score}
+                        </span>
+                      </TableCell>
+                    </AppDataTableRow>
+                  ))}
+                </AppDataTable>
+
+                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {t("pageInfo", {
+                      page: page + 1,
+                      pages: totalPages,
+                      total: totalCount,
+                    })}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="h-9 rounded-md border border-border px-3 disabled:opacity-40"
+                      disabled={page <= 0}
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    >
+                      {t("prev")}
+                    </button>
+                    <button
+                      type="button"
+                      className="h-9 rounded-md border border-border px-3 disabled:opacity-40"
+                      disabled={page + 1 >= totalPages}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      {t("next")}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </AppListCard>
+
+          <p className="text-[10px] text-muted-foreground">{t("weightsNote")}</p>
+        </>
+      )}
+
+      <PerformanceFiltersSheet
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        filters={filters}
+        onApply={setFilters}
+      />
+
+      <PerformanceDrilldownSheet
+        row={selected}
+        open={drillOpen}
+        onOpenChange={setDrillOpen}
+        fromDate={fromDate}
+        toDate={toDate}
+      />
+    </AppPage>
+  );
+}

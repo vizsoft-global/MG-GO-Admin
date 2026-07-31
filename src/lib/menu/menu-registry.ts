@@ -26,6 +26,7 @@ import {
   Cloud,
   Download,
   FormInput,
+  Gauge,
   ScrollText,
   Radar,
   Timer,
@@ -78,6 +79,7 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   Trash2,
   Download,
   FormInput,
+  Gauge,
 };
 
 export const ICON_NAMES = Object.keys(ICON_MAP);
@@ -204,6 +206,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Operations",
     defaultOrder: 7,
     permission: "attendance.view",
+  },
+  {
+    id: "performance",
+    defaultLabel: "Performance",
+    defaultIcon: "Gauge",
+    href: "/performance",
+    defaultGroup: "Operations",
+    defaultOrder: 8,
+    permission: "drivers.view",
   },
   {
     id: "requests",
@@ -446,6 +457,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "dpd-verification": "dpdVerification",
   vehicles: "vehicles",
   attendance: "attendance",
+  performance: "performance",
   "attendance-settings": "attendanceSettings",
   requests: "requests",
   "wrong-actions": "wrongActions",

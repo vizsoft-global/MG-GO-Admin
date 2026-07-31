@@ -38,6 +38,7 @@ Order allocation is **external** (partner apps). We own: monitoring, compliance,
 | 3 | `/deliveries`, `/zones` | `deliveries.view`, `zones.view` | Deliveries + zone geofence (map CRUD at `/zones`) |
 | 4 | `/vehicles`, `/vehicles/[id]` | `vehicles.view` | Vehicle |
 | 5 | `/attendance` | `attendance.view` / `attendance.manage` | Auto check-in / geofence |
+| — | `/performance` | `drivers.view` | Performance score (delivery + utilization + compliance); Live workforce |
 | 6 | `/requests` | `requests.view` / `requests.manage` | Loan, Leave, Fuel, Complaint |
 | 7 | `/wrong-actions` | `wrong_actions.view` | Wrong action details |
 | 8 | `/earnings`, `/earnings-calculation` | `earnings.view` / `earnings.manage` | Earnings + bumper bonus |
@@ -226,6 +227,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-07-31` — Performance Management Dashboard at `/performance` (`drivers.view`): aggregates attendance worked/leave/absent days + incentive-aligned verified deliveries vs `incentive_rules` targets + compliance/exceptions into configurable weighted score (`app_settings.performance_score_weights`, equal defaults pending client sign-off); Live tab (on-duty realtime + recent deliveries). RPC `admin_list_driver_performance`. Migration `20260821100000_performance_management.sql`.
+- `[admin+app] 2026-07-31` — Sideload OTA kill-switch: `app_settings.driver_app_sideload_updates_enabled` (Settings → Driver App); `GET /api/driver-app/active-release` returns null when false; App Releases review banner; handoff §9a Play Store vs sideload flavors (`REQUEST_INSTALL_PACKAGES` only on sideload). Migration `20260821000000_driver_app_sideload_updates_flag.sql`.
 - `[admin+app] 2026-07-30` — Notification Force OFF temporary allow: driver `beginAllowScreenshotSession` clears global `FLAG_SECURE` while unrestricted detail is open, restores on dispose; resume skips re-enable during allow. Handoff §7 updated.
 - `[admin+app] 2026-07-29` — Screenshot restriction for sensitive notifications: `screenshot_restricted` on templates + campaign override/stamp; FCM/inbox `screenshot_restricted`; client event `screenshot_taken`; Admin UI toggle/tri-state/list badge/detail attempts. Migration `20260820110000_notification_screenshot_restriction.sql`. Payload version 2. Driver native enforcement in handoff §7.
 - `[admin only] 2026-07-29` — Driver dynamic custom fields: `custom_field_definitions` + `custom_fields` jsonb on `driver_intakes`/`drivers`; hybrid list column prefs (`admin_role_ui_defaults` + `admin_ui_preferences`); settings `/settings/driver-fields`; Add/Edit/list/import/export wiring. Migration `20260820100000_driver_custom_fields.sql`.

@@ -478,6 +478,23 @@ export async function setDriverAppLoginVerificationExemptAll(
   return { success: true };
 }
 
+export async function setDriverAppSideloadUpdatesEnabled(
+  enabled: boolean,
+): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+  const auth = await requireSettingsManager();
+  if ("error" in auth) return auth;
+
+  const result = await patchAppSettings(
+    "setDriverAppSideloadUpdatesEnabled",
+    { driver_app_sideload_updates_enabled: enabled },
+    auth.session.id,
+  );
+  if (result.error) return result;
+
+  updateTag("app-settings");
+  return { success: true };
+}
+
 export async function resetDriverAppSettings(
   locale: string,
 ): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
@@ -503,6 +520,7 @@ export async function resetDriverAppSettings(
       driver_app_login_verification_exempt_all: false,
       driver_app_delivery_proximity_meters:
         DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
+      driver_app_sideload_updates_enabled: true,
     },
     auth.session.id,
   );
