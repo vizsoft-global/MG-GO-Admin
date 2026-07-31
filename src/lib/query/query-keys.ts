@@ -120,6 +120,16 @@ export const queryKeys = {
     driverDetail: (driverId: string, from: string, to: string) =>
       ["attendance", "driver", driverId, from, to] as const,
   },
+  performance: {
+    all: () => ["performance"] as const,
+    list: (filters: Record<string, unknown> = {}) =>
+      ["performance", "list", filters] as const,
+    detail: (driverId: string, from: string, to: string) =>
+      ["performance", "detail", driverId, from, to] as const,
+    recentDeliveries: (limit: number) =>
+      ["performance", "recent-deliveries", limit] as const,
+    weights: () => ["performance", "weights"] as const,
+  },
   driverShifts: {
     all: () => ["driver-shifts"] as const,
     list: (filters: Record<string, unknown> = {}) => ["driver-shifts", "list", filters] as const,

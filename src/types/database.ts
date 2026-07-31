@@ -381,8 +381,8 @@ export type Database = {
           driver_app_delivery_proximity_meters: number
           driver_app_icon_url: string | null
           driver_app_login_hint: string
-          driver_app_logo_url: string | null
           driver_app_login_verification_exempt_all: boolean
+          driver_app_logo_url: string | null
           driver_app_maintenance_message: string
           driver_app_maintenance_mode: boolean
           driver_app_sideload_updates_enabled: boolean
@@ -394,6 +394,7 @@ export type Database = {
           logo_type: string
           logo_url: string | null
           maintenance_mode: boolean
+          performance_score_weights: Json
           super_admin_claimed: boolean
           super_admin_user_id: string | null
           theme_id: string
@@ -412,8 +413,8 @@ export type Database = {
           driver_app_delivery_proximity_meters?: number
           driver_app_icon_url?: string | null
           driver_app_login_hint?: string
-          driver_app_logo_url?: string | null
           driver_app_login_verification_exempt_all?: boolean
+          driver_app_logo_url?: string | null
           driver_app_maintenance_message?: string
           driver_app_maintenance_mode?: boolean
           driver_app_sideload_updates_enabled?: boolean
@@ -425,6 +426,7 @@ export type Database = {
           logo_type?: string
           logo_url?: string | null
           maintenance_mode?: boolean
+          performance_score_weights?: Json
           super_admin_claimed?: boolean
           super_admin_user_id?: string | null
           theme_id?: string
@@ -443,8 +445,8 @@ export type Database = {
           driver_app_delivery_proximity_meters?: number
           driver_app_icon_url?: string | null
           driver_app_login_hint?: string
-          driver_app_logo_url?: string | null
           driver_app_login_verification_exempt_all?: boolean
+          driver_app_logo_url?: string | null
           driver_app_maintenance_message?: string
           driver_app_maintenance_mode?: boolean
           driver_app_sideload_updates_enabled?: boolean
@@ -456,6 +458,7 @@ export type Database = {
           logo_type?: string
           logo_url?: string | null
           maintenance_mode?: boolean
+          performance_score_weights?: Json
           super_admin_claimed?: boolean
           super_admin_user_id?: string | null
           theme_id?: string
@@ -1601,44 +1604,6 @@ export type Database = {
           },
         ]
       }
-      driver_login_verifications: {
-        Row: {
-          id: string
-          driver_id: string
-          object_key: string
-          captured_at: string
-          created_at: string
-          liveness_passed: boolean
-          liveness_method: string | null
-        }
-        Insert: {
-          id?: string
-          driver_id: string
-          object_key: string
-          captured_at?: string
-          created_at?: string
-          liveness_passed?: boolean
-          liveness_method?: string | null
-        }
-        Update: {
-          id?: string
-          driver_id?: string
-          object_key?: string
-          captured_at?: string
-          created_at?: string
-          liveness_passed?: boolean
-          liveness_method?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "driver_login_verifications_driver_id_fkey"
-            columns: ["driver_id"]
-            isOneToOne: false
-            referencedRelation: "drivers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       driver_documents: {
         Row: {
           created_at: string
@@ -2157,6 +2122,44 @@ export type Database = {
             foreignKeyName: "driver_locations_driver_id_fkey"
             columns: ["driver_id"]
             isOneToOne: true
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_login_verifications: {
+        Row: {
+          captured_at: string
+          created_at: string
+          driver_id: string
+          id: string
+          liveness_method: string | null
+          liveness_passed: boolean
+          object_key: string
+        }
+        Insert: {
+          captured_at?: string
+          created_at?: string
+          driver_id: string
+          id?: string
+          liveness_method?: string | null
+          liveness_passed?: boolean
+          object_key: string
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          driver_id?: string
+          id?: string
+          liveness_method?: string | null
+          liveness_passed?: boolean
+          object_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_login_verifications_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
             referencedRelation: "drivers"
             referencedColumns: ["id"]
           },
@@ -4929,6 +4932,7 @@ export type Database = {
           is_blocked: boolean
           is_on_duty: boolean
           joined_at: string | null
+          login_verification_exempt: boolean
           nationality: string | null
           partner_id: string | null
           restaurant_id: string | null
@@ -5100,6 +5104,14 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_count_eligible_deliveries_on_dates: {
+        Args: {
+          p_dates: string[]
+          p_driver_id: string
+          p_incentive_rule_id: string
+        }
+        Returns: number
+      }
       admin_driver_device_overview: {
         Args: { p_driver_id: string; p_history_limit?: number }
         Returns: Json
@@ -5146,6 +5158,22 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_list_driver_performance: {
+        Args: {
+          p_driver_id?: string
+          p_driver_status?: string
+          p_from: string
+          p_limit?: number
+          p_offset?: number
+          p_partner_id?: string
+          p_restaurant_id?: string
+          p_search?: string
+          p_sort?: string
+          p_to: string
+          p_zone_id?: string
+        }
+        Returns: Json
+      }
       admin_list_shift_adherence: {
         Args: { p_driver_ids?: string[]; p_from: string; p_to: string }
         Returns: {
@@ -5166,6 +5194,14 @@ export type Database = {
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
+      admin_resolve_driver_incentive_target: {
+        Args: { p_driver_id: string; p_on_date: string }
+        Returns: {
+          period: Database["public"]["Enums"]["incentive_period"]
+          rule_id: string
+          target_deliveries: number
+        }[]
+      }
       admin_run_attendance_auto_checkout: { Args: never; Returns: number }
       admin_upsert_exception_action: {
         Args: {
@@ -5477,6 +5513,14 @@ export type Database = {
         }
         Returns: undefined
       }
+      driver_record_login_verification: {
+        Args: {
+          p_liveness_method?: string
+          p_liveness_passed?: boolean
+          p_object_key: string
+        }
+        Returns: Json
+      }
       driver_release_device_session: {
         Args: { p_device_id: string }
         Returns: undefined
@@ -5517,10 +5561,6 @@ export type Database = {
         Returns: Json
       }
       driver_update_avatar: { Args: { p_object_key: string }; Returns: Json }
-      driver_record_login_verification: {
-        Args: { p_object_key: string }
-        Returns: Json
-      }
       enqueue_notification_automation_event: {
         Args: {
           p_driver_id?: string
@@ -6135,4 +6175,3 @@ export const Constants = {
 export type AppRole = Database["public"]["Enums"]["app_role"];
 export type AdminApprovalStatus = Database["public"]["Enums"]["admin_approval_status"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-
