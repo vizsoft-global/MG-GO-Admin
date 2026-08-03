@@ -1,0 +1,79 @@
+name: Vizsoft Bug Report
+description: File a bug report.
+labels: ["bug", "triage"]
+projects: ["octo-org/1", "octo-org/44"]
+assignees:
+  - octocat
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: input
+    id: testid
+    attributes:
+      label: Test ID
+      description: Test id is a unique serial number of each bug/issue
+      placeholder: ex. AB-001
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: If it is app, what is the version?
+      placeholder: ex. 1.0.1
+  - type: input
+    id: module
+    attributes:
+      label: Module
+      description: Which module this issue is related?
+      placeholder: ex. Login Screen
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Short Description
+      description: Give an short overview about this issue.
+      placeholder: Tell us what you see!
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      description: Also tell us, what did you expect to happen?
+      placeholder: Enter the steps on what was expected to happen
+    validations:
+      required: true
+  - type: textarea
+    id: expected-results
+    attributes:
+      label: Expected results
+      description: what was expected to happen?
+      placeholder: Enter the steps on what was expected to happened
+    validations:
+      required: true
+  - type: textarea
+    id: actual-results
+    attributes:
+      label: Actual results
+      description: what actually happen?
+      placeholder: Enter what actually happened
+    validations:
+      required: true
+  - type: textarea
+    id: suggested-solution
+    attributes:
+      label: Suggested Solution
+      description: What is your suggestion to fix this?
+      placeholder: Enter your suggestion
+    validations:
+      required: true
+  - type: input
+    id: kanban-id
+    attributes:
+      label: Kanban task id
+      description: In kanban which task is this issue is from.
+      placeholder: Enter Kanban task id
