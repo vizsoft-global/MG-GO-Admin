@@ -1,30 +1,18 @@
 import { NextResponse } from "next/server";
-import { requireReleasesManagerApi } from "@/lib/auth/require-releases-manager";
-import { registerAppReleaseRecord } from "@/features/app-releases/app-releases-actions";
 
-export async function POST(request: Request): Promise<Response> {
-  const auth = await requireReleasesManagerApi();
-  if ("error" in auth) {
-    return NextResponse.json({ ok: false, error: auth.error }, { status: 403 });
-  }
+/** Sideload / in-app APK OTA permanently removed (Play Store policy). */
+export async function POST(): Promise<Response> {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "sideload_removed",
+      message:
+        "In-app APK publishing is disabled. Ship driver app updates via Google Play only.",
+    },
+    { status: 410 },
+  );
+}
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
-  }
-
-  const result = await registerAppReleaseRecord(body as Record<string, unknown>);
-  if (!result.ok) {
-    const status =
-      result.error === "not_authorized"
-        ? 403
-        : result.error === "not_found" || result.error === "apk_not_found"
-          ? 404
-          : 400;
-    return NextResponse.json({ ok: false, error: result.error }, { status });
-  }
-
-  return NextResponse.json({ ok: true, release: result.release });
+export async function GET(): Promise<Response> {
+  return POST();
 }

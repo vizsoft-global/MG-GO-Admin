@@ -176,14 +176,6 @@ export const queryKeys = {
       archivedOnly: boolean,
     ) => ["data-cleanup", "candidates", tab, search, page, archivedOnly] as const,
   },
-  appReleases: {
-    all: () => ["app-releases"] as const,
-    list: (channel: string) => ["app-releases", "list", channel] as const,
-    adoption: (platform: string, channel: string) =>
-      ["app-releases", "adoption", platform, channel] as const,
-    drivers: (platform: string, channel: string, versionCode: number | null) =>
-      ["app-releases", "drivers", platform, channel, versionCode ?? "unknown"] as const,
-  },
   notifications: {
     all: () => ["notifications"] as const,
     dashboard: () => ["notifications", "dashboard"] as const,

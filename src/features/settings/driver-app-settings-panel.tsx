@@ -8,7 +8,6 @@ import {
   resetDriverAppSettings,
   setDriverAppLoginVerificationExemptAll,
   setDriverAppMaintenanceMode,
-  setDriverAppSideloadUpdatesEnabled,
   updateDriverAppDeliveryProximity,
   updateDriverAppMaintenanceMessage,
   updateDriverAppSettings,
@@ -38,7 +37,6 @@ type DriverAppSettingsPanelProps = {
   driverAppMaintenanceMessage: string;
   driverAppLoginVerificationExemptAll: boolean;
   driverAppDeliveryProximityMeters: number;
-  driverAppSideloadUpdatesEnabled: boolean;
 };
 
 function AssetUploadBlock({
@@ -123,7 +121,6 @@ export function DriverAppSettingsPanel({
   driverAppMaintenanceMessage,
   driverAppLoginVerificationExemptAll,
   driverAppDeliveryProximityMeters,
-  driverAppSideloadUpdatesEnabled,
 }: DriverAppSettingsPanelProps) {
   const t = useTranslations("pages.settings.driverApp");
   const locale = useLocale();
@@ -138,9 +135,6 @@ export function DriverAppSettingsPanel({
   const [maintenanceMode, setMaintenanceMode] = useState(driverAppMaintenanceMode);
   const [loginVerificationExemptAll, setLoginVerificationExemptAll] = useState(
     driverAppLoginVerificationExemptAll,
-  );
-  const [sideloadUpdatesEnabled, setSideloadUpdatesEnabled] = useState(
-    driverAppSideloadUpdatesEnabled,
   );
   const [proximityMeters, setProximityMeters] = useState(
     String(driverAppDeliveryProximityMeters),
@@ -445,60 +439,6 @@ export function DriverAppSettingsPanel({
             </div>
           </AppFormSection>
 
-          <AppFormSection
-            title={t("sideloadUpdatesTitle")}
-            description={t("sideloadUpdatesSubtitle")}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/10 p-3">
-              <div className="space-y-1">
-                <span
-                  className={cn(
-                    "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
-                    sideloadUpdatesEnabled
-                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                      : "bg-amber-100 text-amber-800 border border-amber-200",
-                  )}
-                >
-                  {sideloadUpdatesEnabled
-                    ? t("sideloadUpdatesStatusOn")
-                    : t("sideloadUpdatesStatusOff")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {sideloadUpdatesEnabled
-                    ? t("sideloadUpdatesOnHint")
-                    : t("sideloadUpdatesOffHint")}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="driverAppSideloadUpdates" className="text-sm">
-                  {t("sideloadUpdatesToggle")}
-                </Label>
-                <Switch
-                  id="driverAppSideloadUpdates"
-                  checked={sideloadUpdatesEnabled}
-                  disabled={isPending}
-                  onCheckedChange={(checked) => {
-                    startTransition(async () => {
-                      setError(null);
-                      const result = await setDriverAppSideloadUpdatesEnabled(checked);
-                      if (result.error) {
-                        toast.error(t("errors.saveFailed"));
-                        return;
-                      }
-                      setSideloadUpdatesEnabled(checked);
-                      toast.success(
-                        checked
-                          ? t("sideloadUpdatesEnabled")
-                          : t("sideloadUpdatesDisabled"),
-                      );
-                      router.refresh();
-                    });
-                  }}
-                />
-              </div>
-            </div>
-          </AppFormSection>
-
           <AppFormSection title={t("maintenanceTitle")} description={t("maintenanceSubtitle")}>
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/10 p-3">
@@ -607,7 +547,6 @@ export function DriverAppSettingsPanel({
               setSplashPreview(null);
               setIconPreview(null);
               setMaintenanceMode(false);
-              setSideloadUpdatesEnabled(true);
               setProximityMeters(
                 String(DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters),
               );

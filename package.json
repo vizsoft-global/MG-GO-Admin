@@ -19,7 +19,6 @@
     "migrate:storage-r2": "node scripts/migrate-storage-to-r2.mjs",
     "migrate:storage-r2:dry": "node scripts/migrate-storage-to-r2.mjs --dry-run",
     "env:push-vercel": "node scripts/push-vercel-env.mjs",
-    "publish:apk": "node scripts/publish-app-release.mjs",
     "db:types": "supabase gen types typescript --project-id ytfmsgckjatiserpgdbz 2>/dev/null > src/types/database.ts && printf '\\nexport type AppRole = Database[\"public\"][\"Enums\"][\"app_role\"];\\nexport type AdminApprovalStatus = Database[\"public\"][\"Enums\"][\"admin_approval_status\"];\\nexport type Profile = Database[\"public\"][\"Tables\"][\"profiles\"][\"Row\"];\\n' >> src/types/database.ts"
   },
   "dependencies": {

@@ -30,21 +30,6 @@ export function isR2ObjectKey(value: string | null | undefined): boolean {
   );
 }
 
-export type AppReleaseChannel = "production" | "beta" | "internal";
-
-export function buildAppReleaseApkKey(
-  channel: AppReleaseChannel,
-  versionCode: number,
-): string {
-  return `releases/android/${channel}/musallam-${versionCode}.apk`;
-}
-
-export function isAppReleaseObjectKey(key: string): boolean {
-  const normalized = key.trim().replace(/^\/+/, "");
-  if (normalized.includes("..")) return false;
-  return normalized.startsWith("releases/android/");
-}
-
 export function buildNotificationMediaKey(assetId: string, ext: string): string {
   return `notifications/assets/${assetId}.${ext}`;
 }

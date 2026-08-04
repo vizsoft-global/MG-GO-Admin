@@ -36,7 +36,6 @@ export type AppSettings = {
   driverAppMaintenanceMessage: string;
   driverAppLoginVerificationExemptAll: boolean;
   driverAppDeliveryProximityMeters: number;
-  driverAppSideloadUpdatesEnabled: boolean;
   fontFamily: FontFamilyId;
   logoUrl: string | null;
   logoType: LogoType;
@@ -63,7 +62,6 @@ function normalizeRow(
     driver_app_maintenance_message?: string | null;
     driver_app_login_verification_exempt_all?: boolean | null;
     driver_app_delivery_proximity_meters?: number | null;
-    driver_app_sideload_updates_enabled?: boolean | null;
     font_family: string;
     logo_url: string | null;
     logo_type: string;
@@ -91,8 +89,6 @@ function normalizeRow(
     driverAppDeliveryProximityMeters:
       row.driver_app_delivery_proximity_meters ??
       DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
-    driverAppSideloadUpdatesEnabled:
-      row.driver_app_sideload_updates_enabled ?? true,
     fontFamily: isFontFamilyId(row.font_family) ? row.font_family : "inter",
     logoUrl: row.logo_url,
     logoType: row.logo_type === "svg" ? "svg" : "image",
@@ -128,7 +124,7 @@ async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
 const getCustomThemes = cache(fetchCustomThemes);
 
 const APP_SETTINGS_SELECT =
-  "app_name, app_subtitle, driver_app_login_hint, driver_app_title, driver_app_logo_url, driver_app_splash_url, driver_app_icon_url, driver_app_maintenance_mode, driver_app_maintenance_message, driver_app_login_verification_exempt_all, driver_app_delivery_proximity_meters, driver_app_sideload_updates_enabled, font_family, logo_url, logo_type, theme_id";
+  "app_name, app_subtitle, driver_app_login_hint, driver_app_title, driver_app_logo_url, driver_app_splash_url, driver_app_icon_url, driver_app_maintenance_mode, driver_app_maintenance_message, driver_app_login_verification_exempt_all, driver_app_delivery_proximity_meters, font_family, logo_url, logo_type, theme_id";
 
 async function loadAppSettingsRow(): Promise<{
   app_name: string;
@@ -142,7 +138,6 @@ async function loadAppSettingsRow(): Promise<{
   driver_app_maintenance_message?: string | null;
   driver_app_login_verification_exempt_all?: boolean | null;
   driver_app_delivery_proximity_meters?: number | null;
-  driver_app_sideload_updates_enabled?: boolean | null;
   font_family: string;
   logo_url: string | null;
   logo_type: string;
@@ -213,7 +208,6 @@ async function fetchAppSettings(): Promise<AppSettings> {
       driverAppLoginVerificationExemptAll: false,
       driverAppDeliveryProximityMeters:
         DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
-      driverAppSideloadUpdatesEnabled: true,
       fontFamily: DEFAULT_APP_SETTINGS.font_family,
       logoUrl: DEFAULT_APP_SETTINGS.logo_url,
       logoType: DEFAULT_APP_SETTINGS.logo_type,

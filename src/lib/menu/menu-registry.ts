@@ -343,15 +343,6 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "drivers.manage",
   },
   {
-    id: "app-releases",
-    defaultLabel: "App Releases",
-    defaultIcon: "Download",
-    href: "/app-releases",
-    defaultGroup: "Settings",
-    defaultOrder: 3,
-    permission: "releases.manage",
-  },
-  {
     id: "storage",
     defaultLabel: "Cloudflare R2",
     defaultIcon: "Cloud",
@@ -471,7 +462,6 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   profile: "profile",
   branding: "branding",
   "driver-app": "driverApp",
-  "app-releases": "appReleases",
   storage: "storage",
   roles: "roles",
   "access-requests": "accessRequests",
