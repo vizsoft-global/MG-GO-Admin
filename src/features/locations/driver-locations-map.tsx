@@ -16,7 +16,7 @@ import {
   type GeofenceMapOverlay,
 } from "@/features/locations/geofence-map-overlays";
 import { cn } from "@/lib/utils";
-import { createFleetMarkerIcon } from "./fleet-marker-icon";
+import { createFleetMarkerIcon, createRestaurantMarkerIcon } from "./fleet-marker-icon";
 import type {
   DriverLocationMapMarker,
   DriverLocationMapPath,
@@ -29,6 +29,28 @@ import {
   isTrafficLayerEnabled,
 } from "@/features/live-tracking/tracking-map-layer-controller";
 import { createZoneLabelOverlay } from "./zone-label-overlay";
+
+/** Cap animated pulses — thousands of moving overlays kill the main thread. */
+const MAX_PULSE_MARKERS = 16;
+/** Coalesce MarkerClusterer re-layout under GPS storms. */
+const CLUSTER_RENDER_MS = 200;
+
+function isValidLatLng(lat: number, lng: number): boolean {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180 &&
+    !(lat === 0 && lng === 0)
+  );
+}
+
+function approxMoved(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): boolean {
+  return Math.abs(a.lat - b.lat) > 0.00001 || Math.abs(a.lng - b.lng) > 0.00001;
+}
 
 export function DriverLocationsMap({
   markers,
@@ -78,7 +100,21 @@ export function DriverLocationsMap({
   const t = useTranslations("pages.locations");
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("@/lib/google-maps/load").GoogleMapInstance | null>(null);
-  const markerRefs = useRef<import("@/lib/google-maps/load").GoogleMarkerInstance[]>([]);
+  /** Stable marker identity so live GPS updates move pins instead of recreating them. */
+  const driverMarkerByIdRef = useRef(
+    new Map<
+      string,
+      {
+        marker: import("@/lib/google-maps/load").GoogleMarkerInstance;
+        pulse: {
+          setMap: (map: import("@/lib/google-maps/load").GoogleMapInstance | null) => void;
+          setPosition: (lat: number, lng: number) => void;
+        } | null;
+        iconKey: string;
+        clickListener: { remove?: () => void } | null;
+      }
+    >(),
+  );
   const restaurantMarkerRefs = useRef<import("@/lib/google-maps/load").GoogleMarkerInstance[]>([]);
   const geofenceRefs = useRef<
     Array<{ setMap: (map: import("@/lib/google-maps/load").GoogleMapInstance | null) => void }>
@@ -92,11 +128,31 @@ export function DriverLocationsMap({
     null,
   );
   const clustererRef = useRef<MarkerClusterer | null>(null);
-  const pulseRefs = useRef<Array<{ setMap: (map: import("@/lib/google-maps/load").GoogleMapInstance | null) => void }>>([]);
+  const clusterRenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMarkerPosRef = useRef(new Map<string, { lat: number; lng: number }>());
   const mapClickListenerRef = useRef<{ remove: () => void } | null>(null);
   const hasInitialFitRef = useRef(false);
+  const onMarkerSelectRef = useRef(onMarkerSelect);
+  const focusMarkerIdRef = useRef(focusMarkerId);
+  onMarkerSelectRef.current = onMarkerSelect;
+  focusMarkerIdRef.current = focusMarkerId;
   const [mapState, setMapState] = useState<"loading" | "ready" | "unavailable">("loading");
   const stableStyles = useMemo(() => mapStyles ?? [], [mapStyles]);
+
+  const scheduleClusterRender = () => {
+    if (clusterRenderTimerRef.current != null) return;
+    clusterRenderTimerRef.current = setTimeout(() => {
+      clusterRenderTimerRef.current = null;
+      try {
+        clustererRef.current?.render();
+        const clusters =
+          (clustererRef.current as unknown as { clusters?: Array<unknown> }).clusters?.length ?? 0;
+        onClusterCountChange?.(clusters);
+      } catch {
+        // Clusterer can throw if markers were cleared mid-render; ignore.
+      }
+    }, CLUSTER_RENDER_MS);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -164,16 +220,23 @@ export function DriverLocationsMap({
       cancelled = true;
       mapClickListenerRef.current?.remove();
       mapClickListenerRef.current = null;
-      for (const m of markerRefs.current) m.setMap(null);
-      markerRefs.current = [];
+      if (clusterRenderTimerRef.current != null) {
+        clearTimeout(clusterRenderTimerRef.current);
+        clusterRenderTimerRef.current = null;
+      }
+      for (const entry of driverMarkerByIdRef.current.values()) {
+        entry.clickListener?.remove?.();
+        entry.pulse?.setMap(null);
+        entry.marker.setMap(null);
+      }
+      driverMarkerByIdRef.current.clear();
+      lastMarkerPosRef.current.clear();
       for (const m of restaurantMarkerRefs.current) m.setMap(null);
       restaurantMarkerRefs.current = [];
       for (const g of geofenceRefs.current) g.setMap(null);
       geofenceRefs.current = [];
       for (const label of geofenceLabelRefs.current) label.setMap(null);
       geofenceLabelRefs.current = [];
-      for (const pulse of pulseRefs.current) pulse.setMap(null);
-      pulseRefs.current = [];
       trafficRef.current?.setMap(null);
       trafficRef.current = null;
       heatmapRef.current?.setMap(null);
@@ -199,41 +262,88 @@ export function DriverLocationsMap({
     void loadGoogleMaps().then((google) => {
       if (!google?.maps?.Map || !mapRef.current) return;
 
-      clustererRef.current?.clearMarkers();
-      clustererRef.current = null;
-      onClusterCountChange?.(0);
-
-      for (const m of markerRefs.current) m.setMap(null);
-      markerRefs.current = [];
-      for (const m of restaurantMarkerRefs.current) m.setMap(null);
-      restaurantMarkerRefs.current = [];
-      for (const pulse of pulseRefs.current) pulse.setMap(null);
-      pulseRefs.current = [];
-
       const MarkerCtor = google.maps.Marker;
+      if (!MarkerCtor) return;
 
-      for (const pin of restaurantMarkers) {
-        const marker = new MarkerCtor({
-          position: { lat: pin.lat, lng: pin.lng },
-          map: mapRef.current,
-          title: pin.title,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: "#16a34a",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 2,
-          },
-          zIndex: 500,
-        });
-        restaurantMarkerRefs.current.push(marker);
+      const validMarkers = markers.filter((m) => isValidLatLng(m.lat, m.lng));
+      const nextIds = new Set(validMarkers.map((m) => m.id));
+      const byId = driverMarkerByIdRef.current;
+      const focusedId = focusMarkerIdRef.current;
+
+      // Prefer selected + first moving pins for pulse budget.
+      const pulseEligible = new Set<string>();
+      if (focusedId) pulseEligible.add(focusedId);
+      for (const pin of validMarkers) {
+        if (pulseEligible.size >= MAX_PULSE_MARKERS) break;
+        if (pin.trackingStatus === "moving") pulseEligible.add(pin.id);
       }
 
-      for (const pin of markers) {
+      for (const [id, entry] of byId) {
+        if (nextIds.has(id)) continue;
+        entry.clickListener?.remove?.();
+        entry.pulse?.setMap(null);
+        entry.marker.setMap(null);
+        try {
+          clustererRef.current?.removeMarker(entry.marker);
+        } catch {
+          /* ignore */
+        }
+        byId.delete(id);
+        lastMarkerPosRef.current.delete(id);
+      }
+
+      const created: import("@/lib/google-maps/load").GoogleMarkerInstance[] = [];
+      let anyMoved = false;
+
+      for (const pin of validMarkers) {
+        const iconKey = `${pin.pinStatus ?? ""}|${pin.vehicleType ?? "bike"}|${pin.highlight ? "1" : "0"}|${pin.trackingStatus ?? ""}`;
+        const existing = byId.get(pin.id);
+        const wantPulse =
+          mapLayer !== "heatmap" &&
+          pin.trackingStatus === "moving" &&
+          Boolean(pin.pinStatus) &&
+          pulseEligible.has(pin.id);
+
+        if (existing) {
+          const last = lastMarkerPosRef.current.get(pin.id);
+          if (!last || approxMoved(last, pin)) {
+            existing.marker.setPosition({ lat: pin.lat, lng: pin.lng });
+            lastMarkerPosRef.current.set(pin.id, { lat: pin.lat, lng: pin.lng });
+            anyMoved = true;
+          }
+          existing.marker.setTitle?.(pin.title ?? "");
+          existing.marker.setZIndex?.(pin.highlight ? 999 : 1);
+          if (existing.iconKey !== iconKey) {
+            existing.marker.setIcon?.(
+              createFleetMarkerIcon({
+                pinStatus: pin.pinStatus,
+                selected: Boolean(pin.highlight),
+                vehicle: pin.vehicleType ?? "bike",
+              }),
+            );
+            existing.iconKey = iconKey;
+          }
+          if (existing.pulse) {
+            existing.pulse.setPosition(pin.lat, pin.lng);
+          }
+          if (!existing.pulse && wantPulse && pin.pinStatus) {
+            existing.pulse = createDriverPulseOverlay(
+              google,
+              mapRef.current,
+              { lat: pin.lat, lng: pin.lng },
+              pin.pinStatus,
+            );
+          }
+          if (existing.pulse && !wantPulse) {
+            existing.pulse.setMap(null);
+            existing.pulse = null;
+          }
+          continue;
+        }
+
         const marker = new MarkerCtor({
           position: { lat: pin.lat, lng: pin.lng },
-          map: mapRef.current,
+          map: isHeatmapLayerEnabled(mapLayer) ? null : mapRef.current,
           title: pin.title,
           icon: createFleetMarkerIcon({
             pinStatus: pin.pinStatus,
@@ -242,24 +352,190 @@ export function DriverLocationsMap({
           }),
           zIndex: pin.highlight ? 999 : undefined,
         });
-        if (onMarkerSelect) {
-          marker.addListener("click", () => {
-            const shouldClear = pin.id === focusMarkerId;
-            onMarkerSelect(shouldClear ? null : pin.id);
-          });
-        }
-        markerRefs.current.push(marker);
+        const clickListener = marker.addListener("click", () => {
+          const select = onMarkerSelectRef.current;
+          if (!select) return;
+          const focused = focusMarkerIdRef.current;
+          select(pin.id === focused ? null : pin.id);
+        });
 
-        if (mapLayer !== "heatmap" && pin.trackingStatus === "moving" && pin.pinStatus) {
-          const pulse = createDriverPulseOverlay(
+        let pulse: {
+          setMap: (map: import("@/lib/google-maps/load").GoogleMapInstance | null) => void;
+          setPosition: (lat: number, lng: number) => void;
+        } | null = null;
+        if (wantPulse && pin.pinStatus) {
+          pulse = createDriverPulseOverlay(
             google,
             mapRef.current,
             { lat: pin.lat, lng: pin.lng },
             pin.pinStatus,
           );
-          pulseRefs.current.push(pulse);
+        }
+
+        byId.set(pin.id, {
+          marker,
+          pulse,
+          iconKey,
+          clickListener: clickListener as { remove?: () => void },
+        });
+        lastMarkerPosRef.current.set(pin.id, { lat: pin.lat, lng: pin.lng });
+        created.push(marker);
+        anyMoved = true;
+      }
+
+      if (fitToMarkers && !hasInitialFitRef.current && validMarkers.length > 0) {
+        const bounds = new google.maps.LatLngBounds();
+        for (const pin of validMarkers) bounds.extend({ lat: pin.lat, lng: pin.lng });
+        for (const pin of restaurantMarkers) {
+          if (isValidLatLng(pin.lat, pin.lng)) bounds.extend({ lat: pin.lat, lng: pin.lng });
+        }
+        mapRef.current.fitBounds(bounds, initialFitPadding);
+        hasInitialFitRef.current = true;
+      }
+
+      const allDriverMarkers = [...byId.values()].map((e) => e.marker);
+
+      if (isHeatmapLayerEnabled(mapLayer)) {
+        for (const entry of byId.values()) {
+          entry.marker.setMap(null);
+          entry.pulse?.setMap(null);
+        }
+        clustererRef.current?.clearMarkers();
+        clustererRef.current = null;
+        trafficRef.current?.setMap(null);
+        if (!heatmapRef.current && google.maps.visualization?.HeatmapLayer) {
+          heatmapRef.current = new google.maps.visualization.HeatmapLayer({});
+        }
+        const heatmapPoints = buildHeatmapPoints(validMarkers);
+        heatmapRef.current?.setData(heatmapPoints);
+        heatmapRef.current?.setOptions({
+          radius: 34,
+          opacity: 0.7,
+          gradient: [
+            "rgba(16, 185, 129, 0.15)",
+            "rgba(34, 197, 94, 0.35)",
+            "rgba(250, 204, 21, 0.6)",
+            "rgba(249, 115, 22, 0.8)",
+            "rgba(239, 68, 68, 0.95)",
+          ],
+        });
+        heatmapRef.current?.setMap(mapRef.current);
+        onClusterCountChange?.(0);
+      } else {
+        heatmapRef.current?.setMap(null);
+        if (isTrafficLayerEnabled(mapLayer)) {
+          if (!trafficRef.current) trafficRef.current = new google.maps.TrafficLayer();
+          trafficRef.current.setMap(mapRef.current);
+        } else {
+          trafficRef.current?.setMap(null);
+        }
+
+        if (!clustererRef.current) {
+          clustererRef.current = new MarkerClusterer({
+            map: mapRef.current,
+            markers: allDriverMarkers,
+            renderer: {
+              render: ({ count, position }) =>
+                new google.maps.Marker({
+                  position,
+                  map: null,
+                  icon: {
+                    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+                      `<svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg"><circle cx="21" cy="21" r="20" fill="#2563EB"/><circle cx="21" cy="21" r="15" fill="#1D4ED8"/><text x="21" y="26" text-anchor="middle" fill="white" font-size="12" font-family="Inter,Arial,sans-serif" font-weight="700">${count}</text></svg>`,
+                    )}`,
+                    scaledSize: { width: 42, height: 42 },
+                    anchor: { x: 21, y: 21 },
+                  },
+                  zIndex: 1000,
+                }),
+            },
+          });
+          anyMoved = true;
+        } else if (created.length > 0) {
+          clustererRef.current.addMarkers(created);
+          anyMoved = true;
+        }
+        if (anyMoved) scheduleClusterRender();
+      }
+    });
+  }, [
+    markers,
+    mapState,
+    fitToMarkers,
+    restaurantMarkers,
+    initialFitPadding,
+    mapLayer,
+    onClusterCountChange,
+  ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mapState !== "ready") return;
+
+    void loadGoogleMaps().then((google) => {
+      if (!google?.maps?.Map || !mapRef.current) return;
+      const MarkerCtor = google.maps.Marker;
+      if (!MarkerCtor) return;
+
+      for (const m of restaurantMarkerRefs.current) {
+        try {
+          m.setMap(null);
+        } catch {
+          /* ignore */
         }
       }
+      restaurantMarkerRefs.current = [];
+
+      const bounds = new google.maps.LatLngBounds();
+      let placed = 0;
+
+      for (const pin of restaurantMarkers) {
+        if (!isValidLatLng(pin.lat, pin.lng)) continue;
+        try {
+          const marker = new MarkerCtor({
+            position: { lat: pin.lat, lng: pin.lng },
+            map: mapRef.current,
+            title: pin.title ?? "Restaurant",
+            icon: createRestaurantMarkerIcon({ selected: true }),
+            zIndex: 2000,
+          });
+          restaurantMarkerRefs.current.push(marker);
+          bounds.extend({ lat: pin.lat, lng: pin.lng });
+          placed += 1;
+        } catch (err) {
+          console.error("[live-map] restaurant marker failed", pin, err);
+        }
+      }
+
+      // Frame restaurants + focused driver once per restaurant set (not every GPS tick).
+      if (placed > 0 && focusMarkerIdRef.current) {
+        const fitKey = `${focusMarkerIdRef.current}|${restaurantMarkers
+          .map((p) => p.id)
+          .sort()
+          .join(",")}`;
+        const mapAny = mapRef.current as unknown as { __restaurantFitKey?: string };
+        if (mapAny.__restaurantFitKey !== fitKey) {
+          mapAny.__restaurantFitKey = fitKey;
+          const focusPin = markers.find((m) => m.id === focusMarkerIdRef.current);
+          if (focusPin && isValidLatLng(focusPin.lat, focusPin.lng)) {
+            bounds.extend({ lat: focusPin.lat, lng: focusPin.lng });
+          }
+          try {
+            mapRef.current.fitBounds(bounds, 80);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    });
+  }, [restaurantMarkers, mapState]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mapState !== "ready") return;
+
+    void loadGoogleMaps().then((google) => {
+      if (!google?.maps?.Map || !mapRef.current) return;
 
       polylineRef.current?.setMap(null);
       polylineRef.current = null;
@@ -288,7 +564,23 @@ export function DriverLocationsMap({
             map: mapRef.current,
           });
         }
+
+        if (fitToMarkers && !hasInitialFitRef.current) {
+          const bounds = new google.maps.LatLngBounds();
+          for (const pt of path) bounds.extend(pt);
+          mapRef.current.fitBounds(bounds, initialFitPadding);
+          hasInitialFitRef.current = true;
+        }
       }
+    });
+  }, [path, mapState, fitToMarkers, initialFitPadding]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mapState !== "ready") return;
+
+    void loadGoogleMaps().then((google) => {
+      if (!google?.maps?.Map || !mapRef.current) return;
 
       for (const g of geofenceRefs.current) g.setMap(null);
       geofenceRefs.current = [];
@@ -311,99 +603,19 @@ export function DriverLocationsMap({
         if (zone.name) {
           const center = getOverlayCenter(zone);
           if (center) {
-            const label = createZoneLabelOverlay(google, mapRef.current, {
-              position: center,
-              zoneName: zone.name,
-              zoneColor: zone.color,
-              driverCount: zone.driverCount ?? 0,
-            });
-            geofenceLabelRefs.current.push(label);
+            geofenceLabelRefs.current.push(
+              createZoneLabelOverlay(google, mapRef.current, {
+                position: center,
+                zoneName: zone.name,
+                zoneColor: zone.color,
+                driverCount: zone.driverCount ?? 0,
+              }),
+            );
           }
         }
       }
-
-      if (
-        fitToMarkers &&
-        !hasInitialFitRef.current &&
-        (markers.length > 0 || (path && path.length > 0))
-      ) {
-        const bounds = new google.maps.LatLngBounds();
-        for (const pin of markers) bounds.extend({ lat: pin.lat, lng: pin.lng });
-        for (const pin of restaurantMarkers) bounds.extend({ lat: pin.lat, lng: pin.lng });
-        for (const pt of path ?? []) bounds.extend(pt);
-        mapRef.current.fitBounds(bounds, initialFitPadding);
-        hasInitialFitRef.current = true;
-      }
-
-      if (isHeatmapLayerEnabled(mapLayer)) {
-        for (const marker of markerRefs.current) marker.setMap(null);
-        trafficRef.current?.setMap(null);
-        if (!heatmapRef.current && google.maps.visualization?.HeatmapLayer) {
-          heatmapRef.current = new google.maps.visualization.HeatmapLayer({});
-        }
-        const heatmapPoints = buildHeatmapPoints(markers);
-        heatmapRef.current?.setData(heatmapPoints);
-        heatmapRef.current?.setOptions({
-          radius: 34,
-          opacity: 0.7,
-          gradient: [
-            "rgba(16, 185, 129, 0.15)",
-            "rgba(34, 197, 94, 0.35)",
-            "rgba(250, 204, 21, 0.6)",
-            "rgba(249, 115, 22, 0.8)",
-            "rgba(239, 68, 68, 0.95)",
-          ],
-        });
-        heatmapRef.current?.setMap(mapRef.current);
-      } else {
-        heatmapRef.current?.setMap(null);
-        if (isTrafficLayerEnabled(mapLayer)) {
-          if (!trafficRef.current) trafficRef.current = new google.maps.TrafficLayer();
-          trafficRef.current.setMap(mapRef.current);
-        } else {
-          trafficRef.current?.setMap(null);
-        }
-
-        if (markers.length > 0) {
-          clustererRef.current = new MarkerClusterer({
-            map: mapRef.current,
-            markers: markerRefs.current,
-            renderer: {
-              render: ({ count, position }) =>
-                new google.maps.Marker({
-                  position,
-                  map: null,
-                  icon: {
-                    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-                      `<svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg"><circle cx="21" cy="21" r="20" fill="#2563EB"/><circle cx="21" cy="21" r="15" fill="#1D4ED8"/><text x="21" y="26" text-anchor="middle" fill="white" font-size="12" font-family="Inter,Arial,sans-serif" font-weight="700">${count}</text></svg>`,
-                    )}`,
-                    scaledSize: { width: 42, height: 42 },
-                    anchor: { x: 21, y: 21 },
-                  },
-                  zIndex: 1000,
-                }),
-            },
-          });
-          const clusters =
-            (clustererRef.current as unknown as { clusters?: Array<unknown> }).clusters?.length ??
-            0;
-          onClusterCountChange?.(clusters);
-        }
-      }
     });
-  }, [
-    markers,
-    restaurantMarkers,
-    path,
-    mapState,
-    fitToMarkers,
-    geofenceOverlays,
-    onMarkerSelect,
-    focusMarkerId,
-    initialFitPadding,
-    mapLayer,
-    onClusterCountChange,
-  ]);
+  }, [geofenceOverlays, mapState]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -411,8 +623,14 @@ export function DriverLocationsMap({
     const pin = markers.find((m) => m.id === focusMarkerId);
     if (!pin) return;
     map.panTo({ lat: pin.lat, lng: pin.lng });
-    map.setZoom(16);
   }, [focusMarkerId, markers, mapState]);
+
+  // Zoom once when a driver is first selected; don't reset zoom on every GPS tick.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || mapState !== "ready" || !focusMarkerId) return;
+    map.setZoom(16);
+  }, [focusMarkerId, mapState]);
 
   return (
     <div

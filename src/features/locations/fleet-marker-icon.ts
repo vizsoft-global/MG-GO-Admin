@@ -58,3 +58,27 @@ export function createFleetMarkerIcon(opts?: {
     anchor: { x: 20, y: 20 },
   };
 }
+
+/** Restaurant pin — SVG data URL (avoids SymbolPath / Marker.icon crashes). */
+export function createRestaurantMarkerIcon(opts?: { selected?: boolean }) {
+  const selected = Boolean(opts?.selected);
+  const size = selected ? 36 : 32;
+  const fill = "#16a34a";
+  const ring = selected ? "#bbf7d0" : "#ffffff";
+  const svg = `
+    <svg width="${size}" height="${size}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="14" fill="${ring}" fill-opacity="0.95"/>
+      <circle cx="16" cy="16" r="11" fill="${fill}"/>
+      <circle cx="16" cy="16" r="11" stroke="#ffffff" stroke-width="2"/>
+      <path d="M11 13.5c0-1.4 1.1-2.5 2.5-2.5.5 0 1 .15 1.4.4.4-.25.9-.4 1.4-.4 1.4 0 2.5 1.1 2.5 2.5 0 2.2-2.6 4.4-3.9 5.3-.2.15-.5.15-.7 0-1.3-.9-3.9-3.1-3.9-5.3z" fill="#ffffff"/>
+      <path d="M13 20h6v1.2c0 .4-.3.8-.7.8h-4.6c-.4 0-.7-.4-.7-.8V20z" fill="#ffffff" fill-opacity="0.9"/>
+    </svg>
+  `.trim();
+
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: { width: size, height: size },
+    anchor: { x: size / 2, y: size / 2 },
+  };
+}
+

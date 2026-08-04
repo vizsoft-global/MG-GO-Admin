@@ -75,7 +75,7 @@ export function LiveTrackingLiveView({
     zoomIn: () => void;
     zoomOut: () => void;
   } | null>(null);
-  /** Re-evaluate GPS freshness every 30s so stale drivers drop off the map. */
+  /** Re-evaluate GPS freshness every 10s so stale drivers drop off quickly. */
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
@@ -83,7 +83,7 @@ export function LiveTrackingLiveView({
   }, []);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
+    const id = window.setInterval(() => setNowTick(Date.now()), 10_000);
     return () => window.clearInterval(id);
   }, []);
 

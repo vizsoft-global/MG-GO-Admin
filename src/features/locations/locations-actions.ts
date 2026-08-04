@@ -400,26 +400,43 @@ export async function fetchDriverAssignedRestaurantPins(
     .from("driver_restaurants")
     .select("restaurant_id")
     .eq("driver_id", driverId);
-  if (linkErr) throw linkErr;
+  if (linkErr) throw new Error(linkErr.message);
 
-  const ids = (links ?? []).map((l) => l.restaurant_id);
+  const ids = [...new Set((links ?? []).map((l) => l.restaurant_id).filter(Boolean))];
   if (ids.length === 0) return [];
 
-  const { data: restaurants, error } = await supabase
+  // Prefer published + active; fall back to any active with coordinates so
+  // Live Tracking still shows the assigned pin when ops data is partial.
+  const baseSelect = "id, name, latitude, longitude, map_link, status, is_active";
+
+  const { data: preferred, error } = await supabase
     .from("restaurants")
-    .select("id, name, latitude, longitude, map_link, status, is_active")
+    .select(baseSelect)
     .in("id", ids)
     .eq("status", "published")
     .eq("is_active", true);
-  if (error) throw error;
+  if (error) throw new Error(error.message);
 
-  return (restaurants ?? [])
+  let restaurants = preferred ?? [];
+  if (restaurants.length === 0) {
+    const { data: fallback, error: fbErr } = await supabase
+      .from("restaurants")
+      .select(baseSelect)
+      .in("id", ids)
+      .eq("is_active", true);
+    if (fbErr) throw new Error(fbErr.message);
+    restaurants = fallback ?? [];
+  }
+
+  return restaurants
     .filter(
       (r) =>
         r.latitude != null &&
         r.longitude != null &&
         Number.isFinite(Number(r.latitude)) &&
-        Number.isFinite(Number(r.longitude)),
+        Number.isFinite(Number(r.longitude)) &&
+        Math.abs(Number(r.latitude)) <= 90 &&
+        Math.abs(Number(r.longitude)) <= 180,
     )
     .map((r) => ({
       id: r.id,

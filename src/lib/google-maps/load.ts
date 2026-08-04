@@ -33,6 +33,9 @@ export type GoogleMapInstance = {
 export type GoogleMarkerInstance = {
   setPosition: (position: GoogleMapLatLng) => void;
   setMap: (map: GoogleMapInstance | null) => void;
+  setTitle?: (title: string) => void;
+  setIcon?: (icon: unknown) => void;
+  setZIndex?: (zIndex: number | undefined) => void;
   getPosition: () => { lat: () => number; lng: () => number } | null | undefined;
   addListener: (event: string, handler: () => void) => void;
 };

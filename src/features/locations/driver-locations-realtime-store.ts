@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 import {
   enrichLiveLocation,
+  isGpsLive,
   parseTrackingStatus,
   parseZoneStatus,
 } from "./location-status";
@@ -24,10 +25,17 @@ type LiveRow = Database["public"]["Tables"]["driver_locations"]["Row"] & {
 
 type Listener = (locations: DriverLiveLocation[]) => void;
 
+/** Coalesce realtime floods so React + maps update at most ~4×/sec. */
+const NOTIFY_BATCH_MS = 250;
+/** Drop drivers with no GPS in this window from initial hydrate (keeps boot light). */
+const INITIAL_MAX_AGE_MS = 15 * 60 * 1000;
+
 let channel: RealtimeChannel | null = null;
 let listeners = new Set<Listener>();
-let cache: DriverLiveLocation[] = [];
+/** O(1) live upserts under high write volume. */
+let cacheById = new Map<string, DriverLiveLocation>();
 let fetchPromise: Promise<void> | null = null;
+let notifyTimer: ReturnType<typeof setTimeout> | null = null;
 let nameCache = new Map<
   string,
   {
@@ -51,9 +59,7 @@ function profileName(
   return row?.full_name?.trim() ?? null;
 }
 
-function restaurantFromDriver(
-  driver: LiveRow["drivers"],
-): string | null {
+function restaurantFromDriver(driver: LiveRow["drivers"]): string | null {
   const links = driver?.driver_restaurants;
   if (!links?.length) return null;
   const rest = links[0]?.restaurants;
@@ -61,8 +67,33 @@ function restaurantFromDriver(
   return row?.name ?? null;
 }
 
+function snapshot(): DriverLiveLocation[] {
+  return Array.from(cacheById.values());
+}
+
+function scheduleNotify() {
+  if (notifyTimer != null) return;
+  notifyTimer = setTimeout(() => {
+    notifyTimer = null;
+    const snap = snapshot();
+    for (const listener of listeners) {
+      listener(snap);
+    }
+  }, NOTIFY_BATCH_MS);
+}
+
+function notifyNow() {
+  if (notifyTimer != null) {
+    clearTimeout(notifyTimer);
+    notifyTimer = null;
+  }
+  const snap = snapshot();
+  for (const listener of listeners) {
+    listener(snap);
+  }
+}
+
 function rowToLocation(row: LiveRow): DriverLiveLocation {
-  const meta = nameCache.get(row.driver_id);
   const driver = row.drivers;
 
   if (driver) {
@@ -100,11 +131,27 @@ function rowToLocation(row: LiveRow): DriverLiveLocation {
   });
 }
 
-function notify() {
-  const snapshot = [...cache];
-  for (const listener of listeners) {
-    listener(snapshot);
+/** Skip no-op payloads (same coords / status) that still flood realtime after coalescing edges. */
+function meaningfullyChanged(prev: DriverLiveLocation | undefined, next: DriverLiveLocation): boolean {
+  if (!prev) return true;
+  if (prev.trackingStatus !== next.trackingStatus) return true;
+  if (prev.zoneStatus !== next.zoneStatus) return true;
+  if (prev.pinStatus !== next.pinStatus) return true;
+  if (prev.isOnDuty !== next.isOnDuty) return true;
+  // ~1.1m at equator — ignore GPS jitter smaller than this for UI invalidation.
+  if (Math.abs(prev.latitude - next.latitude) > 0.00001) return true;
+  if (Math.abs(prev.longitude - next.longitude) > 0.00001) return true;
+  if ((prev.speedMps ?? 0) !== (next.speedMps ?? 0)) return true;
+  if (prev.batteryPct !== next.batteryPct) return true;
+  // Always accept fresher lastSeen for idle heartbeats so age badges stay accurate
+  // without forcing a position re-layout if coords unchanged.
+  if (prev.lastSeenAt !== next.lastSeenAt) {
+    const prevTs = new Date(prev.lastSeenAt).getTime();
+    const nextTs = new Date(next.lastSeenAt).getTime();
+    // Only push if age-sensitive fields matter later (every 20s+)
+    if (Math.abs(nextTs - prevTs) >= 20_000) return true;
   }
+  return false;
 }
 
 function patchDriverDuty(driverId: string, isOnDuty: boolean) {
@@ -113,19 +160,17 @@ function patchDriverDuty(driverId: string, isOnDuty: boolean) {
     nameCache.set(driverId, { ...meta, isOnDuty });
   }
 
-  const idx = cache.findIndex((loc) => loc.driverId === driverId);
-  if (idx < 0) return;
+  const prev = cacheById.get(driverId);
+  if (!prev || prev.isOnDuty === isOnDuty) return;
 
-  cache = [
-    ...cache.slice(0, idx),
-    { ...cache[idx]!, isOnDuty },
-    ...cache.slice(idx + 1),
-  ];
-  notify();
+  cacheById.set(driverId, { ...prev, isOnDuty });
+  scheduleNotify();
 }
 
 async function loadInitial() {
   const supabase = createClient();
+  const since = new Date(Date.now() - INITIAL_MAX_AGE_MS).toISOString();
+
   const { data, error } = await supabase
     .from("driver_locations")
     .select(
@@ -140,15 +185,24 @@ async function loadInitial() {
       )
     `,
     )
-    .order("last_seen_at", { ascending: false });
+    .gte("last_seen_at", since)
+    .order("last_seen_at", { ascending: false })
+    // Hard cap so a bloated table cannot block first paint of Live Tracking.
+    .limit(2500);
 
   if (error) {
     console.error("[driver_locations] initial fetch failed", error);
     return;
   }
 
-  cache = (data ?? []).map((row) => rowToLocation(row as LiveRow));
-  notify();
+  const next = new Map<string, DriverLiveLocation>();
+  for (const row of data ?? []) {
+    const loc = rowToLocation(row as LiveRow);
+    if (!isGpsLive(loc.lastSeenAt)) continue;
+    next.set(loc.driverId, loc);
+  }
+  cacheById = next;
+  notifyNow();
 }
 
 function applyPayload(
@@ -159,20 +213,49 @@ function applyPayload(
   if (eventType === "DELETE") {
     const id = oldRow?.driver_id ?? row?.driver_id;
     if (!id) return;
-    cache = cache.filter((l) => l.driverId !== id);
-    notify();
+    if (!cacheById.has(id)) return;
+    cacheById.delete(id);
+    scheduleNotify();
     return;
   }
 
-  if (!row) return;
-  const next = rowToLocation(row);
-  const idx = cache.findIndex((l) => l.driverId === next.driverId);
-  if (idx >= 0) {
-    cache = [...cache.slice(0, idx), next, ...cache.slice(idx + 1)];
-  } else {
-    cache = [...cache, next];
+  if (!row?.driver_id) return;
+
+  // Drop extremely stale realtime events if connection backlog delivers late.
+  if (row.last_seen_at && !isGpsLive(row.last_seen_at)) {
+    if (cacheById.has(row.driver_id)) {
+      cacheById.delete(row.driver_id);
+      scheduleNotify();
+    }
+    return;
   }
-  notify();
+
+  const prev = cacheById.get(row.driver_id);
+  const next = rowToLocation(row);
+  const merged: DriverLiveLocation = prev
+    ? {
+        ...next,
+        driverName:
+          next.driverName && next.driverName !== row.driver_id.slice(0, 8)
+            ? next.driverName
+            : prev.driverName,
+        driverCode: next.driverCode !== "—" ? next.driverCode : prev.driverCode,
+        employeeId: next.employeeId ?? prev.employeeId,
+        isOnDuty: nameCache.get(row.driver_id)?.isOnDuty ?? prev.isOnDuty,
+        restaurantName: next.restaurantName ?? prev.restaurantName,
+      }
+    : next;
+
+  if (!meaningfullyChanged(prev, merged)) {
+    // Still refresh lastSeen quietly for age math without React work.
+    if (prev && prev.lastSeenAt !== merged.lastSeenAt) {
+      cacheById.set(merged.driverId, { ...prev, lastSeenAt: merged.lastSeenAt, updatedAt: merged.updatedAt });
+    }
+    return;
+  }
+
+  cacheById.set(merged.driverId, merged);
+  scheduleNotify();
 }
 
 function ensureChannel() {
@@ -207,7 +290,7 @@ function ensureChannel() {
 
 export function subscribeDriverLocations(listener: Listener): () => void {
   listeners.add(listener);
-  listener(cache);
+  listener(snapshot());
 
   ensureChannel();
 
@@ -222,12 +305,16 @@ export function subscribeDriverLocations(listener: Listener): () => void {
     if (listeners.size === 0 && channel) {
       void createClient().removeChannel(channel);
       channel = null;
+      if (notifyTimer != null) {
+        clearTimeout(notifyTimer);
+        notifyTimer = null;
+      }
     }
   };
 }
 
 export function getCachedDriverLocations(): DriverLiveLocation[] {
-  return cache;
+  return snapshot();
 }
 
 export function seedDriverLocationNames(

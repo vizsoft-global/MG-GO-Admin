@@ -1,9 +1,9 @@
 import type { DriverLiveLocation, PinStatus, TrackingStatus, ZoneStatus } from "./types";
 
-const MOVING_STALE_MS = 2 * 60 * 1000;
-const IDLE_STALE_MS = 5 * 60 * 1000;
+const MOVING_STALE_MS = 45 * 1000;
+const IDLE_STALE_MS = 2 * 60 * 1000;
 /** Drivers with GPS older than this are excluded from the live map and counts. */
-export const LIVE_GPS_MAX_AGE_MS = 10 * 60 * 1000;
+export const LIVE_GPS_MAX_AGE_MS = 8 * 60 * 1000;
 
 export function parseTrackingStatus(value: string): TrackingStatus {
   if (value === "moving" || value === "delivery_submit") return value;
