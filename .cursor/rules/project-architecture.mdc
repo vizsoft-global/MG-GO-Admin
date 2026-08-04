@@ -10,7 +10,7 @@ alwaysApply: true
 **Product:** Enterprise rider workforce Control Tower (Musallam / DPD).  
 **Admin:** Next.js 16 · `dpdadmin/` · https://dpdadmin.vercel.app  
 **Driver app:** Separate repo/session — paste [`docs/DRIVER_APP_HANDOFF.md`](../docs/DRIVER_APP_HANDOFF.md)  
-**Backend:** Supabase `ytfmsgckjatiserpgdbz` (Postgres + Auth + Storage + Realtime)
+**Backend:** Supabase `eoksxkdssptgyqyywdju` (Postgres + Auth + Storage + Realtime) — the driver app **and** admin panel must both point here (`ytfmsgckjatiserpgdbz` is a retired test stack)
 
 ---
 

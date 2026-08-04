@@ -21,7 +21,7 @@ After **any** create/edit under `supabase/migrations/`:
    ```
 3. Confirm push succeeded (no error in CLI output). If push fails, diagnose and fix — do not leave migrations only in git.
 
-Linked project: **`ytfmsgckjatiserpgdbz` only** (DPD production — live deliveries). Never link or push to the retired test ref `cgpioijpvriiqqnauwlx`. See `supabase/.temp/linked-project.json`.
+Linked project: **`eoksxkdssptgyqyywdju` only** (DPD production — live deliveries; matches `NEXT_PUBLIC_SUPABASE_URL` in `.env.local` and Vercel `dpdadmin-prod`). `ytfmsgckjatiserpgdbz` and `cgpioijpvriiqqnauwlx` are retired test refs — never link or push to them. See `supabase/.temp/linked-project.json`.
 
 ## Local dev server
 
