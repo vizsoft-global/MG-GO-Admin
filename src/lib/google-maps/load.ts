@@ -22,7 +22,11 @@ export type GoogleMapInstance = {
   getZoom: () => number | undefined;
   panTo: (center: GoogleMapLatLng) => void;
   setMapTypeId: (id: string) => void;
-  setOptions: (opts: { styles?: GoogleMapStyleRule[]; mapTypeId?: string }) => void;
+  setOptions: (opts: {
+    styles?: GoogleMapStyleRule[];
+    mapTypeId?: string;
+    disableDoubleClickZoom?: boolean;
+  }) => void;
   addListener: (event: string, handler: () => void) => { remove: () => void };
   fitBounds: (
     bounds: GoogleLatLngBounds,
@@ -109,17 +113,6 @@ export type GoogleOverlayViewClass = new () => {
 };
 
 export type GoogleOverlayViewInstance = InstanceType<GoogleOverlayViewClass>;
-
-export type GoogleDrawingManagerInstance = {
-  setMap: (map: GoogleMapInstance | null) => void;
-  setDrawingMode: (mode: string | null) => void;
-  addListener: (event: string, handler: (e: GoogleOverlayCompleteEvent) => void) => void;
-};
-
-export type GoogleOverlayCompleteEvent = {
-  type: string;
-  overlay: GooglePolygonInstance | GoogleCircleInstance;
-};
 
 export type GoogleMapsApi = {
   maps: {
@@ -238,19 +231,6 @@ export type GoogleMapsApi = {
       };
       PlacesServiceStatus: { OK: string };
     };
-    drawing: {
-      DrawingManager: new (opts: {
-        map?: GoogleMapInstance | null;
-        drawingMode?: string | null;
-        drawingControl?: boolean;
-        polygonOptions?: Record<string, unknown>;
-        circleOptions?: Record<string, unknown>;
-      }) => GoogleDrawingManagerInstance;
-      OverlayType: {
-        POLYGON: string;
-        CIRCLE: string;
-      };
-    };
     visualization?: {
       HeatmapLayer: new (opts: {
         data?: GoogleWeightedLocation[] | GoogleMVCArray<GoogleWeightedLocation>;
@@ -298,7 +278,7 @@ function installAuthFailureHandler() {
   };
 }
 
-/** Lazy-load Google Maps JS API with Places, Drawing and Visualization libraries. */
+/** Lazy-load Google Maps JS API with Places and Visualization libraries. */
 export function loadGoogleMaps(): Promise<GoogleMapsApi | null> {
   if (typeof window === "undefined") {
     return Promise.resolve(null);
@@ -363,7 +343,7 @@ export function loadGoogleMaps(): Promise<GoogleMapsApi | null> {
       script.dataset.googleMaps = "true";
       script.async = true;
       script.defer = true;
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places,drawing,visualization&callback=${callbackName}&loading=async`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places,visualization&callback=${callbackName}&loading=async`;
       script.onerror = () => {
         lastFailure = "load_error";
         finish(null);

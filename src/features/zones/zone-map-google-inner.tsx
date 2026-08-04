@@ -48,6 +48,11 @@ import {
   googlePathOptions,
   polygonFromFeature,
 } from "./zone-map-google-utils";
+import {
+  createPolygonDrawController,
+  POLYGON_OVERLAY_TYPE,
+  type PolygonDrawController,
+} from "./polygon-draw-controller";
 
 function tupleToLatLng(center: [number, number]) {
   return { lat: center[0], lng: center[1] };
@@ -148,9 +153,7 @@ export function ZoneMapGoogleInner({
   const draftOverlayRef = useRef<GooglePolygonInstance | GoogleCircleInstance | null>(
     null,
   );
-  const drawingManagerRef = useRef<
-    import("@/lib/google-maps/load").GoogleDrawingManagerInstance | null
-  >(null);
+  const drawingManagerRef = useRef<PolygonDrawController | null>(null);
   const circleClickListenerRef = useRef<{ remove: () => void } | null>(null);
   const onDraftChangeRef = useRef(onDraftGeometryChange);
   const drawModeRef = useRef(drawMode);
@@ -158,6 +161,7 @@ export function ZoneMapGoogleInner({
     clampCircleRadiusMeters(draftCircleRadiusMeters),
   );
   const draftColorRef = useRef(normalizeZoneColor(draftColor));
+  const [draftVertexCount, setDraftVertexCount] = useState(0);
   const [mapState, setMapState] = useState<"loading" | "ready" | "unavailable">(
     "loading",
   );
@@ -441,7 +445,7 @@ export function ZoneMapGoogleInner({
   const setupDrawingManager = useCallback(() => {
     const map = mapRef.current;
     const google = googleRef.current;
-    if (!map || !google || !drawMode || !google.maps.drawing) return;
+    if (!map || !google || !drawMode) return;
 
     if (drawingManagerRef.current) {
       drawingManagerRef.current.setMap(null);
@@ -452,32 +456,28 @@ export function ZoneMapGoogleInner({
     const pathOpts = googlePathOptions(color, { fillOpacity: 0.35, weight: 3 });
     const usePolygonDraw = drawMode === "polygon" && !draftGeometry;
 
-    const dm = new google.maps.drawing.DrawingManager({
-      map,
-      drawingControl: false,
-      drawingMode: usePolygonDraw
-        ? google.maps.drawing.OverlayType.POLYGON
-        : null,
+    const dm = createPolygonDrawController(google, map, {
       polygonOptions: { ...pathOpts, editable: true, draggable: true },
-      circleOptions: { ...pathOpts, editable: true, draggable: true },
+      onVertexCountChange: setDraftVertexCount,
     });
 
+    dm.setDrawingMode(usePolygonDraw ? POLYGON_OVERLAY_TYPE : null);
+
     dm.addListener("overlaycomplete", (e) => {
-      const overlay = e.overlay;
+      const polygon = e.overlay;
       dm.setDrawingMode(null);
 
-      if (e.type === google.maps.drawing.OverlayType.POLYGON) {
-        const polygon = overlay as GooglePolygonInstance;
-        polygon.setEditable(true);
-        const feature = featureFromPolygon(polygon);
-        if (feature) {
-          clearDraftOverlay();
-          draftOverlayRef.current = polygon;
-          bindPolygonEditListeners(polygon, (g, t) =>
-            onDraftChangeRef.current?.(g, t),
-          );
-          onDraftChangeRef.current?.(feature, "polygon");
-        }
+      polygon.setEditable(true);
+      const feature = featureFromPolygon(polygon);
+      if (feature) {
+        clearDraftOverlay();
+        draftOverlayRef.current = polygon;
+        bindPolygonEditListeners(polygon, (g, t) =>
+          onDraftChangeRef.current?.(g, t),
+        );
+        onDraftChangeRef.current?.(feature, "polygon");
+      } else {
+        polygon.setMap(null);
       }
     });
 
@@ -489,13 +489,9 @@ export function ZoneMapGoogleInner({
     clearDraftOverlay();
     if (drawingManagerRef.current && googleRef.current) {
       const mode = drawModeRef.current;
-      if (mode === "polygon") {
-        drawingManagerRef.current.setDrawingMode(
-          googleRef.current.maps.drawing.OverlayType.POLYGON,
-        );
-      } else {
-        drawingManagerRef.current.setDrawingMode(null);
-      }
+      drawingManagerRef.current.setDrawingMode(
+        mode === "polygon" ? POLYGON_OVERLAY_TYPE : null,
+      );
       syncCircleClickPlacement();
     }
     onDraftChangeRef.current?.(
@@ -547,9 +543,7 @@ export function ZoneMapGoogleInner({
               syncCircleClickPlacement();
               return;
             }
-            drawingManagerRef.current.setDrawingMode(
-              google.maps.drawing.OverlayType.POLYGON,
-            );
+            drawingManagerRef.current.setDrawingMode(POLYGON_OVERLAY_TYPE);
             clearCircleClickListener();
           },
           setEditing(enabled) {

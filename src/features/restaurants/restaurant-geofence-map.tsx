@@ -51,6 +51,11 @@ import {
   googlePathOptions,
   polygonFromFeature,
 } from "@/features/zones/zone-map-google-utils";
+import {
+  createPolygonDrawController,
+  POLYGON_OVERLAY_TYPE,
+  type PolygonDrawController,
+} from "@/features/zones/polygon-draw-controller";
 import { cn } from "@/lib/utils";
 import { defaultGeofenceColor } from "./restaurant-geofence-colors";
 
@@ -160,9 +165,7 @@ export function RestaurantGeofenceMap({
   const draftOverlayRef = useRef<GooglePolygonInstance | GoogleCircleInstance | null>(
     null,
   );
-  const drawingManagerRef = useRef<
-    import("@/lib/google-maps/load").GoogleDrawingManagerInstance | null
-  >(null);
+  const drawingManagerRef = useRef<PolygonDrawController | null>(null);
   const activeToolRef = useRef(activeTool);
   const onLocationChangeRef = useRef(onLocationChange);
   const onGeofenceChangeRef = useRef(onGeofenceChange);
@@ -174,6 +177,7 @@ export function RestaurantGeofenceMap({
   const mapModeRef = useRef(mapMode);
   const selectedGeofenceIdRef = useRef(selectedGeofenceId);
   const [mapAdapter, setMapAdapter] = useState<ZoneMapAdapter | null>(null);
+  const [draftVertexCount, setDraftVertexCount] = useState(0);
   const [mapState, setMapState] = useState<"loading" | "ready" | "unavailable">(
     "loading",
   );
@@ -311,7 +315,7 @@ export function RestaurantGeofenceMap({
   const setupDrawingManager = useCallback(() => {
     const map = mapRef.current;
     const google = googleRef.current;
-    if (!map || !google || !google.maps.drawing || mapModeRef.current !== "draw") {
+    if (!map || !google || mapModeRef.current !== "draw") {
       return;
     }
 
@@ -323,35 +327,31 @@ export function RestaurantGeofenceMap({
     const color = defaultGeofenceColor(drawKindRef.current);
     const pathOpts = googlePathOptions(color, { fillOpacity: 0.35, weight: 3 });
 
-    const dm = new google.maps.drawing.DrawingManager({
-      map,
-      drawingControl: false,
-      drawingMode:
-        activeTool === "draw" && zoneTypeRef.current === "polygon"
-          ? google.maps.drawing.OverlayType.POLYGON
-          : null,
+    const dm = createPolygonDrawController(google, map, {
       polygonOptions: { ...pathOpts, editable: true, draggable: true },
-      circleOptions: { ...pathOpts, editable: true, draggable: true },
+      onVertexCountChange: setDraftVertexCount,
     });
+
+    dm.setDrawingMode(
+      activeTool === "draw" && zoneTypeRef.current === "polygon"
+        ? POLYGON_OVERLAY_TYPE
+        : null,
+    );
 
     dm.addListener("overlaycomplete", (e) => {
       const overlay = e.overlay;
       dm.setDrawingMode(null);
 
-      if (e.type === google.maps.drawing.OverlayType.POLYGON) {
-        const feature = featureFromPolygon(overlay as GooglePolygonInstance);
-        if (feature) {
-          overlay.setMap(null);
-          onAddGeofenceRef.current({
-            kind: drawKindRef.current,
-            zone_type: "polygon",
-            geometry: feature,
-            name: null,
-            color: defaultGeofenceColor(drawKindRef.current),
-          });
-        } else {
-          overlay.setMap(null);
-        }
+      const feature = featureFromPolygon(overlay as GooglePolygonInstance);
+      overlay.setMap(null);
+      if (feature) {
+        onAddGeofenceRef.current({
+          kind: drawKindRef.current,
+          zone_type: "polygon",
+          geometry: feature,
+          name: null,
+          color: defaultGeofenceColor(drawKindRef.current),
+        });
       }
     });
 
@@ -457,9 +457,7 @@ export function RestaurantGeofenceMap({
               drawingManagerRef.current.setDrawingMode(null);
               return;
             }
-            drawingManagerRef.current.setDrawingMode(
-              google.maps.drawing.OverlayType.POLYGON,
-            );
+            drawingManagerRef.current.setDrawingMode(POLYGON_OVERLAY_TYPE);
           },
           setEditing(enabled) {
             const id = selectedGeofenceIdRef.current;
@@ -701,7 +699,11 @@ export function RestaurantGeofenceMap({
           <p className="pointer-events-none absolute start-3 bottom-3 z-10 max-w-[min(320px,70%)] rounded-md bg-background/90 px-2 py-1 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm">
             {mapMode === "pin"
               ? t("hints.pickLocation")
-              : t("geofences.drawHint")}
+              : zoneType === "polygon" && activeTool === "draw"
+                ? draftVertexCount > 0
+                  ? t("geofences.polygonProgress", { count: draftVertexCount })
+                  : t("geofences.polygonHint")
+                : t("geofences.drawHint")}
           </p>
         </>
       ) : null}

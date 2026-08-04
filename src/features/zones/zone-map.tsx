@@ -60,7 +60,7 @@ export function ZoneMap(props: ZoneMapProps) {
     let cancelled = false;
     loadGoogleMaps().then((api) => {
       if (cancelled) return;
-      setProvider(api?.maps?.Map && api.maps.drawing ? "google" : "leaflet");
+      setProvider(api?.maps?.Map ? "google" : "leaflet");
     });
     return () => {
       cancelled = true;

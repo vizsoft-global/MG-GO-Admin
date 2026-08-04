@@ -1782,7 +1782,9 @@
           "invalid_kind": "Zone type must be inclusion or exclusion",
           "save_failed": "Could not save delivery zones",
           "load_failed": "Could not load delivery zones"
-        }
+        },
+        "polygonHint": "Click on the map to add points. Click the first point or double-click to close the shape.",
+        "polygonProgress": "{count} points added — click the first point or double-click to finish."
       },
       "errors": {
         "not_authorized": "You do not have permission to manage restaurants",
