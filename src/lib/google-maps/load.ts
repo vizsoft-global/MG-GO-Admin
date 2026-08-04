@@ -37,7 +37,7 @@ export type GoogleMarkerInstance = {
   setIcon?: (icon: unknown) => void;
   setZIndex?: (zIndex: number | undefined) => void;
   getPosition: () => { lat: () => number; lng: () => number } | null | undefined;
-  addListener: (event: string, handler: () => void) => void;
+  addListener: (event: string, handler: () => void) => { remove: () => void };
 };
 
 export type GoogleMVCArray<T> = {

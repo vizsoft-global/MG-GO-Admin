@@ -376,7 +376,7 @@ export function DriverLocationsMap({
           marker,
           pulse,
           iconKey,
-          clickListener: clickListener as { remove?: () => void },
+          clickListener,
         });
         lastMarkerPosRef.current.set(pin.id, { lat: pin.lat, lng: pin.lng });
         created.push(marker);
