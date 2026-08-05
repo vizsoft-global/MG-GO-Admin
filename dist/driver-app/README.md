@@ -8,10 +8,12 @@ and then crashing.
 
 | File | Size | Give it to |
 |---|---|---|
-| `mg-go-driver-1.0.7-arm64-v8a.apk` | 29 MB | **Real phones.** Every 64-bit Android device on Android 7.0+. This is the one you want. |
-| `mg-go-driver-1.0.7-x86_64-emulator.apk` | 31 MB | Android emulators (Android Studio AVDs) only. |
+| `mg-go-driver-1.0.7-arm64-v8a.apk` | 28 MB | **Real phones.** Every 64-bit Android device on Android 7.0+. This is the one you want. |
+| `mg-go-driver-1.0.7-x86_64-emulator.apk` | 29 MB | Android emulators (Android Studio AVDs) only. |
 
-Built from `vizsoft-global/DPD-userapp` `main` @ `e726d08`.
+Built from `vizsoft-global/DPD-userapp` `main` @ `e726d08`, **plus the splash
+screen removal** in `patches/` — the app now boots straight to the login
+screen instead of sitting on a 9.8-second intro video.
 
 - Package: `kw.musallam.delivery`
 - Version: `1.0.7` (build 7)
@@ -26,8 +28,8 @@ match exactly, to the byte:
 
 | File | Bytes | SHA-256 |
 |---|---|---|
-| `mg-go-driver-1.0.7-arm64-v8a.apk` | 30607471 | `e66689bea678defd94ac5266bc0672ad3905418cd55b1e0dbe9ac51ca8db36bf` |
-| `mg-go-driver-1.0.7-x86_64-emulator.apk` | 32116317 | `b33df7bf05738873b78b33f7b83a5507d3c12de4fadad075ba3ed74505d6880c` |
+| `mg-go-driver-1.0.7-arm64-v8a.apk` | 29005572 | `789cc4ca04f695ad44d512a90551bf0d1a3bd069c4656a4c44834e6e79f380f4` |
+| `mg-go-driver-1.0.7-x86_64-emulator.apk` | 30448882 | `40ba67d041600f23d7115a58a0aa1725f3015e3d3511ff07c30b89e07b5f0cf2` |
 
 ```bash
 shasum -a 256 mg-go-driver-1.0.7-arm64-v8a.apk   # macOS / Linux

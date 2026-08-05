@@ -1,0 +1,32 @@
+From d050ade6c679668e363f51a3d7b136dd4efc97ae Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Wed, 5 Aug 2026 17:44:11 +0000
+Subject: [PATCH 2/2] Let ABI splits scope native libraries
+
+Gradle rejects ndk.abiFilters alongside --split-per-abi, and the filter was
+not doing its job anyway: the fat APK still shipped all three ABIs. Per-ABI
+builds achieve the intended arm64-only output and cut the APK roughly in
+half.
+---
+ android/app/build.gradle.kts | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
+index 3ee0b01..696ae4d 100644
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -30,10 +30,7 @@ android {
+         targetSdk = flutter.targetSdkVersion
+         versionCode = flutter.versionCode
+         versionName = flutter.versionName
+-        // arm64-v8a only — modern 64-bit phones (drops 32-bit ARM and x86).
+-        ndk {
+-            abiFilters += listOf("arm64-v8a")
+-        }
++        // ABI scoping is handled by --split-per-abi, which emits one APK per ABI.
+     }
+ 
+     buildTypes {
+-- 
+2.43.0
+
