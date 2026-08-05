@@ -46,6 +46,38 @@ common source of truncated, uninstallable APKs.
 On the phone: open the file, approve "install from unknown sources", then sign
 in with a driver code and 6-digit passcode issued from the admin panel.
 
+## Troubleshooting install failures
+
+### "package conflicts with an existing package"
+
+The device already has `kw.musallam.delivery` installed, signed with a different
+key. Android never lets one signing key replace another, so the install is
+refused. **Fully uninstall the existing app, then install this APK.**
+
+```bash
+adb uninstall kw.musallam.delivery
+```
+
+Or on the phone: Settings → Apps → Musallam → Uninstall.
+
+If the error persists after uninstalling from the launcher, a copy is still
+installed under another user profile — a work profile, a second user, or a
+"Dual Apps" / cloned instance. Check every profile and remove it from each:
+
+```bash
+adb shell pm list users
+adb shell pm list packages --user 0 | grep musallam   # repeat per user id
+adb shell pm uninstall --user 0 kw.musallam.delivery  # repeat per user id
+```
+
+Uninstalling clears local app data, so the tester signs in again with their
+driver code and passcode. Nothing server-side is lost.
+
+### "package appears to be invalid"
+
+The download was truncated. Re-check the byte size and checksum above before
+transferring the file again.
+
 ## Signing — read before wider distribution
 
 These are signed with the **Android debug key**, because
