@@ -696,6 +696,13 @@ Bottom nav (driver app): **Home · Deliveries · Earnings · Vehicle · Profile*
 ### Delivery
 `driver submits (pending)` → `admin verifies (verified)` or `rejects (rejected + reason)` → app shows badge
 
+**Stale pickup auto-cancel.** `driver_create_pickup` raises `active_pickup_exists` while the driver has an
+`in_transit` row, so a pickup that never completes blocks every later order. A cron
+(`admin_expire_stale_pickups`, every 15 min) cancels `in_transit` rows older than
+`app_settings.pickup_auto_cancel_hours` (default 6). The app must tolerate an in-progress pickup
+disappearing on refresh — reload active pickup state rather than assuming it persists, and let the
+driver re-enter the same order id (cancelled rows are excluded from the duplicate check).
+
 ### Request (loan/fuel/leave/complaint)
 `driver submits (pending)` → `admin approves/rejects` → app updates list; loan shows repayment terms from `loan_terms`
 

@@ -21,6 +21,10 @@
     {
       "path": "/api/cron/attendance-auto-checkout",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/expire-stale-pickups",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
