@@ -395,6 +395,7 @@ export type Database = {
           logo_url: string | null
           maintenance_mode: boolean
           performance_score_weights: Json
+          pickup_auto_cancel_hours: number
           super_admin_claimed: boolean
           super_admin_user_id: string | null
           theme_id: string
@@ -427,6 +428,7 @@ export type Database = {
           logo_url?: string | null
           maintenance_mode?: boolean
           performance_score_weights?: Json
+          pickup_auto_cancel_hours?: number
           super_admin_claimed?: boolean
           super_admin_user_id?: string | null
           theme_id?: string
@@ -459,6 +461,7 @@ export type Database = {
           logo_url?: string | null
           maintenance_mode?: boolean
           performance_score_weights?: Json
+          pickup_auto_cancel_hours?: number
           super_admin_claimed?: boolean
           super_admin_user_id?: string | null
           theme_id?: string
@@ -5123,6 +5126,10 @@ export type Database = {
           driver_id: string
           latest_activity_at: string
         }[]
+      }
+      admin_expire_stale_pickups: {
+        Args: never
+        Returns: number
       }
       admin_force_sign_out_driver: {
         Args: { p_driver_id: string }
