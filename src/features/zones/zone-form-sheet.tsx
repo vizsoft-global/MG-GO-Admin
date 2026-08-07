@@ -234,12 +234,14 @@ export function ZoneFormBody({
     type: ZoneGeometryType,
   ) => {
     setGeometry(geo);
-    setZoneType(type);
+    // Clearing a draft must not overwrite Geofence Shape (e.g. Circle → clearDraft
+    // still reports the stale drawModeRef type synchronously).
     if (geo) {
+      setZoneType(type);
       setActiveTool("edit");
-    }
-    if (geo && type === "circle" && geo.properties?.radiusMeters) {
-      setRadiusInput(String(Math.round(geo.properties.radiusMeters)));
+      if (type === "circle" && geo.properties?.radiusMeters) {
+        setRadiusInput(String(Math.round(geo.properties.radiusMeters)));
+      }
     }
   };
 
