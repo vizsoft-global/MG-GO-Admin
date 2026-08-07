@@ -442,10 +442,14 @@ export function ZoneMapGoogleInner({
     );
   }, [mapState, draftGeometry, clearCircleClickListener, placeCircleAt]);
 
+  const syncCircleClickPlacementRef = useRef(syncCircleClickPlacement);
+  syncCircleClickPlacementRef.current = syncCircleClickPlacement;
+
   const setupDrawingManager = useCallback(() => {
     const map = mapRef.current;
     const google = googleRef.current;
-    if (!map || !google || !drawMode) return;
+    const activeDrawMode = drawModeRef.current ?? drawMode;
+    if (!map || !google || !activeDrawMode) return;
 
     if (drawingManagerRef.current) {
       drawingManagerRef.current.setMap(null);
@@ -454,7 +458,7 @@ export function ZoneMapGoogleInner({
 
     const color = draftColorRef.current;
     const pathOpts = googlePathOptions(color, { fillOpacity: 0.35, weight: 3 });
-    const usePolygonDraw = drawMode === "polygon" && !draftGeometry;
+    const usePolygonDraw = activeDrawMode === "polygon" && !draftGeometry;
 
     const dm = createPolygonDrawController(google, map, {
       polygonOptions: { ...pathOpts, editable: true, draggable: true },
@@ -482,8 +486,8 @@ export function ZoneMapGoogleInner({
     });
 
     drawingManagerRef.current = dm;
-    syncCircleClickPlacement();
-  }, [drawMode, draftGeometry, clearDraftOverlay, syncCircleClickPlacement]);
+    syncCircleClickPlacementRef.current();
+  }, [drawMode, draftGeometry, clearDraftOverlay]);
 
   const handleClearShape = useCallback(() => {
     clearDraftOverlay();
@@ -492,17 +496,32 @@ export function ZoneMapGoogleInner({
       drawingManagerRef.current.setDrawingMode(
         mode === "polygon" ? POLYGON_OVERLAY_TYPE : null,
       );
-      syncCircleClickPlacement();
+      syncCircleClickPlacementRef.current();
     }
     onDraftChangeRef.current?.(
       null,
       drawModeRef.current === "circle" ? "circle" : "polygon",
     );
-  }, [clearDraftOverlay, syncCircleClickPlacement]);
+  }, [clearDraftOverlay]);
 
-  const handleDeleteShape = useCallback(() => {
-    handleClearShape();
-  }, [handleClearShape]);
+  const handleClearShapeRef = useRef(handleClearShape);
+  const handleDeleteShapeRef = useRef(() => {
+    handleClearShapeRef.current();
+  });
+  const setupDrawingManagerRef = useRef(setupDrawingManager);
+  const onMapReadyRef = useRef(onMapReady);
+  const clearDraftOverlayRef = useRef(clearDraftOverlay);
+  const clearZoneOverlaysRef = useRef(clearZoneOverlays);
+  const clearZoneLabelsRef = useRef(clearZoneLabels);
+  const clearCircleClickListenerRef = useRef(clearCircleClickListener);
+
+  handleClearShapeRef.current = handleClearShape;
+  setupDrawingManagerRef.current = setupDrawingManager;
+  onMapReadyRef.current = onMapReady;
+  clearDraftOverlayRef.current = clearDraftOverlay;
+  clearZoneOverlaysRef.current = clearZoneOverlays;
+  clearZoneLabelsRef.current = clearZoneLabels;
+  clearCircleClickListenerRef.current = clearCircleClickListener;
 
   useEffect(() => {
     let cancelled = false;
@@ -529,22 +548,35 @@ export function ZoneMapGoogleInner({
         gestureHandling: "greedy",
       });
       mapRef.current = map;
-      onMapReady?.(
+      onMapReadyRef.current?.(
         createMapAdapter(map, google, {
           setDrawMode(mode) {
-            if (!drawingManagerRef.current) return;
-            if (!mode || draftOverlayRef.current) {
-              drawingManagerRef.current.setDrawingMode(null);
-              syncCircleClickPlacement();
+            if (!mode) {
+              if (drawingManagerRef.current) {
+                drawingManagerRef.current.setDrawingMode(null);
+              }
+              syncCircleClickPlacementRef.current();
               return;
             }
+            // Keep ref in sync before syncCircleClickPlacement / setupDrawingManager
+            // so mid-switch calls (e.g. Polygon → Circle) see the intended mode.
+            drawModeRef.current = mode;
+            if (draftOverlayRef.current) {
+              drawingManagerRef.current?.setDrawingMode(null);
+              syncCircleClickPlacementRef.current();
+              return;
+            }
+            if (!drawingManagerRef.current) {
+              setupDrawingManagerRef.current();
+            }
+            if (!drawingManagerRef.current) return;
             if (mode === "circle") {
               drawingManagerRef.current.setDrawingMode(null);
-              syncCircleClickPlacement();
+              syncCircleClickPlacementRef.current();
               return;
             }
             drawingManagerRef.current.setDrawingMode(POLYGON_OVERLAY_TYPE);
-            clearCircleClickListener();
+            clearCircleClickListenerRef.current();
           },
           setEditing(enabled) {
             if (!draftOverlayRef.current) return;
@@ -555,10 +587,10 @@ export function ZoneMapGoogleInner({
             draftOverlayRef.current.setDraggable(enabled);
           },
           deleteSelected() {
-            handleDeleteShape();
+            handleDeleteShapeRef.current();
           },
           clearDraft() {
-            handleClearShape();
+            handleClearShapeRef.current();
           },
         }),
       );
@@ -567,19 +599,20 @@ export function ZoneMapGoogleInner({
 
     return () => {
       cancelled = true;
-      clearCircleClickListener();
+      setMapState("loading");
+      clearCircleClickListenerRef.current();
       if (drawingManagerRef.current) {
         drawingManagerRef.current.setMap(null);
         drawingManagerRef.current = null;
       }
-      clearDraftOverlay();
-      clearZoneOverlays();
-      clearZoneLabels();
+      clearDraftOverlayRef.current();
+      clearZoneOverlaysRef.current();
+      clearZoneLabelsRef.current();
       mapRef.current = null;
       googleRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
-  }, [handleClearShape, handleDeleteShape, onMapReady, clearDraftOverlay, clearZoneOverlays, clearZoneLabels]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once; handlers via refs
+  }, []);
 
   useEffect(() => {
     if (mapState !== "ready") return;
