@@ -14,6 +14,7 @@ import {
 } from "@/lib/google-maps/load";
 import {
   buildCircleFeature,
+  buildPolygonFeature,
   MAX_RADIUS_METERS,
   MIN_RADIUS_METERS,
   zoneMapBoundsFromShape,
@@ -451,9 +452,16 @@ export function ZoneMapGoogleInner({
     const activeDrawMode = drawModeRef.current ?? drawMode;
     if (!map || !google || !activeDrawMode) return;
 
+    // Reuse an existing controller so React effect re-runs do not wipe
+    // in-progress vertices (that left Save disabled while a preview was visible).
     if (drawingManagerRef.current) {
-      drawingManagerRef.current.setMap(null);
-      drawingManagerRef.current = null;
+      const usePolygonDraw =
+        activeDrawMode === "polygon" && !draftOverlayRef.current;
+      drawingManagerRef.current.setDrawingMode(
+        usePolygonDraw ? POLYGON_OVERLAY_TYPE : null,
+      );
+      syncCircleClickPlacementRef.current();
+      return;
     }
 
     const color = draftColorRef.current;
@@ -463,6 +471,21 @@ export function ZoneMapGoogleInner({
     const dm = createPolygonDrawController(google, map, {
       polygonOptions: { ...pathOpts, editable: true, draggable: true },
       onVertexCountChange: setDraftVertexCount,
+      onProvisionalPaths: (paths) => {
+        // Enable Save as soon as a valid ring exists — users often stop after
+        // drawing without double-clicking / closing on the first point.
+        if (!paths || paths.length < 3) {
+          if (!draftOverlayRef.current) {
+            onDraftChangeRef.current?.(null, "polygon");
+          }
+          return;
+        }
+        if (draftOverlayRef.current) return;
+        const feature = buildPolygonFeature(
+          paths.map((p) => [p.lat, p.lng] as [number, number]),
+        );
+        onDraftChangeRef.current?.(feature, "polygon");
+      },
     });
 
     dm.setDrawingMode(usePolygonDraw ? POLYGON_OVERLAY_TYPE : null);
@@ -470,6 +493,7 @@ export function ZoneMapGoogleInner({
     dm.addListener("overlaycomplete", (e) => {
       const polygon = e.overlay;
       dm.setDrawingMode(null);
+      setDraftVertexCount(0);
 
       polygon.setEditable(true);
       const feature = featureFromPolygon(polygon);
@@ -491,6 +515,8 @@ export function ZoneMapGoogleInner({
 
   const handleClearShape = useCallback(() => {
     clearDraftOverlay();
+    drawingManagerRef.current?.clearDraft();
+    setDraftVertexCount(0);
     if (drawingManagerRef.current && googleRef.current) {
       const mode = drawModeRef.current;
       drawingManagerRef.current.setDrawingMode(
@@ -619,22 +645,31 @@ export function ZoneMapGoogleInner({
     if (drawMode) {
       clearZoneLabels();
       syncReferenceOverlays();
-      if (draftGeometry) {
-        if (!draftOverlayRef.current) {
-          attachDraftFromGeometry(draftGeometry, draftZoneType, true);
-        }
-        if (drawingManagerRef.current) {
-          drawingManagerRef.current.setDrawingMode(null);
-        }
-      } else {
+      const sketching = Boolean(drawingManagerRef.current?.isDrawing());
+
+      if (draftOverlayRef.current) {
+        // Finalized overlay on the map — stop click-to-draw.
+        drawingManagerRef.current?.setDrawingMode(null);
+      } else if (draftGeometry && !sketching) {
+        // Loaded / restored geometry (edit) with no live sketch.
+        attachDraftFromGeometry(draftGeometry, draftZoneType, true);
+        drawingManagerRef.current?.setDrawingMode(null);
+      } else if (!draftGeometry && !sketching) {
+        // Fresh draw — ensure a controller exists (do not recreate mid-sketch).
         clearDraftOverlay();
+        setupDrawingManager();
+      } else {
+        // Provisional geometry from an in-progress sketch (≥3 vertices):
+        // keep the draw controller so the user can still finish / add points.
         setupDrawingManager();
       }
     } else {
       if (drawingManagerRef.current) {
+        drawingManagerRef.current.clearDraft();
         drawingManagerRef.current.setMap(null);
         drawingManagerRef.current = null;
       }
+      setDraftVertexCount(0);
       clearDraftOverlay();
       clearZoneLabels();
       syncBrowseOverlays();
@@ -739,6 +774,26 @@ export function ZoneMapGoogleInner({
       ) : null}
       {mapState === "ready" ? (
         <>
+          {drawMode === "polygon" && draftVertexCount > 0 ? (
+            <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
+              <div className="flex max-w-lg flex-wrap items-center justify-center gap-2">
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                  {t("polygonFinishHint")}
+                </p>
+                {draftVertexCount >= 3 ? (
+                  <button
+                    type="button"
+                    className="pointer-events-auto h-9 cursor-pointer rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-xs font-semibold text-emerald-900 shadow-sm transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200 dark:hover:bg-emerald-950"
+                    onClick={() => {
+                      drawingManagerRef.current?.finishDraft();
+                    }}
+                  >
+                    {t("geometryReady")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="pointer-events-none absolute bottom-3 start-3 z-10">
             <ZoneMapLayersControl
               map={mapRef.current}
