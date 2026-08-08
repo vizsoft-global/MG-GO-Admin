@@ -167,7 +167,7 @@ export type DriverListRow = {
   avatar_url: string | null;
   avatar_display_url: string | null;
   rider_category: DriverRiderCategory;
-  custom_fields: Record<string, string | number | boolean | null>;
+  custom_fields: Record<string, string | number | boolean | string[] | null>;
 };
 
 export type DriverAssignedAsset = {
@@ -217,7 +217,7 @@ export type DriverDetailModel = {
   login_verification_exempt: boolean;
   archived_at: string | null;
   documents: Partial<Record<DriverDocumentType, DriverRemoteDocument>>;
-  custom_fields: Record<string, string | number | boolean | null>;
+  custom_fields: Record<string, string | number | boolean | string[] | null>;
 };
 
 export const DRIVER_IMPORT_FIELDS = [

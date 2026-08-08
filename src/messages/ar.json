@@ -1389,6 +1389,7 @@
         "invalid_custom_fields": "تحقق من الحقول المخصصة ثم حاول مرة أخرى",
         "custom_field_required": "هذا الحقل مطلوب",
         "custom_field_letters_only": "يُسمح بالحروف والمسافات والشرطة والفاصلة العليا فقط",
+        "custom_field_non_negative": "أدخل صفرًا أو رقمًا موجبًا",
         "save_failed": "تعذر حفظ السائق. حاول مرة أخرى."
       }
     },
@@ -2442,6 +2443,7 @@
       "lettersOnly": "حروف فقط",
       "lettersOnlyHint": "يسمح بالحروف والمسافات والشرطة والفاصلة العليا — لحقول الأسماء. اتركه مغلقًا للمعرفات أو الرموز.",
       "options": "الخيارات",
+      "checkboxOptionsHint": "أضف خيارات للاختيار المتعدد في إضافة/تعديل السائق. اتركها فارغة لخانة اختيار نعم/لا واحدة.",
       "optionValue": "القيمة",
       "optionLabel": "التسمية",
       "addOption": "إضافة خيار",
@@ -2449,6 +2451,10 @@
       "activate": "تفعيل",
       "deactivate": "إيقاف",
       "inactive": "غير نشط",
+      "archiveField": "أرشفة الحقل",
+      "archiveConfirmTitle": "أرشفة الحقل المخصص؟",
+      "archiveConfirmDescription": "هل أنت متأكد من أرشفة «{label}»؟ سيُزال من نماذج وقوائم السائقين. تُحفظ القيم الحالية.",
+      "archiveConfirm": "أرشفة",
       "archived": "تم الأرشفة",
       "saved": "تم الحفظ",
       "cancel": "إلغاء",

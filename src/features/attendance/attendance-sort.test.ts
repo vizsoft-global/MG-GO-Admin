@@ -111,6 +111,26 @@ describe("sortAttendanceDailyRows", () => {
     assert.equal(sorted[0]?.driver_name, "Anand");
   });
 
+  it("sorts status A–Z by display label alphabetically", () => {
+    const rows = [
+      row({ driver_id: "1", driver_name: "A", live_status: "on_duty" }),
+      row({ driver_id: "2", driver_name: "B", live_status: "no_shift" }),
+      row({ driver_id: "3", driver_name: "C", live_status: "late" }),
+      row({ driver_id: "4", driver_name: "D", live_status: "completed" }),
+      row({ driver_id: "5", driver_name: "E", live_status: "absent" }),
+    ];
+    const asc = sortAttendanceDailyRows(rows, "status_asc");
+    assert.deepEqual(
+      asc.map((r) => r.live_status),
+      ["absent", "completed", "late", "no_shift", "on_duty"],
+    );
+    const desc = sortAttendanceDailyRows(rows, "status_desc");
+    assert.deepEqual(
+      desc.map((r) => r.live_status),
+      ["on_duty", "no_shift", "late", "completed", "absent"],
+    );
+  });
+
   it("sorts on-duty before off-duty for on_duty_desc", () => {
     const rows = [
       row({

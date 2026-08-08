@@ -568,6 +568,13 @@ function AttendancePageContent() {
     tab === "problems"
       ? (exceptionsData?.totalCount ?? 0)
       : (dailyData?.totalCount ?? 0);
+  const rangeFrom = totalCount === 0 ? 0 : page * PAGE_SIZE + 1;
+  const rangeTo = Math.min(totalCount, (page + 1) * PAGE_SIZE);
+  const rangeSummary = t("paginationSummary", {
+    from: rangeFrom,
+    to: rangeTo,
+    total: totalCount,
+  });
 
   const isLoading = tab === "problems" ? exceptionsLoading : dailyLoading;
   const isEmpty = !isLoading && totalCount === 0;
@@ -660,13 +667,7 @@ function AttendancePageContent() {
                   sortItems={sortItems}
                   sortVariant="menu"
                   sortLabel={t("sortBy")}
-                  resultSummary={t("showingCount", {
-                    visible:
-                      tab === "problems"
-                        ? (exceptionsData?.rows.length ?? 0)
-                        : dailyRows.length,
-                    total: totalCount,
-                  })}
+                  resultSummary={rangeSummary}
                   onRefresh={() => void handleRefresh()}
                   isRefreshing={isRefreshing}
                   refreshLabel={t("refresh")}

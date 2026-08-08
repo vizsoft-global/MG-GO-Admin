@@ -164,6 +164,7 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | is_on_duty | boolean | Toggled on Home |
 | current_lat, current_lng | numeric | Updated while online |
 | vehicle_id | uuid | FK → vehicles |
+| custom_fields | jsonb | Admin-defined dynamic fields (`custom_field_definitions`). Values are scalars (`string` / `number` / `boolean`) or, for **checkbox** defs that have `options`, a `string[]` of selected option values. Checkbox with empty options remains a boolean. |
 
 ### `deliveries`
 | Column | Type | Notes |
@@ -688,6 +689,8 @@ Bottom nav (driver app): **Home · Deliveries · Earnings · Vehicle · Profile*
 
 ### Delivery
 `driver submits (pending)` → `admin verifies (verified)` or `rejects (rejected + reason)` → app shows badge
+
+**Active Delivery footer (system nav).** On `/deliveries/active`, bottom actions (**Mark as Delivered**, **Cancel Order**) must sit above the phone system navigation / gesture inset. Prefer `padding: EdgeInsets.only(bottom: 16 + MediaQuery.viewPaddingOf(context).bottom)` (or `SafeArea` with `maintainBottomViewPadding: true`). Do not rely on `MediaQuery.padding.bottom` alone — on Android edge-to-edge it is often `0` while the system bar still overlaps the buttons. Keep tap targets ≥ 48dp.
 
 **Stale pickup auto-cancel.** `driver_create_pickup` raises `active_pickup_exists` while the driver has an
 `in_transit` row, so a pickup that never completes blocks every later order. A cron

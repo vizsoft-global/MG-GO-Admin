@@ -1408,6 +1408,7 @@
         "invalid_custom_fields": "Check custom field values and try again",
         "custom_field_required": "This field is required",
         "custom_field_letters_only": "Letters, spaces, hyphen, and apostrophe only",
+        "custom_field_non_negative": "Enter zero or a positive number",
         "save_failed": "Could not save the driver. Please try again."
       }
     },
@@ -2522,6 +2523,7 @@
       "lettersOnly": "Letters only",
       "lettersOnlyHint": "Allows letters, spaces, hyphen, and apostrophe — for name-like fields. Leave off for IDs or codes.",
       "options": "Options",
+      "checkboxOptionsHint": "Add choices for multi-select on Add/Edit Driver. Leave all empty for a single yes/no checkbox.",
       "optionValue": "Value",
       "optionLabel": "Label",
       "addOption": "Add option",
@@ -2529,6 +2531,10 @@
       "activate": "Activate",
       "deactivate": "Deactivate",
       "inactive": "Inactive",
+      "archiveField": "Archive field",
+      "archiveConfirmTitle": "Archive custom field?",
+      "archiveConfirmDescription": "Are you sure you want to archive “{label}”? It will be removed from driver forms and lists. Existing saved values are kept.",
+      "archiveConfirm": "Archive",
       "archived": "Field archived",
       "saved": "Field saved",
       "cancel": "Cancel",

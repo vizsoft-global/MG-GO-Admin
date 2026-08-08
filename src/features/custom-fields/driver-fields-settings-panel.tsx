@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { AppFormSection, AppPage, AppPageHeader } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +36,7 @@ import {
   type CustomFieldOption,
   type CustomFieldType,
 } from "@/lib/custom-fields/types";
-import { normalizeFieldKey } from "@/lib/custom-fields/validate";
+import { normalizeFieldKey, parseOptions } from "@/lib/custom-fields/validate";
 import {
   useArchiveCustomFieldDefinition,
   useCustomFieldDefinitions,
@@ -75,6 +76,7 @@ function emptyDraft(): {
   label: string;
   field_type: CustomFieldType;
   required: boolean;
+  letters_only: boolean;
   options: CustomFieldOption[];
   default_value: string;
   is_active: boolean;
@@ -84,6 +86,7 @@ function emptyDraft(): {
     label: "",
     field_type: "text",
     required: false,
+    letters_only: false,
     options: [{ value: "", label: "" }],
     default_value: "",
     is_active: true,
@@ -101,6 +104,7 @@ export function DriverFieldsSettingsPanel() {
   const reorder = useReorderCustomFieldDefinitions();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(emptyDraft);
+  const [archiveTarget, setArchiveTarget] = useState<CustomFieldDefinition | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const rolesQuery = useQuery({
@@ -155,9 +159,12 @@ export function DriverFieldsSettingsPanel() {
       label: def.label,
       field_type: def.field_type,
       required: def.required,
+      letters_only: Boolean(def.letters_only),
       options: def.options.length ? def.options : [{ value: "", label: "" }],
       default_value:
-        def.default_value == null ? "" : String(def.default_value),
+        def.default_value == null || Array.isArray(def.default_value)
+          ? ""
+          : String(def.default_value),
       is_active: def.is_active,
     });
     setOpen(true);
@@ -170,6 +177,30 @@ export function DriverFieldsSettingsPanel() {
         toast.error(t("invalidDefinition"));
         return;
       }
+      const options =
+        draft.field_type === "select" || draft.field_type === "checkbox"
+          ? parseOptions(draft.options)
+          : [];
+      const multiCheckbox = draft.field_type === "checkbox" && options.length > 0;
+      let defaultValue: string | number | boolean | string[] | null =
+        draft.default_value === ""
+          ? null
+          : draft.field_type === "checkbox"
+            ? draft.default_value === "true"
+            : draft.field_type === "number"
+              ? Number(draft.default_value)
+              : draft.default_value;
+      if (multiCheckbox) {
+        defaultValue = null;
+      }
+      if (
+        draft.field_type === "number" &&
+        typeof defaultValue === "number" &&
+        (Number.isNaN(defaultValue) || defaultValue < 0)
+      ) {
+        toast.error(t("invalidDefinition"));
+        return;
+      }
       const result = await upsert.mutateAsync({
         id: draft.id,
         entity_type: DRIVER_ENTITY_TYPE,
@@ -177,15 +208,9 @@ export function DriverFieldsSettingsPanel() {
         label: draft.label.trim(),
         field_type: draft.field_type,
         required: draft.required,
-        options: draft.field_type === "select" ? draft.options : [],
-        default_value:
-          draft.default_value === ""
-            ? null
-            : draft.field_type === "checkbox"
-              ? draft.default_value === "true"
-              : draft.field_type === "number"
-                ? Number(draft.default_value)
-                : draft.default_value,
+        letters_only: draft.field_type === "text" ? draft.letters_only : false,
+        options,
+        default_value: defaultValue,
         is_active: draft.is_active,
       });
       if (result.error) {
@@ -263,6 +288,9 @@ export function DriverFieldsSettingsPanel() {
                   <p className="text-[10px] text-muted-foreground">
                     {def.key} · {def.field_type}
                     {def.required ? ` · ${t("required")}` : ""}
+                    {def.field_type === "text" && def.letters_only
+                      ? ` · ${t("lettersOnly")}`
+                      : ""}
                     {!def.is_active ? ` · ${t("inactive")}` : ""}
                   </p>
                 </div>
@@ -312,14 +340,11 @@ export function DriverFieldsSettingsPanel() {
                 <Button
                   type="button"
                   variant="ghost"
-                  className="h-9 text-destructive hover:bg-destructive/10"
-                  onClick={() =>
-                    startTransition(async () => {
-                      const result = await archive.mutateAsync(def.id);
-                      if (result.error) toast.error(t("errors.save_failed"));
-                      else toast.success(t("archived"));
-                    })
-                  }
+                  size="icon"
+                  className="h-9 w-9 text-destructive hover:bg-destructive/10"
+                  aria-label={t("archiveField")}
+                  disabled={isPending || archive.isPending}
+                  onClick={() => setArchiveTarget(def)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -392,6 +417,7 @@ export function DriverFieldsSettingsPanel() {
                 <Label>{t("label")}</Label>
                 <Input
                   className="h-9"
+                  placeholder={t("labelPlaceholder")}
                   value={draft.label}
                   onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
                 />
@@ -400,6 +426,7 @@ export function DriverFieldsSettingsPanel() {
                 <Label>{t("key")}</Label>
                 <Input
                   className="h-9"
+                  placeholder={t("keyPlaceholder")}
                   value={draft.key}
                   disabled={Boolean(draft.id)}
                   onChange={(e) => setDraft((d) => ({ ...d, key: e.target.value }))}
@@ -410,10 +437,15 @@ export function DriverFieldsSettingsPanel() {
                 <Select
                   value={draft.field_type}
                   onValueChange={(v) =>
-                    setDraft((d) => ({
-                      ...d,
-                      field_type: (v as CustomFieldType) ?? "text",
-                    }))
+                    setDraft((d) => {
+                      const field_type = (v as CustomFieldType) ?? "text";
+                      return {
+                        ...d,
+                        field_type,
+                        letters_only:
+                          field_type === "text" ? d.letters_only : false,
+                      };
+                    })
                   }
                 >
                   <SelectTrigger className="h-9">
@@ -432,6 +464,10 @@ export function DriverFieldsSettingsPanel() {
                 <Label>{t("defaultValue")}</Label>
                 <Input
                   className="h-9"
+                  type={draft.field_type === "number" ? "number" : "text"}
+                  min={draft.field_type === "number" ? 0 : undefined}
+                  step={draft.field_type === "number" ? "any" : undefined}
+                  placeholder={t("defaultValuePlaceholder")}
                   value={draft.default_value}
                   onChange={(e) =>
                     setDraft((d) => ({ ...d, default_value: e.target.value }))
@@ -439,18 +475,37 @@ export function DriverFieldsSettingsPanel() {
                 />
               </div>
             </div>
-            <label className="flex h-9 items-center gap-2 text-sm">
-              <Checkbox
-                checked={draft.required}
-                onCheckedChange={(c) =>
-                  setDraft((d) => ({ ...d, required: c === true }))
-                }
-              />
-              {t("required")}
-            </label>
-            {draft.field_type === "select" ? (
+            <div className="flex flex-wrap gap-4">
+              <label className="flex h-9 items-center gap-2 text-sm">
+                <Checkbox
+                  checked={draft.required}
+                  onCheckedChange={(c) =>
+                    setDraft((d) => ({ ...d, required: c === true }))
+                  }
+                />
+                {t("required")}
+              </label>
+              {draft.field_type === "text" ? (
+                <label className="flex h-9 items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={draft.letters_only}
+                    onCheckedChange={(c) =>
+                      setDraft((d) => ({ ...d, letters_only: c === true }))
+                    }
+                  />
+                  {t("lettersOnly")}
+                </label>
+              ) : null}
+            </div>
+            {draft.field_type === "text" && draft.letters_only ? (
+              <p className="text-[10px] text-muted-foreground">{t("lettersOnlyHint")}</p>
+            ) : null}
+            {draft.field_type === "select" || draft.field_type === "checkbox" ? (
               <div className="space-y-2">
                 <Label>{t("options")}</Label>
+                {draft.field_type === "checkbox" ? (
+                  <p className="text-[10px] text-muted-foreground">{t("checkboxOptionsHint")}</p>
+                ) : null}
                 {draft.options.map((opt, i) => (
                   <div key={i} className="grid grid-cols-2 gap-2">
                     <Input
@@ -508,6 +563,26 @@ export function DriverFieldsSettingsPanel() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SimpleConfirmDialog
+        open={archiveTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setArchiveTarget(null);
+        }}
+        title={t("archiveConfirmTitle")}
+        description={t("archiveConfirmDescription", {
+          label: archiveTarget?.label ?? "",
+        })}
+        confirmLabel={t("archiveConfirm")}
+        isPending={archive.isPending}
+        onConfirm={async () => {
+          if (!archiveTarget) return;
+          const result = await archive.mutateAsync(archiveTarget.id);
+          if (result.error) toast.error(t("errors.save_failed"));
+          else toast.success(t("archived"));
+          setArchiveTarget(null);
+        }}
+      />
     </AppPage>
   );
 }

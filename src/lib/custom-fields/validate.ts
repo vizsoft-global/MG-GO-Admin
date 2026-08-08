@@ -16,17 +16,32 @@ export type CustomFieldValidationError = {
     | "invalid_option"
     | "invalid_date"
     | "invalid_number"
+    | "negative_number"
+    | "invalid_letters"
     | "unknown_key"
     | "invalid_definition";
 };
 
 const KEY_RE = /^[a-z][a-z0-9_]{0,62}$/;
+/** Unicode letters + spaces / hyphen / apostrophe; at least one letter. */
+const LETTERS_ONLY_RE = /^(?=.*\p{L})[\p{L}\s'-]+$/u;
+
+export function isLettersOnlyText(value: string): boolean {
+  return LETTERS_ONLY_RE.test(value.trim());
+}
 
 export function isCustomFieldType(value: unknown): value is CustomFieldType {
   return (
     typeof value === "string" &&
     (CUSTOM_FIELD_TYPES as readonly string[]).includes(value)
   );
+}
+
+/** Checkbox with configured options → multi-select; empty options → legacy boolean. */
+export function isMultiCheckboxField(
+  def: Pick<CustomFieldDefinition, "field_type" | "options">,
+): boolean {
+  return def.field_type === "checkbox" && def.options.length > 0;
 }
 
 export function normalizeFieldKey(raw: string): string | null {
@@ -67,16 +82,85 @@ export function validateDefinitionInput(
       return { key, code: "invalid_definition" };
     }
   }
+  if (
+    input.field_type === "checkbox" &&
+    Array.isArray(input.options) &&
+    input.options.length > 0
+  ) {
+    const options = parseOptions(input.options);
+    if (options.length === 0) {
+      return { key, code: "invalid_definition" };
+    }
+  }
   return null;
+}
+
+function parseMultiCheckboxRaw(
+  raw: unknown,
+  options: CustomFieldOption[],
+): { value: string[]; error?: CustomFieldValidationError["code"] } {
+  let selected: string[] = [];
+  if (Array.isArray(raw)) {
+    selected = raw.map((item) => String(item).trim()).filter(Boolean);
+  } else if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return { value: [] };
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (!Array.isArray(parsed)) {
+          return { value: [], error: "invalid_type" };
+        }
+        selected = parsed.map((item) => String(item).trim()).filter(Boolean);
+      } catch {
+        return { value: [], error: "invalid_type" };
+      }
+    } else {
+      selected = trimmed
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  } else if (typeof raw === "boolean") {
+    // Legacy boolean on a field that now has options — treat as none selected.
+    return { value: [] };
+  } else {
+    return { value: [], error: "invalid_type" };
+  }
+
+  const allowed = new Set(options.map((o) => o.value));
+  const labelToValue = new Map(
+    options.map((o) => [o.label.toLowerCase(), o.value] as const),
+  );
+  const out: string[] = [];
+  for (const item of selected) {
+    if (allowed.has(item)) {
+      if (!out.includes(item)) out.push(item);
+      continue;
+    }
+    const byLabel = labelToValue.get(item.toLowerCase());
+    if (byLabel) {
+      if (!out.includes(byLabel)) out.push(byLabel);
+      continue;
+    }
+    return { value: [], error: "invalid_option" };
+  }
+  return { value: out };
 }
 
 export function coerceCustomFieldValue(
   fieldType: CustomFieldType,
   raw: unknown,
   options: CustomFieldOption[],
+  opts?: { lettersOnly?: boolean },
 ): { value: CustomFieldValue; error?: CustomFieldValidationError["code"] } {
+  const multiCheckbox = fieldType === "checkbox" && options.length > 0;
+
   if (raw === undefined || raw === null || raw === "") {
-    return { value: fieldType === "checkbox" ? false : null };
+    if (fieldType === "checkbox") {
+      return { value: multiCheckbox ? [] : false };
+    }
+    return { value: null };
   }
 
   switch (fieldType) {
@@ -88,14 +172,19 @@ export function coerceCustomFieldValue(
         const ok = options.some((o) => o.value === text);
         if (!ok) return { value: null, error: "invalid_option" };
       }
+      if (fieldType === "text" && opts?.lettersOnly && !isLettersOnlyText(text)) {
+        return { value: null, error: "invalid_letters" };
+      }
       return { value: text };
     }
     case "number": {
-      if (typeof raw === "number" && Number.isFinite(raw)) {
-        return { value: raw };
-      }
-      const n = Number(String(raw).trim());
+      const n =
+        typeof raw === "number" && Number.isFinite(raw)
+          ? raw
+          : Number(String(raw).trim());
       if (!Number.isFinite(n)) return { value: null, error: "invalid_number" };
+      // Custom number fields are non-negative (age, counts, IDs, etc.).
+      if (n < 0) return { value: null, error: "negative_number" };
       return { value: n };
     }
     case "date": {
@@ -108,6 +197,9 @@ export function coerceCustomFieldValue(
       return { value: text };
     }
     case "checkbox": {
+      if (multiCheckbox) {
+        return parseMultiCheckboxRaw(raw, options);
+      }
       if (typeof raw === "boolean") return { value: raw };
       const s = String(raw).trim().toLowerCase();
       if (["1", "true", "yes", "y", "on"].includes(s)) return { value: true };
@@ -130,6 +222,11 @@ export function parseCustomFieldsJson(raw: unknown): CustomFieldValues {
       typeof value === "boolean"
     ) {
       out[key] = value;
+    } else if (
+      Array.isArray(value) &&
+      value.every((item) => typeof item === "string")
+    ) {
+      out[key] = value;
     }
   }
   return out;
@@ -138,7 +235,13 @@ export function parseCustomFieldsJson(raw: unknown): CustomFieldValues {
 export function validateCustomFieldValues(
   defs: Pick<
     CustomFieldDefinition,
-    "key" | "field_type" | "required" | "options" | "is_active" | "archived_at"
+    | "key"
+    | "field_type"
+    | "required"
+    | "options"
+    | "is_active"
+    | "archived_at"
+    | "letters_only"
   >[],
   input: CustomFieldValues,
   opts?: { allowInactiveKeys?: boolean },
@@ -147,6 +250,10 @@ export function validateCustomFieldValues(
   const byKey = new Map(defs.map((d) => [d.key, d]));
   const errors: CustomFieldValidationError[] = [];
   const values: CustomFieldValues = {};
+
+  const coerceOpts = (def: { field_type: CustomFieldType; letters_only?: boolean }) => ({
+    lettersOnly: def.field_type === "text" && Boolean(def.letters_only),
+  });
 
   for (const key of Object.keys(input)) {
     const def = byKey.get(key);
@@ -160,7 +267,12 @@ export function validateCustomFieldValues(
       }
       continue;
     }
-    const coerced = coerceCustomFieldValue(def.field_type, input[key], def.options);
+    const coerced = coerceCustomFieldValue(
+      def.field_type,
+      input[key],
+      def.options,
+      coerceOpts(def),
+    );
     if (coerced.error) {
       errors.push({ key, code: coerced.error });
       continue;
@@ -170,9 +282,19 @@ export function validateCustomFieldValues(
 
   for (const def of activeDefs) {
     if (!(def.key in values)) {
-      values[def.key] =
-        def.field_type === "checkbox" ? Boolean(input[def.key]) : (input[def.key] ?? null);
-      const coerced = coerceCustomFieldValue(def.field_type, values[def.key], def.options);
+      if (def.field_type === "checkbox") {
+        values[def.key] = isMultiCheckboxField(def)
+          ? (input[def.key] ?? [])
+          : Boolean(input[def.key]);
+      } else {
+        values[def.key] = input[def.key] ?? null;
+      }
+      const coerced = coerceCustomFieldValue(
+        def.field_type,
+        values[def.key],
+        def.options,
+        coerceOpts(def),
+      );
       if (coerced.error) {
         errors.push({ key: def.key, code: coerced.error });
       } else {
@@ -180,16 +302,25 @@ export function validateCustomFieldValues(
       }
     }
     const v = values[def.key];
+    if (!def.required) continue;
+
+    if (isMultiCheckboxField(def)) {
+      if (!Array.isArray(v) || v.length === 0) {
+        errors.push({ key: def.key, code: "required" });
+      }
+      continue;
+    }
+    if (def.field_type === "checkbox") {
+      if (v !== true) {
+        errors.push({ key: def.key, code: "required" });
+      }
+      continue;
+    }
     const empty =
       v === null ||
       v === undefined ||
-      (typeof v === "string" && v.trim() === "") ||
-      (def.field_type === "checkbox" && v === false && def.required);
-    if (def.required && empty && def.field_type !== "checkbox") {
-      errors.push({ key: def.key, code: "required" });
-    }
-    if (def.required && def.field_type === "checkbox" && v !== true) {
-      // checkbox required means must be checked
+      (typeof v === "string" && v.trim() === "");
+    if (empty) {
       errors.push({ key: def.key, code: "required" });
     }
   }
@@ -198,11 +329,27 @@ export function validateCustomFieldValues(
 }
 
 export function defaultsFromDefinitions(
-  defs: Pick<CustomFieldDefinition, "key" | "default_value" | "field_type" | "is_active" | "archived_at">[],
+  defs: Pick<
+    CustomFieldDefinition,
+    | "key"
+    | "default_value"
+    | "field_type"
+    | "options"
+    | "is_active"
+    | "archived_at"
+  >[],
 ): CustomFieldValues {
   const out: CustomFieldValues = {};
   for (const def of defs) {
     if (!def.is_active || def.archived_at) continue;
+    if (isMultiCheckboxField(def)) {
+      if (Array.isArray(def.default_value)) {
+        out[def.key] = def.default_value;
+      } else {
+        out[def.key] = [];
+      }
+      continue;
+    }
     if (def.default_value !== undefined && def.default_value !== null) {
       out[def.key] = def.default_value;
     } else if (def.field_type === "checkbox") {
@@ -220,7 +367,15 @@ export function formatCustomFieldDisplay(
   options: CustomFieldOption[] = [],
 ): string {
   if (value === null || value === undefined) return "";
-  if (fieldType === "checkbox") return value ? "Yes" : "No";
+  if (fieldType === "checkbox") {
+    if (Array.isArray(value)) {
+      if (value.length === 0) return "";
+      return value
+        .map((v) => options.find((o) => o.value === v)?.label ?? v)
+        .join(", ");
+    }
+    return value ? "Yes" : "No";
+  }
   if (fieldType === "select") {
     const opt = options.find((o) => o.value === String(value));
     return opt?.label ?? String(value);

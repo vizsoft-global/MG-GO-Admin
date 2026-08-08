@@ -227,6 +227,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-08` — Active Delivery footer (driver app): Cancel Order / Mark as Delivered must use `MediaQuery.viewPadding.bottom` so system nav does not cover buttons (edge-to-edge). Handoff §11 Delivery note.
+- `[admin+app] 2026-08-08` — Custom checkbox fields support multi-select when `options` are configured (stored as `string[]` in `custom_fields` jsonb); empty options keep legacy boolean. Shared Checkbox contrast improved for dark mode. Settings → Driver Fields options editor for checkbox type.
 - `[admin only] 2026-08-08` — Notification dispatch: missing push tokens skip FCM only (in-app inbox still delivered). Campaign is no longer marked wholesale `failed` for all-no-token sends; detail UI shows amber in-app-ok / push-skipped messaging instead of a false “no app” failure.
 - `[admin only] 2026-08-08` — Custom text fields: optional `letters_only` on `custom_field_definitions` (Settings → Driver Fields toggle); Add/Edit Driver validates letters/spaces/hyphen/apostrophe. Migration `20260825100000_custom_field_letters_only.sql`.
 - `[admin+app] 2026-08-05` — Stale pickup auto-cancel: an `in_transit` pickup that never completed blocked the driver from logging any further order (`active_pickup_exists`) with no in-app recovery on older builds. `app_settings.pickup_auto_cancel_hours` (default 6) + RPC `admin_expire_stale_pickups` + cron `/api/cron/expire-stale-pickups` (every 15 min). Migration `20260824100000_expire_stale_pickups.sql`. Also removed the Crystal Tower inclusion geofence — an inclusion polygon replaces the 500m pin radius, so it allowed only 100–350m and locked out its 14 assigned drivers.

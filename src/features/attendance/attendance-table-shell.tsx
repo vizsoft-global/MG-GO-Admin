@@ -46,7 +46,7 @@ export function AttendancePaginationFooter({
           {t("prevPage")}
         </Button>
         <span className="text-sm tabular-nums text-muted-foreground">
-          {page + 1} / {totalPages}
+          {t("pageOf", { page: page + 1, totalPages })}
         </span>
         <Button
           type="button"

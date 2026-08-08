@@ -223,7 +223,9 @@ export function DriverFormSheet({
       const defaults = defaultsFromDefinitions(activeCustomDefs);
       const next = { ...defaults };
       for (const [k, v] of Object.entries(prev)) {
-        if (v !== null && v !== undefined && v !== "") next[k] = v;
+        if (v === null || v === undefined || v === "") continue;
+        if (Array.isArray(v) && v.length === 0) continue;
+        next[k] = v;
       }
       return next;
     });
@@ -379,7 +381,14 @@ export function DriverFormSheet({
     const cfResult = validateCustomFieldValues(activeCustomDefs, customFieldValues);
     const cfErrMap: Record<string, string> = {};
     for (const err of cfResult.errors) {
-      cfErrMap[err.key] = tNew("errors.invalid_custom_fields");
+      cfErrMap[err.key] =
+        err.code === "invalid_letters"
+          ? tNew("errors.custom_field_letters_only")
+          : err.code === "negative_number"
+            ? tNew("errors.custom_field_non_negative")
+            : err.code === "required"
+              ? tNew("errors.custom_field_required")
+              : tNew("errors.invalid_custom_fields");
     }
     setCustomFieldErrors(cfErrMap);
     if (hasValidationErrors(validation)) {
@@ -388,7 +397,14 @@ export function DriverFormSheet({
       return;
     }
     if (cfResult.errors.length > 0) {
-      toast.error(driverErrorToast(tNew, "invalid_custom_fields"));
+      const firstCf = cfResult.errors[0];
+      toast.error(
+        firstCf?.code === "invalid_letters"
+          ? tNew("errors.custom_field_letters_only")
+          : firstCf?.code === "negative_number"
+            ? tNew("errors.custom_field_non_negative")
+            : driverErrorToast(tNew, "invalid_custom_fields"),
+      );
       return;
     }
     if (needsR2ForSubmit) {
