@@ -17,22 +17,27 @@ export type PolygonOverlayCompleteEvent = {
   overlay: GooglePolygonInstance;
 };
 
+export type PolygonVertex = { lat: number; lng: number };
+
 export type PolygonDrawController = {
   setMap: (map: GoogleMapInstance | null) => void;
   setDrawingMode: (mode: string | null) => void;
+  /** True while collecting vertices (before overlaycomplete). */
+  isDrawing: () => boolean;
+  /** Abort in-progress sketch without emitting overlaycomplete. */
+  clearDraft: () => void;
+  /** Close the ring if ≥3 vertices (same as dblclick / first-point click). */
+  finishDraft: () => boolean;
   addListener: (
     event: string,
     handler: (e: PolygonOverlayCompleteEvent) => void,
   ) => void;
 };
 
-/** Vertices closer than this (in pixels at the current zoom) close the ring. */
+/** Vertices closer than this (in degrees) close the ring / ignore duplicates. */
 const CLOSE_TOLERANCE_DEGREES = 0.00015;
 
-function nearlyEqual(
-  a: { lat: number; lng: number },
-  b: { lat: number; lng: number },
-) {
+function nearlyEqual(a: PolygonVertex, b: PolygonVertex) {
   return (
     Math.abs(a.lat - b.lat) < CLOSE_TOLERANCE_DEGREES &&
     Math.abs(a.lng - b.lng) < CLOSE_TOLERANCE_DEGREES
@@ -46,15 +51,29 @@ export function createPolygonDrawController(
     polygonOptions: Record<string, unknown>;
     /** Called on every vertex change so callers can surface progress hints. */
     onVertexCountChange?: (count: number) => void;
+    /**
+     * Fired whenever the open ring has ≥3 vertices so the form can enable Save
+     * before the user explicitly closes the polygon.
+     */
+    onProvisionalPaths?: (paths: PolygonVertex[] | null) => void;
   },
 ): PolygonDrawController {
   let map = initialMap;
   let drawing = false;
-  let vertices: Array<{ lat: number; lng: number }> = [];
+  let vertices: PolygonVertex[] = [];
   let preview: GooglePolygonInstance | null = null;
   let handles: GoogleMarkerInstance[] = [];
   let completeHandler: ((e: PolygonOverlayCompleteEvent) => void) | null = null;
   const mapListeners: Array<{ remove: () => void }> = [];
+  let keyHandler: ((e: KeyboardEvent) => void) | null = null;
+
+  const emitProvisional = () => {
+    if (vertices.length >= 3) {
+      options.onProvisionalPaths?.(vertices.map((v) => ({ ...v })));
+    } else {
+      options.onProvisionalPaths?.(null);
+    }
+  };
 
   const clearPreview = () => {
     preview?.setMap(null);
@@ -70,6 +89,7 @@ export function createPolygonDrawController(
     vertices = [];
     clearPreview();
     options.onVertexCountChange?.(0);
+    options.onProvisionalPaths?.(null);
   };
 
   const renderPreview = () => {
@@ -92,9 +112,10 @@ export function createPolygonDrawController(
       const handle = new google.maps.Marker({
         position: vertex,
         map,
+        title: index === 0 && vertices.length >= 3 ? "Click to finish polygon" : undefined,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          scale: index === 0 ? 6 : 4,
+          scale: index === 0 ? 7 : 4,
           fillColor: "#ffffff",
           fillOpacity: 1,
           strokeColor: String(options.polygonOptions.strokeColor ?? "#2563eb"),
@@ -104,18 +125,21 @@ export function createPolygonDrawController(
       });
       // Clicking the first vertex closes the ring, matching the old tool.
       if (index === 0) {
-        handle.addListener("click", () => finish());
+        handle.addListener("click", () => {
+          finish();
+        });
       }
       handles.push(handle);
     });
   };
 
-  const finish = () => {
-    if (vertices.length < 3) return;
+  const finish = (): boolean => {
+    if (vertices.length < 3) return false;
     const paths = vertices.map((v) => ({ lat: v.lat, lng: v.lng }));
     reset();
     drawing = false;
-    if (!map) return;
+    map?.setOptions({ disableDoubleClickZoom: false });
+    if (!map) return false;
 
     const polygon = new google.maps.Polygon({
       paths,
@@ -123,6 +147,7 @@ export function createPolygonDrawController(
       ...options.polygonOptions,
     });
     completeHandler?.({ type: POLYGON_OVERLAY_TYPE, overlay: polygon });
+    return true;
   };
 
   const addVertex = (lat: number, lng: number) => {
@@ -138,6 +163,7 @@ export function createPolygonDrawController(
     vertices.push(next);
     options.onVertexCountChange?.(vertices.length);
     renderPreview();
+    emitProvisional();
   };
 
   const detachMapListeners = () => {
@@ -145,6 +171,10 @@ export function createPolygonDrawController(
       listener.remove();
     }
     mapListeners.length = 0;
+    if (keyHandler && typeof window !== "undefined") {
+      window.removeEventListener("keydown", keyHandler);
+      keyHandler = null;
+    }
   };
 
   const attachMapListeners = () => {
@@ -168,6 +198,22 @@ export function createPolygonDrawController(
         finish();
       }) as () => void),
     );
+
+    if (typeof window !== "undefined") {
+      keyHandler = (e: KeyboardEvent) => {
+        if (!drawing) return;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish();
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          reset();
+          options.onVertexCountChange?.(0);
+        }
+      };
+      window.addEventListener("keydown", keyHandler);
+    }
   };
 
   attachMapListeners();
@@ -185,10 +231,22 @@ export function createPolygonDrawController(
       const next = mode === POLYGON_OVERLAY_TYPE;
       if (next === drawing) return;
       drawing = next;
-      if (!next) reset();
-      // Avoid zooming on the double-click that closes a polygon.
+      // Do not reset vertices here — finish()/clearDraft()/setMap() own cleanup.
+      // Resetting on every setDrawingMode(null) wiped in-progress sketches when
+      // React effects re-ran after provisional geometry enabled Save.
       map?.setOptions({ disableDoubleClickZoom: next });
+      if (next) {
+        options.onVertexCountChange?.(vertices.length);
+        emitProvisional();
+      }
     },
+    isDrawing: () => drawing,
+    clearDraft() {
+      reset();
+      drawing = false;
+      map?.setOptions({ disableDoubleClickZoom: false });
+    },
+    finishDraft: () => finish(),
     addListener(event, handler) {
       if (event === "overlaycomplete") {
         completeHandler = handler;

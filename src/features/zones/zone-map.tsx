@@ -7,7 +7,10 @@ import { loadGoogleMaps } from "@/lib/google-maps/load";
 import type { ZoneMapAdapter } from "./zone-map-adapter";
 import type { ZoneMapDrawMode } from "./zone-map-inner";
 import type { ZoneGeoFeature, ZoneGeometryType } from "@/lib/geo/zone-geometry";
+import type { ZoneDraftGeometryMeta } from "./zone-draft-geometry";
 import type { ZoneRow } from "./types";
+
+export type { ZoneDraftGeometryMeta };
 
 const ZoneMapInnerDynamic = dynamic(
   () => import("./zone-map-inner").then((m) => m.ZoneMapInner),
@@ -48,6 +51,7 @@ export type ZoneMapProps = {
   onDraftGeometryChange?: (
     geometry: ZoneGeoFeature | null,
     zoneType: ZoneGeometryType,
+    meta?: ZoneDraftGeometryMeta,
   ) => void;
   onMapReady?: (adapter: ZoneMapAdapter) => void;
   onZoneSelect?: (zoneId: string) => void;

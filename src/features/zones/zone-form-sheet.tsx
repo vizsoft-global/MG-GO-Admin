@@ -44,6 +44,11 @@ import type {
   ZoneMapAdapter,
   ZoneMapViewport,
 } from "./zone-map-adapter";
+import {
+  shouldKeepPolygonDrawMode,
+  shouldSwitchDrawToolToEdit,
+  type ZoneDraftGeometryMeta,
+} from "./zone-draft-geometry";
 import { DEFAULT_GEOFENCE_SETTINGS } from "./geofence-defaults";
 import {
   ZoneAlertSettingsSection,
@@ -166,6 +171,7 @@ export function ZoneFormBody({
   const [geometry, setGeometry] = useState<ZoneGeoFeature | null>(
     zone?.geometry ?? null,
   );
+  const [draftIsProvisional, setDraftIsProvisional] = useState(false);
   const [radiusInput, setRadiusInput] = useState(
     zone?.zone_type === "circle" && zone.geometry?.properties?.radiusMeters
       ? String(zone.geometry.properties.radiusMeters)
@@ -232,13 +238,17 @@ export function ZoneFormBody({
   const handleGeometryChange = (
     geo: ZoneGeoFeature | null,
     type: ZoneGeometryType,
+    meta?: ZoneDraftGeometryMeta,
   ) => {
     setGeometry(geo);
+    setDraftIsProvisional(Boolean(meta?.provisional));
     // Clearing a draft must not overwrite Geofence Shape (e.g. Circle → clearDraft
     // still reports the stale drawModeRef type synchronously).
     if (geo) {
       setZoneType(type);
-      setActiveTool("edit");
+      if (shouldSwitchDrawToolToEdit(meta)) {
+        setActiveTool("edit");
+      }
       if (type === "circle" && geo.properties?.radiusMeters) {
         setRadiusInput(String(Math.round(geo.properties.radiusMeters)));
       }
@@ -249,13 +259,19 @@ export function ZoneFormBody({
     const adapter = mapAdapterRef.current;
     if (!adapter) return;
     if (activeTool === "draw") {
-      if (geometry) {
-        adapter.setDrawMode?.(null);
-        adapter.setEditing?.(true);
-        adapter.setDragging?.(false);
-      } else {
+      if (
+        shouldKeepPolygonDrawMode({
+          activeTool: "draw",
+          hasGeometry: Boolean(geometry),
+          draftIsProvisional,
+        })
+      ) {
         adapter.setDrawMode?.(zoneType);
         adapter.setEditing?.(false);
+        adapter.setDragging?.(false);
+      } else {
+        adapter.setDrawMode?.(null);
+        adapter.setEditing?.(true);
         adapter.setDragging?.(false);
       }
     } else if (activeTool === "edit") {
@@ -271,9 +287,10 @@ export function ZoneFormBody({
       setActiveTool("edit");
     } else if (activeTool === "clear") {
       adapter.clearDraft?.();
+      setDraftIsProvisional(false);
       setActiveTool("draw");
     }
-  }, [activeTool, zoneType, geometry]);
+  }, [activeTool, zoneType, geometry, draftIsProvisional]);
 
   const handleSave = () => {
     if (!geometry) {

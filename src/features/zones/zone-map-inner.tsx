@@ -20,6 +20,7 @@ import {
   polygonPositionsFromFeature,
   zoneMapBoundsFromShape,
 } from "@/lib/geo/zone-geometry";
+import type { ZoneDraftGeometryMeta } from "./zone-draft-geometry";
 import {
   addZoneLayerToMap,
   applyZoneLayerStyle,
@@ -246,6 +247,7 @@ function GeomanDrawControl({
   onGeometryChange: (
     geometry: ZoneGeoFeature | null,
     zoneType: ZoneGeometryType,
+    meta?: ZoneDraftGeometryMeta,
   ) => void;
   onMapReady?: (map: L.Map) => void;
   onMapAdapterReady?: (adapter: ZoneMapAdapter) => void;
@@ -628,6 +630,7 @@ export function ZoneMapInner({
   onDraftGeometryChange?: (
     geometry: ZoneGeoFeature | null,
     zoneType: ZoneGeometryType,
+    meta?: ZoneDraftGeometryMeta,
   ) => void;
   onMapReady?: (map: L.Map) => void;
   onMapAdapterReady?: (adapter: ZoneMapAdapter) => void;
