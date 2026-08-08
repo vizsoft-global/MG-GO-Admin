@@ -434,10 +434,11 @@ export async function uploadNotificationMedia(
   const entry = formData.get("file");
   // Next may deserialize the part as File or Blob depending on runtime.
   if (!(entry instanceof Blob) || entry.size === 0) return { error: "invalid_input" };
-  const file =
-    entry instanceof File
-      ? entry
-      : new File([entry], "upload.bin", { type: entry.type || "application/octet-stream" });
+  const file = new File(
+    [entry],
+    entry instanceof File && entry.name.trim() ? entry.name : "upload.bin",
+    { type: entry.type || "application/octet-stream" },
+  );
 
   try {
     const result = await uploadNotificationMediaFile(file, session.id);
