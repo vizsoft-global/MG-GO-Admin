@@ -55,17 +55,35 @@ function MediaSlot({
     };
   }, [objectKey]);
 
+  function resolveUploadErrorMessage(code: string): string {
+    if (code === "file_too_large" || code === "invalid_type" || code === "upload_failed") {
+      return t(`mediaErrors.${code}`);
+    }
+    if (
+      code === "not_authorized" ||
+      code === "invalid_input" ||
+      code === "saveFailed"
+    ) {
+      return t(`errors.${code}`);
+    }
+    return t("errors.saveFailed");
+  }
+
   function handleUpload(file: File) {
     startTransition(async () => {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("role", role);
-      const result = await uploadNotificationMedia(formData);
-      if ("error" in result) {
-        toast.error(t(`mediaErrors.${result.error}`, { defaultValue: t("errors.saveFailed") }));
-        return;
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("role", role);
+        const result = await uploadNotificationMedia(formData);
+        if ("error" in result) {
+          toast.error(resolveUploadErrorMessage(result.error));
+          return;
+        }
+        onChange(result.objectKey);
+      } catch {
+        toast.error(t("mediaErrors.upload_failed"));
       }
-      onChange(result.objectKey);
     });
   }
 

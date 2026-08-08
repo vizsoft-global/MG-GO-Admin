@@ -16,6 +16,7 @@ import { uploadNotificationMediaFile } from "./notification-media-storage";
 import { sendPushBatch } from "@/lib/firebase/fcm-provider";
 import { interpolateTemplate } from "./interpolate-template";
 import { resolveScreenshotRestricted } from "./screenshot-restriction";
+import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
 import type {
   NotificationActionError,
   NotificationAnalyticsDailyRow,
@@ -430,14 +431,22 @@ export async function uploadNotificationMedia(
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "invalid_input" };
+  const entry = formData.get("file");
+  // Next may deserialize the part as File or Blob depending on runtime.
+  if (!(entry instanceof Blob) || entry.size === 0) return { error: "invalid_input" };
+  const file =
+    entry instanceof File
+      ? entry
+      : new File([entry], "upload.bin", { type: entry.type || "application/octet-stream" });
 
-  const result = await uploadNotificationMediaFile(file, session.id);
-  if (result.error) return { error: result.error };
-  if (!result.objectKey) return { error: "invalid_input" };
-
-  return { objectKey: result.objectKey };
+  try {
+    const result = await uploadNotificationMediaFile(file, session.id);
+    if (result.error) return { error: result.error };
+    if (!result.objectKey) return { error: "invalid_input" };
+    return { objectKey: result.objectKey };
+  } catch {
+    return { error: "upload_failed" };
+  }
 }
 
 async function loadTemplateScreenshotFlag(
@@ -1060,67 +1069,14 @@ export async function searchDriversForNotification(
 export async function resolveNotificationDriversByEmployeeIds(employeeIds: string[]) {
   await requireNotificationsView();
   const supabase = await notificationsDb();
-  const normalized = [...new Set(employeeIds.map((id) => id.trim()).filter(Boolean))];
-  if (normalized.length === 0) return [];
-
-  const { data, error } = await supabase
-    .from("drivers")
-    .select("id, driver_code, employee_id, is_blocked, archived_at, profiles(full_name)")
-    .in("employee_id", normalized);
-  if (error) throw new Error(error.message);
-
-  const byEmployee = new Map(
-    (data ?? []).map((d: any) => {
-      const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
-      return [
-        d.employee_id,
-        {
-          driver_id: d.id as string,
-          driver_code: d.driver_code as string,
-          full_name: profile?.full_name?.trim() || "Driver",
-          is_blocked: d.is_blocked as boolean,
-          archived_at: d.archived_at as string | null,
-        },
-      ];
-    }),
-  );
-
-  return normalized.map((employee_id) => {
-    const match = byEmployee.get(employee_id) as
-      | {
-          driver_id: string;
-          driver_code: string;
-          full_name: string;
-          is_blocked: boolean;
-          archived_at: string | null;
-        }
-      | undefined;
-    if (!match) {
-      return {
-        employee_id,
-        driver_id: null,
-        driver_code: null,
-        full_name: null,
-        error: "not_found" as const,
-      };
-    }
-    if (match.archived_at || match.is_blocked) {
-      return {
-        employee_id,
-        driver_id: match.driver_id,
-        driver_code: match.driver_code,
-        full_name: match.full_name,
-        error: "blocked" as const,
-      };
-    }
-    return {
-      employee_id,
-      driver_id: match.driver_id,
-      driver_code: match.driver_code,
-      full_name: match.full_name,
-      error: null,
-    };
-  });
+  const resolved = await resolveDriversByLookupIds(supabase, employeeIds);
+  return resolved.map((row) => ({
+    employee_id: row.employee_id,
+    driver_id: row.driver_id,
+    driver_code: row.driver_code,
+    full_name: row.full_name,
+    error: row.error,
+  }));
 }
 
 export async function previewNotificationImport(input: {
