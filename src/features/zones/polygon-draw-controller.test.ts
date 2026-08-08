@@ -121,6 +121,11 @@ describe("createPolygonDrawController", () => {
 
     assert.equal(dm.finishDraft(), true);
     assert.equal(completed, 1);
+    // Regression: provisional emit at ≥3 still happened before finish (Save path).
+    assert.ok(
+      provisional.some((p) => p !== null && p.length >= 3),
+      "expected provisional paths at ≥3 vertices before finish",
+    );
   });
 
   it("setDrawingMode(null) does not wipe an in-progress sketch", () => {
@@ -152,5 +157,109 @@ describe("createPolygonDrawController", () => {
     // Still able to finish after a spurious disable (React effect).
     dm.setDrawingMode(POLYGON_OVERLAY_TYPE);
     assert.equal(dm.finishDraft(), true);
+  });
+
+  it("allows 5+ vertices before finish (provisional does not close the ring)", () => {
+    const google = createFakeGoogle();
+    const map = new google.maps.Map(
+      null as unknown as HTMLElement,
+      {},
+    ) as GoogleMapInstance & { _emit: (e: string, p?: unknown) => void };
+
+    const provisional: Array<Array<{ lat: number; lng: number }> | null> = [];
+    let completed = 0;
+    const dm = createPolygonDrawController(google, map, {
+      polygonOptions: {},
+      onProvisionalPaths: (paths) => provisional.push(paths),
+    });
+    dm.addListener("overlaycomplete", () => {
+      completed += 1;
+    });
+    dm.setDrawingMode(POLYGON_OVERLAY_TYPE);
+
+    const click = (lat: number, lng: number) => {
+      map._emit("click", {
+        latLng: { lat: () => lat, lng: () => lng },
+      });
+    };
+
+    click(29.3, 47.9);
+    click(29.4, 47.9);
+    click(29.4, 48.0);
+    assert.equal(provisional.at(-1)?.length, 3);
+    assert.equal(completed, 0);
+
+    click(29.35, 48.05);
+    click(29.32, 48.02);
+    assert.equal(provisional.at(-1)?.length, 5);
+    assert.equal(completed, 0);
+    assert.equal(dm.isDrawing(), true);
+
+    assert.equal(dm.finishDraft(), true);
+    assert.equal(completed, 1);
+  });
+
+  it("Escape clears provisional paths without finishing", () => {
+    const keydownHandlers = new Set<(e: KeyboardEvent) => void>();
+    const previousWindow = globalThis.window;
+    globalThis.window = {
+      addEventListener(type: string, handler: EventListenerOrEventListenerObject) {
+        if (type === "keydown" && typeof handler === "function") {
+          keydownHandlers.add(handler as (e: KeyboardEvent) => void);
+        }
+      },
+      removeEventListener(
+        type: string,
+        handler: EventListenerOrEventListenerObject,
+      ) {
+        if (type === "keydown" && typeof handler === "function") {
+          keydownHandlers.delete(handler as (e: KeyboardEvent) => void);
+        }
+      },
+    } as unknown as Window & typeof globalThis;
+
+    try {
+      const google = createFakeGoogle();
+      const map = new google.maps.Map(
+        null as unknown as HTMLElement,
+        {},
+      ) as GoogleMapInstance & { _emit: (e: string, p?: unknown) => void };
+
+      const provisional: Array<Array<{ lat: number; lng: number }> | null> = [];
+      let completed = 0;
+      const dm = createPolygonDrawController(google, map, {
+        polygonOptions: {},
+        onProvisionalPaths: (paths) => provisional.push(paths),
+      });
+      dm.addListener("overlaycomplete", () => {
+        completed += 1;
+      });
+      dm.setDrawingMode(POLYGON_OVERLAY_TYPE);
+
+      map._emit("click", {
+        latLng: { lat: () => 29.3, lng: () => 47.9 },
+      });
+      map._emit("click", {
+        latLng: { lat: () => 29.4, lng: () => 47.9 },
+      });
+      map._emit("click", {
+        latLng: { lat: () => 29.4, lng: () => 48.0 },
+      });
+      assert.equal(provisional.at(-1)?.length, 3);
+
+      const escapeEvent = {
+        key: "Escape",
+        preventDefault() {},
+      } as KeyboardEvent;
+      for (const handler of keydownHandlers) {
+        handler(escapeEvent);
+      }
+
+      assert.equal(provisional.at(-1), null);
+      assert.equal(completed, 0);
+      assert.equal(dm.isDrawing(), true);
+    } finally {
+      globalThis.window = previousWindow;
+    }
   });
 });

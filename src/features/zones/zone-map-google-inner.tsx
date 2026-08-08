@@ -54,6 +54,7 @@ import {
   POLYGON_OVERLAY_TYPE,
   type PolygonDrawController,
 } from "./polygon-draw-controller";
+import type { ZoneDraftGeometryMeta } from "./zone-draft-geometry";
 
 function tupleToLatLng(center: [number, number]) {
   return { lat: center[0], lng: center[1] };
@@ -135,6 +136,7 @@ export function ZoneMapGoogleInner({
   onDraftGeometryChange?: (
     geometry: ZoneGeoFeature | null,
     zoneType: ZoneGeometryType,
+    meta?: ZoneDraftGeometryMeta,
   ) => void;
   onMapReady?: (adapter: ZoneMapAdapter) => void;
   onZoneSelect?: (zoneId: string) => void;
@@ -474,9 +476,10 @@ export function ZoneMapGoogleInner({
       onProvisionalPaths: (paths) => {
         // Enable Save as soon as a valid ring exists — users often stop after
         // drawing without double-clicking / closing on the first point.
+        // Also covers Escape → reset() → null (mid-sketch clear); keep draw tool.
         if (!paths || paths.length < 3) {
           if (!draftOverlayRef.current) {
-            onDraftChangeRef.current?.(null, "polygon");
+            onDraftChangeRef.current?.(null, "polygon", { provisional: true });
           }
           return;
         }
@@ -484,7 +487,7 @@ export function ZoneMapGoogleInner({
         const feature = buildPolygonFeature(
           paths.map((p) => [p.lat, p.lng] as [number, number]),
         );
-        onDraftChangeRef.current?.(feature, "polygon");
+        onDraftChangeRef.current?.(feature, "polygon", { provisional: true });
       },
     });
 
@@ -503,7 +506,7 @@ export function ZoneMapGoogleInner({
         bindPolygonEditListeners(polygon, (g, t) =>
           onDraftChangeRef.current?.(g, t),
         );
-        onDraftChangeRef.current?.(feature, "polygon");
+        onDraftChangeRef.current?.(feature, "polygon", { provisional: false });
       } else {
         polygon.setMap(null);
       }
