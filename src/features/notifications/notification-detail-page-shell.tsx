@@ -41,6 +41,10 @@ import { NotificationMediaPreview } from "./notification-media-preview";
 import { NotificationMobilePreview } from "./notification-mobile-preview";
 import { NotificationEngagementReport } from "./notification-engagement-report";
 import { invalidateNotificationCaches } from "./invalidate-notification-caches";
+import {
+  resolveCampaignDisplayStatus,
+  summarizeDispatchOutcomes,
+} from "./dispatch-outcome";
 
 function formatEventTime(iso: string): string {
   try {
@@ -97,8 +101,18 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
   );
   const bannerMedia = pickNotificationMediaByRole(campaign.media, "banner");
   const pushImageMedia = pickNotificationMediaByRole(campaign.media, "image");
-  const noTokenCount = dispatchItems?.filter((item) => item.error_code === "no_token").length ?? 0;
-  const canRetrySend = canSend && ["draft", "queued", "scheduled", "pending_approval", "failed"].includes(campaign.status);
+  const dispatchSummary = summarizeDispatchOutcomes(dispatchItems ?? []);
+  const displayStatus = resolveCampaignDisplayStatus(
+    campaign.status,
+    dispatchItems ?? [],
+  );
+  const canRetrySend =
+    canSend &&
+    (["draft", "queued", "scheduled", "pending_approval", "failed"].includes(
+      campaign.status,
+    ) ||
+      dispatchSummary.allPushSkipped ||
+      dispatchSummary.pushSkipped > 0);
 
   return (
     <AppPage narrow>
@@ -226,7 +240,20 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
           <div className="flex flex-wrap gap-2">
             <StatusPill variant="neutral">{campaign.category}</StatusPill>
             <StatusPill variant="neutral">{campaign.priority}</StatusPill>
-            <StatusPill variant="warning">{campaign.status.replace("_", " ")}</StatusPill>
+            <StatusPill
+              variant={
+                displayStatus === "failed"
+                  ? "danger"
+                  : displayStatus === "sent" ||
+                      displayStatus === "delivered" ||
+                      displayStatus === "opened" ||
+                      displayStatus === "clicked"
+                    ? "success"
+                    : "warning"
+              }
+            >
+              {displayStatus.replace("_", " ")}
+            </StatusPill>
             {campaign.screenshot_restricted ? (
               <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
                 <ShieldOff className="size-3" aria-hidden />
@@ -243,14 +270,22 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
               <span className="text-muted-foreground">{t("colSent")}: </span>
               {campaign.sent_at ?? "—"}
             </p>
-            {campaign.status === "failed" && campaign.failed_count > 0 ? (
-              <p className="sm:col-span-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive">
-                {noTokenCount > 0 && noTokenCount === (dispatchItems?.length ?? 0)
-                  ? t("dispatchAllNoToken", { count: noTokenCount })
-                  : t("dispatchFailedSummary", {
-                      failed: campaign.failed_count,
-                      total: campaign.recipient_count || campaign.estimated_audience_count,
+            {dispatchSummary.pushSkipped > 0 ? (
+              <p className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                {dispatchSummary.allPushSkipped
+                  ? t("dispatchAllNoTokenInAppOk", { count: dispatchSummary.pushSkipped })
+                  : t("dispatchSomeNoTokenInAppOk", {
+                      skipped: dispatchSummary.pushSkipped,
+                      total: dispatchItems?.length ?? campaign.recipient_count,
                     })}
+              </p>
+            ) : null}
+            {displayStatus === "failed" && dispatchSummary.hardFailed > 0 ? (
+              <p className="sm:col-span-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive">
+                {t("dispatchFailedSummary", {
+                  failed: dispatchSummary.hardFailed,
+                  total: campaign.recipient_count || campaign.estimated_audience_count,
+                })}
               </p>
             ) : null}
           </div>

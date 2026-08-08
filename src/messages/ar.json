@@ -85,7 +85,6 @@
     "accessRequests": "طلبات الوصول",
     "maintenance": "وضع الصيانة",
     "dataCleanup": "تنظيف البيانات",
-    "appReleases": "إصدارات التطبيق",
     "zones": "المناطق",
     "dpdVerification": "تحقق DPD",
     "documentExpiry": "انتهاء المستندات",
@@ -946,138 +945,6 @@
         "upload_failed": "فشل رفع الصورة — تم حفظ الأصل بدونها"
       }
     },
-    "appReleases": {
-      "title": "إصدارات التطبيق",
-      "subtitle": "ارفع ملفات APK للأندرويد وتحكم في الإصدار الذي يتلقاه السائقون عند التشغيل.",
-      "refresh": "تحديث",
-      "uploadButton": "رفع APK",
-      "configureStorage": "إعداد التخزين",
-      "configureStorageHint": "تطبيق CORS لـ Cloudflare R2 ليعمل الرفع من المتصفح",
-      "reviewBannerTitle": "تحديثات التثبيت الجانبي متوقفة (وضع المراجعة)",
-      "reviewBannerHint": "لن يتلقى السائقون روابط تنزيل APK حتى يُعاد تفعيل تحديثات التثبيت الجانبي. الرفع والتفعيل ما زالا يعملان هنا.",
-      "reviewBannerAction": "فتح إعدادات تطبيق السائق",
-      "listTitle": "إصدارات {channel}",
-      "emptyTitle": "لا توجد إصدارات بعد",
-      "emptyDescription": "ارفع APK لإنشاء أول إصدار لهذه القناة.",
-      "latestBadge": "الأحدث",
-      "versionCode": "الرمز {code}",
-      "tabs": {
-        "releases": "الإصدارات",
-        "adoption": "الاعتماد"
-      },
-      "channels": {
-        "production": "الإنتاج",
-        "beta": "تجريبي",
-        "internal": "داخلي"
-      },
-      "columns": {
-        "version": "الإصدار",
-        "released": "تاريخ الإصدار",
-        "size": "الحجم",
-        "sha256": "SHA256",
-        "required": "إلزامي",
-        "status": "الحالة",
-        "actions": "إجراءات"
-      },
-      "status": {
-        "active": "نشط",
-        "inactive": "غير نشط"
-      },
-      "actions": {
-        "activate": "تفعيل"
-      },
-      "toasts": {
-        "uploaded": "تم رفع APK",
-        "activated": "تم تفعيل الإصدار",
-        "markedRequired": "تم التعليم كتحديث إلزامي",
-        "markedOptional": "تم التعليم كتحديث اختياري",
-        "deleted": "تم حذف الإصدار",
-        "corsConfigured": "تم تطبيق سياسة CORS لـ Cloudflare R2 — يجب أن يعمل الرفع الآن"
-      },
-      "deleteDialog": {
-        "title": "حذف الإصدار",
-        "confirmText": "DELETE RELEASE {version}",
-        "warning": "يحذف هذا ملف APK من التخزين نهائياً. لا يمكن حذف الإصدارات النشطة."
-      },
-      "upload": {
-        "title": "رفع APK جديد",
-        "description": "ارفع رقم الإصدار في pubspec.yaml قبل البناء. استخدم نفس keystore الإصدار.",
-        "latestHint": "أحدث رمز إصدار في هذه القناة هو {code}. يجب أن يكون الرفع الجديد أعلى.",
-        "fields": {
-          "apk": "ملف APK",
-          "versionName": "اسم الإصدار",
-          "versionCode": "رمز الإصدار",
-          "channel": "القناة",
-          "minSupported": "أدنى رمز إصدار مدعوم",
-          "minSupportedPlaceholder": "اختياري",
-          "required": "تحديث إلزامي",
-          "releaseNotes": "ملاحظات الإصدار"
-        },
-        "cancel": "إلغاء",
-        "submit": "رفع",
-        "progress": {
-          "hashing": "جاري تجهيز APK…",
-          "uploading": "جاري رفع APK… {percent}%",
-          "registering": "جاري حفظ الإصدار…"
-        },
-        "errors": {
-          "missingApk": "اختر ملف APK",
-          "versionCodeNotHigher": "يجب أن يكون رمز الإصدار أعلى من {code}"
-        }
-      },
-      "adoption": {
-        "title": "اعتماد الإصدارات",
-        "description": "إصدار التطبيق الذي يبلّغ عنه كل سائق نشط حالياً.",
-        "summary": "{total} سائق نشط · رمز الإصدار النشط: {active}",
-        "noneActive": "لا يوجد",
-        "emptyTitle": "لا توجد بيانات اعتماد بعد",
-        "emptyDescription": "يبلّغ السائقون عن إصداراتهم عند التحقق من التحديثات عند تشغيل التطبيق.",
-        "errorTitle": "تعذر تحميل الاعتماد",
-        "unknownVersion": "غير معروف / لم يُبلَّغ",
-        "activeRelease": "الإصدار النشط",
-        "unknownRelease": "بناء غير مدرج",
-        "neverReported": "لم يُبلَّغ",
-        "columns": {
-          "version": "الإصدار",
-          "drivers": "السائقون",
-          "percent": "النسبة",
-          "status": "الحالة"
-        },
-        "drilldown": {
-          "titleUnknown": "سائقون بدون إصدار مُبلَّغ",
-          "titleVersion": "سائقون على {version} ({code})",
-          "description": "{count} سائق",
-          "searchPlaceholder": "بحث عن سائق…",
-          "empty": "لا يوجد سائقون مطابقون.",
-          "pageOf": "صفحة {page} من {total}",
-          "columns": {
-            "driver": "السائق",
-            "partner": "الشريك",
-            "lastSeen": "آخر ظهور"
-          }
-        }
-      },
-      "errors": {
-        "not_authorized": "ليس لديك صلاحية إدارة إصدارات التطبيق",
-        "missing_apk": "اختر ملف APK",
-        "file_too_large": "يجب أن يكون APK 100 ميجابايت أو أقل",
-        "invalid_extension": "يجب أن يكون الملف .apk",
-        "invalid_content_type": "نوع محتوى APK غير صالح",
-        "missing_version_name": "اسم الإصدار مطلوب",
-        "invalid_version_code": "أدخل رمز إصدار صالحاً",
-        "invalid_min_supported_version_code": "أدخل أدنى رمز إصدار مدعوم صالحاً",
-        "version_code_not_higher": "يجب أن يكون رمز الإصدار أعلى من الأحدث في هذه القناة",
-        "version_code_exists": "رمز الإصدار موجود مسبقاً لهذه القناة",
-        "upload_failed": "فشل الرفع",
-        "r2_not_configured": "تخزين Cloudflare R2 غير مُعد",
-        "r2_cors_or_network": "تعذر على المتصفح الوصول إلى Cloudflare R2 — اضغط إعداد التخزين لتطبيق CORS",
-        "r2_upload_rejected": "رفض Cloudflare R2 الرفع",
-        "cors_apply_failed": "تعذر تطبيق سياسة CORS على حاوية R2",
-        "not_found": "الإصدار غير موجود",
-        "cannot_delete_active": "عطّل الإصدار قبل الحذف",
-        "apk_not_found": "ملف APK غير موجود في التخزين"
-      }
-    },
     "driverDetail": {
       "title": "تفاصيل السائق",
       "subtitle": "الملف والسجل التشغيلي",
@@ -1520,6 +1387,9 @@
         "insufficient_stock": "أحد الأصول المحددة أو أكثر غير متوفر في المخزون",
         "expiry_date_required": "تاريخ الانتهاء مطلوب عند تفعيل التتبع",
         "invalid_custom_fields": "تحقق من الحقول المخصصة ثم حاول مرة أخرى",
+        "custom_field_required": "هذا الحقل مطلوب",
+        "custom_field_letters_only": "يُسمح بالحروف والمسافات والشرطة والفاصلة العليا فقط",
+        "custom_field_non_negative": "أدخل صفرًا أو رقمًا موجبًا",
         "save_failed": "تعذر حفظ السائق. حاول مرة أخرى."
       }
     },
@@ -2519,8 +2389,9 @@
       "emptyToday": "لا يوجد سائقون اليوم",
       "emptyHistory": "لا سجلات في هذا النطاق",
       "emptyProblems": "لا مشاكل اليوم",
-      "showingCount": "عرض {visible} من {total}",
-      "paginationSummary": "{from}–{to} من {total}",
+      "showingCount": "عرض {from}–{to} من {total}",
+      "paginationSummary": "عرض {from}–{to} من {total}",
+      "pageOf": "صفحة {page} من {totalPages}",
       "prevPage": "السابق",
       "nextPage": "التالي"
     },
@@ -2562,11 +2433,17 @@
       "modalSubtitle": "التسمية والنوع والتحقق",
       "empty": "لا توجد حقول بعد.",
       "label": "التسمية",
+      "labelPlaceholder": "أدخل التسمية",
       "key": "المفتاح",
+      "keyPlaceholder": "أدخل المفتاح",
       "type": "النوع",
       "defaultValue": "القيمة الافتراضية",
+      "defaultValuePlaceholder": "أدخل القيمة الافتراضية",
       "required": "مطلوب",
+      "lettersOnly": "حروف فقط",
+      "lettersOnlyHint": "يسمح بالحروف والمسافات والشرطة والفاصلة العليا — لحقول الأسماء. اتركه مغلقًا للمعرفات أو الرموز.",
       "options": "الخيارات",
+      "checkboxOptionsHint": "أضف خيارات للاختيار المتعدد في إضافة/تعديل السائق. اتركها فارغة لخانة اختيار نعم/لا واحدة.",
       "optionValue": "القيمة",
       "optionLabel": "التسمية",
       "addOption": "إضافة خيار",
@@ -2574,6 +2451,10 @@
       "activate": "تفعيل",
       "deactivate": "إيقاف",
       "inactive": "غير نشط",
+      "archiveField": "أرشفة الحقل",
+      "archiveConfirmTitle": "أرشفة الحقل المخصص؟",
+      "archiveConfirmDescription": "هل أنت متأكد من أرشفة «{label}»؟ سيُزال من نماذج وقوائم السائقين. تُحفظ القيم الحالية.",
+      "archiveConfirm": "أرشفة",
       "archived": "تم الأرشفة",
       "saved": "تم الحفظ",
       "cancel": "إلغاء",
@@ -3256,11 +3137,13 @@
       "driverSearchHint": "اكتب للبحث عن السائقين",
       "driverSearchEmpty": "لا يوجد سائقون مطابقون",
       "pasteEmployeeIds": "لصق الأرقام",
-      "pasteEmployeeIdsHint": "الصق أرقام الموظفين مفصولة بفواصل أو أسطر.",
+      "pasteEmployeeIdsHint": "الصق أرقام الموظفين أو رموز السائقين مفصولة بفواصل أو أسطر.",
       "pasteEmployeeIdsPlaceholder": "12345, 67890",
       "pasteResolve": "تأكيد السائقين",
       "pasteSuccess": "تمت إضافة {count} سائق",
       "pastePartial": "تمت إضافة {added}؛ تعذر مطابقة {failed}",
+      "pasteNoneMatched": "لم تتم مطابقة أي سائق ({failed} رقم غير موجود). استخدم رقم الموظف أو رمز السائق.",
+      "pasteNoIds": "لم يتم العثور على أرقام صالحة في النص الملصق.",
       "pasteFailed": "تعذر مطابقة أرقام الموظفين",
       "groupSearchPlaceholder": "ابحث في المجموعات",
       "groupSearchEmpty": "لا توجد مجموعات",
@@ -3316,6 +3199,7 @@
       "engagementTapped": "نُقر",
       "engagementFailed": "فشل",
       "engagementNoApp": "لا يوجد تطبيق",
+      "engagementPushSkipped": "تخطي الإشعار",
       "engagementSeenRate": "نسبة المشاهدة",
       "engagementTrackingOff": "تتبع التفاعل معطل لهذه الحملة.",
       "engagementTabAll": "الكل",
@@ -3323,6 +3207,7 @@
       "engagementTabNotSeen": "لم يُشاهد",
       "engagementTabTapped": "نُقر",
       "engagementTabFailed": "فشل / لا تطبيق",
+      "engagementTabPushIssues": "مشاكل الإشعار",
       "engagementColSeen": "شوهد",
       "engagementColTapped": "نُقر",
       "engagementColDelivery": "التسليم",
@@ -3330,6 +3215,8 @@
       "engagementNo": "لا",
       "engagementDelivered": "تم التسليم",
       "engagementNotDelivered": "لم يُسلّم",
+      "engagementInAppOnly": "داخل التطبيق فقط (لا رمز دفع)",
+      "engagementInAppPushSkipped": "داخل التطبيق · تخطي الدفع (لا رمز)",
       "engagementPending": "قيد الانتظار",
       "estimateAudience": "تقدير الجمهور",
       "audienceEstimateHint": "شغّل التقدير لمعاينة حجم الجمهور.",
@@ -3374,6 +3261,8 @@
       "dispatchOutcomes": "نتائج التسليم",
       "dispatchNoToken": "لا يوجد رمز push مسجل على الجهاز",
       "dispatchAllNoToken": "جميع السائقين ({count}) ليس لديهم رمز push. افتح تطبيق السائق، اسمح بالإشعارات، ثم سجّل الدخول مرة أخرى.",
+      "dispatchAllNoTokenInAppOk": "تم تسليم الإشعار داخل التطبيق لجميع السائقين ({count}). تم تخطي إشعار الدفع لعدم وجود رمز جهاز — افتح تطبيق السائق، اسمح بالإشعارات، ثم سجّل الدخول مرة أخرى.",
+      "dispatchSomeNoTokenInAppOk": "تم تسليم الإشعار داخل التطبيق للجمهور. تم تخطي إشعار الدفع لـ {skipped} من {total} سائقين بلا رمز جهاز.",
       "dispatchFailedSummary": "فشل {failed} من {total} عمليات تسليم. راجع التفاصيل أدناه.",
       "colDriver": "السائق",
       "colDispatchStatus": "الحالة",
@@ -3892,15 +3781,6 @@
         "loginVerificationExemptOffHint": "يجب على السائقين إكمال صورة تسجيل الدخول اليومية ما لم يكن سجل السائق الفردي مُستثنى.",
         "loginVerificationExemptEnabled": "تم تخطي صورة تسجيل الدخول لجميع السائقين",
         "loginVerificationExemptDisabled": "صورة تسجيل الدخول مطلوبة مرة أخرى (باستثناء الاستثناءات الفردية)",
-        "sideloadUpdatesTitle": "تحديثات التثبيت الجانبي",
-        "sideloadUpdatesSubtitle": "تحديثات APK داخل التطبيق عبر إصدارات التطبيق. أوقفها أثناء مراجعة Play Store (لا تزيل REQUEST_INSTALL_PACKAGES من حزمة Play Store).",
-        "sideloadUpdatesToggle": "تحديثات التثبيت الجانبي",
-        "sideloadUpdatesStatusOn": "التحديثات مفعّلة",
-        "sideloadUpdatesStatusOff": "وضع المراجعة — التحديثات متوقفة",
-        "sideloadUpdatesOnHint": "يمكن للسائقين التحقق من إصدارات التطبيق وتنزيل ملف APK النشط عند توفر إصدار أحدث.",
-        "sideloadUpdatesOffHint": "تُخفى مطالبات التحديث لجميع السائقين؛ ولا يُرجع active-release رابط تنزيل. يبقى الرفع/التفعيل في إصدارات التطبيق متاحاً. استخدم بناء Play Store منفصلاً بدون REQUEST_INSTALL_PACKAGES للمراجعة.",
-        "sideloadUpdatesEnabled": "تم تفعيل تحديثات التثبيت الجانبي",
-        "sideloadUpdatesDisabled": "تم إيقاف تحديثات التثبيت الجانبي (وضع المراجعة)",
         "maintenanceTitle": "صيانة تطبيق السائق",
         "maintenanceSubtitle": "منفصل عن صيانة لوحة الإدارة في الإعدادات → وضع الصيانة",
         "statusLive": "تطبيق السائق يعمل",

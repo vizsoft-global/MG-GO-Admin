@@ -26,6 +26,7 @@ function mapRow(row: {
   label: string;
   field_type: string;
   required: boolean;
+  letters_only?: boolean | null;
   options: Json;
   default_value: Json;
   sort_order: number;
@@ -43,6 +44,11 @@ function mapRow(row: {
     typeof row.default_value === "boolean"
   ) {
     defaultValue = row.default_value;
+  } else if (
+    Array.isArray(row.default_value) &&
+    row.default_value.every((item) => typeof item === "string")
+  ) {
+    defaultValue = row.default_value as string[];
   }
   return {
     id: row.id,
@@ -51,6 +57,7 @@ function mapRow(row: {
     label: row.label,
     field_type: row.field_type,
     required: row.required,
+    letters_only: row.field_type === "text" && Boolean(row.letters_only),
     options: parseOptions(row.options),
     default_value: defaultValue,
     sort_order: row.sort_order,
@@ -125,6 +132,8 @@ export async function upsertCustomFieldDefinition(
 
   const options: CustomFieldOption[] =
     input.field_type === "select" ? parseOptions(input.options) : [];
+  const lettersOnly =
+    input.field_type === "text" ? Boolean(input.letters_only) : false;
   const supabase = await createClient();
   const now = new Date().toISOString();
 
@@ -135,6 +144,7 @@ export async function upsertCustomFieldDefinition(
         label: input.label.trim(),
         field_type: input.field_type,
         required: Boolean(input.required),
+        letters_only: lettersOnly,
         options: options as unknown as Json,
         default_value: (input.default_value ?? null) as Json,
         sort_order: input.sort_order ?? 0,
@@ -151,7 +161,12 @@ export async function upsertCustomFieldDefinition(
       entityType: "custom_field_definition",
       entityId: data.id,
       routeName: "upsertCustomFieldDefinition",
-      after: { key, label: input.label.trim(), field_type: input.field_type },
+      after: {
+        key,
+        label: input.label.trim(),
+        field_type: input.field_type,
+        letters_only: lettersOnly,
+      },
     });
     return { success: true, id: data.id };
   }
@@ -170,6 +185,7 @@ export async function upsertCustomFieldDefinition(
       label: input.label.trim(),
       field_type: input.field_type,
       required: Boolean(input.required),
+      letters_only: lettersOnly,
       options: options as unknown as Json,
       default_value: (input.default_value ?? null) as Json,
       sort_order: input.sort_order ?? count ?? 0,

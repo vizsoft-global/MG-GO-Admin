@@ -13,7 +13,7 @@ export type CustomFieldOption = {
   label: string;
 };
 
-export type CustomFieldValue = string | number | boolean | null;
+export type CustomFieldValue = string | number | boolean | string[] | null;
 
 export type CustomFieldValues = Record<string, CustomFieldValue>;
 
@@ -24,6 +24,8 @@ export type CustomFieldDefinition = {
   label: string;
   field_type: CustomFieldType;
   required: boolean;
+  /** When true and field_type is text: letters, spaces, hyphen, apostrophe only. */
+  letters_only: boolean;
   options: CustomFieldOption[];
   default_value: CustomFieldValue;
   sort_order: number;
@@ -40,6 +42,7 @@ export type CustomFieldDefinitionInput = {
   label: string;
   field_type: CustomFieldType;
   required: boolean;
+  letters_only?: boolean;
   options?: CustomFieldOption[];
   default_value?: CustomFieldValue;
   sort_order?: number;

@@ -74,6 +74,7 @@ export function nextAttendanceSortKey(
   return pair.asc;
 }
 
+/** Severity rank for "Problems first" only — not for Status A–Z / Z–A. */
 const STATUS_RANK: Record<string, number> = {
   late: 1,
   offline_during_shift: 2,
@@ -86,6 +87,27 @@ const STATUS_RANK: Record<string, number> = {
   scheduled: 9,
   no_shift: 10,
 };
+
+/**
+ * Canonical English labels for Status A–Z / Z–A (matches UI copy in en).
+ * Keeps sort stable across locales and aligned with user-facing names.
+ */
+const STATUS_LABEL_SORT: Record<string, string> = {
+  absent: "Absent",
+  completed: "Completed",
+  gps_stale: "GPS stale",
+  late: "Late",
+  no_shift: "No shift",
+  offline_during_shift: "Offline during shift",
+  on_duty: "On duty",
+  outside_zone: "Outside zone",
+  present: "Present",
+  scheduled: "Scheduled",
+};
+
+function statusSortLabel(liveStatus: string): string {
+  return STATUS_LABEL_SORT[liveStatus] ?? liveStatus;
+}
 
 function ts(value: string | null | undefined): number {
   if (!value) return Number.NaN;
@@ -161,12 +183,18 @@ export function sortAttendanceDailyRows(
         primary = cmpNullableString(a.log_date, b.log_date, "desc");
         break;
       case "status_asc":
-        primary =
-          (STATUS_RANK[a.live_status] ?? 11) - (STATUS_RANK[b.live_status] ?? 11);
+        primary = cmpNullableString(
+          statusSortLabel(a.live_status),
+          statusSortLabel(b.live_status),
+          "asc",
+        );
         break;
       case "status_desc":
-        primary =
-          (STATUS_RANK[b.live_status] ?? 11) - (STATUS_RANK[a.live_status] ?? 11);
+        primary = cmpNullableString(
+          statusSortLabel(a.live_status),
+          statusSortLabel(b.live_status),
+          "desc",
+        );
         break;
       case "check_in_asc":
         primary = cmpNullableNumber(ts(a.check_in_at), ts(b.check_in_at), "asc");

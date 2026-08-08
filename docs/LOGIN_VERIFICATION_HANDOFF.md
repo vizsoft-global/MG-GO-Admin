@@ -1,8 +1,8 @@
 # Handoff: Driver Login Photo Verification (Admin)
 
 **From:** Driver App (`MG-GO` / `dpd_userapp`)  
-**To:** Admin API + Supabase (`MGgo-Admin` / testing + `dpdadmin-prod`)  
-**Date:** 2026-07-30  
+**To:** Admin API + Supabase (`MGgo-Admin` → driver-facing **`dpdadmin-prod`**)  
+**Date:** 2026-07-30 (env notes updated 2026-08-08)  
 **Scope of this handoff:** Backend allowlist + DB audit trail only. **Admin UI to view photos is a later task.**
 
 ---
@@ -34,7 +34,7 @@ After successful passcode login (`driver-passcode-login` → Supabase session), 
 ### File
 
 `src/lib/storage/driver-upload-keys.ts`  
-(apply in **both** testing Admin and prod Admin repos)
+(apply on the admin codebase deployed to **`dpdadmin-prod`**; ops testing deploy is optional and not a driver-app target)
 
 ### Add entity type
 
@@ -60,12 +60,12 @@ Completed uploads should continue to appear in `storage_uploads` (Settings → C
 
 ### Environments
 
-| Env | Admin deploy | R2 bucket | Supabase |
-|-----|--------------|-----------|----------|
-| Testing | `dpdadmin` / `dpdadmin.vercel.app` | `dpd-private` | `ytfmsgckjatiserpgdbz` |
-| Production | `dpdadmin-prod` / `dpdadmin-prod.vercel.app` | `dpd-private-prod` | `eoksxkdssptgyqyywdju` |
+| Role | Admin deploy | R2 bucket | Supabase |
+|------|--------------|-----------|----------|
+| **Driver-facing (required)** | `dpdadmin-prod` / `dpdadmin-prod.vercel.app` | `dpd-private-prod` | `eoksxkdssptgyqyywdju` |
+| Ops testing (optional, not driver target) | `dpdadmin` / `dpdadmin.vercel.app` | `dpd-private` | `ytfmsgckjatiserpgdbz` |
 
-Ship allowlist + migration to **both**.
+Ship allowlist + migration to **production** so the driver app works. Ops may mirror to testing if they still run that admin stack.
 
 ---
 
@@ -110,7 +110,7 @@ Mirror style of `driver_update_avatar`:
 - Return `jsonb` including `liveness_passed` / `liveness_method`
 - `GRANT EXECUTE ... TO authenticated`
 
-Apply Phase-1 migration to **testing and prod** Supabase projects (`20260730120000_login_verification_liveness.sql`).
+Apply Phase-1 migration to **production** Supabase (`eoksxkdssptgyqyywdju` / `20260730120000_login_verification_liveness.sql`). Mirror to ops testing only if that stack is still used.
 
 ---
 
@@ -163,11 +163,9 @@ Auth: Bearer Supabase access token on upload routes (same as avatar / order_proo
 
 ## 6. Acceptance checklist (Admin)
 
-- [ ] `login_verification` accepted by presign/confirm/proxy (testing)
-- [ ] Same allowlist deployed on prod Admin
+- [ ] `login_verification` accepted by presign/confirm/proxy on **prod** Admin
 - [ ] Object lands in correct bucket under `drivers/{id}/login_verification/...`
 - [ ] `storage_uploads` row created for the upload
-- [ ] Migration applied: table + RPC (testing)
 - [ ] Migration applied: table + RPC (prod)
 - [ ] Driver JWT can call RPC; non-driver / anon cannot
 - [ ] Invalid / empty `object_key` rejected

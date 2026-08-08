@@ -1,31 +1,35 @@
 # DPD / Musallam Driver App — Handoff Document
 
 > **Paste this entire file** into a new AI session when building the driver mobile app.  
-> It stays in sync with the admin panel (`dpdadmin/`). Admin URL: https://dpdadmin.vercel.app  
-> Backend (testing): Supabase `ytfmsgckjatiserpgdbz` · Admin https://dpdadmin.vercel.app  
-> Backend (production): separate clean stack — see **§1a** (Pulumi `infra/`, stack `production`)
+> It stays in sync with the admin panel (`MGgo-Admin` / `dpdadmin`).  
+> **Driver-facing stack (required):** Supabase `eoksxkdssptgyqyywdju` · Admin https://dpdadmin-prod.vercel.app · Firebase `musallam-delivery-prod`  
+> See **§1a**. Ops may still run a separate testing admin; it is **not** a driver-app target.
 
 ---
 
-## 1a. Environments (testing vs production)
+## 1a. Environments (driver vs ops)
 
-| | **Testing** (existing data) | **Production** (clean, schema only) |
-|---|---------------------------|-------------------------------------|
-| Supabase ref | `ytfmsgckjatiserpgdbz` | `eoksxkdssptgyqyywdju` (`dpd-production`) |
-| Firebase GCP | `musallam-delivery-kw` | `musallam-delivery-prod` |
-| R2 bucket | `dpd-private` | `dpd-private-prod` |
-| Admin Vercel | `dpdadmin` | `dpdadmin-prod` → https://dpdadmin-prod.vercel.app |
-| Mobile config | `docs/firebase/*` | `docs/firebase-prod/*` |
+### Driver app — production only
+
+| | **Production** (driver-facing) |
+|---|-------------------------------|
+| Supabase ref | `eoksxkdssptgyqyywdju` (`dpd-production`) |
+| Firebase GCP | `musallam-delivery-prod` |
+| R2 bucket | `dpd-private-prod` |
+| Admin Vercel | `dpdadmin-prod` → https://dpdadmin-prod.vercel.app |
+| Mobile config | `docs/firebase-prod/*` + `env/prod.json` on the driver app |
 
 **Production Firebase app IDs** (live):
 
 | Platform | App ID |
 |----------|--------|
-| Android | `1:579224507592:android:ce14086cc2ea677d4981fd` |
+| Android | `1:579224507592:android:eaa8cdda265bc0914981fd` (`com.musallam_delivery.app`) |
 | iOS | `1:579224507592:ios:53130e94d3c1f1364981fd` |
 | Web | `1:579224507592:web:566afbce6fb96ae84981fd` |
 
-Infrastructure code: `dpdadmin/infra/` · Runbook: `infra/README.md`.
+### Ops / testing (not a driver-app target)
+
+A testing admin stack may still exist for internal ops (`ytfmsgckjatiserpgdbz`, `dpdadmin.vercel.app`, `dpd-private`, `musallam-delivery-kw`). Do **not** point the shipped driver app at it. Infrastructure code: `infra/` · Runbook: `infra/README.md`.
 
 ---
 
@@ -160,6 +164,7 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | is_on_duty | boolean | Toggled on Home |
 | current_lat, current_lng | numeric | Updated while online |
 | vehicle_id | uuid | FK → vehicles |
+| custom_fields | jsonb | Admin-defined dynamic fields (`custom_field_definitions`). Values are scalars (`string` / `number` / `boolean`) or, for **checkbox** defs that have `options`, a `string[]` of selected option values. Checkbox with empty options remains a boolean. |
 
 ### `deliveries`
 | Column | Type | Notes |
@@ -499,26 +504,15 @@ Deactivate stale tokens when FCM returns invalid-registration.
 
 ### Firebase client bootstrap
 
-**Testing** — project **Musallam Delivery** (`musallam-delivery-kw`):
-
-| Platform | Package / bundle | Firebase app ID |
-|----------|------------------|-----------------|
-| Android | `kw.musallam.delivery` | `1:942102607123:android:2b709642cb7ab7a48096e6` |
-| iOS | `kw.musallam.delivery` | `1:942102607123:ios:442ef4381a6480f48096e6` |
-
-**Production** — project `musallam-delivery-prod` (or stack output `firebaseProjectId`): new app IDs from Pulumi/GCP; use `docs/firebase-prod/` after `firebase apps:sdkconfig`. Point runtime config at **production admin URL** (`https://dpdadmin-prod.vercel.app/api/driver-app/firebase-config?platform=...`) for prod builds.
-
-**Option A — native config files:** copy from admin repo `docs/firebase/` (testing) or `docs/firebase-prod/` (production).
-
-**Option B — runtime fetch from admin:**
+**Driver app uses production only** — project `musallam-delivery-prod`. Native config: `docs/firebase-prod/` (or driver `android/app/src/main/google-services.json`). Runtime fetch:
 
 ```
-GET https://dpdadmin.vercel.app/api/driver-app/firebase-config?platform=android   # testing
-GET https://dpdadmin-prod.vercel.app/api/driver-app/firebase-config?platform=android  # production
+GET https://dpdadmin-prod.vercel.app/api/driver-app/firebase-config?platform=android
 ```
 
 Response includes `config.projectId`, `config.appId`, `config.apiKey`, `config.messagingSenderId`, plus `serverConfigured` (admin FCM credentials present).
 
+(Ops testing Firebase under `docs/firebase/` / `musallam-delivery-kw` is not a driver-app target.)
 ### Deep links
 
 | action_type | Behavior |
@@ -664,17 +658,17 @@ select driver_app_title,
 - `driver_app_delivery_proximity_meters` (default 500): max meters outside zone boundary or from assigned restaurant to allow Add Delivery. `0` disables the gate. Loaded via `driver_get_delivery_proximity_context()` when opening Add Delivery (includes zone geometry + assigned restaurants).
 - `driver_app_sideload_updates_enabled` is **deprecated and forced `false`** — sideload OTA was removed.
 
-### 9a. Distribution: Google Play only, single channel (required)
+### 9a. Distribution: Google Play only (required)
 
-In-app APK install / sideload OTA is **removed**. There is **one** release channel: `production`.
+In-app APK install / sideload OTA is **removed**. There are **no Android product flavors** and **no in-app update channels**. Updates ship only via Google Play.
 
 **Driver app must:**
 
-1. Ship **only** through Google Play (single `env` flavor dimension: `dev` / `prod`).
+1. Ship **only** through Google Play (single production app / AAB — no `dev`/`prod` flavor split).
 2. **Never** declare `REQUEST_INSTALL_PACKAGES`, and never bundle an APK installer / FileProvider install path.
-3. Not show in-app update dialogs or download APKs. Admin no longer serves them.
+3. Not show in-app update dialogs or download APKs. Admin no longer serves them (`/app-releases` is a tombstone; admin APIs return `sideload_removed`).
 4. **Hard-block the app when Android Developer options are enabled** (check at launch and on resume; show a non-dismissible screen with an exit action).
-5. Optional adoption ping only: `GET /api/driver-app/active-release?platform=android&versionCode=…&versionName=…` with the driver Bearer token. It records the installed version and **always returns `null`** — no `apk_url`, no channel parameter (any `channel` sent by older builds is ignored and stored as `production`).
+5. Optional adoption ping only: `GET https://dpdadmin-prod.vercel.app/api/driver-app/active-release?platform=android&versionCode=…&versionName=…` with the driver Bearer token. It records the installed version and **always returns `null`** — no `apk_url`. Any legacy `channel` query param is ignored; the DB stores the adoption label `production` for history only (not a product update channel).
 
 ---
 
@@ -695,6 +689,8 @@ Bottom nav (driver app): **Home · Deliveries · Earnings · Vehicle · Profile*
 
 ### Delivery
 `driver submits (pending)` → `admin verifies (verified)` or `rejects (rejected + reason)` → app shows badge
+
+**Active Delivery footer (system nav).** On `/deliveries/active`, bottom actions (**Mark as Delivered**, **Cancel Order**) must sit above the phone system navigation / gesture inset. Prefer `padding: EdgeInsets.only(bottom: 16 + MediaQuery.viewPaddingOf(context).bottom)` (or `SafeArea` with `maintainBottomViewPadding: true`). Do not rely on `MediaQuery.padding.bottom` alone — on Android edge-to-edge it is often `0` while the system bar still overlaps the buttons. Keep tap targets ≥ 48dp.
 
 **Stale pickup auto-cancel.** `driver_create_pickup` raises `active_pickup_exists` while the driver has an
 `in_transit` row, so a pickup that never completes blocks every later order. A cron
@@ -792,15 +788,15 @@ Every completed upload is recorded in `storage_uploads` and shown on **Settings 
 
 ## 15. Supabase connection
 
-All driver builds use the **DPD production** Supabase project (`ytfmsgckjatiserpgdbz`). The former test project `dpd-test` was removed.
+All driver builds use the **DPD production** Supabase project (`eoksxkdssptgyqyywdju`) and admin `https://dpdadmin-prod.vercel.app`. Prefer driver `env/prod.json` / dart-defines:
 
 ```env
-EXPO_PUBLIC_SUPABASE_URL=https://ytfmsgckjatiserpgdbz.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon key from DPD project API settings>
+SUPABASE_URL=https://eoksxkdssptgyqyywdju.supabase.co
+SUPABASE_ANON_KEY=<anon key from production project API settings>
+ADMIN_API_BASE_URL=https://dpdadmin-prod.vercel.app
 ```
 
 Never ship `SUPABASE_SERVICE_ROLE_KEY` in the mobile app.
-
 ---
 
 ## 16. Restaurant delivery geofences (admin-managed)
@@ -887,7 +883,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-04 — [admin+app] Sideload / in-app APK OTA removed entirely (Google Play only, single `production` channel); Developer options hard-block in the driver app; `/api/driver-app/active-release` always returns `null`; admin App Releases decommissioned. Migrations `20260823100000_disable_driver_app_sideload.sql`, `20260823110000_single_release_channel.sql`.*
+*Last synced: 2026-08-08 — [admin+app] Driver app collapsed to single production stack (no Android flavors / no OTA / no update channels); driver targets `dpdadmin-prod` + Supabase `eoksxkdssptgyqyywdju` + Firebase `musallam-delivery-prod` only; Play Store distribution; `/api/driver-app/active-release` always returns `null`; admin App Releases remain tombstoned. Migrations `20260823100000_disable_driver_app_sideload.sql`, `20260823110000_single_release_channel.sql`.*
 
 *Prior: 2026-07-29 — [admin+app] Ops audit: security events RPC, delivery idempotency, device-guard overload cleanup, published restaurant gate, period incentive accrual fix.*
 

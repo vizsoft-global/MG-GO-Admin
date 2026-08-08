@@ -833,6 +833,7 @@ export type Database = {
           is_active: boolean
           key: string
           label: string
+          letters_only: boolean
           options: Json
           required: boolean
           sort_order: number
@@ -848,6 +849,7 @@ export type Database = {
           is_active?: boolean
           key: string
           label: string
+          letters_only?: boolean
           options?: Json
           required?: boolean
           sort_order?: number
@@ -863,6 +865,7 @@ export type Database = {
           is_active?: boolean
           key?: string
           label?: string
+          letters_only?: boolean
           options?: Json
           required?: boolean
           sort_order?: number

@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_BUILD_ID: buildId,
   },
+  // Notification media allows 2 MB images; multipart FormData needs headroom
+  // above the default 1 MB Server Action body limit.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "4mb",
+    },
+  },
 };
 
 export default withSentryConfig(withNextIntl(nextConfig), {

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useNotificationDriverSearch } from "./use-notifications";
+import { parsePastedDriverLookupIds } from "@/features/drivers/parse-pasted-driver-ids";
 import { resolveNotificationDriversByEmployeeIds } from "./notifications-actions";
 
 export type NotificationDriverOption = {
@@ -55,11 +56,11 @@ export function NotificationDriverPicker({
   };
 
   const handlePaste = () => {
-    const ids = pasteText
-      .split(/[\n,;\s]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (ids.length === 0) return;
+    const ids = parsePastedDriverLookupIds(pasteText);
+    if (ids.length === 0) {
+      toast.warning(t("pasteNoIds"));
+      return;
+    }
     startTransition(async () => {
       try {
         const resolved = await resolveNotificationDriversByEmployeeIds(ids);
@@ -78,7 +79,9 @@ export function NotificationDriverPicker({
         }
         onChange(nextIds, merged);
         const failed = resolved.length - ok.length;
-        if (failed > 0) {
+        if (ok.length === 0) {
+          toast.warning(t("pasteNoneMatched", { failed }));
+        } else if (failed > 0) {
           toast.warning(t("pastePartial", { added: ok.length, failed }));
         } else {
           toast.success(t("pasteSuccess", { count: ok.length }));
@@ -138,6 +141,7 @@ export function NotificationDriverPicker({
                     <Checkbox
                       checked={selectedIds.includes(driver.id)}
                       onCheckedChange={(checked) => toggle(driver, checked === true)}
+                      className="border-muted-foreground/70 shadow-sm dark:border-muted-foreground"
                     />
                     <span className="min-w-0 flex-1 truncate">
                       {driver.full_name}
