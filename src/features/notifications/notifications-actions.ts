@@ -881,15 +881,22 @@ async function executeNotificationDispatch(
       .in("id", deadTokenIds);
   }
 
-  const sentCount = batchResult.successCount;
-  const failedCount = recipientIds.length - sentCount;
+  const pushSentCount = batchResult.successCount;
+  const pushHardFailedCount = batchResult.failureCount;
+  const pushSkippedNoToken = recipientIds.length - messages.length;
+  // Inbox rows are created for every recipient before FCM. Missing tokens skip
+  // push only — that is not a wholesale campaign failure.
+  const campaignFailed =
+    pushSentCount === 0 && pushSkippedNoToken === 0 && recipientIds.length > 0;
+  const runStatus = campaignFailed ? "failed" : "sent";
+  const campaignStatus = campaignFailed ? "failed" : "sent";
 
   await service
     .from("notification_dispatch_runs")
     .update({
-      status: failedCount === recipientIds.length ? "failed" : "sent",
-      sent_count: sentCount,
-      failed_count: failedCount,
+      status: runStatus,
+      sent_count: pushSentCount,
+      failed_count: pushHardFailedCount,
       finished_at: new Date().toISOString(),
     })
     .eq("id", run.id);
@@ -897,11 +904,11 @@ async function executeNotificationDispatch(
   await service
     .from("notification_campaigns")
     .update({
-      status: failedCount === recipientIds.length ? "failed" : "sent",
+      status: campaignStatus,
       sent_at: new Date().toISOString(),
       recipient_count: recipientIds.length,
-      failed_count: failedCount,
-      delivered_count: sentCount,
+      failed_count: pushHardFailedCount,
+      delivered_count: pushSentCount,
       updated_by: actorUserId,
     })
     .eq("id", campaignId);
@@ -912,10 +919,19 @@ async function executeNotificationDispatch(
       entityType: "notification_campaign",
       entityId: campaignId,
       routeName: "notifications",
-      context: { sentCount, failedCount },
+      context: {
+        pushSentCount,
+        pushHardFailedCount,
+        pushSkippedNoToken,
+        inboxDelivered: recipientIds.length,
+      },
     });
   }
-  return { ok: true, sent: sentCount, failed: failedCount };
+  return {
+    ok: true,
+    sent: pushSentCount,
+    failed: pushHardFailedCount + pushSkippedNoToken,
+  };
 }
 
 export async function cloneNotificationCampaign(

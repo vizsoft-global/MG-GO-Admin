@@ -18,13 +18,25 @@ import {
 import { cn } from "@/lib/utils";
 import { exportNotificationDispatchItemsCsv } from "./notifications-actions";
 import type { NotificationDispatchItemRow } from "./notifications-actions";
+import { isHardPushFailure, isPushSkippedNoToken } from "./dispatch-outcome";
 
 type EngagementTab = "all" | "seen" | "not_seen" | "tapped" | "failed";
 
 function friendlyDeliveryStatus(item: NotificationDispatchItemRow, t: ReturnType<typeof useTranslations>) {
-  if (item.error_code === "no_token") return t("engagementNoApp");
-  if (item.status === "failed" || item.status === "skipped") return t("engagementNotDelivered");
-  if (item.status === "sent" || item.status === "delivered") return t("engagementDelivered");
+  if (isPushSkippedNoToken(item)) {
+    return item.engagement_seen || item.status === "opened" || item.status === "clicked"
+      ? t("engagementInAppOnly")
+      : t("engagementInAppPushSkipped");
+  }
+  if (isHardPushFailure(item) || item.status === "skipped") return t("engagementNotDelivered");
+  if (
+    item.status === "sent" ||
+    item.status === "delivered" ||
+    item.status === "opened" ||
+    item.status === "clicked"
+  ) {
+    return t("engagementDelivered");
+  }
   return t("engagementPending");
 }
 
@@ -42,12 +54,19 @@ export function NotificationEngagementReport({
   const [pending, startTransition] = useTransition();
 
   const stats = useMemo(() => {
-    const sent = items.filter((i) => i.status !== "skipped" && i.error_code !== "no_token").length;
+    const sent = items.filter(
+      (i) =>
+        !isPushSkippedNoToken(i) &&
+        (i.status === "sent" ||
+          i.status === "delivered" ||
+          i.status === "opened" ||
+          i.status === "clicked"),
+    ).length;
     const seen = items.filter((i) => i.engagement_seen).length;
     const tapped = items.filter((i) => i.engagement_tapped).length;
-    const failed = items.filter((i) => i.status === "failed" || i.error_code === "no_token").length;
-    const noApp = items.filter((i) => i.error_code === "no_token").length;
-    return { sent, seen, tapped, failed, noApp, total: items.length };
+    const failed = items.filter((i) => isHardPushFailure(i)).length;
+    const pushSkipped = items.filter((i) => isPushSkippedNoToken(i)).length;
+    return { sent, seen, tapped, failed, noApp: pushSkipped, total: items.length };
   }, [items]);
 
   const filtered = useMemo(() => {
@@ -55,13 +74,11 @@ export function NotificationEngagementReport({
       case "seen":
         return items.filter((i) => i.engagement_seen);
       case "not_seen":
-        return items.filter(
-          (i) => !i.engagement_seen && i.status !== "failed" && i.error_code !== "no_token",
-        );
+        return items.filter((i) => !i.engagement_seen && !isHardPushFailure(i));
       case "tapped":
         return items.filter((i) => i.engagement_tapped);
       case "failed":
-        return items.filter((i) => i.status === "failed" || i.error_code === "no_token");
+        return items.filter((i) => isHardPushFailure(i) || isPushSkippedNoToken(i));
       default:
         return items;
     }
@@ -103,7 +120,7 @@ export function NotificationEngagementReport({
           { label: t("engagementSeen"), value: stats.seen },
           { label: t("engagementTapped"), value: stats.tapped },
           { label: t("engagementFailed"), value: stats.failed },
-          { label: t("engagementNoApp"), value: stats.noApp },
+          { label: t("engagementPushSkipped"), value: stats.noApp },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-lg border border-border bg-muted/20 px-3 py-2">
             <p className="text-[10px] text-muted-foreground">{kpi.label}</p>
@@ -131,7 +148,7 @@ export function NotificationEngagementReport({
             ["seen", t("engagementTabSeen")],
             ["not_seen", t("engagementTabNotSeen")],
             ["tapped", t("engagementTabTapped")],
-            ["failed", t("engagementTabFailed")],
+            ["failed", t("engagementTabPushIssues")],
           ] as const
         ).map(([id, label]) => (
           <button
