@@ -97,36 +97,6 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     label: "Export notification reports",
     category: "notifications",
   },
-  {
-    slug: "notifications.approve",
-    label: "Approve notifications",
-    category: "notifications",
-  },
-  {
-    slug: "notifications.send",
-    label: "Send notifications",
-    category: "notifications",
-  },
-  {
-    slug: "notifications.export",
-    label: "Export notifications",
-    category: "notifications",
-  },
-  {
-    slug: "notifications.approve",
-    label: "Approve notifications",
-    category: "notifications",
-  },
-  {
-    slug: "notifications.send",
-    label: "Send notifications",
-    category: "notifications",
-  },
-  {
-    slug: "notifications.export",
-    label: "Export notification reports",
-    category: "notifications",
-  },
   { slug: "support.view", label: "View support", category: "support" },
   { slug: "support.manage", label: "Manage support", category: "support" },
   { slug: "settings.view", label: "View settings", category: "settings" },
@@ -146,11 +116,7 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     label: "Permanent data cleanup (super admin)",
     category: "admin",
   },
-  {
-    slug: "releases.manage",
-    label: "Manage Android app releases",
-    category: "admin",
-  },
+  // releases.manage removed — App Releases / sideload OTA decommissioned (Play Store only).
 ] as const;
 
 export const CATALOG_SLUGS = PERMISSION_CATALOG.map((e) => e.slug);

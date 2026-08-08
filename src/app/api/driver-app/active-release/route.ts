@@ -8,7 +8,8 @@ import { APP_RELEASE_CHANNEL } from "@/lib/app-version/channel";
 /**
  * Driver app version adoption ping only.
  * In-app APK / sideload OTA was removed for Play Store policy — never returns apk_url.
- * Single channel: any `channel` query param from older builds is ignored.
+ * Any legacy `channel` query param is ignored; adoption is stored under
+ * APP_RELEASE_CHANNEL ("production") as a DB label only — not a product update channel.
  */
 function readBearerToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization");
