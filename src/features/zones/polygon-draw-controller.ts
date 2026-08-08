@@ -112,8 +112,6 @@ export function createPolygonDrawController(
       const handle = new google.maps.Marker({
         position: vertex,
         map,
-        clickable: true,
-        cursor: "pointer",
         title: index === 0 && vertices.length >= 3 ? "Click to finish polygon" : undefined,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
