@@ -10,6 +10,7 @@ import type {
   RequestAttachment,
   RequestClarification,
   RequestDecisionTerms,
+  RequestDepartmentOption,
   RequestDetail,
   RequestKpis,
   RequestListFilters,
@@ -70,6 +71,9 @@ export async function fetchRequestTypeCounts(): Promise<{
 export async function fetchAdminRequestsList(filters: RequestListFilters): Promise<{
   rows: RequestListRow[];
   kpi: RequestKpis;
+  filteredTotal: number;
+  statusCounts: Record<string, number>;
+  departmentOptions: RequestDepartmentOption[];
   error?: string;
 }> {
   await requireRequestsView();
@@ -84,23 +88,46 @@ export async function fetchAdminRequestsList(filters: RequestListFilters): Promi
     p_search: filters.search?.trim() || undefined,
     p_limit: filters.limit ?? 50,
     p_offset: filters.offset ?? 0,
+    p_department_key: filters.departmentKey || undefined,
+    p_zone_id: filters.zoneId || undefined,
   });
 
   if (error) {
     return {
       rows: [],
       kpi: emptyKpi(),
+      filteredTotal: 0,
+      statusCounts: {},
+      departmentOptions: [],
       error: error.message,
     };
   }
 
   const payload = asRecord(data);
   if (payload.ok === false) {
-    return { rows: [], kpi: emptyKpi(), error: String(payload.error ?? "failed") };
+    return {
+      rows: [],
+      kpi: emptyKpi(),
+      filteredTotal: 0,
+      statusCounts: {},
+      departmentOptions: [],
+      error: String(payload.error ?? "failed"),
+    };
   }
 
   const kpiRaw = asRecord(payload.kpi);
   const rowsRaw = Array.isArray(payload.rows) ? payload.rows : [];
+  const statusCountsRaw = asRecord(payload.status_counts);
+  const statusCounts: Record<string, number> = {};
+  for (const [key, value] of Object.entries(statusCountsRaw)) {
+    statusCounts[key] = Number(value ?? 0);
+  }
+  const departmentOptions: RequestDepartmentOption[] = (
+    Array.isArray(payload.department_options) ? payload.department_options : []
+  ).map((option) => {
+    const o = asRecord(option);
+    return { key: String(o.key ?? ""), label: String(o.label ?? o.key ?? "") };
+  });
 
   await logAdminRead("requests", "requests.list", {
     preset: filters.datePreset,
@@ -129,6 +156,9 @@ export async function fetchAdminRequestsList(filters: RequestListFilters): Promi
         created_at: String(r.created_at ?? ""),
         severity: r.severity != null ? String(r.severity) : null,
         awaiting_driver_ack: Boolean(r.awaiting_driver_ack),
+        department_key: r.department_key != null ? String(r.department_key) : null,
+        department_label:
+          r.department_label != null ? String(r.department_label) : null,
       };
     }),
     kpi: {
@@ -149,6 +179,9 @@ export async function fetchAdminRequestsList(filters: RequestListFilters): Promi
           ? Number(kpiRaw.prev_avg_resolution_seconds)
           : null,
     },
+    filteredTotal: Number(payload.filtered_total ?? rowsRaw.length),
+    statusCounts,
+    departmentOptions,
   };
 }
 

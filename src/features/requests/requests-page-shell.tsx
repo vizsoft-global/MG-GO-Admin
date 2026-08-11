@@ -2,7 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowDown, ArrowUp, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Building2,
+  Clock,
+  Download,
+  ExternalLink,
+  Loader2,
+  MapPin,
+  RefreshCw,
+  Timer,
+  TriangleAlert,
+} from "lucide-react";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   AppDataTable,
@@ -11,6 +23,8 @@ import {
 } from "@/components/app/app-data-table";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
+import { TabBar } from "@/components/dashboard/tab-bar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,10 +34,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitives";
+import { useZonesList } from "@/features/zones/use-zones";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { requestStatusLabelKey, requestStatusVariant } from "./request-status-utils";
-import type { RequestDatePreset } from "./types";
+import type { RequestDatePreset, RequestListRow } from "./types";
 import { useAdminRequestsList } from "./use-requests";
 
 function formatAvgDays(seconds: number | null): string {
@@ -82,6 +98,58 @@ const TYPE_FILTERS = [
   "salary_justification",
 ] as const;
 
+const STATUS_FILTERS = [
+  "all",
+  "submitted",
+  "pending",
+  "in_review",
+  "needs_clarification",
+  "approved",
+  "rejected",
+  "solved",
+  "overdue",
+] as const;
+
+/** Only the rows currently on screen are exported, matching what the admin can see. */
+function exportRowsToCsv(rows: RequestListRow[], fileName: string) {
+  const header = [
+    "Request code",
+    "Rider",
+    "Rider code",
+    "Zone",
+    "Type",
+    "Department",
+    "Status",
+    "Current step",
+    "Submitted",
+  ];
+  const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const body = rows.map((row) =>
+    [
+      row.request_code,
+      row.driver_name,
+      row.driver_code,
+      row.driver_zone ?? "",
+      row.request_type,
+      row.department_label ?? "",
+      row.status,
+      row.current_step_label ?? "",
+      row.created_at,
+    ]
+      .map((cell) => escape(String(cell ?? "")))
+      .join(","),
+  );
+  const blob = new Blob([[header.map(escape).join(","), ...body].join("\r\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function RequestsPageShell({
   initialType = "all",
 }: {
@@ -96,36 +164,48 @@ export function RequestsPageShell({
       : "all",
   );
   const [status, setStatus] = useState<string>("all");
+  const [departmentKey, setDepartmentKey] = useState<string>("all");
+  const [zoneId, setZoneId] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
-
-  const STATUS_FILTERS = [
-    "all",
-    "submitted",
-    "pending",
-    "in_review",
-    "needs_clarification",
-    "approved",
-    "rejected",
-    "solved",
-    "overdue",
-  ] as const;
 
   const filters = useMemo(
     () => ({
       datePreset,
       type: type === "all" ? null : type,
       status: status === "all" ? null : status,
+      departmentKey: departmentKey === "all" ? null : departmentKey,
+      zoneId: zoneId === "all" ? null : zoneId,
       search: searchApplied,
       limit: 50,
       offset: 0,
     }),
-    [datePreset, type, status, searchApplied],
+    [datePreset, type, status, departmentKey, zoneId, searchApplied],
   );
 
   const { data, isLoading, isFetching, refetch } = useAdminRequestsList(filters);
+  const { data: zones } = useZonesList();
   const rows = data?.rows ?? [];
   const kpi = data?.kpi;
+  const statusCounts = data?.statusCounts ?? {};
+  const filteredTotal = data?.filteredTotal ?? rows.length;
+  const departmentOptions = data?.departmentOptions ?? [];
+
+  const statusTabs = useMemo(
+    () =>
+      STATUS_FILTERS.map((key) => {
+        const label =
+          key === "all"
+            ? t("statusFilter.all")
+            : t(`status.${key}` as "status.pending");
+        const count =
+          key === "all"
+            ? Object.values(statusCounts).reduce((sum, n) => sum + n, 0)
+            : (statusCounts[key] ?? 0);
+        return { id: key, label: `${label} ${count}` };
+      }),
+    [statusCounts, t],
+  );
 
   return (
     <AppPage>
@@ -166,6 +246,19 @@ export function RequestsPageShell({
               variant="outline"
               size="sm"
               className="h-9"
+              disabled={rows.length === 0}
+              onClick={() =>
+                exportRowsToCsv(rows, `requests-${datePreset}-${Date.now()}.csv`)
+              }
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {t("export")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
               disabled={isFetching}
               onClick={() => void refetch()}
             >
@@ -183,17 +276,20 @@ export function RequestsPageShell({
           {
             label: t("kpi.total"),
             value: kpi ? kpi.total : "—",
+            icon: Building2,
             caption: kpi ? trendCaption(kpi.total, kpi.prev_total, false, t) : null,
           },
           {
             label: t("kpi.pending"),
             value: kpi ? kpi.pending : "—",
             accent: "warning",
+            icon: Clock,
             caption: kpi ? trendCaption(kpi.pending, kpi.prev_pending, true, t) : null,
           },
           {
             label: t("kpi.avgResolution"),
             value: formatAvgDays(kpi?.avg_resolution_seconds ?? null),
+            icon: Timer,
             caption:
               kpi?.avg_resolution_seconds != null && kpi.prev_avg_resolution_seconds != null
                 ? trendCaption(
@@ -208,6 +304,7 @@ export function RequestsPageShell({
             label: t("kpi.overdue"),
             value: kpi ? kpi.overdue : "—",
             accent: "danger",
+            icon: TriangleAlert,
             caption: kpi ? trendCaption(kpi.overdue, kpi.prev_overdue, true, t) : null,
           },
         ]}
@@ -264,35 +361,53 @@ export function RequestsPageShell({
           </Select>
 
           <Select
-            items={STATUS_FILTERS.map((key) => ({
-              value: key,
-              label:
-                key === "all"
-                  ? t("statusFilter.all")
-                  : t(`status.${key}` as "status.pending"),
-            }))}
-            value={status}
+            items={[
+              { value: "all", label: t("filters.departmentAll") },
+              ...departmentOptions.map((option) => ({
+                value: option.key,
+                label: option.label,
+              })),
+            ]}
+            value={departmentKey}
             onValueChange={(v) => {
-              if (v) setStatus(v);
+              if (v) setDepartmentKey(v);
             }}
           >
-            <SelectTrigger className="h-9 w-[180px]">
-              <SelectValue placeholder={t("filters.status")} />
+            <SelectTrigger className="h-9 w-[190px]">
+              <SelectValue placeholder={t("filters.department")} />
             </SelectTrigger>
             <SelectContent>
-              {STATUS_FILTERS.map((key) => (
-                <SelectItem
-                  key={key}
-                  value={key}
-                  label={
-                    key === "all"
-                      ? t("statusFilter.all")
-                      : t(`status.${key}` as "status.pending")
-                  }
-                >
-                  {key === "all"
-                    ? t("statusFilter.all")
-                    : t(`status.${key}` as "status.pending")}
+              <SelectItem value="all" label={t("filters.departmentAll")}>
+                {t("filters.departmentAll")}
+              </SelectItem>
+              {departmentOptions.map((option) => (
+                <SelectItem key={option.key} value={option.key} label={option.label}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            items={[
+              { value: "all", label: t("filters.zoneAll") },
+              ...(zones ?? []).map((zone) => ({ value: zone.id, label: zone.name })),
+            ]}
+            value={zoneId}
+            onValueChange={(v) => {
+              if (v) setZoneId(v);
+            }}
+          >
+            <SelectTrigger className="h-9 w-[170px]">
+              <SelectValue placeholder={t("filters.zone")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" label={t("filters.zoneAll")}>
+                {t("filters.zoneAll")}
+              </SelectItem>
+              {(zones ?? []).map((zone) => (
+                <SelectItem key={zone.id} value={zone.id} label={zone.name}>
+                  {zone.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -318,6 +433,21 @@ export function RequestsPageShell({
           </Button>
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-2">
+          <TabBar
+            items={statusTabs}
+            activeId={status}
+            className="gap-4 border-b-0"
+            onSelect={setStatus}
+          />
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {t("resultCount", {
+              shown: `${rows.length}`,
+              total: `${filteredTotal}`,
+            })}
+          </p>
+        </div>
+
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -330,8 +460,9 @@ export function RequestsPageShell({
               { id: "code", label: t("colCode") },
               { id: "driver", label: t("colDriver") },
               { id: "type", label: t("colType") },
-              { id: "step", label: t("colStep") },
+              { id: "department", label: t("colDepartment") },
               { id: "status", label: t("colStatus") },
+              { id: "step", label: t("colStep") },
               { id: "date", label: t("colDate") },
               { id: "actions", label: t("colActions") },
             ]}
@@ -357,27 +488,55 @@ export function RequestsPageShell({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{row.driver_name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {row.driver_zone
-                        ? t("zoneLabel", { zone: row.driver_zone })
-                        : row.driver_code}
-                    </p>
-                    <Link
-                      href={`/requests/${row.id}`}
-                      className="text-[10px] text-primary hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {t("viewDetails")}
-                    </Link>
+                  <div className="flex items-center gap-2">
+                    <Avatar className="h-7 w-7 shrink-0 border border-border">
+                      <AvatarFallback
+                        className={cn(
+                          "bg-transparent text-[10px] font-semibold",
+                          avatarTintFromName(row.driver_name),
+                        )}
+                      >
+                        {row.driver_name
+                          .split(" ")
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((part) => part[0]?.toUpperCase() ?? "")
+                          .join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{row.driver_name}</p>
+                      <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        {row.driver_zone ? (
+                          <>
+                            <MapPin className="h-3 w-3" />
+                            {row.driver_zone}
+                          </>
+                        ) : (
+                          row.driver_code
+                        )}
+                      </p>
+                      <Link
+                        href={`/requests/${row.id}`}
+                        className="text-[10px] text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {t("viewDetails")}
+                      </Link>
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-sm">
                   {t(`types.${row.request_type}` as "types.leave")}
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {row.current_step_label ?? "—"}
+                <TableCell>
+                  {row.department_label ? (
+                    <span className="inline-flex items-center rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      {row.department_label}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <StatusPill
@@ -391,6 +550,9 @@ export function RequestsPageShell({
                       })}` as "status.pending",
                     )}
                   </StatusPill>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {row.current_step_label ?? "—"}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground tabular-nums">
                   {row.created_at

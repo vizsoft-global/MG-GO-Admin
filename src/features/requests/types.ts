@@ -16,6 +16,13 @@ export type RequestListFilters = {
   search?: string;
   limit?: number;
   offset?: number;
+  departmentKey?: string | null;
+  zoneId?: string | null;
+};
+
+export type RequestDepartmentOption = {
+  key: string;
+  label: string;
 };
 
 export type RequestListRow = {
@@ -35,6 +42,9 @@ export type RequestListRow = {
   created_at: string;
   severity: string | null;
   awaiting_driver_ack: boolean;
+  /** Derived from the current approval step's role, not a column on `requests`. */
+  department_key: string | null;
+  department_label: string | null;
 };
 
 export type RequestKpis = {
