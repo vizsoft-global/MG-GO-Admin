@@ -232,7 +232,7 @@ Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settin
 
 Related tables: `request_approval_steps`, `request_clarifications`, `request_attachments`.  
 Config (may be empty until client confirms): `loan_tenure_options`, `complaint_categories`.  
-**Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests`, `driver_get_request`, `driver_submit_clarification`.  
+**Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests` (includes `payload`), `driver_get_request`, `driver_submit_clarification`, `driver_acknowledge_request` (clears `payload.awaiting_driver_ack`, sets `driver_ack_at`, raises Admin `needs_attention`). Final admin approve on `loan` / `asset` / `sick_leave` sets `payload.awaiting_driver_ack=true`.  
 Loan submit requires rows in `loan_tenure_options` (empty until client confirms). Complaint submit requires `complaint_categories` rows (empty until client confirms).
 
 **Flutter routes (MG-GO):** Profile → Help & Support → `/profile/support` hub; forms `/profile/support/requests/new?type=…`; list/detail; **Action required** `/profile/support/action-required` (status `needs_clarification`); visit book `/profile/support/visits/book`; my visits `/profile/support/visits`. Feature folder `lib/features/support/`. Attachments upload to Supabase bucket `request-attachments` under `{driver_id}/…`.

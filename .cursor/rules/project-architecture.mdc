@@ -227,6 +227,7 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-11` — Plan(6) implementation pass: Admin RCM/Visit hubs (`/requests`, `/visit-bookings`) + overview/all list routes; §10 full date presets; accent attention badge; Flutter Sent/Recieved tabs, visit Continue gate, gated loan/complaint submit, Figma declaration texts + uploads; RPC `driver_acknowledge_request` + final-approve `awaiting_driver_ack`; list payload for Received tab. Migrations `20260826100600`–`007`. §11 QA documented in `docs/RCM_VISIT_FIGMA_QA.md` (not 100% Visual PASS). Loan tenure + complaint categories remain gated empty.
 - `[admin+app] 2026-08-11` — E-Sign + Appointments: `esign_categories`/`esign_requests` (SIG-####), screenshot default, storage `esign-documents`; Admin `/requests/esign/*` + screenshot/assets/bulk/reports; Flutter Sign inbox/capture + Appointments (APT-####). Migration `20260826100500_esign_appointments.sql`. QA matrix `docs/RCM_VISIT_FIGMA_QA.md`.
 - `[admin+app] 2026-08-11` — RCM/Visit remaining: Admin settings (workflows/categories/staff access) + Visit calendar/reception/slots/catalog/reports; driver transactional inbox via `notify_driver_transactional` on decide/visit status; Flutter Action Required + deep links. Migration `20260826100400_rcm_visit_driver_notify.sql`.
 - `[admin+app] 2026-08-11` — Flutter Help & Support RCM + Visit Booking: hub, typed request forms (gated loan/complaint), my requests + clarify, visit wizard + my visits; weekday slot seed. Routes under `/profile/support/*`.

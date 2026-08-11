@@ -1,6 +1,6 @@
 import { setRequestLocale } from "next-intl/server";
 import { requirePermission } from "@/lib/auth/require-permission";
-import { VisitsPageShell } from "@/features/visits/visits-page-shell";
+import { VisitsHubShell } from "@/features/visits/visits-hub-shell";
 
 export default async function VisitBookingsPage({
   params,
@@ -10,5 +10,5 @@ export default async function VisitBookingsPage({
   const { locale } = await params;
   setRequestLocale(locale);
   await requirePermission(locale, "visits.view");
-  return <VisitsPageShell />;
+  return <VisitsHubShell />;
 }

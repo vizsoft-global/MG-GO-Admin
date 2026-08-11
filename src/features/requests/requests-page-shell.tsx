@@ -57,9 +57,13 @@ function kpiValue(current: number | string, previous: number | null): string {
 
 const DATE_PRESETS: RequestDatePreset[] = [
   "today",
+  "tomorrow",
   "this_week",
+  "last_week",
   "this_month",
   "last_month",
+  "this_year",
+  "last_year",
   "all",
 ];
 
@@ -75,11 +79,19 @@ const TYPE_FILTERS = [
   "salary_justification",
 ] as const;
 
-export function RequestsPageShell() {
+export function RequestsPageShell({
+  initialType = "all",
+}: {
+  initialType?: string;
+}) {
   const t = useTranslations("pages.requests");
   const router = useRouter();
   const [datePreset, setDatePreset] = useState<RequestDatePreset>("this_month");
-  const [type, setType] = useState<string>("all");
+  const [type, setType] = useState<string>(
+    TYPE_FILTERS.includes(initialType as (typeof TYPE_FILTERS)[number])
+      ? initialType
+      : "all",
+  );
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
 
@@ -101,10 +113,19 @@ export function RequestsPageShell() {
   return (
     <AppPage>
       <AppPageHeader
-        title={t("title")}
+        title={t("overviewTitle")}
         description={t("subtitle")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              render={<Link href="/requests" />}
+            >
+              {t("hubLink")}
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -256,7 +277,7 @@ export function RequestsPageShell() {
                 key={row.id}
                 className={cn(
                   "cursor-pointer",
-                  row.needs_attention && "bg-amber-50/80 dark:bg-amber-950/20",
+                  row.needs_attention && "bg-primary/10",
                 )}
                 onClick={() => router.push(`/requests/${row.id}`)}
               >
@@ -264,7 +285,7 @@ export function RequestsPageShell() {
                   <div className="flex items-center gap-1.5">
                     {row.needs_attention ? (
                       <span
-                        className="inline-block h-2 w-2 rounded-full bg-amber-500"
+                        className="inline-block h-2 w-2 rounded-full bg-primary"
                         title={t("attentionBadge")}
                       />
                     ) : null}

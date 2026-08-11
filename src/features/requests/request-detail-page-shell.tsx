@@ -70,7 +70,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     return (
       <AppPage>
         <AppPageHeader title={t("detail.notFound")} />
-        <Button variant="outline" className="h-9" render={<Link href="/requests" />}>
+        <Button variant="outline" className="h-9" render={<Link href="/requests/overview" />}>
           <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
           {t("detail.back")}
         </Button>
@@ -88,7 +88,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             <StatusPill variant={statusVariant(request.status)}>
               {t(`status.${request.status}` as "status.pending")}
             </StatusPill>
-            <Button variant="outline" size="sm" className="h-9" render={<Link href="/requests" />}>
+            <Button variant="outline" size="sm" className="h-9" render={<Link href="/requests/overview" />}>
               <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
               {t("detail.back")}
             </Button>
@@ -132,12 +132,20 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 <dd className="mt-1 whitespace-pre-wrap">{request.details}</dd>
               </div>
             ) : null}
-            <div>
-              <dt className="text-muted-foreground">{t("detail.payload")}</dt>
-              <dd className="mt-1 max-h-40 overflow-auto rounded-lg bg-muted/40 p-2 text-[11px] font-mono">
-                {JSON.stringify(request.payload, null, 2)}
-              </dd>
-            </div>
+            {Object.entries(request.payload ?? {}).map(([key, value]) => (
+              <div key={key} className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">{key}</dt>
+                <dd className="max-w-[60%] break-words text-end tabular-nums">
+                  {Array.isArray(value)
+                    ? value.join(", ")
+                    : value == null
+                      ? "—"
+                      : typeof value === "object"
+                        ? JSON.stringify(value)
+                        : String(value)}
+                </dd>
+              </div>
+            ))}
           </dl>
         </section>
 

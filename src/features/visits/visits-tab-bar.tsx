@@ -22,7 +22,7 @@ type VisitTabRoute = {
 };
 
 const TAB_ROUTES: VisitTabRoute[] = [
-  { id: "list", href: "/visit-bookings", icon: List },
+  { id: "list", href: "/visit-bookings/all", icon: List },
   { id: "calendar", href: "/visit-bookings/calendar", icon: CalendarDays },
   { id: "reception", href: "/visit-bookings/reception", icon: DoorOpen, perm: "visits.operate" },
   { id: "reports", href: "/visit-bookings/reports", icon: PieChart },
@@ -43,6 +43,7 @@ function activeTabFromPath(pathname: string): string {
   if (pathname.includes("/visit-bookings/slots")) return "slots";
   if (pathname.includes("/visit-bookings/departments")) return "departments";
   if (pathname.includes("/visit-bookings/branches")) return "branches";
+  if (pathname.includes("/visit-bookings/all")) return "list";
   if (pathname.match(/\/visit-bookings\/[^/]+$/)) return "list";
   return "list";
 }
