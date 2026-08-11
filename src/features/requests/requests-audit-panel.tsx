@@ -195,14 +195,17 @@ export function RequestsAuditPanel() {
             { id: "target", label: t("colTarget") },
             { id: "details", label: t("colDetails") },
           ]}
+          empty={
+            loading ? (
+              <AppDataTableEmpty>
+                <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+              </AppDataTableEmpty>
+            ) : filteredRows.length === 0 ? (
+              <AppDataTableEmpty>{t("empty")}</AppDataTableEmpty>
+            ) : undefined
+          }
         >
-          {loading ? (
-            <AppDataTableEmpty>
-              <Loader2 className="mx-auto h-4 w-4 animate-spin" />
-            </AppDataTableEmpty>
-          ) : filteredRows.length === 0 ? (
-            <AppDataTableEmpty>{t("empty")}</AppDataTableEmpty>
-          ) : (
+          {loading || filteredRows.length === 0 ? null : (
             filteredRows.map((row) => (
               <AppDataTableRow key={row.id}>
                 <TableCell className="text-xs whitespace-nowrap">

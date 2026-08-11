@@ -66,7 +66,6 @@ type TimelineStep = {
 
 type TimelineLabels = {
   booked: string;
-  confirmed: string;
   checkedIn: string;
   completed: string;
   cancelled: string;
@@ -81,18 +80,12 @@ function buildTimeline(
   labels: TimelineLabels,
   stamp: (iso: string) => string,
 ): TimelineStep[] {
-  // Bookings are inserted already confirmed by driver_book_visit, so "Booked" and
-  // "Confirmed · slot held" share the same timestamp — there is no separate event.
+  // driver_book_visit inserts the row already confirmed, so booking and
+  // confirmation are one event and share one step.
   const steps: TimelineStep[] = [
     {
       key: "booked",
       label: labels.booked,
-      sub: stamp(visit.created_at),
-      state: "done",
-    },
-    {
-      key: "confirmed",
-      label: labels.confirmed,
       sub: stamp(visit.created_at),
       state: "done",
     },
@@ -234,7 +227,6 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
         visit,
         {
           booked: t("detail.stepBooked"),
-          confirmed: t("detail.stepConfirmed"),
           checkedIn: t("detail.stepCheckedIn"),
           completed: t("detail.stepCompleted"),
           cancelled: t("detail.stepCancelled"),

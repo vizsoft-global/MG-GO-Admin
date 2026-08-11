@@ -393,10 +393,13 @@ export function RequestsReportsPanel() {
                   { id: "rate", label: t("colApprovalRate") },
                   { id: "avg", label: t("colAvgStepTime") },
                 ]}
+                empty={
+                  departmentRows.length === 0 ? (
+                    <AppDataTableEmpty>{t("departmentEmpty")}</AppDataTableEmpty>
+                  ) : undefined
+                }
               >
-                {departmentRows.length === 0 ? (
-                  <AppDataTableEmpty>{t("departmentEmpty")}</AppDataTableEmpty>
-                ) : (
+                {departmentRows.length === 0 ? null : (
                   departmentRows.map((row) => {
                     const decided = row.approved + row.rejected;
                     return (
@@ -430,10 +433,13 @@ export function RequestsReportsPanel() {
                   { id: "count", label: t("colCount") },
                   { id: "share", label: t("colShare") },
                 ]}
+                empty={
+                  rows.length === 0 ? (
+                    <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty>
+                  ) : undefined
+                }
               >
-                {rows.length === 0 ? (
-                  <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty>
-                ) : (
+                {rows.length === 0 ? null : (
                   REQUEST_TYPES.map((type) => {
                     const count = byType[type] ?? 0;
                     const share = rows.length > 0 ? Math.round((count / rows.length) * 100) : 0;
@@ -457,10 +463,13 @@ export function RequestsReportsPanel() {
                   { id: "count", label: t("colCount") },
                   { id: "share", label: t("colShare") },
                 ]}
+                empty={
+                  rows.length === 0 ? (
+                    <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty>
+                  ) : undefined
+                }
               >
-                {rows.length === 0 ? (
-                  <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty>
-                ) : (
+                {rows.length === 0 ? null : (
                   REQUEST_STATUSES.map((status) => {
                     const count = byStatus[status] ?? 0;
                     const share = rows.length > 0 ? Math.round((count / rows.length) * 100) : 0;
