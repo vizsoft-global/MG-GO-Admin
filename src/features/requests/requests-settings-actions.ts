@@ -7,6 +7,9 @@ import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import type {
   AccessLevel,
   ComplaintCategoryRow,
+  DepartmentMemberRow,
+  DepartmentRoleTitle,
+  DepartmentRow,
   RequestTypeScreenshotPolicyRow,
   RequestTypeSlug,
   StaffAccessRow,
@@ -397,6 +400,200 @@ export async function fetchStaffAccessMatrix(): Promise<{
     fetchStaffProfileOptions(),
   ]);
   return { staffOptions: staff, rows: accessResult.rows, error: accessResult.error };
+}
+
+export async function fetchDepartments(): Promise<{
+  rows: DepartmentRow[];
+  error?: string;
+}> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { data, error } = await (supabase as any)
+    .from("request_departments")
+    .select("id, key, label_en, label_ar, is_active, sort_order, request_department_members(count)")
+    .order("sort_order")
+    .order("label_en");
+
+  if (error) return { rows: [], error: error.message };
+
+  await logAdminRead("requests", "requests.settings.departments.list", {});
+
+  return {
+    rows: (data ?? []).map((row: Record<string, unknown>) => ({
+      id: String(row.id),
+      key: String(row.key),
+      label_en: String(row.label_en),
+      label_ar: row.label_ar != null ? String(row.label_ar) : null,
+      is_active: Boolean(row.is_active),
+      sort_order: Number(row.sort_order ?? 0),
+      member_count: Number(
+        (row.request_department_members as { count: number }[] | undefined)?.[0]?.count ?? 0,
+      ),
+    })),
+  };
+}
+
+export async function upsertDepartment(input: {
+  id?: string;
+  key: string;
+  label_en: string;
+  label_ar?: string | null;
+}): Promise<{ ok: boolean; error?: string; id?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const key = input.key.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+  const label_en = input.label_en.trim();
+  if (!key || !label_en) return { ok: false, error: "missing_fields" };
+
+  const row = {
+    key,
+    label_en,
+    label_ar: input.label_ar?.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (input.id) {
+    const { error } = await (supabase as any)
+      .from("request_departments")
+      .update(row)
+      .eq("id", input.id);
+    if (error) return { ok: false, error: error.message };
+    await logAdminMutation({
+      action: "update",
+      entityType: "request_departments",
+      entityId: input.id,
+      routeName: "requests.settings.departments.update",
+    });
+    return { ok: true, id: input.id };
+  }
+
+  const { data, error } = await (supabase as any)
+    .from("request_departments")
+    .insert(row)
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "create",
+    entityType: "request_departments",
+    entityId: data.id,
+    routeName: "requests.settings.departments.create",
+  });
+  return { ok: true, id: data.id };
+}
+
+export async function deleteDepartment(id: string): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { error } = await (supabase as any).from("request_departments").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "delete",
+    entityType: "request_departments",
+    entityId: id,
+    routeName: "requests.settings.departments.delete",
+  });
+  return { ok: true };
+}
+
+export async function fetchDepartmentMembers(departmentId: string): Promise<{
+  rows: DepartmentMemberRow[];
+  error?: string;
+}> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { data, error } = await (supabase as any)
+    .from("request_department_members")
+    .select("id, department_id, profile_id, role_title, is_active, profiles(full_name, email)")
+    .eq("department_id", departmentId)
+    .order("created_at");
+
+  if (error) return { rows: [], error: error.message };
+
+  return {
+    rows: (data ?? []).map((row: Record<string, unknown>) => {
+      const profile = asRecord(row.profiles);
+      return {
+        id: String(row.id),
+        department_id: String(row.department_id),
+        profile_id: String(row.profile_id),
+        profile_name: String(profile.full_name ?? "—"),
+        profile_email: profile.email != null ? String(profile.email) : null,
+        role_title: row.role_title as DepartmentRoleTitle,
+        is_active: Boolean(row.is_active),
+      };
+    }),
+  };
+}
+
+export async function addDepartmentMember(input: {
+  department_id: string;
+  profile_id: string;
+  role_title: DepartmentRoleTitle;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { error } = await (supabase as any).from("request_department_members").upsert(
+    {
+      department_id: input.department_id,
+      profile_id: input.profile_id,
+      role_title: input.role_title,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "department_id,profile_id" },
+  );
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "create",
+    entityType: "request_department_members",
+    entityId: input.profile_id,
+    routeName: "requests.settings.departments.addMember",
+    context: { department_id: input.department_id },
+  });
+  return { ok: true };
+}
+
+export async function updateDepartmentMemberStatus(
+  id: string,
+  is_active: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { error } = await (supabase as any)
+    .from("request_department_members")
+    .update({ is_active, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "request_department_members",
+    entityId: id,
+    routeName: "requests.settings.departments.toggleMember",
+    context: { is_active },
+  });
+  return { ok: true };
+}
+
+export async function removeDepartmentMember(id: string): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { error } = await (supabase as any)
+    .from("request_department_members")
+    .delete()
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "delete",
+    entityType: "request_department_members",
+    entityId: id,
+    routeName: "requests.settings.departments.removeMember",
+  });
+  return { ok: true };
 }
 
 export async function saveStaffAccessGrants(

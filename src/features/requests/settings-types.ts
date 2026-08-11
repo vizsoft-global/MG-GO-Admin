@@ -71,3 +71,25 @@ export type StaffAccessMatrixRow = {
   profile_email: string | null;
   access: Partial<Record<RequestTypeSlug, AccessLevel>>;
 };
+
+export type DepartmentRow = {
+  id: string;
+  key: string;
+  label_en: string;
+  label_ar: string | null;
+  is_active: boolean;
+  sort_order: number;
+  member_count: number;
+};
+
+export type DepartmentRoleTitle = "agent" | "manager";
+
+export type DepartmentMemberRow = {
+  id: string;
+  department_id: string;
+  profile_id: string;
+  profile_name: string;
+  profile_email: string | null;
+  role_title: DepartmentRoleTitle;
+  is_active: boolean;
+};
