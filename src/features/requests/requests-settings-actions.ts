@@ -11,6 +11,7 @@ import type {
   DepartmentMemberRow,
   DepartmentRoleTitle,
   DepartmentRow,
+  RequestDepartmentReportRow,
   RequestTypeScreenshotPolicyRow,
   RequestTypeSlug,
   SettingsHubCounts,
@@ -460,6 +461,42 @@ export async function fetchAppointmentStatusCounts(): Promise<AppointmentStatusC
     else if (row.status === "rejected") counts.rejected += 1;
   }
   return counts;
+}
+
+/** Department breakdown on the Reports page (Figma 09-Reports), derived from approval steps. */
+export async function fetchRequestDepartmentReport(bounds: {
+  from: string | null;
+  to: string | null;
+}): Promise<{ rows: RequestDepartmentReportRow[]; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  // The RPC ships in 20260828140000 and is not in the generated Database type yet.
+  const client = supabase as unknown as {
+    rpc(
+      fn: "admin_request_department_report",
+      args: { p_date_from: string | null; p_date_to: string | null },
+    ): Promise<{ data: unknown; error: { message: string } | null }>;
+  };
+  const { data, error } = await client.rpc("admin_request_department_report", {
+    p_date_from: bounds.from,
+    p_date_to: bounds.to,
+  });
+
+  if (error) return { rows: [], error: error.message };
+  const result = asRecord(data);
+  if (result.ok === false) return { rows: [], error: String(result.error ?? "failed") };
+
+  const rows = Array.isArray(result.rows) ? (result.rows as Record<string, unknown>[]) : [];
+  return {
+    rows: rows.map((row) => ({
+      department_key: String(row.department_key),
+      department_label: String(row.department_label),
+      requests: Number(row.requests ?? 0),
+      approved: Number(row.approved ?? 0),
+      rejected: Number(row.rejected ?? 0),
+      avg_step_seconds: row.avg_step_seconds == null ? null : Number(row.avg_step_seconds),
+    })),
+  };
 }
 
 /** profile_id → department label for the Roles table DEPARTMENT column. */

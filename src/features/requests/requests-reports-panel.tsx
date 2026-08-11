@@ -23,10 +23,18 @@ import {
 import { buildCsv, downloadCsv } from "@/features/driver-tracking/csv-export";
 import { useEsignStatusCounts } from "@/features/esign/use-esign";
 import { queryKeys } from "@/lib/query/query-keys";
+import { selectOptions } from "@/lib/select-items";
 import { fetchAdminRequestsList } from "./requests-actions";
-import { fetchAppointmentStatusCounts } from "./requests-settings-actions";
+import {
+  fetchAppointmentStatusCounts,
+  fetchRequestDepartmentReport,
+} from "./requests-settings-actions";
 import { datePresetToBounds } from "./date-presets";
 import type { RequestDatePreset } from "./types";
+
+const GROUP_BY_OPTIONS = ["department", "type", "status"] as const;
+
+type GroupBy = (typeof GROUP_BY_OPTIONS)[number];
 
 const REQUEST_TYPES = [
   "leave",
@@ -93,8 +101,21 @@ export function RequestsReportsPanel() {
   const tTypes = useTranslations("pages.requests.types");
   const tStatus = useTranslations("pages.requests.status");
   const [datePreset, setDatePreset] = useState<RequestDatePreset>("this_month");
+  const [groupBy, setGroupBy] = useState<GroupBy>("department");
 
   const { from, to } = useMemo(() => datePresetToBounds(datePreset), [datePreset]);
+
+  // Base UI Select shows the raw value in the trigger unless `items` supplies the label.
+  const groupByItems = useMemo(
+    () =>
+      selectOptions(
+        GROUP_BY_OPTIONS.map((option) => ({
+          value: option,
+          label: t("groupByValue", { value: t(`groupByOptions.${option}`) }),
+        })),
+      ),
+    [t],
+  );
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.requests.list({ reports: true, from, to }),
@@ -108,6 +129,16 @@ export function RequestsReportsPanel() {
     queryKey: ["requests", "reports", "appointment-status-counts"],
     queryFn: fetchAppointmentStatusCounts,
   });
+  const { data: departmentReport } = useQuery({
+    queryKey: ["requests", "reports", "departments", from, to],
+    queryFn: () => fetchRequestDepartmentReport({ from, to }),
+  });
+
+  const departmentRows = useMemo(() => departmentReport?.rows ?? [], [departmentReport?.rows]);
+  const maxStepSeconds = useMemo(
+    () => departmentRows.reduce((max, row) => Math.max(max, row.avg_step_seconds ?? 0), 0),
+    [departmentRows],
+  );
 
   const byType = useMemo(() => {
     const map = Object.fromEntries(REQUEST_TYPES.map((k) => [k, 0])) as Record<string, number>;
@@ -152,11 +183,20 @@ export function RequestsReportsPanel() {
 
   function exportCsv() {
     const csv = buildCsv(
-      ["request_code", "type", "status", "driver_name", "driver_code", "created_at"],
+      [
+        "request_code",
+        "type",
+        "status",
+        "department",
+        "driver_name",
+        "driver_code",
+        "created_at",
+      ],
       rows.map((r) => [
         r.request_code,
         r.request_type,
         r.status,
+        r.department_label ?? "",
         r.driver_name ?? "",
         r.driver_code ?? "",
         r.created_at,
@@ -184,6 +224,22 @@ export function RequestsReportsPanel() {
                 {DATE_PRESETS.map((preset) => (
                   <SelectItem key={preset} value={preset}>
                     {tRoot(`datePresets.${preset}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={groupBy}
+              onValueChange={(v) => v && setGroupBy(v as GroupBy)}
+              items={groupByItems}
+            >
+              <SelectTrigger className="h-9 w-[190px]" aria-label={t("groupBy")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {GROUP_BY_OPTIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {t(`groupByOptions.${option}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -250,39 +306,123 @@ export function RequestsReportsPanel() {
             ]}
           />
 
-          <AppListCard className="space-y-3 p-4">
-            <div>
-              <h3 className="text-sm font-semibold">{t("volumeTitle")}</h3>
-              <p className="text-[11px] text-muted-foreground">{t("volumeSubtitle")}</p>
-            </div>
-            {maxVolume === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">{t("emptyTitle")}</p>
-            ) : (
-              <div className="flex h-40 items-end gap-1.5">
-                {volume.map((bucket) => (
-                  <div
-                    key={bucket.label}
-                    className="flex h-full flex-1 flex-col items-center justify-end gap-1"
-                    title={t("volumeTooltip", { week: bucket.label, count: bucket.count })}
-                  >
-                    <span className="text-[10px] tabular-nums text-muted-foreground">
-                      {bucket.count > 0 ? bucket.count : ""}
-                    </span>
-                    <div
-                      className="w-full rounded-t-sm bg-primary/25"
-                      style={{
-                        height: `${Math.max(2, Math.round((bucket.count / maxVolume) * 80))}%`,
-                      }}
-                    />
-                    <span className="text-[10px] text-muted-foreground">{bucket.label}</span>
-                  </div>
-                ))}
+          <div className="grid gap-2 lg:grid-cols-3 lg:items-stretch">
+            <AppListCard className="h-full space-y-3 p-4 lg:col-span-2">
+              <div>
+                <h3 className="text-sm font-semibold">{t("volumeTitle")}</h3>
+                <p className="text-[11px] text-muted-foreground">{t("volumeSubtitle")}</p>
               </div>
-            )}
-          </AppListCard>
+              {maxVolume === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">{t("emptyTitle")}</p>
+              ) : (
+                <div className="flex h-40 items-end gap-1.5">
+                  {volume.map((bucket) => (
+                    <div
+                      key={bucket.label}
+                      className="flex h-full flex-1 flex-col items-center justify-end gap-1"
+                      title={t("volumeTooltip", { week: bucket.label, count: bucket.count })}
+                    >
+                      <span className="text-[10px] tabular-nums text-muted-foreground">
+                        {bucket.count > 0 ? bucket.count : ""}
+                      </span>
+                      <div
+                        className="w-full rounded-t-sm bg-primary/25"
+                        style={{
+                          height: `${Math.max(2, Math.round((bucket.count / maxVolume) * 80))}%`,
+                        }}
+                      />
+                      <span className="text-[10px] text-muted-foreground">{bucket.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </AppListCard>
 
-          <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
-            <AppListCard className="h-full p-0">
+            <AppListCard className="h-full space-y-2 p-4">
+              <div>
+                <h3 className="text-sm font-semibold">{t("stepTimeTitle")}</h3>
+                <p className="text-[11px] text-muted-foreground">{t("stepTimeSubtitle")}</p>
+              </div>
+              {maxStepSeconds === 0 ? (
+                <p className="py-6 text-center text-[11px] text-muted-foreground">
+                  {t("stepTimeEmpty")}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {departmentRows
+                    .filter((row) => row.avg_step_seconds != null)
+                    .map((row) => (
+                      <div key={row.department_key} className="space-y-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="truncate text-xs">{row.department_label}</span>
+                          <span className="shrink-0 text-xs font-medium tabular-nums">
+                            {formatDays(row.avg_step_seconds)}
+                            {t("days")}
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-muted">
+                          <div
+                            className="h-1.5 rounded-full bg-primary"
+                            style={{
+                              width: `${Math.max(
+                                4,
+                                Math.round(((row.avg_step_seconds ?? 0) / maxStepSeconds) * 100),
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </AppListCard>
+          </div>
+
+          {groupBy === "department" ? (
+            <AppListCard className="p-0">
+              <div className="border-b border-border p-3">
+                <h3 className="text-sm font-semibold">{t("byDepartment")}</h3>
+                <p className="text-[11px] text-muted-foreground">{t("byDepartmentSubtitle")}</p>
+              </div>
+              <AppDataTable
+                columns={[
+                  { id: "department", label: t("colDepartment") },
+                  { id: "requests", label: t("colRequests") },
+                  { id: "approved", label: t("colApproved") },
+                  { id: "rejected", label: t("colRejected") },
+                  { id: "rate", label: t("colApprovalRate") },
+                  { id: "avg", label: t("colAvgStepTime") },
+                ]}
+              >
+                {departmentRows.length === 0 ? (
+                  <AppDataTableEmpty>{t("departmentEmpty")}</AppDataTableEmpty>
+                ) : (
+                  departmentRows.map((row) => {
+                    const decided = row.approved + row.rejected;
+                    return (
+                      <AppDataTableRow key={row.department_key}>
+                        <TableCell className="text-sm">{row.department_label}</TableCell>
+                        <TableCell className="tabular-nums">{row.requests}</TableCell>
+                        <TableCell className="tabular-nums">{row.approved}</TableCell>
+                        <TableCell className="tabular-nums">{row.rejected}</TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
+                          {decided === 0
+                            ? "—"
+                            : `${Math.round((row.approved / decided) * 100)}%`}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
+                          {row.avg_step_seconds == null
+                            ? "—"
+                            : `${formatDays(row.avg_step_seconds)}${t("days")}`}
+                        </TableCell>
+                      </AppDataTableRow>
+                    );
+                  })
+                )}
+              </AppDataTable>
+            </AppListCard>
+          ) : groupBy === "type" ? (
+            <AppListCard className="p-0">
               <h3 className="border-b border-border p-3 text-sm font-semibold">{t("byType")}</h3>
               <AppDataTable
                 columns={[
@@ -308,8 +448,8 @@ export function RequestsReportsPanel() {
                 )}
               </AppDataTable>
             </AppListCard>
-
-            <AppListCard className="h-full p-0">
+          ) : (
+            <AppListCard className="p-0">
               <h3 className="border-b border-border p-3 text-sm font-semibold">{t("byStatus")}</h3>
               <AppDataTable
                 columns={[
@@ -335,7 +475,7 @@ export function RequestsReportsPanel() {
                 )}
               </AppDataTable>
             </AppListCard>
-          </div>
+          )}
 
           <div className="space-y-2">
             <h3 className="text-sm font-semibold">{t("signaturesSection")}</h3>

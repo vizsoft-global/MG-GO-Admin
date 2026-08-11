@@ -105,6 +105,20 @@ export type AppointmentStatusCounts = {
   rejected: number;
 };
 
+/**
+ * Department breakdown on the Reports page (Figma 09-Reports). Department is the approval step's
+ * `role_key`; `avg_step_seconds` is the time a request waited on that department's own step, not
+ * whole-request resolution time.
+ */
+export type RequestDepartmentReportRow = {
+  department_key: string;
+  department_label: string;
+  requests: number;
+  approved: number;
+  rejected: number;
+  avg_step_seconds: number | null;
+};
+
 export type DepartmentMemberRow = {
   id: string;
   department_id: string;

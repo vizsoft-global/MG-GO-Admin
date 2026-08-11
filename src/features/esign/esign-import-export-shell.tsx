@@ -50,6 +50,7 @@ type ColumnId =
   | "driver_name"
   | "driver_zone"
   | "request_type"
+  | "department_label"
   | "status"
   | "current_step_label"
   | "created_at";
@@ -59,13 +60,14 @@ const COLUMNS: { id: ColumnId; key: string }[] = [
   { id: "driver_name", key: "riderName" },
   { id: "driver_zone", key: "riderZone" },
   { id: "request_type", key: "type" },
+  { id: "department_label", key: "department" },
   { id: "status", key: "status" },
   { id: "current_step_label", key: "currentStep" },
   { id: "created_at", key: "createdDate" },
 ];
 
-/** Figma lists these columns; none has schema backing on `requests` yet. */
-const UNAVAILABLE_COLUMNS = ["department", "remarks", "internalNotes"] as const;
+/** Figma lists these columns; neither has schema backing on `requests` yet. */
+const UNAVAILABLE_COLUMNS = ["remarks", "internalNotes"] as const;
 
 const TOTAL_COLUMNS = COLUMNS.length + UNAVAILABLE_COLUMNS.length;
 
