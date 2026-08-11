@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -684,6 +684,7 @@ export type Database = {
       }
       asset_catalog: {
         Row: {
+          category: string | null
           code: string
           created_at: string
           description: string | null
@@ -692,11 +693,13 @@ export type Database = {
           image_url: string | null
           is_active: boolean
           name: string
+          penalty_kwd: number | null
           reorder_level: number
           total_quantity: number
           updated_at: string
         }
         Insert: {
+          category?: string | null
           code: string
           created_at?: string
           description?: string | null
@@ -705,11 +708,13 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean
           name: string
+          penalty_kwd?: number | null
           reorder_level?: number
           total_quantity?: number
           updated_at?: string
         }
         Update: {
+          category?: string | null
           code?: string
           created_at?: string
           description?: string | null
@@ -718,6 +723,7 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean
           name?: string
+          penalty_kwd?: number | null
           reorder_level?: number
           total_quantity?: number
           updated_at?: string
@@ -2733,6 +2739,9 @@ export type Database = {
           sent_by: string | null
           signature_storage_key: string | null
           signed_at: string | null
+          signed_document_error: string | null
+          signed_document_generated_at: string | null
+          signed_document_storage_key: string | null
           signer_display_name: string | null
           signer_meta: Json
           status: Database["public"]["Enums"]["esign_request_status"]
@@ -2751,6 +2760,9 @@ export type Database = {
           sent_by?: string | null
           signature_storage_key?: string | null
           signed_at?: string | null
+          signed_document_error?: string | null
+          signed_document_generated_at?: string | null
+          signed_document_storage_key?: string | null
           signer_display_name?: string | null
           signer_meta?: Json
           status?: Database["public"]["Enums"]["esign_request_status"]
@@ -2769,6 +2781,9 @@ export type Database = {
           sent_by?: string | null
           signature_storage_key?: string | null
           signed_at?: string | null
+          signed_document_error?: string | null
+          signed_document_generated_at?: string | null
+          signed_document_storage_key?: string | null
           signer_display_name?: string | null
           signer_meta?: Json
           status?: Database["public"]["Enums"]["esign_request_status"]
@@ -4515,6 +4530,84 @@ export type Database = {
           },
         ]
       }
+      request_department_members: {
+        Row: {
+          created_at: string
+          department_id: string
+          id: string
+          is_active: boolean
+          profile_id: string
+          role_title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          id?: string
+          is_active?: boolean
+          profile_id: string
+          role_title?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          id?: string
+          is_active?: boolean
+          profile_id?: string
+          role_title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_department_members_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "request_departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_department_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_departments: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          key: string
+          label_ar: string | null
+          label_en: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key: string
+          label_ar?: string | null
+          label_en: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key?: string
+          label_ar?: string | null
+          label_en?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       request_staff_access: {
         Row: {
           access_level: Database["public"]["Enums"]["request_access_level"]
@@ -5126,6 +5219,87 @@ export type Database = {
           },
         ]
       }
+      visit_blocked_dates: {
+        Row: {
+          blocked_date: string
+          branch_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          blocked_date: string
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          blocked_date?: string
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_blocked_dates_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "visit_branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_blocked_dates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_booking_notes: {
+        Row: {
+          author_id: string | null
+          body: string
+          booking_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          booking_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          booking_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_booking_notes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_booking_notes_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "visit_bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       visit_bookings: {
         Row: {
           booking_code: string
@@ -5138,6 +5312,7 @@ export type Database = {
           driver_id: string
           id: string
           note: string | null
+          note_to_rider: string | null
           rescheduled_from_id: string | null
           scheduled_date: string
           slot_id: string
@@ -5155,6 +5330,7 @@ export type Database = {
           driver_id: string
           id?: string
           note?: string | null
+          note_to_rider?: string | null
           rescheduled_from_id?: string | null
           scheduled_date: string
           slot_id: string
@@ -5172,6 +5348,7 @@ export type Database = {
           driver_id?: string
           id?: string
           note?: string | null
+          note_to_rider?: string | null
           rescheduled_from_id?: string | null
           scheduled_date?: string
           slot_id?: string
@@ -5219,56 +5396,77 @@ export type Database = {
       visit_branches: {
         Row: {
           address: string | null
+          booking_window_days: number
           city: string | null
           closing_time: string | null
           contact_phone: string | null
           created_at: string
+          default_slot_capacity: number
           desks_count: number
           id: string
           is_active: boolean
           is_default: boolean
           key: string
+          lunch_end: string | null
+          lunch_start: string | null
           name: string
           opening_time: string | null
+          slot_buffer_minutes: number
+          slot_length_minutes: number
           sort_order: number
           updated_at: string
           working_days: string | null
+          working_dows: number[]
           working_hours: string | null
         }
         Insert: {
           address?: string | null
+          booking_window_days?: number
           city?: string | null
           closing_time?: string | null
           contact_phone?: string | null
           created_at?: string
+          default_slot_capacity?: number
           desks_count?: number
           id?: string
           is_active?: boolean
           is_default?: boolean
           key: string
+          lunch_end?: string | null
+          lunch_start?: string | null
           name: string
           opening_time?: string | null
+          slot_buffer_minutes?: number
+          slot_length_minutes?: number
           sort_order?: number
           updated_at?: string
           working_days?: string | null
+          working_dows?: number[]
           working_hours?: string | null
         }
         Update: {
           address?: string | null
+          booking_window_days?: number
           city?: string | null
           closing_time?: string | null
           contact_phone?: string | null
           created_at?: string
+          default_slot_capacity?: number
           desks_count?: number
           id?: string
           is_active?: boolean
           is_default?: boolean
           key?: string
+          lunch_end?: string | null
+          lunch_start?: string | null
           name?: string
           opening_time?: string | null
+          slot_buffer_minutes?: number
+          slot_length_minutes?: number
           sort_order?: number
           updated_at?: string
           working_days?: string | null
+          working_dows?: number[]
           working_hours?: string | null
         }
         Relationships: []
@@ -5279,6 +5477,7 @@ export type Database = {
           avg_handling_minutes: number | null
           created_at: string
           desk_location: string | null
+          desks_count: number
           id: string
           is_active: boolean
           key: string
@@ -5292,6 +5491,7 @@ export type Database = {
           avg_handling_minutes?: number | null
           created_at?: string
           desk_location?: string | null
+          desks_count?: number
           id?: string
           is_active?: boolean
           key: string
@@ -5305,6 +5505,7 @@ export type Database = {
           avg_handling_minutes?: number | null
           created_at?: string
           desk_location?: string | null
+          desks_count?: number
           id?: string
           is_active?: boolean
           key?: string
@@ -5981,11 +6182,13 @@ export type Database = {
         Args: {
           p_date_from?: string
           p_date_to?: string
+          p_department_key?: string
           p_limit?: number
           p_offset?: number
           p_search?: string
           p_status?: string
           p_type?: string
+          p_zone_id?: string
         }
         Returns: Json
       }
@@ -6019,6 +6222,14 @@ export type Database = {
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
+      admin_reschedule_visit: {
+        Args: {
+          p_booking_id: string
+          p_new_date: string
+          p_new_slot_id: string
+        }
+        Returns: Json
+      }
       admin_resolve_driver_incentive_target: {
         Args: { p_driver_id: string; p_on_date: string }
         Returns: {
@@ -7198,6 +7409,7 @@ export const Constants = {
     },
   },
 } as const
+
 export type AppRole = Database["public"]["Enums"]["app_role"];
 export type AdminApprovalStatus = Database["public"]["Enums"]["admin_approval_status"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
