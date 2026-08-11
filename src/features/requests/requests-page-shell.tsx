@@ -92,18 +92,32 @@ export function RequestsPageShell({
       ? initialType
       : "all",
   );
+  const [status, setStatus] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
+
+  const STATUS_FILTERS = [
+    "all",
+    "submitted",
+    "pending",
+    "in_review",
+    "needs_clarification",
+    "approved",
+    "rejected",
+    "solved",
+    "overdue",
+  ] as const;
 
   const filters = useMemo(
     () => ({
       datePreset,
       type: type === "all" ? null : type,
+      status: status === "all" ? null : status,
       search: searchApplied,
       limit: 50,
       offset: 0,
     }),
-    [datePreset, type, searchApplied],
+    [datePreset, type, status, searchApplied],
   );
 
   const { data, isLoading, isFetching, refetch } = useAdminRequestsList(filters);
@@ -229,6 +243,41 @@ export function RequestsPageShell({
               {TYPE_FILTERS.map((key) => (
                 <SelectItem key={key} value={key} label={t(`types.${key}`)}>
                   {t(`types.${key}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            items={STATUS_FILTERS.map((key) => ({
+              value: key,
+              label:
+                key === "all"
+                  ? t("statusFilter.all")
+                  : t(`status.${key}` as "status.pending"),
+            }))}
+            value={status}
+            onValueChange={(v) => {
+              if (v) setStatus(v);
+            }}
+          >
+            <SelectTrigger className="h-9 w-[180px]">
+              <SelectValue placeholder={t("filters.status")} />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_FILTERS.map((key) => (
+                <SelectItem
+                  key={key}
+                  value={key}
+                  label={
+                    key === "all"
+                      ? t("statusFilter.all")
+                      : t(`status.${key}` as "status.pending")
+                  }
+                >
+                  {key === "all"
+                    ? t("statusFilter.all")
+                    : t(`status.${key}` as "status.pending")}
                 </SelectItem>
               ))}
             </SelectContent>

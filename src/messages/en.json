@@ -2675,6 +2675,8 @@
       "subtitle": "RCM queue — approve, clarify, and resolve rider requests",
       "hub": {
         "subtitle": "Pick a module to manage requests, workflows, and e-signatures",
+        "requestTypesHeading": "Request types",
+        "operationsHeading": "Operations",
         "leave": "Leave",
         "leaveHint": "Annual, emergency, unpaid leave queue",
         "asset": "Asset",
@@ -2695,7 +2697,7 @@
         "auditHint": "Decision and access history",
         "settings": "Settings",
         "settingsHint": "Workflows, categories, roles, screenshot",
-        "esign": "Admin & E-Signature",
+        "esign": "Admin request & e-signature",
         "esignHint": "Send and track signature requests"
       },
       "refresh": "Refresh",
@@ -2718,7 +2720,11 @@
       "colActions": "Actions",
       "filters": {
         "date": "Date range",
-        "type": "Type"
+        "type": "Type",
+        "status": "Status"
+      },
+      "statusFilter": {
+        "all": "All statuses"
       },
       "datePresets": {
         "today": "Today",
@@ -2777,7 +2783,23 @@
         "clarify": "Ask clarification",
         "solve": "Solve / close",
         "actionOk": "Updated",
-        "actionFailed": "Action failed"
+        "actionFailed": "Action failed",
+        "attachments": "Attachments",
+        "noAttachments": "No files attached",
+        "viewDrawer": "View drawer",
+        "noTypedFields": "No typed fields on this request",
+        "close": "Close",
+        "download": "Download",
+        "actionLabels": {
+          "approve": "Approve",
+          "reject": "Reject",
+          "reschedule": "Reschedule",
+          "request_documents": "Request documents",
+          "send_response": "Send response",
+          "escalate": "Escalate",
+          "attach_send": "Attach & send",
+          "attach_breakdown": "Attach breakdown"
+        }
       },
       "settings": {
         "title": "RCM settings",
@@ -3102,6 +3124,8 @@
       "subtitle": "Head Office view · Operator check-in and visit catalog",
       "hub": {
         "subtitle": "Pick a module to manage visit bookings, slots, and settings",
+        "manageHeading": "Manage",
+        "configureHeading": "Configure",
         "allVisits": "All visits",
         "allVisitsHint": "Search and update bookings",
         "calendar": "Calendar",
@@ -3121,9 +3145,18 @@
       "viewDetails": "View details",
       "emptyTitle": "No visits yet",
       "emptyDescription": "Driver bookings with VIS-##### tokens will appear here.",
+      "kpi": {
+        "today": "Today",
+        "todayCheckedIn": "Checked in today",
+        "upcoming": "Upcoming",
+        "awaitingCheckin": "Awaiting check-in",
+        "noShows": "No-shows"
+      },
       "colCode": "Booking",
       "colDriver": "Driver",
       "colDepartment": "Department",
+      "colBranch": "Branch",
+      "colTime": "Time",
       "colDate": "Date",
       "colStatus": "Status",
       "colActions": "Actions",

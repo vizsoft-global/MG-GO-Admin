@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { AppPage, AppPageHeader } from "@/components/app";
 import { StatusPill } from "@/components/dashboard/status-pill";
@@ -11,6 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/auth-context";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { fetchRequestAttachmentUrl } from "./requests-actions";
+import { RequestTypedDrawer } from "./request-typed-drawer";
+import type { RequestApprovalStep } from "./types";
 import { useAdminRequestDetail, useDecideRequest } from "./use-requests";
 
 function statusVariant(
@@ -20,6 +23,36 @@ function statusVariant(
   if (status === "rejected") return "danger";
   if (status === "needs_clarification" || status === "overdue") return "warning";
   return "neutral";
+}
+
+function humanizeFieldKey(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatFieldValue(value: unknown): string {
+  if (value == null || value === "") return "—";
+  if (Array.isArray(value)) return value.map((v) => formatFieldValue(v)).join(", ");
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "object") return JSON.stringify(value);
+  const str = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return new Date(str).toLocaleDateString();
+  }
+  return str;
+}
+
+const NON_TYPED_KEYS = new Set(["awaiting_driver_ack"]);
+
+function typedFields(payload: Record<string, unknown>): Array<[string, unknown]> {
+  return Object.entries(payload).filter(([key]) => !NON_TYPED_KEYS.has(key));
+}
+
+function currentStepAllowedActions(steps: RequestApprovalStep[]): string[] {
+  const active = steps.find((s) => s.status === "in_progress");
+  return active?.allowed_actions ?? [];
 }
 
 export function RequestDetailPageShell({ requestId }: { requestId: string }) {
@@ -33,13 +66,16 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const request = data?.request;
   const steps = data?.steps ?? [];
   const clarifications = data?.clarifications ?? [];
+  const attachments = data?.attachments ?? [];
   const closed =
     request?.status === "approved" ||
     request?.status === "rejected" ||
     request?.status === "solved";
+  const stepActions = currentStepAllowedActions(steps);
+  const REASON_REQUIRED_ACTIONS = new Set(["reject", "clarify"]);
 
-  const runAction = async (action: string, requireReason = false) => {
-    if (requireReason && !reason.trim()) {
+  const runAction = async (action: string) => {
+    if (REASON_REQUIRED_ACTIONS.has(action) && !reason.trim()) {
       toast.error(t("detail.reasonRequired"));
       return;
     }
@@ -54,6 +90,15 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     toast.success(t("detail.actionOk"));
     setReason("");
     await refetch();
+  };
+
+  const openAttachment = async (storageKey: string) => {
+    const result = await fetchRequestAttachmentUrl(storageKey);
+    if (!result.url) {
+      toast.error(result.error ?? t("detail.actionFailed"));
+      return;
+    }
+    window.open(result.url, "_blank", "noopener,noreferrer");
   };
 
   if (isLoading) {
@@ -88,6 +133,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             <StatusPill variant={statusVariant(request.status)}>
               {t(`status.${request.status}` as "status.pending")}
             </StatusPill>
+            <RequestTypedDrawer request={request} attachments={attachments} />
             <Button variant="outline" size="sm" className="h-9" render={<Link href="/requests/overview" />}>
               <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
               {t("detail.back")}
@@ -132,21 +178,40 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 <dd className="mt-1 whitespace-pre-wrap">{request.details}</dd>
               </div>
             ) : null}
-            {Object.entries(request.payload ?? {}).map(([key, value]) => (
+            {typedFields(request.payload ?? {}).map(([key, value]) => (
               <div key={key} className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">{key}</dt>
-                <dd className="max-w-[60%] break-words text-end tabular-nums">
-                  {Array.isArray(value)
-                    ? value.join(", ")
-                    : value == null
-                      ? "—"
-                      : typeof value === "object"
-                        ? JSON.stringify(value)
-                        : String(value)}
+                <dt className="text-muted-foreground">{humanizeFieldKey(key)}</dt>
+                <dd className="max-w-[60%] break-words text-end">
+                  {formatFieldValue(value)}
                 </dd>
               </div>
             ))}
           </dl>
+
+          <div className="mt-3 border-t border-border pt-3">
+            <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+              <Paperclip className="h-3.5 w-3.5" />
+              {t("detail.attachments")}
+            </h3>
+            {attachments.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">{t("detail.noAttachments")}</p>
+            ) : (
+              <ul className="space-y-1">
+                {attachments.map((a) => (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      onClick={() => void openAttachment(a.storage_key)}
+                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      {a.file_name ?? a.storage_key.split("/").pop()}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
 
         <section className="h-full rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -212,20 +277,36 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             onChange={(e) => setReason(e.target.value)}
           />
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              className="h-9"
-              disabled={decide.isPending}
-              onClick={() => void runAction("approve")}
-            >
-              {t("detail.approve")}
-            </Button>
+            {stepActions.length > 0 ? (
+              stepActions.map((action) =>
+                action === "reject" ? null : (
+                  <Button
+                    key={action}
+                    type="button"
+                    className="h-9"
+                    disabled={decide.isPending}
+                    onClick={() => void runAction(action)}
+                  >
+                    {t(`detail.actionLabels.${action}` as "detail.actionLabels.approve")}
+                  </Button>
+                ),
+              )
+            ) : (
+              <Button
+                type="button"
+                className="h-9"
+                disabled={decide.isPending}
+                onClick={() => void runAction("solve")}
+              >
+                {t("detail.solve")}
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
               className="h-9 text-destructive hover:bg-destructive/10"
               disabled={decide.isPending}
-              onClick={() => void runAction("reject", true)}
+              onClick={() => void runAction("reject")}
             >
               {t("detail.reject")}
             </Button>
@@ -234,18 +315,9 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
               variant="outline"
               className="h-9"
               disabled={decide.isPending}
-              onClick={() => void runAction("clarify", true)}
+              onClick={() => void runAction("clarify")}
             >
               {t("detail.clarify")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9"
-              disabled={decide.isPending}
-              onClick={() => void runAction("solve")}
-            >
-              {t("detail.solve")}
             </Button>
           </div>
         </section>

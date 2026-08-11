@@ -2593,6 +2593,8 @@
       "subtitle": "قائمة RCM — الموافقة والتوضيح وحل طلبات السائقين",
       "hub": {
         "subtitle": "اختر وحدة لإدارة الطلبات وسير العمل والتوقيع الإلكتروني",
+        "requestTypesHeading": "أنواع الطلبات",
+        "operationsHeading": "العمليات",
         "leave": "إجازة",
         "leaveHint": "طابور الإجازات السنوية والطوارئ وغير المدفوعة",
         "asset": "أصل",
@@ -2636,7 +2638,11 @@
       "colActions": "إجراءات",
       "filters": {
         "date": "نطاق التاريخ",
-        "type": "النوع"
+        "type": "النوع",
+        "status": "الحالة"
+      },
+      "statusFilter": {
+        "all": "كل الحالات"
       },
       "datePresets": {
         "today": "اليوم",
@@ -2695,7 +2701,23 @@
         "clarify": "طلب توضيح",
         "solve": "حل / إغلاق",
         "actionOk": "تم التحديث",
-        "actionFailed": "فشل الإجراء"
+        "actionFailed": "فشل الإجراء",
+        "attachments": "المرفقات",
+        "noAttachments": "لا توجد ملفات مرفقة",
+        "viewDrawer": "عرض الدرج",
+        "noTypedFields": "لا توجد حقول مكتوبة لهذا الطلب",
+        "close": "إغلاق",
+        "download": "تنزيل",
+        "actionLabels": {
+          "approve": "موافقة",
+          "reject": "رفض",
+          "reschedule": "إعادة جدولة",
+          "request_documents": "طلب مستندات",
+          "send_response": "إرسال رد",
+          "escalate": "تصعيد",
+          "attach_send": "إرفاق وإرسال",
+          "attach_breakdown": "إرفاق التفاصيل"
+        }
       },
       "settings": {
         "title": "إعدادات RCM",
@@ -3020,6 +3042,8 @@
       "subtitle": "عرض المكتب الرئيسي · تسجيل الوصول وفهرس الزيارات",
       "hub": {
         "subtitle": "اختر وحدة لإدارة حجوزات الزيارة والفترات والإعدادات",
+        "manageHeading": "إدارة",
+        "configureHeading": "إعدادات",
         "allVisits": "كل الزيارات",
         "allVisitsHint": "البحث وتحديث الحجوزات",
         "calendar": "التقويم",
@@ -3039,9 +3063,18 @@
       "viewDetails": "عرض التفاصيل",
       "emptyTitle": "لا توجد زيارات بعد",
       "emptyDescription": "ستظهر حجوزات السائقين برمز VIS-##### هنا.",
+      "kpi": {
+        "today": "اليوم",
+        "todayCheckedIn": "تسجيل الوصول اليوم",
+        "upcoming": "القادمة",
+        "awaitingCheckin": "بانتظار تسجيل الوصول",
+        "noShows": "عدم الحضور"
+      },
       "colCode": "الحجز",
       "colDriver": "السائق",
       "colDepartment": "القسم",
+      "colBranch": "الفرع",
+      "colTime": "الوقت",
       "colDate": "التاريخ",
       "colStatus": "الحالة",
       "colActions": "إجراءات",
