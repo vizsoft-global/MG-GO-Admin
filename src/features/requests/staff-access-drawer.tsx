@@ -150,7 +150,12 @@ export function StaffAccessDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex h-full w-full max-h-[100dvh] flex-col sm:max-w-md">
+      <SheetContent
+        side="right"
+        className="flex h-full w-full max-h-[100dvh] flex-col sm:max-w-md"
+        // Sheet's own data-[side=right]:sm:max-w-sm outranks utility classes here.
+        style={{ maxWidth: "min(440px, 100vw)" }}
+      >
         <SheetHeader>
           <SheetTitle>{isAssignMode ? t("assignStaff") : t("editAccess")}</SheetTitle>
         </SheetHeader>

@@ -51,18 +51,29 @@ function initialsOf(name: string): string {
   );
 }
 
-function groupByStaff(rows: StaffAccessRow[]): StaffRow[] {
+/**
+ * Figma lists every staff member with "—" where they have no access, so an admin can grant
+ * rights from the row itself. Seeding from the profile list keeps staff without any grant visible.
+ */
+function buildStaffRows(staff: StaffProfileOption[], rows: StaffAccessRow[]): StaffRow[] {
   const map = new Map<string, StaffRow>();
+  for (const option of staff) {
+    map.set(option.id, {
+      profile_id: option.id,
+      profile_name: option.full_name,
+      profile_email: option.email,
+      access: {},
+    });
+  }
   for (const row of rows) {
-    const existing = map.get(row.profile_id);
-    const access: Partial<Record<RequestTypeSlug, AccessLevel>> = existing?.access ?? {};
-    access[row.request_type as RequestTypeSlug] = row.access_level;
-    map.set(row.profile_id, {
+    const existing = map.get(row.profile_id) ?? {
       profile_id: row.profile_id,
       profile_name: row.profile_name,
       profile_email: row.profile_email,
-      access,
-    });
+      access: {} as Partial<Record<RequestTypeSlug, AccessLevel>>,
+    };
+    existing.access[row.request_type as RequestTypeSlug] = row.access_level;
+    map.set(row.profile_id, existing);
   }
   return Array.from(map.values()).sort((a, b) => a.profile_name.localeCompare(b.profile_name));
 }
@@ -97,7 +108,10 @@ export function RolesSettingsPanel() {
     void load();
   }, [load]);
 
-  const staffRows = useMemo(() => groupByStaff(rawRows), [rawRows]);
+  const staffRows = useMemo(
+    () => buildStaffRows(staffOptions, rawRows),
+    [staffOptions, rawRows],
+  );
 
   const viewOnlyCount = useMemo(
     () => staffRows.filter((r) => Object.values(r.access).includes("view_only")).length,
