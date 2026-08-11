@@ -2750,14 +2750,277 @@
       "settings": {
         "title": "RCM settings",
         "subtitle": "Workflows, categories, roles, and request configuration",
-        "comingSoon": "Screen scaffold — full Figma settings next",
+        "stubNote": "Placeholder — full analytics coming later",
         "links": {
           "workflows": "Workflow builder",
           "categories": "Complaint categories",
           "types": "Request types",
           "departments": "Department staff",
-          "roles": "Roles & access"
+          "roles": "Roles & access",
+          "reports": "Reports",
+          "audit": "Audit log"
+        },
+        "linksDesc": {
+          "workflows": "Edit approval steps per request type",
+          "categories": "Manage complaint category options",
+          "types": "Built-in request types (read-only)",
+          "departments": "Grant staff view or approver access",
+          "roles": "View-only vs approver explained",
+          "audit": "Recent RCM admin activity"
+        },
+        "workflows": {
+          "hub": "RCM settings",
+          "title": "Workflow builder",
+          "subtitle": "Configure approval steps for each request type",
+          "requestType": "Request type",
+          "addStep": "Add step",
+          "save": "Save workflow",
+          "loading": "Loading steps…",
+          "colOrder": "#",
+          "colName": "Step name",
+          "colRole": "Role key",
+          "colSystem": "System",
+          "colActions": "Allowed actions",
+          "systemAuto": "Auto",
+          "hint": "Role keys must match staff access grants.",
+          "rolesLink": "Roles & access",
+          "saved": "Workflow saved",
+          "actions": {
+            "approve": "Approve",
+            "reject": "Reject",
+            "reschedule": "Reschedule",
+            "request_documents": "Request docs",
+            "attach_send": "Attach & send",
+            "send_response": "Send response",
+            "escalate": "Escalate",
+            "attach_breakdown": "Attach breakdown"
+          },
+          "errors": {
+            "missingFields": "Every step needs a name and role key",
+            "saveFailed": "Could not save workflow"
+          }
+        },
+        "categories": {
+          "hub": "RCM settings",
+          "title": "Complaint categories",
+          "subtitle": "Options shown to drivers when filing a complaint",
+          "emptyHint": "No categories yet — add rows when the client confirms the list.",
+          "key": "Key",
+          "labelEn": "Label (EN)",
+          "labelAr": "Label (AR)",
+          "add": "Add category",
+          "added": "Category added",
+          "empty": "No complaint categories configured",
+          "active": "Status",
+          "activeOn": "Active",
+          "activeOff": "Inactive",
+          "remove": "Remove",
+          "deleteTitle": "Remove category?",
+          "deleteDescription": "Remove “{label}”? Drivers will no longer see this option.",
+          "deleted": "Category removed",
+          "errors": {
+            "saveFailed": "Could not save category",
+            "deleteFailed": "Could not remove category"
+          }
+        },
+        "types": {
+          "hub": "RCM settings",
+          "title": "Request types",
+          "subtitle": "Built-in enum values — custom types deferred",
+          "deferredNote": "Custom request types are not supported yet. Only the built-in enum values below are available.",
+          "colSlug": "Slug",
+          "colLabel": "Label",
+          "colStatus": "Status",
+          "builtIn": "Built-in"
+        },
+        "departments": {
+          "hub": "RCM settings",
+          "title": "Staff access grants",
+          "subtitle": "Assign view-only or approver access per request type",
+          "staff": "Staff member",
+          "staffPlaceholder": "Select staff…",
+          "staffSearch": "Search by name or email",
+          "requestType": "Request type",
+          "accessLevel": "Access level",
+          "viewOnly": "View only",
+          "approver": "Approver",
+          "addGrant": "Add grant",
+          "added": "Grant saved",
+          "empty": "No staff grants yet",
+          "remove": "Remove",
+          "deleteTitle": "Remove grant?",
+          "deleteDescription": "This staff member will lose RCM access for that request type.",
+          "deleted": "Grant removed",
+          "errors": {
+            "staffRequired": "Select a staff member",
+            "saveFailed": "Could not save grant",
+            "deleteFailed": "Could not remove grant"
+          }
+        },
+        "roles": {
+          "hub": "RCM settings",
+          "title": "Roles & access",
+          "subtitle": "How view-only and approver grants work in RCM",
+          "viewOnlyTitle": "View only",
+          "viewOnlyBody": "Staff can see requests of the assigned type in the queue and detail view, but cannot approve, reject, or ask for clarification.",
+          "approverTitle": "Approver",
+          "approverBody": "Staff can act on the current workflow step — approve, reject, clarify, or other allowed actions — when their role key matches the step.",
+          "grantsHint": "Assign grants per staff member and request type on the staff access page.",
+          "manageGrants": "Manage staff grants"
+        },
+        "reports": {
+          "hub": "RCM settings",
+          "title": "Reports",
+          "subtitle": "RCM analytics and exports",
+          "stubTitle": "Reports coming soon",
+          "stubBody": "Resolution trends, SLA breakdowns, and exportable summaries will appear here in a future release."
+        },
+        "audit": {
+          "hub": "RCM settings",
+          "title": "Audit log",
+          "subtitle": "Recent admin activity on requests",
+          "load": "Load log",
+          "prompt": "Click Load log to fetch recent RCM activity",
+          "empty": "No RCM audit entries found",
+          "colWhen": "When",
+          "colAction": "Action",
+          "colRoute": "Route",
+          "colEntity": "Entity",
+          "errors": {
+            "loadFailed": "Could not load audit log"
+          }
         }
+      }
+    },
+    "visitBookings": {
+      "title": "Visit bookings",
+      "subtitle": "Head Office view · Operator check-in and visit catalog",
+      "refresh": "Refresh",
+      "viewDetails": "View details",
+      "emptyTitle": "No visits yet",
+      "emptyDescription": "Driver bookings with VIS-##### tokens will appear here.",
+      "colCode": "Booking",
+      "colDriver": "Driver",
+      "colDepartment": "Department",
+      "colDate": "Date",
+      "colStatus": "Status",
+      "colActions": "Actions",
+      "checkIn": "Check in",
+      "complete": "Complete",
+      "cancel": "Cancel",
+      "noShow": "No show",
+      "actionOk": "Visit updated",
+      "actionFailed": "Update failed",
+      "nav": {
+        "list": "List",
+        "calendar": "Calendar",
+        "reception": "Reception",
+        "reports": "Reports",
+        "slots": "Slots",
+        "departments": "Departments",
+        "branches": "Branches"
+      },
+      "status": {
+        "confirmed": "Confirmed",
+        "checked_in": "Checked in",
+        "completed": "Completed",
+        "no_show": "No show",
+        "cancelled": "Cancelled"
+      },
+      "detail": {
+        "back": "Back to list",
+        "notFound": "Visit not found",
+        "driverSection": "Booking details",
+        "driverCode": "Driver ID",
+        "branch": "Branch",
+        "slot": "Time slot",
+        "note": "Note",
+        "timeline": "Status timeline",
+        "created": "Booked",
+        "checkedIn": "Checked in",
+        "completed": "Completed",
+        "cancelled": "Cancelled"
+      },
+      "calendar": {
+        "title": "Visit calendar",
+        "subtitle": "{from} – {to}",
+        "month": "This month",
+        "week": "This week",
+        "count": "{count} visits",
+        "emptyTitle": "No visits in range",
+        "emptyDescription": "Bookings for the selected period will appear grouped by date."
+      },
+      "reception": {
+        "title": "Reception desk",
+        "subtitle": "Today's confirmed visits · {date}",
+        "searchPlaceholder": "Search by VIS code, driver name, or ID",
+        "emptyTitle": "No arrivals expected",
+        "emptyDescription": "Confirmed visits scheduled for today will appear here."
+      },
+      "reports": {
+        "title": "Visit reports",
+        "subtitle": "Status counts for {month}",
+        "total": "Total visits",
+        "count": "Count",
+        "share": "Share",
+        "emptyTitle": "No visits this month",
+        "emptyDescription": "Monthly aggregates appear once bookings exist."
+      },
+      "departments": {
+        "title": "Departments",
+        "subtitle": "Toggle which departments accept visit bookings",
+        "emptyTitle": "No departments",
+        "emptyDescription": "Department catalog is seeded in the database."
+      },
+      "branches": {
+        "title": "Branches",
+        "subtitle": "Head Office branch directory for visit slots",
+        "editTitle": "Edit branch",
+        "emptyTitle": "No branches",
+        "emptyDescription": "Branch catalog is seeded in the database."
+      },
+      "slots": {
+        "title": "Visit slots",
+        "subtitle": "Create and manage bookable time windows",
+        "add": "Add slot",
+        "addTitle": "New slot",
+        "editTitle": "Edit slot",
+        "modalSubtitle": "Weekday recurring or one-off date · optional branch",
+        "schedule": "Schedule",
+        "time": "Time",
+        "capacity": "Capacity",
+        "inactive": "Inactive",
+        "deactivate": "Deactivate",
+        "deactivated": "Slot deactivated",
+        "scheduleType": "Schedule type",
+        "weekday": "Weekday recurring",
+        "specificDate": "Specific date",
+        "dayOfWeek": "Day of week",
+        "slotDate": "Date",
+        "startTime": "Start",
+        "endTime": "End",
+        "selectDepartment": "Select department",
+        "optionalBranch": "Branch (optional)",
+        "noBranch": "No branch",
+        "departmentRequired": "Select a department",
+        "capacityInvalid": "Capacity must be at least 1",
+        "emptyTitle": "No slots configured",
+        "emptyDescription": "Add weekday or date-specific slots for drivers to book."
+      },
+      "catalog": {
+        "key": "Key",
+        "label": "Label",
+        "name": "Name",
+        "address": "Address",
+        "sortOrder": "Sort",
+        "active": "Active",
+        "yes": "Yes",
+        "no": "No",
+        "edit": "Edit",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saved": "Saved",
+        "saveFailed": "Could not save"
       }
     },
     "wrongActions": {

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Search } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
@@ -13,34 +13,50 @@ import {
 } from "@/components/app/app-data-table";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
 import { Link } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
-import { fetchAdminVisitsList, updateAdminVisitStatus } from "./visits-actions";
+import {
+  fetchReceptionVisitsToday,
+  updateAdminVisitStatus,
+} from "./visits-actions";
 import { visitStatusVariant } from "./visit-status-utils";
 import { VisitsTabBar } from "./visits-tab-bar";
 
-export function VisitsPageShell() {
+export function VisitsReceptionShell() {
   const t = useTranslations("pages.visitBookings");
   const { can } = useAuth();
   const canOperate = can("visits.operate");
   const queryClient = useQueryClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: queryKeys.visits.list({}),
-    queryFn: () => fetchAdminVisitsList({ limit: 100 }),
+    queryKey: queryKeys.visits.reception(today),
+    queryFn: () => fetchReceptionVisitsToday(),
   });
 
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => {
+    const all = data?.rows ?? [];
+    const q = search.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter(
+      (r) =>
+        r.booking_code.toLowerCase().includes(q) ||
+        r.driver_name.toLowerCase().includes(q) ||
+        r.driver_code.toLowerCase().includes(q),
+    );
+  }, [data?.rows, search]);
 
-  const setStatus = async (
-    bookingId: string,
-    status: "checked_in" | "completed" | "no_show" | "cancelled",
-  ) => {
+  const checkIn = async (bookingId: string) => {
     setBusyId(bookingId);
-    const result = await updateAdminVisitStatus({ bookingId, status });
+    const result = await updateAdminVisitStatus({
+      bookingId,
+      status: "checked_in",
+    });
     setBusyId(null);
     if (!result.ok) {
       toast.error(result.error ?? t("actionFailed"));
@@ -53,8 +69,8 @@ export function VisitsPageShell() {
   return (
     <AppPage>
       <AppPageHeader
-        title={t("title")}
-        description={t("subtitle")}
+        title={t("reception.title")}
+        description={t("reception.subtitle", { date: today })}
         actions={
           <Button
             type="button"
@@ -75,14 +91,26 @@ export function VisitsPageShell() {
       <VisitsTabBar />
 
       <AppListCard className="mt-2">
+        <div className="border-b border-border p-3">
+          <div className="relative max-w-md">
+            <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="h-9 ps-8"
+              placeholder={t("reception.searchPlaceholder")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : rows.length === 0 ? (
           <AppEmptyState
-            title={t("emptyTitle")}
-            description={t("emptyDescription")}
+            title={t("reception.emptyTitle")}
+            description={t("reception.emptyDescription")}
           />
         ) : (
           <AppDataTable
@@ -90,7 +118,6 @@ export function VisitsPageShell() {
               { id: "code", label: t("colCode") },
               { id: "driver", label: t("colDriver") },
               { id: "dept", label: t("colDepartment") },
-              { id: "date", label: t("colDate") },
               { id: "status", label: t("colStatus") },
               { id: "actions", label: t("colActions") },
             ]}
@@ -110,55 +137,23 @@ export function VisitsPageShell() {
                   <p className="text-[11px] text-muted-foreground">
                     {row.driver_code}
                   </p>
-                  <Link
-                    href={`/visit-bookings/${row.id}`}
-                    className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    {t("viewDetails")}
-                  </Link>
                 </TableCell>
                 <TableCell className="text-sm">{row.department_label}</TableCell>
-                <TableCell className="text-sm tabular-nums">
-                  {row.scheduled_date}
-                </TableCell>
                 <TableCell>
                   <StatusPill variant={visitStatusVariant(row.status)}>
                     {t(`status.${row.status}` as "status.confirmed")}
                   </StatusPill>
                 </TableCell>
                 <TableCell>
-                  {canOperate && row.status === "confirmed" ? (
-                    <div className="flex flex-wrap gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-8"
-                        disabled={busyId === row.id}
-                        onClick={() => void setStatus(row.id, "checked_in")}
-                      >
-                        {t("checkIn")}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-destructive hover:bg-destructive/10"
-                        disabled={busyId === row.id}
-                        onClick={() => void setStatus(row.id, "cancelled")}
-                      >
-                        {t("cancel")}
-                      </Button>
-                    </div>
-                  ) : canOperate && row.status === "checked_in" ? (
+                  {canOperate ? (
                     <Button
                       type="button"
                       size="sm"
                       className="h-8"
                       disabled={busyId === row.id}
-                      onClick={() => void setStatus(row.id, "completed")}
+                      onClick={() => void checkIn(row.id)}
                     >
-                      {t("complete")}
+                      {t("checkIn")}
                     </Button>
                   ) : (
                     <span className="text-[11px] text-muted-foreground">—</span>

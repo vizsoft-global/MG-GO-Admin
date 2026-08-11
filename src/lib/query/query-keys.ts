@@ -110,6 +110,10 @@ export const queryKeys = {
     all: () => ["visits"] as const,
     list: (filters: Record<string, unknown> = {}) => ["visits", "list", filters] as const,
     detail: (id: string) => ["visits", "detail", id] as const,
+    departments: () => ["visits", "departments"] as const,
+    branches: () => ["visits", "branches"] as const,
+    slots: () => ["visits", "slots"] as const,
+    reception: (date: string) => ["visits", "reception", date] as const,
   },
   attendance: {
     all: () => ["attendance"] as const,

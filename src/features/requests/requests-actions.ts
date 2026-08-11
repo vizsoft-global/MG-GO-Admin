@@ -53,8 +53,8 @@ export async function fetchAdminRequestsList(filters: RequestListFilters): Promi
   const { from, to } = datePresetToBounds(filters.datePreset);
 
   const { data, error } = await supabase.rpc("admin_list_requests", {
-    p_date_from: from,
-    p_date_to: to,
+    p_date_from: from ?? undefined,
+    p_date_to: to ?? undefined,
     p_status: filters.status || undefined,
     p_type: filters.type || undefined,
     p_search: filters.search?.trim() || undefined,

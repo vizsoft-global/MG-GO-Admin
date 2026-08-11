@@ -2668,14 +2668,277 @@
       "settings": {
         "title": "إعدادات RCM",
         "subtitle": "سير العمل والفئات والأدوار وإعداد الطلبات",
-        "comingSoon": "هيكل الشاشة — إعدادات Figma الكاملة لاحقاً",
+        "stubNote": "عنصر نائب — التحليلات الكاملة لاحقاً",
         "links": {
           "workflows": "منشئ سير العمل",
           "categories": "فئات الشكاوى",
           "types": "أنواع الطلبات",
           "departments": "موظفو الأقسام",
-          "roles": "الأدوار والصلاحيات"
+          "roles": "الأدوار والصلاحيات",
+          "reports": "التقارير",
+          "audit": "سجل التدقيق"
+        },
+        "linksDesc": {
+          "workflows": "تعديل خطوات الموافقة لكل نوع طلب",
+          "categories": "إدارة خيارات فئات الشكاوى",
+          "types": "أنواع الطلبات المدمجة (للقراءة فقط)",
+          "departments": "منح صلاحية عرض أو موافقة للموظفين",
+          "roles": "شرح العرض فقط مقابل الموافق",
+          "audit": "نشاط إداري حديث لـ RCM"
+        },
+        "workflows": {
+          "hub": "إعدادات RCM",
+          "title": "منشئ سير العمل",
+          "subtitle": "تهيئة خطوات الموافقة لكل نوع طلب",
+          "requestType": "نوع الطلب",
+          "addStep": "إضافة خطوة",
+          "save": "حفظ سير العمل",
+          "loading": "جاري تحميل الخطوات…",
+          "colOrder": "#",
+          "colName": "اسم الخطوة",
+          "colRole": "مفتاح الدور",
+          "colSystem": "النظام",
+          "colActions": "الإجراءات المسموحة",
+          "systemAuto": "تلقائي",
+          "hint": "يجب أن تطابق مفاتيح الأدوار منح وصول الموظفين.",
+          "rolesLink": "الأدوار والصلاحيات",
+          "saved": "تم حفظ سير العمل",
+          "actions": {
+            "approve": "موافقة",
+            "reject": "رفض",
+            "reschedule": "إعادة جدولة",
+            "request_documents": "طلب مستندات",
+            "attach_send": "إرفاق وإرسال",
+            "send_response": "إرسال رد",
+            "escalate": "تصعيد",
+            "attach_breakdown": "إرفاق تفصيل"
+          },
+          "errors": {
+            "missingFields": "كل خطوة تحتاج اسمًا ومفتاح دور",
+            "saveFailed": "تعذر حفظ سير العمل"
+          }
+        },
+        "categories": {
+          "hub": "إعدادات RCM",
+          "title": "فئات الشكاوى",
+          "subtitle": "الخيارات المعروضة للسائقين عند تقديم شكوى",
+          "emptyHint": "لا توجد فئات بعد — أضف صفوفاً عند تأكيد العميل للقائمة.",
+          "key": "المفتاح",
+          "labelEn": "التسمية (EN)",
+          "labelAr": "التسمية (AR)",
+          "add": "إضافة فئة",
+          "added": "تمت إضافة الفئة",
+          "empty": "لم تُهيّأ فئات شكاوى",
+          "active": "الحالة",
+          "activeOn": "نشط",
+          "activeOff": "غير نشط",
+          "remove": "إزالة",
+          "deleteTitle": "إزالة الفئة؟",
+          "deleteDescription": "إزالة «{label}»؟ لن يرى السائقون هذا الخيار.",
+          "deleted": "تمت إزالة الفئة",
+          "errors": {
+            "saveFailed": "تعذر حفظ الفئة",
+            "deleteFailed": "تعذر إزالة الفئة"
+          }
+        },
+        "types": {
+          "hub": "إعدادات RCM",
+          "title": "أنواع الطلبات",
+          "subtitle": "قيم enum المدمجة — الأنواع المخصصة مؤجلة",
+          "deferredNote": "أنواع الطلبات المخصصة غير مدعومة بعد. القيم المدمجة أدناه فقط متاحة.",
+          "colSlug": "المعرّف",
+          "colLabel": "التسمية",
+          "colStatus": "الحالة",
+          "builtIn": "مدمج"
+        },
+        "departments": {
+          "hub": "إعدادات RCM",
+          "title": "منح وصول الموظفين",
+          "subtitle": "تعيين عرض فقط أو موافقة لكل نوع طلب",
+          "staff": "الموظف",
+          "staffPlaceholder": "اختر موظفاً…",
+          "staffSearch": "بحث بالاسم أو البريد",
+          "requestType": "نوع الطلب",
+          "accessLevel": "مستوى الوصول",
+          "viewOnly": "عرض فقط",
+          "approver": "موافق",
+          "addGrant": "إضافة منح",
+          "added": "تم حفظ المنح",
+          "empty": "لا توجد منح بعد",
+          "remove": "إزالة",
+          "deleteTitle": "إزالة المنح؟",
+          "deleteDescription": "سيفقد هذا الموظف وصول RCM لذلك النوع.",
+          "deleted": "تمت إزالة المنح",
+          "errors": {
+            "staffRequired": "اختر موظفاً",
+            "saveFailed": "تعذر حفظ المنح",
+            "deleteFailed": "تعذر إزالة المنح"
+          }
+        },
+        "roles": {
+          "hub": "إعدادات RCM",
+          "title": "الأدوار والصلاحيات",
+          "subtitle": "كيف تعمل منح العرض فقط والموافقة في RCM",
+          "viewOnlyTitle": "عرض فقط",
+          "viewOnlyBody": "يمكن للموظفين رؤية الطلبات من النوع المعيّن في القائمة والتفاصيل، دون موافقة أو رفض أو طلب توضيح.",
+          "approverTitle": "موافق",
+          "approverBody": "يمكن للموظفين التصرف في خطوة سير العمل الحالية — موافقة، رفض، توضيح، أو إجراءات مسموحة أخرى — عندما يطابق مفتاح دورهم الخطوة.",
+          "grantsHint": "عيّن المنح لكل موظف ونوع طلب في صفحة وصول الموظفين.",
+          "manageGrants": "إدارة منح الموظفين"
+        },
+        "reports": {
+          "hub": "إعدادات RCM",
+          "title": "التقارير",
+          "subtitle": "تحليلات وتصدير RCM",
+          "stubTitle": "التقارير قريباً",
+          "stubBody": "ستظهر هنا اتجاهات الحل وتحليلات SLA والملخصات القابلة للتصدير في إصدار لاحق."
+        },
+        "audit": {
+          "hub": "إعدادات RCM",
+          "title": "سجل التدقيق",
+          "subtitle": "نشاط إداري حديث على الطلبات",
+          "load": "تحميل السجل",
+          "prompt": "انقر تحميل السجل لجلب نشاط RCM الأخير",
+          "empty": "لا توجد سجلات تدقيق RCM",
+          "colWhen": "الوقت",
+          "colAction": "الإجراء",
+          "colRoute": "المسار",
+          "colEntity": "الكيان",
+          "errors": {
+            "loadFailed": "تعذر تحميل سجل التدقيق"
+          }
         }
+      }
+    },
+    "visitBookings": {
+      "title": "حجوزات الزيارة",
+      "subtitle": "عرض المكتب الرئيسي · تسجيل الوصول وفهرس الزيارات",
+      "refresh": "تحديث",
+      "viewDetails": "عرض التفاصيل",
+      "emptyTitle": "لا توجد زيارات بعد",
+      "emptyDescription": "ستظهر حجوزات السائقين برمز VIS-##### هنا.",
+      "colCode": "الحجز",
+      "colDriver": "السائق",
+      "colDepartment": "القسم",
+      "colDate": "التاريخ",
+      "colStatus": "الحالة",
+      "colActions": "إجراءات",
+      "checkIn": "تسجيل الوصول",
+      "complete": "إكمال",
+      "cancel": "إلغاء",
+      "noShow": "لم يحضر",
+      "actionOk": "تم تحديث الزيارة",
+      "actionFailed": "فشل التحديث",
+      "nav": {
+        "list": "القائمة",
+        "calendar": "التقويم",
+        "reception": "الاستقبال",
+        "reports": "التقارير",
+        "slots": "المواعيد",
+        "departments": "الأقسام",
+        "branches": "الفروع"
+      },
+      "status": {
+        "confirmed": "مؤكد",
+        "checked_in": "تم تسجيل الوصول",
+        "completed": "مكتمل",
+        "no_show": "لم يحضر",
+        "cancelled": "ملغى"
+      },
+      "detail": {
+        "back": "العودة للقائمة",
+        "notFound": "الزيارة غير موجودة",
+        "driverSection": "تفاصيل الحجز",
+        "driverCode": "معرف السائق",
+        "branch": "الفرع",
+        "slot": "الموعد",
+        "note": "ملاحظة",
+        "timeline": "الجدول الزمني",
+        "created": "تم الحجز",
+        "checkedIn": "تسجيل الوصول",
+        "completed": "مكتمل",
+        "cancelled": "ملغى"
+      },
+      "calendar": {
+        "title": "تقويم الزيارات",
+        "subtitle": "{from} – {to}",
+        "month": "هذا الشهر",
+        "week": "هذا الأسبوع",
+        "count": "{count} زيارة",
+        "emptyTitle": "لا زيارات في النطاق",
+        "emptyDescription": "ستظهر الحجوزات مجمّعة حسب التاريخ."
+      },
+      "reception": {
+        "title": "مكتب الاستقبال",
+        "subtitle": "زيارات اليوم المؤكدة · {date}",
+        "searchPlaceholder": "بحث برمز VIS أو اسم السائق أو المعرف",
+        "emptyTitle": "لا وصول متوقع",
+        "emptyDescription": "ستظهر الزيارات المؤكدة لليوم هنا."
+      },
+      "reports": {
+        "title": "تقارير الزيارات",
+        "subtitle": "عدد الحالات لـ {month}",
+        "total": "إجمالي الزيارات",
+        "count": "العدد",
+        "share": "النسبة",
+        "emptyTitle": "لا زيارات هذا الشهر",
+        "emptyDescription": "تظهر الإحصائيات الشهرية عند وجود حجوزات."
+      },
+      "departments": {
+        "title": "الأقسام",
+        "subtitle": "تفعيل الأقسام التي تقبل حجوزات الزيارة",
+        "emptyTitle": "لا أقسام",
+        "emptyDescription": "فهرس الأقسام موجود في قاعدة البيانات."
+      },
+      "branches": {
+        "title": "الفروع",
+        "subtitle": "دليل فروع المكتب الرئيسي لمواعيد الزيارة",
+        "editTitle": "تعديل الفرع",
+        "emptyTitle": "لا فروع",
+        "emptyDescription": "فهرس الفروع موجود في قاعدة البيانات."
+      },
+      "slots": {
+        "title": "مواعيد الزيارة",
+        "subtitle": "إنشاء وإدارة نوافذ الحجز",
+        "add": "إضافة موعد",
+        "addTitle": "موعد جديد",
+        "editTitle": "تعديل الموعد",
+        "modalSubtitle": "أسبوعي متكرر أو تاريخ محدد · فرع اختياري",
+        "schedule": "الجدول",
+        "time": "الوقت",
+        "capacity": "السعة",
+        "inactive": "غير نشط",
+        "deactivate": "إلغاء التفعيل",
+        "deactivated": "تم إلغاء تفعيل الموعد",
+        "scheduleType": "نوع الجدول",
+        "weekday": "أسبوعي متكرر",
+        "specificDate": "تاريخ محدد",
+        "dayOfWeek": "يوم الأسبوع",
+        "slotDate": "التاريخ",
+        "startTime": "البداية",
+        "endTime": "النهاية",
+        "selectDepartment": "اختر القسم",
+        "optionalBranch": "الفرع (اختياري)",
+        "noBranch": "بدون فرع",
+        "departmentRequired": "اختر قسماً",
+        "capacityInvalid": "يجب أن تكون السعة 1 على الأقل",
+        "emptyTitle": "لا مواعيد مُعدّة",
+        "emptyDescription": "أضف مواعيد أسبوعية أو لتاريخ محدد."
+      },
+      "catalog": {
+        "key": "المفتاح",
+        "label": "التسمية",
+        "name": "الاسم",
+        "address": "العنوان",
+        "sortOrder": "الترتيب",
+        "active": "نشط",
+        "yes": "نعم",
+        "no": "لا",
+        "edit": "تعديل",
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "saved": "تم الحفظ",
+        "saveFailed": "تعذر الحفظ"
       }
     },
     "wrongActions": {

@@ -4,11 +4,13 @@ import { AppPage, AppPageHeader } from "@/components/app";
 import { Link } from "@/i18n/navigation";
 
 const LINKS = [
-  { href: "/requests/settings/workflows", key: "workflows" },
-  { href: "/requests/settings/categories", key: "categories" },
-  { href: "/requests/settings/types", key: "types" },
-  { href: "/requests/settings/departments", key: "departments" },
-  { href: "/requests/settings/roles", key: "roles" },
+  { href: "/requests/settings/workflows", key: "workflows", status: "ready" },
+  { href: "/requests/settings/categories", key: "categories", status: "ready" },
+  { href: "/requests/settings/types", key: "types", status: "ready" },
+  { href: "/requests/settings/departments", key: "departments", status: "ready" },
+  { href: "/requests/settings/roles", key: "roles", status: "ready" },
+  { href: "/requests/settings/reports", key: "reports", status: "stub" },
+  { href: "/requests/settings/audit", key: "audit", status: "ready" },
 ] as const;
 
 export default async function RequestsSettingsPage({
@@ -33,7 +35,7 @@ export default async function RequestsSettingsPage({
           >
             {t(`links.${link.key}`)}
             <p className="mt-1 text-[11px] font-normal text-muted-foreground">
-              {t("comingSoon")}
+              {link.status === "stub" ? t("stubNote") : t(`linksDesc.${link.key}`)}
             </p>
           </Link>
         ))}

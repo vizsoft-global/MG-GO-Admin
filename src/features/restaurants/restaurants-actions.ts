@@ -21,6 +21,10 @@ import {
   parseRestaurantFormData,
   validateRestaurantCoordinates,
 } from "./parse-restaurant-form";
+import {
+  fromDbRestaurantStatus,
+  toDbRestaurantStatus,
+} from "./restaurant-status";
 import { resolveRestaurantLogoUrls } from "@/lib/storage/restaurant-logo-url";
 import {
   validateZoneGeometry,
@@ -387,7 +391,7 @@ async function mapRestaurantBaseRow(
     map_link: string | null;
     latitude: number | null;
     longitude: number | null;
-    status: RestaurantRow["status"];
+    status: string;
     is_active: boolean;
     created_at: string;
   },
@@ -417,7 +421,7 @@ async function mapRestaurantBaseRow(
     map_link: row.map_link,
     latitude: row.latitude != null ? Number(row.latitude) : null,
     longitude: row.longitude != null ? Number(row.longitude) : null,
-    status: row.status,
+    status: fromDbRestaurantStatus(row.status, row.is_active),
     is_active: row.is_active,
     driver_count: driverCount,
     created_at: row.created_at,
@@ -576,7 +580,7 @@ export async function fetchRestaurantPickerOptions(): Promise<
     partner_name: row.partner_id
       ? (partnerNameById.get(row.partner_id) ?? null)
       : null,
-    status: row.status,
+    status: fromDbRestaurantStatus(row.status),
   }));
 }
 
@@ -1058,8 +1062,8 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
     map_link: mapLink || null,
     latitude,
     longitude,
-    status,
-    is_active: isActive,
+    status: toDbRestaurantStatus(status),
+    is_active: isActive && status !== "archived",
     updated_at: new Date().toISOString(),
   };
 

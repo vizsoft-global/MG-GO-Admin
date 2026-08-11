@@ -130,22 +130,26 @@ export async function fetchDriverPerformanceList(
   });
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_list_driver_performance", {
-    p_from: from,
-    p_to: to,
-    p_search: filters.search?.trim() || undefined,
-    p_partner_id: filters.partnerId || undefined,
-    p_zone_id: filters.zoneId || undefined,
-    p_restaurant_id: filters.restaurantId || undefined,
-    p_driver_status:
-      filters.driverStatus && filters.driverStatus !== "all"
-        ? filters.driverStatus
-        : undefined,
-    p_driver_id: filters.driverId || undefined,
-    p_sort: filters.sort ?? "overall_desc",
-    p_limit: pageSize,
-    p_offset: page * pageSize,
-  });
+  // RPC present in prod; regenerate database.ts when CLI types catch up.
+  const { data, error } = await supabase.rpc(
+    "admin_list_driver_performance" as never,
+    {
+      p_from: from,
+      p_to: to,
+      p_search: filters.search?.trim() || undefined,
+      p_partner_id: filters.partnerId || undefined,
+      p_zone_id: filters.zoneId || undefined,
+      p_restaurant_id: filters.restaurantId || undefined,
+      p_driver_status:
+        filters.driverStatus && filters.driverStatus !== "all"
+          ? filters.driverStatus
+          : undefined,
+      p_driver_id: filters.driverId || undefined,
+      p_sort: filters.sort ?? "overall_desc",
+      p_limit: pageSize,
+      p_offset: page * pageSize,
+    } as never,
+  );
 
   if (error) {
     throw new Error(error.message);
@@ -196,7 +200,7 @@ export async function getPerformanceScoreWeights(): Promise<PerformanceScoreWeig
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("app_settings")
-    .select("performance_score_weights")
+    .select("*")
     .eq("id", 1)
     .maybeSingle();
 
@@ -204,9 +208,9 @@ export async function getPerformanceScoreWeights(): Promise<PerformanceScoreWeig
     throw new Error(error.message);
   }
 
-  return parsePerformanceWeights(
-    data?.performance_score_weights ?? DEFAULT_PERFORMANCE_WEIGHTS,
-  );
+  const weights = (data as { performance_score_weights?: unknown } | null)
+    ?.performance_score_weights;
+  return parsePerformanceWeights(weights ?? DEFAULT_PERFORMANCE_WEIGHTS);
 }
 
 export async function updatePerformanceScoreWeights(
@@ -221,7 +225,7 @@ export async function updatePerformanceScoreWeights(
       .update({
         performance_score_weights: next,
         updated_at: new Date().toISOString(),
-      })
+      } as never)
       .eq("id", 1);
 
     if (error) {

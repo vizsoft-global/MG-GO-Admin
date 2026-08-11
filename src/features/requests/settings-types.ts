@@ -1,0 +1,58 @@
+export const REQUEST_TYPE_SLUGS = [
+  "loan",
+  "leave",
+  "sick_leave",
+  "asset",
+  "fuel",
+  "document",
+  "complaint",
+  "salary_justification",
+] as const;
+
+export type RequestTypeSlug = (typeof REQUEST_TYPE_SLUGS)[number];
+
+export const STEP_ALLOWED_ACTIONS = [
+  "approve",
+  "reject",
+  "reschedule",
+  "request_documents",
+  "attach_send",
+  "send_response",
+  "escalate",
+  "attach_breakdown",
+] as const;
+
+export type StepAllowedAction = (typeof STEP_ALLOWED_ACTIONS)[number];
+
+export type StepTemplateRow = {
+  id?: string;
+  step_order: number;
+  step_name: string;
+  role_key: string;
+  is_system_auto: boolean;
+  allowed_actions: string[];
+};
+
+export type ComplaintCategoryRow = {
+  id: string;
+  key: string;
+  label_en: string;
+  label_ar: string | null;
+  is_active: boolean;
+  sort_order: number;
+};
+
+export type StaffAccessRow = {
+  id: string;
+  profile_id: string;
+  profile_name: string;
+  profile_email: string | null;
+  request_type: string;
+  access_level: "view_only" | "approver";
+};
+
+export type StaffProfileOption = {
+  id: string;
+  full_name: string;
+  email: string | null;
+};

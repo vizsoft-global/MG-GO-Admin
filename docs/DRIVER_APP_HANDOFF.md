@@ -235,7 +235,9 @@ Config (may be empty until client confirms): `loan_tenure_options`, `complaint_c
 **Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests`, `driver_get_request`, `driver_submit_clarification`.  
 Loan submit requires rows in `loan_tenure_options` (empty until client confirms). Complaint submit requires `complaint_categories` rows (empty until client confirms).
 
-**Flutter routes (MG-GO):** Profile → Help & Support → `/profile/support` hub; forms `/profile/support/requests/new?type=…`; list/detail; visit book `/profile/support/visits/book`; my visits `/profile/support/visits`. Feature folder `lib/features/support/`. Attachments upload to Supabase bucket `request-attachments` under `{driver_id}/…`.
+**Flutter routes (MG-GO):** Profile → Help & Support → `/profile/support` hub; forms `/profile/support/requests/new?type=…`; list/detail; **Action required** `/profile/support/action-required` (status `needs_clarification`); visit book `/profile/support/visits/book`; my visits `/profile/support/visits`. Feature folder `lib/features/support/`. Attachments upload to Supabase bucket `request-attachments` under `{driver_id}/…`.
+
+**Driver notifications (RCM/Visit):** On admin decide / visit status change, Postgres `notify_driver_transactional` inserts inbox campaign + dispatch item. Deep links: `musallam:///profile/support/requests/{id}`, `musallam:///profile/support/action-required`, `musallam:///profile/support/visits`. `action_params.record_type` = `request` | `visit`. No admin push for RCM attention.
 
 ### Visit booking (Help & Support → Schedule visit)
 | Table | Notes |
