@@ -9,6 +9,8 @@ import type {
   RequestApprovalStep,
   RequestAttachment,
   RequestClarification,
+  RequestCreateInput,
+  RequestCreateOptions,
   RequestDecisionTerms,
   RequestDepartmentOption,
   RequestDetail,
@@ -23,6 +25,14 @@ async function requireRequestsView() {
     !session ||
     !hasPermissionInSet(session.permissions, "requests.view", session.isSuperAdmin)
   ) {
+    throw new Error("not_authorized");
+  }
+  return session;
+}
+
+async function requireRequestsManage() {
+  const session = await requireRequestsView();
+  if (!hasPermissionInSet(session.permissions, "requests.manage", session.isSuperAdmin)) {
     throw new Error("not_authorized");
   }
   return session;
@@ -446,6 +456,111 @@ export async function decideAdminRequestsBulk(input: {
   });
 
   return { ok: failed.length === 0, succeeded, failed };
+}
+
+/**
+ * Riders, plus the two option tables the create form needs. `loan_tenure_options` and
+ * `complaint_categories` are deliberately empty until the client confirms them, so the form
+ * reads them instead of hardcoding values and shows an empty state when there are none.
+ */
+export async function fetchRequestCreateOptions(): Promise<
+  RequestCreateOptions & { error?: string }
+> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+
+  const [driversResult, tenuresResult, categoriesResult] = await Promise.all([
+    supabase
+      .from("drivers")
+      .select("id, driver_code, employee_id, profiles(full_name, phone)")
+      .is("archived_at", null)
+      .order("driver_code"),
+    supabase
+      .from("loan_tenure_options")
+      .select("months, label, is_active")
+      .eq("is_active", true)
+      .order("sort_order")
+      .order("months"),
+    supabase
+      .from("complaint_categories")
+      .select("key, label_en, is_active")
+      .eq("is_active", true)
+      .order("sort_order")
+      .order("label_en"),
+  ]);
+
+  const error =
+    driversResult.error?.message ??
+    tenuresResult.error?.message ??
+    categoriesResult.error?.message;
+
+  return {
+    drivers: (driversResult.data ?? []).map((row) => {
+      const profile = asRecord(row.profiles);
+      return {
+        id: row.id,
+        full_name: String(profile.full_name ?? row.driver_code ?? "—"),
+        driver_code: row.driver_code ?? "",
+        employee_id: row.employee_id,
+        phone: profile.phone != null ? String(profile.phone) : null,
+      };
+    }),
+    loanTenures: (tenuresResult.data ?? []).map((row) => ({
+      months: Number(row.months),
+      label: row.label ?? `${row.months}`,
+    })),
+    complaintCategories: (categoriesResult.data ?? []).map((row) => ({
+      key: row.key,
+      label: row.label_en ?? row.key,
+    })),
+    ...(error ? { error } : {}),
+  };
+}
+
+/**
+ * Office staff raising a request for a rider who phoned in. `admin_create_request` mirrors
+ * `driver_create_request` (code allocation, approval-step seeding, gated config checks) and
+ * stamps `payload.created_on_behalf_by` so the audit trail keeps the two apart.
+ */
+export async function createRequestOnBehalf(input: RequestCreateInput): Promise<{
+  ok: boolean;
+  requestId?: string;
+  requestCode?: string;
+  error?: string;
+}> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("admin_create_request", {
+    p_driver_id: input.driverId,
+    p_type: input.type as "leave",
+    p_payload: input.payload,
+    p_amount_kwd: input.amountKwd ?? undefined,
+    p_start_date: input.startDate ?? undefined,
+    p_end_date: input.endDate ?? undefined,
+    p_severity: (input.severity as "low") ?? undefined,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  const payload = asRecord(data);
+  if (payload.ok === false) {
+    return { ok: false, error: String(payload.error ?? "failed") };
+  }
+
+  const requestId = payload.id != null ? String(payload.id) : undefined;
+  await logAdminMutation({
+    action: "create",
+    entityType: "requests",
+    entityId: requestId,
+    routeName: "requests.createOnBehalf",
+    context: { requestType: input.type, driverId: input.driverId },
+  });
+
+  return {
+    ok: true,
+    requestId,
+    requestCode: payload.request_code != null ? String(payload.request_code) : undefined,
+  };
 }
 
 /** Edit path for requests already decided — merges into the last completed step. */

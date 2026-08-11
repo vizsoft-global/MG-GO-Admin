@@ -3,14 +3,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
+  createRequestOnBehalf,
   decideAdminRequest,
   decideAdminRequestsBulk,
   fetchAdminRequestDetail,
   fetchAdminRequestsList,
+  fetchRequestCreateOptions,
   fetchRequestTypeCounts,
   saveRequestDecisionTerms,
 } from "./requests-actions";
-import type { RequestDecisionTerms, RequestListFilters } from "./types";
+import type {
+  RequestCreateInput,
+  RequestDecisionTerms,
+  RequestListFilters,
+} from "./types";
 
 export function useAdminRequestsList(filters: RequestListFilters) {
   return useQuery({
@@ -24,6 +30,25 @@ export function useRequestTypeCounts() {
     queryKey: queryKeys.requests.typeCounts(),
     queryFn: () => fetchRequestTypeCounts(),
     staleTime: 60_000,
+  });
+}
+
+export function useRequestCreateOptions(enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.requests.all(), "create-options"],
+    queryFn: () => fetchRequestCreateOptions(),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useCreateRequestOnBehalf() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RequestCreateInput) => createRequestOnBehalf(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.requests.all() });
+    },
   });
 }
 

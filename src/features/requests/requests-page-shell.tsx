@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Loader2,
   MapPin,
+  Plus,
   RefreshCw,
   Timer,
   TriangleAlert,
@@ -47,6 +48,7 @@ import { useZonesList } from "@/features/zones/use-zones";
 import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { RequestCreateDialog } from "./request-create-dialog";
 import { requestStatusLabelKey, requestStatusVariant } from "./request-status-utils";
 import { DECISION_TERM_TYPES, type RequestDatePreset, type RequestListRow } from "./types";
 import { useAdminRequestsList, useBulkDecideRequests } from "./use-requests";
@@ -197,9 +199,11 @@ export function RequestsPageShell({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { can } = useAuth();
   const canDecide = can("requests.approve") || can("requests.manage");
+  const canCreate = can("requests.manage");
   const bulkDecide = useBulkDecideRequests();
 
   const filters = useMemo(
@@ -346,6 +350,17 @@ export function RequestsPageShell({
               />
               {t("refresh")}
             </Button>
+            {canCreate ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-9"
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus className="me-1.5 h-3.5 w-3.5" />
+                {t("create.button")}
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -733,6 +748,8 @@ export function RequestsPageShell({
           </AppDataTable>
         )}
       </AppListCard>
+
+      <RequestCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent

@@ -82,6 +82,35 @@ export type RequestDecisionTerms = {
 
 export const DECISION_TERM_TYPES = ["loan", "asset", "sick_leave"] as const;
 
+/** Rider picker source for the admin "New request" modal. */
+export type RequestDriverOption = {
+  id: string;
+  full_name: string;
+  driver_code: string;
+  employee_id: string | null;
+  phone: string | null;
+};
+
+/**
+ * Config the create form needs. `loanTenures` and `complaintCategories` stay empty until the
+ * client confirms them — the form must show that instead of inventing options.
+ */
+export type RequestCreateOptions = {
+  drivers: RequestDriverOption[];
+  loanTenures: Array<{ months: number; label: string }>;
+  complaintCategories: Array<{ key: string; label: string }>;
+};
+
+export type RequestCreateInput = {
+  driverId: string;
+  type: string;
+  payload: Record<string, string | number | boolean>;
+  amountKwd?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  severity?: string | null;
+};
+
 export type RequestClarification = {
   id: string;
   step_order: number | null;
