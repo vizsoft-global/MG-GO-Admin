@@ -11,6 +11,7 @@ import {
   Fuel,
   MessageSquareWarning,
   Package,
+  Plus,
   Stethoscope,
   type LucideIcon,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { ToggleChip } from "@/components/app/toggle-chip";
+import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import {
   Table,
@@ -101,6 +103,12 @@ export function TypesSettingsPanel() {
           { label: t("hub"), href: "/requests/settings" },
           { label: t("title") },
         ]}
+        actions={
+          <Button type="button" size="sm" className="h-9" disabled title={t("deferredNote")}>
+            <Plus className="me-1.5 h-3.5 w-3.5" />
+            {t("addRequestType")}
+          </Button>
+        }
       />
 
       <AppListCard className="p-0">

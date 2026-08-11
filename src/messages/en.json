@@ -2910,6 +2910,7 @@
           "hub": "RCM settings",
           "title": "Request types & fields",
           "subtitle": "Manage request types, fields, and screenshot policy",
+          "addRequestType": "Add request type",
           "deferredNote": "Custom request types and field editing are not supported yet — only the built-in enum values and their screenshot/active policy can be changed here.",
           "colSlug": "Slug",
           "colLabel": "Label",
