@@ -92,14 +92,14 @@ export function RequestsHubShell() {
 
   return (
     <AppPage>
-      <AppPageHeader title={t("title")} description={t("hub.subtitle")} />
+      <AppPageHeader title={t("hub.title")} description={t("hub.subtitle")} />
 
       <div className="flex flex-col items-center gap-1 pt-2 text-center">
         <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {t("hub.requestTypesHeading")}
         </h2>
       </div>
-      <div className="mx-auto grid grid-cols-2 gap-4 pt-3 sm:grid-cols-4 sm:gap-6">
+      <div className="mx-auto grid w-fit grid-cols-2 gap-x-10 gap-y-6 pt-3 sm:grid-cols-4">
         {TYPE_TILES.map((tile) => (
           <Link
             key={tile.type}
@@ -119,7 +119,7 @@ export function RequestsHubShell() {
           {t("hub.operationsHeading")}
         </h2>
       </div>
-      <div className="mx-auto grid grid-cols-2 gap-4 pt-3 sm:grid-cols-5 sm:gap-6">
+      <div className="mx-auto grid w-fit grid-cols-2 gap-x-10 gap-y-6 pt-3 sm:grid-cols-5">
         {OP_TILES.map((tile) => (
           <Link
             key={tile.href}
