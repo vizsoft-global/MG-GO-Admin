@@ -74,3 +74,19 @@ Not a full re-run against the baseline above (§ Baseline numbers unchanged — 
 | ESign categories | PASS | Covered by the same settings-actions wiring as request categories. |
 
 Locked constraints respected: loan tenure options and complaint categories remain empty (no invented seed values); Leave approval chain and Admin notification rules unchanged (attention-badge-only, verified in Backend verification table above). Migrations `20260827100000`–`20260827105000` applied to `eoksxkdssptgyqyywdju` (migration history repaired for `20260827102100`, which had been applied out-of-band). Production build (`npm run build`) passed clean. Not deployed per instruction.
+
+### 2026-08-12 — Admin Visit Booking authenticated re-test (7 screens)
+
+Re-tested at 1366×768 with a real admin session; every mutation was rolled back afterwards (VIS-00001 back to `confirmed`, branch desk count restored, blocked date removed, department handling time cleared).
+
+| Node | Screen | Result | One-line reason |
+|---|---|---|---|
+| `4195:11440` | VB/07 Branches | PASS | Footer-first Add/Edit modal with Close outside; edit round-trip written to DB and restored. |
+| `4195:8626` | VB/01 All visits | PASS + gap | Fixed status pill, `12 Aug` date order and a clipped ACTIONS column (`fa9d3ca`); Figma's bulk-select checkbox column has no visits bulk RPC to drive it. |
+| `4195:8350` | VB/00 Hub | PASS | MANAGE / CONFIGURE grouping with live badge counts. |
+| `4195:9172` | VB/02 Calendar | PASS + gap | Day/Week toggle and branch picker correct; the purple Appointment overlay belongs to the appointments module. |
+| `4195:10894` | VB/05 Slots | PASS | Blocked-date add → verify → remove round-trip, table back to 0 rows. |
+| `4195:11133` | VB/06 Departments | PASS + gap | 11 rows above the fold; no branch filter because `visit_departments` has no `branch_id`. |
+| `4195:11679` | VB/08 Reports | PASS | Bars and date presets work; KPI trend deltas need a prior-period aggregate RPC. |
+
+Two environment findings, both outside the visits scope: the dashboard shell logs `No QueryClient set` and 500s intermittently in dev even on `/dashboard` (single deduped `@tanstack/react-query`, so a Turbopack dev module-graph artifact — re-check on the next production build), and the dev server died once from memory exhaustion and was restarted with `--max-old-space-size=6144`. Day view scrolls horizontally with 11 real departments against Figma's 5 mock columns, which is acceptable for a resource calendar. `npx tsc --noEmit` clean.
