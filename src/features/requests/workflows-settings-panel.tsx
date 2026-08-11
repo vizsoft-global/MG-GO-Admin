@@ -195,7 +195,12 @@ export function WorkflowsSettingsPanel() {
                 </SelectContent>
               </Select>
             </div>
-            <Button size="sm" className="h-9" onClick={handleSave} disabled={isPending || loading}>
+            <Button
+              size="sm"
+              className="h-9"
+              onClick={handleSave}
+              disabled={isPending || loading || !dirty}
+            >
               {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {t("save")}
             </Button>

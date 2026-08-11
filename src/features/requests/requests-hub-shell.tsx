@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { AppPage, AppPageHeader } from "@/components/app";
+import { AppPage } from "@/components/app";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { useRequestTypeCounts } from "./use-requests";
@@ -92,9 +92,14 @@ export function RequestsHubShell() {
 
   return (
     <AppPage>
-      <AppPageHeader title={t("hub.title")} description={t("hub.subtitle")} />
-
       <div className="flex flex-col items-center gap-1 pt-2 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t("hub.title")}
+        </h1>
+        <p className="text-sm text-muted-foreground">{t("hub.subtitle")}</p>
+      </div>
+
+      <div className="flex flex-col items-center gap-1 pt-6 text-center">
         <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {t("hub.requestTypesHeading")}
         </h2>
