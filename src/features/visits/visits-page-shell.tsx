@@ -1,17 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Activity,
   AlertTriangle,
   CalendarDays,
+  Check,
+  CheckCheck,
   Clock,
   Download,
   ExternalLink,
   FileText,
   Loader2,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -36,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { StatusPill } from "@/components/dashboard/status-pill";
 import { useAuth } from "@/contexts/auth-context";
 import { Link } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -69,25 +73,15 @@ function isoDate(d: string | null): string {
   return d ? d.slice(0, 10) : "";
 }
 
-/** `2026-08-12` -> `12 Aug` (Figma column format). */
-function shortDate(value: string): string {
+/**
+ * `2026-08-12` -> `12 Aug` (Figma column format). Built from parts because
+ * `toLocaleDateString` puts the month first for en-US.
+ */
+function shortDate(value: string, locale: string): string {
   const parsed = new Date(`${value}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-}
-
-function statusDotClass(variant: ReturnType<typeof visitStatusVariant>): string {
-  if (variant === "success") return "bg-success";
-  if (variant === "warning") return "bg-warning";
-  if (variant === "danger") return "bg-danger";
-  return "bg-muted-foreground";
-}
-
-function statusTextClass(variant: ReturnType<typeof visitStatusVariant>): string {
-  if (variant === "success") return "text-success";
-  if (variant === "warning") return "text-warning";
-  if (variant === "danger") return "text-danger";
-  return "text-muted-foreground";
+  const month = parsed.toLocaleDateString(locale, { month: "short" });
+  return `${parsed.getDate()} ${month}`;
 }
 
 function toCsv(rows: VisitListRow[]): string {
@@ -120,6 +114,7 @@ function toCsv(rows: VisitListRow[]): string {
 
 export function VisitsPageShell() {
   const t = useTranslations("pages.visitBookings");
+  const locale = useLocale();
   const { can } = useAuth();
   const canOperate = can("visits.operate");
   const queryClient = useQueryClient();
@@ -495,10 +490,9 @@ export function VisitsPageShell() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", statusTextClass(variant))}>
-                      <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass(variant))} />
+                    <StatusPill variant={variant} dot>
                       {t(`status.${row.status}` as "status.confirmed")}
-                    </span>
+                    </StatusPill>
                   </TableCell>
                   <TableCell className="text-sm tabular-nums text-muted-foreground">
                     {row.slot_start ? row.slot_start.slice(0, 5) : "—"}
@@ -508,13 +502,15 @@ export function VisitsPageShell() {
                     className="text-sm tabular-nums"
                     title={row.scheduled_date}
                   >
-                    {shortDate(row.scheduled_date)}
+                    {shortDate(row.scheduled_date, locale)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
                       <Link
                         href={`/visit-bookings/${row.id}`}
-                        className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-primary hover:bg-primary/10"
+                        title={t("viewDetails")}
+                        aria-label={t("viewDetails")}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-primary hover:bg-primary/10"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Link>
@@ -522,33 +518,39 @@ export function VisitsPageShell() {
                         <>
                           <Button
                             type="button"
-                            size="sm"
-                            className="h-8"
+                            size="icon"
+                            className="h-8 w-8"
+                            title={t("checkIn")}
+                            aria-label={t("checkIn")}
                             disabled={busyId === row.id}
                             onClick={() => void setStatus(row.id, "checked_in")}
                           >
-                            {t("checkIn")}
+                            <Check className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-destructive hover:bg-destructive/10"
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            title={t("cancel")}
+                            aria-label={t("cancel")}
                             disabled={busyId === row.id}
                             onClick={() => void setStatus(row.id, "cancelled")}
                           >
-                            {t("cancel")}
+                            <X className="h-3.5 w-3.5" />
                           </Button>
                         </>
                       ) : canOperate && row.status === "checked_in" ? (
                         <Button
                           type="button"
-                          size="sm"
-                          className="h-8"
+                          size="icon"
+                          className="h-8 w-8"
+                          title={t("complete")}
+                          aria-label={t("complete")}
                           disabled={busyId === row.id}
                           onClick={() => void setStatus(row.id, "completed")}
                         >
-                          {t("complete")}
+                          <CheckCheck className="h-3.5 w-3.5" />
                         </Button>
                       ) : null}
                     </div>
