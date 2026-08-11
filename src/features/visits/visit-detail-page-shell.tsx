@@ -9,11 +9,11 @@ import {
   ExternalLink,
   Loader2,
   Pencil,
-  QrCode,
   Send,
   X,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { AppPage, AppPageHeader } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -456,8 +456,13 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
             </div>
 
             <div className="mt-3 flex items-center gap-4 rounded-lg border border-border bg-muted/30 p-3">
-              <span className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-lg border border-border bg-background">
-                <QrCode className="h-8 w-8 text-muted-foreground" />
+              <span className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-lg border border-border bg-white p-1">
+                <QRCodeSVG
+                  value={visit.booking_code}
+                  size={64}
+                  level="M"
+                  marginSize={0}
+                />
               </span>
               <div className="min-w-0">
                 <p className={SECTION_LABEL}>{t("detail.checkInCodeLabel")}</p>

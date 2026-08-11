@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Check, Loader2, QrCode, RefreshCw, Search } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -37,8 +37,10 @@ export function VisitsReceptionShell() {
   const queryClient = useQueryClient();
   const today = new Date().toISOString().slice(0, 10);
   const [search, setSearch] = useState("");
+  const [scanValue, setScanValue] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const scanRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: queryKeys.visits.reception(today),
@@ -85,6 +87,21 @@ export function VisitsReceptionShell() {
     null;
 
   const recents = useMemo(() => sorted.slice(0, 5).map((r) => r.booking_code), [sorted]);
+
+  // Handheld QR scanners behave as keyboards: they type the code and press
+  // Enter, so the field stays focused and clears itself after every read.
+  const resolveScan = (raw: string) => {
+    const code = raw.trim().toUpperCase();
+    if (!code) return;
+    const row = sorted.find((r) => r.booking_code.toUpperCase() === code);
+    if (!row) {
+      toast.error(t("reception.scanNotFound", { code }));
+    } else {
+      setSelectedId(row.id);
+    }
+    setScanValue("");
+    scanRef.current?.focus();
+  };
 
   const setStatus = async (status: "checked_in" | "completed" | "no_show") => {
     if (!selected) return;
@@ -316,14 +333,35 @@ export function VisitsReceptionShell() {
           </div>
 
           <div className="space-y-2">
-            <div className="rounded-xl border border-border bg-card p-4 text-center shadow-sm">
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <h2 className="text-sm font-semibold">{t("reception.scanTitle")}</h2>
-              <div className="mt-3 flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-6">
-                <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-muted">
-                  <QrCode className="h-7 w-7 text-muted-foreground" />
+              <form
+                className="mt-3 flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  resolveScan(scanValue);
+                }}
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted">
+                  <QrCode className="h-6 w-6 text-muted-foreground" />
                 </span>
-                <p className="text-[11px] text-muted-foreground">{t("reception.scanHint")}</p>
-              </div>
+                <Input
+                  ref={scanRef}
+                  autoFocus
+                  className="h-9 text-center font-mono uppercase placeholder:normal-case"
+                  placeholder={t("reception.scanPlaceholder")}
+                  value={scanValue}
+                  onChange={(e) => setScanValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    resolveScan(e.currentTarget.value);
+                  }}
+                />
+                <p className="text-center text-[11px] text-muted-foreground">
+                  {t("reception.scanHint")}
+                </p>
+              </form>
             </div>
 
             <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
