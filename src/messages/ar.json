@@ -2842,7 +2842,7 @@
           "slaGapNote": "مدة SLA لكل خطوة ومسار التصعيد غير مدعومين في قاعدة البيانات بعد."
         },
         "categories": {
-          "hub": "إعدادات RCM",
+          "hub": "الإعدادات",
           "title": "فئات الشكاوى",
           "subtitle": "الخيارات المعروضة للسائقين عند تقديم شكوى",
           "emptyHint": "لا توجد فئات بعد — أضف صفوفاً عند تأكيد العميل للقائمة.",
@@ -2865,7 +2865,7 @@
           }
         },
         "types": {
-          "hub": "إعدادات RCM",
+          "hub": "الإعدادات",
           "title": "أنواع الطلبات والحقول",
           "subtitle": "إدارة أنواع الطلبات والحقول المخصصة والأيقونات وسياسة لقطات الشاشة",
           "addRequestType": "إضافة نوع طلب",
@@ -2888,7 +2888,7 @@
           "edit": "تعديل"
         },
         "departments": {
-          "hub": "إعدادات RCM",
+          "hub": "الإعدادات",
           "title": "الأقسام والموظفون",
           "subtitle": "إدارة أعضاء كل قسم ودورهم",
           "addDepartment": "إضافة قسم",
@@ -2929,7 +2929,7 @@
           }
         },
         "roles": {
-          "hub": "إعدادات RCM",
+          "hub": "الإعدادات",
           "title": "الأدوار وحقوق الوصول",
           "subtitle": "دوران يحددان من يمكنه العرض ومن يمكنه الموافقة أو الرفض",
           "viewOnlyTitle": "عرض فقط",
@@ -3059,15 +3059,19 @@
           "allStaff": "كل الموظفين",
           "colActor": "المنفّذ",
           "colTarget": "الهدف",
-          "colDetails": "التفاصيل"
+          "colDetails": "التفاصيل",
+          "range": "{from}–{to} من {total}",
+          "pageOf": "صفحة {page} من {pages}",
+          "prev": "السابق",
+          "next": "التالي"
         },
         "linksMeta": {
-          "workflows": "{count} مسار",
-          "types": "{count} نوع طلب",
-          "assets": "{count} أصل",
-          "departments": "{count} قسم",
-          "roles": "{count} دور",
-          "esign": "{count} فئة",
+          "workflows": "{count, plural, =0 {لا توجد مسارات} one {مسار واحد} two {مساران} few {# مسارات} many {# مسارًا} other {# مسار}}",
+          "types": "{count, plural, =0 {لا توجد أنواع طلبات} one {نوع طلب واحد} two {نوعا طلب} few {# أنواع طلبات} many {# نوع طلب} other {# نوع طلب}}",
+          "assets": "{count, plural, =0 {لا توجد أصول} one {أصل واحد} two {أصلان} few {# أصول} many {# أصلًا} other {# أصل}}",
+          "departments": "{count, plural, =0 {لا توجد أقسام} one {قسم واحد} two {قسمان} few {# أقسام} many {# قسمًا} other {# قسم}}",
+          "roles": "{count, plural, =0 {لا توجد أدوار} one {دور واحد} two {دوران} few {# أدوار} many {# دورًا} other {# دور}}",
+          "esign": "{count, plural, =0 {لا توجد فئات} one {فئة واحدة} two {فئتان} few {# فئات} many {# فئة} other {# فئة}}",
           "audit": "عرض النشاط",
           "importExport": "CSV / XLSX",
           "screenshot": "للمشرف فقط"
@@ -3308,7 +3312,8 @@
           "empty": "لا توجد عناصر في الفهرس بعد",
           "assetCount": "{count} أصل",
           "searchPlaceholder": "بحث في الأصول",
-          "outOfStock": "غير متوفر"
+          "outOfStock": "غير متوفر",
+          "allCategories": "كل الفئات"
         },
         "importExport": {
           "requests": "الطلبات",
@@ -3507,7 +3512,7 @@
         "filterAllBranches": "كل الفروع",
         "filterAllDepartments": "كل الأقسام",
         "filterAllStatus": "كل الحالات",
-        "colVisId": "الحجز",
+        "colVisId": "رقم الزيارة",
         "colSlot": "الموعد"
       },
       "kpi": {
@@ -3648,7 +3653,7 @@
       "reports": {
         "title": "تقارير الزيارات",
         "subtitle": "عدد الحالات لـ {month}",
-        "newSubtitle": "الحجم وعدم الحضور والإكمال حسب القسم",
+        "newSubtitle": "حجم الزيارات ونسبة عدم الحضور وأداء الأقسام حسب الفرع",
         "completionRateCard": "معدل الإكمال",
         "noShowRate": "معدل عدم الحضور",
         "visitsOverTime": "الزيارات عبر الزمن",
@@ -3669,7 +3674,11 @@
         "busiestSlotsSub": "الحجوزات حسب الموعد",
         "busiestSlotsCaption": "أكثر المواعيد حجزًا في النطاق المحدد",
         "busiestSlotsEmpty": "لا توجد حجوزات مواعيد في النطاق",
-        "colAvgWait": "متوسط الانتظار"
+        "colAvgWait": "متوسط الانتظار",
+        "pageTitle": "التقارير والتحليلات",
+        "filterBranchAll": "الفرع: كل الفروع",
+        "filterBranchValue": "الفرع: {name}",
+        "weekBarTitle": "{week} · {count} زيارة"
       },
       "departments": {
         "title": "الأقسام",
@@ -3685,11 +3694,13 @@
         "editTitle": "تعديل القسم",
         "addTitle": "قسم جديد",
         "modalSubtitle": "تعيين المكتب وتفاصيل الخدمة",
-        "countLabel": "{count} أقسام"
+        "countLabel": "{count, plural, one {قسم واحد} other {# أقسام}}",
+        "pageTitle": "الأقسام والمكاتب",
+        "pageSubtitle": "إدارة مكتب الاستقبال والموظف المسؤول والإتاحة لكل قسم"
       },
       "branches": {
         "title": "الفروع",
-        "subtitle": "دليل فروع المكتب الرئيسي لمواعيد الزيارة",
+        "subtitle": "إدارة مواقع الزيارات. كل حجز وقاعدة موعد ومكتب ينتمي إلى فرع.",
         "editTitle": "تعديل الفرع",
         "emptyTitle": "لا فروع",
         "emptyDescription": "فهرس الفروع موجود في قاعدة البيانات.",
@@ -3701,7 +3712,7 @@
         "colWorkingHours": "ساعات العمل",
         "colDesks": "المكاتب",
         "desks": "المكاتب",
-        "desksValue": "{count} مكاتب",
+        "desksValue": "{count, plural, one {مكتب واحد} other {# مكاتب}}",
         "desksInvalid": "يجب أن يكون عدد المكاتب 1 على الأقل",
         "default": "افتراضي",
         "city": "المدينة"
@@ -3744,7 +3755,7 @@
         "bufferBetween": "الفاصل بين المواعيد",
         "bookingWindow": "نافذة الحجز",
         "minutesValue": "{minutes} دقيقة",
-        "ridersValue": "{count} مندوبين",
+        "ridersValue": "{count, plural, one {سائق واحد} other {# سائقين}}",
         "daysAheadValue": "{days} يوماً مقدماً",
         "desksPerDepartment": "المكاتب لكل قسم",
         "blockedDatesTitle": "التواريخ المحجوبة",

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Link } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
+import { selectOptionsFrom } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
 import {
   fetchAdminVisitsList,
@@ -126,6 +127,15 @@ export function VisitsCalendarShell() {
   const departments = useMemo(
     () => (deptData?.rows ?? []).filter((d) => d.is_active),
     [deptData?.rows],
+  );
+  const branchItems = useMemo(
+    () =>
+      selectOptionsFrom(
+        configs,
+        (c) => c.branch_id,
+        (c) => c.branch_name,
+      ),
+    [configs],
   );
 
   const blockedDates = useMemo(() => {
@@ -279,6 +289,7 @@ export function VisitsCalendarShell() {
         <div className="flex flex-wrap items-center gap-2">
           {configs.length > 0 ? (
             <Select
+              items={branchItems}
               value={config?.branch_id ?? undefined}
               onValueChange={(v) => v && setBranchId(v)}
             >
@@ -287,9 +298,9 @@ export function VisitsCalendarShell() {
                 <SelectValue placeholder={t("calendar.branch")} />
               </SelectTrigger>
               <SelectContent>
-                {configs.map((c) => (
-                  <SelectItem key={c.branch_id} value={c.branch_id} label={c.branch_name}>
-                    {c.branch_name}
+                {branchItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -372,17 +383,17 @@ export function VisitsCalendarShell() {
             description={t("calendar.noSlotsDescription")}
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="max-h-[calc(100dvh-6.5rem)] overflow-auto">
             <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-muted/40">
-                  <th className="h-[42px] w-[95px] text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-muted/40 [&>th]:bg-muted/40 [&>th]:backdrop-blur-sm">
+                  <th className="h-[38px] w-[80px] text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("colTime")}
                   </th>
                   {columns.map((column) => (
                     <th
                       key={column.id}
-                      className="h-[42px] min-w-[160px] border-s border-border ps-3 text-start"
+                      className="h-[38px] min-w-[150px] border-s border-border ps-3 text-start"
                     >
                       <span className="block truncate text-[12.5px] font-semibold text-foreground">
                         {column.title}
@@ -411,7 +422,7 @@ export function VisitsCalendarShell() {
                       </tr>
                     ) : null}
                     <tr className="border-t border-border">
-                      <td className="h-[54px] text-center text-xs font-medium tabular-nums text-muted-foreground">
+                      <td className="h-[38px] text-center text-xs font-medium tabular-nums text-muted-foreground">
                         {row.time}
                       </td>
                       {columns.map((column) => {
@@ -420,7 +431,7 @@ export function VisitsCalendarShell() {
                           return (
                             <td
                               key={column.id}
-                              className="h-[54px] border-s border-border bg-muted/60 text-center text-[11px] font-medium text-muted-foreground"
+                              className="h-[38px] border-s border-border bg-muted/60 text-center text-[11px] font-medium text-muted-foreground"
                             >
                               {t("calendar.blocked")}
                             </td>
@@ -432,7 +443,7 @@ export function VisitsCalendarShell() {
                           <td
                             key={column.id}
                             className={cn(
-                              "h-[54px] border-s border-border px-2.5 py-2 align-top",
+                              "h-[38px] border-s border-border px-2 py-1 align-top",
                               cell.booked === 0
                                 ? "bg-card"
                                 : isFull
@@ -445,7 +456,7 @@ export function VisitsCalendarShell() {
                             {cell.first ? (
                               <Link
                                 href={`/visit-bookings/${cell.first.id}`}
-                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card py-0.5 pe-2 ps-1.5 text-[11px] font-medium text-foreground hover:bg-muted/60"
+                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card py-px pe-1.5 ps-1.5 text-[10.5px] font-medium leading-4 text-foreground hover:bg-muted/60"
                               >
                                 <span
                                   className={cn(
@@ -462,7 +473,7 @@ export function VisitsCalendarShell() {
                             ) : null}
                             <span
                               className={cn(
-                                "mt-1.5 block text-[10.5px] tabular-nums",
+                                "block text-[10px] leading-4 tabular-nums",
                                 cell.booked === 0
                                   ? "font-medium text-muted-foreground/60"
                                   : isFull

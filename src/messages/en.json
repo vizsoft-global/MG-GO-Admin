@@ -2924,7 +2924,7 @@
           "slaGapNote": "Per-step SLA and escalation targets from the design have no column on request_approval_step_templates yet — pending schema sign-off."
         },
         "categories": {
-          "hub": "RCM settings",
+          "hub": "Settings",
           "title": "Complaint categories",
           "subtitle": "Options shown to drivers when filing a complaint",
           "emptyHint": "No categories yet — add rows when the client confirms the list.",
@@ -2947,7 +2947,7 @@
           }
         },
         "types": {
-          "hub": "RCM settings",
+          "hub": "Settings",
           "title": "Request types & fields",
           "subtitle": "Manage request types, custom fields, icon slots and screenshot policy",
           "addRequestType": "Add request type",
@@ -2970,7 +2970,7 @@
           "edit": "Edit"
         },
         "departments": {
-          "hub": "RCM settings",
+          "hub": "Settings",
           "title": "Departments and staff",
           "subtitle": "Manage who belongs to each department queue and their role",
           "addDepartment": "Add department",
@@ -3011,7 +3011,7 @@
           }
         },
         "roles": {
-          "hub": "RCM settings",
+          "hub": "Settings",
           "title": "Roles & access rights",
           "subtitle": "Two roles control who can view and who can approve or reject requests",
           "viewOnlyTitle": "View only",
@@ -3131,7 +3131,7 @@
           "allActions": "All action types",
           "searchPlaceholder": "Search route or entity…",
           "eventCount": "{count} events",
-          "colWhen": "When",
+          "colWhen": "Timestamp",
           "colAction": "Action",
           "colRoute": "Route",
           "colEntity": "Entity",
@@ -3141,15 +3141,19 @@
           "allStaff": "All staff",
           "colActor": "Actor",
           "colTarget": "Target",
-          "colDetails": "Details"
+          "colDetails": "Details",
+          "range": "{from}–{to} of {total}",
+          "pageOf": "Page {page} of {pages}",
+          "prev": "Previous",
+          "next": "Next"
         },
         "linksMeta": {
-          "workflows": "{count} workflows",
-          "types": "{count} request types",
-          "assets": "{count} assets",
-          "departments": "{count} departments",
-          "roles": "{count} roles",
-          "esign": "{count} categories",
+          "workflows": "{count, plural, =0 {No workflows} one {# workflow} other {# workflows}}",
+          "types": "{count, plural, =0 {No request types} one {# request type} other {# request types}}",
+          "assets": "{count, plural, =0 {No assets} one {# asset} other {# assets}}",
+          "departments": "{count, plural, =0 {No departments} one {# department} other {# departments}}",
+          "roles": "{count, plural, =0 {No roles} one {# role} other {# roles}}",
+          "esign": "{count, plural, =0 {No categories} one {# category} other {# categories}}",
           "audit": "View activity",
           "importExport": "CSV / XLSX",
           "screenshot": "Admin only"
@@ -3390,7 +3394,8 @@
           "empty": "No catalog items yet",
           "assetCount": "{count} assets",
           "searchPlaceholder": "Search assets",
-          "outOfStock": "Out of stock"
+          "outOfStock": "Out of stock",
+          "allCategories": "All categories"
         },
         "importExport": {
           "requests": "Requests",
@@ -3589,7 +3594,7 @@
         "filterAllBranches": "All branches",
         "filterAllDepartments": "All departments",
         "filterAllStatus": "All statuses",
-        "colVisId": "Booking",
+        "colVisId": "VIS ID",
         "colSlot": "Slot"
       },
       "kpi": {
@@ -3730,7 +3735,7 @@
       "reports": {
         "title": "Visit reports",
         "subtitle": "Status counts for {month}",
-        "newSubtitle": "Volume, no-shows, and completion by department",
+        "newSubtitle": "Visit volume, no-show rate and department performance by branch",
         "completionRateCard": "Completion rate",
         "noShowRate": "No-show rate",
         "visitsOverTime": "Visits over time",
@@ -3751,7 +3756,11 @@
         "busiestSlotsSub": "Bookings by slot",
         "busiestSlotsCaption": "Highest-volume slots in the selected range",
         "busiestSlotsEmpty": "No slot bookings in range",
-        "colAvgWait": "Avg. wait"
+        "colAvgWait": "Avg. wait",
+        "pageTitle": "Reports & analytics",
+        "filterBranchAll": "Branch: All branches",
+        "filterBranchValue": "Branch: {name}",
+        "weekBarTitle": "{week} · {count} visits"
       },
       "departments": {
         "title": "Departments",
@@ -3767,11 +3776,13 @@
         "editTitle": "Edit department",
         "addTitle": "New department",
         "modalSubtitle": "Desk assignment and service details",
-        "countLabel": "{count} departments"
+        "countLabel": "{count, plural, one {# department} other {# departments}}",
+        "pageTitle": "Departments & desks",
+        "pageSubtitle": "Manage each department's reception desk, assigned staff and availability"
       },
       "branches": {
         "title": "Branches",
-        "subtitle": "Head Office branch directory for visit slots",
+        "subtitle": "Manage visit locations. Every booking, slot rule and desk belongs to a branch.",
         "editTitle": "Edit branch",
         "emptyTitle": "No branches",
         "emptyDescription": "Branch catalog is seeded in the database.",
@@ -3783,7 +3794,7 @@
         "colWorkingHours": "Working hours",
         "colDesks": "Desks",
         "desks": "Desks",
-        "desksValue": "{count} desks",
+        "desksValue": "{count, plural, one {# desk} other {# desks}}",
         "desksInvalid": "Desks must be at least 1",
         "default": "Default",
         "city": "City"
@@ -3826,7 +3837,7 @@
         "bufferBetween": "Buffer between slots",
         "bookingWindow": "Booking window",
         "minutesValue": "{minutes} minutes",
-        "ridersValue": "{count} riders",
+        "ridersValue": "{count, plural, one {# rider} other {# riders}}",
         "daysAheadValue": "{days} days ahead",
         "desksPerDepartment": "Desks per department",
         "blockedDatesTitle": "Blocked dates",

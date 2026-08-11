@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { queryKeys } from "@/lib/query/query-keys";
+import { selectOptionsFrom } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
 import { fetchAdminVisitsList, fetchVisitBranches, type VisitListRow } from "./visits-actions";
 import { departmentBadgeClass } from "./visit-status-utils";
@@ -176,6 +177,18 @@ export function VisitsReportsShell() {
     return all.filter((r) => r.branch_id === branchFilter);
   }, [data?.rows, branchFilter]);
 
+  const branchItems = useMemo(
+    () => [
+      { value: "all", label: t("reports.filterBranchAll") },
+      ...selectOptionsFrom(
+        branchesData?.rows ?? [],
+        (b) => b.id,
+        (b) => t("reports.filterBranchValue", { name: b.name }),
+      ),
+    ],
+    [branchesData?.rows, t],
+  );
+
   const summary = useMemo(() => {
     const total = rows.length;
     const completed = rows.filter((r) => r.status === "completed").length;
@@ -269,24 +282,25 @@ export function VisitsReportsShell() {
       <AppPageHeader
         breadcrumbs={[
           { label: t("title"), href: "/visit-bookings" },
-          { label: t("reports.title") },
+          { label: t("hub.reports") },
         ]}
-        title={t("reports.title")}
+        title={t("reports.pageTitle")}
         description={t("reports.newSubtitle")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <DateRangeFilter value={dateRange} onChange={setDateRange} />
-            <Select value={branchFilter} onValueChange={(v) => v && setBranchFilter(v)}>
-              <SelectTrigger className="h-9 w-[160px]">
+            <Select
+              items={branchItems}
+              value={branchFilter}
+              onValueChange={(v) => v && setBranchFilter(v)}
+            >
+              <SelectTrigger className="h-9 w-[190px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" label={t("allVisits.filterAllBranches")}>
-                  {t("allVisits.filterAllBranches")}
-                </SelectItem>
-                {(branchesData?.rows ?? []).map((b) => (
-                  <SelectItem key={b.id} value={b.id} label={b.name}>
-                    {b.name}
+                {branchItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -356,16 +370,25 @@ export function VisitsReportsShell() {
               <p className="text-[11px] text-muted-foreground">
                 {t("reports.visitsOverTimeSub")}
               </p>
+              {/* Bar heights are percentages, so the track needs a definite height. */}
               <div className="mt-4 flex h-32 items-end gap-2">
                 {weekly.map((bucket, idx) => (
                   <div key={idx} className="flex flex-1 flex-col items-center gap-1">
-                    <div
-                      className={cn(
-                        "w-full rounded-t-sm",
-                        idx === weekly.length - 1 ? "bg-foreground" : "bg-muted",
-                      )}
-                      style={{ height: `${Math.max(4, (bucket.count / maxWeekly) * 100)}%` }}
-                    />
+                    <div className="flex h-[112px] w-full items-end">
+                      <div
+                        title={t("reports.weekBarTitle", {
+                          week: bucket.label,
+                          count: bucket.count,
+                        })}
+                        className={cn(
+                          "w-full rounded-t-sm",
+                          idx === weekly.length - 1 ? "bg-foreground" : "bg-muted",
+                        )}
+                        style={{
+                          height: `${Math.max(4, (bucket.count / maxWeekly) * 100)}%`,
+                        }}
+                      />
+                    </div>
                     <span className="text-[9px] text-muted-foreground">{bucket.label}</span>
                   </div>
                 ))}

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
+import { selectOptionsFrom } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
 import {
   addVisitBlockedDate,
@@ -129,6 +130,52 @@ export function VisitsSlotsShell() {
   const departments = useMemo(
     () => (deptData?.rows ?? []).filter((d) => d.is_active),
     [deptData?.rows],
+  );
+
+  const branchItems = useMemo(
+    () =>
+      selectOptionsFrom(
+        configs,
+        (c) => c.branch_id,
+        (c) => c.branch_name,
+      ),
+    [configs],
+  );
+  const slotLengthItems = useMemo(
+    () =>
+      selectOptionsFrom(
+        SLOT_LENGTH_OPTIONS,
+        (minutes) => String(minutes),
+        (minutes) => t("slots.minutesValue", { minutes }),
+      ),
+    [t],
+  );
+  const bufferItems = useMemo(
+    () =>
+      selectOptionsFrom(
+        BUFFER_OPTIONS,
+        (minutes) => String(minutes),
+        (minutes) => t("slots.minutesValue", { minutes }),
+      ),
+    [t],
+  );
+  const capacityItems = useMemo(
+    () =>
+      selectOptionsFrom(
+        CAPACITY_OPTIONS,
+        (count) => String(count),
+        (count) => t("slots.ridersValue", { count }),
+      ),
+    [t],
+  );
+  const bookingWindowItems = useMemo(
+    () =>
+      selectOptionsFrom(
+        BOOKING_WINDOW_OPTIONS,
+        (days) => String(days),
+        (days) => t("slots.daysAheadValue", { days }),
+      ),
+    [t],
   );
 
   const draft = useMemo(() => {
@@ -291,6 +338,7 @@ export function VisitsSlotsShell() {
           <div className="flex flex-wrap items-center gap-2">
             {configs.length > 0 ? (
               <Select
+                items={branchItems}
                 value={activeConfig?.branch_id ?? undefined}
                 onValueChange={(v) => v && setBranchId(v)}
               >
@@ -299,9 +347,9 @@ export function VisitsSlotsShell() {
                   <SelectValue placeholder={t("detail.branch")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {configs.map((c) => (
-                    <SelectItem key={c.branch_id} value={c.branch_id} label={c.branch_name}>
-                      {c.branch_name}
+                  {branchItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -414,6 +462,7 @@ export function VisitsSlotsShell() {
                 <div className="space-y-1">
                   <Label className={FIELD_LABEL_CLASS}>{t("slots.slotLength")}</Label>
                   <Select
+                    items={slotLengthItems}
                     value={String(draft.slot_length_minutes)}
                     onValueChange={(v) =>
                       v &&
@@ -424,13 +473,9 @@ export function VisitsSlotsShell() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {SLOT_LENGTH_OPTIONS.map((minutes) => (
-                        <SelectItem
-                          key={minutes}
-                          value={String(minutes)}
-                          label={t("slots.minutesValue", { minutes })}
-                        >
-                          {t("slots.minutesValue", { minutes })}
+                      {slotLengthItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -439,6 +484,7 @@ export function VisitsSlotsShell() {
                 <div className="space-y-1">
                   <Label className={FIELD_LABEL_CLASS}>{t("slots.capacityPerSlot")}</Label>
                   <Select
+                    items={capacityItems}
                     value={String(draft.default_slot_capacity)}
                     onValueChange={(v) =>
                       v &&
@@ -449,13 +495,9 @@ export function VisitsSlotsShell() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {CAPACITY_OPTIONS.map((count) => (
-                        <SelectItem
-                          key={count}
-                          value={String(count)}
-                          label={t("slots.ridersValue", { count })}
-                        >
-                          {t("slots.ridersValue", { count })}
+                      {capacityItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -464,6 +506,7 @@ export function VisitsSlotsShell() {
                 <div className="space-y-1">
                   <Label className={FIELD_LABEL_CLASS}>{t("slots.bufferBetween")}</Label>
                   <Select
+                    items={bufferItems}
                     value={String(draft.slot_buffer_minutes)}
                     onValueChange={(v) =>
                       v &&
@@ -474,13 +517,9 @@ export function VisitsSlotsShell() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {BUFFER_OPTIONS.map((minutes) => (
-                        <SelectItem
-                          key={minutes}
-                          value={String(minutes)}
-                          label={t("slots.minutesValue", { minutes })}
-                        >
-                          {t("slots.minutesValue", { minutes })}
+                      {bufferItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -489,6 +528,7 @@ export function VisitsSlotsShell() {
                 <div className="space-y-1">
                   <Label className={FIELD_LABEL_CLASS}>{t("slots.bookingWindow")}</Label>
                   <Select
+                    items={bookingWindowItems}
                     value={String(draft.booking_window_days)}
                     onValueChange={(v) =>
                       v &&
@@ -499,13 +539,9 @@ export function VisitsSlotsShell() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {BOOKING_WINDOW_OPTIONS.map((days) => (
-                        <SelectItem
-                          key={days}
-                          value={String(days)}
-                          label={t("slots.daysAheadValue", { days })}
-                        >
-                          {t("slots.daysAheadValue", { days })}
+                      {bookingWindowItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -526,7 +562,7 @@ export function VisitsSlotsShell() {
                   {departments.map((dept) => (
                     <li
                       key={dept.id}
-                      className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
+                      className="flex items-center justify-between gap-2 py-1.5 first:pt-0 last:pb-0"
                     >
                       <span className="truncate text-sm text-foreground">
                         {dept.label_en}

@@ -39,6 +39,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { Link } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
+import { selectOptions, selectOptionsFrom } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
 import {
   fetchAdminVisitsList,
@@ -56,8 +57,23 @@ import {
 
 type DataTab = "all" | "today" | "upcoming" | "past";
 
+const STATUS_KEYS = [
+  "confirmed",
+  "checked_in",
+  "completed",
+  "no_show",
+  "cancelled",
+] as const;
+
 function isoDate(d: string | null): string {
   return d ? d.slice(0, 10) : "";
+}
+
+/** `2026-08-12` -> `12 Aug` (Figma column format). */
+function shortDate(value: string): string {
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
 function statusDotClass(variant: ReturnType<typeof visitStatusVariant>): string {
@@ -196,12 +212,51 @@ export function VisitsPageShell() {
     URL.revokeObjectURL(url);
   };
 
+  const pastCount = useMemo(
+    () => rows.filter((r) => r.scheduled_date < today).length,
+    [rows, today],
+  );
+
   const TABS: { id: DataTab; label: string; count?: number }[] = [
     { id: "all", label: t("allVisits.tabAll"), count: rows.length },
     { id: "today", label: t("allVisits.tabToday"), count: kpi?.today },
     { id: "upcoming", label: t("allVisits.tabUpcoming"), count: kpi?.upcoming },
-    { id: "past", label: t("allVisits.tabPast") },
+    { id: "past", label: t("allVisits.tabPast"), count: pastCount },
   ];
+
+  const branchItems = useMemo(
+    () => [
+      { value: "all", label: t("allVisits.filterAllBranches") },
+      ...selectOptionsFrom(
+        branchesData?.rows ?? [],
+        (b) => b.id,
+        (b) => b.name,
+      ),
+    ],
+    [branchesData?.rows, t],
+  );
+  const deptItems = useMemo(
+    () => [
+      { value: "all", label: t("allVisits.filterAllDepartments") },
+      ...selectOptionsFrom(
+        deptData?.rows ?? [],
+        (d) => d.key,
+        (d) => d.label_en,
+      ),
+    ],
+    [deptData?.rows, t],
+  );
+  const statusItems = useMemo(
+    () =>
+      selectOptions([
+        { value: "all", label: t("allVisits.filterAllStatus") },
+        ...STATUS_KEYS.map((s) => ({
+          value: s,
+          label: t(`status.${s}` as "status.confirmed"),
+        })),
+      ]),
+    [t],
+  );
 
   return (
     <AppPage>
@@ -309,47 +364,50 @@ export function VisitsPageShell() {
         })}
         filterSlot={
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={branchFilter} onValueChange={(v) => v && setBranchFilter(v)}>
+            <Select
+              items={branchItems}
+              value={branchFilter}
+              onValueChange={(v) => v && setBranchFilter(v)}
+            >
               <SelectTrigger className="h-9 w-[150px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" label={t("allVisits.filterAllBranches")}>
-                  {t("allVisits.filterAllBranches")}
-                </SelectItem>
-                {(branchesData?.rows ?? []).map((b) => (
-                  <SelectItem key={b.id} value={b.id} label={b.name}>
-                    {b.name}
+                {branchItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={deptFilter} onValueChange={(v) => v && setDeptFilter(v)}>
+            <Select
+              items={deptItems}
+              value={deptFilter}
+              onValueChange={(v) => v && setDeptFilter(v)}
+            >
               <SelectTrigger className="h-9 w-[160px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" label={t("allVisits.filterAllDepartments")}>
-                  {t("allVisits.filterAllDepartments")}
-                </SelectItem>
-                {(deptData?.rows ?? []).map((d) => (
-                  <SelectItem key={d.key} value={d.key} label={d.label_en}>
-                    {d.label_en}
+                {deptItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
+            <Select
+              items={statusItems}
+              value={statusFilter}
+              onValueChange={(v) => v && setStatusFilter(v)}
+            >
               <SelectTrigger className="h-9 w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" label={t("allVisits.filterAllStatus")}>
-                  {t("allVisits.filterAllStatus")}
-                </SelectItem>
-                {["confirmed", "checked_in", "completed", "no_show", "cancelled"].map((s) => (
-                  <SelectItem key={s} value={s} label={t(`status.${s}` as "status.confirmed")}>
-                    {t(`status.${s}` as "status.confirmed")}
+                {statusItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -446,11 +504,14 @@ export function VisitsPageShell() {
                     {row.slot_start ? row.slot_start.slice(0, 5) : "—"}
                     {row.slot_end ? `–${row.slot_end.slice(0, 5)}` : ""}
                   </TableCell>
-                  <TableCell className="text-sm tabular-nums">
-                    {row.scheduled_date}
+                  <TableCell
+                    className="text-sm tabular-nums"
+                    title={row.scheduled_date}
+                  >
+                    {shortDate(row.scheduled_date)}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap items-center gap-1">
+                    <div className="flex items-center gap-1">
                       <Link
                         href={`/visit-bookings/${row.id}`}
                         className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-primary hover:bg-primary/10"
