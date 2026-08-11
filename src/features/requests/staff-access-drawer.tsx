@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { SegmentOption } from "@/components/app/toggle-chip";
+import { cn } from "@/lib/utils";
 import { saveStaffAccessGrants } from "./requests-settings-actions";
 import { REQUEST_TYPE_SLUGS, type AccessLevel, type RequestTypeSlug, type StaffProfileOption } from "./settings-types";
 
@@ -28,6 +28,47 @@ type StaffTarget = {
 };
 
 const LEVELS: AccessLevel[] = ["none", "view_only", "approver"];
+
+/**
+ * Figma renders the three access levels as one equal-width segmented control where
+ * the selected "None" stays neutral grey — SegmentOption only offers primary/success.
+ */
+function AccessSegment({
+  selected,
+  tone,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  tone: "neutral" | "primary" | "success";
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const selectedClass =
+    tone === "success"
+      ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm ring-1 ring-emerald-400/50"
+      : tone === "primary"
+        ? "border-primary bg-primary/15 text-primary ring-1 ring-primary/30"
+        : "border-border bg-muted text-foreground";
+
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-8 w-full cursor-pointer items-center justify-center gap-1 rounded-md border px-1.5 text-xs font-semibold transition-[color,background-color,border-color,box-shadow] duration-150 ease-out",
+        selected
+          ? selectedClass
+          : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+      )}
+    >
+      {selected && tone === "success" ? <Check className="h-3 w-3 stroke-[2.5]" /> : null}
+      {children}
+    </button>
+  );
+}
 
 export function StaffAccessDrawer({
   open,
@@ -163,17 +204,21 @@ export function StaffAccessDrawer({
                   key={type}
                   className="flex items-center justify-between gap-2 rounded-lg border border-border p-2.5"
                 >
-                  <span className="text-sm font-medium">{tTypes(type)}</span>
-                  <div className="flex items-center gap-1">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {tTypes(type)}
+                  </span>
+                  <div className="grid w-[186px] shrink-0 grid-cols-3 gap-1">
                     {LEVELS.map((lvl) => (
-                      <SegmentOption
+                      <AccessSegment
                         key={lvl}
                         selected={level === lvl}
                         onClick={() => setLevel(type, lvl)}
-                        variant={lvl === "approver" ? "success" : "default"}
+                        tone={
+                          lvl === "approver" ? "success" : lvl === "view_only" ? "primary" : "neutral"
+                        }
                       >
                         {t(`level.${lvl}`)}
-                      </SegmentOption>
+                      </AccessSegment>
                     ))}
                   </div>
                 </div>

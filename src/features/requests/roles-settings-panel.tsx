@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { selectOptions } from "@/lib/select-items";
 import { fetchStaffAccessMatrix } from "./requests-settings-actions";
 import { REQUEST_TYPE_SLUGS, type AccessLevel, type RequestTypeSlug, type StaffAccessRow, type StaffDepartmentMap, type StaffProfileOption } from "./settings-types";
 import { StaffAccessDrawer } from "./staff-access-drawer";
@@ -234,6 +235,10 @@ export function RolesSettingsPanel() {
           <Select
             value={typeFilter}
             onValueChange={(v) => v && setTypeFilter(v as "all" | RequestTypeSlug)}
+            items={selectOptions([
+              { value: "all", label: t("allRequestTypes") },
+              ...REQUEST_TYPE_SLUGS.map((type) => ({ value: type, label: tTypes(type) })),
+            ])}
           >
             <SelectTrigger className="h-9 w-[160px]">
               <SelectValue />

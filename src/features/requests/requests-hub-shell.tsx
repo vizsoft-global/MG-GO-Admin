@@ -99,12 +99,12 @@ export function RequestsHubShell() {
           {t("hub.requestTypesHeading")}
         </h2>
       </div>
-      <div className="mx-auto grid w-fit grid-cols-2 gap-x-10 gap-y-6 pt-3 sm:grid-cols-4">
+      <div className="mx-auto grid w-fit grid-cols-2 gap-x-6 gap-y-5 pt-3 sm:grid-cols-4">
         {TYPE_TILES.map((tile) => (
           <Link
             key={tile.type}
             href={tile.href}
-            className="flex flex-col items-center gap-2 rounded-xl p-2 text-center transition-colors hover:bg-muted/40"
+            className="flex w-24 flex-col items-center gap-2 rounded-xl p-2 text-center transition-colors hover:bg-muted/40"
           >
             <TileIcon Icon={tile.icon} tint={tile.tint} count={counts[tile.type]?.pending} />
             <span className="text-xs font-medium text-foreground">
@@ -119,12 +119,12 @@ export function RequestsHubShell() {
           {t("hub.operationsHeading")}
         </h2>
       </div>
-      <div className="mx-auto grid w-fit grid-cols-2 gap-x-10 gap-y-6 pt-3 sm:grid-cols-5">
+      <div className="mx-auto grid w-fit grid-cols-2 gap-x-6 gap-y-5 pt-3 sm:grid-cols-5">
         {OP_TILES.map((tile) => (
           <Link
             key={tile.href}
             href={tile.href}
-            className="flex flex-col items-center gap-2 rounded-xl p-2 text-center transition-colors hover:bg-muted/40"
+            className="flex w-24 flex-col items-center gap-2 rounded-xl p-2 text-center transition-colors hover:bg-muted/40"
           >
             <TileIcon
               Icon={tile.icon}

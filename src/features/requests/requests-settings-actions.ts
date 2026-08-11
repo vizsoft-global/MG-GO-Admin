@@ -21,6 +21,8 @@ import type {
   StepTemplateRow,
 } from "./settings-types";
 
+const GRANTABLE_ACCESS_LEVELS: AccessLevel[] = ["view_only", "approver"];
+
 async function requireRequestsManage() {
   const session = await getSessionUser();
   if (
@@ -409,7 +411,7 @@ export async function fetchSettingsHubCounts(): Promise<SettingsHubCounts> {
   await requireRequestsManage();
   const supabase = await createClient();
 
-  const [workflowTypes, activeTypes, assets, departments, roles, esignCategories] =
+  const [workflowTypes, activeTypes, assets, departments, esignCategories] =
     await Promise.all([
       supabase.from("request_approval_step_templates").select("request_type"),
       (supabase as any)
@@ -424,7 +426,6 @@ export async function fetchSettingsHubCounts(): Promise<SettingsHubCounts> {
         .from("request_departments")
         .select("id", { count: "exact", head: true })
         .eq("is_active", true),
-      supabase.from("request_staff_access").select("access_level"),
       supabase
         .from("esign_categories")
         .select("id", { count: "exact", head: true })
@@ -434,16 +435,14 @@ export async function fetchSettingsHubCounts(): Promise<SettingsHubCounts> {
   const distinctWorkflows = new Set(
     (workflowTypes.data ?? []).map((row) => String(row.request_type)),
   );
-  const distinctRoles = new Set(
-    (roles.data ?? []).map((row) => String(row.access_level)),
-  );
-
   return {
     workflows: distinctWorkflows.size,
     types: activeTypes.count ?? 0,
     assets: assets.count ?? 0,
     departments: departments.count ?? 0,
-    roles: distinctRoles.size,
+    // The two grantable access levels the Roles panel exposes (view_only, approver).
+    // Not derived from request_staff_access — that table holds grants, not roles.
+    roles: GRANTABLE_ACCESS_LEVELS.length,
     esignCategories: esignCategories.count ?? 0,
   };
 }

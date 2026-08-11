@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { selectOptions } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
 import {
   addDepartmentMember,
@@ -109,6 +110,15 @@ export function DepartmentsSettingsPanel() {
     if (activeDeptId) void loadMembers(activeDeptId);
     else setMembers([]);
   }, [activeDeptId, loadMembers]);
+
+  const roleOptions = useMemo(
+    () =>
+      selectOptions([
+        { value: "agent", label: t("roleAgent") },
+        { value: "manager", label: t("roleManager") },
+      ]),
+    [t],
+  );
 
   const staffItems = useMemo(
     () =>
@@ -252,21 +262,28 @@ export function DepartmentsSettingsPanel() {
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border">
               {departments.map((dept) => (
                 <button
                   key={dept.id}
                   type="button"
                   onClick={() => setActiveDeptId(dept.id)}
                   className={cn(
-                    "flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition-colors",
+                    "-mb-px flex h-9 items-center gap-1.5 border-b-2 px-3 text-sm font-medium transition-colors",
                     dept.id === activeDeptId
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/60",
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {dept.label_en}
-                  <span className="rounded-full bg-background/60 px-1.5 py-0.5 text-[10px]">
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px]",
+                      dept.id === activeDeptId
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
                     {dept.member_count}
                   </span>
                 </button>
@@ -353,6 +370,7 @@ export function DepartmentsSettingsPanel() {
                     <Select
                       value={memberRole}
                       onValueChange={(v) => setMemberRole(v as DepartmentRoleTitle)}
+                      items={roleOptions}
                     >
                       <SelectTrigger className="h-9">
                         <SelectValue />
@@ -385,8 +403,6 @@ export function DepartmentsSettingsPanel() {
                   <div className="flex items-center justify-center py-8 text-muted-foreground">
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   </div>
-                ) : members.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">{t("emptyMembers")}</p>
                 ) : (
                   <Table>
                     <TableHeader>
@@ -398,6 +414,16 @@ export function DepartmentsSettingsPanel() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
+                      {members.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={4}
+                            className="py-6 text-center text-sm text-muted-foreground"
+                          >
+                            {t("emptyMembers")}
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
                       {members.map((member) => (
                         <TableRow key={member.id}>
                           <TableCell>
@@ -423,6 +449,7 @@ export function DepartmentsSettingsPanel() {
                               onValueChange={(v) =>
                                 v && changeMemberRole(member, v as DepartmentRoleTitle)
                               }
+                              items={roleOptions}
                             >
                               <SelectTrigger className="h-9 w-[130px]">
                                 <SelectValue />

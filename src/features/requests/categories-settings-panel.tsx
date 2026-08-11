@@ -28,6 +28,7 @@ import type { ComplaintCategoryRow } from "./settings-types";
 
 export function CategoriesSettingsPanel() {
   const t = useTranslations("pages.requests.settings.categories");
+  const tRoot = useTranslations("pages.requests");
   const [rows, setRows] = useState<ComplaintCategoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -108,7 +109,8 @@ export function CategoriesSettingsPanel() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
-          { label: t("hub"), href: "/requests/settings" },
+          { label: tRoot("title"), href: "/requests" },
+          { label: tRoot("settings.title"), href: "/requests/settings" },
           { label: t("title") },
         ]}
       />

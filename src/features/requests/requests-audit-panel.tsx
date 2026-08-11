@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
@@ -12,6 +12,7 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -41,8 +42,25 @@ const DATE_PRESETS: RequestDatePreset[] = [
   "last_month",
 ];
 
+/** Figma 10-Audit shows 10 rows per page so the table fits a 14" viewport. */
+const PAGE_SIZE = 10;
+
 function actionTone(action: string): string {
   return ACTION_TONE[action] ?? ACTION_TONE.read;
+}
+
+/** Figma shows day-first "12 Jul, 14:05" — the default locale string blows out the column. */
+function formatTimestamp(value: string, locale: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const day = new Intl.DateTimeFormat(locale, { day: "2-digit" }).format(date);
+  const month = new Intl.DateTimeFormat(locale, { month: "short" }).format(date);
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+  return `${day} ${month}, ${time}`;
 }
 
 function initialsOf(name: string): string {
@@ -66,6 +84,8 @@ export function RequestsAuditPanel() {
   const [actionFilter, setActionFilter] = useState("all");
   const [actorFilter, setActorFilter] = useState("all");
   const [datePreset, setDatePreset] = useState<RequestDatePreset>("all");
+  const [page, setPage] = useState(1);
+  const locale = useLocale();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -118,6 +138,17 @@ export function RequestsAuditPanel() {
     });
   }, [rows, search, actionFilter, actorFilter, datePreset]);
 
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pagedRows = useMemo(
+    () => filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filteredRows, currentPage],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, actionFilter, actorFilter, datePreset]);
+
   return (
     <AppPage>
       <AppPageHeader
@@ -125,6 +156,7 @@ export function RequestsAuditPanel() {
         description={t("subtitle")}
         breadcrumbs={[
           { label: tRoot("title"), href: "/requests" },
+          { label: tRoot("settings.title"), href: "/requests/settings" },
           { label: t("title") },
         ]}
         actions={
@@ -226,15 +258,15 @@ export function RequestsAuditPanel() {
           }
         >
           {loading || filteredRows.length === 0 ? null : (
-            filteredRows.map((row) => (
+            pagedRows.map((row) => (
               <AppDataTableRow key={row.id}>
                 <TableCell className="text-xs whitespace-nowrap">
-                  {new Date(row.created_at).toLocaleString()}
+                  {formatTimestamp(row.created_at, locale)}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <Avatar className="h-7 w-7">
-                      <AvatarFallback className="text-[10px]">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-[9px]">
                         {initialsOf(row.actor_name)}
                       </AvatarFallback>
                     </Avatar>
@@ -270,6 +302,44 @@ export function RequestsAuditPanel() {
             ))
           )}
         </AppDataTable>
+        {!loading && filteredRows.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-1.5">
+            <span className="text-[11px] text-muted-foreground">
+              {t("range", {
+                from: (currentPage - 1) * PAGE_SIZE + 1,
+                to: (currentPage - 1) * PAGE_SIZE + pagedRows.length,
+                total: filteredRows.length,
+              })}
+            </span>
+            <div className="ms-auto flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                {t("prev")}
+              </Button>
+              <span className="text-[11px] text-muted-foreground">
+                {t("pageOf", { page: currentPage, pages: pageCount })}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={currentPage >= pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              >
+                {t("next")}
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </AppListCard>
     </AppPage>
   );

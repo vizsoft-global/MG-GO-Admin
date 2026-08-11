@@ -10,6 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -18,16 +25,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Link } from "@/i18n/navigation";
+import { selectOptions } from "@/lib/select-items";
 import { fetchAssetsCatalog } from "@/features/assets/assets-actions";
 import type { AssetCatalogRow } from "@/features/assets/types";
 
 export function EsignAssetsLinkShell() {
   const t = useTranslations("pages.requests.esign.assets");
+  const tRoot = useTranslations("pages.requests");
   const tSettings = useTranslations("pages.requests.settings");
   const tAssets = useTranslations("pages.assets");
   const [rows, setRows] = useState<AssetCatalogRow[] | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
 
   useEffect(() => {
     fetchAssetsCatalog()
@@ -35,15 +45,25 @@ export function EsignAssetsLinkShell() {
       .catch(() => setForbidden(true));
   }, []);
 
+  const categoryOptions = useMemo(() => {
+    const found = Array.from(
+      new Set((rows ?? []).map((row) => row.category).filter((c): c is string => Boolean(c))),
+    ).sort((a, b) => a.localeCompare(b));
+    return selectOptions([
+      { value: "all", label: t("allCategories") },
+      ...found.map((c) => ({ value: c, label: c })),
+    ]);
+  }, [rows, t]);
+
   const visibleRows = useMemo(() => {
     if (!rows) return null;
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (row) =>
-        row.name.toLowerCase().includes(q) || row.code.toLowerCase().includes(q),
-    );
-  }, [rows, search]);
+    return rows.filter((row) => {
+      if (category !== "all" && row.category !== category) return false;
+      if (!q) return true;
+      return row.name.toLowerCase().includes(q) || row.code.toLowerCase().includes(q);
+    });
+  }, [rows, search, category]);
 
   return (
     <AppPage>
@@ -53,6 +73,7 @@ export function EsignAssetsLinkShell() {
           rows ? `${t("subtitle")} · ${t("assetCount", { count: rows.length })}` : t("subtitle")
         }
         breadcrumbs={[
+          { label: tRoot("title"), href: "/requests" },
           { label: tSettings("title"), href: "/requests/settings" },
           { label: t("title") },
         ]}
@@ -83,6 +104,18 @@ export function EsignAssetsLinkShell() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <Select value={category} onValueChange={(v) => v && setCategory(v)} items={categoryOptions}>
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {categoryOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <span className="ms-auto text-[11px] text-muted-foreground">
               {visibleRows ? t("assetCount", { count: visibleRows.length }) : ""}
             </span>

@@ -16,7 +16,6 @@ import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -25,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Link } from "@/i18n/navigation";
+import { selectOptions } from "@/lib/select-items";
 import {
   fetchStepTemplates,
   upsertStepTemplates,
@@ -57,7 +57,7 @@ function normalizeOrders(steps: StepTemplateRow[]): StepTemplateRow[] {
 function ChainConnector() {
   return (
     <div className="flex justify-center">
-      <div className="h-5 w-px bg-border" />
+      <div className="h-3 w-px bg-border" />
     </div>
   );
 }
@@ -178,7 +178,11 @@ export function WorkflowsSettingsPanel() {
               </span>
             ) : null}
             <div className="min-w-[160px]">
-              <Select value={requestType} onValueChange={(v) => v && setRequestType(v as RequestTypeSlug)}>
+              <Select
+                value={requestType}
+                onValueChange={(v) => v && setRequestType(v as RequestTypeSlug)}
+                items={selectOptions(typeOptions)}
+              >
                 <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
@@ -199,7 +203,7 @@ export function WorkflowsSettingsPanel() {
         }
       />
 
-      <div className="grid gap-2 lg:grid-cols-[1fr,320px] lg:items-start">
+      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
         <AppListCard className="space-y-1 p-4">
           {loading ? (
             <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -207,7 +211,7 @@ export function WorkflowsSettingsPanel() {
               {t("loading")}
             </div>
           ) : (
-            <div className="mx-auto max-w-2xl">
+            <div className="mx-auto max-w-3xl">
               <div className="flex justify-center">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
                   <LogIn className="h-3.5 w-3.5" />
@@ -218,32 +222,26 @@ export function WorkflowsSettingsPanel() {
               {steps.map((step, index) => (
                 <div key={`${step.id ?? "new"}-${index}`}>
                   <ChainConnector />
-                  <div className="rounded-xl border border-border bg-background p-3 shadow-sm">
-                    <div className="flex flex-wrap items-start gap-3">
+                  <div className="rounded-xl border border-border bg-background px-3 py-1.5 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                         {step.step_order}
                       </span>
-                      <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
-                        <div className="min-w-[160px] flex-1 space-y-1">
-                          <Label className="text-[10px] uppercase text-muted-foreground">
-                            {t("colName")}
-                          </Label>
-                          <Input
-                            className="h-9"
-                            value={step.step_name}
-                            onChange={(e) => updateStep(index, { step_name: e.target.value })}
-                          />
-                        </div>
-                        <div className="min-w-[140px] space-y-1">
-                          <Label className="text-[10px] uppercase text-muted-foreground">
-                            {t("colRole")}
-                          </Label>
-                          <Input
-                            className="h-9"
-                            value={step.role_key}
-                            onChange={(e) => updateStep(index, { role_key: e.target.value })}
-                          />
-                        </div>
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                        <Input
+                          className="h-9 min-w-[150px] flex-1"
+                          value={step.step_name}
+                          placeholder={t("colName")}
+                          aria-label={t("colName")}
+                          onChange={(e) => updateStep(index, { step_name: e.target.value })}
+                        />
+                        <Input
+                          className="h-9 w-[150px]"
+                          value={step.role_key}
+                          placeholder={t("colRole")}
+                          aria-label={t("colRole")}
+                          onChange={(e) => updateStep(index, { role_key: e.target.value })}
+                        />
                         <ToggleChip
                           selected={step.is_system_auto}
                           onClick={() =>
@@ -290,7 +288,7 @@ export function WorkflowsSettingsPanel() {
                         </div>
                       </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1 ps-9">
+                    <div className="mt-1 flex flex-wrap gap-1 ps-8">
                       {STEP_ALLOWED_ACTIONS.map((action) => (
                         <ToggleChip
                           key={action}
