@@ -22,6 +22,7 @@ export type VisitListRow = {
   status: string;
   note: string | null;
   created_at: string;
+  checked_in_at: string | null;
 };
 
 export type VisitKpis = {
@@ -178,6 +179,7 @@ export async function fetchAdminVisitsList(input?: {
       status: String(r.status ?? ""),
       note: r.note != null ? String(r.note) : null,
       created_at: String(r.created_at ?? ""),
+      checked_in_at: r.checked_in_at != null ? String(r.checked_in_at) : null,
     };
   });
 
@@ -302,6 +304,37 @@ export async function fetchVisitDepartments(): Promise<{
   return { rows: (data ?? []) as VisitDepartmentRow[] };
 }
 
+export async function createVisitDepartment(input: {
+  key: string;
+  label_en: string;
+  label_ar?: string | null;
+  desk_location?: string | null;
+  assigned_staff_name?: string | null;
+  avg_handling_minutes?: number | null;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  await requireVisitsManageCatalog();
+  if (!input.key.trim() || !input.label_en.trim()) {
+    return { ok: false, error: "key_and_label_required" };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("visit_departments")
+    .insert({
+      key: input.key.trim(),
+      label_en: input.label_en.trim(),
+      label_ar: input.label_ar ?? null,
+      desk_location: input.desk_location ?? null,
+      assigned_staff_name: input.assigned_staff_name ?? null,
+      avg_handling_minutes: input.avg_handling_minutes ?? null,
+      is_active: true,
+    })
+    .select("id")
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, id: data.id };
+}
+
 export async function updateVisitDepartment(input: {
   id: string;
   is_active?: boolean;
@@ -343,6 +376,41 @@ export async function fetchVisitBranches(): Promise<{
 
   if (error) return { rows: [], error: error.message };
   return { rows: (data ?? []) as VisitBranchRow[] };
+}
+
+export async function createVisitBranch(input: {
+  key: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  working_days?: string | null;
+  opening_time?: string | null;
+  closing_time?: string | null;
+  desks_count?: number;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  await requireVisitsManageCatalog();
+  if (!input.key.trim() || !input.name.trim()) {
+    return { ok: false, error: "key_and_name_required" };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("visit_branches")
+    .insert({
+      key: input.key.trim(),
+      name: input.name.trim(),
+      address: input.address ?? null,
+      city: input.city ?? null,
+      working_days: input.working_days ?? null,
+      opening_time: input.opening_time ?? null,
+      closing_time: input.closing_time ?? null,
+      desks_count: input.desks_count ?? 1,
+      is_active: true,
+    })
+    .select("id")
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, id: data.id };
 }
 
 export async function updateVisitBranch(input: {

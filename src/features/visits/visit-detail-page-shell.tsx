@@ -16,7 +16,7 @@ import {
   fetchAdminVisitDetail,
   updateAdminVisitStatus,
 } from "./visits-actions";
-import { visitStatusVariant } from "./visit-status-utils";
+import { departmentBadgeClass, visitStatusVariant } from "./visit-status-utils";
 import { VisitsTabBar } from "./visits-tab-bar";
 
 export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
@@ -83,6 +83,11 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
   return (
     <AppPage>
       <AppPageHeader
+        breadcrumbs={[
+          { label: t("title"), href: "/visit-bookings" },
+          { label: t("allVisits.title"), href: "/visit-bookings/all" },
+          { label: visit.booking_code },
+        ]}
         title={visit.booking_code}
         description={`${visit.department_label} · ${visit.scheduled_date}`}
         actions={
@@ -114,7 +119,16 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
             </div>
             <div className="flex justify-between gap-2">
               <dt className="text-muted-foreground">{t("colDepartment")}</dt>
-              <dd>{visit.department_label}</dd>
+              <dd>
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                    departmentBadgeClass(visit.department_key),
+                  )}
+                >
+                  {visit.department_label}
+                </span>
+              </dd>
             </div>
             <div className="flex justify-between gap-2">
               <dt className="text-muted-foreground">{t("detail.branch")}</dt>

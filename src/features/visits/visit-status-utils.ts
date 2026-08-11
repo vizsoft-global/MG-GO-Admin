@@ -65,6 +65,16 @@ export function avatarTintClass(name: string): string {
   return AVATAR_TINT_CLASSES[idx];
 }
 
+export function formatWorkingHours(row: {
+  working_days: string | null;
+  opening_time: string | null;
+  closing_time: string | null;
+}): string {
+  if (!row.opening_time || !row.closing_time) return "—";
+  const hours = `${row.opening_time.slice(0, 5)}–${row.closing_time.slice(0, 5)}`;
+  return row.working_days ? `${row.working_days} · ${hours}` : hours;
+}
+
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "—";
