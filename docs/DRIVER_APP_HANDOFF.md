@@ -214,17 +214,40 @@ Configured in admin **Settings → DPD → Restaurants**.
 
 Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settings/dpd` redirects to `/dpd`.
 
-### `requests`
+### `requests` (RCM — Request & Complaint)
 | Column | Type | Notes |
 |--------|------|-------|
-| request_code | text | RQ-#### |
-| request_type | enum | loan, leave, fuel, complaint, document |
-| status | enum | pending, approved, rejected |
-| amount_kwd | numeric | Loan/fuel amount |
+| request_code | text | **RCM-####** (allocator `allocate_request_code`) |
+| request_type | enum | loan, leave, fuel, complaint, document, **sick_leave**, **salary_justification**, **asset** |
+| status | enum | draft, pending, submitted, in_review, needs_clarification, approved, rejected, solved, overdue |
+| payload | jsonb | Type-specific Figma fields (leave_type, tenure_months, category, …) |
+| current_step_label / current_step_order | text / int | Denormalized approval progress |
+| amount_kwd | numeric | Loan/fuel amount (also in payload where typed) |
 | start_date, end_date | date | Leave range |
-| details | text | Reason |
-| attachment_url | text | Receipt etc. |
-| decision_reason | text | Set by admin on reject |
+| details | text | Legacy reason (prefer payload) |
+| attachment_url | text | Legacy single file; prefer `request_attachments` |
+| decision_reason | text | Set by admin on reject/clarify |
+| needs_attention | bool | Admin list badge only (cleared on staff open); **no admin push** |
+| completed_at | timestamptz | KPI avg resolution |
+
+Related tables: `request_approval_steps`, `request_clarifications`, `request_attachments`.  
+Config (may be empty until client confirms): `loan_tenure_options`, `complaint_categories`.  
+**Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests`, `driver_get_request`, `driver_submit_clarification`.  
+Loan submit requires rows in `loan_tenure_options` (empty until client confirms). Complaint submit requires `complaint_categories` rows (empty until client confirms).
+
+**Flutter routes (MG-GO):** Profile → Help & Support → `/profile/support` hub; forms `/profile/support/requests/new?type=…`; list/detail; visit book `/profile/support/visits/book`; my visits `/profile/support/visits`. Feature folder `lib/features/support/`. Attachments upload to Supabase bucket `request-attachments` under `{driver_id}/…`.
+
+### Visit booking (Help & Support → Schedule visit)
+| Table | Notes |
+|-------|-------|
+| `visit_departments` | R — Figma RSup/12 keys (hr_services, legal, …) |
+| `visit_branches` | R — Admin catalog; User App shows Central Tower (no branch picker) |
+| `visit_slots` | R — capacity; remaining = capacity − active bookings |
+| `visit_bookings` | **W** own rows; code **VIS-#####**; status confirmed / checked_in / completed / no_show / cancelled |
+| Duplicate rule | Unique active `(driver_id, scheduled_date, department_key)` where status ∈ confirmed, checked_in. Error: `duplicate_department_date` — “Already booked for this department on this date.” |
+| RPCs (live) | `driver_list_visit_slots`, `driver_book_visit`, `driver_cancel_visit` |
+
+Legacy `appointment_slots` / `appointments` remain until Visit Booking fully replaces them in the app.
 
 ### `loan_terms` (read only for driver after approve)
 - `total_kwd`, `deduction_kwd`, `months`, `installment_remaining`
@@ -336,6 +359,7 @@ Legacy Supabase buckets `driver-intakes` and `partner-logos` are deprecated; mig
 | fuel-receipts | Yes | `{driver_id}/{request_id}.jpg` |
 | hygiene-photos | Yes | `{driver_id}/{task_id}.jpg` |
 | support-attachments | Yes | `{thread_id}/{uuid}` |
+| request-attachments | Yes (RCM) | `{driver_id}/{request_id}/{file}` — JPEG/PNG/WebP/PDF; metadata in `request_attachments` |
 
 RLS: authenticated user can write only under their `driver_id` prefix where applicable.
 
