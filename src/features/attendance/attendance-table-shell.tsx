@@ -5,6 +5,28 @@ import { useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getAttendancePaginationState } from "./attendance-pagination";
+
+/** Same wording at toolbar + footer — record range only. */
+export function AttendancePaginationSummary({
+  page,
+  pageSize,
+  totalCount,
+  className,
+}: {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  className?: string;
+}) {
+  const t = useTranslations("pages.attendance");
+  const { from, to } = getAttendancePaginationState(page, pageSize, totalCount);
+  return (
+    <span className={cn("text-sm tabular-nums text-muted-foreground", className)}>
+      {t("paginationSummary", { from, to, total: totalCount })}
+    </span>
+  );
+}
 
 export function AttendancePaginationFooter({
   page,
@@ -20,9 +42,7 @@ export function AttendancePaginationFooter({
   className?: string;
 }) {
   const t = useTranslations("pages.attendance");
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const from = totalCount === 0 ? 0 : page * pageSize + 1;
-  const to = Math.min(totalCount, (page + 1) * pageSize);
+  const { totalPages } = getAttendancePaginationState(page, pageSize, totalCount);
 
   return (
     <div
@@ -31,27 +51,31 @@ export function AttendancePaginationFooter({
         className,
       )}
     >
-      <p className="text-sm text-muted-foreground">
-        {t("paginationSummary", { from, to, total: totalCount })}
-      </p>
+      <AttendancePaginationSummary
+        page={page}
+        pageSize={pageSize}
+        totalCount={totalCount}
+      />
       <div className="flex items-center gap-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="h-9"
           disabled={page <= 0}
           onClick={() => onPageChange(page - 1)}
         >
           <ChevronLeft className="h-4 w-4" />
           {t("prevPage")}
         </Button>
-        <span className="text-sm tabular-nums text-muted-foreground">
+        <span className="min-w-[7rem] text-center text-sm tabular-nums text-muted-foreground">
           {t("pageOf", { page: page + 1, totalPages })}
         </span>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="h-9"
           disabled={page + 1 >= totalPages}
           onClick={() => onPageChange(page + 1)}
         >

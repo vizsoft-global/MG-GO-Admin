@@ -130,8 +130,11 @@ export async function upsertCustomFieldDefinition(
   const defError = validateDefinitionInput({ ...input, key, entity_type: entityType });
   if (defError) return { error: "invalid_definition" };
 
+  // Checkbox with options = multi-select; empty options keeps legacy boolean.
   const options: CustomFieldOption[] =
-    input.field_type === "select" ? parseOptions(input.options) : [];
+    input.field_type === "select" || input.field_type === "checkbox"
+      ? parseOptions(input.options)
+      : [];
   const lettersOnly =
     input.field_type === "text" ? Boolean(input.letters_only) : false;
   const supabase = await createClient();
