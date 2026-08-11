@@ -1,11 +1,12 @@
+/** Row order mirrors the Figma "Request types & fields" and access drawer frames. */
 export const REQUEST_TYPE_SLUGS = [
-  "loan",
   "leave",
-  "sick_leave",
+  "loan",
   "asset",
   "fuel",
-  "document",
   "complaint",
+  "document",
+  "sick_leave",
   "salary_justification",
 ] as const;
 
@@ -51,6 +52,9 @@ export type StaffAccessRow = {
   access_level: "view_only" | "approver";
 };
 
+/** profile_id → department label, used by the Roles & access rights table. */
+export type StaffDepartmentMap = Record<string, string>;
+
 export type StaffProfileOption = {
   id: string;
   full_name: string;
@@ -83,6 +87,23 @@ export type DepartmentRow = {
 };
 
 export type DepartmentRoleTitle = "agent" | "manager";
+
+/** Meta counts shown under each tile on the Settings hub (Figma 12-Settings-Home). */
+export type SettingsHubCounts = {
+  workflows: number;
+  types: number;
+  assets: number;
+  departments: number;
+  roles: number;
+  esignCategories: number;
+};
+
+/** Appointments summary card on the Reports page (Figma 09-Reports). */
+export type AppointmentStatusCounts = {
+  accepted: number;
+  pending: number;
+  rejected: number;
+};
 
 export type DepartmentMemberRow = {
   id: string;

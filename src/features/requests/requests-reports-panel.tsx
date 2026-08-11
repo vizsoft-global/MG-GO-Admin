@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Clock, Download, FileText, Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileText, Loader2, Signature } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
@@ -21,8 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { buildCsv, downloadCsv } from "@/features/driver-tracking/csv-export";
+import { useEsignStatusCounts } from "@/features/esign/use-esign";
 import { queryKeys } from "@/lib/query/query-keys";
 import { fetchAdminRequestsList } from "./requests-actions";
+import { fetchAppointmentStatusCounts } from "./requests-settings-actions";
 import { datePresetToBounds } from "./date-presets";
 import type { RequestDatePreset } from "./types";
 
@@ -65,6 +67,26 @@ function formatDays(seconds: number | null | undefined): string {
   return `${(seconds / 86400).toFixed(1)}`;
 }
 
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+const CHART_WEEKS = 12;
+
+/** Trailing 12 ISO weeks of created volume — Figma "Requests over time". */
+function weeklyVolume(rows: { created_at: string }[]): { label: string; count: number }[] {
+  const now = Date.now();
+  const buckets = Array.from({ length: CHART_WEEKS }, (_, i) => ({
+    label: `W${i + 1}`,
+    count: 0,
+  }));
+  for (const row of rows) {
+    const created = Date.parse(row.created_at);
+    if (Number.isNaN(created)) continue;
+    const weeksAgo = Math.floor((now - created) / WEEK_MS);
+    if (weeksAgo < 0 || weeksAgo >= CHART_WEEKS) continue;
+    buckets[CHART_WEEKS - 1 - weeksAgo].count += 1;
+  }
+  return buckets;
+}
+
 export function RequestsReportsPanel() {
   const t = useTranslations("pages.requests.settings.reports");
   const tRoot = useTranslations("pages.requests");
@@ -81,6 +103,11 @@ export function RequestsReportsPanel() {
 
   const rows = data?.rows ?? [];
   const kpi = data?.kpi;
+  const { data: esignCounts } = useEsignStatusCounts();
+  const { data: appointmentCounts } = useQuery({
+    queryKey: ["requests", "reports", "appointment-status-counts"],
+    queryFn: fetchAppointmentStatusCounts,
+  });
 
   const byType = useMemo(() => {
     const map = Object.fromEntries(REQUEST_TYPES.map((k) => [k, 0])) as Record<string, number>;
@@ -93,6 +120,28 @@ export function RequestsReportsPanel() {
     for (const row of rows) map[row.status] = (map[row.status] ?? 0) + 1;
     return map;
   }, [rows]);
+
+  const volume = useMemo(() => weeklyVolume(rows), [rows]);
+  const maxVolume = useMemo(
+    () => volume.reduce((max, bucket) => Math.max(max, bucket.count), 0),
+    [volume],
+  );
+  const pendingAck = useMemo(
+    () => rows.filter((row) => row.awaiting_driver_ack).length,
+    [rows],
+  );
+
+  const totalDelta = useMemo(() => {
+    if (kpi?.prev_total == null) return null;
+    return rows.length - kpi.prev_total;
+  }, [kpi?.prev_total, rows.length]);
+
+  const resolutionDelta = useMemo(() => {
+    if (kpi?.avg_resolution_seconds == null || kpi?.prev_avg_resolution_seconds == null) {
+      return null;
+    }
+    return (kpi.prev_avg_resolution_seconds - kpi.avg_resolution_seconds) / 86400;
+  }, [kpi?.avg_resolution_seconds, kpi?.prev_avg_resolution_seconds]);
 
   const approvalRate = useMemo(() => {
     const decided = rows.filter((r) => r.status === "approved" || r.status === "rejected");
@@ -122,7 +171,7 @@ export function RequestsReportsPanel() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
-          { label: t("hub"), href: "/requests/settings" },
+          { label: tRoot("title"), href: "/requests" },
           { label: t("title") },
         ]}
         actions={
@@ -162,12 +211,28 @@ export function RequestsReportsPanel() {
         <>
           <KpiGrid
             items={[
-              { label: t("kpiTotal"), value: String(rows.length), icon: FileText },
+              {
+                label: t("kpiTotal"),
+                value: String(rows.length),
+                icon: FileText,
+                caption:
+                  totalDelta == null
+                    ? undefined
+                    : t("deltaVsPrev", {
+                        delta: `${totalDelta >= 0 ? "+" : ""}${totalDelta}`,
+                      }),
+              },
               {
                 label: t("kpiAvgResolution"),
                 value: `${formatDays(kpi?.avg_resolution_seconds)}${t("days")}`,
                 icon: Clock,
                 accent: "primary",
+                caption:
+                  resolutionDelta == null
+                    ? undefined
+                    : resolutionDelta >= 0
+                      ? t("deltaFaster", { days: resolutionDelta.toFixed(1) })
+                      : t("deltaSlower", { days: Math.abs(resolutionDelta).toFixed(1) }),
               },
               {
                 label: t("kpiApprovalRate"),
@@ -175,8 +240,46 @@ export function RequestsReportsPanel() {
                 icon: CheckCircle2,
                 accent: "success",
               },
+              {
+                label: t("kpiPendingAck"),
+                value: String(pendingAck),
+                icon: Signature,
+                accent: "warning",
+                caption: t("kpiPendingAckCaption"),
+              },
             ]}
           />
+
+          <AppListCard className="space-y-3 p-4">
+            <div>
+              <h3 className="text-sm font-semibold">{t("volumeTitle")}</h3>
+              <p className="text-[11px] text-muted-foreground">{t("volumeSubtitle")}</p>
+            </div>
+            {maxVolume === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">{t("emptyTitle")}</p>
+            ) : (
+              <div className="flex h-40 items-end gap-1.5">
+                {volume.map((bucket) => (
+                  <div
+                    key={bucket.label}
+                    className="flex h-full flex-1 flex-col items-center justify-end gap-1"
+                    title={t("volumeTooltip", { week: bucket.label, count: bucket.count })}
+                  >
+                    <span className="text-[10px] tabular-nums text-muted-foreground">
+                      {bucket.count > 0 ? bucket.count : ""}
+                    </span>
+                    <div
+                      className="w-full rounded-t-sm bg-primary/25"
+                      style={{
+                        height: `${Math.max(2, Math.round((bucket.count / maxVolume) * 80))}%`,
+                      }}
+                    />
+                    <span className="text-[10px] text-muted-foreground">{bucket.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </AppListCard>
 
           <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
             <AppListCard className="h-full p-0">
@@ -232,6 +335,87 @@ export function RequestsReportsPanel() {
                 )}
               </AppDataTable>
             </AppListCard>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">{t("signaturesSection")}</h3>
+            <div className="grid gap-2 lg:grid-cols-3 lg:items-stretch">
+              <AppListCard className="h-full space-y-2 p-4">
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  <span className="h-2 w-2 rounded-full bg-primary" />
+                  {t("esignTitle")}
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-lg font-semibold tabular-nums text-emerald-700">
+                      {esignCounts?.signed ?? "—"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{t("esignSigned")}</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold tabular-nums text-warning">
+                      {esignCounts?.pending ?? "—"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{t("esignPending")}</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold tabular-nums text-muted-foreground">
+                      {esignCounts?.expired ?? "—"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{t("esignExpired")}</p>
+                  </div>
+                </div>
+              </AppListCard>
+
+              <AppListCard className="h-full space-y-2 p-4">
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  {t("ackTitle")}
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-lg font-semibold tabular-nums">{pendingAck}</p>
+                    <p className="text-[10px] text-muted-foreground">{t("ackPending")}</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold tabular-nums text-muted-foreground">—</p>
+                    <p className="text-[10px] text-muted-foreground">{t("ackRate")}</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold tabular-nums text-muted-foreground">—</p>
+                    <p className="text-[10px] text-muted-foreground">{t("ackAvgTime")}</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">{t("ackGapNote")}</p>
+              </AppListCard>
+
+              <AppListCard className="h-full space-y-2 p-4">
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  <span className="h-2 w-2 rounded-full bg-sky-500" />
+                  {t("appointmentsTitle")}
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-lg font-semibold tabular-nums text-emerald-700">
+                      {appointmentCounts?.accepted ?? "—"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{t("appointmentsAccepted")}</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold tabular-nums text-warning">
+                      {appointmentCounts?.pending ?? "—"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{t("appointmentsPending")}</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold tabular-nums text-destructive">
+                      {appointmentCounts?.rejected ?? "—"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{t("appointmentsRejected")}</p>
+                  </div>
+                </div>
+              </AppListCard>
+            </div>
           </div>
         </>
       )}

@@ -65,7 +65,7 @@
     "attendance": "الحضور",
     "attendanceSettings": "حدود الحضور",
     "driverFields": "حقول السائق المخصصة",
-    "requests": "الطلبات",
+    "requests": "الطلبات والشكاوى",
     "visitBookings": "حجوزات الزيارة",
     "wrongActions": "المخالفات",
     "earnings": "الأرباح والحوافز",
@@ -2592,7 +2592,7 @@
       "hubLink": "الرئيسية",
       "subtitle": "قائمة RCM — الموافقة والتوضيح وحل طلبات السائقين",
       "hub": {
-        "subtitle": "اختر وحدة لإدارة الطلبات وسير العمل والتوقيع الإلكتروني",
+        "subtitle": "اختر وحدة لإدارة الطلبات وقوائم الانتظار والإعدادات",
         "requestTypesHeading": "أنواع الطلبات",
         "operationsHeading": "العمليات",
         "leave": "إجازة",
@@ -2619,8 +2619,9 @@
         "auditHint": "سجل القرارات والوصول",
         "settings": "الإعدادات",
         "settingsHint": "سير العمل والفئات والأدوار ولقطة الشاشة",
-        "esign": "المشرف والتوقيع الإلكتروني",
-        "esignHint": "إرسال وتتبع طلبات التوقيع"
+        "esign": "طلب إداري وتوقيع إلكتروني",
+        "esignHint": "إرسال وتتبع طلبات التوقيع",
+        "title": "الطلبات والشكاوى"
       },
       "refresh": "تحديث",
       "settingsLink": "الإعدادات",
@@ -2755,8 +2756,8 @@
         }
       },
       "settings": {
-        "title": "إعدادات RCM",
-        "subtitle": "سير العمل والفئات والأدوار وإعداد الطلبات",
+        "title": "الإعدادات",
+        "subtitle": "إعداد المسارات والفئات والأصول والوصول للطلبات والشكاوى",
         "stubNote": "عنصر نائب — التحليلات الكاملة لاحقاً",
         "links": {
           "esign": "إعدادات التوقيع الإلكتروني",
@@ -2776,15 +2777,15 @@
           "workflows": "تحديد خطوات الموافقة ومدد SLA ومسارات التصعيد",
           "categories": "إدارة خيارات فئات الشكاوى",
           "types": "إدارة أنواع الطلبات والحقول المخصصة ولقطات الشاشة",
-          "departments": "منح صلاحية عرض أو موافقة للموظفين لكل نوع طلب",
+          "departments": "الفرق والأعضاء وقواعد الإسناد",
           "roles": "دوران: عرض فقط وموافقة/رفض، بمصفوفة لكل نوع",
           "screenshot": "منع لقطات الشاشة لكل نوع طلب ومستند",
-          "assets": "فتح وحدة مخزون الأصول",
+          "assets": "عناصر يمكن للمندوبين طلبها مع مستويات المخزون",
           "audit": "تتبع كل إجراء وتغيير عبر الطلبات",
           "importExport": "استيراد السائقين والأصول، وتصدير بيانات التقارير"
         },
         "workflows": {
-          "hub": "إعدادات RCM",
+          "hub": "الإعدادات",
           "title": "منشئ سير العمل",
           "subtitle": "تهيئة خطوات الموافقة لكل نوع طلب",
           "subtitleFor": "مسار الموافقة لـ {type}",
@@ -2819,7 +2820,10 @@
           "errors": {
             "missingFields": "كل خطوة تحتاج اسمًا ومفتاح دور",
             "saveFailed": "تعذر حفظ سير العمل"
-          }
+          },
+          "breadcrumb": "منشئ المسار",
+          "titleFor": "مسار الموافقة · {type}",
+          "slaGapNote": "مدة SLA لكل خطوة ومسار التصعيد غير مدعومين في قاعدة البيانات بعد."
         },
         "categories": {
           "hub": "إعدادات RCM",
@@ -2847,7 +2851,7 @@
         "types": {
           "hub": "إعدادات RCM",
           "title": "أنواع الطلبات والحقول",
-          "subtitle": "إدارة أنواع الطلبات والحقول وسياسة لقطات الشاشة",
+          "subtitle": "إدارة أنواع الطلبات والحقول المخصصة والأيقونات وسياسة لقطات الشاشة",
           "addRequestType": "إضافة نوع طلب",
           "deferredNote": "الأنواع المخصصة وتحرير الحقول غير مدعومين بعد — يمكن هنا فقط تغيير سياسة لقطة الشاشة والتفعيل للقيم المدمجة.",
           "colSlug": "المعرّف",
@@ -2864,12 +2868,13 @@
           "manageCategories": "الفئات",
           "errors": {
             "saveFailed": "تعذر حفظ السياسة"
-          }
+          },
+          "edit": "تعديل"
         },
         "departments": {
           "hub": "إعدادات RCM",
           "title": "الأقسام والموظفون",
-          "subtitle": "إدارة من ينتمي إلى قائمة انتظار كل قسم ودورهم",
+          "subtitle": "إدارة أعضاء كل قسم ودورهم",
           "addDepartment": "إضافة قسم",
           "addMember": "إضافة عضو",
           "members_one": "{count} عضو",
@@ -2910,14 +2915,14 @@
         "roles": {
           "hub": "إعدادات RCM",
           "title": "الأدوار وحقوق الوصول",
-          "subtitle": "دوران: من يمكنه العرض ومن يمكنه الموافقة أو الرفض",
+          "subtitle": "دوران يحددان من يمكنه العرض ومن يمكنه الموافقة أو الرفض",
           "viewOnlyTitle": "عرض فقط",
           "viewOnlyBody": "يمكن للموظفين رؤية الطلبات من النوع المعيّن في القائمة والتفاصيل، دون موافقة أو رفض أو طلب توضيح.",
           "approverTitle": "موافق",
           "approverBody": "يمكن للموظفين التصرف في خطوة سير العمل الحالية — موافقة، رفض، توضيح، أو إجراءات مسموحة أخرى — عندما يطابق مفتاح دورهم الخطوة.",
           "grantsHint": "عيّن المنح لكل موظف ونوع طلب في صفحة وصول الموظفين.",
           "manageGrants": "إدارة منح الموظفين",
-          "staffCount": "{count} موظف · عرض القائمة",
+          "staffCount": "{count} موظف",
           "staffAccessTitle": "الموظفون وصلاحياتهم",
           "searchPlaceholder": "ابحث عن موظف بالاسم…",
           "filter": {
@@ -2947,12 +2952,19 @@
           "errors": {
             "staffRequired": "اختر موظفًا",
             "saveFailed": "تعذر حفظ الصلاحية"
-          }
+          },
+          "colDepartment": "القسم",
+          "viewList": "عرض القائمة",
+          "allRequestTypes": "كل أنواع الطلبات",
+          "staffTotal": "{count} موظف",
+          "change": "تغيير",
+          "staffAccessSubtitle": "من يمكنه العرض ومن يمكنه الموافقة لكل نوع طلب. اضغط على دور أعلاه للتصفية.",
+          "perTypeHintAssign": "اختر موظفًا، ثم حدد صلاحياته لكل نوع طلب."
         },
         "reports": {
           "hub": "إعدادات RCM",
           "title": "التقارير والتحليلات",
-          "subtitle": "حجم الطلبات والحل والموافقات حسب النوع والحالة",
+          "subtitle": "حجم الطلبات والحل والإقرارات والتوقيعات",
           "stubTitle": "التقارير قريباً",
           "stubBody": "ستظهر هنا اتجاهات الحل وتحليلات SLA والملخصات القابلة للتصدير في إصدار لاحق.",
           "export": "تصدير CSV",
@@ -2966,12 +2978,34 @@
           "colCount": "العدد",
           "colShare": "النسبة",
           "emptyTitle": "لا توجد طلبات هذا الشهر",
-          "emptyDescription": "تظهر الإجماليات الشهرية عند وجود طلبات."
+          "emptyDescription": "تظهر الإجماليات الشهرية عند وجود طلبات.",
+          "deltaVsPrev": "{delta} مقارنة بالفترة السابقة",
+          "deltaFaster": "أسرع بـ {days} يوم",
+          "deltaSlower": "أبطأ بـ {days} يوم",
+          "kpiPendingAck": "بانتظار الإقرار",
+          "kpiPendingAckCaption": "تمت الموافقة وبانتظار المندوب",
+          "volumeTitle": "الطلبات عبر الوقت",
+          "volumeSubtitle": "الحجم الأسبوعي · آخر 12 أسبوعاً",
+          "volumeTooltip": "{week}: {count} طلب",
+          "signaturesSection": "التوقيعات والإقرارات",
+          "esignTitle": "التوقيعات الإلكترونية",
+          "esignSigned": "موقّعة",
+          "esignPending": "قيد الانتظار",
+          "esignExpired": "منتهية",
+          "ackTitle": "الإقرارات",
+          "ackPending": "قيد الانتظار",
+          "ackRate": "نسبة الإقرار",
+          "ackAvgTime": "متوسط الوقت",
+          "ackGapNote": "نسبة الإقرار ومتوسط الوقت يحتاجان حقل acknowledged_at غير الموجود بعد.",
+          "appointmentsTitle": "المواعيد",
+          "appointmentsAccepted": "مقبولة",
+          "appointmentsPending": "قيد الانتظار",
+          "appointmentsRejected": "مرفوضة"
         },
         "audit": {
           "hub": "إعدادات RCM",
           "title": "سجل التدقيق",
-          "subtitle": "كل إجراء وتحقق وإقرار وتغيير عبر الطلبات",
+          "subtitle": "كل إجراء وتحقق وإقرار وتوقيع على الطلبات",
           "load": "تحميل السجل",
           "refresh": "تحديث",
           "prompt": "انقر تحميل السجل لجلب نشاط RCM الأخير",
@@ -2986,7 +3020,22 @@
           "colEntity": "الكيان",
           "errors": {
             "loadFailed": "تعذر تحميل سجل التدقيق"
-          }
+          },
+          "allStaff": "كل الموظفين",
+          "colActor": "المنفّذ",
+          "colTarget": "الهدف",
+          "colDetails": "التفاصيل"
+        },
+        "linksMeta": {
+          "workflows": "{count} مسار",
+          "types": "{count} نوع طلب",
+          "assets": "{count} أصل",
+          "departments": "{count} قسم",
+          "roles": "{count} دور",
+          "esign": "{count} فئة",
+          "audit": "عرض النشاط",
+          "importExport": "CSV / XLSX",
+          "screenshot": "للمشرف فقط"
         }
       },
       "esign": {
@@ -3000,20 +3049,30 @@
             "sent": "الطلبات المرسلة",
             "signatures": "التوقيعات الإلكترونية",
             "categories": "فئات التوقيع",
-            "screenshot": "إعدادات التوقيع الإلكتروني"
+            "screenshot": "إعدادات التوقيع الإلكتروني",
+            "calendar": "تقويم المشرف"
           },
           "tilesDesc": {
             "sent": "تتبع الطلبات التي أرسلتها وحالتها",
             "signatures": "المعلقة والموقعة والمرفوضة والمنتهية",
             "categories": "الفئات والأيقونات وسياسة لقطة الشاشة",
-            "screenshot": "فئات التوقيع والأيقونات وسياسة لقطة الشاشة"
-          }
+            "screenshot": "فئات التوقيع والأيقونات وسياسة لقطة الشاشة",
+            "calendar": "طلبات المواعيد المقبولة على تقويمك"
+          },
+          "tilesMeta": {
+            "sent": "{total} طلب · {pending} قيد الانتظار",
+            "signatures": "{pending} قيد الانتظار",
+            "categories": "{count} فئة",
+            "calendar": "عرض التقويم"
+          },
+          "newRequestMeta": "يفتح منشئ الطلب الجديد"
         },
         "status": {
           "pending": "معلق",
           "signed": "موقّع",
           "expired": "منتهٍ",
-          "cancelled": "ملغى"
+          "cancelled": "ملغى",
+          "declined": "مرفوض"
         },
         "sent": {
           "title": "الطلبات المرسلة",
@@ -3046,6 +3105,22 @@
           "errors": {
             "missingFields": "السائق والعنوان مطلوبان",
             "createFailed": "تعذر إنشاء الطلب"
+          },
+          "colSent": "أُرسل",
+          "kpiSent": "أُرسل (30 يوم)",
+          "kpiSentCaption": "كل الأنواع",
+          "kpiPending": "قيد الانتظار",
+          "kpiPendingCaption": "بانتظار الرد",
+          "kpiSigned": "موقّعة",
+          "kpiSignedCaption": "مكتملة",
+          "kpiExpired": "منتهية",
+          "kpiExpiredCaption": "لا رد",
+          "filters": {
+            "all": "الكل",
+            "pending": "قيد الانتظار",
+            "signed": "موقّعة",
+            "declined": "مرفوضة",
+            "expired": "منتهية"
           }
         },
         "signatures": {
@@ -3065,8 +3140,23 @@
           "filters": {
             "all": "الكل",
             "pending": "معلق",
-            "signed": "موقّع"
-          }
+            "signed": "موقّع",
+            "declined": "مرفوضة",
+            "expired": "منتهية"
+          },
+          "kpiPending": "بانتظار التوقيع",
+          "kpiPendingCaption": "بانتظار التوقيع",
+          "kpiSigned": "موقّعة (30 يوم)",
+          "kpiSignedCaption": "مكتملة",
+          "kpiRejected": "مرفوضة",
+          "kpiRejectedCaption": "مرفوضة",
+          "kpiExpired": "منتهية",
+          "kpiExpiredCaption": "بلا إجراء",
+          "colDocument": "المستند",
+          "colRecipient": "المستلم",
+          "colCategory": "الفئة",
+          "colSent": "أُرسل",
+          "colSignedOn": "تاريخ التوقيع"
         },
         "detail": {
           "notFound": "الطلب غير موجود",
@@ -3084,11 +3174,32 @@
           "screenshotBlocked": "محظورة",
           "screenshotAllowed": "مسموحة",
           "signerMeta": "بيانات الجهاز",
-          "noSignerMeta": "لا توجد بيانات موقّع بعد"
+          "noSignerMeta": "لا توجد بيانات موقّع بعد",
+          "statusSection": "الحالة",
+          "detailsSection": "التفاصيل",
+          "proofSection": "سجل إثبات التوقيع",
+          "recipient": "المستلم",
+          "timelineSent": "أُرسل إلى المستلم",
+          "timelineSigned": "تم التوقيع",
+          "timelinePending": "لم يتم التوقيع بعد",
+          "timelineViewedGap": "لا يتم تسجيل وقت المشاهدة في طلبات التوقيع بعد.",
+          "signedElectronically": "موقّع إلكترونياً · {at}",
+          "noDocumentTitle": "لا يوجد مستند مرفق",
+          "noDocumentBody": "أُرسل هذا الطلب بدون مستند، أو لم يتم رفع الملف بعد.",
+          "downloadDocument": "تنزيل المستند الموقّع",
+          "downloadSignature": "تنزيل صورة التوقيع",
+          "proof": {
+            "employee_id": "الرقم الوظيفي",
+            "phone": "الهاتف",
+            "civil_id": "الرقم المدني",
+            "company": "الشركة",
+            "ip_address": "عنوان IP",
+            "device": "الجهاز"
+          }
         },
         "categories": {
           "title": "فئات التوقيع",
-          "subtitle": "خيارات الفئات لطلبات التوقيع",
+          "subtitle": "لكل فئة أيقونة خاصة وسياسة لقطات شاشة",
           "key": "المفتاح",
           "name": "الاسم",
           "description": "الوصف",
@@ -3108,11 +3219,16 @@
           "errors": {
             "saveFailed": "تعذر حفظ الفئة",
             "deleteFailed": "تعذر إزالة الفئة"
-          }
+          },
+          "colSigned": "موقّعة",
+          "edit": "تعديل",
+          "updated": "تم تحديث الفئة",
+          "saveChanges": "حفظ التغييرات",
+          "cancel": "إلغاء"
         },
         "screenshot": {
           "title": "إعدادات لقطة الشاشة",
-          "subtitle": "التحكم بأنواع الطلبات والمستندات التي تمنع لقطات الشاشة في تطبيق السائقين",
+          "subtitle": "تحكّم في أنواع الطلبات والمستندات التي تمنع لقطات الشاشة في تطبيق المندوب (للمشرف فقط)",
           "defaultLabel": "الافتراضي العام — منع لقطات الشاشة للمستندات الحساسة",
           "overrideNote": "عند المنع، يرى المستخدم عنصرًا نائبًا محميًا ولا يمكنه التقاط الشاشة. يمكن لكل صف أدناه تجاوز الافتراضي.",
           "sectionRequestTypes": "أنواع الطلبات",
@@ -3126,11 +3242,22 @@
           "manageCategories": "إدارة الفئات",
           "errors": {
             "saveFailed": "تعذر حفظ الإعداد"
+          },
+          "colAppliesTo": "ينطبق على",
+          "appliesTo": {
+            "leave": "تواريخ الإجازة والسبب",
+            "loan": "عرض اتفاقية السلفة",
+            "asset": "تسليم الأصل والغرامة",
+            "fuel": "عرض إيصال الوقود",
+            "complaint": "تفاصيل الرد على الشكوى",
+            "document": "المستندات المرفقة",
+            "sick_leave": "المستندات الطبية المرفوعة",
+            "salary_justification": "التبرير وعرض كشف الراتب"
           }
         },
         "assets": {
-          "title": "مخزون الأصول",
-          "subtitle": "أصول الأسطول المرتبطة بطلبات السائقين",
+          "title": "كتالوج الأصول",
+          "subtitle": "عناصر يمكن للمندوبين طلبها من التطبيق",
           "body": "يتم إدارة فهرس الأصول والتعيينات في وحدة المخزون المخصصة.",
           "openAssets": "فتح مخزون الأصول",
           "colName": "الأصل",
@@ -3140,12 +3267,15 @@
           "lowStock": "{count} متبقٍ · مخزون منخفض",
           "activeOn": "نشط",
           "activeOff": "غير نشط",
-          "empty": "لا توجد عناصر في الفهرس بعد"
+          "empty": "لا توجد عناصر في الفهرس بعد",
+          "assetCount": "{count} أصل",
+          "searchPlaceholder": "بحث في الأصول",
+          "outOfStock": "غير متوفر"
         },
         "importExport": {
           "requests": "الطلبات",
-          "title": "استيراد وتصدير",
-          "subtitle": "أدوات جماعية لبيانات RCM والتوقيع",
+          "title": "تصدير الطلبات",
+          "subtitle": "تنزيل بيانات الطلبات المُفلترة كجدول بيانات",
           "exportRequestsTitle": "تصدير طلبات RCM",
           "exportRequestsBody": "تنزيل حتى 1000 طلب (سلفة/إجازة/أصل/شكوى) كـ CSV.",
           "exportTitle": "تصدير طلبات التوقيع",
@@ -3155,7 +3285,40 @@
           "exportEmpty": "لا يوجد ما يُصدَّر",
           "importTitle": "استيراد",
           "importBody": "الاستيراد الجماعي للطلبات والتوقيعات غير متاح بعد.",
-          "importComingSoon": "قريباً"
+          "importComingSoon": "قريباً",
+          "settings": "الإعدادات",
+          "breadcrumb": "تصدير",
+          "exportEsignButton": "تصدير التوقيعات CSV",
+          "filtersTitle": "الفلاتر",
+          "filtersBody": "اختر الطلبات المضمّنة",
+          "filterPreset": "إعداد الفلترة",
+          "presetCurrentView": "العرض الحالي",
+          "presetAll": "كل الطلبات",
+          "dateRange": "النطاق الزمني",
+          "statusLabel": "الحالة",
+          "statusAll": "كل الحالات",
+          "matchLoading": "جارٍ حساب الطلبات المطابقة…",
+          "matchCount": "{count} طلب مطابق للفلاتر الحالية",
+          "columnsTitle": "الأعمدة المضمّنة",
+          "columnsSelected": "{selected} من {total} محدد",
+          "columnUnavailable": "غير متاح — لا يوجد حقل في سجل الطلب بعد",
+          "sizeHint": "CSV · حوالي {kb} كيلوبايت",
+          "pdfUnavailable": "تصدير PDF غير متاح بعد",
+          "exportPdf": "تصدير PDF",
+          "exportCsv": "تصدير CSV",
+          "exportExcel": "تصدير Excel",
+          "columns": {
+            "requestId": "رقم الطلب",
+            "riderName": "اسم المندوب",
+            "riderZone": "منطقة المندوب",
+            "type": "النوع",
+            "status": "الحالة",
+            "currentStep": "الخطوة الحالية",
+            "createdDate": "تاريخ الإنشاء",
+            "department": "القسم",
+            "remarks": "سجل الملاحظات",
+            "internalNotes": "ملاحظات داخلية"
+          }
         },
         "reports": {
           "requests": "الطلبات",

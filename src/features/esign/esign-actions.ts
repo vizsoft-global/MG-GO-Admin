@@ -11,6 +11,7 @@ import type {
   EsignListFilters,
   EsignListRow,
   EsignRequestStatus,
+  EsignStatusCounts,
 } from "./types";
 
 async function requireRequestsManage() {
@@ -78,6 +79,40 @@ export async function fetchEsignRequestsList(
   };
 }
 
+/** KPI + tab counts for the Sent requests / E-signatures lists (Figma ESign 01 & 02). */
+export async function fetchEsignStatusCounts(): Promise<EsignStatusCounts> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+
+  const [requests, categories] = await Promise.all([
+    (supabase as any).from("esign_requests").select("status, created_at, signed_at"),
+    supabase
+      .from("esign_categories")
+      .select("id", { count: "exact", head: true })
+      .eq("is_active", true),
+  ]);
+
+  const rows = (requests.data ?? []) as {
+    status: string;
+    created_at: string | null;
+    signed_at: string | null;
+  }[];
+  const count = (status: string) => rows.filter((row) => row.status === status).length;
+
+  return {
+    all: rows.length,
+    pending: count("pending"),
+    signed: count("signed"),
+    declined: count("declined"),
+    expired: count("expired"),
+    cancelled: count("cancelled"),
+    signedLast30d: rows.filter((row) => row.signed_at != null && row.signed_at >= since).length,
+    sentLast30d: rows.filter((row) => row.created_at != null && row.created_at >= since).length,
+    categories: categories.count ?? 0,
+  };
+}
+
 export async function fetchEsignRequestDetail(
   id: string,
 ): Promise<{ request: EsignDetail | null; error?: string }> {
@@ -124,6 +159,40 @@ export async function fetchEsignRequestDetail(
       updated_at: String(row.updated_at ?? ""),
     },
   };
+}
+
+const ESIGN_BUCKET = "esign-documents";
+const SIGNED_URL_TTL_SECONDS = 300;
+
+/** Short-lived signed URLs for the document preview / signature proof (Figma ESign 03). */
+export async function fetchEsignDocumentLinks(
+  id: string,
+): Promise<{ documentUrl: string | null; signatureUrl: string | null; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { data, error } = await (supabase as any)
+    .from("esign_requests")
+    .select("document_storage_key, signature_storage_key")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) return { documentUrl: null, signatureUrl: null, error: error.message };
+  const row = asRecord(data);
+
+  async function signedUrl(key: unknown): Promise<string | null> {
+    if (key == null || String(key).trim() === "") return null;
+    const { data: signed } = await supabase.storage
+      .from(ESIGN_BUCKET)
+      .createSignedUrl(String(key), SIGNED_URL_TTL_SECONDS);
+    return signed?.signedUrl ?? null;
+  }
+
+  const [documentUrl, signatureUrl] = await Promise.all([
+    signedUrl(row.document_storage_key),
+    signedUrl(row.signature_storage_key),
+  ]);
+
+  return { documentUrl, signatureUrl };
 }
 
 export async function createEsignRequest(input: {
@@ -178,6 +247,16 @@ export async function fetchEsignCategories(): Promise<{
 
   if (error) return { rows: [], error: error.message };
 
+  const { data: signedRows } = await (supabase as any)
+    .from("esign_requests")
+    .select("category_key")
+    .eq("status", "signed");
+  const signedByKey = new Map<string, number>();
+  for (const row of (signedRows ?? []) as { category_key: string | null }[]) {
+    if (!row.category_key) continue;
+    signedByKey.set(row.category_key, (signedByKey.get(row.category_key) ?? 0) + 1);
+  }
+
   await logAdminRead("esign_categories", "esign.categories.list", {});
 
   return {
@@ -190,6 +269,7 @@ export async function fetchEsignCategories(): Promise<{
       screenshot_restricted: row.screenshot_restricted,
       is_active: row.is_active,
       sort_order: row.sort_order,
+      signed_count: signedByKey.get(row.key) ?? 0,
     })),
   };
 }

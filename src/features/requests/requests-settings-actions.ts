@@ -6,13 +6,16 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import type {
   AccessLevel,
+  AppointmentStatusCounts,
   ComplaintCategoryRow,
   DepartmentMemberRow,
   DepartmentRoleTitle,
   DepartmentRow,
   RequestTypeScreenshotPolicyRow,
   RequestTypeSlug,
+  SettingsHubCounts,
   StaffAccessRow,
+  StaffDepartmentMap,
   StaffProfileOption,
   StepTemplateRow,
 } from "./settings-types";
@@ -327,7 +330,32 @@ export type RequestsAuditLogRow = {
   route_name: string | null;
   entity_id: string | null;
   created_at: string;
+  /** Actor name + role, shown in the Figma ACTOR column. */
+  actor_id: string | null;
+  actor_name: string;
+  actor_role: string | null;
+  /** Human-readable summary built from changed fields / context. */
+  details: string | null;
 };
+
+/** Compact "field: value" summary for the Figma DETAILS column. */
+function summarizeLogContext(
+  context: unknown,
+  changedFields: unknown,
+  errorMessage: string | null,
+): string | null {
+  if (errorMessage) return errorMessage;
+  const fields = Array.isArray(changedFields)
+    ? changedFields.map(String).filter(Boolean)
+    : [];
+  if (fields.length > 0) return fields.join(", ");
+  const record = asRecord(context);
+  const parts = Object.entries(record)
+    .filter(([, value]) => value != null && typeof value !== "object")
+    .slice(0, 3)
+    .map(([key, value]) => `${key}: ${String(value)}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 export async function fetchRequestsAuditLogs(): Promise<{
   rows: RequestsAuditLogRow[];
@@ -337,13 +365,119 @@ export async function fetchRequestsAuditLogs(): Promise<{
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("admin_activity_logs")
-    .select("id, action, route_name, entity_id, created_at")
+    .select(
+      "id, action, route_name, entity_id, created_at, admin_user_id, admin_role_slug, context, changed_fields, error_message",
+    )
     .eq("entity_type", "requests")
     .order("created_at", { ascending: false })
     .limit(100);
 
   if (error) return { rows: [], error: error.message };
-  return { rows: data ?? [] };
+
+  const actorIds = Array.from(
+    new Set((data ?? []).map((row) => row.admin_user_id).filter((id): id is string => Boolean(id))),
+  );
+  const nameById = new Map<string, string>();
+  if (actorIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", actorIds);
+    for (const profile of profiles ?? []) {
+      if (profile.full_name) nameById.set(profile.id, profile.full_name);
+    }
+  }
+
+  return {
+    rows: (data ?? []).map((row) => ({
+      id: row.id,
+      action: row.action,
+      route_name: row.route_name,
+      entity_id: row.entity_id,
+      created_at: row.created_at,
+      actor_id: row.admin_user_id,
+      actor_name: row.admin_user_id ? (nameById.get(row.admin_user_id) ?? "—") : "System",
+      actor_role: row.admin_role_slug,
+      details: summarizeLogContext(row.context, row.changed_fields, row.error_message),
+    })),
+  };
+}
+
+/** Tile meta counts for the Settings hub (Figma 12-Settings-Home). */
+export async function fetchSettingsHubCounts(): Promise<SettingsHubCounts> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+
+  const [workflowTypes, activeTypes, assets, departments, roles, esignCategories] =
+    await Promise.all([
+      supabase.from("request_approval_step_templates").select("request_type"),
+      (supabase as any)
+        .from("request_type_screenshot_policy")
+        .select("request_type", { count: "exact", head: true })
+        .eq("is_active", true),
+      supabase
+        .from("asset_catalog")
+        .select("id", { count: "exact", head: true })
+        .eq("is_active", true),
+      (supabase as any)
+        .from("request_departments")
+        .select("id", { count: "exact", head: true })
+        .eq("is_active", true),
+      supabase.from("request_staff_access").select("access_level"),
+      supabase
+        .from("esign_categories")
+        .select("id", { count: "exact", head: true })
+        .eq("is_active", true),
+    ]);
+
+  const distinctWorkflows = new Set(
+    (workflowTypes.data ?? []).map((row) => String(row.request_type)),
+  );
+  const distinctRoles = new Set(
+    (roles.data ?? []).map((row) => String(row.access_level)),
+  );
+
+  return {
+    workflows: distinctWorkflows.size,
+    types: activeTypes.count ?? 0,
+    assets: assets.count ?? 0,
+    departments: departments.count ?? 0,
+    roles: distinctRoles.size,
+    esignCategories: esignCategories.count ?? 0,
+  };
+}
+
+/** Appointments card on the Reports page (Figma 09-Reports). */
+export async function fetchAppointmentStatusCounts(): Promise<AppointmentStatusCounts> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { data } = await supabase.from("appointments").select("status");
+
+  const counts: AppointmentStatusCounts = { accepted: 0, pending: 0, rejected: 0 };
+  for (const row of data ?? []) {
+    if (row.status === "accepted") counts.accepted += 1;
+    else if (row.status === "pending" || row.status === "reschedule_requested") counts.pending += 1;
+    else if (row.status === "rejected") counts.rejected += 1;
+  }
+  return counts;
+}
+
+/** profile_id → department label for the Roles table DEPARTMENT column. */
+export async function fetchStaffDepartments(): Promise<StaffDepartmentMap> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { data } = await (supabase as any)
+    .from("request_department_members")
+    .select("profile_id, request_departments(label_en)")
+    .eq("is_active", true);
+
+  const map: StaffDepartmentMap = {};
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
+    const label = asRecord(row.request_departments).label_en;
+    const profileId = String(row.profile_id);
+    if (label && !map[profileId]) map[profileId] = String(label);
+  }
+  return map;
 }
 
 export async function fetchRequestTypeScreenshotPolicy(): Promise<{
@@ -393,13 +527,20 @@ export async function updateRequestTypeScreenshotPolicy(
 export async function fetchStaffAccessMatrix(): Promise<{
   staffOptions: StaffProfileOption[];
   rows: StaffAccessRow[];
+  departments: StaffDepartmentMap;
   error?: string;
 }> {
-  const [accessResult, staff] = await Promise.all([
+  const [accessResult, staff, departments] = await Promise.all([
     fetchStaffAccess(),
     fetchStaffProfileOptions(),
+    fetchStaffDepartments(),
   ]);
-  return { staffOptions: staff, rows: accessResult.rows, error: accessResult.error };
+  return {
+    staffOptions: staff,
+    rows: accessResult.rows,
+    departments,
+    error: accessResult.error,
+  };
 }
 
 export async function fetchDepartments(): Promise<{
@@ -574,6 +715,28 @@ export async function updateDepartmentMemberStatus(
     entityId: id,
     routeName: "requests.settings.departments.toggleMember",
     context: { is_active },
+  });
+  return { ok: true };
+}
+
+export async function updateDepartmentMemberRole(
+  id: string,
+  role_title: DepartmentRoleTitle,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { error } = await (supabase as any)
+    .from("request_department_members")
+    .update({ role_title, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "request_department_members",
+    entityId: id,
+    routeName: "requests.settings.departments.updateMemberRole",
+    context: { role_title },
   });
   return { ok: true };
 }

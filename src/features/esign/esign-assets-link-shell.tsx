@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Loader2, Package } from "lucide-react";
+import { ExternalLink, Loader2, Package, Search } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -24,6 +25,7 @@ export function EsignAssetsLinkShell() {
   const tSettings = useTranslations("pages.requests.settings");
   const [rows, setRows] = useState<AssetCatalogRow[] | null>(null);
   const [forbidden, setForbidden] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     fetchAssetsCatalog()
@@ -31,11 +33,23 @@ export function EsignAssetsLinkShell() {
       .catch(() => setForbidden(true));
   }, []);
 
+  const visibleRows = useMemo(() => {
+    if (!rows) return null;
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (row) =>
+        row.name.toLowerCase().includes(q) || row.code.toLowerCase().includes(q),
+    );
+  }, [rows, search]);
+
   return (
     <AppPage>
       <AppPageHeader
         title={t("title")}
-        description={t("subtitle")}
+        description={
+          rows ? `${t("subtitle")} · ${t("assetCount", { count: rows.length })}` : t("subtitle")
+        }
         breadcrumbs={[
           { label: tSettings("title"), href: "/requests/settings" },
           { label: t("title") },
@@ -57,6 +71,20 @@ export function EsignAssetsLinkShell() {
         </AppListCard>
       ) : (
         <AppListCard className="p-0">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-9 w-64 ps-8"
+                placeholder={t("searchPlaceholder")}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <span className="ms-auto text-[11px] text-muted-foreground">
+              {visibleRows ? t("assetCount", { count: visibleRows.length }) : ""}
+            </span>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -66,20 +94,20 @@ export function EsignAssetsLinkShell() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows === null ? (
+              {visibleRows === null ? (
                 <TableRow>
                   <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
                     <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                   </TableCell>
                 </TableRow>
-              ) : rows.length === 0 ? (
+              ) : visibleRows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
                     {t("empty")}
                   </TableCell>
                 </TableRow>
               ) : (
-                rows.map((row) => (
+                visibleRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>
                       <div className="flex items-center gap-2.5">
@@ -93,7 +121,9 @@ export function EsignAssetsLinkShell() {
                       </div>
                     </TableCell>
                     <TableCell className="tabular-nums text-sm">
-                      {row.is_low_stock ? (
+                      {row.available_qty <= 0 ? (
+                        <span className="text-destructive">{t("outOfStock")}</span>
+                      ) : row.is_low_stock ? (
                         <span className="text-destructive">
                           {t("lowStock", { count: row.available_qty })}
                         </span>

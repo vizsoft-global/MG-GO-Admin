@@ -65,6 +65,7 @@ function ChainConnector() {
 export function WorkflowsSettingsPanel() {
   const t = useTranslations("pages.requests.settings.workflows");
   const tTypes = useTranslations("pages.requests.types");
+  const tRequests = useTranslations("pages.requests");
   const [requestType, setRequestType] = useState<RequestTypeSlug>("leave");
   const [steps, setSteps] = useState<StepTemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,11 +163,12 @@ export function WorkflowsSettingsPanel() {
   return (
     <AppPage>
       <AppPageHeader
-        title={t("title")}
+        title={t("titleFor", { type: tTypes(requestType) })}
         description={t("subtitleFor", { type: tTypes(requestType) })}
         breadcrumbs={[
+          { label: tRequests("title"), href: "/requests" },
           { label: t("hub"), href: "/requests/settings" },
-          { label: t("title") },
+          { label: t("breadcrumb") },
         ]}
         actions={
           <div className="flex items-center gap-2">
@@ -339,6 +341,9 @@ export function WorkflowsSettingsPanel() {
             <Link href="/requests/settings/roles" className="text-primary hover:underline">
               {t("rolesLink")}
             </Link>
+          </p>
+          <p className="border-t border-border pt-2 text-[10px] text-muted-foreground">
+            {t("slaGapNote")}
           </p>
         </AppListCard>
       </div>

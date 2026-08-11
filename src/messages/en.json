@@ -65,8 +65,8 @@
     "attendance": "Attendance",
     "attendanceSettings": "Attendance thresholds",
     "driverFields": "Driver custom fields",
-    "requests": "Requests",
-    "visitBookings": "Visit bookings",
+    "requests": "Request & Complaint",
+    "visitBookings": "Visit Bookings",
     "wrongActions": "Wrong Actions",
     "earnings": "Earnings & Incentives",
     "notifications": "Notifications",
@@ -2674,7 +2674,7 @@
       "hubLink": "Hub",
       "subtitle": "RCM queue — approve, clarify, and resolve rider requests",
       "hub": {
-        "subtitle": "Pick a module to manage requests, workflows, and e-signatures",
+        "subtitle": "Pick a module to manage requests, queues, and settings",
         "requestTypesHeading": "Request types",
         "operationsHeading": "Operations",
         "leave": "Leave",
@@ -2701,8 +2701,9 @@
         "auditHint": "Decision and access history",
         "settings": "Settings",
         "settingsHint": "Workflows, categories, roles, screenshot",
-        "esign": "Admin request & e-signature",
-        "esignHint": "Send and track signature requests"
+        "esign": "Admin Request & e-signature",
+        "esignHint": "Send and track signature requests",
+        "title": "Request & Complaint"
       },
       "refresh": "Refresh",
       "settingsLink": "Settings",
@@ -2837,8 +2838,8 @@
         }
       },
       "settings": {
-        "title": "RCM settings",
-        "subtitle": "Workflows, categories, roles, and request configuration",
+        "title": "Settings",
+        "subtitle": "Configure workflows, categories, assets and access for requests and complaints",
         "stubNote": "Placeholder — full analytics coming later",
         "links": {
           "esign": "E-Signature settings",
@@ -2858,15 +2859,15 @@
           "workflows": "Define approval steps, SLAs and escalation paths",
           "categories": "Manage complaint category options",
           "types": "Manage request types, custom fields and screenshots",
-          "departments": "Grant staff view or approver access per request type",
+          "departments": "Teams, members and assignment rules",
           "roles": "Two roles: view-only and approve/reject, per-type matrix",
           "screenshot": "Block screenshots per request type and document",
-          "assets": "Open the fleet asset inventory module",
+          "assets": "Items riders can request with stock levels",
           "audit": "Track every action and change across requests",
           "importExport": "Import riders and assets, export report data"
         },
         "workflows": {
-          "hub": "RCM settings",
+          "hub": "Settings",
           "title": "Workflow builder",
           "subtitle": "Configure approval steps for each request type",
           "subtitleFor": "Approval chain for {type}",
@@ -2901,7 +2902,10 @@
           "errors": {
             "missingFields": "Every step needs a name and role key",
             "saveFailed": "Could not save workflow"
-          }
+          },
+          "breadcrumb": "Workflow builder",
+          "titleFor": "Approval workflow · {type}",
+          "slaGapNote": "Per-step SLA and escalation targets from the design have no column on request_approval_step_templates yet — pending schema sign-off."
         },
         "categories": {
           "hub": "RCM settings",
@@ -2929,7 +2933,7 @@
         "types": {
           "hub": "RCM settings",
           "title": "Request types & fields",
-          "subtitle": "Manage request types, fields, and screenshot policy",
+          "subtitle": "Manage request types, custom fields, icon slots and screenshot policy",
           "addRequestType": "Add request type",
           "deferredNote": "Custom request types and field editing are not supported yet — only the built-in enum values and their screenshot/active policy can be changed here.",
           "colSlug": "Slug",
@@ -2946,7 +2950,8 @@
           "manageCategories": "Categories",
           "errors": {
             "saveFailed": "Could not save policy"
-          }
+          },
+          "edit": "Edit"
         },
         "departments": {
           "hub": "RCM settings",
@@ -2992,14 +2997,14 @@
         "roles": {
           "hub": "RCM settings",
           "title": "Roles & access rights",
-          "subtitle": "Two roles: who can view and who can approve or reject requests",
+          "subtitle": "Two roles control who can view and who can approve or reject requests",
           "viewOnlyTitle": "View only",
           "viewOnlyBody": "Staff can see requests of the assigned type in the queue and detail view, but cannot approve, reject, or ask for clarification.",
           "approverTitle": "Approver",
           "approverBody": "Staff can act on the current workflow step — approve, reject, clarify, or other allowed actions — when their role key matches the step.",
           "grantsHint": "Assign grants per staff member and request type on the staff access page.",
           "manageGrants": "Manage staff grants",
-          "staffCount": "{count} staff · View list",
+          "staffCount": "{count} staff",
           "staffAccessTitle": "Staff & their access",
           "searchPlaceholder": "Search staff by name…",
           "filter": {
@@ -3029,12 +3034,19 @@
           "errors": {
             "staffRequired": "Select a staff member",
             "saveFailed": "Could not save access"
-          }
+          },
+          "colDepartment": "Department",
+          "viewList": "View list",
+          "allRequestTypes": "All request types",
+          "staffTotal": "{count} staff",
+          "change": "Change",
+          "staffAccessSubtitle": "Who can view and who can approve each request type. Click a role above to filter.",
+          "perTypeHintAssign": "Pick a staff member, then set their access per request type."
         },
         "reports": {
           "hub": "RCM settings",
           "title": "Reports and analytics",
-          "subtitle": "Request volume, resolution and approvals by type and status",
+          "subtitle": "Request volume, resolution, acknowledgements and signatures",
           "stubTitle": "Reports coming soon",
           "stubBody": "Resolution trends, SLA breakdowns, and exportable summaries will appear here in a future release.",
           "export": "Export CSV",
@@ -3048,12 +3060,34 @@
           "colCount": "Count",
           "colShare": "Share",
           "emptyTitle": "No requests this month",
-          "emptyDescription": "Monthly aggregates appear once requests exist."
+          "emptyDescription": "Monthly aggregates appear once requests exist.",
+          "deltaVsPrev": "{delta} vs last period",
+          "deltaFaster": "{days}d faster",
+          "deltaSlower": "{days}d slower",
+          "kpiPendingAck": "Awaiting acknowledgement",
+          "kpiPendingAckCaption": "Approved, waiting on the rider",
+          "volumeTitle": "Requests over time",
+          "volumeSubtitle": "Weekly volume · last 12 weeks",
+          "volumeTooltip": "{week}: {count} requests",
+          "signaturesSection": "Signatures & acknowledgements",
+          "esignTitle": "E-Signatures",
+          "esignSigned": "Signed",
+          "esignPending": "Pending",
+          "esignExpired": "Expired",
+          "ackTitle": "Acknowledgements",
+          "ackPending": "Pending",
+          "ackRate": "Ack. rate",
+          "ackAvgTime": "Avg. time",
+          "ackGapNote": "Acknowledgement rate and average time need an acknowledged_at timestamp on requests — not in the schema yet.",
+          "appointmentsTitle": "Appointments",
+          "appointmentsAccepted": "Accepted",
+          "appointmentsPending": "Pending",
+          "appointmentsRejected": "Rejected"
         },
         "audit": {
           "hub": "RCM settings",
           "title": "Audit log",
-          "subtitle": "Every action, validation, acknowledgement and change across requests",
+          "subtitle": "Every action, validation, acknowledgement and signature across requests",
           "load": "Load log",
           "refresh": "Refresh",
           "prompt": "Click Load log to fetch recent RCM activity",
@@ -3068,7 +3102,22 @@
           "colEntity": "Entity",
           "errors": {
             "loadFailed": "Could not load audit log"
-          }
+          },
+          "allStaff": "All staff",
+          "colActor": "Actor",
+          "colTarget": "Target",
+          "colDetails": "Details"
+        },
+        "linksMeta": {
+          "workflows": "{count} workflows",
+          "types": "{count} request types",
+          "assets": "{count} assets",
+          "departments": "{count} departments",
+          "roles": "{count} roles",
+          "esign": "{count} categories",
+          "audit": "View activity",
+          "importExport": "CSV / XLSX",
+          "screenshot": "Admin only"
         }
       },
       "esign": {
@@ -3082,20 +3131,30 @@
             "sent": "Sent requests",
             "signatures": "E-signatures",
             "categories": "Signature categories",
-            "screenshot": "E-Signature settings"
+            "screenshot": "E-Signature settings",
+            "calendar": "Admin calendar"
           },
           "tilesDesc": {
             "sent": "Track requests you have sent and their status",
             "signatures": "Pending, signed, rejected and expired signatures",
             "categories": "Categories, icons and screenshot policy",
-            "screenshot": "Signature categories, icons and screenshot policy"
-          }
+            "screenshot": "Signature categories, icons and screenshot policy",
+            "calendar": "Accepted appointment requests on your calendar"
+          },
+          "tilesMeta": {
+            "sent": "{total} requests · {pending} pending",
+            "signatures": "{pending} pending",
+            "categories": "{count} categories",
+            "calendar": "View calendar"
+          },
+          "newRequestMeta": "Opens the new-request composer"
         },
         "status": {
           "pending": "Pending",
           "signed": "Signed",
           "expired": "Expired",
-          "cancelled": "Cancelled"
+          "cancelled": "Cancelled",
+          "declined": "Rejected"
         },
         "sent": {
           "title": "Sent requests",
@@ -3128,6 +3187,22 @@
           "errors": {
             "missingFields": "Driver and title are required",
             "createFailed": "Could not create request"
+          },
+          "colSent": "Sent",
+          "kpiSent": "Sent (30d)",
+          "kpiSentCaption": "All types",
+          "kpiPending": "Pending",
+          "kpiPendingCaption": "Awaiting response",
+          "kpiSigned": "Signed",
+          "kpiSignedCaption": "Completed",
+          "kpiExpired": "Expired",
+          "kpiExpiredCaption": "No response",
+          "filters": {
+            "all": "All",
+            "pending": "Pending",
+            "signed": "Signed",
+            "declined": "Rejected",
+            "expired": "Expired"
           }
         },
         "signatures": {
@@ -3147,8 +3222,23 @@
           "filters": {
             "all": "All",
             "pending": "Pending",
-            "signed": "Signed"
-          }
+            "signed": "Signed",
+            "declined": "Rejected",
+            "expired": "Expired"
+          },
+          "kpiPending": "Pending signature",
+          "kpiPendingCaption": "Awaiting sign",
+          "kpiSigned": "Signed (30d)",
+          "kpiSignedCaption": "Completed",
+          "kpiRejected": "Rejected",
+          "kpiRejectedCaption": "Declined",
+          "kpiExpired": "Expired",
+          "kpiExpiredCaption": "No action",
+          "colDocument": "Document",
+          "colRecipient": "Recipient",
+          "colCategory": "Category",
+          "colSent": "Sent",
+          "colSignedOn": "Signed on"
         },
         "detail": {
           "notFound": "Request not found",
@@ -3166,11 +3256,32 @@
           "screenshotBlocked": "Blocked",
           "screenshotAllowed": "Allowed",
           "signerMeta": "Device metadata",
-          "noSignerMeta": "No signer metadata yet"
+          "noSignerMeta": "No signer metadata yet",
+          "statusSection": "Status",
+          "detailsSection": "Details",
+          "proofSection": "Signature proof record",
+          "recipient": "Recipient",
+          "timelineSent": "Sent to recipient",
+          "timelineSigned": "Signed",
+          "timelinePending": "Not signed yet",
+          "timelineViewedGap": "A viewed-at timestamp is not recorded on e-sign requests yet.",
+          "signedElectronically": "Signed electronically · {at}",
+          "noDocumentTitle": "No document attached",
+          "noDocumentBody": "This request was sent without a document, or the file has not been uploaded yet.",
+          "downloadDocument": "Download signed document",
+          "downloadSignature": "Download signature image",
+          "proof": {
+            "employee_id": "Employee code",
+            "phone": "Phone",
+            "civil_id": "Civil ID",
+            "company": "Company",
+            "ip_address": "IP address",
+            "device": "Device"
+          }
         },
         "categories": {
           "title": "Signature categories",
-          "subtitle": "Category options for e-sign requests",
+          "subtitle": "Each category has its own icon slot and screenshot policy",
           "key": "Key",
           "name": "Name",
           "description": "Description",
@@ -3190,11 +3301,16 @@
           "errors": {
             "saveFailed": "Could not save category",
             "deleteFailed": "Could not remove category"
-          }
+          },
+          "colSigned": "Signed",
+          "edit": "Edit",
+          "updated": "Category updated",
+          "saveChanges": "Save changes",
+          "cancel": "Cancel"
         },
         "screenshot": {
           "title": "Screenshot settings",
-          "subtitle": "Control which request types and documents block screenshots in the workforce app",
+          "subtitle": "Control which request types and documents block screenshots in the workforce app (admin only)",
           "defaultLabel": "Global default — block screenshots on sensitive documents",
           "overrideNote": "When blocked, viewers see a protected placeholder and cannot capture the screen. Each row below can override the default.",
           "sectionRequestTypes": "Request types",
@@ -3208,11 +3324,22 @@
           "manageCategories": "Manage categories",
           "errors": {
             "saveFailed": "Could not save setting"
+          },
+          "colAppliesTo": "Applies to",
+          "appliesTo": {
+            "leave": "Leave dates and reason",
+            "loan": "Loan agreement view",
+            "asset": "Asset handover & penalty",
+            "fuel": "Fuel receipt view",
+            "complaint": "Complaint response detail",
+            "document": "Attached documents",
+            "sick_leave": "Uploaded medical documents",
+            "salary_justification": "Justification & payslip view"
           }
         },
         "assets": {
-          "title": "Asset inventory",
-          "subtitle": "Fleet assets linked to driver requests",
+          "title": "Asset catalog",
+          "subtitle": "Items riders can request from the app",
           "body": "Asset catalog and assignments are managed in the dedicated inventory module.",
           "openAssets": "Open asset inventory",
           "colName": "Asset",
@@ -3222,12 +3349,15 @@
           "lowStock": "{count} left · low stock",
           "activeOn": "Active",
           "activeOff": "Inactive",
-          "empty": "No catalog items yet"
+          "empty": "No catalog items yet",
+          "assetCount": "{count} assets",
+          "searchPlaceholder": "Search assets",
+          "outOfStock": "Out of stock"
         },
         "importExport": {
           "requests": "Requests",
-          "title": "Import & export",
-          "subtitle": "Bulk tools for RCM and e-sign data",
+          "title": "Export requests",
+          "subtitle": "Download filtered request data as a spreadsheet",
           "exportRequestsTitle": "Export RCM requests",
           "exportRequestsBody": "Download up to 1000 loan/leave/asset/complaint requests as CSV.",
           "exportTitle": "Export e-sign requests",
@@ -3237,7 +3367,40 @@
           "exportEmpty": "Nothing to export",
           "importTitle": "Import",
           "importBody": "Bulk import for requests and signatures is not available yet.",
-          "importComingSoon": "Coming soon"
+          "importComingSoon": "Coming soon",
+          "settings": "Settings",
+          "breadcrumb": "Export",
+          "exportEsignButton": "Export e-sign CSV",
+          "filtersTitle": "Filters",
+          "filtersBody": "Choose which requests are included",
+          "filterPreset": "Filter preset",
+          "presetCurrentView": "Current view",
+          "presetAll": "All requests",
+          "dateRange": "Date range",
+          "statusLabel": "Status",
+          "statusAll": "All statuses",
+          "matchLoading": "Counting matching requests…",
+          "matchCount": "{count} requests match the current filters",
+          "columnsTitle": "Columns to include",
+          "columnsSelected": "{selected} of {total} selected",
+          "columnUnavailable": "Not available — no field on the request record yet",
+          "sizeHint": "CSV · approx. {kb} KB",
+          "pdfUnavailable": "PDF export is not available yet",
+          "exportPdf": "Export as PDF",
+          "exportCsv": "Export as CSV",
+          "exportExcel": "Export as Excel",
+          "columns": {
+            "requestId": "Request ID",
+            "riderName": "Rider name",
+            "riderZone": "Rider zone",
+            "type": "Type",
+            "status": "Status",
+            "currentStep": "Current step",
+            "createdDate": "Created date",
+            "department": "Department",
+            "remarks": "Remarks history",
+            "internalNotes": "Internal notes"
+          }
         },
         "reports": {
           "requests": "Requests",

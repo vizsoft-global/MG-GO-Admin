@@ -23,6 +23,8 @@ type StaffTarget = {
   id: string;
   full_name: string;
   email: string | null;
+  /** Figma shows "HR · noor@example.com" under the staff name. */
+  department?: string | null;
 };
 
 const LEVELS: AccessLevel[] = ["none", "view_only", "approver"];
@@ -50,10 +52,13 @@ export function StaffAccessDrawer({
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [access, setAccess] = useState<Partial<Record<RequestTypeSlug, AccessLevel>>>({});
   const [saving, setSaving] = useState(false);
+  /** Figma "Change" affordance: swap the pre-selected staff member for another one. */
+  const [changingStaff, setChangingStaff] = useState(false);
 
   useEffect(() => {
     if (open) {
       setPickedId(null);
+      setChangingStaff(false);
       setAccess(initialAccess ?? {});
     }
   }, [open, initialAccess]);
@@ -69,7 +74,8 @@ export function StaffAccessDrawer({
     [staffOptions],
   );
 
-  const targetId = staff?.id ?? pickedId;
+  const showPicker = isAssignMode || changingStaff;
+  const targetId = showPicker ? (pickedId ?? staff?.id ?? null) : (staff?.id ?? null);
 
   function setLevel(type: RequestTypeSlug, level: AccessLevel) {
     setAccess((prev) => ({ ...prev, [type]: level }));
@@ -109,7 +115,7 @@ export function StaffAccessDrawer({
         </SheetHeader>
 
         <SheetBody className="space-y-4 overflow-y-auto">
-          {isAssignMode ? (
+          {showPicker ? (
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground">{t("staffMember")}</p>
               <SearchSelect
@@ -127,14 +133,27 @@ export function StaffAccessDrawer({
               <Avatar className="h-9 w-9">
                 <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{staff?.full_name}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{staff?.email ?? "—"}</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {[staff?.department, staff?.email].filter(Boolean).join(" · ") || "—"}
+                </p>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() => setChangingStaff(true)}
+              >
+                {t("change")}
+              </Button>
             </div>
           )}
 
-          <p className="text-[11px] text-muted-foreground">{t("perTypeHint")}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {isAssignMode ? t("perTypeHintAssign") : t("perTypeHint")}
+          </p>
 
           <div className="space-y-2">
             {REQUEST_TYPE_SLUGS.map((type) => {

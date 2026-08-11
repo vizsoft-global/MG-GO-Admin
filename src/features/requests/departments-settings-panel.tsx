@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,13 +36,27 @@ import {
   fetchDepartments,
   fetchStaffProfileOptions,
   removeDepartmentMember,
+  updateDepartmentMemberRole,
   updateDepartmentMemberStatus,
   upsertDepartment,
 } from "./requests-settings-actions";
 import type { DepartmentMemberRow, DepartmentRoleTitle, DepartmentRow } from "./settings-types";
 
+function initialsOf(name: string): string {
+  return (
+    name
+      .split(" ")
+      .map((part) => part[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?"
+  );
+}
+
 export function DepartmentsSettingsPanel() {
   const t = useTranslations("pages.requests.settings.departments");
+  const tRoot = useTranslations("pages.requests");
   const [departments, setDepartments] = useState<DepartmentRow[]>([]);
   const [members, setMembers] = useState<DepartmentMemberRow[]>([]);
   const [staffOptions, setStaffOptions] = useState<
@@ -53,6 +68,7 @@ export function DepartmentsSettingsPanel() {
   const [isPending, startTransition] = useTransition();
 
   const [showAddDept, setShowAddDept] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
   const [deptKey, setDeptKey] = useState("");
   const [deptLabelEn, setDeptLabelEn] = useState("");
   const [deleteDept, setDeleteDept] = useState<DepartmentRow | null>(null);
@@ -159,7 +175,22 @@ export function DepartmentsSettingsPanel() {
       }
       toast.success(t("memberAdded"));
       setMemberProfileId(null);
+      setShowAddMember(false);
       await Promise.all([loadMembers(activeDeptId), loadDepartments()]);
+    });
+  }
+
+  function changeMemberRole(member: DepartmentMemberRow, role: DepartmentRoleTitle) {
+    if (!activeDeptId || role === member.role_title) return;
+    setMembers((prev) =>
+      prev.map((m) => (m.id === member.id ? { ...m, role_title: role } : m)),
+    );
+    startTransition(async () => {
+      const result = await updateDepartmentMemberRole(member.id, role);
+      if (!result.ok) {
+        toast.error(result.error ?? t("errors.memberSaveFailed"));
+        await loadMembers(activeDeptId);
+      }
     });
   }
 
@@ -195,6 +226,7 @@ export function DepartmentsSettingsPanel() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
+          { label: tRoot("title"), href: "/requests" },
           { label: t("hub"), href: "/requests/settings" },
           { label: t("title") },
         ]}
@@ -204,7 +236,7 @@ export function DepartmentsSettingsPanel() {
               type="button"
               className="h-9"
               disabled={isPending}
-              onClick={() => setShowAddDept((v) => !v)}
+              onClick={() => setShowAddMember((v) => !v)}
             >
               <Plus className="mr-1 h-3.5 w-3.5" />
               {t("addMember")}
@@ -302,7 +334,8 @@ export function DepartmentsSettingsPanel() {
               </div>
             ) : activeDeptId ? (
               <>
-                <div className="grid gap-2 lg:grid-cols-4">
+                {showAddMember ? (
+                <div className="grid gap-2 rounded-md border border-border bg-muted/30 p-3 lg:grid-cols-4">
                   <div className="space-y-1 lg:col-span-2">
                     <Label className="text-xs">{t("staff")}</Label>
                     <SearchSelect
@@ -346,6 +379,7 @@ export function DepartmentsSettingsPanel() {
                     </Button>
                   </div>
                 </div>
+                ) : null}
 
                 {membersLoading ? (
                   <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -367,15 +401,37 @@ export function DepartmentsSettingsPanel() {
                       {members.map((member) => (
                         <TableRow key={member.id}>
                           <TableCell>
-                            <div className="text-sm font-medium">{member.profile_name}</div>
-                            {member.profile_email ? (
-                              <div className="text-[10px] text-muted-foreground">
-                                {member.profile_email}
+                            <div className="flex items-center gap-2.5">
+                              <Avatar className="h-8 w-8">
+                                <AvatarFallback className="text-[10px]">
+                                  {initialsOf(member.profile_name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium">{member.profile_name}</div>
+                                {member.profile_email ? (
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {member.profile_email}
+                                  </div>
+                                ) : null}
                               </div>
-                            ) : null}
+                            </div>
                           </TableCell>
                           <TableCell>
-                            {member.role_title === "manager" ? t("roleManager") : t("roleAgent")}
+                            <Select
+                              value={member.role_title}
+                              onValueChange={(v) =>
+                                v && changeMemberRole(member, v as DepartmentRoleTitle)
+                              }
+                            >
+                              <SelectTrigger className="h-9 w-[130px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="agent">{t("roleAgent")}</SelectItem>
+                                <SelectItem value="manager">{t("roleManager")}</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell>
                             <ToggleChip
@@ -389,12 +445,12 @@ export function DepartmentsSettingsPanel() {
                             <Button
                               type="button"
                               variant="ghost"
-                              size="sm"
-                              className="h-8 text-destructive hover:bg-destructive/10"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              aria-label={t("remove")}
                               onClick={() => setRemoveMember(member)}
                             >
-                              <Trash2 className="mr-1 h-3.5 w-3.5" />
-                              {t("remove")}
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </TableCell>
                         </TableRow>

@@ -1,4 +1,24 @@
-export type EsignRequestStatus = "pending" | "signed" | "expired" | "cancelled";
+/** Mirrors the `esign_request_status` enum. `declined` renders as "Rejected" in Figma. */
+export type EsignRequestStatus =
+  | "pending"
+  | "signed"
+  | "expired"
+  | "cancelled"
+  | "declined";
+
+export type EsignStatusCounts = {
+  all: number;
+  pending: number;
+  signed: number;
+  declined: number;
+  expired: number;
+  cancelled: number;
+  /** Signed within the trailing 30 days — the Figma "Signed (30d)" KPI. */
+  signedLast30d: number;
+  /** Sent within the trailing 30 days — the Figma "Sent (30d)" KPI. */
+  sentLast30d: number;
+  categories: number;
+};
 
 export type EsignListFilters = {
   status?: EsignRequestStatus | null;
@@ -40,6 +60,8 @@ export type EsignCategoryRow = {
   screenshot_restricted: boolean;
   is_active: boolean;
   sort_order: number;
+  /** Signed requests filed under this category — the Figma SIGNED column. */
+  signed_count: number;
 };
 
 export type EsignDriverOption = {

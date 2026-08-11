@@ -6,7 +6,7 @@ import { Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
-import { ToggleChip } from "@/components/app/toggle-chip";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -32,6 +32,7 @@ export function EsignScreenshotSettingsShell() {
   const t = useTranslations("pages.requests.esign.screenshot");
   const tTypes = useTranslations("pages.requests.types");
   const tSettings = useTranslations("pages.requests.settings");
+  const tRequests = useTranslations("pages.requests");
   const { data: defaultData, isLoading: defaultLoading } = useEsignScreenshotDefault();
   const updateDefault = useUpdateEsignScreenshotDefault();
   const { data: categories, isLoading: categoriesLoading, refetch: refetchCategories } =
@@ -110,6 +111,7 @@ export function EsignScreenshotSettingsShell() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
+          { label: tRequests("title"), href: "/requests" },
           { label: tSettings("title"), href: "/requests/settings" },
           { label: t("title") },
         ]}
@@ -126,27 +128,40 @@ export function EsignScreenshotSettingsShell() {
         {defaultLoading ? (
           <Loader2 className="h-4 w-4 animate-spin text-amber-700" />
         ) : (
-          <ToggleChip selected={defaultData?.value ?? true} onClick={() => void toggleDefault()}>
-            {defaultData?.value ?? true ? t("blocked") : t("allowed")}
-          </ToggleChip>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-amber-900">
+              {(defaultData?.value ?? true) ? t("blocked") : t("allowed")}
+            </span>
+            <Switch
+              checked={defaultData?.value ?? true}
+              onCheckedChange={() => void toggleDefault()}
+              aria-label={t("defaultLabel")}
+            />
+          </div>
         )}
       </AppListCard>
 
       <AppListCard className="p-0">
-        <h3 className="border-b border-border px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {t("sectionRequestTypes")}
-        </h3>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colItem")}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colAppliesTo")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colScreenshot")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
+            <TableRow className="hover:bg-transparent">
+              <TableCell
+                colSpan={3}
+                className="bg-muted/40 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                {t("sectionRequestTypes")}
+              </TableCell>
+            </TableRow>
             {typesLoading ? (
               <TableRow>
-                <TableCell colSpan={2} className="py-6 text-center text-muted-foreground">
+                <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
                   <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                 </TableCell>
               </TableRow>
@@ -156,33 +171,36 @@ export function EsignScreenshotSettingsShell() {
                   <TableCell className="text-sm font-medium">
                     {tTypes(row.request_type as RequestTypeSlug)}
                   </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {t(`appliesTo.${row.request_type}` as "appliesTo.leave")}
+                  </TableCell>
                   <TableCell>
-                    <ToggleChip selected={row.screenshot_restricted} onClick={() => toggleType(row)}>
-                      {row.screenshot_restricted ? t("blocked") : t("allowed")}
-                    </ToggleChip>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={row.screenshot_restricted}
+                        onCheckedChange={() => toggleType(row)}
+                        aria-label={tTypes(row.request_type as RequestTypeSlug)}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {row.screenshot_restricted ? t("blocked") : t("allowed")}
+                      </span>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
             )}
-          </TableBody>
-        </Table>
-      </AppListCard>
 
-      <AppListCard className="p-0">
-        <h3 className="border-b border-border px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {t("sectionCategories")}
-        </h3>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colItem")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colScreenshot")}</TableHead>
+            <TableRow className="hover:bg-transparent">
+              <TableCell
+                colSpan={3}
+                className="bg-muted/40 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                {t("sectionCategories")}
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
             {categoriesLoading ? (
               <TableRow>
-                <TableCell colSpan={2} className="py-6 text-center text-muted-foreground">
+                <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
                   <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                 </TableCell>
               </TableRow>
@@ -191,13 +209,20 @@ export function EsignScreenshotSettingsShell() {
                 .map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="text-sm font-medium">{row.label_en}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {row.description ?? "—"}
+                    </TableCell>
                     <TableCell>
-                      <ToggleChip
-                        selected={row.screenshot_restricted}
-                        onClick={() => toggleCategory(row)}
-                      >
-                        {row.screenshot_restricted ? t("blocked") : t("allowed")}
-                      </ToggleChip>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={row.screenshot_restricted}
+                          onCheckedChange={() => toggleCategory(row)}
+                          aria-label={row.label_en}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {row.screenshot_restricted ? t("blocked") : t("allowed")}
+                        </span>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

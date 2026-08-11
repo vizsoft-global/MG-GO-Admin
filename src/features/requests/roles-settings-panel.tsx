@@ -6,8 +6,16 @@ import { Eye, Loader2, Pencil, ShieldCheck, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -17,8 +25,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { fetchStaffAccessMatrix } from "./requests-settings-actions";
-import { REQUEST_TYPE_SLUGS, type AccessLevel, type RequestTypeSlug, type StaffAccessRow, type StaffProfileOption } from "./settings-types";
+import { REQUEST_TYPE_SLUGS, type AccessLevel, type RequestTypeSlug, type StaffAccessRow, type StaffDepartmentMap, type StaffProfileOption } from "./settings-types";
 import { StaffAccessDrawer } from "./staff-access-drawer";
+
+/** Figma shows at most two type chips per cell, then a "+N" overflow chip. */
+const MAX_VISIBLE_CHIPS = 2;
 
 type StaffRow = {
   profile_id: string;
@@ -26,6 +37,18 @@ type StaffRow = {
   profile_email: string | null;
   access: Partial<Record<RequestTypeSlug, AccessLevel>>;
 };
+
+function initialsOf(name: string): string {
+  return (
+    name
+      .split(" ")
+      .map((part) => part[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?"
+  );
+}
 
 function groupByStaff(rows: StaffAccessRow[]): StaffRow[] {
   const map = new Map<string, StaffRow>();
@@ -46,11 +69,14 @@ function groupByStaff(rows: StaffAccessRow[]): StaffRow[] {
 export function RolesSettingsPanel() {
   const t = useTranslations("pages.requests.settings.roles");
   const tTypes = useTranslations("pages.requests.types");
+  const tRoot = useTranslations("pages.requests");
   const [rawRows, setRawRows] = useState<StaffAccessRow[]>([]);
   const [staffOptions, setStaffOptions] = useState<StaffProfileOption[]>([]);
+  const [departments, setDepartments] = useState<StaffDepartmentMap>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "view_only" | "approver">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | RequestTypeSlug>("all");
   const [drawerTarget, setDrawerTarget] = useState<StaffRow | null | "assign">(null);
 
   const load = useCallback(async () => {
@@ -63,6 +89,7 @@ export function RolesSettingsPanel() {
     }
     setRawRows(result.rows);
     setStaffOptions(result.staffOptions);
+    setDepartments(result.departments);
   }, []);
 
   useEffect(() => {
@@ -84,16 +111,44 @@ export function RolesSettingsPanel() {
     const q = search.trim().toLowerCase();
     return staffRows.filter((row) => {
       if (roleFilter !== "all" && !Object.values(row.access).includes(roleFilter)) return false;
+      if (typeFilter !== "all" && !row.access[typeFilter]) return false;
       if (!q) return true;
       return (
         row.profile_name.toLowerCase().includes(q) ||
         (row.profile_email ?? "").toLowerCase().includes(q)
       );
     });
-  }, [staffRows, search, roleFilter]);
+  }, [staffRows, search, roleFilter, typeFilter]);
 
   function typesFor(row: StaffRow, level: AccessLevel): RequestTypeSlug[] {
     return REQUEST_TYPE_SLUGS.filter((type) => row.access[type] === level);
+  }
+
+  function renderChips(types: RequestTypeSlug[], tone: "view" | "approve") {
+    if (types.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+    const visible = types.slice(0, MAX_VISIBLE_CHIPS);
+    const overflow = types.length - visible.length;
+    const chipClass =
+      tone === "approve"
+        ? "rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800"
+        : "rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium";
+    return (
+      <div className="flex flex-wrap items-center gap-1">
+        {visible.map((type) => (
+          <span key={type} className={chipClass}>
+            {tTypes(type)}
+          </span>
+        ))}
+        {overflow > 0 ? (
+          <span
+            className="text-[10px] font-medium text-muted-foreground"
+            title={types.slice(MAX_VISIBLE_CHIPS).map((type) => tTypes(type)).join(", ")}
+          >
+            +{overflow}
+          </span>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -102,6 +157,7 @@ export function RolesSettingsPanel() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
+          { label: tRoot("title"), href: "/requests" },
           { label: t("hub"), href: "/requests/settings" },
           { label: t("title") },
         ]}
@@ -127,7 +183,7 @@ export function RolesSettingsPanel() {
             className="text-[11px] font-medium text-primary hover:underline"
             onClick={() => setRoleFilter("view_only")}
           >
-            {t("staffCount", { count: viewOnlyCount })}
+            {t("staffCount", { count: viewOnlyCount })} · {t("viewList")}
           </button>
         </AppListCard>
 
@@ -144,14 +200,17 @@ export function RolesSettingsPanel() {
             className="text-[11px] font-medium text-primary hover:underline"
             onClick={() => setRoleFilter("approver")}
           >
-            {t("staffCount", { count: approverCount })}
+            {t("staffCount", { count: approverCount })} · {t("viewList")}
           </button>
         </AppListCard>
       </div>
 
       <AppListCard className="p-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-          <h3 className="me-auto text-sm font-semibold">{t("staffAccessTitle")}</h3>
+          <div className="me-auto">
+            <h3 className="text-sm font-semibold">{t("staffAccessTitle")}</h3>
+            <p className="text-[11px] text-muted-foreground">{t("staffAccessSubtitle")}</p>
+          </div>
           <Input
             className="h-9 w-56"
             placeholder={t("searchPlaceholder")}
@@ -172,6 +231,25 @@ export function RolesSettingsPanel() {
               </Button>
             ))}
           </div>
+          <Select
+            value={typeFilter}
+            onValueChange={(v) => v && setTypeFilter(v as "all" | RequestTypeSlug)}
+          >
+            <SelectTrigger className="h-9 w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("allRequestTypes")}</SelectItem>
+              {REQUEST_TYPE_SLUGS.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {tTypes(type)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-[11px] text-muted-foreground">
+            {loading ? "" : t("staffTotal", { count: filteredRows.length })}
+          </span>
         </div>
 
         {loading ? (
@@ -185,6 +263,7 @@ export function RolesSettingsPanel() {
             <TableHeader>
               <TableRow>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colDepartment")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colViewOnlyFor")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colApproverFor")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS} />
@@ -197,40 +276,28 @@ export function RolesSettingsPanel() {
                 return (
                   <TableRow key={row.profile_id}>
                     <TableCell>
-                      <p className="text-sm font-medium">{row.profile_name}</p>
-                      <p className="text-[10px] text-muted-foreground">{row.profile_email ?? "—"}</p>
-                    </TableCell>
-                    <TableCell className="max-w-[220px]">
-                      <div className="flex flex-wrap gap-1">
-                        {viewTypes.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : (
-                          viewTypes.map((type) => (
-                            <span
-                              key={type}
-                              className="rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium"
-                            >
-                              {tTypes(type)}
-                            </span>
-                          ))
-                        )}
+                      <div className="flex items-center gap-2.5">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-[10px]">
+                            {initialsOf(row.profile_name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{row.profile_name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {row.profile_email ?? "—"}
+                          </p>
+                        </div>
                       </div>
                     </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {departments[row.profile_id] ?? "—"}
+                    </TableCell>
                     <TableCell className="max-w-[220px]">
-                      <div className="flex flex-wrap gap-1">
-                        {approveTypes.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : (
-                          approveTypes.map((type) => (
-                            <span
-                              key={type}
-                              className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800"
-                            >
-                              {tTypes(type)}
-                            </span>
-                          ))
-                        )}
-                      </div>
+                      {renderChips(viewTypes, "view")}
+                    </TableCell>
+                    <TableCell className="max-w-[220px]">
+                      {renderChips(approveTypes, "approve")}
                     </TableCell>
                     <TableCell>
                       <Button
@@ -261,6 +328,7 @@ export function RolesSettingsPanel() {
                 id: drawerTarget.profile_id,
                 full_name: drawerTarget.profile_name,
                 email: drawerTarget.profile_email,
+                department: departments[drawerTarget.profile_id] ?? null,
               }
             : null
         }

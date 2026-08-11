@@ -5,13 +5,22 @@ import { queryKeys } from "@/lib/query/query-keys";
 import {
   createEsignRequest,
   fetchEsignCategories,
+  fetchEsignDocumentLinks,
   fetchEsignDriverOptions,
   fetchEsignRequestDetail,
   fetchEsignRequestsList,
   fetchEsignScreenshotDefault,
+  fetchEsignStatusCounts,
   updateEsignScreenshotDefault,
 } from "./esign-actions";
 import type { EsignListFilters } from "./types";
+
+export function useEsignStatusCounts() {
+  return useQuery({
+    queryKey: [...queryKeys.esign.all(), "status-counts"],
+    queryFn: () => fetchEsignStatusCounts(),
+  });
+}
 
 export function useEsignRequestsList(filters: EsignListFilters = {}) {
   return useQuery({
@@ -25,6 +34,15 @@ export function useEsignRequestDetail(id: string) {
     queryKey: queryKeys.esign.detail(id),
     queryFn: () => fetchEsignRequestDetail(id),
     enabled: Boolean(id),
+  });
+}
+
+export function useEsignDocumentLinks(id: string) {
+  return useQuery({
+    queryKey: [...queryKeys.esign.detail(id), "document-links"],
+    queryFn: () => fetchEsignDocumentLinks(id),
+    enabled: Boolean(id),
+    staleTime: 4 * 60 * 1000,
   });
 }
 

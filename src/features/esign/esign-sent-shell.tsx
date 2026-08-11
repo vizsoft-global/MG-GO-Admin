@@ -3,7 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Loader2, Plus, RefreshCw } from "lucide-react";
+import {
+  CircleSlash,
+  Clock,
+  ExternalLink,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Send,
+  ShieldCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -12,6 +21,7 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -33,16 +43,30 @@ import {
   useEsignCategories,
   useEsignDriverOptions,
   useEsignRequestsList,
+  useEsignStatusCounts,
 } from "./use-esign";
 import type { EsignRequestStatus } from "./types";
+
+const STATUS_TABS = ["all", "pending", "signed", "declined", "expired"] as const;
+
+type StatusTab = (typeof STATUS_TABS)[number];
 
 function statusVariant(
   status: EsignRequestStatus,
 ): "success" | "warning" | "danger" | "neutral" {
   if (status === "signed") return "success";
-  if (status === "expired" || status === "cancelled") return "danger";
+  if (status === "declined") return "danger";
+  if (status === "expired" || status === "cancelled") return "neutral";
   if (status === "pending") return "warning";
   return "neutral";
+}
+
+function formatDay(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+  });
 }
 
 export function EsignSentShell() {
@@ -55,8 +79,15 @@ export function EsignSentShell() {
   const [title, setTitle] = useState("");
   const [categoryKey, setCategoryKey] = useState<string>("");
   const [dueAt, setDueAt] = useState("");
+  const [statusTab, setStatusTab] = useState<StatusTab>("all");
 
-  const { data, isLoading, isFetching, refetch } = useEsignRequestsList({});
+  const listFilters = useMemo(
+    () => ({ status: statusTab === "all" ? null : (statusTab as EsignRequestStatus) }),
+    [statusTab],
+  );
+
+  const { data, isLoading, isFetching, refetch } = useEsignRequestsList(listFilters);
+  const { data: counts } = useEsignStatusCounts();
   const { data: driversData } = useEsignDriverOptions();
   const { data: categoriesData } = useEsignCategories();
   const create = useCreateEsignRequest();
@@ -149,7 +180,66 @@ export function EsignSentShell() {
         }
       />
 
-      <AppListCard className="mt-2">
+      <KpiGrid
+        items={[
+          {
+            label: t("kpiSent"),
+            value: counts?.sentLast30d ?? "—",
+            icon: Send,
+            accent: "primary",
+            caption: t("kpiSentCaption"),
+          },
+          {
+            label: t("kpiPending"),
+            value: counts?.pending ?? "—",
+            icon: Clock,
+            accent: "warning",
+            caption: t("kpiPendingCaption"),
+          },
+          {
+            label: t("kpiSigned"),
+            value: counts?.signed ?? "—",
+            icon: ShieldCheck,
+            accent: "success",
+            caption: t("kpiSignedCaption"),
+          },
+          {
+            label: t("kpiExpired"),
+            value: counts?.expired ?? "—",
+            icon: CircleSlash,
+            caption: t("kpiExpiredCaption"),
+          },
+        ]}
+      />
+
+      <AppListCard className="p-0">
+        <div className="flex flex-wrap items-center gap-1 border-b border-border p-2">
+          {STATUS_TABS.map((tab) => {
+            const count =
+              counts == null ? null : tab === "all" ? counts.all : counts[tab];
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setStatusTab(tab)}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors",
+                  statusTab === tab
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted/60",
+                )}
+              >
+                {t(`filters.${tab}`)}
+                {count != null ? (
+                  <span className="rounded-full bg-muted px-1.5 text-[10px] tabular-nums">
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -160,11 +250,12 @@ export function EsignSentShell() {
           <AppDataTable
             columns={[
               { id: "code", label: t("colCode") },
-              { id: "title", label: t("colTitle") },
               { id: "driver", label: t("colDriver") },
+              { id: "title", label: t("colTitle") },
               { id: "category", label: t("colCategory") },
-              { id: "due", label: t("colDue") },
               { id: "status", label: t("colStatus") },
+              { id: "sent", label: t("colSent") },
+              { id: "due", label: t("colDue") },
               { id: "actions", label: t("colActions") },
             ]}
           >
@@ -175,20 +266,23 @@ export function EsignSentShell() {
                 onClick={() => router.push(`/requests/esign/${row.id}`)}
               >
                 <TableCell className="font-mono text-xs">{row.request_code}</TableCell>
-                <TableCell className="max-w-[180px] truncate text-sm font-medium">
-                  {row.title}
-                </TableCell>
                 <TableCell className="text-sm">
                   <div>{row.driver_name}</div>
                   <div className="text-[11px] text-muted-foreground">{row.driver_code}</div>
                 </TableCell>
-                <TableCell className="text-sm">{row.category_label ?? "—"}</TableCell>
-                <TableCell className="text-sm tabular-nums">{row.due_at ?? "—"}</TableCell>
-                <TableCell>
-                <StatusPill variant={statusVariant(row.status)}>
-                  {tCommon(`status.${row.status}`)}
-                </StatusPill>
+                <TableCell className="max-w-[180px] truncate text-sm font-medium">
+                  {row.title}
                 </TableCell>
+                <TableCell className="text-sm">{row.category_label ?? "—"}</TableCell>
+                <TableCell>
+                  <StatusPill variant={statusVariant(row.status)}>
+                    {tCommon(`status.${row.status}`)}
+                  </StatusPill>
+                </TableCell>
+                <TableCell className="text-sm tabular-nums">
+                  {formatDay(row.created_at)}
+                </TableCell>
+                <TableCell className="text-sm tabular-nums">{formatDay(row.due_at)}</TableCell>
                 <TableCell>
                   <Button
                     type="button"

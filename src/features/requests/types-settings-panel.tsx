@@ -18,8 +18,8 @@ import {
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
-import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Link } from "@/i18n/navigation";
 import {
   Table,
@@ -52,6 +52,7 @@ type PolicyState = { screenshot_restricted: boolean; is_active: boolean };
 export function TypesSettingsPanel() {
   const t = useTranslations("pages.requests.settings.types");
   const tTypes = useTranslations("pages.requests.types");
+  const tRoot = useTranslations("pages.requests");
   const [policies, setPolicies] = useState<Record<string, PolicyState>>({});
   const [loading, setLoading] = useState(true);
   const [, startTransition] = useTransition();
@@ -100,6 +101,7 @@ export function TypesSettingsPanel() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
+          { label: tRoot("title"), href: "/requests" },
           { label: t("hub"), href: "/requests/settings" },
           { label: t("title") },
         ]}
@@ -144,36 +146,51 @@ export function TypesSettingsPanel() {
                     {loading || !policy ? (
                       <span className="text-xs text-muted-foreground">—</span>
                     ) : (
-                      <ToggleChip
-                        selected={policy.screenshot_restricted}
-                        onClick={() => toggle(slug, "screenshot_restricted")}
-                      >
-                        {policy.screenshot_restricted ? t("blocked") : t("allowed")}
-                      </ToggleChip>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={policy.screenshot_restricted}
+                          onCheckedChange={() => toggle(slug, "screenshot_restricted")}
+                          aria-label={t("colScreenshots")}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {policy.screenshot_restricted ? t("blocked") : t("allowed")}
+                        </span>
+                      </div>
                     )}
                   </TableCell>
                   <TableCell>
                     {loading || !policy ? (
                       <span className="text-xs text-muted-foreground">—</span>
                     ) : (
-                      <ToggleChip
-                        selected={policy.is_active}
-                        onClick={() => toggle(slug, "is_active")}
-                      >
-                        {policy.is_active ? t("activeOn") : t("activeOff")}
-                      </ToggleChip>
+                      <Switch
+                        checked={policy.is_active}
+                        onCheckedChange={() => toggle(slug, "is_active")}
+                        aria-label={t("colStatus")}
+                      />
                     )}
                   </TableCell>
                   <TableCell>
-                    {slug === "complaint" ? (
-                      <Link
-                        href="/requests/settings/categories"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    <div className="flex items-center justify-end gap-2">
+                      {slug === "complaint" ? (
+                        <Link
+                          href="/requests/settings/categories"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {t("manageCategories")}
+                        </Link>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        disabled
+                        title={t("deferredNote")}
                       >
-                        <ExternalLink className="h-3 w-3" />
-                        {t("manageCategories")}
-                      </Link>
-                    ) : null}
+                        {t("edit")}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
