@@ -2787,7 +2787,9 @@
         "approved": "Approved",
         "rejected": "Rejected",
         "solved": "Solved",
-        "overdue": "Overdue"
+        "overdue": "Overdue",
+        "awaiting_ack": "Awaiting acknowledgement",
+        "acknowledged": "Acknowledged"
       },
       "detail": {
         "back": "Back to list",
@@ -2851,7 +2853,8 @@
           "penaltyAmount": "Penalty amount",
           "requiredDocument": "Required document",
           "requiredDocumentPlaceholder": "e.g. Medical certificate"
-        }
+        },
+        "otherDetails": "Other details"
       },
       "settings": {
         "title": "Settings",
@@ -3524,7 +3527,9 @@
           "description": "Description",
           "salary_month": "Salary Month",
           "expected_amount": "Expected amount",
-          "received_amount": "Received amount"
+          "received_amount": "Received amount",
+          "duration_days": "Days",
+          "declaration_accepted": "Declaration"
         },
         "severities": {
           "low": "Low",

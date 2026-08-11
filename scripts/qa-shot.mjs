@@ -57,12 +57,17 @@ const GROUPS = {
 
 const args = process.argv.slice(2);
 let outDir = ".qa/shots";
+let warmOnly = false;
 const routes = [];
 for (let i = 0; i < args.length; i += 1) {
   const arg = args[i];
   if (arg === "--out") {
     outDir = args[i + 1];
     i += 1;
+  } else if (arg === "--warm") {
+    warmOnly = true;
+  } else if (arg === "--all") {
+    routes.push(...GROUPS["--all-rcm"], ...GROUPS["--all-esign"], ...GROUPS["--all-vb"]);
   } else if (GROUPS[arg]) {
     routes.push(...GROUPS[arg]);
   } else {
@@ -111,6 +116,30 @@ await probe.close();
 if (needsLogin) {
   if (!PASSWORD) throw new Error("QA_PASSWORD is required for the first login");
   await login(context);
+}
+
+// Warm mode: compile every route server-side, a few at a time. Turbopack pays the
+// first-compile cost once here instead of once per agent per screen.
+if (warmOnly) {
+  const CONCURRENCY = 4;
+  const queue = [...routes];
+  const started = Date.now();
+  const worker = async () => {
+    while (queue.length > 0) {
+      const route = queue.shift();
+      const t0 = Date.now();
+      try {
+        const res = await context.request.get(`${BASE}/en${route}`, { timeout: 300_000 });
+        console.log(`warm ${res.status()}  ${((Date.now() - t0) / 1000).toFixed(1)}s  ${route}`);
+      } catch (error) {
+        console.log(`warm FAIL ${route}  ${String(error).slice(0, 120)}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  console.log(`\nwarmed ${routes.length} routes in ${((Date.now() - started) / 1000).toFixed(0)}s`);
+  await browser.close();
+  process.exit(0);
 }
 
 const page = await context.newPage();

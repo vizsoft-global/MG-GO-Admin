@@ -2705,7 +2705,9 @@
         "approved": "موافق عليه",
         "rejected": "مرفوض",
         "solved": "محلول",
-        "overdue": "متأخر"
+        "overdue": "متأخر",
+        "awaiting_ack": "بانتظار الإقرار",
+        "acknowledged": "تم الإقرار"
       },
       "detail": {
         "back": "العودة للقائمة",
@@ -2769,7 +2771,8 @@
           "penaltyAmount": "مبلغ الغرامة",
           "requiredDocument": "المستند المطلوب",
           "requiredDocumentPlaceholder": "مثال: شهادة طبية"
-        }
+        },
+        "otherDetails": "تفاصيل أخرى"
       },
       "settings": {
         "title": "الإعدادات",
@@ -3442,7 +3445,9 @@
           "description": "الوصف",
           "salary_month": "شهر الراتب",
           "expected_amount": "المبلغ المتوقع",
-          "received_amount": "المبلغ المستلم"
+          "received_amount": "المبلغ المستلم",
+          "duration_days": "المدة (أيام)",
+          "declaration_accepted": "الإقرار"
         },
         "severities": {
           "low": "منخفضة",
