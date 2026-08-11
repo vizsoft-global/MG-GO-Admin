@@ -140,12 +140,15 @@ export function VisitsDepartmentsShell() {
       <AppPageHeader
         breadcrumbs={[
           { label: t("title"), href: "/visit-bookings" },
-          { label: t("departments.title") },
+          { label: t("departments.pageTitle") },
         ]}
-        title={t("departments.title")}
-        description={t("departments.subtitle")}
+        title={t("departments.pageTitle")}
+        description={t("departments.pageSubtitle")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">
+              {t("departments.countLabel", { count: rows.length })}
+            </span>
             {canManage ? (
               <Button type="button" size="sm" className="h-9" onClick={openCreate}>
                 <Plus className="me-1.5 h-3.5 w-3.5" />
@@ -169,13 +172,7 @@ export function VisitsDepartmentsShell() {
         }
       />
 
-      <div className="mt-2 flex items-center justify-end">
-        <span className="text-[11px] text-muted-foreground">
-          {t("departments.countLabel", { count: rows.length })}
-        </span>
-      </div>
-
-      <AppListCard>
+      <AppListCard className="mt-2 p-0">
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
