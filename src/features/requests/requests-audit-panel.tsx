@@ -78,6 +78,7 @@ function initialsOf(name: string): string {
 export function RequestsAuditPanel() {
   const t = useTranslations("pages.requests.settings.audit");
   const tRoot = useTranslations("pages.requests");
+  const tTypes = useTranslations("pages.requests.types");
   const [rows, setRows] = useState<RequestsAuditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -131,6 +132,7 @@ export function RequestsAuditPanel() {
       if (!q) return true;
       return (
         (row.route_name ?? "").toLowerCase().includes(q) ||
+        (row.target_code ?? "").toLowerCase().includes(q) ||
         (row.entity_id ?? "").toLowerCase().includes(q) ||
         row.actor_name.toLowerCase().includes(q) ||
         (row.details ?? "").toLowerCase().includes(q)
@@ -168,7 +170,7 @@ export function RequestsAuditPanel() {
       />
 
       <AppListCard className="p-0">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
           <Select
             value={actorFilter}
             onValueChange={(v) => v && setActorFilter(v)}
@@ -288,11 +290,13 @@ export function RequestsAuditPanel() {
                   </span>
                 </TableCell>
                 <TableCell className="max-w-[200px]">
-                  <p className="truncate text-xs">{row.route_name ?? "—"}</p>
-                  {row.entity_id ? (
-                    <p className="truncate font-mono text-[10px] text-muted-foreground">
-                      {row.entity_id}
-                    </p>
+                  <p className="truncate text-xs">
+                    {row.target_code
+                      ? `${row.target_code}${row.target_type ? ` · ${tTypes(row.target_type)}` : ""}`
+                      : (row.route_name ?? "—")}
+                  </p>
+                  {row.target_code && row.route_name ? (
+                    <p className="truncate text-[10px] text-muted-foreground">{row.route_name}</p>
                   ) : null}
                 </TableCell>
                 <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
@@ -303,7 +307,7 @@ export function RequestsAuditPanel() {
           )}
         </AppDataTable>
         {!loading && filteredRows.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-1.5">
+          <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-1">
             <span className="text-[11px] text-muted-foreground">
               {t("range", {
                 from: (currentPage - 1) * PAGE_SIZE + 1,

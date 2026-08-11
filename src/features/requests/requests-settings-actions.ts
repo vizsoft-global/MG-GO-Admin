@@ -339,7 +339,12 @@ export type RequestsAuditLogRow = {
   actor_role: string | null;
   /** Human-readable summary built from changed fields / context. */
   details: string | null;
+  /** RCM-#### code of the request the row is about, when it can be resolved. */
+  target_code: string | null;
+  target_type: string | null;
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Compact "field: value" summary for the Figma DETAILS column. */
 function summarizeLogContext(
@@ -355,6 +360,8 @@ function summarizeLogContext(
   const record = asRecord(context);
   const parts = Object.entries(record)
     .filter(([, value]) => value != null && typeof value !== "object")
+    // Raw ids are noise in the DETAILS column; the TARGET column carries the request code.
+    .filter(([, value]) => !UUID_RE.test(String(value)))
     .slice(0, 3)
     .map(([key, value]) => `${key}: ${String(value)}`);
   return parts.length > 0 ? parts.join(" · ") : null;
@@ -391,18 +398,47 @@ export async function fetchRequestsAuditLogs(): Promise<{
     }
   }
 
+  const requestIds = Array.from(
+    new Set(
+      (data ?? [])
+        .flatMap((row) => [row.entity_id, asRecord(row.context).requestId])
+        .filter((id): id is string => typeof id === "string" && UUID_RE.test(id)),
+    ),
+  );
+  const requestById = new Map<string, { code: string | null; type: string | null }>();
+  if (requestIds.length > 0) {
+    const { data: requests } = await supabase
+      .from("requests")
+      .select("id, request_code, request_type")
+      .in("id", requestIds);
+    for (const request of requests ?? []) {
+      requestById.set(request.id, {
+        code: request.request_code,
+        type: request.request_type,
+      });
+    }
+  }
+
   return {
-    rows: (data ?? []).map((row) => ({
-      id: row.id,
-      action: row.action,
-      route_name: row.route_name,
-      entity_id: row.entity_id,
-      created_at: row.created_at,
-      actor_id: row.admin_user_id,
-      actor_name: row.admin_user_id ? (nameById.get(row.admin_user_id) ?? "—") : "System",
-      actor_role: row.admin_role_slug,
-      details: summarizeLogContext(row.context, row.changed_fields, row.error_message),
-    })),
+    rows: (data ?? []).map((row) => {
+      const contextRequestId = asRecord(row.context).requestId;
+      const target =
+        requestById.get(row.entity_id ?? "") ??
+        (typeof contextRequestId === "string" ? requestById.get(contextRequestId) : undefined);
+      return {
+        id: row.id,
+        action: row.action,
+        route_name: row.route_name,
+        entity_id: row.entity_id,
+        created_at: row.created_at,
+        actor_id: row.admin_user_id,
+        actor_name: row.admin_user_id ? (nameById.get(row.admin_user_id) ?? "—") : "System",
+        actor_role: row.admin_role_slug,
+        details: summarizeLogContext(row.context, row.changed_fields, row.error_message),
+        target_code: target?.code ?? null,
+        target_type: target?.type ?? null,
+      };
+    }),
   };
 }
 
