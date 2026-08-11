@@ -56,6 +56,24 @@ export function VisitsReportsShell() {
     return { total: rows.length, byStatus: map };
   }, [data?.rows]);
 
+  const byDepartment = useMemo(() => {
+    const rows = data?.rows ?? [];
+    const map = new Map<string, { label: string; visits: number; completed: number; noShows: number }>();
+    for (const row of rows) {
+      const entry = map.get(row.department_key) ?? {
+        label: row.department_label,
+        visits: 0,
+        completed: 0,
+        noShows: 0,
+      };
+      entry.visits += 1;
+      if (row.status === "completed") entry.completed += 1;
+      if (row.status === "no_show") entry.noShows += 1;
+      map.set(row.department_key, entry);
+    }
+    return [...map.values()].sort((a, b) => b.visits - a.visits);
+  }, [data?.rows]);
+
   return (
     <AppPage>
       <AppPageHeader
@@ -100,45 +118,85 @@ export function VisitsReportsShell() {
         />
       </div>
 
-      <AppListCard className="mt-2">
-        {isLoading ? (
-          <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : counts.total === 0 ? (
-          <AppEmptyState
-            title={t("reports.emptyTitle")}
-            description={t("reports.emptyDescription")}
-          />
-        ) : (
-          <AppDataTable
-            columns={[
-              { id: "status", label: t("colStatus") },
-              { id: "count", label: t("reports.count") },
-              { id: "share", label: t("reports.share") },
-            ]}
-          >
-            {VISIT_STATUSES.map((status) => {
-              const count = counts.byStatus[status] ?? 0;
-              const share =
-                counts.total > 0
-                  ? `${Math.round((count / counts.total) * 100)}%`
-                  : "0%";
-              return (
-                <AppDataTableRow key={status}>
-                  <TableCell className="text-sm font-medium">
-                    {t(`status.${status}` as "status.confirmed")}
-                  </TableCell>
-                  <TableCell className="tabular-nums">{count}</TableCell>
+      <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
+        <AppListCard className="h-full p-0">
+          {isLoading ? (
+            <div className="flex h-48 items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : counts.total === 0 ? (
+            <AppEmptyState
+              title={t("reports.emptyTitle")}
+              description={t("reports.emptyDescription")}
+            />
+          ) : (
+            <AppDataTable
+              columns={[
+                { id: "status", label: t("colStatus") },
+                { id: "count", label: t("reports.count") },
+                { id: "share", label: t("reports.share") },
+              ]}
+            >
+              {VISIT_STATUSES.map((status) => {
+                const count = counts.byStatus[status] ?? 0;
+                const share =
+                  counts.total > 0
+                    ? `${Math.round((count / counts.total) * 100)}%`
+                    : "0%";
+                return (
+                  <AppDataTableRow key={status}>
+                    <TableCell className="text-sm font-medium">
+                      {t(`status.${status}` as "status.confirmed")}
+                    </TableCell>
+                    <TableCell className="tabular-nums">{count}</TableCell>
+                    <TableCell className="tabular-nums text-muted-foreground">
+                      {share}
+                    </TableCell>
+                  </AppDataTableRow>
+                );
+              })}
+            </AppDataTable>
+          )}
+        </AppListCard>
+
+        <AppListCard className="h-full p-0">
+          <h3 className="border-b border-border p-3 text-sm font-semibold">
+            {t("reports.byDepartment")}
+          </h3>
+          {isLoading ? (
+            <div className="flex h-32 items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : byDepartment.length === 0 ? (
+            <AppEmptyState
+              title={t("reports.emptyTitle")}
+              description={t("reports.emptyDescription")}
+            />
+          ) : (
+            <AppDataTable
+              columns={[
+                { id: "dept", label: t("colDepartment") },
+                { id: "visits", label: t("reports.colVisits") },
+                { id: "completed", label: t("reports.colCompleted") },
+                { id: "noShows", label: t("reports.colNoShows") },
+                { id: "rate", label: t("reports.colCompletionRate") },
+              ]}
+            >
+              {byDepartment.map((dept) => (
+                <AppDataTableRow key={dept.label}>
+                  <TableCell className="text-sm font-medium">{dept.label}</TableCell>
+                  <TableCell className="tabular-nums">{dept.visits}</TableCell>
+                  <TableCell className="tabular-nums">{dept.completed}</TableCell>
+                  <TableCell className="tabular-nums">{dept.noShows}</TableCell>
                   <TableCell className="tabular-nums text-muted-foreground">
-                    {share}
+                    {dept.visits > 0 ? `${Math.round((dept.completed / dept.visits) * 100)}%` : "0%"}
                   </TableCell>
                 </AppDataTableRow>
-              );
-            })}
-          </AppDataTable>
-        )}
-      </AppListCard>
+              ))}
+            </AppDataTable>
+          )}
+        </AppListCard>
+      </div>
     </AppPage>
   );
 }

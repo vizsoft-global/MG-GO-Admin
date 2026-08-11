@@ -13,17 +13,10 @@ import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { fetchRequestAttachmentUrl } from "./requests-actions";
 import { RequestTypedDrawer } from "./request-typed-drawer";
+import { requestStatusVariant } from "./request-status-utils";
+import { RequesterHeader } from "./requester-header";
 import type { RequestApprovalStep } from "./types";
 import { useAdminRequestDetail, useDecideRequest } from "./use-requests";
-
-function statusVariant(
-  status: string,
-): "success" | "warning" | "danger" | "neutral" {
-  if (status === "approved" || status === "solved") return "success";
-  if (status === "rejected") return "danger";
-  if (status === "needs_clarification" || status === "overdue") return "warning";
-  return "neutral";
-}
 
 function humanizeFieldKey(key: string): string {
   return key
@@ -130,7 +123,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         description={`${t(`types.${request.request_type}` as "types.leave")} · ${request.current_step_label ?? "—"}`}
         actions={
           <div className="flex items-center gap-2">
-            <StatusPill variant={statusVariant(request.status)}>
+            <StatusPill variant={requestStatusVariant(request.status)}>
               {t(`status.${request.status}` as "status.pending")}
             </StatusPill>
             <RequestTypedDrawer request={request} attachments={attachments} />
@@ -142,21 +135,14 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         }
       />
 
+      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <RequesterHeader driverId={request.driver_id} requester={request.requester} />
+      </div>
+
       <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
         <section className="h-full rounded-xl border border-border bg-card p-4 shadow-sm">
           <h2 className="mb-2 text-sm font-semibold">{t("detail.fields")}</h2>
           <dl className="space-y-2 text-sm">
-            <div className="flex justify-between gap-2">
-              <dt className="text-muted-foreground">{t("colDriver")}</dt>
-              <dd>
-                <Link
-                  href={`/drivers/${request.driver_id}`}
-                  className="text-primary hover:underline"
-                >
-                  {request.driver_id.slice(0, 8)}…
-                </Link>
-              </dd>
-            </div>
             {request.amount_kwd != null ? (
               <div className="flex justify-between gap-2">
                 <dt className="text-muted-foreground">{t("colAmount")}</dt>

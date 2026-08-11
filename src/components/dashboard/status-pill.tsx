@@ -6,10 +6,11 @@ const statusPillVariants = cva(
   {
     variants: {
       variant: {
-        success: "bg-success-bg text-success",
-        warning: "bg-warning-bg text-warning",
-        danger: "bg-danger-bg text-danger",
-        neutral: "bg-muted text-muted-foreground",
+      success: "bg-success-bg text-success",
+      warning: "bg-warning-bg text-warning",
+      danger: "bg-danger-bg text-danger",
+      info: "bg-info-bg text-info",
+      neutral: "bg-muted text-muted-foreground",
       },
     },
     defaultVariants: {
@@ -37,6 +38,7 @@ export function StatusPill({
             variant === "success" && "bg-success",
             variant === "warning" && "bg-warning",
             variant === "danger" && "bg-danger",
+            variant === "info" && "bg-info",
             variant === "neutral" && "bg-muted-foreground",
           )}
         />

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { ArrowDown, ArrowUp, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   AppDataTable,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { requestStatusVariant } from "./request-status-utils";
 import type { RequestDatePreset } from "./types";
 import { useAdminRequestsList } from "./use-requests";
 
@@ -30,29 +31,31 @@ function formatAvgDays(seconds: number | null): string {
   return `${(seconds / 86400).toFixed(1)}d`;
 }
 
-function trendDelta(current: number, previous: number | null): string {
-  if (previous == null) return "";
+/** Trend caption vs previous month (locked KPI rule). `lowerIsBetter` flips the tone. */
+function trendCaption(
+  current: number,
+  previous: number | null,
+  lowerIsBetter: boolean,
+  t: (key: string, values?: Record<string, string>) => string,
+) {
+  if (previous == null) return null;
   const delta = current - previous;
-  if (delta === 0) return "±0";
-  return delta > 0 ? `+${delta}` : `${delta}`;
-}
-
-function statusVariant(
-  status: string,
-): "success" | "warning" | "danger" | "neutral" {
-  if (status === "approved" || status === "solved") return "success";
-  if (status === "rejected") return "danger";
-  if (status === "needs_clarification" || status === "overdue") return "warning";
-  return "neutral";
-}
-
-function kpiValue(current: number | string, previous: number | null): string {
-  const base = String(current);
-  const delta = trendDelta(
-    typeof current === "number" ? current : Number(current) || 0,
-    previous,
+  if (delta === 0) {
+    return <span className="text-muted-foreground">{t("kpi.trendFlat")}</span>;
+  }
+  const improved = lowerIsBetter ? delta < 0 : delta > 0;
+  const Icon = delta > 0 ? ArrowUp : ArrowDown;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5",
+        improved ? "text-success" : "text-danger",
+      )}
+    >
+      <Icon className="h-3 w-3" />
+      {t("kpi.trendDelta", { delta: `${Math.abs(delta)}` })}
+    </span>
   );
-  return delta ? `${base} (${delta})` : base;
 }
 
 const DATE_PRESETS: RequestDatePreset[] = [
@@ -179,21 +182,33 @@ export function RequestsPageShell({
         items={[
           {
             label: t("kpi.total"),
-            value: kpi ? kpiValue(kpi.total, kpi.prev_total) : "—",
+            value: kpi ? kpi.total : "—",
+            caption: kpi ? trendCaption(kpi.total, kpi.prev_total, false, t) : null,
           },
           {
             label: t("kpi.pending"),
-            value: kpi ? kpiValue(kpi.pending, kpi.prev_pending) : "—",
+            value: kpi ? kpi.pending : "—",
             accent: "warning",
+            caption: kpi ? trendCaption(kpi.pending, kpi.prev_pending, true, t) : null,
           },
           {
             label: t("kpi.avgResolution"),
             value: formatAvgDays(kpi?.avg_resolution_seconds ?? null),
+            caption:
+              kpi?.avg_resolution_seconds != null && kpi.prev_avg_resolution_seconds != null
+                ? trendCaption(
+                    Number((kpi.avg_resolution_seconds / 86400).toFixed(1)),
+                    Number((kpi.prev_avg_resolution_seconds / 86400).toFixed(1)),
+                    true,
+                    t,
+                  )
+                : null,
           },
           {
             label: t("kpi.overdue"),
-            value: kpi ? kpiValue(kpi.overdue, kpi.prev_overdue) : "—",
+            value: kpi ? kpi.overdue : "—",
             accent: "danger",
+            caption: kpi ? trendCaption(kpi.overdue, kpi.prev_overdue, true, t) : null,
           },
         ]}
       />
@@ -344,7 +359,11 @@ export function RequestsPageShell({
                 <TableCell>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{row.driver_name}</p>
-                    <p className="text-[11px] text-muted-foreground">{row.driver_code}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {row.driver_zone
+                        ? t("zoneLabel", { zone: row.driver_zone })
+                        : row.driver_code}
+                    </p>
                     <Link
                       href={`/requests/${row.id}`}
                       className="text-[10px] text-primary hover:underline"
@@ -361,7 +380,7 @@ export function RequestsPageShell({
                   {row.current_step_label ?? "—"}
                 </TableCell>
                 <TableCell>
-                  <StatusPill variant={statusVariant(row.status)}>
+                  <StatusPill variant={requestStatusVariant(row.status)}>
                     {t(`status.${row.status}` as "status.pending")}
                   </StatusPill>
                 </TableCell>

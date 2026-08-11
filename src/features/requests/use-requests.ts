@@ -6,6 +6,7 @@ import {
   decideAdminRequest,
   fetchAdminRequestDetail,
   fetchAdminRequestsList,
+  fetchRequestTypeCounts,
 } from "./requests-actions";
 import type { RequestListFilters } from "./types";
 
@@ -13,6 +14,14 @@ export function useAdminRequestsList(filters: RequestListFilters) {
   return useQuery({
     queryKey: queryKeys.requests.list(filters),
     queryFn: () => fetchAdminRequestsList(filters),
+  });
+}
+
+export function useRequestTypeCounts() {
+  return useQuery({
+    queryKey: queryKeys.requests.typeCounts(),
+    queryFn: () => fetchRequestTypeCounts(),
+    staleTime: 60_000,
   });
 }
 

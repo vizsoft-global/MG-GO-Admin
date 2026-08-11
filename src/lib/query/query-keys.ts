@@ -105,6 +105,7 @@ export const queryKeys = {
     all: () => ["requests"] as const,
     list: (filters: Record<string, unknown> = {}) => ["requests", "list", filters] as const,
     detail: (id: string) => ["requests", "detail", id] as const,
+    typeCounts: () => ["requests", "typeCounts"] as const,
   },
   esign: {
     all: () => ["esign"] as const,

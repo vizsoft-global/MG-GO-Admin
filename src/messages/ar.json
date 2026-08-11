@@ -2607,6 +2607,10 @@
         "complaintHint": "شكاوى السائقين والتصعيد",
         "document": "مستندات",
         "documentHint": "الشهادات وإصدار المستندات",
+        "salary_justification": "تبرير الراتب",
+        "salary_justificationHint": "استفسارات فروقات الراتب",
+        "sick_leave": "المرض والحوادث",
+        "sick_leaveHint": "طابور إجازات المرض والحوادث",
         "all": "كل الطلبات",
         "allHint": "الطابور الكامل مع مؤشرات الانتباه",
         "reports": "التقارير",
@@ -2626,6 +2630,7 @@
       "attentionBadge": "يحتاج انتباهاً",
       "viewDetails": "عرض التفاصيل",
       "open": "فتح",
+      "zoneLabel": "المنطقة {zone}",
       "emptyTitle": "لا توجد طلبات بعد",
       "emptyDescription": "ستظهر الطلبات المقدمة هنا مع تقدم الموافقة.",
       "colCode": "رقم الطلب",
@@ -2659,7 +2664,9 @@
         "total": "إجمالي الطلبات",
         "pending": "معلق",
         "avgResolution": "متوسط الحل",
-        "overdue": "متأخر (15 يوماً)"
+        "overdue": "متأخر (15 يوماً)",
+        "trendFlat": "لا تغيير عن الشهر الماضي",
+        "trendDelta": "{delta} عن الشهر الماضي"
       },
       "types": {
         "all": "كل الأنواع",
@@ -2705,6 +2712,7 @@
         "attachments": "المرفقات",
         "noAttachments": "لا توجد ملفات مرفقة",
         "viewDrawer": "عرض الدرج",
+        "viewProfile": "عرض الملف الشخصي",
         "noTypedFields": "لا توجد حقول مكتوبة لهذا الطلب",
         "close": "إغلاق",
         "download": "تنزيل",
@@ -2849,9 +2857,16 @@
         "reports": {
           "hub": "إعدادات RCM",
           "title": "التقارير",
-          "subtitle": "تحليلات وتصدير RCM",
+          "subtitle": "حجم الطلبات والحل حسب النوع — {month}",
           "stubTitle": "التقارير قريباً",
-          "stubBody": "ستظهر هنا اتجاهات الحل وتحليلات SLA والملخصات القابلة للتصدير في إصدار لاحق."
+          "stubBody": "ستظهر هنا اتجاهات الحل وتحليلات SLA والملخصات القابلة للتصدير في إصدار لاحق.",
+          "byType": "حسب النوع",
+          "byStatus": "حسب الحالة",
+          "colType": "النوع",
+          "colCount": "العدد",
+          "colShare": "النسبة",
+          "emptyTitle": "لا توجد طلبات هذا الشهر",
+          "emptyDescription": "تظهر الإجماليات الشهرية عند وجود طلبات."
         },
         "audit": {
           "hub": "إعدادات RCM",
@@ -3119,9 +3134,17 @@
         "subtitle": "{from} – {to}",
         "month": "هذا الشهر",
         "week": "هذا الأسبوع",
+        "day": "يوم",
+        "list": "قائمة",
+        "today": "اليوم",
+        "branch": "الفرع",
+        "allBranches": "كل الفروع",
+        "desk": "المكتب 1",
         "count": "{count} زيارة",
         "emptyTitle": "لا زيارات في النطاق",
-        "emptyDescription": "ستظهر الحجوزات مجمّعة حسب التاريخ."
+        "emptyDescription": "ستظهر الحجوزات مجمّعة حسب التاريخ.",
+        "noSlotsTitle": "لا مواعيد مهيأة",
+        "noSlotsDescription": "أضف مواعيد لهذا الفرع واليوم من الفترات والتوفر."
       },
       "reception": {
         "title": "مكتب الاستقبال",
@@ -3137,7 +3160,12 @@
         "count": "العدد",
         "share": "النسبة",
         "emptyTitle": "لا زيارات هذا الشهر",
-        "emptyDescription": "تظهر الإحصائيات الشهرية عند وجود حجوزات."
+        "emptyDescription": "تظهر الإحصائيات الشهرية عند وجود حجوزات.",
+        "byDepartment": "حسب القسم",
+        "colVisits": "الزيارات",
+        "colCompleted": "مكتملة",
+        "colNoShows": "عدم الحضور",
+        "colCompletionRate": "معدل الإكمال"
       },
       "departments": {
         "title": "الأقسام",

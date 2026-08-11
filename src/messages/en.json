@@ -2689,6 +2689,10 @@
         "complaintHint": "Driver complaints and escalations",
         "document": "Documents",
         "documentHint": "Certificates and document issuance",
+        "salary_justification": "Salary Justification",
+        "salary_justificationHint": "Salary discrepancy queries",
+        "sick_leave": "Sick & accident",
+        "sick_leaveHint": "Sick and accident leave queue",
         "all": "All requests",
         "allHint": "Full queue with KPIs and attention badges",
         "reports": "Reports",
@@ -2708,6 +2712,7 @@
       "attentionBadge": "Needs attention",
       "viewDetails": "View details",
       "open": "Open",
+      "zoneLabel": "Zone {zone}",
       "emptyTitle": "No requests yet",
       "emptyDescription": "Submitted requests will appear here with approval progress.",
       "colCode": "Request ID",
@@ -2741,7 +2746,9 @@
         "total": "Total requests",
         "pending": "Pending",
         "avgResolution": "Avg. resolution",
-        "overdue": "Overdue (15d)"
+        "overdue": "Overdue (15d)",
+        "trendFlat": "No change vs last month",
+        "trendDelta": "{delta} vs last month"
       },
       "types": {
         "all": "All types",
@@ -2787,6 +2794,7 @@
         "attachments": "Attachments",
         "noAttachments": "No files attached",
         "viewDrawer": "View drawer",
+        "viewProfile": "View profile",
         "noTypedFields": "No typed fields on this request",
         "close": "Close",
         "download": "Download",
@@ -2931,9 +2939,16 @@
         "reports": {
           "hub": "RCM settings",
           "title": "Reports",
-          "subtitle": "RCM analytics and exports",
+          "subtitle": "Request volume and resolution by type — {month}",
           "stubTitle": "Reports coming soon",
-          "stubBody": "Resolution trends, SLA breakdowns, and exportable summaries will appear here in a future release."
+          "stubBody": "Resolution trends, SLA breakdowns, and exportable summaries will appear here in a future release.",
+          "byType": "By type",
+          "byStatus": "By status",
+          "colType": "Type",
+          "colCount": "Count",
+          "colShare": "Share",
+          "emptyTitle": "No requests this month",
+          "emptyDescription": "Monthly aggregates appear once requests exist."
         },
         "audit": {
           "hub": "RCM settings",
@@ -3201,9 +3216,17 @@
         "subtitle": "{from} – {to}",
         "month": "This month",
         "week": "This week",
+        "day": "Day",
+        "list": "List",
+        "today": "Today",
+        "branch": "Branch",
+        "allBranches": "All branches",
+        "desk": "Desk 1",
         "count": "{count} visits",
         "emptyTitle": "No visits in range",
-        "emptyDescription": "Bookings for the selected period will appear grouped by date."
+        "emptyDescription": "Bookings for the selected period will appear grouped by date.",
+        "noSlotsTitle": "No slots configured",
+        "noSlotsDescription": "Add slots for this branch and day from Slot & availability."
       },
       "reception": {
         "title": "Reception desk",
@@ -3219,7 +3242,12 @@
         "count": "Count",
         "share": "Share",
         "emptyTitle": "No visits this month",
-        "emptyDescription": "Monthly aggregates appear once bookings exist."
+        "emptyDescription": "Monthly aggregates appear once bookings exist.",
+        "byDepartment": "By department",
+        "colVisits": "Visits",
+        "colCompleted": "Completed",
+        "colNoShows": "No-shows",
+        "colCompletionRate": "Completion rate"
       },
       "departments": {
         "title": "Departments",

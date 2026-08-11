@@ -9,13 +9,27 @@ export type VisitListRow = {
   booking_code: string;
   driver_id: string;
   driver_name: string;
+  driver_phone: string | null;
   driver_code: string;
   department_key: string;
   department_label: string;
+  branch_id: string | null;
+  branch_name: string | null;
+  slot_id: string;
+  slot_start: string | null;
+  slot_end: string | null;
   scheduled_date: string;
   status: string;
   note: string | null;
   created_at: string;
+};
+
+export type VisitKpis = {
+  today: number;
+  today_checked_in: number;
+  upcoming: number;
+  awaiting_checkin: number;
+  no_shows: number;
 };
 
 export type VisitDetailRow = VisitListRow & {
@@ -37,6 +51,9 @@ export type VisitDepartmentRow = {
   label_ar: string | null;
   is_active: boolean;
   sort_order: number;
+  desk_location: string | null;
+  assigned_staff_name: string | null;
+  avg_handling_minutes: number | null;
 };
 
 export type VisitBranchRow = {
@@ -44,6 +61,12 @@ export type VisitBranchRow = {
   key: string;
   name: string;
   address: string | null;
+  city: string | null;
+  working_days: string | null;
+  opening_time: string | null;
+  closing_time: string | null;
+  desks_count: number;
+  is_default: boolean;
   is_active: boolean;
   sort_order: number;
 };
@@ -105,7 +128,7 @@ export async function fetchAdminVisitsList(input?: {
   dateTo?: string | null;
   limit?: number;
   offset?: number;
-}): Promise<{ rows: VisitListRow[]; error?: string }> {
+}): Promise<{ rows: VisitListRow[]; kpi: VisitKpis; error?: string }> {
   await requireVisitsView();
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("admin_list_visits", {
@@ -116,9 +139,24 @@ export async function fetchAdminVisitsList(input?: {
     p_offset: input?.offset ?? 0,
   });
 
-  if (error) return { rows: [], error: error.message };
-  const payload = data as { ok?: boolean; rows?: unknown[]; error?: string };
-  if (payload?.ok === false) return { rows: [], error: payload.error ?? "failed" };
+  const emptyKpi: VisitKpis = {
+    today: 0,
+    today_checked_in: 0,
+    upcoming: 0,
+    awaiting_checkin: 0,
+    no_shows: 0,
+  };
+
+  if (error) return { rows: [], kpi: emptyKpi, error: error.message };
+  const payload = data as {
+    ok?: boolean;
+    rows?: unknown[];
+    kpi?: Record<string, unknown>;
+    error?: string;
+  };
+  if (payload?.ok === false) {
+    return { rows: [], kpi: emptyKpi, error: payload.error ?? "failed" };
+  }
 
   const rows = (payload?.rows ?? []).map((raw) => {
     const r = raw as Record<string, unknown>;
@@ -127,9 +165,15 @@ export async function fetchAdminVisitsList(input?: {
       booking_code: String(r.booking_code ?? ""),
       driver_id: String(r.driver_id ?? ""),
       driver_name: String(r.driver_name ?? "—"),
+      driver_phone: r.driver_phone != null ? String(r.driver_phone) : null,
       driver_code: String(r.driver_code ?? ""),
       department_key: String(r.department_key ?? ""),
       department_label: String(r.department_label ?? r.department_key ?? ""),
+      branch_id: r.branch_id != null ? String(r.branch_id) : null,
+      branch_name: r.branch_name != null ? String(r.branch_name) : null,
+      slot_id: String(r.slot_id ?? ""),
+      slot_start: r.slot_start != null ? String(r.slot_start) : null,
+      slot_end: r.slot_end != null ? String(r.slot_end) : null,
       scheduled_date: String(r.scheduled_date ?? ""),
       status: String(r.status ?? ""),
       note: r.note != null ? String(r.note) : null,
@@ -137,7 +181,16 @@ export async function fetchAdminVisitsList(input?: {
     };
   });
 
-  return { rows };
+  const kpiRaw = payload?.kpi ?? {};
+  const kpi: VisitKpis = {
+    today: Number(kpiRaw.today ?? 0),
+    today_checked_in: Number(kpiRaw.today_checked_in ?? 0),
+    upcoming: Number(kpiRaw.upcoming ?? 0),
+    awaiting_checkin: Number(kpiRaw.awaiting_checkin ?? 0),
+    no_shows: Number(kpiRaw.no_shows ?? 0),
+  };
+
+  return { rows, kpi };
 }
 
 export async function fetchAdminVisitDetail(
@@ -157,7 +210,7 @@ export async function fetchAdminVisitDetail(
 
   const [driverRes, profileRes, deptRes, branchRes, slotRes] = await Promise.all([
     supabase.from("drivers").select("driver_code").eq("id", booking.driver_id).maybeSingle(),
-    supabase.from("profiles").select("full_name").eq("id", booking.driver_id).maybeSingle(),
+    supabase.from("profiles").select("full_name, phone").eq("id", booking.driver_id).maybeSingle(),
     supabase
       .from("visit_departments")
       .select("label_en")
@@ -175,6 +228,7 @@ export async function fetchAdminVisitDetail(
       booking_code: booking.booking_code,
       driver_id: booking.driver_id,
       driver_name: profileRes.data?.full_name ?? "—",
+      driver_phone: profileRes.data?.phone ?? null,
       driver_code: driverRes.data?.driver_code ?? "",
       department_key: booking.department_key,
       department_label: deptRes.data?.label_en ?? booking.department_key,
@@ -239,7 +293,9 @@ export async function fetchVisitDepartments(): Promise<{
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("visit_departments")
-    .select("id, key, label_en, label_ar, is_active, sort_order")
+    .select(
+      "id, key, label_en, label_ar, is_active, sort_order, desk_location, assigned_staff_name, avg_handling_minutes",
+    )
     .order("sort_order");
 
   if (error) return { rows: [], error: error.message };
@@ -248,14 +304,25 @@ export async function fetchVisitDepartments(): Promise<{
 
 export async function updateVisitDepartment(input: {
   id: string;
-  is_active: boolean;
+  is_active?: boolean;
+  desk_location?: string | null;
+  assigned_staff_name?: string | null;
+  avg_handling_minutes?: number | null;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireVisitsManageCatalog();
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("visit_departments")
-    .update({ is_active: input.is_active, updated_at: new Date().toISOString() })
-    .eq("id", input.id);
+  const patch = {
+    updated_at: new Date().toISOString(),
+    ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
+    ...(input.desk_location !== undefined ? { desk_location: input.desk_location } : {}),
+    ...(input.assigned_staff_name !== undefined
+      ? { assigned_staff_name: input.assigned_staff_name }
+      : {}),
+    ...(input.avg_handling_minutes !== undefined
+      ? { avg_handling_minutes: input.avg_handling_minutes }
+      : {}),
+  };
+  const { error } = await supabase.from("visit_departments").update(patch).eq("id", input.id);
 
   if (error) return { ok: false, error: error.message };
   return { ok: true };
@@ -269,7 +336,9 @@ export async function fetchVisitBranches(): Promise<{
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("visit_branches")
-    .select("id, key, name, address, is_active, sort_order")
+    .select(
+      "id, key, name, address, city, working_days, opening_time, closing_time, desks_count, is_default, is_active, sort_order",
+    )
     .order("sort_order");
 
   if (error) return { rows: [], error: error.message };
@@ -280,6 +349,11 @@ export async function updateVisitBranch(input: {
   id: string;
   name?: string;
   address?: string | null;
+  city?: string | null;
+  working_days?: string | null;
+  opening_time?: string | null;
+  closing_time?: string | null;
+  desks_count?: number;
   is_active?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireVisitsManageCatalog();
@@ -288,6 +362,11 @@ export async function updateVisitBranch(input: {
     updated_at: new Date().toISOString(),
     ...(input.name !== undefined ? { name: input.name } : {}),
     ...(input.address !== undefined ? { address: input.address } : {}),
+    ...(input.city !== undefined ? { city: input.city } : {}),
+    ...(input.working_days !== undefined ? { working_days: input.working_days } : {}),
+    ...(input.opening_time !== undefined ? { opening_time: input.opening_time } : {}),
+    ...(input.closing_time !== undefined ? { closing_time: input.closing_time } : {}),
+    ...(input.desks_count !== undefined ? { desks_count: input.desks_count } : {}),
     ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
   };
 

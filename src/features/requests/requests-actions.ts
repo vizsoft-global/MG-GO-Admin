@@ -43,6 +43,29 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+export async function fetchRequestTypeCounts(): Promise<{
+  counts: Record<string, { total: number; pending: number }>;
+  error?: string;
+}> {
+  await requireRequestsView();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_count_requests_by_type");
+
+  if (error) return { counts: {}, error: error.message };
+  const payload = asRecord(data);
+  if (payload.ok === false) {
+    return { counts: {}, error: String(payload.error ?? "failed") };
+  }
+
+  const raw = asRecord(payload.counts);
+  const counts: Record<string, { total: number; pending: number }> = {};
+  for (const [type, value] of Object.entries(raw)) {
+    const v = asRecord(value);
+    counts[type] = { total: Number(v.total ?? 0), pending: Number(v.pending ?? 0) };
+  }
+  return { counts };
+}
+
 export async function fetchAdminRequestsList(filters: RequestListFilters): Promise<{
   rows: RequestListRow[];
   kpi: RequestKpis;
@@ -98,6 +121,7 @@ export async function fetchAdminRequestsList(filters: RequestListFilters): Promi
         driver_id: String(r.driver_id ?? ""),
         driver_name: String(r.driver_name ?? "—"),
         driver_code: String(r.driver_code ?? ""),
+        driver_zone: r.driver_zone != null ? String(r.driver_zone) : null,
         amount_kwd: r.amount_kwd != null ? Number(r.amount_kwd) : null,
         needs_attention: Boolean(r.needs_attention),
         attention_at: r.attention_at != null ? String(r.attention_at) : null,
@@ -174,6 +198,7 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
   }
 
   const r = asRecord(payload.request);
+  const requesterRaw = asRecord(payload.requester);
   await logAdminRead("requests", "requests.detail", { requestId });
 
   return {
@@ -188,6 +213,15 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
       current_step_order:
         r.current_step_order != null ? Number(r.current_step_order) : null,
       driver_id: String(r.driver_id ?? ""),
+      requester:
+        requesterRaw.name != null
+          ? {
+              name: String(requesterRaw.name),
+              code: requesterRaw.code != null ? String(requesterRaw.code) : "",
+              phone: requesterRaw.phone != null ? String(requesterRaw.phone) : null,
+              zone: requesterRaw.zone != null ? String(requesterRaw.zone) : null,
+            }
+          : null,
       amount_kwd: r.amount_kwd != null ? Number(r.amount_kwd) : null,
       start_date: r.start_date != null ? String(r.start_date) : null,
       end_date: r.end_date != null ? String(r.end_date) : null,
@@ -210,6 +244,9 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
         decided_by: s.decided_by != null ? String(s.decided_by) : null,
         decided_at: s.decided_at != null ? String(s.decided_at) : null,
         decision_note: s.decision_note != null ? String(s.decision_note) : null,
+        allowed_actions: Array.isArray(s.allowed_actions)
+          ? s.allowed_actions.map((a) => String(a))
+          : [],
       };
     }),
     clarifications: (Array.isArray(payload.clarifications)
@@ -236,10 +273,24 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
         storage_key: String(row.storage_key ?? ""),
         file_name: row.file_name != null ? String(row.file_name) : null,
         content_type: row.content_type != null ? String(row.content_type) : null,
+        byte_size: row.byte_size != null ? Number(row.byte_size) : null,
         created_at: String(row.created_at ?? ""),
       };
     }),
   };
+}
+
+export async function fetchRequestAttachmentUrl(
+  storageKey: string,
+): Promise<{ url: string | null; error?: string }> {
+  await requireRequestsView();
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage
+    .from("request-attachments")
+    .createSignedUrl(storageKey, 300);
+
+  if (error) return { url: null, error: error.message };
+  return { url: data?.signedUrl ?? null };
 }
 
 export async function decideAdminRequest(input: {

@@ -11,6 +11,8 @@ import {
   DialogContent,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { requestStatusVariant } from "./request-status-utils";
+import { RequesterHeader } from "./requester-header";
 import type { RequestAttachment, RequestDetail } from "./types";
 
 type Field = { key: string; label: string; from?: "payload" | "column" };
@@ -83,15 +85,6 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
-function statusVariant(
-  status: string,
-): "success" | "warning" | "danger" | "neutral" {
-  if (status === "approved" || status === "solved") return "success";
-  if (status === "rejected") return "danger";
-  if (status === "needs_clarification" || status === "overdue") return "warning";
-  return "neutral";
-}
-
 function readField(request: RequestDetail, field: Field): unknown {
   if (field.from === "column") {
     if (field.key === "amount_kwd") return request.amount_kwd;
@@ -138,7 +131,7 @@ export function RequestTypedDrawer({
               <span className="font-semibold tabular-nums">
                 {request.request_code}
               </span>
-              <StatusPill variant={statusVariant(request.status)}>
+              <StatusPill variant={requestStatusVariant(request.status)}>
                 {t(`status.${request.status}` as "status.pending")}
               </StatusPill>
             </div>
@@ -146,7 +139,10 @@ export function RequestTypedDrawer({
               {t(`types.${request.request_type}` as "types.leave")} ·{" "}
               {request.current_step_label ?? "—"}
             </p>
-            <dl className="space-y-2 text-sm">
+            <div className="border-t border-border pt-3">
+              <RequesterHeader driverId={request.driver_id} requester={request.requester} />
+            </div>
+            <dl className="space-y-2 border-t border-border pt-3 text-sm">
               {rows.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {t("detail.noTypedFields")}

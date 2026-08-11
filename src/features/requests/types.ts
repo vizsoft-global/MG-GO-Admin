@@ -28,6 +28,7 @@ export type RequestListRow = {
   driver_id: string;
   driver_name: string;
   driver_code: string;
+  driver_zone: string | null;
   amount_kwd: number | null;
   needs_attention: boolean;
   attention_at: string | null;
@@ -55,6 +56,7 @@ export type RequestApprovalStep = {
   decided_by: string | null;
   decided_at: string | null;
   decision_note: string | null;
+  allowed_actions: string[];
 };
 
 export type RequestClarification = {
@@ -71,7 +73,15 @@ export type RequestAttachment = {
   storage_key: string;
   file_name: string | null;
   content_type: string | null;
+  byte_size: number | null;
   created_at: string;
+};
+
+export type RequestRequester = {
+  name: string;
+  code: string;
+  phone: string | null;
+  zone: string | null;
 };
 
 export type RequestDetail = {
@@ -83,6 +93,7 @@ export type RequestDetail = {
   current_step_label: string | null;
   current_step_order: number | null;
   driver_id: string;
+  requester: RequestRequester | null;
   amount_kwd: number | null;
   start_date: string | null;
   end_date: string | null;
