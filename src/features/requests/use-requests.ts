@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   decideAdminRequest,
+  decideAdminRequestsBulk,
   fetchAdminRequestDetail,
   fetchAdminRequestsList,
   fetchRequestTypeCounts,
@@ -44,6 +45,20 @@ export function useDecideRequest(requestId: string) {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.requests.detail(requestId),
       });
+    },
+  });
+}
+
+export function useBulkDecideRequests() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      requestIds: string[];
+      action: "approve" | "reject";
+      reason?: string;
+    }) => decideAdminRequestsBulk(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.requests.all() });
     },
   });
 }

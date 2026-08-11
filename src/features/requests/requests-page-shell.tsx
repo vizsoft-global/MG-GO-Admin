@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   ArrowDown,
   ArrowUp,
   Building2,
+  Check,
   Clock,
   Download,
   ExternalLink,
@@ -14,6 +16,7 @@ import {
   RefreshCw,
   Timer,
   TriangleAlert,
+  X,
 } from "lucide-react";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
@@ -23,10 +26,14 @@ import {
 } from "@/components/app/app-data-table";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
+import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -34,13 +41,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitives";
 import { useZonesList } from "@/features/zones/use-zones";
+import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { requestStatusLabelKey, requestStatusVariant } from "./request-status-utils";
-import type { RequestDatePreset, RequestListRow } from "./types";
-import { useAdminRequestsList } from "./use-requests";
+import { DECISION_TERM_TYPES, type RequestDatePreset, type RequestListRow } from "./types";
+import { useAdminRequestsList, useBulkDecideRequests } from "./use-requests";
 
 function formatAvgDays(seconds: number | null): string {
   if (seconds == null || Number.isNaN(seconds)) return "—";
@@ -97,6 +106,23 @@ const TYPE_FILTERS = [
   "complaint",
   "salary_justification",
 ] as const;
+
+const CLOSED_STATUSES = new Set(["approved", "rejected", "solved"]);
+
+/**
+ * Loan, asset and sick-leave approvals must capture terms (amount, tenure, penalty, document)
+ * on the final step, which only the detail page can do — so they are never bulk approved.
+ */
+function canBulkApprove(row: RequestListRow): boolean {
+  return (
+    !CLOSED_STATUSES.has(row.status) &&
+    !(DECISION_TERM_TYPES as readonly string[]).includes(row.request_type)
+  );
+}
+
+function canBulkReject(row: RequestListRow): boolean {
+  return !CLOSED_STATUSES.has(row.status);
+}
 
 const STATUS_FILTERS = [
   "all",
@@ -168,6 +194,13 @@ export function RequestsPageShell({
   const [zoneId, setZoneId] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const { can } = useAuth();
+  const canDecide = can("requests.approve") || can("requests.manage");
+  const bulkDecide = useBulkDecideRequests();
 
   const filters = useMemo(
     () => ({
@@ -206,6 +239,52 @@ export function RequestsPageShell({
       }),
     [statusCounts, t],
   );
+
+  const selectableRows = rows.filter(canBulkReject);
+  const selectedRows = rows.filter((row) => selected.has(row.id));
+  const approvableRows = selectedRows.filter(canBulkApprove);
+
+  const toggleRow = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelected((current) =>
+      current.size === selectableRows.length
+        ? new Set()
+        : new Set(selectableRows.map((row) => row.id)),
+    );
+
+  const runBulk = async (action: "approve" | "reject", reason?: string) => {
+    const targets = action === "approve" ? approvableRows : selectedRows;
+    if (targets.length === 0) return;
+    const result = await bulkDecide.mutateAsync({
+      requestIds: targets.map((row) => row.id),
+      action,
+      reason,
+    });
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (result.failed.length > 0) {
+      toast.warning(
+        t("bulk.partial", {
+          done: `${result.succeeded.length}`,
+          failed: `${result.failed.length}`,
+        }),
+      );
+    } else {
+      toast.success(t("bulk.done", { done: `${result.succeeded.length}` }));
+    }
+    setSelected(new Set());
+    setRejectOpen(false);
+    setRejectReason("");
+  };
 
   return (
     <AppPage>
@@ -448,6 +527,53 @@ export function RequestsPageShell({
           </p>
         </div>
 
+        {canDecide && selected.size > 0 ? (
+          <div className="mx-3 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+            <p className="text-xs font-medium text-foreground">
+              {t("bulk.selected", { count: `${selected.size}` })}
+              {approvableRows.length !== selectedRows.length ? (
+                <span className="ms-2 font-normal text-muted-foreground">
+                  {t("bulk.termsExcluded", {
+                    count: `${selectedRows.length - approvableRows.length}`,
+                  })}
+                </span>
+              ) : null}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8"
+                disabled={approvableRows.length === 0 || bulkDecide.isPending}
+                onClick={() => void runBulk("approve")}
+              >
+                <Check className="me-1 h-3.5 w-3.5" />
+                {t("bulk.approve", { count: `${approvableRows.length}` })}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 text-destructive hover:bg-destructive/10"
+                disabled={bulkDecide.isPending}
+                onClick={() => setRejectOpen(true)}
+              >
+                <X className="me-1 h-3.5 w-3.5" />
+                {t("bulk.reject", { count: `${selectedRows.length}` })}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => setSelected(new Set())}
+              >
+                {t("bulk.clear")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -457,6 +583,24 @@ export function RequestsPageShell({
         ) : (
           <AppDataTable
             columns={[
+              ...(canDecide
+                ? [
+                    {
+                      id: "select",
+                      className: "w-10",
+                      label: (
+                        <Checkbox
+                          aria-label={t("bulk.selectAll")}
+                          checked={
+                            selectableRows.length > 0 &&
+                            selected.size === selectableRows.length
+                          }
+                          onCheckedChange={toggleAll}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               { id: "code", label: t("colCode") },
               { id: "driver", label: t("colDriver") },
               { id: "type", label: t("colType") },
@@ -476,6 +620,16 @@ export function RequestsPageShell({
                 )}
                 onClick={() => router.push(`/requests/${row.id}`)}
               >
+                {canDecide ? (
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      aria-label={row.request_code}
+                      checked={selected.has(row.id)}
+                      disabled={!canBulkReject(row)}
+                      onCheckedChange={() => toggleRow(row.id)}
+                    />
+                  </TableCell>
+                ) : null}
                 <TableCell>
                   <div className="flex items-center gap-1.5">
                     {row.needs_attention ? (
@@ -579,6 +733,58 @@ export function RequestsPageShell({
           </AppDataTable>
         )}
       </AppListCard>
+
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent
+          className="w-[min(520px,96vw)] overflow-visible pt-4"
+          showCloseButton
+          closeOutside
+        >
+          <div className="space-y-1 px-5">
+            <Label htmlFor="bulk-reject-reason">{t("bulk.reasonLabel")}</Label>
+            <Textarea
+              id="bulk-reject-reason"
+              rows={4}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder={t("bulk.reasonPlaceholder")}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              {t("bulk.reasonHint", { count: `${selectedRows.length}` })}
+            </p>
+          </div>
+          <div className="px-2 pb-2 pt-3">
+            <AppModalFooter
+              title={t("bulk.rejectTitle")}
+              subtitle={t("bulk.rejectSubtitle", { count: `${selectedRows.length}` })}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setRejectOpen(false)}
+              >
+                {t("bulk.cancel")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={!rejectReason.trim() || bulkDecide.isPending}
+                onClick={() => void runBulk("reject", rejectReason.trim())}
+              >
+                {bulkDecide.isPending ? (
+                  <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <X className="me-1.5 h-3.5 w-3.5" />
+                )}
+                {t("bulk.confirmReject")}
+              </Button>
+            </AppModalFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppPage>
   );
 }

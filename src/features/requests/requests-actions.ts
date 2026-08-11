@@ -389,6 +389,65 @@ export async function decideAdminRequest(input: {
   return { ok: true, status: payload.status != null ? String(payload.status) : undefined };
 }
 
+/**
+ * Bulk decide runs the same per-request RPC in a loop so the approval chain, permissions and
+ * driver notifications behave exactly as they do for a single decision. Failures are reported
+ * per request instead of aborting the batch.
+ */
+export async function decideAdminRequestsBulk(input: {
+  requestIds: string[];
+  action: "approve" | "reject";
+  reason?: string;
+}): Promise<{
+  ok: boolean;
+  succeeded: string[];
+  failed: Array<{ requestId: string; error: string }>;
+  error?: string;
+}> {
+  const session = await requireRequestsDecide();
+  if (input.requestIds.length === 0) {
+    return { ok: false, succeeded: [], failed: [], error: "no_requests" };
+  }
+  if (input.action === "reject" && !input.reason?.trim()) {
+    return { ok: false, succeeded: [], failed: [], error: "reason_required" };
+  }
+
+  const supabase = await createClient();
+  const succeeded: string[] = [];
+  const failed: Array<{ requestId: string; error: string }> = [];
+
+  for (const requestId of input.requestIds) {
+    const { data, error } = await supabase.rpc("admin_decide_request", {
+      p_request_id: requestId,
+      p_action: input.action,
+      p_reason: input.reason?.trim() || undefined,
+      p_meta: buildDecisionMeta(undefined, staffDisplayName(session)),
+    });
+    const payload = asRecord(data);
+    if (error) {
+      failed.push({ requestId, error: error.message });
+    } else if (payload.ok === false) {
+      failed.push({ requestId, error: String(payload.error ?? "failed") });
+    } else {
+      succeeded.push(requestId);
+    }
+  }
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "requests",
+    routeName: "requests.decide_bulk",
+    context: {
+      decideAction: input.action,
+      requested: input.requestIds.length,
+      succeeded: succeeded.length,
+      failed: failed.length,
+    },
+  });
+
+  return { ok: failed.length === 0, succeeded, failed };
+}
+
 /** Edit path for requests already decided — merges into the last completed step. */
 export async function saveRequestDecisionTerms(input: {
   requestId: string;
