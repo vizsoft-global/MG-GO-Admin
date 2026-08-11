@@ -2770,7 +2770,8 @@
           "deductionStart": "بداية الخصم",
           "penaltyAmount": "مبلغ الغرامة",
           "requiredDocument": "المستند المطلوب",
-          "requiredDocumentPlaceholder": "مثال: شهادة طبية"
+          "requiredDocumentPlaceholder": "مثال: شهادة طبية",
+          "ackDone": "أقرّ العامل بهذه الشروط في التطبيق."
         },
         "otherDetails": "تفاصيل أخرى"
       },

@@ -1,19 +1,16 @@
 "use client";
 
-import { PanelRightOpen, Paperclip } from "lucide-react";
+import { Download, PanelRightOpen } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { fetchRequestAttachmentUrl } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
-import { getTypedFieldRows } from "./request-typed-fields";
+import { getExtraPayloadRows, getTypedFieldRows } from "./request-typed-fields";
 import { requestStatusLabelKey, requestStatusVariant } from "./request-status-utils";
 import { RequesterHeader } from "./requester-header";
 import type { RequestApprovalStep, RequestAttachment, RequestDetail } from "./types";
@@ -37,9 +34,22 @@ export function RequestTypedDrawer({
   const t = useTranslations("pages.requests");
   const rows = getTypedFieldRows(request);
   const subjectRow = rows.find((row) => row.key === "subject" && row.value !== "—");
-  const detailRows = rows.filter((row) => row.key !== "subject" && row.key !== "description");
+  const detailRows = [
+    ...rows.filter((row) => row.key !== "subject" && row.key !== "description"),
+    ...getExtraPayloadRows(request),
+  ];
   const descriptionRow = rows.find((row) => row.key === "description");
-  const message = descriptionRow?.value !== "—" ? descriptionRow?.value : request.details;
+  const message =
+    descriptionRow && descriptionRow.value !== "—" ? descriptionRow.value : request.details;
+
+  const openAttachment = async (storageKey: string) => {
+    const result = await fetchRequestAttachmentUrl(storageKey);
+    if (!result.url) {
+      toast.error(result.error ?? t("detail.actionFailed"));
+      return;
+    }
+    window.open(result.url, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <Dialog>
@@ -53,10 +63,13 @@ export function RequestTypedDrawer({
       </DialogTrigger>
       <DialogContent
         closeOutside
-        className="right-3 left-auto top-3 h-[min(720px,calc(100dvh-24px))] w-[min(440px,calc(100vw-24px))] max-w-none translate-x-0 translate-y-0 overflow-visible"
+        className="right-3 left-auto top-3 max-w-none translate-x-0 translate-y-0 overflow-visible"
+        // Inline: Tailwind does not emit these nested calc() arbitrary values, and twMerge
+        // already strips the base w-full/max-w-lg, which left the drawer unsized.
+        style={{ width: "min(440px, calc(100vw - 24px))", maxHeight: "calc(100dvh - 24px)" }}
       >
-        <div className="flex min-h-0 flex-1 flex-col pt-4">
-          <div className="space-y-4 overflow-y-auto px-5 py-4">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-5 py-3">
             <div className="flex items-center gap-2">
               <span className="font-semibold tabular-nums">
                 {request.request_code}
@@ -64,17 +77,17 @@ export function RequestTypedDrawer({
               <StatusPill variant="neutral">
                 {t(`types.${request.request_type}` as "types.leave")}
               </StatusPill>
-              <StatusPill variant={requestStatusVariant(request.status, request.payload)}>
+              <StatusPill dot variant={requestStatusVariant(request.status, request.payload)}>
                 {t(`status.${requestStatusLabelKey(request.status, request.payload)}` as "status.pending")}
               </StatusPill>
             </div>
 
-            <div className="border-t border-border pt-3">
+            <div className="border-t border-border pt-2.5">
               <RequesterHeader driverId={request.driver_id} requester={request.requester} />
             </div>
 
             {subjectRow || message ? (
-              <div className="space-y-1.5 border-t border-border pt-3">
+              <div className="space-y-1.5 border-t border-border pt-2.5">
                 {subjectRow ? (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -94,18 +107,22 @@ export function RequestTypedDrawer({
               </div>
             ) : null}
 
-            {attachments.length > 0 ? (
-              <div className="space-y-1.5 border-t border-border pt-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {t("detail.attachments")}
-                </p>
+            <div className="space-y-1.5 border-t border-border pt-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("detail.attachments")}
+              </p>
+              {attachments.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">{t("detail.noAttachments")}</p>
+              ) : (
                 <div className="grid grid-cols-2 gap-1.5">
                   {attachments.map((a) => (
-                    <div
+                    <button
                       key={a.id}
-                      className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/20 px-2 py-1.5"
+                      type="button"
+                      onClick={() => void openAttachment(a.storage_key)}
+                      className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/20 px-2 py-1.5 text-start transition-colors hover:border-primary/40 hover:bg-primary/10"
                     >
-                      <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <Download className="h-3.5 w-3.5 shrink-0 text-primary" />
                       <div className="min-w-0">
                         <p className="truncate text-[11px] font-medium">
                           {a.file_name ?? a.storage_key.split("/").pop()}
@@ -116,14 +133,14 @@ export function RequestTypedDrawer({
                           </p>
                         ) : null}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
-              </div>
-            ) : null}
+              )}
+            </div>
 
             {detailRows.length > 0 ? (
-              <div className="border-t border-border pt-3">
+              <div className="border-t border-border pt-2.5">
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("detail.fields")}
                 </p>
@@ -139,7 +156,12 @@ export function RequestTypedDrawer({
                           {t(`detail.${row.gatedKey}` as "detail.categoryGated")}
                         </span>
                       ) : (
-                        <span className={cn("font-medium", row.value === "—" && "text-muted-foreground")}>
+                        <span
+                          className={cn(
+                            "max-w-[60%] break-words text-end font-medium",
+                            row.value === "—" && "text-muted-foreground",
+                          )}
+                        >
                           {row.value}
                         </span>
                       )}
@@ -150,7 +172,7 @@ export function RequestTypedDrawer({
             ) : null}
 
             {steps.length > 0 ? (
-              <div className="border-t border-border pt-3">
+              <div className="border-t border-border pt-2.5">
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("detail.approval")}
                 </p>
@@ -161,13 +183,7 @@ export function RequestTypedDrawer({
           <AppModalFooter
             title={t(`types.${request.request_type}` as "types.leave")}
             subtitle={request.request_code}
-          >
-            <DialogClose
-              render={<Button type="button" variant="outline" className="h-9" />}
-            >
-              {t("detail.close")}
-            </DialogClose>
-          </AppModalFooter>
+          />
         </div>
       </DialogContent>
     </Dialog>

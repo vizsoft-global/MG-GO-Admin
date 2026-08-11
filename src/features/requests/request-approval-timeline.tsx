@@ -5,14 +5,18 @@ import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type { RequestApprovalStep } from "./types";
 
+/** Pinned locale + Kuwait time so SSR and the browser render the same stamp. */
+const STAMP_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Kuwait",
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 function formatStamp(value: string | null): string {
   if (!value) return "";
-  return new Date(value).toLocaleString(undefined, {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return STAMP_FORMAT.format(new Date(value));
 }
 
 /** Figma approval-progress checklist — shared by the detail page and the typed drawer. */
@@ -28,7 +32,7 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
         const isRejected = step.status === "rejected";
 
         return (
-          <li key={step.id} className="relative flex gap-2.5 pb-4">
+          <li key={step.id} className={cn("relative flex gap-2.5", isLast ? "pb-0" : "pb-3")}>
             {!isLast ? (
               <span
                 className="absolute top-5 left-[9px] w-px bg-border"

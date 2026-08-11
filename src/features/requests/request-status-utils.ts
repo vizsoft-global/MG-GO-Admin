@@ -11,6 +11,7 @@ export function requestStatusVariant(
   payload?: Record<string, unknown> | null,
 ): RequestStatusVariant {
   if (isAwaitingDriverAck(status, payload)) return "warning";
+  if (isDriverAcknowledged(status, payload)) return "success";
   if (status === "approved" || status === "solved") return "success";
   if (status === "rejected" || status === "overdue") return "danger";
   if (status === "pending" || status === "needs_clarification") return "warning";
@@ -25,11 +26,20 @@ export function isAwaitingDriverAck(
   return status === "approved" && Boolean(payload?.awaiting_driver_ack);
 }
 
+/** `driver_acknowledge_request` stamps `driver_ack_at` and clears the awaiting flag. */
+export function isDriverAcknowledged(
+  status: string,
+  payload?: Record<string, unknown> | null,
+): boolean {
+  return status === "approved" && Boolean(payload?.driver_ack_at);
+}
+
 /** i18n key under pages.requests.status.* — "awaiting_ack" overlays "approved" until the driver confirms. */
 export function requestStatusLabelKey(
   status: string,
   payload?: Record<string, unknown> | null,
 ): string {
   if (isAwaitingDriverAck(status, payload)) return "awaiting_ack";
+  if (isDriverAcknowledged(status, payload)) return "acknowledged";
   return status;
 }

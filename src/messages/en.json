@@ -2852,7 +2852,8 @@
           "deductionStart": "Deduction starts",
           "penaltyAmount": "Penalty amount",
           "requiredDocument": "Required document",
-          "requiredDocumentPlaceholder": "e.g. Medical certificate"
+          "requiredDocumentPlaceholder": "e.g. Medical certificate",
+          "ackDone": "The worker acknowledged these terms in the app."
         },
         "otherDetails": "Other details"
       },
