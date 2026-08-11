@@ -3146,8 +3146,11 @@
           "fieldCategoryNone": "بدون فئة",
           "fieldDue": "تاريخ الاستحقاق",
           "errors": {
-            "missingFields": "السائق والعنوان مطلوبان",
-            "createFailed": "تعذر إنشاء الطلب"
+            "missingFields": "السائق والعنوان والمستند مطلوبة",
+            "createFailed": "تعذر إنشاء الطلب",
+            "uploadFailed": "تعذر رفع المستند",
+            "unsupported_source_type": "نوع ملف غير مدعوم — ارفع ملف PDF أو PNG أو JPG",
+            "file_too_large": "حجم الملف أكبر من 10 ميجابايت"
           },
           "colSent": "أُرسل",
           "kpiSent": "أُرسل (30 يوم)",
@@ -3164,10 +3167,12 @@
             "signed": "موقّعة",
             "declined": "مرفوضة",
             "expired": "منتهية"
-          }
+          },
+          "fieldDocument": "المستند المطلوب توقيعه",
+          "fieldDocumentHint": "PDF أو PNG أو JPG بحجم أقصى 10 ميجابايت. صيغة WebP غير مدعومة في تركيب النسخة الموقعة."
         },
         "signatures": {
-          "title": "التوقيعات",
+          "title": "التوقيعات الإلكترونية",
           "subtitle": "متابعة التوقيعات المعلقة والمكتملة",
           "refresh": "تحديث",
           "viewDetails": "عرض التفاصيل",
@@ -3229,7 +3234,7 @@
           "signedElectronically": "موقّع إلكترونياً · {at}",
           "noDocumentTitle": "لا يوجد مستند مرفق",
           "noDocumentBody": "أُرسل هذا الطلب بدون مستند، أو لم يتم رفع الملف بعد.",
-          "downloadDocument": "تنزيل المستند الموقّع",
+          "downloadDocument": "تنزيل المستند الأصلي",
           "downloadSignature": "تنزيل صورة التوقيع",
           "proof": {
             "employee_id": "الرقم الوظيفي",
@@ -3237,11 +3242,13 @@
             "civil_id": "الرقم المدني",
             "company": "الشركة",
             "ip_address": "عنوان IP",
-            "device": "الجهاز"
+            "device": "الجهاز",
+            "signed_at": "التاريخ / الوقت"
           },
-          "downloadSignedCopy": "تنزيل النسخة الموقعة",
+          "downloadSignedCopy": "تنزيل المستند الموقّع",
           "signedCopyPending": "لا يزال يتم إنشاء النسخة الموقعة — النسخة الأصلية أدناه.",
-          "signedCopyFailed": "تعذر إنشاء النسخة الموقعة ({reason}). النسخة الأصلية فقط متاحة."
+          "signedCopyFailed": "تعذر إنشاء النسخة الموقعة ({reason}). النسخة الأصلية فقط متاحة.",
+          "print": "طباعة"
         },
         "categories": {
           "title": "فئات التوقيع",
@@ -3270,7 +3277,8 @@
           "edit": "تعديل",
           "updated": "تم تحديث الفئة",
           "saveChanges": "حفظ التغييرات",
-          "cancel": "إلغاء"
+          "cancel": "إلغاء",
+          "iconSlot": "رمز الأيقونة"
         },
         "screenshot": {
           "title": "إعدادات لقطة الشاشة",
@@ -3448,7 +3456,8 @@
           "expected_amount": "المبلغ المتوقع",
           "received_amount": "المبلغ المستلم",
           "duration_days": "المدة (أيام)",
-          "declaration_accepted": "الإقرار"
+          "declaration_accepted": "الإقرار",
+          "date_range": "الفترة"
         },
         "severities": {
           "low": "منخفضة",

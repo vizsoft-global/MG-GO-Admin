@@ -206,7 +206,7 @@ export function RequestsReportsPanel() {
   }
 
   return (
-    <AppPage>
+    <AppPage className="space-y-3">
       <AppPageHeader
         title={t("title")}
         description={t("subtitle")}
@@ -274,6 +274,7 @@ export function RequestsReportsPanel() {
       ) : (
         <>
           <KpiGrid
+            compact
             items={[
               {
                 label: t("kpiTotal"),
@@ -315,15 +316,17 @@ export function RequestsReportsPanel() {
           />
 
           <div className="grid gap-2 lg:grid-cols-3 lg:items-stretch">
-            <AppListCard className="h-full space-y-3 p-4 lg:col-span-2">
-              <div>
+            <AppListCard className="h-full space-y-1 p-3 lg:col-span-2">
+              <div className="flex items-baseline gap-2">
                 <h3 className="text-sm font-semibold">{t("volumeTitle")}</h3>
-                <p className="text-[11px] text-muted-foreground">{t("volumeSubtitle")}</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {t("volumeSubtitle")}
+                </p>
               </div>
               {maxVolume === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">{t("emptyTitle")}</p>
+                <p className="py-4 text-center text-sm text-muted-foreground">{t("emptyTitle")}</p>
               ) : (
-                <div className="flex h-40 items-end gap-1.5">
+                <div className="flex h-10 items-end gap-1.5">
                   {volume.map((bucket) => (
                     <div
                       key={bucket.label}
@@ -346,21 +349,26 @@ export function RequestsReportsPanel() {
               )}
             </AppListCard>
 
-            <AppListCard className="h-full space-y-2 p-4">
-              <div>
+            <AppListCard className="h-full space-y-1 p-3">
+              <div className="flex items-baseline gap-2">
                 <h3 className="text-sm font-semibold">{t("stepTimeTitle")}</h3>
-                <p className="text-[11px] text-muted-foreground">{t("stepTimeSubtitle")}</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {t("stepTimeSubtitle")}
+                </p>
               </div>
               {maxStepSeconds === 0 ? (
                 <p className="py-6 text-center text-[11px] text-muted-foreground">
                   {t("stepTimeEmpty")}
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1">
+                  {/* Slowest departments only — the table below carries every department,
+                      so this card stays short enough to keep the page in one viewport. */}
                   {departmentRows
                     .filter((row) => row.avg_step_seconds != null)
+                    .slice(0, 4)
                     .map((row) => (
-                      <div key={row.department_key} className="space-y-1">
+                      <div key={row.department_key} className="space-y-0.5">
                         <div className="flex items-baseline justify-between gap-2">
                           <span className="truncate text-xs">{row.department_label}</span>
                           <span className="shrink-0 text-xs font-medium tabular-nums">
@@ -388,11 +396,14 @@ export function RequestsReportsPanel() {
 
           {groupBy === "department" ? (
             <AppListCard className="p-0">
-              <div className="border-b border-border p-3">
-                <h3 className="text-sm font-semibold">{t("byDepartment")}</h3>
-                <p className="text-[11px] text-muted-foreground">{t("byDepartmentSubtitle")}</p>
+              <div className="border-b border-border px-3 py-1.5">
+                <h3 className="text-sm font-semibold" title={t("byDepartmentSubtitle")}>
+                  {t("byDepartment")}
+                </h3>
+                <p className="sr-only">{t("byDepartmentSubtitle")}</p>
               </div>
               <AppDataTable
+                headerRowClassName="[&>th]:h-8"
                 columns={[
                   { id: "department", label: t("colDepartment") },
                   { id: "requests", label: t("colRequests") },
@@ -494,29 +505,29 @@ export function RequestsReportsPanel() {
             </AppListCard>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-1">
             <h3 className="text-sm font-semibold">{t("signaturesSection")}</h3>
             <div className="grid gap-2 lg:grid-cols-3 lg:items-stretch">
-              <AppListCard className="h-full space-y-2 p-4">
+              <AppListCard className="h-full space-y-1 px-3 py-2">
                 <p className="flex items-center gap-1.5 text-sm font-medium">
                   <span className="h-2 w-2 rounded-full bg-primary" />
                   {t("esignTitle")}
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <p className="text-lg font-semibold tabular-nums text-emerald-700">
+                    <p className="text-base font-semibold tabular-nums text-emerald-700">
                       {esignCounts?.signed ?? "—"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{t("esignSigned")}</p>
                   </div>
                   <div>
-                    <p className="text-lg font-semibold tabular-nums text-warning">
+                    <p className="text-base font-semibold tabular-nums text-warning">
                       {esignCounts?.pending ?? "—"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{t("esignPending")}</p>
                   </div>
                   <div>
-                    <p className="text-lg font-semibold tabular-nums text-muted-foreground">
+                    <p className="text-base font-semibold tabular-nums text-muted-foreground">
                       {esignCounts?.expired ?? "—"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{t("esignExpired")}</p>
@@ -524,48 +535,50 @@ export function RequestsReportsPanel() {
                 </div>
               </AppListCard>
 
-              <AppListCard className="h-full space-y-2 p-4">
+              <AppListCard className="h-full space-y-1 px-3 py-2">
                 <p className="flex items-center gap-1.5 text-sm font-medium">
                   <span className="h-2 w-2 rounded-full bg-emerald-500" />
                   {t("ackTitle")}
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <p className="text-lg font-semibold tabular-nums">{pendingAck}</p>
+                    <p className="text-base font-semibold tabular-nums">{pendingAck}</p>
                     <p className="text-[10px] text-muted-foreground">{t("ackPending")}</p>
                   </div>
-                  <div>
-                    <p className="text-lg font-semibold tabular-nums text-muted-foreground">—</p>
+                  <div title={t("ackGapNote")}>
+                    <p className="text-base font-semibold tabular-nums text-muted-foreground">—</p>
                     <p className="text-[10px] text-muted-foreground">{t("ackRate")}</p>
                   </div>
-                  <div>
-                    <p className="text-lg font-semibold tabular-nums text-muted-foreground">—</p>
+                  <div title={t("ackGapNote")}>
+                    <p className="text-base font-semibold tabular-nums text-muted-foreground">—</p>
                     <p className="text-[10px] text-muted-foreground">{t("ackAvgTime")}</p>
                   </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground">{t("ackGapNote")}</p>
+                {/* Explains the two "—" values above without spending a third line on
+                    an analytics page that has to fit one viewport. */}
+                <p className="sr-only">{t("ackGapNote")}</p>
               </AppListCard>
 
-              <AppListCard className="h-full space-y-2 p-4">
+              <AppListCard className="h-full space-y-1 px-3 py-2">
                 <p className="flex items-center gap-1.5 text-sm font-medium">
                   <span className="h-2 w-2 rounded-full bg-sky-500" />
                   {t("appointmentsTitle")}
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <p className="text-lg font-semibold tabular-nums text-emerald-700">
+                    <p className="text-base font-semibold tabular-nums text-emerald-700">
                       {appointmentCounts?.accepted ?? "—"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{t("appointmentsAccepted")}</p>
                   </div>
                   <div>
-                    <p className="text-lg font-semibold tabular-nums text-warning">
+                    <p className="text-base font-semibold tabular-nums text-warning">
                       {appointmentCounts?.pending ?? "—"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{t("appointmentsPending")}</p>
                   </div>
                   <div>
-                    <p className="text-lg font-semibold tabular-nums text-destructive">
+                    <p className="text-base font-semibold tabular-nums text-destructive">
                       {appointmentCounts?.rejected ?? "—"}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{t("appointmentsRejected")}</p>

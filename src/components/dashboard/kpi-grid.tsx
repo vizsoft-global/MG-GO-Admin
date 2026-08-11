@@ -10,7 +10,14 @@ export type KpiGridItem = {
   caption?: ReactNode;
 };
 
-export function KpiGrid({ items }: { items: KpiGridItem[] }) {
+export function KpiGrid({
+  items,
+  compact = false,
+}: {
+  items: KpiGridItem[];
+  /** Pass on pages where the KPI strip shares the viewport with a table or charts. */
+  compact?: boolean;
+}) {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
       {items.map((kpi) => (
@@ -21,6 +28,7 @@ export function KpiGrid({ items }: { items: KpiGridItem[] }) {
           icon={kpi.icon}
           accent={kpi.accent}
           caption={kpi.caption}
+          compact={compact}
         />
       ))}
     </div>

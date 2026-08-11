@@ -167,7 +167,7 @@ export function RolesSettingsPanel() {
   }
 
   return (
-    <AppPage>
+    <AppPage className="space-y-3">
       <AppPageHeader
         title={t("title")}
         description={t("subtitle")}

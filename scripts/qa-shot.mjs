@@ -156,17 +156,21 @@ for (const route of routes) {
     await page.goto(`${BASE}/en${route}`, { waitUntil: "domcontentloaded", timeout: 180_000 });
     await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
     const overflow = await page.evaluate(() => {
-      const doc = document.documentElement;
+      // The dashboard shell is h-svh overflow-hidden, so documentElement never
+      // scrolls: the content scroller is <main>. Measure that, and ignore the
+      // sidebar nav, which is allowed to scroll.
       const scrollers = [...document.querySelectorAll("*")].filter((el) => {
         const style = getComputedStyle(el);
         return (
           /auto|scroll/.test(style.overflowY) &&
-          el.scrollHeight - el.clientHeight > 24 &&
-          el.clientHeight > 120
+          el.scrollHeight - el.clientHeight > 8 &&
+          el.dataset.slot !== "sidebar-content"
         );
       });
+      const main = document.querySelector("main");
       return {
-        pageScroll: doc.scrollHeight - window.innerHeight,
+        pageScroll: main ? main.scrollHeight - main.clientHeight : 0,
+        sideScroll: main ? main.scrollWidth - main.clientWidth : 0,
         innerScrollers: scrollers.length,
         title: document.querySelector("h1")?.textContent?.trim() ?? null,
         rawValueTriggers: [...document.querySelectorAll('[data-slot="select-trigger"]')]
@@ -177,7 +181,7 @@ for (const route of routes) {
     await page.screenshot({ path: file });
     results.push({ route, file, ...overflow });
     console.log(
-      `ok   ${route}  scroll=${overflow.pageScroll}px inner=${overflow.innerScrollers}` +
+      `ok   ${route}  scroll=${overflow.pageScroll}px side=${overflow.sideScroll}px inner=${overflow.innerScrollers}` +
         (overflow.rawValueTriggers.length ? `  RAW_SELECT=${overflow.rawValueTriggers.join("|")}` : ""),
     );
   } catch (error) {

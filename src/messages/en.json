@@ -3228,8 +3228,11 @@
           "fieldCategoryNone": "No category",
           "fieldDue": "Due date",
           "errors": {
-            "missingFields": "Driver and title are required",
-            "createFailed": "Could not create request"
+            "missingFields": "Driver, title and document are required",
+            "createFailed": "Could not create request",
+            "uploadFailed": "Could not upload the document",
+            "unsupported_source_type": "Unsupported file type — upload a PDF, PNG or JPG",
+            "file_too_large": "File is larger than 10 MB"
           },
           "colSent": "Sent",
           "kpiSent": "Sent (30d)",
@@ -3246,10 +3249,12 @@
             "signed": "Signed",
             "declined": "Rejected",
             "expired": "Expired"
-          }
+          },
+          "fieldDocument": "Document to sign",
+          "fieldDocumentHint": "PDF, PNG or JPG up to 10 MB. WebP is not supported by the signed-copy composer."
         },
         "signatures": {
-          "title": "Signatures",
+          "title": "E-Signatures",
           "subtitle": "Track pending and completed signatures",
           "refresh": "Refresh",
           "viewDetails": "View details",
@@ -3311,7 +3316,7 @@
           "signedElectronically": "Signed electronically · {at}",
           "noDocumentTitle": "No document attached",
           "noDocumentBody": "This request was sent without a document, or the file has not been uploaded yet.",
-          "downloadDocument": "Download signed document",
+          "downloadDocument": "Download original document",
           "downloadSignature": "Download signature image",
           "proof": {
             "employee_id": "Employee code",
@@ -3319,11 +3324,13 @@
             "civil_id": "Civil ID",
             "company": "Company",
             "ip_address": "IP address",
-            "device": "Device"
+            "device": "Device",
+            "signed_at": "Date / time"
           },
-          "downloadSignedCopy": "Download signed copy",
+          "downloadSignedCopy": "Download signed document",
           "signedCopyPending": "The signed copy is still being composed — the original is below.",
-          "signedCopyFailed": "Signed copy could not be composed ({reason}). Only the original is available."
+          "signedCopyFailed": "Signed copy could not be composed ({reason}). Only the original is available.",
+          "print": "Print"
         },
         "categories": {
           "title": "Signature categories",
@@ -3352,7 +3359,8 @@
           "edit": "Edit",
           "updated": "Category updated",
           "saveChanges": "Save changes",
-          "cancel": "Cancel"
+          "cancel": "Cancel",
+          "iconSlot": "Icon slot"
         },
         "screenshot": {
           "title": "Screenshot settings",
@@ -3530,7 +3538,8 @@
           "expected_amount": "Expected amount",
           "received_amount": "Received amount",
           "duration_days": "Days",
-          "declaration_accepted": "Declaration"
+          "declaration_accepted": "Declaration",
+          "date_range": "Dates"
         },
         "severities": {
           "low": "Low",

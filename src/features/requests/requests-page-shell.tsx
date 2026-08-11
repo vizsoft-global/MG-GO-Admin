@@ -7,19 +7,21 @@ import {
   ArrowDown,
   ArrowUp,
   Building2,
+  CalendarDays,
   Check,
   Clock,
   Download,
-  ExternalLink,
+  Eye,
   Loader2,
   MapPin,
   Plus,
   RefreshCw,
+  Settings,
   Timer,
   TriangleAlert,
   X,
 } from "lucide-react";
-import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { AppEmptyState, AppListCard, AppPage } from "@/components/app";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -30,6 +32,14 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -56,6 +66,16 @@ import { useAdminRequestsList, useBulkDecideRequests } from "./use-requests";
 function formatAvgDays(seconds: number | null): string {
   if (seconds == null || Number.isNaN(seconds)) return "—";
   return `${(seconds / 86400).toFixed(1)}d`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "12 Jul" — built from parts so the day stays first regardless of runtime locale. */
+function shortDate(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
 }
 
 /** Trend caption vs previous month (locked KPI rule). `lowerIsBetter` flips the tone. */
@@ -291,81 +311,23 @@ export function RequestsPageShell({
   };
 
   return (
-    <AppPage>
-      <AppPageHeader
-        title={t("overviewTitle")}
-        description={t("subtitle")}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9"
-              render={<Link href="/requests" />}
-            >
-              {t("hubLink")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9"
-              render={<Link href="/requests/esign" />}
-            >
-              {t("esignLink")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9"
-              render={<Link href="/requests/settings" />}
-            >
-              {t("settingsLink")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9"
-              disabled={rows.length === 0}
-              onClick={() =>
-                exportRowsToCsv(rows, `requests-${datePreset}-${Date.now()}.csv`)
-              }
-            >
-              <Download className="me-1.5 h-3.5 w-3.5" />
-              {t("export")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9"
-              disabled={isFetching}
-              onClick={() => void refetch()}
-            >
-              <RefreshCw
-                className={cn("me-1.5 h-3.5 w-3.5", isFetching && "animate-spin")}
-              />
-              {t("refresh")}
-            </Button>
-            {canCreate ? (
-              <Button
-                type="button"
-                size="sm"
-                className="h-9"
-                onClick={() => setCreateOpen(true)}
-              >
-                <Plus className="me-1.5 h-3.5 w-3.5" />
-                {t("create.button")}
-              </Button>
-            ) : null}
-          </div>
-        }
-      />
+    <AppPage className="space-y-3">
+      {/* Figma leads with the breadcrumb only — the page title band is replaced by the
+          queue tabs, so the KPI strip and the table both stay above the fold. */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/requests">{t("hub.title")}</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{t("overviewTitle")}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
       <KpiGrid
+        compact
         items={[
           {
             label: t("kpi.total"),
@@ -404,34 +366,69 @@ export function RequestsPageShell({
         ]}
       />
 
-      <AppListCard className="mt-2">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-          <Select
-            items={DATE_PRESETS.map((preset) => ({
-              value: preset,
-              label: t(`datePresets.${preset}`),
-            }))}
-            value={datePreset}
-            onValueChange={(v) => {
-              if (v) setDatePreset(v as RequestDatePreset);
-            }}
-          >
-            <SelectTrigger className="h-9 w-[160px]">
-              <SelectValue placeholder={t("filters.date")} />
-            </SelectTrigger>
-            <SelectContent>
-              {DATE_PRESETS.map((preset) => (
-                <SelectItem
-                  key={preset}
-                  value={preset}
-                  label={t(`datePresets.${preset}`)}
-                >
-                  {t(`datePresets.${preset}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <AppListCard>
+        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1">
+          {/* Nine data-backed queues do not fit one line next to the actions, so the
+              strip scrolls sideways instead of wrapping into a second row. */}
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <TabBar
+              items={statusTabs}
+              activeId={status}
+              className="flex-nowrap gap-4 border-b-0 [&>button]:pb-2"
+              onSelect={setStatus}
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label={t("refresh")}
+              title={t("refresh")}
+              disabled={isFetching}
+              onClick={() => void refetch()}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              disabled={rows.length === 0}
+              onClick={() =>
+                exportRowsToCsv(rows, `requests-${datePreset}-${Date.now()}.csv`)
+              }
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {t("export")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              render={<Link href="/requests/settings" />}
+            >
+              <Settings className="me-1.5 h-3.5 w-3.5" />
+              {t("settingsLink")}
+            </Button>
+            {canCreate ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-8"
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus className="me-1.5 h-3.5 w-3.5" />
+                {t("create.button")}
+              </Button>
+            ) : null}
+          </div>
+        </div>
 
+        <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
           <Select
             items={TYPE_FILTERS.map((key) => ({
               value: key,
@@ -507,39 +504,50 @@ export function RequestsPageShell({
             </SelectContent>
           </Select>
 
-          <Input
-            className="h-9 max-w-xs"
-            placeholder={t("searchPlaceholder")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") setSearchApplied(search.trim());
+          <Select
+            items={DATE_PRESETS.map((preset) => ({
+              value: preset,
+              label: t(`datePresets.${preset}`),
+            }))}
+            value={datePreset}
+            onValueChange={(v) => {
+              if (v) setDatePreset(v as RequestDatePreset);
             }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9"
-            onClick={() => setSearchApplied(search.trim())}
           >
-            {t("search")}
-          </Button>
-        </div>
+            <SelectTrigger className="h-9 w-[160px]">
+              <CalendarDays className="me-1.5 h-3.5 w-3.5 text-muted-foreground" />
+              <SelectValue placeholder={t("filters.date")} />
+            </SelectTrigger>
+            <SelectContent>
+              {DATE_PRESETS.map((preset) => (
+                <SelectItem
+                  key={preset}
+                  value={preset}
+                  label={t(`datePresets.${preset}`)}
+                >
+                  {t(`datePresets.${preset}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-2">
-          <TabBar
-            items={statusTabs}
-            activeId={status}
-            className="gap-4 border-b-0"
-            onSelect={setStatus}
-          />
-          <p className="text-xs text-muted-foreground tabular-nums">
+          <p className="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">
             {t("resultCount", {
               shown: `${rows.length}`,
               total: `${filteredTotal}`,
             })}
           </p>
+
+          <Input
+            className="h-9 w-[240px] shrink-0"
+            placeholder={t("searchPlaceholder")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onBlur={() => setSearchApplied(search.trim())}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setSearchApplied(search.trim());
+            }}
+          />
         </div>
 
         {canDecide && selected.size > 0 ? (
@@ -674,8 +682,10 @@ export function RequestsPageShell({
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{row.driver_name}</p>
-                      <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <p className="truncate text-[13px] font-medium leading-tight">
+                        {row.driver_name}
+                      </p>
+                      <p className="flex items-center gap-1 text-[11px] leading-tight text-muted-foreground">
                         {row.driver_zone ? (
                           <>
                             <MapPin className="h-3 w-3" />
@@ -685,13 +695,6 @@ export function RequestsPageShell({
                           row.driver_code
                         )}
                       </p>
-                      <Link
-                        href={`/requests/${row.id}`}
-                        className="text-[10px] text-primary hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {t("viewDetails")}
-                      </Link>
                     </div>
                   </div>
                 </TableCell>
@@ -724,23 +727,22 @@ export function RequestsPageShell({
                   {row.current_step_label ?? "—"}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground tabular-nums">
-                  {row.created_at
-                    ? new Date(row.created_at).toLocaleString()
-                    : "—"}
+                  {shortDate(row.created_at)}
                 </TableCell>
                 <TableCell>
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
-                    className="h-8 text-primary hover:bg-primary/10"
+                    size="icon"
+                    className="h-8 w-8 text-primary hover:bg-primary/10"
+                    aria-label={t("viewDetails")}
+                    title={t("viewDetails")}
                     onClick={(e) => {
                       e.stopPropagation();
                       router.push(`/requests/${row.id}`);
                     }}
                   >
-                    <ExternalLink className="me-1 h-3.5 w-3.5" />
-                    {t("open")}
+                    <Eye className="h-4 w-4" />
                   </Button>
                 </TableCell>
               </AppDataTableRow>

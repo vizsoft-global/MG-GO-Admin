@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import {
   fetchRequestTypeScreenshotPolicy,
   updateRequestTypeScreenshotPolicy,
@@ -106,7 +107,7 @@ export function EsignScreenshotSettingsShell() {
   };
 
   return (
-    <AppPage>
+    <AppPage className="space-y-3">
       <AppPageHeader
         title={t("title")}
         description={t("subtitle")}
@@ -141,83 +142,46 @@ export function EsignScreenshotSettingsShell() {
         )}
       </AppListCard>
 
-      <AppListCard className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colItem")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colAppliesTo")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colScreenshot")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow className="hover:bg-transparent">
-              <TableCell
-                colSpan={3}
-                className="bg-muted/40 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                {t("sectionRequestTypes")}
-              </TableCell>
-            </TableRow>
-            {typesLoading ? (
+      {/* Figma stacks both groups in one table because the mock has 10 items. Production
+          carries 15, which overflows a 14-inch viewport, so the two groups sit side by
+          side instead — same columns, same grouping, no row hidden. */}
+      <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
+        <AppListCard className="h-full min-w-0 p-0">
+          <p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("sectionRequestTypes")}
+          </p>
+          <Table style={{ tableLayout: "fixed" }}>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto h-4 w-4 animate-spin" />
-                </TableCell>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[46%]")}>{t("colItem")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[34%]")}>{t("colAppliesTo")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[20%]")}>
+                  {t("colScreenshot")}
+                </TableHead>
               </TableRow>
-            ) : (
-              typePolicies.map((row) => (
-                <TableRow key={row.request_type}>
-                  <TableCell className="text-sm font-medium">
-                    {tTypes(row.request_type as RequestTypeSlug)}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {t(`appliesTo.${row.request_type}` as "appliesTo.leave")}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={row.screenshot_restricted}
-                        onCheckedChange={() => toggleType(row)}
-                        aria-label={tTypes(row.request_type as RequestTypeSlug)}
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        {row.screenshot_restricted ? t("blocked") : t("allowed")}
-                      </span>
-                    </div>
+            </TableHeader>
+            <TableBody>
+              {typesLoading ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-
-            <TableRow className="hover:bg-transparent">
-              <TableCell
-                colSpan={3}
-                className="bg-muted/40 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                {t("sectionCategories")}
-              </TableCell>
-            </TableRow>
-            {categoriesLoading ? (
-              <TableRow>
-                <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto h-4 w-4 animate-spin" />
-                </TableCell>
-              </TableRow>
-            ) : (categories?.rows ?? [])
-                .filter((row) => row.is_active)
-                .map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="text-sm font-medium">{row.label_en}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {row.description ?? "—"}
+              ) : (
+                typePolicies.map((row) => (
+                  <TableRow key={row.request_type}>
+                    <TableCell className="truncate text-sm font-medium">
+                      {tTypes(row.request_type as RequestTypeSlug)}
+                    </TableCell>
+                    <TableCell className="truncate text-xs text-muted-foreground">
+                      {t(`appliesTo.${row.request_type}` as "appliesTo.leave")}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Switch
                           checked={row.screenshot_restricted}
-                          onCheckedChange={() => toggleCategory(row)}
-                          aria-label={row.label_en}
+                          onCheckedChange={() => toggleType(row)}
+                          aria-label={tTypes(row.request_type as RequestTypeSlug)}
                         />
                         <span className="text-xs text-muted-foreground">
                           {row.screenshot_restricted ? t("blocked") : t("allowed")}
@@ -225,10 +189,61 @@ export function EsignScreenshotSettingsShell() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
-          </TableBody>
-        </Table>
-      </AppListCard>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </AppListCard>
+
+        <AppListCard className="h-full min-w-0 p-0">
+          <p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("sectionCategories")}
+          </p>
+          <Table style={{ tableLayout: "fixed" }}>
+            <TableHeader>
+              <TableRow>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[46%]")}>{t("colItem")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[34%]")}>{t("colAppliesTo")}</TableHead>
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[20%]")}>
+                  {t("colScreenshot")}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {categoriesLoading ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                (categories?.rows ?? [])
+                  .filter((row) => row.is_active)
+                  .map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="truncate text-sm font-medium" title={row.label_en}>{row.label_en}</TableCell>
+                      <TableCell className="truncate text-xs text-muted-foreground">
+                        {row.description ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={row.screenshot_restricted}
+                            onCheckedChange={() => toggleCategory(row)}
+                            aria-label={row.label_en}
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {row.screenshot_restricted ? t("blocked") : t("allowed")}
+                          </span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+              )}
+            </TableBody>
+          </Table>
+        </AppListCard>
+      </div>
     </AppPage>
   );
 }

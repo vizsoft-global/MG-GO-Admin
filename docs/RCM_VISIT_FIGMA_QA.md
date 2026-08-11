@@ -115,3 +115,18 @@ Two dev-environment red herrings that three separate re-tests reported, now expl
 
 - The "hydration mismatch on every dashboard page" is `data-cursor-ref` injected into the sidebar by the QA browser tooling itself, not app code.
 - The intermittent `No QueryClient set` 500 arrives with Turbopack panics of the form `process has locked a portion of the file (os error 33)` — Windows file locking on `.next` while several browsers compile at once. `@tanstack/react-query` is a single deduped copy and `QueryProvider` does wrap the tree, so re-confirm on the next production build rather than refactoring the provider. `scripts/qa-manifest-guard.mjs` repairs the manifest those panics corrupt.
+
+### 2026-08-12 — "Fits one viewport" was measured wrong; four screens actually overflowed
+
+Every earlier Rsp verdict in this file, mine included, measured `documentElement.scrollHeight`. The dashboard shell is `h-svh overflow-hidden`, so that value is **always** 768 and the check could never fail. The real content scroller is `<main>`. After fixing the metric (`scripts/qa-shot.mjs`, plus `scripts/qa-overflow.mjs` and `scripts/qa-heights.mjs` for attribution), four of the 25 Admin routes were over the fold with production data:
+
+| Route | Was | Now | What changed |
+|---|--:|--:|---|
+| `/requests/overview` | +294px | 0px | Rebuilt to the Figma architecture: no page-title band (breadcrumb only), the nine queue tabs share one row with Export / Settings / New request, filters + result count + search on the second row, `12 Aug` dates, eye-icon row action, compact KPI strip. |
+| `/requests/settings/reports` | +295px | 0px | Density pass: compact KPI strip, shorter bars, department bar list capped at the four slowest (the table below still lists every department), single-line card headers. |
+| `/requests/settings/screenshot` | +141px | 0px | Split the one 17-row table into the two groups Figma already labels — Request types beside E-Signature categories — with a fixed table layout so no column is clipped. |
+| `/requests/settings/roles` | +13px | 0px | Page stack tightened to `space-y-3`. |
+
+`KpiCard` / `KpiGrid` gained an opt-in `compact` prop (caption beside the value, as in Figma) — no existing caller changed. Sweep after the fixes: **25/25 routes at `scroll=0px side=0px inner=0`**, one console error in the whole run (a Supabase 429 from the sweep's own request rate).
+
+Deliberate deviation to record: Figma's screenshot-settings mock has 10 rows in one table; production has 15, which cannot fit stacked. The two-column split keeps every row and both group labels.
