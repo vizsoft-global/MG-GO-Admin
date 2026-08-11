@@ -28,7 +28,6 @@ import {
   type VisitBranchRow,
 } from "./visits-actions";
 import { formatWorkingHours } from "./visit-status-utils";
-import { VisitsTabBar } from "./visits-tab-bar";
 
 const WEEKDAY_DEFAULT = "0,1,2,3,4"; // Sun-Thu
 
@@ -170,8 +169,6 @@ export function VisitsBranchesShell() {
           </div>
         }
       />
-
-      <VisitsTabBar />
 
       <AppListCard className="mt-2">
         {isLoading ? (

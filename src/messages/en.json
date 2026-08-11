@@ -3270,7 +3270,7 @@
         "receptionHint": "Operator desk check-in",
         "slots": "Slot & availability",
         "slotsHint": "Capacity and booking hours",
-        "departments": "Departments",
+        "departments": "Departments & desks",
         "departmentsHint": "Desk catalog and availability",
         "branches": "Branches",
         "branchesHint": "Visit locations",
@@ -3352,10 +3352,10 @@
         "cancelled": "Cancelled"
       },
       "calendar": {
-        "title": "Visit calendar",
+        "title": "Calendar",
         "subtitle": "{from} – {to}",
         "month": "This month",
-        "week": "This week",
+        "week": "Week",
         "day": "Day",
         "list": "List",
         "today": "Today",
@@ -3365,8 +3365,14 @@
         "count": "{count} visits",
         "emptyTitle": "No visits in range",
         "emptyDescription": "Bookings for the selected period will appear grouped by date.",
-        "noSlotsTitle": "No slots configured",
-        "noSlotsDescription": "Add slots for this branch and day from Slot & availability."
+        "noSlotsTitle": "No booking hours configured",
+        "noSlotsDescription": "Set working days, opening hours and slot length in Slot & availability.",
+        "previous": "Previous",
+        "next": "Next",
+        "full": "Full",
+        "blocked": "Blocked",
+        "deskCount": "Desk {count}",
+        "lunchBreak": "Lunch break · {from} – {to}"
       },
       "reception": {
         "title": "Reception desk",
@@ -3405,7 +3411,15 @@
         "colVisits": "Visits",
         "colCompleted": "Completed",
         "colNoShows": "No-shows",
-        "colCompletionRate": "Completion rate"
+        "colCompletionRate": "Completion rate",
+        "avgWaitTime": "Avg. wait time",
+        "avgWaitEmpty": "No check-in timestamps in range",
+        "visitsOverTimeSub": "Weekly visits · last 12 weeks",
+        "busiestSlots": "Busiest time slots",
+        "busiestSlotsSub": "Bookings by slot",
+        "busiestSlotsCaption": "Highest-volume slots in the selected range",
+        "busiestSlotsEmpty": "No slot bookings in range",
+        "colAvgWait": "Avg. wait"
       },
       "departments": {
         "title": "Departments",
@@ -3420,7 +3434,8 @@
         "handlingInvalid": "Handling time must be 0 or more",
         "editTitle": "Edit department",
         "addTitle": "New department",
-        "modalSubtitle": "Desk assignment and service details"
+        "modalSubtitle": "Desk assignment and service details",
+        "countLabel": "{count} departments"
       },
       "branches": {
         "title": "Branches",
@@ -3442,8 +3457,8 @@
         "city": "City"
       },
       "slots": {
-        "title": "Visit slots",
-        "subtitle": "Create and manage bookable time windows",
+        "title": "Slot & availability",
+        "subtitle": "Configure booking hours, slot length and capacity for each branch",
         "add": "Add slot",
         "addTitle": "New slot",
         "editTitle": "Edit slot",
@@ -3467,7 +3482,32 @@
         "departmentRequired": "Select a department",
         "capacityInvalid": "Capacity must be at least 1",
         "emptyTitle": "No slots configured",
-        "emptyDescription": "Add weekday or date-specific slots for drivers to book."
+        "emptyDescription": "Add weekday or date-specific slots for drivers to book.",
+        "saveChanges": "Save changes",
+        "workingDaysTitle": "Working days & hours",
+        "openingTime": "Opening time",
+        "closingTime": "Closing time",
+        "lunchBreak": "Lunch break",
+        "capacityTitle": "Slots & capacity",
+        "slotLength": "Slot length",
+        "capacityPerSlot": "Capacity per slot",
+        "bufferBetween": "Buffer between slots",
+        "bookingWindow": "Booking window",
+        "minutesValue": "{minutes} minutes",
+        "ridersValue": "{count} riders",
+        "daysAheadValue": "{days} days ahead",
+        "desksPerDepartment": "Desks per department",
+        "blockedDatesTitle": "Blocked dates",
+        "blockedDatesEmpty": "No blocked dates for this branch.",
+        "addBlockedDate": "Add blocked date",
+        "removeBlockedDate": "Remove blocked date",
+        "blockedDate": "Date",
+        "blockedReason": "Reason",
+        "blockedReasonPlaceholder": "National day, maintenance…",
+        "blockedModalSubtitle": "Visits cannot be booked on this date",
+        "blockedDateRequired": "Pick a date to block",
+        "hoursRequired": "Set opening and closing time",
+        "noBranchesDescription": "Add a branch in Branches before configuring booking hours."
       },
       "catalog": {
         "key": "Key",

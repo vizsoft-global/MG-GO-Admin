@@ -28,7 +28,6 @@ import {
   type VisitDepartmentRow,
 } from "./visits-actions";
 import { avatarTintClass, departmentBadgeClass, initialsOf } from "./visit-status-utils";
-import { VisitsTabBar } from "./visits-tab-bar";
 
 type DeptDraft = {
   id?: string;
@@ -170,9 +169,13 @@ export function VisitsDepartmentsShell() {
         }
       />
 
-      <VisitsTabBar />
+      <div className="mt-2 flex items-center justify-end">
+        <span className="text-[11px] text-muted-foreground">
+          {t("departments.countLabel", { count: rows.length })}
+        </span>
+      </div>
 
-      <AppListCard className="mt-2">
+      <AppListCard>
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -232,10 +235,20 @@ export function VisitsDepartmentsShell() {
                 </TableCell>
                 <TableCell>
                   {canManage ? (
-                    <Switch
-                      checked={row.is_active}
-                      onCheckedChange={(checked) => void toggleActive(row.id, checked)}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={row.is_active}
+                        onCheckedChange={(checked) => void toggleActive(row.id, checked)}
+                      />
+                      <span
+                        className={cn(
+                          "text-xs font-medium",
+                          row.is_active ? "text-success" : "text-muted-foreground",
+                        )}
+                      >
+                        {row.is_active ? t("catalog.active") : t("slots.inactive")}
+                      </span>
+                    </div>
                   ) : (
                     <StatusPill variant={row.is_active ? "success" : "neutral"}>
                       {row.is_active ? t("catalog.active") : t("slots.inactive")}

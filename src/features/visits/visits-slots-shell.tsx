@@ -2,17 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Building2, Loader2, Minus, Plus, X } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { AppPage, AppPageHeader } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
-import {
-  AppDataTable,
-  AppDataTableRow,
-  TableCell,
-} from "@/components/app/app-data-table";
-import { StatusPill } from "@/components/dashboard/status-pill";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -24,68 +19,76 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import {
-  deactivateVisitSlot,
-  fetchVisitBranches,
+  addVisitBlockedDate,
+  fetchVisitBlockedDates,
+  fetchVisitBookingConfigs,
   fetchVisitDepartments,
-  fetchVisitSlots,
-  upsertVisitSlot,
-  type VisitSlotRow,
+  removeVisitBlockedDate,
+  saveVisitBookingConfig,
+  updateVisitDepartmentDesks,
+  type VisitBookingConfigRow,
 } from "./visits-actions";
-import { departmentBadgeClass } from "./visit-status-utils";
 import { DAY_OF_WEEK_LABELS } from "./visit-status-utils";
-import { VisitsTabBar } from "./visits-tab-bar";
 
-type SlotDraft = {
-  id?: string;
-  department_key: string;
-  branch_id: string;
-  scheduleType: "weekday" | "date";
-  day_of_week: string;
-  slot_date: string;
-  start_time: string;
-  end_time: string;
-  capacity: string;
-  is_active: boolean;
+const SLOT_LENGTH_OPTIONS = [15, 20, 30, 45, 60];
+const BUFFER_OPTIONS = [0, 5, 10, 15];
+const CAPACITY_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
+const BOOKING_WINDOW_OPTIONS = [7, 14, 21, 30, 60];
+
+const FIELD_LABEL_CLASS =
+  "text-[10px] font-semibold uppercase tracking-wide text-muted-foreground";
+
+type ConfigDraft = {
+  working_dows: number[];
+  opening_time: string;
+  closing_time: string;
+  lunch_start: string;
+  lunch_end: string;
+  slot_length_minutes: number;
+  slot_buffer_minutes: number;
+  default_slot_capacity: number;
+  booking_window_days: number;
 };
 
-function emptyDraft(): SlotDraft {
+function hhmm(value: string | null): string {
+  return value ? value.slice(0, 5) : "";
+}
+
+function draftFromConfig(config: VisitBookingConfigRow): ConfigDraft {
   return {
-    department_key: "",
-    branch_id: "",
-    scheduleType: "weekday",
-    day_of_week: "0",
-    slot_date: "",
-    start_time: "09:00",
-    end_time: "09:30",
-    capacity: "2",
-    is_active: true,
+    working_dows: [...config.working_dows],
+    opening_time: hhmm(config.opening_time),
+    closing_time: hhmm(config.closing_time),
+    lunch_start: hhmm(config.lunch_start),
+    lunch_end: hhmm(config.lunch_end),
+    slot_length_minutes: config.slot_length_minutes,
+    slot_buffer_minutes: config.slot_buffer_minutes,
+    default_slot_capacity: config.default_slot_capacity,
+    booking_window_days: config.booking_window_days,
   };
 }
 
-function draftFromRow(row: VisitSlotRow): SlotDraft {
-  return {
-    id: row.id,
-    department_key: row.department_key,
-    branch_id: row.branch_id ?? "",
-    scheduleType: row.slot_date ? "date" : "weekday",
-    day_of_week: String(row.day_of_week ?? 0),
-    slot_date: row.slot_date ?? "",
-    start_time: row.start_time.slice(0, 5),
-    end_time: row.end_time.slice(0, 5),
-    capacity: String(row.capacity),
-    is_active: row.is_active,
-  };
-}
-
-function formatSchedule(row: VisitSlotRow): string {
-  if (row.slot_date) return row.slot_date;
-  if (row.day_of_week != null) return DAY_OF_WEEK_LABELS[row.day_of_week] ?? `DOW ${row.day_of_week}`;
-  return "—";
+function SettingsCard({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn("rounded-xl border border-border bg-card p-4 shadow-sm", className)}
+    >
+      <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
 }
 
 export function VisitsSlotsShell() {
@@ -93,106 +96,190 @@ export function VisitsSlotsShell() {
   const { can } = useAuth();
   const canManage = can("visits.manage_catalog");
   const queryClient = useQueryClient();
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [draft, setDraft] = useState<SlotDraft>(emptyDraft());
-  const [branchFilter, setBranchFilter] = useState("all");
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: queryKeys.visits.slots(),
-    queryFn: () => fetchVisitSlots(),
+  const [branchId, setBranchId] = useState<string | null>(null);
+  const [draftOverride, setDraftOverride] = useState<{
+    branchId: string;
+    value: ConfigDraft;
+  } | null>(null);
+  const [deskOverride, setDeskOverride] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  const [blockedOpen, setBlockedOpen] = useState(false);
+  const [blockedDate, setBlockedDate] = useState("");
+  const [blockedReason, setBlockedReason] = useState("");
+
+  const { data: configData, isLoading: configLoading } = useQuery({
+    queryKey: queryKeys.visits.list({ bookingConfig: true }),
+    queryFn: fetchVisitBookingConfigs,
   });
-
   const { data: deptData } = useQuery({
     queryKey: queryKeys.visits.departments(),
-    queryFn: () => fetchVisitDepartments(),
+    queryFn: fetchVisitDepartments,
+  });
+  const { data: blockedData } = useQuery({
+    queryKey: queryKeys.visits.list({ blockedDates: true }),
+    queryFn: fetchVisitBlockedDates,
   });
 
-  const { data: branchData } = useQuery({
-    queryKey: queryKeys.visits.branches(),
-    queryFn: () => fetchVisitBranches(),
-  });
-
-  const allRows = data?.rows ?? [];
-  const rows = useMemo(
-    () =>
-      branchFilter === "all"
-        ? allRows
-        : allRows.filter((r) => r.branch_id === branchFilter),
-    [allRows, branchFilter],
+  const configs = useMemo(() => configData?.rows ?? [], [configData?.rows]);
+  const activeConfig = useMemo(
+    () => configs.find((c) => c.branch_id === branchId) ?? configs[0] ?? null,
+    [configs, branchId],
   );
   const departments = useMemo(
     () => (deptData?.rows ?? []).filter((d) => d.is_active),
     [deptData?.rows],
   );
-  const branches = useMemo(
-    () => (branchData?.rows ?? []).filter((b) => b.is_active),
-    [branchData?.rows],
+
+  const draft = useMemo(() => {
+    if (!activeConfig) return null;
+    if (draftOverride && draftOverride.branchId === activeConfig.branch_id) {
+      return draftOverride.value;
+    }
+    return draftFromConfig(activeConfig);
+  }, [activeConfig, draftOverride]);
+
+  const desks = useMemo(
+    () =>
+      Object.fromEntries(
+        departments.map((d) => [d.id, deskOverride[d.id] ?? d.desks_count]),
+      ) as Record<string, number>,
+    [departments, deskOverride],
   );
 
-  const openCreate = () => {
-    setDraft({
-      ...emptyDraft(),
-      department_key: departments[0]?.key ?? "",
-      branch_id: branches[0]?.id ?? "",
-    });
-    setDialogOpen(true);
+  const setDraft = (
+    updater: (current: ConfigDraft | null) => ConfigDraft | null,
+  ) => {
+    if (!activeConfig) return;
+    const next = updater(draft);
+    if (next) setDraftOverride({ branchId: activeConfig.branch_id, value: next });
   };
 
-  const openEdit = (row: VisitSlotRow) => {
-    setDraft(draftFromRow(row));
-    setDialogOpen(true);
+  const setDesks = (
+    updater: (current: Record<string, number>) => Record<string, number>,
+  ) => {
+    setDeskOverride(updater(desks));
   };
 
-  const saveSlot = async () => {
-    if (!draft.department_key) {
-      toast.error(t("slots.departmentRequired"));
-      return;
-    }
-    const capacity = Number(draft.capacity);
-    if (!Number.isFinite(capacity) || capacity < 1) {
-      toast.error(t("slots.capacityInvalid"));
-      return;
-    }
+  const blockedRows = useMemo(() => {
+    const rows = blockedData?.rows ?? [];
+    if (!activeConfig) return rows;
+    return rows.filter(
+      (row) => row.branch_id == null || row.branch_id === activeConfig.branch_id,
+    );
+  }, [blockedData?.rows, activeConfig]);
 
-    setBusyId(draft.id ?? "new");
-    const result = await upsertVisitSlot({
-      id: draft.id,
-      department_key: draft.department_key,
-      branch_id: draft.branch_id || null,
-      slot_date: draft.scheduleType === "date" ? draft.slot_date || null : null,
-      day_of_week:
-        draft.scheduleType === "weekday" ? Number(draft.day_of_week) : null,
-      start_time: draft.start_time,
-      end_time: draft.end_time,
-      capacity,
-      is_active: draft.is_active,
+  const deskDirty = departments.some((d) => desks[d.id] !== d.desks_count);
+  const configDirty = useMemo(() => {
+    if (!activeConfig || !draft) return false;
+    const original = draftFromConfig(activeConfig);
+    return JSON.stringify(original) !== JSON.stringify(draft);
+  }, [activeConfig, draft]);
+  const dirty = configDirty || deskDirty;
+
+  const resetDraft = () => {
+    setDraftOverride(null);
+    setDeskOverride({});
+  };
+
+  const toggleDow = (dow: number) => {
+    setDraft((d) =>
+      d
+        ? {
+            ...d,
+            working_dows: d.working_dows.includes(dow)
+              ? d.working_dows.filter((v) => v !== dow)
+              : [...d.working_dows, dow].sort((a, b) => a - b),
+          }
+        : d,
+    );
+  };
+
+  const save = async () => {
+    if (!activeConfig || !draft) return;
+    if (!draft.opening_time || !draft.closing_time) {
+      toast.error(t("slots.hoursRequired"));
+      return;
+    }
+    setSaving(true);
+    const result = await saveVisitBookingConfig({
+      branch_id: activeConfig.branch_id,
+      working_dows: draft.working_dows,
+      opening_time: draft.opening_time,
+      closing_time: draft.closing_time,
+      lunch_start: draft.lunch_start || null,
+      lunch_end: draft.lunch_end || null,
+      slot_length_minutes: draft.slot_length_minutes,
+      slot_buffer_minutes: draft.slot_buffer_minutes,
+      default_slot_capacity: draft.default_slot_capacity,
+      booking_window_days: draft.booking_window_days,
     });
-    setBusyId(null);
 
     if (!result.ok) {
+      setSaving(false);
       toast.error(result.error ?? t("catalog.saveFailed"));
       return;
     }
+
+    for (const dept of departments) {
+      const next = desks[dept.id];
+      if (next === dept.desks_count) continue;
+      const deskResult = await updateVisitDepartmentDesks({
+        id: dept.id,
+        desks_count: next,
+      });
+      if (!deskResult.ok) {
+        setSaving(false);
+        toast.error(deskResult.error ?? t("catalog.saveFailed"));
+        return;
+      }
+    }
+
+    setSaving(false);
     toast.success(t("catalog.saved"));
-    setDialogOpen(false);
-    await queryClient.invalidateQueries({ queryKey: queryKeys.visits.slots() });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.visits.all() });
   };
 
-  const deactivate = async (slotId: string) => {
-    setBusyId(slotId);
-    const result = await deactivateVisitSlot(slotId);
-    setBusyId(null);
+  const addBlocked = async () => {
+    if (!blockedDate) {
+      toast.error(t("slots.blockedDateRequired"));
+      return;
+    }
+    setSaving(true);
+    const result = await addVisitBlockedDate({
+      branch_id: activeConfig?.branch_id ?? null,
+      blocked_date: blockedDate,
+      reason: blockedReason,
+    });
+    setSaving(false);
     if (!result.ok) {
       toast.error(result.error ?? t("catalog.saveFailed"));
       return;
     }
-    toast.success(t("slots.deactivated"));
-    await queryClient.invalidateQueries({ queryKey: queryKeys.visits.slots() });
+    setBlockedOpen(false);
+    setBlockedDate("");
+    setBlockedReason("");
+    toast.success(t("catalog.saved"));
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.visits.list({ blockedDates: true }),
+    });
+  };
+
+  const removeBlocked = async (id: string) => {
+    setSaving(true);
+    const result = await removeVisitBlockedDate(id);
+    setSaving(false);
+    if (!result.ok) {
+      toast.error(result.error ?? t("catalog.saveFailed"));
+      return;
+    }
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.visits.list({ blockedDates: true }),
+    });
   };
 
   return (
-    <AppPage>
+    <AppPage className="space-y-3">
       <AppPageHeader
         breadcrumbs={[
           { label: t("title"), href: "/visit-bookings" },
@@ -202,303 +289,382 @@ export function VisitsSlotsShell() {
         description={t("slots.subtitle")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {canManage ? (
-              <Button type="button" size="sm" className="h-9" onClick={openCreate}>
-                <Plus className="me-1.5 h-3.5 w-3.5" />
-                {t("slots.add")}
-              </Button>
+            {configs.length > 0 ? (
+              <Select
+                value={activeConfig?.branch_id ?? undefined}
+                onValueChange={(v) => v && setBranchId(v)}
+              >
+                <SelectTrigger className="h-9 w-[200px]">
+                  <Building2 className="me-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <SelectValue placeholder={t("detail.branch")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {configs.map((c) => (
+                    <SelectItem key={c.branch_id} value={c.branch_id} label={c.branch_name}>
+                      {c.branch_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : null}
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="h-9"
-              disabled={isFetching}
-              onClick={() => void refetch()}
+              disabled={!dirty || saving}
+              onClick={resetDraft}
             >
-              <RefreshCw
-                className={cn("me-1.5 h-3.5 w-3.5", isFetching && "animate-spin")}
-              />
-              {t("refresh")}
+              {t("catalog.cancel")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9"
+              disabled={!canManage || !dirty || saving}
+              onClick={() => void save()}
+            >
+              {saving ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              {t("slots.saveChanges")}
             </Button>
           </div>
         }
       />
 
-      <VisitsTabBar />
-
-      <div className="flex items-center gap-2">
-        <Select value={branchFilter} onValueChange={(v) => v && setBranchFilter(v)}>
-          <SelectTrigger className="h-9 w-[220px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" label={t("allVisits.filterAllBranches")}>
-              {t("allVisits.filterAllBranches")}
-            </SelectItem>
-            {branches.map((b) => (
-              <SelectItem key={b.id} value={b.id} label={b.name}>
-                {b.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <AppListCard className="mt-2">
-        {isLoading ? (
-          <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : rows.length === 0 ? (
-          <AppEmptyState
-            title={t("slots.emptyTitle")}
-            description={t("slots.emptyDescription")}
-          />
-        ) : (
-          <AppDataTable
-            columns={[
-              { id: "dept", label: t("colDepartment") },
-              { id: "branch", label: t("detail.branch") },
-              { id: "schedule", label: t("slots.schedule") },
-              { id: "time", label: t("slots.time") },
-              { id: "capacity", label: t("slots.capacity") },
-              { id: "status", label: t("colStatus") },
-              { id: "actions", label: t("colActions") },
-            ]}
-          >
-            {rows.map((row) => (
-              <AppDataTableRow key={row.id}>
-                <TableCell>
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                      departmentBadgeClass(row.department_key),
-                    )}
+      {configLoading ? (
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : !activeConfig || !draft ? (
+        <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground shadow-sm">
+          {t("slots.noBranchesDescription")}
+        </p>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-3 lg:items-start">
+          <div className="space-y-3 lg:col-span-2">
+            <SettingsCard title={t("slots.workingDaysTitle")}>
+              <div className="flex flex-wrap gap-1.5">
+                {DAY_OF_WEEK_LABELS.map((label, dow) => (
+                  <ToggleChip
+                    key={label}
+                    size="md"
+                    selected={draft.working_dows.includes(dow)}
+                    disabled={!canManage}
+                    onClick={() => toggleDow(dow)}
                   >
-                    {row.department_label}
-                  </span>
-                </TableCell>
-                <TableCell className="text-sm">{row.branch_name ?? "—"}</TableCell>
-                <TableCell className="text-sm tabular-nums">
-                  {formatSchedule(row)}
-                </TableCell>
-                <TableCell className="text-sm tabular-nums">
-                  {row.start_time.slice(0, 5)} – {row.end_time.slice(0, 5)}
-                </TableCell>
-                <TableCell className="tabular-nums">{row.capacity}</TableCell>
-                <TableCell>
-                  <StatusPill variant={row.is_active ? "success" : "neutral"}>
-                    {row.is_active ? t("catalog.active") : t("slots.inactive")}
-                  </StatusPill>
-                </TableCell>
-                <TableCell>
-                  {canManage ? (
-                    <div className="flex flex-wrap gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 text-primary hover:bg-primary/10"
-                        onClick={() => openEdit(row)}
-                      >
-                        {t("catalog.edit")}
-                      </Button>
-                      {row.is_active ? (
+                    {label}
+                  </ToggleChip>
+                ))}
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className={FIELD_LABEL_CLASS}>{t("slots.openingTime")}</Label>
+                  <Input
+                    type="time"
+                    className="h-9"
+                    disabled={!canManage}
+                    value={draft.opening_time}
+                    onChange={(e) =>
+                      setDraft((d) => (d ? { ...d, opening_time: e.target.value } : d))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className={FIELD_LABEL_CLASS}>{t("slots.closingTime")}</Label>
+                  <Input
+                    type="time"
+                    className="h-9"
+                    disabled={!canManage}
+                    value={draft.closing_time}
+                    onChange={(e) =>
+                      setDraft((d) => (d ? { ...d, closing_time: e.target.value } : d))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className={FIELD_LABEL_CLASS}>{t("slots.lunchBreak")}</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="time"
+                      className="h-9"
+                      disabled={!canManage}
+                      value={draft.lunch_start}
+                      onChange={(e) =>
+                        setDraft((d) => (d ? { ...d, lunch_start: e.target.value } : d))
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">–</span>
+                    <Input
+                      type="time"
+                      className="h-9"
+                      disabled={!canManage}
+                      value={draft.lunch_end}
+                      onChange={(e) =>
+                        setDraft((d) => (d ? { ...d, lunch_end: e.target.value } : d))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            </SettingsCard>
+
+            <SettingsCard title={t("slots.capacityTitle")}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className={FIELD_LABEL_CLASS}>{t("slots.slotLength")}</Label>
+                  <Select
+                    value={String(draft.slot_length_minutes)}
+                    onValueChange={(v) =>
+                      v &&
+                      setDraft((d) => (d ? { ...d, slot_length_minutes: Number(v) } : d))
+                    }
+                  >
+                    <SelectTrigger className="h-9" disabled={!canManage}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SLOT_LENGTH_OPTIONS.map((minutes) => (
+                        <SelectItem
+                          key={minutes}
+                          value={String(minutes)}
+                          label={t("slots.minutesValue", { minutes })}
+                        >
+                          {t("slots.minutesValue", { minutes })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className={FIELD_LABEL_CLASS}>{t("slots.capacityPerSlot")}</Label>
+                  <Select
+                    value={String(draft.default_slot_capacity)}
+                    onValueChange={(v) =>
+                      v &&
+                      setDraft((d) => (d ? { ...d, default_slot_capacity: Number(v) } : d))
+                    }
+                  >
+                    <SelectTrigger className="h-9" disabled={!canManage}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CAPACITY_OPTIONS.map((count) => (
+                        <SelectItem
+                          key={count}
+                          value={String(count)}
+                          label={t("slots.ridersValue", { count })}
+                        >
+                          {t("slots.ridersValue", { count })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className={FIELD_LABEL_CLASS}>{t("slots.bufferBetween")}</Label>
+                  <Select
+                    value={String(draft.slot_buffer_minutes)}
+                    onValueChange={(v) =>
+                      v &&
+                      setDraft((d) => (d ? { ...d, slot_buffer_minutes: Number(v) } : d))
+                    }
+                  >
+                    <SelectTrigger className="h-9" disabled={!canManage}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BUFFER_OPTIONS.map((minutes) => (
+                        <SelectItem
+                          key={minutes}
+                          value={String(minutes)}
+                          label={t("slots.minutesValue", { minutes })}
+                        >
+                          {t("slots.minutesValue", { minutes })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className={FIELD_LABEL_CLASS}>{t("slots.bookingWindow")}</Label>
+                  <Select
+                    value={String(draft.booking_window_days)}
+                    onValueChange={(v) =>
+                      v &&
+                      setDraft((d) => (d ? { ...d, booking_window_days: Number(v) } : d))
+                    }
+                  >
+                    <SelectTrigger className="h-9" disabled={!canManage}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BOOKING_WINDOW_OPTIONS.map((days) => (
+                        <SelectItem
+                          key={days}
+                          value={String(days)}
+                          label={t("slots.daysAheadValue", { days })}
+                        >
+                          {t("slots.daysAheadValue", { days })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </SettingsCard>
+          </div>
+
+          <div className="space-y-3">
+            <SettingsCard title={t("slots.desksPerDepartment")}>
+              {departments.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("departments.emptyDescription")}
+                </p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {departments.map((dept) => (
+                    <li
+                      key={dept.id}
+                      className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
+                    >
+                      <span className="truncate text-sm text-foreground">
+                        {dept.label_en}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
                         <Button
                           type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 text-destructive hover:bg-destructive/10"
-                          disabled={busyId === row.id}
-                          onClick={() => void deactivate(row.id)}
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={!canManage || (desks[dept.id] ?? 0) <= 0}
+                          onClick={() =>
+                            setDesks((d) => ({
+                              ...d,
+                              [dept.id]: Math.max(0, (d[dept.id] ?? 0) - 1),
+                            }))
+                          }
                         >
-                          <Trash2 className="me-1 h-3.5 w-3.5" />
-                          {t("slots.deactivate")}
+                          <Minus className="h-3 w-3" />
                         </Button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <span className="text-[11px] text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-              </AppDataTableRow>
-            ))}
-          </AppDataTable>
-        )}
-      </AppListCard>
+                        <span className="w-6 text-center text-sm font-semibold tabular-nums">
+                          {desks[dept.id] ?? dept.desks_count}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={!canManage}
+                          onClick={() =>
+                            setDesks((d) => ({
+                              ...d,
+                              [dept.id]: (d[dept.id] ?? 0) + 1,
+                            }))
+                          }
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SettingsCard>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <SettingsCard title={t("slots.blockedDatesTitle")}>
+              {blockedRows.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("slots.blockedDatesEmpty")}
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {blockedRows.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold tabular-nums text-foreground">
+                          {row.blocked_date}
+                        </span>
+                        {row.reason ? (
+                          <span className="block truncate text-[11px] text-muted-foreground">
+                            {row.reason}
+                          </span>
+                        ) : null}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                        disabled={!canManage || saving}
+                        aria-label={t("slots.removeBlockedDate")}
+                        onClick={() => void removeBlocked(row.id)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {canManage ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 h-9 w-full border-dashed"
+                  onClick={() => setBlockedOpen(true)}
+                >
+                  <Plus className="me-1.5 h-3.5 w-3.5" />
+                  {t("slots.addBlockedDate")}
+                </Button>
+              ) : null}
+            </SettingsCard>
+          </div>
+        </div>
+      )}
+
+      <Dialog open={blockedOpen} onOpenChange={setBlockedOpen}>
         <DialogContent className="overflow-visible pt-4" showCloseButton closeOutside>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1 sm:col-span-2">
-              <Label>{t("colDepartment")}</Label>
-              <Select
-                value={draft.department_key}
-                onValueChange={(v) => {
-                  if (v) setDraft((d) => ({ ...d, department_key: v }));
-                }}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder={t("slots.selectDepartment")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {departments.map((d) => (
-                    <SelectItem key={d.key} value={d.key} label={d.label_en}>
-                      {d.label_en}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1 sm:col-span-2">
-              <Label>{t("detail.branch")}</Label>
-              <Select
-                value={draft.branch_id || "__none__"}
-                onValueChange={(v) => {
-                  if (v)
-                    setDraft((d) => ({
-                      ...d,
-                      branch_id: v === "__none__" ? "" : v,
-                    }));
-                }}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder={t("slots.optionalBranch")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__" label={t("slots.noBranch")}>
-                    {t("slots.noBranch")}
-                  </SelectItem>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id} label={b.name}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="space-y-1">
-              <Label>{t("slots.scheduleType")}</Label>
-              <Select
-                value={draft.scheduleType}
-                onValueChange={(v) => {
-                  if (v) setDraft((d) => ({ ...d, scheduleType: v as "weekday" | "date" }));
-                }}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weekday" label={t("slots.weekday")}>
-                    {t("slots.weekday")}
-                  </SelectItem>
-                  <SelectItem value="date" label={t("slots.specificDate")}>
-                    {t("slots.specificDate")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {draft.scheduleType === "weekday" ? (
-              <div className="space-y-1">
-                <Label>{t("slots.dayOfWeek")}</Label>
-                <Select
-                  value={draft.day_of_week}
-                  onValueChange={(v) => {
-                    if (v) setDraft((d) => ({ ...d, day_of_week: v }));
-                  }}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DAY_OF_WEEK_LABELS.map((label, idx) => (
-                      <SelectItem key={label} value={String(idx)} label={label}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <Label>{t("slots.slotDate")}</Label>
-                <Input
-                  type="date"
-                  className="h-9"
-                  value={draft.slot_date}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, slot_date: e.target.value }))
-                  }
-                />
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <Label>{t("slots.startTime")}</Label>
+              <Label className={FIELD_LABEL_CLASS}>{t("slots.blockedDate")}</Label>
               <Input
-                type="time"
+                type="date"
                 className="h-9"
-                value={draft.start_time}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, start_time: e.target.value }))
-                }
+                value={blockedDate}
+                onChange={(e) => setBlockedDate(e.target.value)}
               />
             </div>
             <div className="space-y-1">
-              <Label>{t("slots.endTime")}</Label>
+              <Label className={FIELD_LABEL_CLASS}>{t("slots.blockedReason")}</Label>
               <Input
-                type="time"
                 className="h-9"
-                value={draft.end_time}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, end_time: e.target.value }))
-                }
+                value={blockedReason}
+                placeholder={t("slots.blockedReasonPlaceholder")}
+                onChange={(e) => setBlockedReason(e.target.value)}
               />
-            </div>
-            <div className="space-y-1">
-              <Label>{t("slots.capacity")}</Label>
-              <Input
-                type="number"
-                min={1}
-                className="h-9"
-                value={draft.capacity}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, capacity: e.target.value }))
-                }
-              />
-            </div>
-            <div className="flex items-center gap-2 sm:col-span-2">
-              <Switch
-                checked={draft.is_active}
-                onCheckedChange={(checked) =>
-                  setDraft((d) => ({ ...d, is_active: checked }))
-                }
-              />
-              <span className="text-sm">{t("catalog.active")}</span>
             </div>
           </div>
 
           <AppModalFooter
-            title={draft.id ? t("slots.editTitle") : t("slots.addTitle")}
-            subtitle={t("slots.modalSubtitle")}
+            title={t("slots.addBlockedDate")}
+            subtitle={t("slots.blockedModalSubtitle")}
           >
             <Button
               type="button"
               variant="outline"
               className="h-9"
-              onClick={() => setDialogOpen(false)}
+              onClick={() => setBlockedOpen(false)}
             >
               {t("catalog.cancel")}
             </Button>
             <Button
               type="button"
               className="h-9"
-              disabled={busyId != null}
-              onClick={() => void saveSlot()}
+              disabled={saving}
+              onClick={() => void addBlocked()}
             >
               {t("catalog.save")}
             </Button>

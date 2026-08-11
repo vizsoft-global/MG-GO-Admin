@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowLeft, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppPage, AppPageHeader } from "@/components/app";
@@ -17,7 +17,6 @@ import {
   updateAdminVisitStatus,
 } from "./visits-actions";
 import { departmentBadgeClass, visitStatusVariant } from "./visit-status-utils";
-import { VisitsTabBar } from "./visits-tab-bar";
 
 export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
   const t = useTranslations("pages.visitBookings");
@@ -33,10 +32,10 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
 
   const visit = data?.visit;
 
-  const slotLabel = useMemo(() => {
-    if (!visit?.slot_start || !visit?.slot_end) return "—";
-    return `${visit.slot_start.slice(0, 5)} – ${visit.slot_end.slice(0, 5)}`;
-  }, [visit?.slot_end, visit?.slot_start]);
+  const slotLabel =
+    visit?.slot_start && visit?.slot_end
+      ? `${visit.slot_start.slice(0, 5)} – ${visit.slot_end.slice(0, 5)}`
+      : "—";
 
   const setStatus = async (
     status: "checked_in" | "completed" | "no_show" | "cancelled",
@@ -102,8 +101,6 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
           </div>
         }
       />
-
-      <VisitsTabBar />
 
       <div className="mt-2 grid gap-2 lg:grid-cols-2 lg:items-stretch">
         <section className="h-full rounded-xl border border-border bg-card p-4 shadow-sm">

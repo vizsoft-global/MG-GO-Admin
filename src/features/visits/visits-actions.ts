@@ -1,8 +1,19 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+
+/**
+ * Columns added by 20260827110000_visit_slot_availability_config.sql and the
+ * visit_blocked_dates table are not in the generated `Database` types yet
+ * (src/types/database.ts is owned elsewhere), so those reads/writes go through
+ * an untyped client.
+ */
+async function createUntypedClient(): Promise<SupabaseClient> {
+  return (await createClient()) as unknown as SupabaseClient;
+}
 
 export type VisitListRow = {
   id: string;
@@ -55,6 +66,7 @@ export type VisitDepartmentRow = {
   desk_location: string | null;
   assigned_staff_name: string | null;
   avg_handling_minutes: number | null;
+  desks_count: number;
 };
 
 export type VisitBranchRow = {
@@ -292,16 +304,34 @@ export async function fetchVisitDepartments(): Promise<{
   error?: string;
 }> {
   await requireVisitsView();
-  const supabase = await createClient();
+  const supabase = await createUntypedClient();
   const { data, error } = await supabase
     .from("visit_departments")
     .select(
-      "id, key, label_en, label_ar, is_active, sort_order, desk_location, assigned_staff_name, avg_handling_minutes",
+      "id, key, label_en, label_ar, is_active, sort_order, desk_location, assigned_staff_name, avg_handling_minutes, desks_count",
     )
     .order("sort_order");
 
   if (error) return { rows: [], error: error.message };
   return { rows: (data ?? []) as VisitDepartmentRow[] };
+}
+
+export async function updateVisitDepartmentDesks(input: {
+  id: string;
+  desks_count: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireVisitsManageCatalog();
+  if (!Number.isInteger(input.desks_count) || input.desks_count < 0) {
+    return { ok: false, error: "invalid_desks_count" };
+  }
+  const supabase = await createUntypedClient();
+  const { error } = await supabase
+    .from("visit_departments")
+    .update({ desks_count: input.desks_count, updated_at: new Date().toISOString() })
+    .eq("id", input.id);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 export async function createVisitDepartment(input: {
@@ -443,6 +473,152 @@ export async function updateVisitBranch(input: {
   return { ok: true };
 }
 
+export type VisitBookingConfigRow = {
+  branch_id: string;
+  branch_name: string;
+  working_dows: number[];
+  opening_time: string | null;
+  closing_time: string | null;
+  lunch_start: string | null;
+  lunch_end: string | null;
+  slot_length_minutes: number;
+  slot_buffer_minutes: number;
+  default_slot_capacity: number;
+  booking_window_days: number;
+};
+
+export type VisitBlockedDateRow = {
+  id: string;
+  branch_id: string | null;
+  blocked_date: string;
+  reason: string | null;
+};
+
+const BOOKING_CONFIG_COLUMNS =
+  "id, name, working_dows, opening_time, closing_time, lunch_start, lunch_end, slot_length_minutes, slot_buffer_minutes, default_slot_capacity, booking_window_days";
+
+function mapBookingConfig(raw: Record<string, unknown>): VisitBookingConfigRow {
+  const dows = Array.isArray(raw.working_dows) ? raw.working_dows : [];
+  return {
+    branch_id: String(raw.id),
+    branch_name: String(raw.name ?? ""),
+    working_dows: dows.map((d) => Number(d)).filter((d) => Number.isInteger(d)),
+    opening_time: raw.opening_time != null ? String(raw.opening_time) : null,
+    closing_time: raw.closing_time != null ? String(raw.closing_time) : null,
+    lunch_start: raw.lunch_start != null ? String(raw.lunch_start) : null,
+    lunch_end: raw.lunch_end != null ? String(raw.lunch_end) : null,
+    slot_length_minutes: Number(raw.slot_length_minutes ?? 30),
+    slot_buffer_minutes: Number(raw.slot_buffer_minutes ?? 0),
+    default_slot_capacity: Number(raw.default_slot_capacity ?? 1),
+    booking_window_days: Number(raw.booking_window_days ?? 14),
+  };
+}
+
+export async function fetchVisitBookingConfigs(): Promise<{
+  rows: VisitBookingConfigRow[];
+  error?: string;
+}> {
+  await requireVisitsView();
+  const supabase = await createUntypedClient();
+  const { data, error } = await supabase
+    .from("visit_branches")
+    .select(BOOKING_CONFIG_COLUMNS)
+    .order("sort_order");
+
+  if (error) return { rows: [], error: error.message };
+  return {
+    rows: ((data ?? []) as Record<string, unknown>[]).map(mapBookingConfig),
+  };
+}
+
+export async function saveVisitBookingConfig(input: {
+  branch_id: string;
+  working_dows: number[];
+  opening_time: string;
+  closing_time: string;
+  lunch_start: string | null;
+  lunch_end: string | null;
+  slot_length_minutes: number;
+  slot_buffer_minutes: number;
+  default_slot_capacity: number;
+  booking_window_days: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireVisitsManageCatalog();
+
+  if (input.closing_time <= input.opening_time) return { ok: false, error: "invalid_hours" };
+  if (input.lunch_start && input.lunch_end && input.lunch_end <= input.lunch_start) {
+    return { ok: false, error: "invalid_lunch_break" };
+  }
+  if (input.slot_length_minutes <= 0) return { ok: false, error: "invalid_slot_length" };
+  if (input.default_slot_capacity <= 0) return { ok: false, error: "invalid_capacity" };
+  if (input.booking_window_days <= 0) return { ok: false, error: "invalid_booking_window" };
+
+  const supabase = await createUntypedClient();
+  const { error } = await supabase
+    .from("visit_branches")
+    .update({
+      working_dows: [...new Set(input.working_dows)].sort((a, b) => a - b),
+      opening_time: input.opening_time,
+      closing_time: input.closing_time,
+      lunch_start: input.lunch_start,
+      lunch_end: input.lunch_end,
+      slot_length_minutes: input.slot_length_minutes,
+      slot_buffer_minutes: input.slot_buffer_minutes,
+      default_slot_capacity: input.default_slot_capacity,
+      booking_window_days: input.booking_window_days,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.branch_id);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function fetchVisitBlockedDates(): Promise<{
+  rows: VisitBlockedDateRow[];
+  error?: string;
+}> {
+  await requireVisitsView();
+  const supabase = await createUntypedClient();
+  const { data, error } = await supabase
+    .from("visit_blocked_dates")
+    .select("id, branch_id, blocked_date, reason")
+    .order("blocked_date");
+
+  if (error) return { rows: [], error: error.message };
+  return { rows: (data ?? []) as VisitBlockedDateRow[] };
+}
+
+export async function addVisitBlockedDate(input: {
+  branch_id: string | null;
+  blocked_date: string;
+  reason?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await requireVisitsManageCatalog();
+  if (!input.blocked_date) return { ok: false, error: "date_required" };
+
+  const supabase = await createUntypedClient();
+  const { error } = await supabase.from("visit_blocked_dates").insert({
+    branch_id: input.branch_id,
+    blocked_date: input.blocked_date,
+    reason: input.reason?.trim() || null,
+    created_by: session.id,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function removeVisitBlockedDate(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireVisitsManageCatalog();
+  const supabase = await createUntypedClient();
+  const { error } = await supabase.from("visit_blocked_dates").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export async function fetchVisitSlots(): Promise<{
   rows: VisitSlotRow[];
   error?: string;
@@ -506,63 +682,3 @@ export async function fetchVisitSlots(): Promise<{
   return { rows };
 }
 
-export async function upsertVisitSlot(input: {
-  id?: string;
-  department_key: string;
-  branch_id?: string | null;
-  slot_date?: string | null;
-  day_of_week?: number | null;
-  start_time: string;
-  end_time: string;
-  capacity: number;
-  is_active?: boolean;
-}): Promise<{ ok: boolean; id?: string; error?: string }> {
-  await requireVisitsManageCatalog();
-
-  if (!input.slot_date && input.day_of_week == null) {
-    return { ok: false, error: "date_or_dow_required" };
-  }
-  if (input.end_time <= input.start_time) {
-    return { ok: false, error: "invalid_time_range" };
-  }
-
-  const supabase = await createClient();
-  const payload = {
-    department_key: input.department_key,
-    branch_id: input.branch_id ?? null,
-    slot_date: input.slot_date ?? null,
-    day_of_week: input.day_of_week ?? null,
-    start_time: input.start_time,
-    end_time: input.end_time,
-    capacity: input.capacity,
-    is_active: input.is_active ?? true,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (input.id) {
-    const { error } = await supabase.from("visit_slots").update(payload).eq("id", input.id);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, id: input.id };
-  }
-
-  const { data, error } = await supabase
-    .from("visit_slots")
-    .insert(payload)
-    .select("id")
-    .single();
-
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, id: data.id };
-}
-
-export async function deactivateVisitSlot(slotId: string): Promise<{ ok: boolean; error?: string }> {
-  await requireVisitsManageCatalog();
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("visit_slots")
-    .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq("id", slotId);
-
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
-}

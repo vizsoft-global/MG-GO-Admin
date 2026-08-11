@@ -2,7 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { CalendarDays, Download, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CalendarDays,
+  Clock,
+  Download,
+  ExternalLink,
+  FileText,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
@@ -43,7 +53,6 @@ import {
   initialsOf,
   visitStatusVariant,
 } from "./visit-status-utils";
-import { VisitsTabBar } from "./visits-tab-bar";
 
 type DataTab = "all" | "today" | "upcoming" | "past";
 
@@ -126,7 +135,7 @@ export function VisitsPageShell() {
     queryFn: fetchVisitDepartments,
   });
 
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
   const kpi = data?.kpi;
   const today = new Date().toISOString().slice(0, 10);
 
@@ -236,26 +245,32 @@ export function VisitsPageShell() {
         }
       />
 
-      <VisitsTabBar />
-
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <KpiTile
+          icon={<FileText className="h-3.5 w-3.5" />}
+          iconClass="bg-primary/10 text-primary"
           label={t("kpi.today")}
           value={kpi?.today ?? "—"}
           sub={t("allVisits.kpiTodaySub", { count: kpi?.today_checked_in ?? 0 })}
         />
         <KpiTile
+          icon={<Clock className="h-3.5 w-3.5" />}
+          iconClass="bg-warning/10 text-warning"
           label={t("kpi.upcoming")}
           value={kpi?.upcoming ?? "—"}
           sub={t("allVisits.kpiUpcomingSub")}
         />
         <KpiTile
+          icon={<Activity className="h-3.5 w-3.5" />}
+          iconClass="bg-primary/10 text-primary"
           label={t("kpi.awaitingCheckin")}
           value={kpi?.awaiting_checkin ?? "—"}
           sub={t("allVisits.kpiAwaitingSub")}
           accent="warning"
         />
         <KpiTile
+          icon={<AlertTriangle className="h-3.5 w-3.5" />}
+          iconClass="bg-danger/10 text-danger"
           label={t("kpi.noShows")}
           value={kpi?.no_shows ?? "—"}
           sub={t("allVisits.kpiNoShowsSub")}
@@ -488,11 +503,15 @@ export function VisitsPageShell() {
 }
 
 function KpiTile({
+  icon,
+  iconClass,
   label,
   value,
   sub,
   accent,
 }: {
+  icon: React.ReactNode;
+  iconClass: string;
   label: string;
   value: string | number;
   sub: string;
@@ -500,9 +519,16 @@ function KpiTile({
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
+      <div className="flex items-center gap-2">
+        <span
+          className={cn("flex h-6 w-6 items-center justify-center rounded-md", iconClass)}
+        >
+          {icon}
+        </span>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+      </div>
       <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
         {value}
       </p>

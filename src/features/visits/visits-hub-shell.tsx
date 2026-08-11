@@ -1,18 +1,17 @@
 "use client";
 
 import {
-  BarChart3,
-  CalendarDays,
-  LayoutGrid,
+  CalendarCheck,
+  DoorOpen,
+  FileBarChart,
   Layers,
-  List,
-  ShieldCheck,
-  Share2,
+  Network,
+  Table2,
+  UserRoundCheck,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
-import { AppPage, AppPageHeader } from "@/components/app";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
@@ -32,22 +31,22 @@ const MANAGE_TILES: HubTile[] = [
   {
     href: "/visit-bookings/all",
     labelKey: "hub.allVisits",
-    icon: List,
-    tint: "bg-gradient-to-br from-teal-400 to-emerald-600",
+    icon: DoorOpen,
+    tint: "bg-teal-600",
     countKey: "upcoming",
   },
   {
     href: "/visit-bookings/calendar",
     labelKey: "hub.calendar",
-    icon: CalendarDays,
-    tint: "bg-gradient-to-br from-violet-400 to-purple-600",
+    icon: CalendarCheck,
+    tint: "bg-violet-600",
     countKey: "today",
   },
   {
     href: "/visit-bookings/reception",
     labelKey: "hub.reception",
-    icon: ShieldCheck,
-    tint: "bg-gradient-to-br from-orange-400 to-orange-600",
+    icon: UserRoundCheck,
+    tint: "bg-orange-600",
     perm: "visits.operate",
     countKey: "awaiting_checkin",
   },
@@ -57,49 +56,66 @@ const CONFIGURE_TILES: HubTile[] = [
   {
     href: "/visit-bookings/slots",
     labelKey: "hub.slots",
-    icon: LayoutGrid,
-    tint: "bg-gradient-to-br from-teal-400 to-teal-600",
+    icon: Table2,
+    tint: "bg-teal-700",
     perm: "visits.manage_catalog",
   },
   {
     href: "/visit-bookings/departments",
     labelKey: "hub.departments",
     icon: Layers,
-    tint: "bg-gradient-to-br from-sky-400 to-blue-500",
+    tint: "bg-cyan-600",
     perm: "visits.manage_catalog",
   },
   {
     href: "/visit-bookings/branches",
     labelKey: "hub.branches",
-    icon: Share2,
-    tint: "bg-gradient-to-br from-slate-400 to-slate-500",
+    icon: Network,
+    tint: "bg-slate-500",
     perm: "visits.manage_catalog",
   },
   {
     href: "/visit-bookings/reports",
     labelKey: "hub.reports",
-    icon: BarChart3,
-    tint: "bg-gradient-to-br from-lime-500 to-green-600",
+    icon: FileBarChart,
+    tint: "bg-lime-600",
   },
 ];
 
-function TileIcon({ Icon, tint, count }: { Icon: LucideIcon; tint: string; count?: number }) {
+function HubTileLink({
+  tile,
+  label,
+  count,
+}: {
+  tile: HubTile;
+  label: string;
+  count?: number;
+}) {
+  const Icon = tile.icon;
   return (
-    <span className="relative inline-flex">
+    <Link
+      href={tile.href}
+      className="relative flex h-[148px] w-[112px] flex-col items-center justify-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+    >
       <span
         className={cn(
-          "inline-flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm",
-          tint,
+          "relative inline-flex h-24 w-24 items-center justify-center overflow-hidden rounded-[20px] shadow-[0_8px_16px_rgba(0,0,0,0.3)] transition-transform duration-150 ease-out motion-safe:hover:-translate-y-0.5",
+          tile.tint,
         )}
       >
-        <Icon className="h-6 w-6 text-white" />
+        <span
+          aria-hidden
+          className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/15"
+        />
+        <Icon className="relative h-10 w-10 text-white" strokeWidth={1.6} />
       </span>
+      <span className="text-center text-[13px] font-medium text-zinc-100">{label}</span>
       {count != null && count > 0 ? (
-        <span className="absolute -end-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1.5 text-[10px] font-bold text-foreground shadow ring-1 ring-border">
+        <span className="absolute end-2 top-0 inline-flex items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-[7px] py-0.5 text-xs font-semibold text-amber-700">
           {count > 999 ? "999+" : count}
         </span>
       ) : null}
-    </span>
+    </Link>
   );
 }
 
@@ -118,52 +134,50 @@ export function VisitsHubShell() {
     awaiting_checkin: kpi?.awaiting_checkin ?? 0,
   };
 
-  const manageTiles = MANAGE_TILES.filter((tile) => !tile.perm || can(tile.perm));
-  const configureTiles = CONFIGURE_TILES.filter((tile) => !tile.perm || can(tile.perm));
+  const groups = [
+    {
+      id: "manage",
+      heading: t("hub.manageHeading"),
+      width: "max-w-[631px]",
+      tiles: MANAGE_TILES.filter((tile) => !tile.perm || can(tile.perm)),
+    },
+    {
+      id: "configure",
+      heading: t("hub.configureHeading"),
+      width: "max-w-[780px]",
+      tiles: CONFIGURE_TILES.filter((tile) => !tile.perm || can(tile.perm)),
+    },
+  ].filter((group) => group.tiles.length > 0);
 
   return (
-    <AppPage>
-      <AppPageHeader title={t("title")} description={t("hub.subtitle")} />
-
-      <h2 className="pt-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {t("hub.manageHeading")}
-      </h2>
-      <div className="mx-auto grid grid-cols-3 gap-4 pt-3 sm:gap-6">
-        {manageTiles.map((tile) => (
-          <Link
-            key={tile.href}
-            href={tile.href}
-            className="flex flex-col items-center gap-2 rounded-xl p-2 text-center transition-colors hover:bg-muted/40"
-          >
-            <TileIcon
-              Icon={tile.icon}
-              tint={tile.tint}
-              count={tile.countKey ? counts[tile.countKey] : undefined}
-            />
-            <span className="text-xs font-medium text-foreground">{t(tile.labelKey)}</span>
-          </Link>
-        ))}
+    <div className="-m-3 flex min-h-[calc(100%+1.5rem)] flex-col items-center gap-8 bg-gradient-to-b from-[#2a2a40] via-[#35354f] via-55% to-[#1f1f32] px-12 pb-10 pt-16">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <h1 className="text-[30px] font-semibold text-white">{t("title")}</h1>
+        <p className="text-sm text-zinc-300">{t("hub.subtitle")}</p>
       </div>
 
-      {configureTiles.length > 0 ? (
-        <>
-          <h2 className="mt-6 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {t("hub.configureHeading")}
+      {groups.map((group) => (
+        <section key={group.id} className="flex flex-col items-center gap-[18px]">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-zinc-400">
+            {group.heading}
           </h2>
-          <div className="mx-auto grid grid-cols-2 gap-4 pt-3 sm:grid-cols-4 sm:gap-6">
-            {configureTiles.map((tile) => (
-              <Link
+          <div
+            className={cn(
+              "flex flex-wrap items-start justify-center gap-x-5 gap-y-6",
+              group.width,
+            )}
+          >
+            {group.tiles.map((tile) => (
+              <HubTileLink
                 key={tile.href}
-                href={tile.href}
-                className="flex flex-col items-center gap-2 rounded-xl p-2 text-center transition-colors hover:bg-muted/40"
-              >
-                <TileIcon Icon={tile.icon} tint={tile.tint} />
-                <span className="text-xs font-medium text-foreground">{t(tile.labelKey)}</span>
-              </Link>
+                tile={tile}
+                label={t(tile.labelKey)}
+                count={tile.countKey ? counts[tile.countKey] : undefined}
+              />
             ))}
           </div>
-        </>
-      ) : null}
-    </AppPage>
+        </section>
+      ))}
+    </div>
   );
 }

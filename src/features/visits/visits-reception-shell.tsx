@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, QrCode, RefreshCw, Search } from "lucide-react";
+import { Check, Loader2, QrCode, RefreshCw, Search } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
@@ -23,7 +23,6 @@ import {
   initialsOf,
   visitStatusVariant,
 } from "./visit-status-utils";
-import { VisitsTabBar } from "./visits-tab-bar";
 
 function queueGroup(status: string): "waiting" | "inProgress" | "done" {
   if (status === "confirmed") return "waiting";
@@ -39,7 +38,6 @@ export function VisitsReceptionShell() {
   const today = new Date().toISOString().slice(0, 10);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -47,13 +45,12 @@ export function VisitsReceptionShell() {
     queryFn: () => fetchReceptionVisitsToday(),
   });
 
-  const rows = data?.rows ?? [];
   const sorted = useMemo(
     () =>
-      [...rows].sort((a, b) =>
+      [...(data?.rows ?? [])].sort((a, b) =>
         (a.slot_start ?? "").localeCompare(b.slot_start ?? ""),
       ),
-    [rows],
+    [data?.rows],
   );
 
   const groups = useMemo(() => {
@@ -99,7 +96,6 @@ export function VisitsReceptionShell() {
       return;
     }
     toast.success(t("actionOk"));
-    setNote("");
     await queryClient.invalidateQueries({ queryKey: queryKeys.visits.all() });
   };
 
@@ -144,8 +140,6 @@ export function VisitsReceptionShell() {
           </div>
         }
       />
-
-      <VisitsTabBar />
 
       {isLoading ? (
         <div className="flex h-48 items-center justify-center">
@@ -215,51 +209,43 @@ export function VisitsReceptionShell() {
 
                 {canOperate ? (
                   <div className="mt-4 space-y-2 border-t border-border pt-3">
-                    <Input
-                      className="h-9"
-                      placeholder={t("reception.notePlaceholder")}
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      {selected.status === "confirmed" ? (
-                        <>
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-9"
-                            disabled={busy}
-                            onClick={() => void setStatus("checked_in")}
-                          >
-                            {t("reception.markArrived")}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-9 text-destructive hover:bg-destructive/10"
-                            disabled={busy}
-                            onClick={() => void setStatus("no_show")}
-                          >
-                            {t("noShow")}
-                          </Button>
-                        </>
-                      ) : selected.status === "checked_in" ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-9"
-                          disabled={busy}
-                          onClick={() => void setStatus("completed")}
-                        >
-                          {t("reception.markCompleted")}
-                        </Button>
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground">
-                          {t("reception.alreadyClosed")}
-                        </p>
-                      )}
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-9 bg-success text-white hover:bg-success/90"
+                        disabled={busy || selected.status !== "confirmed"}
+                        onClick={() => void setStatus("checked_in")}
+                      >
+                        <Check className="me-1.5 h-3.5 w-3.5" />
+                        {t("reception.markArrived")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9"
+                        disabled={busy || selected.status !== "checked_in"}
+                        onClick={() => void setStatus("completed")}
+                      >
+                        {t("reception.markCompleted")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 text-destructive hover:bg-destructive/10"
+                        disabled={busy || selected.status !== "confirmed"}
+                        onClick={() => void setStatus("no_show")}
+                      >
+                        {t("noShow")}
+                      </Button>
                     </div>
+                    {selected.status !== "confirmed" && selected.status !== "checked_in" ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("reception.alreadyClosed")}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

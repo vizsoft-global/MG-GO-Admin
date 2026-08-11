@@ -1,16 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
-  AppDataTable,
-  AppDataTableRow,
-  TableCell,
-} from "@/components/app/app-data-table";
-import { StatusPill } from "@/components/dashboard/status-pill";
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { AppEmptyState, AppPage } from "@/components/app";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -24,23 +26,37 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import {
   fetchAdminVisitsList,
-  fetchVisitBranches,
+  fetchVisitBlockedDates,
+  fetchVisitBookingConfigs,
   fetchVisitDepartments,
   fetchVisitSlots,
   type VisitListRow,
+  type VisitSlotRow,
 } from "./visits-actions";
-import { visitStatusVariant } from "./visit-status-utils";
-import { VisitsTabBar } from "./visits-tab-bar";
+import { DAY_OF_WEEK_LABELS } from "./visit-status-utils";
 
-function dateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+type BoardMode = "day" | "week";
 
-function monthBounds(): { from: string; to: string } {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { from: dateStr(from), to: dateStr(to) };
+type BoardColumn = {
+  id: string;
+  title: string;
+  subtitle: string;
+  /** Column date for week mode; day mode uses the toolbar date. */
+  date: string;
+  departmentKeys: string[];
+};
+
+type BoardCell = {
+  booked: number;
+  capacity: number;
+  blocked: boolean;
+  first?: VisitListRow;
+};
+
+function dateKeyOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
 }
 
 function addDays(d: Date, n: number): Date {
@@ -49,10 +65,21 @@ function addDays(d: Date, n: number): Date {
   return next;
 }
 
+function toMinutes(time: string): number {
+  const [h, m] = time.slice(0, 5).split(":");
+  return Number(h) * 60 + Number(m);
+}
+
+function toTime(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(
+    minutes % 60,
+  ).padStart(2, "0")}`;
+}
+
 function LegendDot({ className, label }: { className: string; label: string }) {
   return (
-    <span className="inline-flex items-center gap-1 px-1">
-      <span className={cn("h-1.5 w-1.5 rounded-full", className)} />
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className={cn("h-2 w-2 rounded-full", className)} />
       {label}
     </span>
   );
@@ -60,17 +87,18 @@ function LegendDot({ className, label }: { className: string; label: string }) {
 
 export function VisitsCalendarShell() {
   const t = useTranslations("pages.visitBookings");
-  const [mode, setMode] = useState<"day" | "list">("day");
+  const [mode, setMode] = useState<BoardMode>("day");
   const [date, setDate] = useState(() => new Date());
   const [branchId, setBranchId] = useState<string | null>(null);
 
-  const dateKey = dateStr(date);
-  const dow = date.getDay();
-  const listBounds = useMemo(() => monthBounds(), []);
+  const dateKey = dateKeyOf(date);
+  const weekStart = useMemo(() => addDays(date, -date.getDay()), [date]);
+  const rangeFrom = mode === "day" ? dateKey : dateKeyOf(weekStart);
+  const rangeTo = mode === "day" ? dateKey : dateKeyOf(addDays(weekStart, 6));
 
-  const { data: branchesData } = useQuery({
-    queryKey: queryKeys.visits.branches(),
-    queryFn: fetchVisitBranches,
+  const { data: configData } = useQuery({
+    queryKey: queryKeys.visits.list({ bookingConfig: true }),
+    queryFn: fetchVisitBookingConfigs,
   });
   const { data: deptData } = useQuery({
     queryKey: queryKeys.visits.departments(),
@@ -80,336 +108,384 @@ export function VisitsCalendarShell() {
     queryKey: queryKeys.visits.slots(),
     queryFn: fetchVisitSlots,
   });
-
-  const branches = (branchesData?.rows ?? []).filter((b) => b.is_active);
-  const activeBranchId = branchId ?? branches[0]?.id ?? null;
-  const departments = (deptData?.rows ?? []).filter((d) => d.is_active);
-
-  const {
-    data: dayData,
-    isFetching: dayFetching,
-    refetch: refetchDay,
-  } = useQuery({
-    queryKey: queryKeys.visits.list({ calendarDay: dateKey }),
-    queryFn: () => fetchAdminVisitsList({ dateFrom: dateKey, dateTo: dateKey, limit: 500 }),
-    enabled: mode === "day",
+  const { data: blockedData } = useQuery({
+    queryKey: queryKeys.visits.list({ blockedDates: true }),
+    queryFn: fetchVisitBlockedDates,
   });
-
-  const {
-    data: listData,
-    isLoading: listLoading,
-    isFetching: listFetching,
-    refetch: refetchList,
-  } = useQuery({
-    queryKey: queryKeys.visits.list({ calendarList: listBounds }),
+  const { data: visitsData, isLoading } = useQuery({
+    queryKey: queryKeys.visits.list({ board: mode, from: rangeFrom, to: rangeTo }),
     queryFn: () =>
-      fetchAdminVisitsList({ dateFrom: listBounds.from, dateTo: listBounds.to, limit: 500 }),
-    enabled: mode === "list",
+      fetchAdminVisitsList({ dateFrom: rangeFrom, dateTo: rangeTo, limit: 500 }),
   });
 
-  const timeRows = useMemo(() => {
-    const slots = slotsData?.rows ?? [];
-    const times = new Set<string>();
-    for (const slot of slots) {
-      if (!slot.is_active) continue;
-      if (activeBranchId && slot.branch_id && slot.branch_id !== activeBranchId) continue;
-      const matchesDate = slot.slot_date === dateKey;
-      const matchesDow = slot.slot_date == null && slot.day_of_week === dow;
-      if (matchesDate || matchesDow) times.add(slot.start_time);
-    }
-    return [...times].sort();
-  }, [slotsData?.rows, activeBranchId, dateKey, dow]);
+  const configs = useMemo(() => configData?.rows ?? [], [configData?.rows]);
+  const config = useMemo(
+    () => configs.find((c) => c.branch_id === branchId) ?? configs[0] ?? null,
+    [configs, branchId],
+  );
+  const departments = useMemo(
+    () => (deptData?.rows ?? []).filter((d) => d.is_active),
+    [deptData?.rows],
+  );
 
-  const bookingsBySlot = useMemo(() => {
-    const map = new Map<string, VisitListRow[]>();
-    for (const row of dayData?.rows ?? []) {
-      if (row.status === "cancelled") continue;
-      const list = map.get(row.slot_id) ?? [];
-      list.push(row);
-      map.set(row.slot_id, list);
+  const blockedDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of blockedData?.rows ?? []) {
+      if (row.branch_id && config && row.branch_id !== config.branch_id) continue;
+      set.add(row.blocked_date);
+    }
+    return set;
+  }, [blockedData?.rows, config]);
+
+  /** Slot overrides keyed by `date|department|HH:mm` so capacity and blocked slots win over the branch default. */
+  const slotIndex = useMemo(() => {
+    const map = new Map<string, VisitSlotRow>();
+    for (const slot of slotsData?.rows ?? []) {
+      if (config && slot.branch_id && slot.branch_id !== config.branch_id) continue;
+      map.set(
+        `${slot.slot_date ?? `dow${slot.day_of_week}`}|${slot.department_key}|${slot.start_time.slice(0, 5)}`,
+        slot,
+      );
     }
     return map;
-  }, [dayData?.rows]);
+  }, [slotsData?.rows, config]);
 
-  function slotFor(deptKey: string, time: string) {
-    return (slotsData?.rows ?? []).find(
-      (slot) =>
-        slot.department_key === deptKey &&
-        slot.start_time === time &&
-        slot.is_active &&
-        (!activeBranchId || !slot.branch_id || slot.branch_id === activeBranchId) &&
-        (slot.slot_date === dateKey || (slot.slot_date == null && slot.day_of_week === dow)),
+  function slotFor(day: string, dow: number, deptKey: string, time: string) {
+    return (
+      slotIndex.get(`${day}|${deptKey}|${time}`) ??
+      slotIndex.get(`dow${dow}|${deptKey}|${time}`)
     );
   }
 
-  const grouped = useMemo(() => {
-    const rows = listData?.rows ?? [];
-    const map = new Map<string, typeof rows>();
-    for (const row of rows) {
-      const list = map.get(row.scheduled_date) ?? [];
+  /** Bookings keyed by `date|department|HH:mm` (slot start comes from the joined slot row). */
+  const bookings = useMemo(() => {
+    const map = new Map<string, VisitListRow[]>();
+    for (const row of visitsData?.rows ?? []) {
+      if (row.status === "cancelled") continue;
+      if (config && row.branch_id && row.branch_id !== config.branch_id) continue;
+      if (!row.slot_start) continue;
+      const key = `${row.scheduled_date}|${row.department_key}|${row.slot_start.slice(0, 5)}`;
+      const list = map.get(key) ?? [];
       list.push(row);
-      map.set(row.scheduled_date, list);
+      map.set(key, list);
     }
-    for (const list of map.values()) {
-      list.sort((a, b) => (a.slot_start ?? "").localeCompare(b.slot_start ?? ""));
+    return map;
+  }, [visitsData?.rows, config]);
+
+  const step = config
+    ? Math.max(5, config.slot_length_minutes + config.slot_buffer_minutes)
+    : 30;
+  const lunch = useMemo(
+    () =>
+      config?.lunch_start && config?.lunch_end
+        ? { from: toMinutes(config.lunch_start), to: toMinutes(config.lunch_end) }
+        : null,
+    [config],
+  );
+
+  const timeRows = useMemo(() => {
+    if (!config?.opening_time || !config?.closing_time) return [];
+    const open = toMinutes(config.opening_time);
+    const close = toMinutes(config.closing_time);
+    const rows: { time: string; breakBefore: boolean }[] = [];
+    let breakPending = false;
+    for (let minutes = open; minutes + config.slot_length_minutes <= close; minutes += step) {
+      if (lunch && minutes >= lunch.from && minutes < lunch.to) {
+        breakPending = true;
+        continue;
+      }
+      rows.push({ time: toTime(minutes), breakBefore: breakPending });
+      breakPending = false;
     }
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [listData?.rows]);
+    return rows;
+  }, [config, step, lunch]);
+
+  const columns = useMemo<BoardColumn[]>(() => {
+    if (mode === "week") {
+      return Array.from({ length: 7 }, (_, i) => {
+        const day = addDays(weekStart, i);
+        return {
+          id: dateKeyOf(day),
+          title: DAY_OF_WEEK_LABELS[day.getDay()],
+          subtitle: day.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
+          date: dateKeyOf(day),
+          departmentKeys: departments.map((d) => d.key),
+        };
+      });
+    }
+    return departments.map((dept) => ({
+      id: dept.key,
+      title: dept.label_en,
+      subtitle: dept.desk_location ?? t("calendar.deskCount", { count: dept.desks_count }),
+      date: dateKey,
+      departmentKeys: [dept.key],
+    }));
+  }, [mode, weekStart, departments, dateKey, t]);
+
+  function cellFor(column: BoardColumn, time: string): BoardCell {
+    const day = column.date;
+    const dow = new Date(`${day}T00:00:00`).getDay();
+    const dayClosed = config != null && !config.working_dows.includes(dow);
+    let capacity = 0;
+    let booked = 0;
+    let blockedSlots = 0;
+    let first: VisitListRow | undefined;
+
+    for (const deptKey of column.departmentKeys) {
+      const slot = slotFor(day, dow, deptKey, time);
+      if (slot && !slot.is_active) {
+        blockedSlots += 1;
+        continue;
+      }
+      capacity += slot?.capacity ?? config?.default_slot_capacity ?? 0;
+      const rows = bookings.get(`${day}|${deptKey}|${time}`) ?? [];
+      booked += rows.length;
+      if (!first && rows[0]) first = rows[0];
+    }
+
+    const blocked =
+      dayClosed ||
+      blockedDates.has(day) ||
+      (blockedSlots > 0 && capacity === 0 && booked === 0);
+
+    return { booked, capacity, blocked, first };
+  }
+
+  const dayLabel = date.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  const weekLabel = `${weekStart.toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${addDays(
+    weekStart,
+    6,
+  ).toLocaleDateString(undefined, { day: "numeric", month: "short" })}`;
 
   return (
-    <AppPage>
-      <AppPageHeader
-        breadcrumbs={[
-          { label: t("title"), href: "/visit-bookings" },
-          { label: t("calendar.title") },
-        ]}
-        title={t("calendar.title")}
-        description={
-          mode === "day"
-            ? date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })
-            : t("calendar.subtitle", { from: listBounds.from, to: listBounds.to })
-        }
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant={mode === "day" ? "default" : "outline"}
-              size="sm"
-              className="h-9"
-              onClick={() => setMode("day")}
-            >
-              {t("calendar.day")}
-            </Button>
-            <Button
-              type="button"
-              variant={mode === "list" ? "default" : "outline"}
-              size="sm"
-              className="h-9"
-              onClick={() => setMode("list")}
-            >
-              {t("calendar.list")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9"
-              disabled={mode === "day" ? dayFetching : listFetching}
-              onClick={() => void (mode === "day" ? refetchDay() : refetchList())}
-            >
-              <RefreshCw
-                className={cn(
-                  "me-1.5 h-3.5 w-3.5",
-                  (mode === "day" ? dayFetching : listFetching) && "animate-spin",
-                )}
-              />
-              {t("refresh")}
-            </Button>
-          </div>
-        }
-      />
+    <AppPage className="space-y-3">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/visit-bookings">{t("title")}</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{t("calendar.title")}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
-      <VisitsTabBar />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {configs.length > 0 ? (
+            <Select
+              value={config?.branch_id ?? undefined}
+              onValueChange={(v) => v && setBranchId(v)}
+            >
+              <SelectTrigger className="h-9 w-[190px]">
+                <Building2 className="me-1.5 h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue placeholder={t("calendar.branch")} />
+              </SelectTrigger>
+              <SelectContent>
+                {configs.map((c) => (
+                  <SelectItem key={c.branch_id} value={c.branch_id} label={c.branch_name}>
+                    {c.branch_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
 
-      {mode === "day" ? (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-              <LegendDot className="bg-success" label={t("status.confirmed")} />
-              <LegendDot className="bg-primary" label={t("status.checked_in")} />
-              <LegendDot className="bg-danger" label={t("calendar.full")} />
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {branches.length > 0 ? (
-              <Select
-                value={activeBranchId ?? undefined}
-                onValueChange={(v) => v && setBranchId(v)}
-              >
-                <SelectTrigger className="h-9 w-[200px]">
-                  <SelectValue placeholder={t("calendar.branch")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id} label={b.name}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
+          <div className="inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-card px-1">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
-              className="h-9 w-9"
-              onClick={() => setDate((d) => addDays(d, -1))}
+              className="h-7 w-7"
+              aria-label={t("calendar.previous")}
+              onClick={() => setDate((d) => addDays(d, mode === "day" ? -1 : -7))}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-medium tabular-nums">
-              {date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+            <span className="min-w-[92px] text-center text-[13px] font-semibold tabular-nums text-foreground">
+              {mode === "day" ? dayLabel : weekLabel}
             </span>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
-              className="h-9 w-9"
-              onClick={() => setDate((d) => addDays(d, 1))}
+              className="h-7 w-7"
+              aria-label={t("calendar.next")}
+              onClick={() => setDate((d) => addDays(d, mode === "day" ? 1 : 7))}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={() => setDate(new Date())}
-            >
-              {t("calendar.today")}
-            </Button>
           </div>
 
-          <AppListCard className="mt-2 overflow-x-auto p-0">
-            {timeRows.length === 0 ? (
-              <AppEmptyState
-                title={t("calendar.noSlotsTitle")}
-                description={t("calendar.noSlotsDescription")}
-              />
-            ) : (
-              <table className="w-full min-w-[720px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="w-20 px-3 py-2 text-start text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {t("colTime")}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-9"
+            onClick={() => setDate(new Date())}
+          >
+            {t("calendar.today")}
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <LegendDot className="bg-success" label={t("status.confirmed")} />
+            <LegendDot className="bg-primary" label={t("status.checked_in")} />
+            <LegendDot className="bg-danger" label={t("calendar.full")} />
+          </div>
+          <span className="h-4 w-px bg-border" aria-hidden />
+          <div className="inline-flex h-9 items-center rounded-lg bg-muted p-1">
+            {(["day", "week"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={mode === value}
+                onClick={() => setMode(value)}
+                className={cn(
+                  "inline-flex h-7 items-center rounded-md px-3.5 text-[13px] transition-colors",
+                  mode === value
+                    ? "border border-border bg-card font-semibold text-foreground shadow-sm"
+                    : "font-medium text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t(value === "day" ? "calendar.day" : "calendar.week")}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        {isLoading ? (
+          <div className="flex h-48 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : timeRows.length === 0 || columns.length === 0 ? (
+          <AppEmptyState
+            title={t("calendar.noSlotsTitle")}
+            description={t("calendar.noSlotsDescription")}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-muted/40">
+                  <th className="h-[42px] w-[95px] text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("colTime")}
+                  </th>
+                  {columns.map((column) => (
+                    <th
+                      key={column.id}
+                      className="h-[42px] min-w-[160px] border-s border-border ps-3 text-start"
+                    >
+                      <span className="block truncate text-[12.5px] font-semibold text-foreground">
+                        {column.title}
+                      </span>
+                      <span className="block truncate text-[10.5px] font-normal text-muted-foreground">
+                        {column.subtitle}
+                      </span>
                     </th>
-                    {departments.map((dept) => (
-                      <th
-                        key={dept.key}
-                        className="min-w-[140px] border-s border-border px-3 py-2 text-start"
-                      >
-                        <p className="text-xs font-semibold text-foreground">{dept.label_en}</p>
-                        <p className="text-[10px] text-muted-foreground">{t("calendar.desk")}</p>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {timeRows.map((time) => (
-                    <tr key={time} className="border-b border-border last:border-b-0">
-                      <td className="px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                        {time.slice(0, 5)}
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {timeRows.map((row) => (
+                  <Fragment key={row.time}>
+                    {row.breakBefore && config?.lunch_start && config?.lunch_end ? (
+                      <tr className="border-y border-border bg-muted/30">
+                        <td
+                          colSpan={columns.length + 1}
+                          className="py-1.5 text-center text-[11.5px] font-medium text-muted-foreground"
+                        >
+                          {t("calendar.lunchBreak", {
+                            from: config.lunch_start.slice(0, 5),
+                            to: config.lunch_end.slice(0, 5),
+                          })}
+                        </td>
+                      </tr>
+                    ) : null}
+                    <tr className="border-t border-border">
+                      <td className="h-[54px] text-center text-xs font-medium tabular-nums text-muted-foreground">
+                        {row.time}
                       </td>
-                      {departments.map((dept) => {
-                        const slot = slotFor(dept.key, time);
-                        if (!slot) {
+                      {columns.map((column) => {
+                        const cell = cellFor(column, row.time);
+                        if (cell.blocked) {
                           return (
-                            <td key={dept.key} className="border-s border-border bg-muted/20 px-3 py-2" />
+                            <td
+                              key={column.id}
+                              className="h-[54px] border-s border-border bg-muted/60 text-center text-[11px] font-medium text-muted-foreground"
+                            >
+                              {t("calendar.blocked")}
+                            </td>
                           );
                         }
-                        const booked = bookingsBySlot.get(slot.id) ?? [];
-                        const first = booked[0];
-                        const isFull = booked.length >= slot.capacity;
+                        const isFull = cell.capacity > 0 && cell.booked >= cell.capacity;
+                        const checkedIn = cell.first?.status === "checked_in";
                         return (
-                          <td key={dept.key} className="border-s border-border px-3 py-2 align-top">
-                            <p
-                              className={cn(
-                                "text-[10px] font-medium tabular-nums",
-                                isFull ? "text-danger" : "text-muted-foreground",
-                              )}
-                            >
-                              {booked.length}/{slot.capacity}
-                              {isFull ? ` · ${t("calendar.full")}` : ""}
-                            </p>
-                            {first ? (
+                          <td
+                            key={column.id}
+                            className={cn(
+                              "h-[54px] border-s border-border px-2.5 py-2 align-top",
+                              cell.booked === 0
+                                ? "bg-card"
+                                : isFull
+                                  ? "bg-danger/10"
+                                  : checkedIn
+                                    ? "bg-primary/10"
+                                    : "bg-success/10",
+                            )}
+                          >
+                            {cell.first ? (
                               <Link
-                                href={`/visit-bookings/${first.id}`}
-                                className="mt-0.5 flex items-center gap-1.5 hover:underline"
+                                href={`/visit-bookings/${cell.first.id}`}
+                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card py-0.5 pe-2 ps-1.5 text-[11px] font-medium text-foreground hover:bg-muted/60"
                               >
-                                <StatusPill variant={visitStatusVariant(first.status)} dot>
-                                  {first.driver_name}
-                                </StatusPill>
+                                <span
+                                  className={cn(
+                                    "h-[7px] w-[7px] shrink-0 rounded-full",
+                                    isFull
+                                      ? "bg-danger"
+                                      : checkedIn
+                                        ? "bg-primary"
+                                        : "bg-success",
+                                  )}
+                                />
+                                <span className="truncate">{cell.first.driver_name}</span>
                               </Link>
                             ) : null}
+                            <span
+                              className={cn(
+                                "mt-1.5 block text-[10.5px] tabular-nums",
+                                cell.booked === 0
+                                  ? "font-medium text-muted-foreground/60"
+                                  : isFull
+                                    ? "font-semibold text-danger"
+                                    : checkedIn
+                                      ? "font-semibold text-primary"
+                                      : "font-semibold text-success",
+                              )}
+                            >
+                              {cell.booked}/{cell.capacity}
+                              {isFull ? ` ${t("calendar.full")}` : ""}
+                            </span>
                           </td>
                         );
                       })}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </AppListCard>
-        </>
-      ) : (
-        <AppListCard className="mt-2">
-          {listLoading ? (
-            <div className="flex h-48 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : grouped.length === 0 ? (
-            <AppEmptyState
-              title={t("calendar.emptyTitle")}
-              description={t("calendar.emptyDescription")}
-            />
-          ) : (
-            <div className="divide-y divide-border">
-              {grouped.map(([groupDate, rows]) => (
-                <div key={groupDate} className="p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold tabular-nums">{groupDate}</h3>
-                    <span className="text-[11px] text-muted-foreground">
-                      {t("calendar.count", { count: rows.length })}
-                    </span>
-                  </div>
-                  <AppDataTable
-                    columns={[
-                      { id: "time", label: t("colTime") },
-                      { id: "code", label: t("colCode") },
-                      { id: "driver", label: t("colDriver") },
-                      { id: "dept", label: t("colDepartment") },
-                      { id: "branch", label: t("colBranch") },
-                      { id: "status", label: t("colStatus") },
-                    ]}
-                  >
-                    {rows.map((row) => (
-                      <AppDataTableRow key={row.id}>
-                        <TableCell className="text-sm tabular-nums text-muted-foreground">
-                          {row.slot_start ? row.slot_start.slice(0, 5) : "—"}
-                          {row.slot_end ? `–${row.slot_end.slice(0, 5)}` : ""}
-                        </TableCell>
-                        <TableCell className="font-medium tabular-nums">
-                          <Link
-                            href={`/visit-bookings/${row.id}`}
-                            className="text-primary hover:underline"
-                          >
-                            {row.booking_code}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <p className="text-sm">{row.driver_name}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {row.driver_code}
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-sm">{row.department_label}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {row.branch_name ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          <StatusPill variant={visitStatusVariant(row.status)}>
-                            {t(`status.${row.status}` as "status.confirmed")}
-                          </StatusPill>
-                        </TableCell>
-                      </AppDataTableRow>
-                    ))}
-                  </AppDataTable>
-                </div>
-              ))}
-            </div>
-          )}
-        </AppListCard>
-      )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </AppPage>
   );
 }
