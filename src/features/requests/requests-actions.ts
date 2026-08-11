@@ -9,6 +9,7 @@ import type {
   RequestApprovalStep,
   RequestAttachment,
   RequestClarification,
+  RequestDecisionTerms,
   RequestDetail,
   RequestKpis,
   RequestListFilters,
@@ -248,6 +249,7 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
         allowed_actions: Array.isArray(s.allowed_actions)
           ? s.allowed_actions.map((a) => String(a))
           : [],
+        meta: asRecord(s.meta),
       };
     }),
     clarifications: (Array.isArray(payload.clarifications)
@@ -294,18 +296,47 @@ export async function fetchRequestAttachmentUrl(
   return { url: data?.signedUrl ?? null };
 }
 
+function staffDisplayName(session: Awaited<ReturnType<typeof requireRequestsDecide>>): string | null {
+  const profile = asRecord(session.profile);
+  const name = profile.full_name != null ? String(profile.full_name).trim() : "";
+  return name || session.email || null;
+}
+
+/**
+ * Only keys the driver app reads are forwarded, so a blank field never
+ * overwrites a previously agreed term with an empty value.
+ */
+function buildDecisionMeta(
+  terms: RequestDecisionTerms | undefined,
+  approvedBy: string | null,
+): Record<string, string | number> {
+  const meta: Record<string, string | number> = {};
+  if (!terms) return meta;
+  if (terms.approved_amount != null) meta.approved_amount = terms.approved_amount;
+  if (terms.approved_tenure_months != null) {
+    meta.approved_tenure_months = terms.approved_tenure_months;
+  }
+  if (terms.deduction_start_date) meta.deduction_start_date = terms.deduction_start_date;
+  if (terms.penalty_amount != null) meta.penalty_amount = terms.penalty_amount;
+  const document = terms.required_document?.trim();
+  if (document) meta.required_document = document;
+  if (Object.keys(meta).length > 0 && approvedBy) meta.approved_by = approvedBy;
+  return meta;
+}
+
 export async function decideAdminRequest(input: {
   requestId: string;
   action: string;
   reason?: string;
+  terms?: RequestDecisionTerms;
 }): Promise<{ ok: boolean; error?: string; status?: string }> {
-  await requireRequestsDecide();
+  const session = await requireRequestsDecide();
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("admin_decide_request", {
     p_request_id: input.requestId,
     p_action: input.action,
     p_reason: input.reason ?? undefined,
-    p_meta: {},
+    p_meta: buildDecisionMeta(input.terms, staffDisplayName(session)),
   });
 
   if (error) return { ok: false, error: error.message };
@@ -323,4 +354,36 @@ export async function decideAdminRequest(input: {
   });
 
   return { ok: true, status: payload.status != null ? String(payload.status) : undefined };
+}
+
+/** Edit path for requests already decided — merges into the last completed step. */
+export async function saveRequestDecisionTerms(input: {
+  requestId: string;
+  terms: RequestDecisionTerms;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await requireRequestsDecide();
+  const meta = buildDecisionMeta(input.terms, staffDisplayName(session));
+  if (Object.keys(meta).length === 0) return { ok: false, error: "no_terms" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_set_request_decision_meta", {
+    p_request_id: input.requestId,
+    p_meta: meta,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  const payload = asRecord(data);
+  if (payload.ok === false) {
+    return { ok: false, error: String(payload.error ?? "failed") };
+  }
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "requests",
+    entityId: input.requestId,
+    routeName: "requests.decisionTerms",
+    context: { terms: Object.keys(meta) },
+  });
+
+  return { ok: true };
 }

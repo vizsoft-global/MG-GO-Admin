@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowLeft, Download, Loader2, Paperclip } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Paperclip, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { AppPage, AppPageHeader } from "@/components/app";
 import { StatusPill } from "@/components/dashboard/status-pill";
@@ -13,12 +13,18 @@ import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { fetchRequestAttachmentUrl } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
+import { RequestDecisionTermsDialog } from "./request-decision-terms-dialog";
 import { RequestTypedDrawer } from "./request-typed-drawer";
 import { getTypedFieldRows } from "./request-typed-fields";
 import { requestStatusLabelKey, requestStatusVariant } from "./request-status-utils";
 import { RequesterHeader } from "./requester-header";
-import type { RequestApprovalStep } from "./types";
-import { useAdminRequestDetail, useDecideRequest } from "./use-requests";
+import { DECISION_TERM_TYPES } from "./types";
+import type { RequestApprovalStep, RequestDecisionTerms } from "./types";
+import {
+  useAdminRequestDetail,
+  useDecideRequest,
+  useSaveDecisionTerms,
+} from "./use-requests";
 
 function formatFileSize(bytes: number | null): string {
   if (bytes == null) return "";
@@ -32,13 +38,63 @@ function currentStepAllowedActions(steps: RequestApprovalStep[]): string[] {
   return active?.allowed_actions ?? [];
 }
 
+/**
+ * Terms only reach the driver when they sit on the step that closes the
+ * request, because the app reads the last completed step's meta.
+ */
+function isFinalApprovalStep(steps: RequestApprovalStep[]): boolean {
+  const active = steps.find((s) => s.status === "in_progress");
+  if (!active) return true;
+  return !steps.some((s) => s.step_order > active.step_order && s.status === "pending");
+}
+
+function decidedTerms(steps: RequestApprovalStep[]): RequestDecisionTerms | null {
+  const completed = steps
+    .filter((s) => s.status === "completed")
+    .sort((a, b) => b.step_order - a.step_order)[0];
+  const meta = completed?.meta;
+  if (!meta) return null;
+  const number = (value: unknown) => (value != null ? Number(value) : null);
+  return {
+    approved_amount: number(meta.approved_amount),
+    approved_tenure_months: number(meta.approved_tenure_months),
+    deduction_start_date: meta.deduction_start_date != null ? String(meta.deduction_start_date) : null,
+    penalty_amount: number(meta.penalty_amount),
+    required_document: meta.required_document != null ? String(meta.required_document) : null,
+  };
+}
+
+function termRowsFor(
+  requestType: string,
+  terms: RequestDecisionTerms | null,
+): { key: string; value: string | null }[] {
+  if (requestType === "loan") {
+    return [
+      { key: "approvedAmount", value: terms?.approved_amount != null ? `${terms.approved_amount} KWD` : null },
+      {
+        key: "tenureMonths",
+        value: terms?.approved_tenure_months != null ? String(terms.approved_tenure_months) : null,
+      },
+      { key: "deductionStart", value: terms?.deduction_start_date ?? null },
+    ];
+  }
+  if (requestType === "asset") {
+    return [
+      { key: "penaltyAmount", value: terms?.penalty_amount != null ? `${terms.penalty_amount} KWD` : null },
+    ];
+  }
+  return [{ key: "requiredDocument", value: terms?.required_document ?? null }];
+}
+
 export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const t = useTranslations("pages.requests");
   const { can } = useAuth();
   const canDecide = can("requests.approve") || can("requests.manage");
   const { data, isLoading, refetch } = useAdminRequestDetail(requestId);
   const decide = useDecideRequest(requestId);
+  const saveTerms = useSaveDecisionTerms(requestId);
   const [reason, setReason] = useState("");
+  const [termsMode, setTermsMode] = useState<"approve" | "edit" | null>(null);
 
   const request = data?.request;
   const steps = data?.steps ?? [];
@@ -56,8 +112,13 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     request?.status === "solved";
   const stepActions = currentStepAllowedActions(steps);
   const REASON_REQUIRED_ACTIONS = new Set(["reject", "clarify"]);
+  const takesTerms =
+    request != null &&
+    (DECISION_TERM_TYPES as readonly string[]).includes(request.request_type);
+  const currentTerms = decidedTerms(steps);
+  const termsOnApprove = takesTerms && isFinalApprovalStep(steps);
 
-  const runAction = async (action: string) => {
+  const runAction = async (action: string, terms?: RequestDecisionTerms) => {
     if (REASON_REQUIRED_ACTIONS.has(action) && !reason.trim()) {
       toast.error(t("detail.reasonRequired"));
       return;
@@ -65,6 +126,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     const result = await decide.mutateAsync({
       action,
       reason: reason.trim() || undefined,
+      terms,
     });
     if (!result.ok) {
       toast.error(result.error ?? t("detail.actionFailed"));
@@ -72,6 +134,18 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     }
     toast.success(t("detail.actionOk"));
     setReason("");
+    setTermsMode(null);
+    await refetch();
+  };
+
+  const submitTermsEdit = async (terms: RequestDecisionTerms) => {
+    const result = await saveTerms.mutateAsync(terms);
+    if (!result.ok) {
+      toast.error(result.error ?? t("detail.actionFailed"));
+      return;
+    }
+    toast.success(t("detail.terms.saved"));
+    setTermsMode(null);
     await refetch();
   };
 
@@ -255,7 +329,13 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     type="button"
                     className="h-9"
                     disabled={decide.isPending}
-                    onClick={() => void runAction(action)}
+                    onClick={() => {
+                      if (action === "approve" && termsOnApprove) {
+                        setTermsMode("approve");
+                        return;
+                      }
+                      void runAction(action);
+                    }}
                   >
                     {t(`detail.actionLabels.${action}` as "detail.actionLabels.approve")}
                   </Button>
@@ -291,6 +371,63 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             </Button>
           </div>
         </section>
+      ) : null}
+
+      {takesTerms && closed && request.status !== "rejected" ? (
+        <section className="mt-2 rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">{t("detail.terms.cardTitle")}</h2>
+            {canDecide ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setTermsMode("edit")}
+              >
+                <Pencil className="me-1.5 h-3.5 w-3.5" />
+                {t("detail.terms.edit")}
+              </Button>
+            ) : null}
+          </div>
+          <div className="divide-y divide-border rounded-lg border border-border text-sm">
+            {termRowsFor(request.request_type, currentTerms).map((row) => (
+              <div key={row.key} className="flex items-center justify-between gap-2 px-2.5 py-1.5">
+                <span className="text-xs text-muted-foreground">
+                  {t(`detail.terms.${row.key}` as "detail.terms.approvedAmount")}
+                </span>
+                <span
+                  className={cn(
+                    "font-medium",
+                    row.value == null && "text-[11px] font-normal text-warning",
+                  )}
+                >
+                  {row.value ?? t("detail.terms.notSet")}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] text-muted-foreground">{t("detail.terms.ackHint")}</p>
+        </section>
+      ) : null}
+
+      {takesTerms ? (
+        <RequestDecisionTermsDialog
+          open={termsMode != null}
+          onOpenChange={(next) => setTermsMode(next ? termsMode : null)}
+          requestType={request.request_type}
+          requestCode={request.request_code}
+          initialTerms={currentTerms}
+          mode={termsMode ?? "approve"}
+          submitting={decide.isPending || saveTerms.isPending}
+          onSubmit={(terms) => {
+            if (termsMode === "edit") {
+              void submitTermsEdit(terms);
+              return;
+            }
+            void runAction("approve", terms);
+          }}
+        />
       ) : null}
     </AppPage>
   );

@@ -58,7 +58,19 @@ export type RequestApprovalStep = {
   decided_at: string | null;
   decision_note: string | null;
   allowed_actions: string[];
+  meta: Record<string, unknown>;
 };
+
+/** Terms the driver app reads from the last completed step's `meta` (RSup/10b–10d). */
+export type RequestDecisionTerms = {
+  approved_amount?: number | null;
+  approved_tenure_months?: number | null;
+  deduction_start_date?: string | null;
+  penalty_amount?: number | null;
+  required_document?: string | null;
+};
+
+export const DECISION_TERM_TYPES = ["loan", "asset", "sick_leave"] as const;
 
 export type RequestClarification = {
   id: string;

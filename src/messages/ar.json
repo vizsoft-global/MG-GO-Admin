@@ -2732,6 +2732,26 @@
           "escalate": "تصعيد",
           "attach_send": "إرفاق وإرسال",
           "attach_breakdown": "إرفاق التفاصيل"
+        },
+        "terms": {
+          "cardTitle": "شروط القرار",
+          "edit": "تعديل الشروط",
+          "saved": "تم حفظ شروط القرار",
+          "notSet": "غير محدد",
+          "approveTitle": "الموافقة وتحديد الشروط",
+          "editTitle": "تعديل شروط القرار",
+          "subtitle": "يُرسل إلى العامل للإقرار · {code}",
+          "approveSubmit": "موافقة",
+          "editSubmit": "حفظ الشروط",
+          "cancel": "إلغاء",
+          "hint": "الحقول الفارغة تبقى كما هي ولا تظهر في تطبيق العامل.",
+          "ackHint": "تكتمل الموافقة بعد إقرار العامل بهذه الشروط في التطبيق.",
+          "approvedAmount": "المبلغ المعتمد",
+          "tenureMonths": "المدة (بالأشهر)",
+          "deductionStart": "بداية الخصم",
+          "penaltyAmount": "مبلغ الغرامة",
+          "requiredDocument": "المستند المطلوب",
+          "requiredDocumentPlaceholder": "مثال: شهادة طبية"
         }
       },
       "settings": {

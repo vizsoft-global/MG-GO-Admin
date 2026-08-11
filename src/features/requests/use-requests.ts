@@ -7,8 +7,9 @@ import {
   fetchAdminRequestDetail,
   fetchAdminRequestsList,
   fetchRequestTypeCounts,
+  saveRequestDecisionTerms,
 } from "./requests-actions";
-import type { RequestListFilters } from "./types";
+import type { RequestDecisionTerms, RequestListFilters } from "./types";
 
 export function useAdminRequestsList(filters: RequestListFilters) {
   return useQuery({
@@ -36,10 +37,23 @@ export function useAdminRequestDetail(requestId: string) {
 export function useDecideRequest(requestId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { action: string; reason?: string }) =>
+    mutationFn: (input: { action: string; reason?: string; terms?: RequestDecisionTerms }) =>
       decideAdminRequest({ requestId, ...input }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.requests.all() });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.requests.detail(requestId),
+      });
+    },
+  });
+}
+
+export function useSaveDecisionTerms(requestId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (terms: RequestDecisionTerms) =>
+      saveRequestDecisionTerms({ requestId, terms }),
+    onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.requests.detail(requestId),
       });

@@ -2814,6 +2814,26 @@
           "escalate": "Escalate",
           "attach_send": "Attach & send",
           "attach_breakdown": "Attach breakdown"
+        },
+        "terms": {
+          "cardTitle": "Decision terms",
+          "edit": "Edit terms",
+          "saved": "Decision terms saved",
+          "notSet": "Not set",
+          "approveTitle": "Approve and set terms",
+          "editTitle": "Edit decision terms",
+          "subtitle": "Sent to the worker for acknowledgement · {code}",
+          "approveSubmit": "Approve",
+          "editSubmit": "Save terms",
+          "cancel": "Cancel",
+          "hint": "Blank fields are left unchanged and are hidden in the worker app.",
+          "ackHint": "Approval completes once the worker acknowledges these terms in the app.",
+          "approvedAmount": "Approved amount",
+          "tenureMonths": "Tenure (months)",
+          "deductionStart": "Deduction starts",
+          "penaltyAmount": "Penalty amount",
+          "requiredDocument": "Required document",
+          "requiredDocumentPlaceholder": "e.g. Medical certificate"
         }
       },
       "settings": {
