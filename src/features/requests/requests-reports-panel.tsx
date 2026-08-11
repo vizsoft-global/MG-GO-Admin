@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileText, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
@@ -12,9 +12,19 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { buildCsv, downloadCsv } from "@/features/driver-tracking/csv-export";
 import { queryKeys } from "@/lib/query/query-keys";
 import { fetchAdminRequestsList } from "./requests-actions";
 import { datePresetToBounds } from "./date-presets";
+import type { RequestDatePreset } from "./types";
 
 const REQUEST_TYPES = [
   "leave",
@@ -38,8 +48,21 @@ const REQUEST_STATUSES = [
   "overdue",
 ] as const;
 
-function monthLabel(): string {
-  return new Date().toLocaleDateString(undefined, { month: "long", year: "numeric" });
+const DATE_PRESETS: RequestDatePreset[] = [
+  "today",
+  "tomorrow",
+  "this_week",
+  "last_week",
+  "this_month",
+  "last_month",
+  "this_year",
+  "last_year",
+  "all",
+];
+
+function formatDays(seconds: number | null | undefined): string {
+  if (!seconds) return "—";
+  return `${(seconds / 86400).toFixed(1)}`;
 }
 
 export function RequestsReportsPanel() {
@@ -47,13 +70,13 @@ export function RequestsReportsPanel() {
   const tRoot = useTranslations("pages.requests");
   const tTypes = useTranslations("pages.requests.types");
   const tStatus = useTranslations("pages.requests.status");
+  const [datePreset, setDatePreset] = useState<RequestDatePreset>("this_month");
 
-  const { from, to } = useMemo(() => datePresetToBounds("this_month"), []);
+  const { from, to } = useMemo(() => datePresetToBounds(datePreset), [datePreset]);
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.requests.list({ reports: true, from, to }),
-    queryFn: () =>
-      fetchAdminRequestsList({ datePreset: "this_month", limit: 1000, offset: 0 }),
+    queryFn: () => fetchAdminRequestsList({ datePreset, limit: 1000, offset: 0 }),
   });
 
   const rows = data?.rows ?? [];
@@ -71,15 +94,64 @@ export function RequestsReportsPanel() {
     return map;
   }, [rows]);
 
+  const approvalRate = useMemo(() => {
+    const decided = rows.filter((r) => r.status === "approved" || r.status === "rejected");
+    if (decided.length === 0) return null;
+    const approved = decided.filter((r) => r.status === "approved").length;
+    return Math.round((approved / decided.length) * 100);
+  }, [rows]);
+
+  function exportCsv() {
+    const csv = buildCsv(
+      ["request_code", "type", "status", "driver_name", "driver_code", "created_at"],
+      rows.map((r) => [
+        r.request_code,
+        r.request_type,
+        r.status,
+        r.driver_name ?? "",
+        r.driver_code ?? "",
+        r.created_at,
+      ]),
+    );
+    downloadCsv(`rcm-requests-${datePreset}-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  }
+
   return (
     <AppPage>
       <AppPageHeader
         title={t("title")}
-        description={t("subtitle", { month: monthLabel() })}
+        description={t("subtitle")}
         breadcrumbs={[
           { label: t("hub"), href: "/requests/settings" },
           { label: t("title") },
         ]}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={datePreset} onValueChange={(v) => v && setDatePreset(v as RequestDatePreset)}>
+              <SelectTrigger className="h-9 w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DATE_PRESETS.map((preset) => (
+                  <SelectItem key={preset} value={preset}>
+                    {tRoot(`datePresets.${preset}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9"
+              disabled={rows.length === 0}
+              onClick={exportCsv}
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {t("export")}
+            </Button>
+          </div>
+        }
       />
 
       {isLoading ? (
@@ -90,9 +162,19 @@ export function RequestsReportsPanel() {
         <>
           <KpiGrid
             items={[
-              { label: tRoot("kpi.total"), value: String(rows.length) },
-              { label: tRoot("kpi.pending"), value: String(kpi?.pending ?? 0), accent: "warning" },
-              { label: tRoot("kpi.overdue"), value: String(kpi?.overdue ?? 0), accent: "danger" },
+              { label: t("kpiTotal"), value: String(rows.length), icon: FileText },
+              {
+                label: t("kpiAvgResolution"),
+                value: `${formatDays(kpi?.avg_resolution_seconds)}${t("days")}`,
+                icon: Clock,
+                accent: "primary",
+              },
+              {
+                label: t("kpiApprovalRate"),
+                value: approvalRate == null ? "—" : `${approvalRate}%`,
+                icon: CheckCircle2,
+                accent: "success",
+              },
             ]}
           />
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ExternalLink, Loader2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -48,6 +49,7 @@ export function EsignSentShell() {
   const t = useTranslations("pages.requests.esign.sent");
   const tCommon = useTranslations("pages.requests.esign");
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [createOpen, setCreateOpen] = useState(false);
   const [driverId, setDriverId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -73,6 +75,13 @@ export function EsignSentShell() {
     [driversData?.rows],
   );
   const categories = categoriesData?.rows.filter((c) => c.is_active) ?? [];
+
+  useEffect(() => {
+    if (searchParams.get("add") === "1") {
+      setCreateOpen(true);
+      router.replace("/requests/esign/sent");
+    }
+  }, [searchParams, router]);
 
   const submitCreate = async () => {
     if (!driverId || !title.trim()) {

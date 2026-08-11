@@ -1,20 +1,31 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import {
+  ArrowUpDown,
+  ChevronRight,
+  FileSignature,
+  History,
+  Package,
+  ShieldCheck,
+  Tags,
+  Users,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { AppPage, AppPageHeader } from "@/components/app";
 import { Link } from "@/i18n/navigation";
 
-const LINKS = [
-  { href: "/requests/esign", key: "esign", status: "ready" },
-  { href: "/requests/settings/workflows", key: "workflows", status: "ready" },
-  { href: "/requests/settings/categories", key: "categories", status: "ready" },
-  { href: "/requests/settings/types", key: "types", status: "ready" },
-  { href: "/requests/settings/departments", key: "departments", status: "ready" },
-  { href: "/requests/settings/roles", key: "roles", status: "ready" },
-  { href: "/requests/settings/screenshot", key: "screenshot", status: "ready" },
-  { href: "/requests/settings/assets", key: "assets", status: "ready" },
-  { href: "/requests/settings/reports", key: "reports", status: "stub" },
-  { href: "/requests/settings/audit", key: "audit", status: "ready" },
-] as const;
+const LINKS: { href: string; key: string; icon: LucideIcon }[] = [
+  { href: "/requests/settings/workflows", key: "workflows", icon: Workflow },
+  { href: "/requests/settings/types", key: "types", icon: Tags },
+  { href: "/requests/settings/assets", key: "assets", icon: Package },
+  { href: "/requests/settings/departments", key: "departments", icon: Users },
+  { href: "/requests/settings/audit", key: "audit", icon: History },
+  { href: "/requests/import-export", key: "importExport", icon: ArrowUpDown },
+  { href: "/requests/settings/roles", key: "roles", icon: ShieldCheck },
+  { href: "/requests/settings/screenshot", key: "screenshot", icon: ArrowUpDown },
+  { href: "/requests/esign/categories", key: "esign", icon: FileSignature },
+];
 
 export default async function RequestsSettingsPage({
   params,
@@ -28,18 +39,26 @@ export default async function RequestsSettingsPage({
 
   return (
     <AppPage>
-      <AppPageHeader title={t("title")} description={t("subtitle")} />
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {LINKS.map((link) => (
+      <AppPageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        breadcrumbs={[{ label: t("title") }]}
+      />
+      <div className="grid gap-2 lg:grid-cols-2">
+        {LINKS.map(({ href, key, icon: Icon }) => (
           <Link
-            key={link.href}
-            href={link.href}
-            className="rounded-xl border border-border bg-card p-4 text-sm font-medium shadow-sm transition-colors hover:bg-muted/40"
+            key={href}
+            href={href}
+            className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-muted/40"
           >
-            {t(`links.${link.key}`)}
-            <p className="mt-1 text-[11px] font-normal text-muted-foreground">
-              {link.status === "stub" ? t("stubNote") : t(`linksDesc.${link.key}`)}
-            </p>
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+              <Icon className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{t(`links.${key}`)}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{t(`linksDesc.${key}`)}</p>
+            </div>
+            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
           </Link>
         ))}
       </div>

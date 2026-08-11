@@ -5,7 +5,9 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import type {
+  AccessLevel,
   ComplaintCategoryRow,
+  RequestTypeScreenshotPolicyRow,
   RequestTypeSlug,
   StaffAccessRow,
   StaffProfileOption,
@@ -339,4 +341,100 @@ export async function fetchRequestsAuditLogs(): Promise<{
 
   if (error) return { rows: [], error: error.message };
   return { rows: data ?? [] };
+}
+
+export async function fetchRequestTypeScreenshotPolicy(): Promise<{
+  rows: RequestTypeScreenshotPolicyRow[];
+  error?: string;
+}> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { data, error } = await (supabase as any)
+    .from("request_type_screenshot_policy")
+    .select("request_type, screenshot_restricted, is_active")
+    .order("request_type");
+
+  if (error) return { rows: [], error: error.message };
+  return {
+    rows: (data ?? []).map((row: Record<string, unknown>) => ({
+      request_type: row.request_type as RequestTypeSlug,
+      screenshot_restricted: Boolean(row.screenshot_restricted),
+      is_active: Boolean(row.is_active),
+    })),
+  };
+}
+
+export async function updateRequestTypeScreenshotPolicy(
+  requestType: RequestTypeSlug,
+  patch: { screenshot_restricted?: boolean; is_active?: boolean },
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { error } = await (supabase as any)
+    .from("request_type_screenshot_policy")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("request_type", requestType);
+
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "request_type_screenshot_policy",
+    entityId: requestType,
+    routeName: "requests.settings.screenshot.update",
+    context: patch,
+  });
+  return { ok: true };
+}
+
+export async function fetchStaffAccessMatrix(): Promise<{
+  staffOptions: StaffProfileOption[];
+  rows: StaffAccessRow[];
+  error?: string;
+}> {
+  const [accessResult, staff] = await Promise.all([
+    fetchStaffAccess(),
+    fetchStaffProfileOptions(),
+  ]);
+  return { staffOptions: staff, rows: accessResult.rows, error: accessResult.error };
+}
+
+export async function saveStaffAccessGrants(
+  profileId: string,
+  grants: Partial<Record<RequestTypeSlug, AccessLevel>>,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+
+  for (const [requestType, level] of Object.entries(grants) as [RequestTypeSlug, AccessLevel][]) {
+    if (!level || level === "none") {
+      const { error } = await supabase
+        .from("request_staff_access")
+        .delete()
+        .eq("profile_id", profileId)
+        .eq("request_type", requestType);
+      if (error) return { ok: false, error: error.message };
+      continue;
+    }
+    const { error } = await supabase.from("request_staff_access").upsert(
+      {
+        profile_id: profileId,
+        request_type: requestType,
+        access_level: level,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "profile_id,request_type" },
+    );
+    if (error) return { ok: false, error: error.message };
+  }
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "request_staff_access",
+    entityId: profileId,
+    routeName: "requests.settings.roles.saveGrants",
+    context: { grants },
+  });
+
+  return { ok: true };
 }

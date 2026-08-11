@@ -7,16 +7,18 @@ import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { Button } from "@/components/ui/button";
 import { buildCsv, downloadCsv } from "@/features/driver-tracking/csv-export";
+import { fetchAdminRequestsList } from "@/features/requests/requests-actions";
 import { fetchEsignRequestsList } from "./esign-actions";
 
 export function EsignImportExportShell() {
   const t = useTranslations("pages.requests.esign.importExport");
-  const [exporting, setExporting] = useState(false);
+  const [exportingEsign, setExportingEsign] = useState(false);
+  const [exportingRequests, setExportingRequests] = useState(false);
 
-  const exportCsv = async () => {
-    setExporting(true);
+  const exportEsignCsv = async () => {
+    setExportingEsign(true);
     const result = await fetchEsignRequestsList({ limit: 500 });
-    setExporting(false);
+    setExportingEsign(false);
     if (result.error) {
       toast.error(result.error);
       return;
@@ -53,6 +55,29 @@ export function EsignImportExportShell() {
     toast.success(t("exportOk", { count: result.rows.length }));
   };
 
+  const exportRequestsCsv = async () => {
+    setExportingRequests(true);
+    const result = await fetchAdminRequestsList({ datePreset: "all", limit: 1000, offset: 0 });
+    setExportingRequests(false);
+    if (result.rows.length === 0) {
+      toast.error(t("exportEmpty"));
+      return;
+    }
+    const csv = buildCsv(
+      ["request_code", "type", "status", "driver_name", "driver_code", "created_at"],
+      result.rows.map((r) => [
+        r.request_code,
+        r.request_type,
+        r.status,
+        r.driver_name,
+        r.driver_code,
+        r.created_at,
+      ]),
+    );
+    downloadCsv(`rcm-requests-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+    toast.success(t("exportOk", { count: result.rows.length }));
+  };
+
   return (
     <AppPage>
       <AppPageHeader
@@ -68,21 +93,38 @@ export function EsignImportExportShell() {
         <AppListCard className="space-y-3 p-4">
           <div className="flex items-center gap-2">
             <Download className="h-4 w-4 text-primary" />
+            <p className="text-sm font-medium">{t("exportRequestsTitle")}</p>
+          </div>
+          <p className="text-[11px] text-muted-foreground">{t("exportRequestsBody")}</p>
+          <Button
+            type="button"
+            className="h-9"
+            disabled={exportingRequests}
+            onClick={() => void exportRequestsCsv()}
+          >
+            {exportingRequests ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+            {t("exportButton")}
+          </Button>
+        </AppListCard>
+
+        <AppListCard className="space-y-3 p-4">
+          <div className="flex items-center gap-2">
+            <Download className="h-4 w-4 text-primary" />
             <p className="text-sm font-medium">{t("exportTitle")}</p>
           </div>
           <p className="text-[11px] text-muted-foreground">{t("exportBody")}</p>
           <Button
             type="button"
             className="h-9"
-            disabled={exporting}
-            onClick={() => void exportCsv()}
+            disabled={exportingEsign}
+            onClick={() => void exportEsignCsv()}
           >
-            {exporting ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+            {exportingEsign ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
             {t("exportButton")}
           </Button>
         </AppListCard>
 
-        <AppListCard className="space-y-3 p-4">
+        <AppListCard className="space-y-3 p-4 lg:col-span-2">
           <div className="flex items-center gap-2">
             <Upload className="h-4 w-4 text-muted-foreground" />
             <p className="text-sm font-medium">{t("importTitle")}</p>

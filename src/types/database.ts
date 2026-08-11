@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -541,10 +541,14 @@ export type Database = {
           admin_note: string | null
           appointment_code: string | null
           created_at: string
+          created_by: string | null
           driver_id: string
+          driver_response_note: string | null
           id: string
           location_label: string | null
+          proposed_for: string | null
           reason: string | null
+          responded_at: string | null
           scheduled_for: string
           slot_id: string
           status: Database["public"]["Enums"]["appointment_status"]
@@ -555,10 +559,14 @@ export type Database = {
           admin_note?: string | null
           appointment_code?: string | null
           created_at?: string
+          created_by?: string | null
           driver_id: string
+          driver_response_note?: string | null
           id?: string
           location_label?: string | null
+          proposed_for?: string | null
           reason?: string | null
+          responded_at?: string | null
           scheduled_for: string
           slot_id: string
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -569,10 +577,14 @@ export type Database = {
           admin_note?: string | null
           appointment_code?: string | null
           created_at?: string
+          created_by?: string | null
           driver_id?: string
+          driver_response_note?: string | null
           id?: string
           location_label?: string | null
+          proposed_for?: string | null
           reason?: string | null
+          responded_at?: string | null
           scheduled_for?: string
           slot_id?: string
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -580,6 +592,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "appointments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "appointments_driver_id_fkey"
             columns: ["driver_id"]
@@ -4531,6 +4550,27 @@ export type Database = {
           },
         ]
       }
+      request_type_screenshot_policy: {
+        Row: {
+          is_active: boolean
+          request_type: Database["public"]["Enums"]["request_type"]
+          screenshot_restricted: boolean
+          updated_at: string
+        }
+        Insert: {
+          is_active?: boolean
+          request_type: Database["public"]["Enums"]["request_type"]
+          screenshot_restricted?: boolean
+          updated_at?: string
+        }
+        Update: {
+          is_active?: boolean
+          request_type?: Database["public"]["Enums"]["request_type"]
+          screenshot_restricted?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       requests: {
         Row: {
           amount_kwd: number | null
@@ -5179,39 +5219,66 @@ export type Database = {
       visit_branches: {
         Row: {
           address: string | null
+          city: string | null
+          closing_time: string | null
+          contact_phone: string | null
           created_at: string
+          desks_count: number
           id: string
           is_active: boolean
+          is_default: boolean
           key: string
           name: string
+          opening_time: string | null
           sort_order: number
           updated_at: string
+          working_days: string | null
+          working_hours: string | null
         }
         Insert: {
           address?: string | null
+          city?: string | null
+          closing_time?: string | null
+          contact_phone?: string | null
           created_at?: string
+          desks_count?: number
           id?: string
           is_active?: boolean
+          is_default?: boolean
           key: string
           name: string
+          opening_time?: string | null
           sort_order?: number
           updated_at?: string
+          working_days?: string | null
+          working_hours?: string | null
         }
         Update: {
           address?: string | null
+          city?: string | null
+          closing_time?: string | null
+          contact_phone?: string | null
           created_at?: string
+          desks_count?: number
           id?: string
           is_active?: boolean
+          is_default?: boolean
           key?: string
           name?: string
+          opening_time?: string | null
           sort_order?: number
           updated_at?: string
+          working_days?: string | null
+          working_hours?: string | null
         }
         Relationships: []
       }
       visit_departments: {
         Row: {
+          assigned_staff_name: string | null
+          avg_handling_minutes: number | null
           created_at: string
+          desk_location: string | null
           id: string
           is_active: boolean
           key: string
@@ -5221,7 +5288,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_staff_name?: string | null
+          avg_handling_minutes?: number | null
           created_at?: string
+          desk_location?: string | null
           id?: string
           is_active?: boolean
           key: string
@@ -5231,7 +5301,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_staff_name?: string | null
+          avg_handling_minutes?: number | null
           created_at?: string
+          desk_location?: string | null
           id?: string
           is_active?: boolean
           key?: string
@@ -5955,6 +6028,10 @@ export type Database = {
         }[]
       }
       admin_run_attendance_auto_checkout: { Args: never; Returns: number }
+      admin_set_request_decision_meta: {
+        Args: { p_meta: Json; p_request_id: string }
+        Returns: Json
+      }
       admin_update_visit_status: {
         Args: {
           p_booking_id: string
@@ -6366,6 +6443,15 @@ export type Database = {
         }
         Returns: Json
       }
+      driver_respond_appointment: {
+        Args: {
+          p_action: string
+          p_id: string
+          p_note?: string
+          p_proposed_for?: string
+        }
+        Returns: Json
+      }
       driver_set_duty_state: {
         Args: { p_is_on_duty: boolean; p_is_online: boolean }
         Returns: Json
@@ -6599,7 +6685,14 @@ export type Database = {
         | "recalculate"
       admin_approval_status: "pending" | "approved" | "rejected"
       app_role: "staff" | "rider"
-      appointment_status: "scheduled" | "completed" | "cancelled"
+      appointment_status:
+        | "scheduled"
+        | "completed"
+        | "cancelled"
+        | "pending"
+        | "accepted"
+        | "rejected"
+        | "reschedule_requested"
       asset_assignment_status: "assigned" | "returned"
       asset_type:
         | "gps"
@@ -6622,7 +6715,12 @@ export type Database = {
       driver_rider_category: "in_house" | "outsourced"
       driver_status: "active" | "suspended" | "pending"
       driver_workflow_status: "draft" | "pending" | "approved"
-      esign_request_status: "pending" | "signed" | "expired" | "cancelled"
+      esign_request_status:
+        | "pending"
+        | "signed"
+        | "expired"
+        | "cancelled"
+        | "declined"
       hygiene_submission_status: "pending" | "completed" | "rejected"
       hygiene_task_status: "draft" | "active" | "ended"
       incentive_payout_mode: "milestone" | "cumulative"
@@ -6906,7 +7004,15 @@ export const Constants = {
       ],
       admin_approval_status: ["pending", "approved", "rejected"],
       app_role: ["staff", "rider"],
-      appointment_status: ["scheduled", "completed", "cancelled"],
+      appointment_status: [
+        "scheduled",
+        "completed",
+        "cancelled",
+        "pending",
+        "accepted",
+        "rejected",
+        "reschedule_requested",
+      ],
       asset_assignment_status: ["assigned", "returned"],
       asset_type: ["gps", "sim", "phone", "delivery_bag", "helmet", "uniform"],
       attendance_status: ["present", "late", "absent", "on_leave"],
@@ -6924,7 +7030,13 @@ export const Constants = {
       driver_rider_category: ["in_house", "outsourced"],
       driver_status: ["active", "suspended", "pending"],
       driver_workflow_status: ["draft", "pending", "approved"],
-      esign_request_status: ["pending", "signed", "expired", "cancelled"],
+      esign_request_status: [
+        "pending",
+        "signed",
+        "expired",
+        "cancelled",
+        "declined",
+      ],
       hygiene_submission_status: ["pending", "completed", "rejected"],
       hygiene_task_status: ["draft", "active", "ended"],
       incentive_payout_mode: ["milestone", "cumulative"],
@@ -7086,7 +7198,6 @@ export const Constants = {
     },
   },
 } as const
-
 export type AppRole = Database["public"]["Enums"]["app_role"];
 export type AdminApprovalStatus = Database["public"]["Enums"]["admin_approval_status"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];

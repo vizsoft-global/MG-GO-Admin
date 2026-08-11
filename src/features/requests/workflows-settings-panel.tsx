@@ -2,10 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowDown, ArrowUp, Loader2, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CircleCheck,
+  Loader2,
+  LogIn,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
-import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,14 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Link } from "@/i18n/navigation";
 import {
   fetchStepTemplates,
@@ -54,12 +53,22 @@ function normalizeOrders(steps: StepTemplateRow[]): StepTemplateRow[] {
   }));
 }
 
+/** Visual connector line between step chain cards — matches Figma 05-Workflow-Builder-Settings. */
+function ChainConnector() {
+  return (
+    <div className="flex justify-center">
+      <div className="h-5 w-px bg-border" />
+    </div>
+  );
+}
+
 export function WorkflowsSettingsPanel() {
   const t = useTranslations("pages.requests.settings.workflows");
   const tTypes = useTranslations("pages.requests.types");
   const [requestType, setRequestType] = useState<RequestTypeSlug>("leave");
   const [steps, setSteps] = useState<StepTemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dirty, setDirty] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const loadSteps = useCallback(async (type: RequestTypeSlug) => {
@@ -72,6 +81,7 @@ export function WorkflowsSettingsPanel() {
       return;
     }
     setSteps(result.steps.length > 0 ? result.steps : [emptyStep(1)]);
+    setDirty(false);
   }, []);
 
   useEffect(() => {
@@ -88,9 +98,8 @@ export function WorkflowsSettingsPanel() {
   );
 
   function updateStep(index: number, patch: Partial<StepTemplateRow>) {
-    setSteps((prev) =>
-      prev.map((step, i) => (i === index ? { ...step, ...patch } : step)),
-    );
+    setSteps((prev) => prev.map((step, i) => (i === index ? { ...step, ...patch } : step)));
+    setDirty(true);
   }
 
   function toggleAction(index: number, action: string) {
@@ -106,6 +115,7 @@ export function WorkflowsSettingsPanel() {
         };
       }),
     );
+    setDirty(true);
   }
 
   function moveStep(index: number, direction: -1 | 1) {
@@ -116,14 +126,17 @@ export function WorkflowsSettingsPanel() {
       [next[index], next[target]] = [next[target], next[index]];
       return normalizeOrders(next);
     });
+    setDirty(true);
   }
 
   function addStep() {
     setSteps((prev) => normalizeOrders([...prev, emptyStep(prev.length + 1)]));
+    setDirty(true);
   }
 
   function removeStep(index: number) {
     setSteps((prev) => normalizeOrders(prev.filter((_, i) => i !== index)));
+    setDirty(true);
   }
 
   function handleSave() {
@@ -150,154 +163,185 @@ export function WorkflowsSettingsPanel() {
     <AppPage>
       <AppPageHeader
         title={t("title")}
-        description={t("subtitle")}
+        description={t("subtitleFor", { type: tTypes(requestType) })}
         breadcrumbs={[
           { label: t("hub"), href: "/requests/settings" },
           { label: t("title") },
         ]}
         actions={
-          <Button size="sm" onClick={handleSave} disabled={isPending || loading}>
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {t("save")}
-          </Button>
+          <div className="flex items-center gap-2">
+            {dirty ? (
+              <span className="rounded-full border border-warning-bg bg-warning-bg px-2 py-0.5 text-[11px] font-medium text-warning">
+                {t("unsavedChanges")}
+              </span>
+            ) : null}
+            <div className="min-w-[160px]">
+              <Select value={requestType} onValueChange={(v) => v && setRequestType(v as RequestTypeSlug)}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {typeOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button size="sm" className="h-9" onClick={handleSave} disabled={isPending || loading}>
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {t("save")}
+            </Button>
+          </div>
         }
       />
 
-      <AppListCard className="space-y-3 p-4">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="min-w-[200px] flex-1 space-y-1">
-            <Label className="text-xs">{t("requestType")}</Label>
-            <Select value={requestType} onValueChange={(v) => v && setRequestType(v as RequestTypeSlug)}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {typeOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button type="button" variant="outline" size="sm" className="h-9" onClick={addStep}>
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            {t("addStep")}
-          </Button>
-        </div>
+      <div className="grid gap-2 lg:grid-cols-[1fr,320px] lg:items-start">
+        <AppListCard className="space-y-1 p-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {t("loading")}
+            </div>
+          ) : (
+            <div className="mx-auto max-w-2xl">
+              <div className="flex justify-center">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                  <LogIn className="h-3.5 w-3.5" />
+                  {t("chainStart", { type: tTypes(requestType) })}
+                </span>
+              </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-8 text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {t("loading")}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colOrder")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colRole")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colSystem")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colActions")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS} />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {steps.map((step, index) => (
-                  <TableRow key={`${step.id ?? "new"}-${index}`}>
-                    <TableCell className="w-12 text-center text-xs">{step.step_order}</TableCell>
-                    <TableCell>
-                      <Input
-                        className="h-9"
-                        value={step.step_name}
-                        onChange={(e) => updateStep(index, { step_name: e.target.value })}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        className="h-9"
-                        value={step.role_key}
-                        onChange={(e) => updateStep(index, { role_key: e.target.value })}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <ToggleChip
-                        selected={step.is_system_auto}
-                        onClick={() =>
-                          updateStep(index, {
-                            is_system_auto: !step.is_system_auto,
-                            allowed_actions: !step.is_system_auto ? [] : ["approve", "reject"],
-                          })
-                        }
-                      >
-                        {t("systemAuto")}
-                      </ToggleChip>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {STEP_ALLOWED_ACTIONS.map((action) => (
-                          <ToggleChip
-                            key={action}
-                            selected={step.allowed_actions.includes(action)}
-                            disabled={step.is_system_auto}
-                            onClick={() => toggleAction(index, action)}
-                            size="sm"
+              {steps.map((step, index) => (
+                <div key={`${step.id ?? "new"}-${index}`}>
+                  <ChainConnector />
+                  <div className="rounded-xl border border-border bg-background p-3 shadow-sm">
+                    <div className="flex flex-wrap items-start gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {step.step_order}
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
+                        <div className="min-w-[160px] flex-1 space-y-1">
+                          <Label className="text-[10px] uppercase text-muted-foreground">
+                            {t("colName")}
+                          </Label>
+                          <Input
+                            className="h-9"
+                            value={step.step_name}
+                            onChange={(e) => updateStep(index, { step_name: e.target.value })}
+                          />
+                        </div>
+                        <div className="min-w-[140px] space-y-1">
+                          <Label className="text-[10px] uppercase text-muted-foreground">
+                            {t("colRole")}
+                          </Label>
+                          <Input
+                            className="h-9"
+                            value={step.role_key}
+                            onChange={(e) => updateStep(index, { role_key: e.target.value })}
+                          />
+                        </div>
+                        <ToggleChip
+                          selected={step.is_system_auto}
+                          onClick={() =>
+                            updateStep(index, {
+                              is_system_auto: !step.is_system_auto,
+                              allowed_actions: !step.is_system_auto ? [] : ["approve", "reject"],
+                            })
+                          }
+                          size="md"
+                        >
+                          {t("systemAuto")}
+                        </ToggleChip>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={index === 0}
+                            onClick={() => moveStep(index, -1)}
                           >
-                            {t(`actions.${action}` as "actions.approve")}
-                          </ToggleChip>
-                        ))}
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={index === steps.length - 1}
+                            onClick={() => moveStep(index, 1)}
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                            disabled={steps.length <= 1}
+                            onClick={() => removeStep(index)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={index === 0}
-                          onClick={() => moveStep(index, -1)}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1 ps-9">
+                      {STEP_ALLOWED_ACTIONS.map((action) => (
+                        <ToggleChip
+                          key={action}
+                          selected={step.allowed_actions.includes(action)}
+                          disabled={step.is_system_auto}
+                          onClick={() => toggleAction(index, action)}
+                          size="sm"
                         >
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={index === steps.length - 1}
-                          onClick={() => moveStep(index, 1)}
-                        >
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                          disabled={steps.length <= 1}
-                          onClick={() => removeStep(index)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+                          {t(`actions.${action}` as "actions.approve")}
+                        </ToggleChip>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
 
-        <p className="text-[10px] text-muted-foreground">
-          {t("hint")}{" "}
-          <Link href="/requests/settings/roles" className="text-primary hover:underline">
-            {t("rolesLink")}
-          </Link>
-        </p>
-      </AppListCard>
+              <ChainConnector />
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-full"
+                  onClick={addStep}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  {t("addStep")}
+                </Button>
+              </div>
+              <ChainConnector />
+              <div className="flex justify-center">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-success-bg bg-success-bg px-3 py-1 text-xs font-medium text-success">
+                  <CircleCheck className="h-3.5 w-3.5" />
+                  {t("chainEnd")}
+                </span>
+              </div>
+            </div>
+          )}
+        </AppListCard>
+
+        <AppListCard className="space-y-2 p-4">
+          <h3 className="text-sm font-semibold">{t("howRoutingWorks")}</h3>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {t("howRoutingWorksBody")}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {t("hint")}{" "}
+            <Link href="/requests/settings/roles" className="text-primary hover:underline">
+              {t("rolesLink")}
+            </Link>
+          </p>
+        </AppListCard>
+      </div>
     </AppPage>
   );
 }

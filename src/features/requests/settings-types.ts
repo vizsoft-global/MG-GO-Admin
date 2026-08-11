@@ -56,3 +56,18 @@ export type StaffProfileOption = {
   full_name: string;
   email: string | null;
 };
+
+export type RequestTypeScreenshotPolicyRow = {
+  request_type: RequestTypeSlug;
+  screenshot_restricted: boolean;
+  is_active: boolean;
+};
+
+export type AccessLevel = "none" | "view_only" | "approver";
+
+export type StaffAccessMatrixRow = {
+  profile_id: string;
+  profile_name: string;
+  profile_email: string | null;
+  access: Partial<Record<RequestTypeSlug, AccessLevel>>;
+};

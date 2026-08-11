@@ -1,13 +1,100 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Eye, ShieldCheck } from "lucide-react";
+import { Eye, Loader2, Pencil, ShieldCheck, UserPlus } from "lucide-react";
+import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { Button } from "@/components/ui/button";
-import { Link } from "@/i18n/navigation";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { fetchStaffAccessMatrix } from "./requests-settings-actions";
+import { REQUEST_TYPE_SLUGS, type AccessLevel, type RequestTypeSlug, type StaffAccessRow, type StaffProfileOption } from "./settings-types";
+import { StaffAccessDrawer } from "./staff-access-drawer";
+
+type StaffRow = {
+  profile_id: string;
+  profile_name: string;
+  profile_email: string | null;
+  access: Partial<Record<RequestTypeSlug, AccessLevel>>;
+};
+
+function groupByStaff(rows: StaffAccessRow[]): StaffRow[] {
+  const map = new Map<string, StaffRow>();
+  for (const row of rows) {
+    const existing = map.get(row.profile_id);
+    const access: Partial<Record<RequestTypeSlug, AccessLevel>> = existing?.access ?? {};
+    access[row.request_type as RequestTypeSlug] = row.access_level;
+    map.set(row.profile_id, {
+      profile_id: row.profile_id,
+      profile_name: row.profile_name,
+      profile_email: row.profile_email,
+      access,
+    });
+  }
+  return Array.from(map.values()).sort((a, b) => a.profile_name.localeCompare(b.profile_name));
+}
 
 export function RolesSettingsPanel() {
   const t = useTranslations("pages.requests.settings.roles");
+  const tTypes = useTranslations("pages.requests.types");
+  const [rawRows, setRawRows] = useState<StaffAccessRow[]>([]);
+  const [staffOptions, setStaffOptions] = useState<StaffProfileOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | "view_only" | "approver">("all");
+  const [drawerTarget, setDrawerTarget] = useState<StaffRow | null | "assign">(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const result = await fetchStaffAccessMatrix();
+    setLoading(false);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    setRawRows(result.rows);
+    setStaffOptions(result.staffOptions);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const staffRows = useMemo(() => groupByStaff(rawRows), [rawRows]);
+
+  const viewOnlyCount = useMemo(
+    () => staffRows.filter((r) => Object.values(r.access).includes("view_only")).length,
+    [staffRows],
+  );
+  const approverCount = useMemo(
+    () => staffRows.filter((r) => Object.values(r.access).includes("approver")).length,
+    [staffRows],
+  );
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return staffRows.filter((row) => {
+      if (roleFilter !== "all" && !Object.values(row.access).includes(roleFilter)) return false;
+      if (!q) return true;
+      return (
+        row.profile_name.toLowerCase().includes(q) ||
+        (row.profile_email ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [staffRows, search, roleFilter]);
+
+  function typesFor(row: StaffRow, level: AccessLevel): RequestTypeSlug[] {
+    return REQUEST_TYPE_SLUGS.filter((type) => row.access[type] === level);
+  }
 
   return (
     <AppPage>
@@ -18,10 +105,16 @@ export function RolesSettingsPanel() {
           { label: t("hub"), href: "/requests/settings" },
           { label: t("title") },
         ]}
+        actions={
+          <Button size="sm" className="h-9" onClick={() => setDrawerTarget("assign")}>
+            <UserPlus className="me-1.5 h-3.5 w-3.5" />
+            {t("assignStaff")}
+          </Button>
+        }
       />
 
       <div className="grid gap-2 lg:grid-cols-2">
-        <AppListCard className="space-y-2 p-4">
+        <AppListCard className="space-y-1 p-4">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-muted/40">
               <Eye className="h-3.5 w-3.5 text-muted-foreground" />
@@ -29,9 +122,16 @@ export function RolesSettingsPanel() {
             <h3 className="text-sm font-semibold">{t("viewOnlyTitle")}</h3>
           </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground">{t("viewOnlyBody")}</p>
+          <button
+            type="button"
+            className="text-[11px] font-medium text-primary hover:underline"
+            onClick={() => setRoleFilter("view_only")}
+          >
+            {t("staffCount", { count: viewOnlyCount })}
+          </button>
         </AppListCard>
 
-        <AppListCard className="space-y-2 p-4">
+        <AppListCard className="space-y-1 p-4">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-700" />
@@ -39,16 +139,135 @@ export function RolesSettingsPanel() {
             <h3 className="text-sm font-semibold">{t("approverTitle")}</h3>
           </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground">{t("approverBody")}</p>
+          <button
+            type="button"
+            className="text-[11px] font-medium text-primary hover:underline"
+            onClick={() => setRoleFilter("approver")}
+          >
+            {t("staffCount", { count: approverCount })}
+          </button>
         </AppListCard>
       </div>
 
-      <AppListCard className="mt-2 flex flex-wrap items-center justify-between gap-2 p-4">
-        <p className="text-[11px] text-muted-foreground">{t("grantsHint")}</p>
-        <Button variant="outline" size="sm" className="h-9" render={<Link href="/requests/settings/departments" />}>
-          <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-          {t("manageGrants")}
-        </Button>
+      <AppListCard className="p-0">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+          <h3 className="me-auto text-sm font-semibold">{t("staffAccessTitle")}</h3>
+          <Input
+            className="h-9 w-56"
+            placeholder={t("searchPlaceholder")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="flex items-center gap-1">
+            {(["all", "view_only", "approver"] as const).map((f) => (
+              <Button
+                key={f}
+                type="button"
+                size="sm"
+                variant={roleFilter === f ? "default" : "outline"}
+                className="h-8"
+                onClick={() => setRoleFilter(f)}
+              >
+                {t(`filter.${f}`)}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8 text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          </div>
+        ) : filteredRows.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">{t("empty")}</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colViewOnlyFor")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colApproverFor")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS} />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredRows.map((row) => {
+                const viewTypes = typesFor(row, "view_only");
+                const approveTypes = typesFor(row, "approver");
+                return (
+                  <TableRow key={row.profile_id}>
+                    <TableCell>
+                      <p className="text-sm font-medium">{row.profile_name}</p>
+                      <p className="text-[10px] text-muted-foreground">{row.profile_email ?? "—"}</p>
+                    </TableCell>
+                    <TableCell className="max-w-[220px]">
+                      <div className="flex flex-wrap gap-1">
+                        {viewTypes.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          viewTypes.map((type) => (
+                            <span
+                              key={type}
+                              className="rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium"
+                            >
+                              {tTypes(type)}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[220px]">
+                      <div className="flex flex-wrap gap-1">
+                        {approveTypes.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          approveTypes.map((type) => (
+                            <span
+                              key={type}
+                              className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800"
+                            >
+                              {tTypes(type)}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-primary hover:bg-primary/10"
+                        onClick={() => setDrawerTarget(row)}
+                      >
+                        <Pencil className="me-1 h-3.5 w-3.5" />
+                        {t("edit")}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
       </AppListCard>
+
+      <StaffAccessDrawer
+        open={drawerTarget !== null}
+        onOpenChange={(open) => !open && setDrawerTarget(null)}
+        staff={
+          drawerTarget && drawerTarget !== "assign"
+            ? {
+                id: drawerTarget.profile_id,
+                full_name: drawerTarget.profile_name,
+                email: drawerTarget.profile_email,
+              }
+            : null
+        }
+        staffOptions={staffOptions}
+        initialAccess={drawerTarget && drawerTarget !== "assign" ? drawerTarget.access : undefined}
+        onSaved={() => void load()}
+      />
     </AppPage>
   );
 }
