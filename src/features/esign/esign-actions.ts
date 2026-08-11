@@ -216,11 +216,43 @@ export async function fetchEsignDocumentLinks(id: string): Promise<{
   };
 }
 
+/**
+ * WebP is deliberately excluded: `esign-compose-signed-document` rejects it with
+ * `unsupported_source_type`, so a WebP source could never produce a signed copy.
+ */
+const UPLOAD_MIME_EXT: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+};
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+/** Uploads the document a driver has to sign and returns its `esign-documents` object key. */
+export async function uploadEsignDocument(
+  formData: FormData,
+): Promise<{ ok: boolean; key?: string; error?: string }> {
+  await requireRequestsManage();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "missing_file" };
+  const ext = UPLOAD_MIME_EXT[file.type];
+  if (!ext) return { ok: false, error: "unsupported_source_type" };
+  if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: "file_too_large" };
+
+  const supabase = await createClient();
+  const key = `admin/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage
+    .from(ESIGN_BUCKET)
+    .upload(key, file, { contentType: file.type, upsert: false });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, key };
+}
+
 export async function createEsignRequest(input: {
   driver_id: string;
   title: string;
   category_key?: string | null;
   due_at?: string | null;
+  document_storage_key?: string | null;
 }): Promise<{ ok: boolean; id?: string; request_code?: string; error?: string }> {
   await requireRequestsManage();
   const supabase = await createClient();
@@ -229,6 +261,7 @@ export async function createEsignRequest(input: {
     p_title: input.title.trim(),
     p_category_key: input.category_key || undefined,
     p_due_at: input.due_at || undefined,
+    p_document_storage_key: input.document_storage_key || undefined,
   });
 
   if (error) return { ok: false, error: error.message };
@@ -300,6 +333,7 @@ export async function upsertEsignCategory(input: {
   key: string;
   label_en: string;
   description?: string | null;
+  icon_key?: string | null;
   screenshot_restricted?: boolean;
   is_active?: boolean;
   sort_order?: number;
@@ -314,6 +348,7 @@ export async function upsertEsignCategory(input: {
     key,
     label_en,
     description: input.description?.trim() || null,
+    icon_key: input.icon_key?.trim().slice(0, 2) || null,
     screenshot_restricted: input.screenshot_restricted ?? true,
     is_active: input.is_active ?? true,
     sort_order: input.sort_order ?? 0,
