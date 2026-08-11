@@ -21,7 +21,6 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
-import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -37,7 +36,10 @@ import {
 } from "@/components/ui/select";
 import { Link, useRouter } from "@/i18n/navigation";
 import { driverSearchOptions } from "@/lib/search-options";
+import { selectOptions } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
+import { uploadEsignDocument } from "./esign-actions";
+import { EsignKpiStrip } from "./esign-kpi-strip";
 import {
   useCreateEsignRequest,
   useEsignCategories,
@@ -79,6 +81,8 @@ export function EsignSentShell() {
   const [title, setTitle] = useState("");
   const [categoryKey, setCategoryKey] = useState<string>("");
   const [dueAt, setDueAt] = useState("");
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
 
   const listFilters = useMemo(
@@ -105,7 +109,19 @@ export function EsignSentShell() {
       ),
     [driversData?.rows],
   );
-  const categories = categoriesData?.rows.filter((c) => c.is_active) ?? [];
+  const categories = useMemo(
+    () => categoriesData?.rows.filter((c) => c.is_active) ?? [],
+    [categoriesData?.rows],
+  );
+  // Base UI Select renders the raw value in the trigger unless it is given `items`.
+  const categoryItems = useMemo(
+    () =>
+      selectOptions([
+        { value: "__none", label: t("fieldCategoryNone") },
+        ...categories.map((c) => ({ value: c.key, label: c.label_en })),
+      ]),
+    [categories, t],
+  );
 
   useEffect(() => {
     if (searchParams.get("add") === "1") {
@@ -115,15 +131,29 @@ export function EsignSentShell() {
   }, [searchParams, router]);
 
   const submitCreate = async () => {
-    if (!driverId || !title.trim()) {
+    if (!driverId || !title.trim() || !documentFile) {
       toast.error(t("errors.missingFields"));
       return;
     }
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.set("file", documentFile);
+    const upload = await uploadEsignDocument(formData);
+    setUploading(false);
+    if (!upload.ok || !upload.key) {
+      const known = ["unsupported_source_type", "file_too_large"] as const;
+      const code = known.find((c) => c === upload.error);
+      toast.error(code ? t(`errors.${code}`) : (upload.error ?? t("errors.uploadFailed")));
+      return;
+    }
+
     const result = await create.mutateAsync({
       driver_id: driverId,
       title: title.trim(),
       category_key: categoryKey || null,
       due_at: dueAt || null,
+      document_storage_key: upload.key,
     });
     if (!result.ok) {
       toast.error(result.error ?? t("errors.createFailed"));
@@ -135,6 +165,7 @@ export function EsignSentShell() {
     setTitle("");
     setCategoryKey("");
     setDueAt("");
+    setDocumentFile(null);
     if (result.id) {
       router.push(`/requests/esign/${result.id}`);
     } else {
@@ -180,7 +211,7 @@ export function EsignSentShell() {
         }
       />
 
-      <KpiGrid
+      <EsignKpiStrip
         items={[
           {
             label: t("kpiSent"),
@@ -256,7 +287,6 @@ export function EsignSentShell() {
               { id: "status", label: t("colStatus") },
               { id: "sent", label: t("colSent") },
               { id: "due", label: t("colDue") },
-              { id: "actions", label: t("colActions") },
             ]}
           >
             {rows.map((row) => (
@@ -265,12 +295,27 @@ export function EsignSentShell() {
                 className="cursor-pointer"
                 onClick={() => router.push(`/requests/esign/${row.id}`)}
               >
-                <TableCell className="font-mono text-xs">{row.request_code}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {row.request_code}
+                  {/* ui-system §6: row click opens the detail page; the link is the affordance,
+                      so the list keeps Figma's column set instead of an actions column. */}
+                  <Link
+                    href={`/requests/esign/${row.id}`}
+                    className="mt-0.5 flex items-center gap-1 font-sans text-[10px] text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {t("viewDetails")}
+                  </Link>
+                </TableCell>
                 <TableCell className="text-sm">
                   <div>{row.driver_name}</div>
                   <div className="text-[11px] text-muted-foreground">{row.driver_code}</div>
                 </TableCell>
-                <TableCell className="max-w-[180px] truncate text-sm font-medium">
+                <TableCell
+                  className="max-w-[320px] truncate text-sm font-medium"
+                  title={row.title ?? undefined}
+                >
                   {row.title}
                 </TableCell>
                 <TableCell className="text-sm">{row.category_label ?? "—"}</TableCell>
@@ -283,19 +328,6 @@ export function EsignSentShell() {
                   {formatDay(row.created_at)}
                 </TableCell>
                 <TableCell className="text-sm tabular-nums">{formatDay(row.due_at)}</TableCell>
-                <TableCell>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-primary hover:bg-primary/10"
-                    render={<Link href={`/requests/esign/${row.id}`} />}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink className="me-1 h-3.5 w-3.5" />
-                    {t("viewDetails")}
-                  </Button>
-                </TableCell>
               </AppDataTableRow>
             ))}
           </AppDataTable>
@@ -328,7 +360,11 @@ export function EsignSentShell() {
             </div>
             <div className="space-y-1">
               <Label>{t("fieldCategory")}</Label>
-              <Select value={categoryKey || "__none"} onValueChange={(v) => setCategoryKey(v === "__none" ? "" : (v ?? ""))}>
+              <Select
+                items={categoryItems}
+                value={categoryKey || "__none"}
+                onValueChange={(v) => setCategoryKey(v === "__none" ? "" : (v ?? ""))}
+              >
                 <SelectTrigger className="h-9 w-full">
                   <SelectValue placeholder={t("fieldCategoryPlaceholder")} />
                 </SelectTrigger>
@@ -352,6 +388,19 @@ export function EsignSentShell() {
                 onChange={(e) => setDueAt(e.target.value)}
               />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="esign-document">
+                {t("fieldDocument")} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="esign-document"
+                type="file"
+                accept="application/pdf,image/png,image/jpeg"
+                className="h-9 py-1.5"
+                onChange={(e) => setDocumentFile(e.target.files?.[0] ?? null)}
+              />
+              <p className="text-[10px] text-muted-foreground">{t("fieldDocumentHint")}</p>
+            </div>
           </div>
           <AppModalFooter title={t("createTitle")} subtitle={t("createSubtitle")}>
             <Button
@@ -365,10 +414,10 @@ export function EsignSentShell() {
             <Button
               type="button"
               className="h-9"
-              disabled={create.isPending || !driverId || !title.trim()}
+              disabled={create.isPending || uploading || !driverId || !title.trim() || !documentFile}
               onClick={() => void submitCreate()}
             >
-              {create.isPending ? (
+              {create.isPending || uploading ? (
                 <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />
               ) : null}
               {t("send")}

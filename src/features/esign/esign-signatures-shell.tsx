@@ -17,11 +17,11 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
-import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { EsignKpiStrip } from "./esign-kpi-strip";
 import { useEsignRequestsList, useEsignStatusCounts } from "./use-esign";
 import type { EsignRequestStatus } from "./types";
 
@@ -93,7 +93,9 @@ export function EsignSignaturesShell() {
         }
       />
 
-      <KpiGrid
+      {/* Figma ESign 02 shows four equal full-width KPI cards; the shared KpiGrid is a
+          six-column strip, which would leave a third of the row empty and clip the labels. */}
+      <EsignKpiStrip
         items={[
           {
             label: t("kpiPending"),
@@ -168,7 +170,6 @@ export function EsignSignaturesShell() {
               { id: "status", label: t("colStatus") },
               { id: "sent", label: t("colSent") },
               { id: "signedOn", label: t("colSignedOn") },
-              { id: "actions", label: t("colActions") },
             ]}
           >
             {rows.map((row) => (
@@ -177,8 +178,23 @@ export function EsignSignaturesShell() {
                 className="cursor-pointer"
                 onClick={() => router.push(`/requests/esign/${row.id}`)}
               >
-                <TableCell className="font-mono text-xs">{row.request_code}</TableCell>
-                <TableCell className="max-w-[200px] truncate text-sm font-medium">
+                <TableCell className="font-mono text-xs">
+                  {row.request_code}
+                  {/* ui-system §6: row click opens the detail page; the link is the affordance,
+                      so the list keeps Figma's seven columns instead of an actions column. */}
+                  <Link
+                    href={`/requests/esign/${row.id}`}
+                    className="mt-0.5 flex items-center gap-1 font-sans text-[10px] text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {t("viewDetails")}
+                  </Link>
+                </TableCell>
+                <TableCell
+                  className="max-w-[320px] truncate text-sm font-medium"
+                  title={row.title ?? undefined}
+                >
                   {row.title}
                 </TableCell>
                 <TableCell className="text-sm">
@@ -195,19 +211,6 @@ export function EsignSignaturesShell() {
                 </TableCell>
                 <TableCell className="text-sm tabular-nums">{formatDay(row.created_at)}</TableCell>
                 <TableCell className="text-sm tabular-nums">{formatDay(row.signed_at)}</TableCell>
-                <TableCell>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-primary hover:bg-primary/10"
-                    render={<Link href={`/requests/esign/${row.id}`} />}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink className="me-1 h-3.5 w-3.5" />
-                    {t("viewDetails")}
-                  </Button>
-                </TableCell>
               </AppDataTableRow>
             ))}
           </AppDataTable>

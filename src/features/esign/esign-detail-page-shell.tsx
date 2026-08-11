@@ -1,7 +1,15 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { ArrowLeft, Download, FileText, Loader2, Shield, ShieldOff } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  FileText,
+  Loader2,
+  Printer,
+  Shield,
+  ShieldOff,
+} from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
@@ -92,20 +100,41 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
           { label: request.request_code },
         ]}
         actions={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9"
-            render={<Link href="/requests/esign/sent" />}
-          >
-            <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
-            {t("back")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              disabled={!links?.signedDocumentUrl && !links?.documentUrl}
+              // Opens the document itself (signed copy first) — printing this page would only
+              // capture the admin chrome, and the preview iframe is cross-origin.
+              onClick={() =>
+                window.open(
+                  links?.signedDocumentUrl ?? links?.documentUrl ?? "",
+                  "_blank",
+                  "noopener",
+                )
+              }
+            >
+              <Printer className="me-1.5 h-3.5 w-3.5" />
+              {t("print")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              render={<Link href="/requests/esign/sent" />}
+            >
+              <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
+              {t("back")}
+            </Button>
+          </div>
         }
       />
 
-      <div className="grid gap-2 lg:grid-cols-[1fr,320px] lg:items-start">
+      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
         <AppListCard className="flex min-h-[420px] flex-col gap-3 bg-muted/30 p-4">
           {links?.documentUrl ? (
             <iframe
@@ -155,6 +184,15 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                   </p>
                 </div>
               </li>
+              {/* Figma has a Viewed step, but no viewed_at column exists yet — render it
+                  explicitly unavailable rather than implying we track it. */}
+              <li className="flex items-start gap-2">
+                <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-muted-foreground/30" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">{t("timelineViewed")}</p>
+                  <p className="text-[10px] text-muted-foreground">{t("timelineViewedGap")}</p>
+                </div>
+              </li>
               <li className="flex items-start gap-2">
                 <span
                   className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
@@ -169,9 +207,6 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                 </div>
               </li>
             </ol>
-            <p className="border-t border-border pt-2 text-[10px] text-muted-foreground">
-              {t("timelineViewedGap")}
-            </p>
           </AppListCard>
 
           <AppListCard className="space-y-2 p-4">
@@ -213,7 +248,8 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               />
               <h3 className="text-sm font-semibold">{t("proofSection")}</h3>
             </div>
-            <dl className="space-y-1.5">
+            {/* Two-up so a fully populated proof record (8 fields) still fits one viewport. */}
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               <Row label={t("signerName")} value={request.signer_display_name ?? "—"} />
               {proofRows.map((row) => (
                 <Row
@@ -222,6 +258,9 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                   value={row.value as string}
                 />
               ))}
+              {request.signed_at ? (
+                <Row label={t("proof.signed_at")} value={formatStamp(request.signed_at)} />
+              ) : null}
             </dl>
             {proofRows.length === 0 ? (
               <p className="text-[10px] text-muted-foreground">{t("noSignerMeta")}</p>

@@ -3230,7 +3230,7 @@
           "timelineSent": "أُرسل إلى المستلم",
           "timelineSigned": "تم التوقيع",
           "timelinePending": "لم يتم التوقيع بعد",
-          "timelineViewedGap": "لا يتم تسجيل وقت المشاهدة في طلبات التوقيع بعد.",
+          "timelineViewedGap": "غير متتبَّع بعد",
           "signedElectronically": "موقّع إلكترونياً · {at}",
           "noDocumentTitle": "لا يوجد مستند مرفق",
           "noDocumentBody": "أُرسل هذا الطلب بدون مستند، أو لم يتم رفع الملف بعد.",
@@ -3248,7 +3248,8 @@
           "downloadSignedCopy": "تنزيل المستند الموقّع",
           "signedCopyPending": "لا يزال يتم إنشاء النسخة الموقعة — النسخة الأصلية أدناه.",
           "signedCopyFailed": "تعذر إنشاء النسخة الموقعة ({reason}). النسخة الأصلية فقط متاحة.",
-          "print": "طباعة"
+          "print": "طباعة",
+          "timelineViewed": "تمت المشاهدة"
         },
         "categories": {
           "title": "فئات التوقيع",
@@ -3278,7 +3279,10 @@
           "updated": "تم تحديث الفئة",
           "saveChanges": "حفظ التغييرات",
           "cancel": "إلغاء",
-          "iconSlot": "رمز الأيقونة"
+          "iconSlot": "رمز الأيقونة",
+          "colCategory": "الفئة",
+          "colScreenshots": "لقطات الشاشة",
+          "colActive": "نشط"
         },
         "screenshot": {
           "title": "إعدادات لقطة الشاشة",

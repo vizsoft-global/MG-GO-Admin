@@ -3312,7 +3312,7 @@
           "timelineSent": "Sent to recipient",
           "timelineSigned": "Signed",
           "timelinePending": "Not signed yet",
-          "timelineViewedGap": "A viewed-at timestamp is not recorded on e-sign requests yet.",
+          "timelineViewedGap": "Not tracked yet",
           "signedElectronically": "Signed electronically · {at}",
           "noDocumentTitle": "No document attached",
           "noDocumentBody": "This request was sent without a document, or the file has not been uploaded yet.",
@@ -3330,7 +3330,8 @@
           "downloadSignedCopy": "Download signed document",
           "signedCopyPending": "The signed copy is still being composed — the original is below.",
           "signedCopyFailed": "Signed copy could not be composed ({reason}). Only the original is available.",
-          "print": "Print"
+          "print": "Print",
+          "timelineViewed": "Viewed"
         },
         "categories": {
           "title": "Signature categories",
@@ -3360,7 +3361,10 @@
           "updated": "Category updated",
           "saveChanges": "Save changes",
           "cancel": "Cancel",
-          "iconSlot": "Icon slot"
+          "iconSlot": "Icon slot",
+          "colCategory": "Category",
+          "colScreenshots": "Screenshots",
+          "colActive": "Active"
         },
         "screenshot": {
           "title": "Screenshot settings",

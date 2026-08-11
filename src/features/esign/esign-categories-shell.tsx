@@ -43,6 +43,11 @@ function slotTint(key: string): string {
   return SLOT_TINTS[hash % SLOT_TINTS.length];
 }
 
+/** Figma disambiguates same-initial categories (Administrative "Ad" vs Asset "As") via `icon_key`. */
+function slotLabel(row: EsignCategoryRow): string {
+  return (row.icon_key?.trim() || row.label_en.slice(0, 1)).slice(0, 2).toUpperCase();
+}
+
 export function EsignCategoriesShell() {
   const t = useTranslations("pages.requests.esign.categories");
   const tCommon = useTranslations("pages.requests.esign");
@@ -56,6 +61,7 @@ export function EsignCategoriesShell() {
   const [key, setKey] = useState("");
   const [labelEn, setLabelEn] = useState("");
   const [description, setDescription] = useState("");
+  const [iconKey, setIconKey] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,6 +83,7 @@ export function EsignCategoriesShell() {
     setKey("");
     setLabelEn("");
     setDescription("");
+    setIconKey("");
     setShowAdd(false);
   }
 
@@ -85,6 +92,7 @@ export function EsignCategoriesShell() {
     setKey(row.key);
     setLabelEn(row.label_en);
     setDescription(row.description ?? "");
+    setIconKey(row.icon_key ?? "");
     setShowAdd(true);
   }
 
@@ -95,6 +103,7 @@ export function EsignCategoriesShell() {
         key,
         label_en: labelEn,
         description: description.trim() || null,
+        icon_key: iconKey.trim() || labelEn.trim().slice(0, 1),
         screenshot_restricted: editing?.screenshot_restricted,
         is_active: editing?.is_active,
         sort_order: editing?.sort_order,
@@ -116,6 +125,7 @@ export function EsignCategoriesShell() {
         key: row.key,
         label_en: row.label_en,
         description: row.description,
+        icon_key: row.icon_key,
         screenshot_restricted: row.screenshot_restricted,
         is_active: !row.is_active,
         sort_order: row.sort_order,
@@ -135,6 +145,7 @@ export function EsignCategoriesShell() {
         key: row.key,
         label_en: row.label_en,
         description: row.description,
+        icon_key: row.icon_key,
         screenshot_restricted: !row.screenshot_restricted,
         is_active: row.is_active,
         sort_order: row.sort_order,
@@ -186,7 +197,7 @@ export function EsignCategoriesShell() {
 
       <AppListCard className="space-y-3 p-4">
         {showAdd ? (
-        <div className="grid gap-2 rounded-md border border-border bg-muted/30 p-3 sm:grid-cols-4">
+        <div className="grid gap-2 rounded-md border border-border bg-muted/30 p-3 sm:grid-cols-5">
           <div className="space-y-1">
             <Label className="text-xs">{t("key")}</Label>
             <Input
@@ -208,7 +219,17 @@ export function EsignCategoriesShell() {
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
-          <div className="flex items-end gap-2 sm:col-span-4">
+          <div className="space-y-1">
+            <Label className="text-xs">{t("iconSlot")}</Label>
+            <Input
+              className="h-9"
+              maxLength={2}
+              placeholder={labelEn.slice(0, 1).toUpperCase() || "A"}
+              value={iconKey}
+              onChange={(e) => setIconKey(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end gap-2 sm:col-span-5">
             <Button
               type="button"
               className="h-9"
@@ -239,11 +260,11 @@ export function EsignCategoriesShell() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("name")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colCategory")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("description")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colSigned")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("screenshot")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("active")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colScreenshots")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colActive")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS} />
               </TableRow>
             </TableHeader>
@@ -255,7 +276,7 @@ export function EsignCategoriesShell() {
                       <span
                         className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold text-white ${slotTint(row.key)}`}
                       >
-                        {row.label_en.slice(0, 1).toUpperCase()}
+                        {slotLabel(row)}
                       </span>
                       <span className="text-sm font-medium">{row.label_en}</span>
                     </div>
@@ -266,10 +287,11 @@ export function EsignCategoriesShell() {
                   <TableCell className="tabular-nums text-sm">{row.signed_count}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
+                      {/* Figma reads the switch as "screenshots allowed" — green on = Allowed. */}
                       <Switch
-                        checked={row.screenshot_restricted}
+                        checked={!row.screenshot_restricted}
                         onCheckedChange={() => toggleScreenshot(row)}
-                        aria-label={t("screenshot")}
+                        aria-label={t("colScreenshots")}
                       />
                       <span className="text-xs text-muted-foreground">
                         {row.screenshot_restricted
@@ -282,7 +304,7 @@ export function EsignCategoriesShell() {
                     <Switch
                       checked={row.is_active}
                       onCheckedChange={() => toggleActive(row)}
-                      aria-label={t("active")}
+                      aria-label={t("colActive")}
                     />
                   </TableCell>
                   <TableCell>
