@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { selectOptions, selectOptionsFrom } from "@/lib/select-items";
 import { fetchRequestsAuditLogs, type RequestsAuditLogRow } from "./requests-settings-actions";
 import { datePresetToBounds } from "./date-presets";
 import type { RequestDatePreset } from "./types";
@@ -136,7 +137,14 @@ export function RequestsAuditPanel() {
 
       <AppListCard className="p-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-          <Select value={actorFilter} onValueChange={(v) => v && setActorFilter(v)}>
+          <Select
+            value={actorFilter}
+            onValueChange={(v) => v && setActorFilter(v)}
+            items={selectOptions([
+              { value: "all", label: t("allStaff") },
+              ...actorOptions.map(([id, name]) => ({ value: id, label: name })),
+            ])}
+          >
             <SelectTrigger className="h-9 w-[150px]">
               <SelectValue />
             </SelectTrigger>
@@ -149,7 +157,14 @@ export function RequestsAuditPanel() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={actionFilter} onValueChange={(v) => v && setActionFilter(v)}>
+          <Select
+            value={actionFilter}
+            onValueChange={(v) => v && setActionFilter(v)}
+            items={selectOptions([
+              { value: "all", label: t("allActions") },
+              ...actionOptions.map((action) => ({ value: action, label: action })),
+            ])}
+          >
             <SelectTrigger className="h-9 w-[160px]">
               <SelectValue />
             </SelectTrigger>
@@ -165,6 +180,11 @@ export function RequestsAuditPanel() {
           <Select
             value={datePreset}
             onValueChange={(v) => v && setDatePreset(v as RequestDatePreset)}
+            items={selectOptionsFrom(
+              DATE_PRESETS,
+              (preset) => preset,
+              (preset) => tRoot(`datePresets.${preset}`),
+            )}
           >
             <SelectTrigger className="h-9 w-[150px]">
               <SelectValue />

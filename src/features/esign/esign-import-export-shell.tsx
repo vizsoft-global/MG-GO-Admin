@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { buildCsv, downloadCsv } from "@/features/driver-tracking/csv-export";
 import { queryKeys } from "@/lib/query/query-keys";
+import { selectOptions, selectOptionsFrom } from "@/lib/select-items";
 import { fetchAdminRequestsList } from "@/features/requests/requests-actions";
 import type { RequestDatePreset, RequestListRow } from "@/features/requests/types";
 import { fetchEsignRequestsList } from "./esign-actions";
@@ -239,6 +240,10 @@ export function EsignImportExportShell() {
             <Select
               value={preset}
               onValueChange={(v) => v && setPreset(v as "current" | "all")}
+              items={selectOptions([
+                { value: "current", label: t("presetCurrentView") },
+                { value: "all", label: t("presetAll") },
+              ])}
             >
               <SelectTrigger className="h-9">
                 <SelectValue />
@@ -259,6 +264,11 @@ export function EsignImportExportShell() {
                 value={effectiveDatePreset}
                 disabled={preset === "all"}
                 onValueChange={(v) => v && setDatePreset(v as RequestDatePreset)}
+                items={selectOptionsFrom(
+                  DATE_PRESETS,
+                  (option) => option,
+                  (option) => tRequests(`datePresets.${option}`),
+                )}
               >
                 <SelectTrigger className="h-9">
                   <SelectValue />
@@ -280,6 +290,14 @@ export function EsignImportExportShell() {
                 value={effectiveStatus}
                 disabled={preset === "all"}
                 onValueChange={(v) => v && setStatus(v as StatusOption)}
+                items={selectOptionsFrom(
+                  STATUSES,
+                  (option) => option,
+                  (option) =>
+                    option === "all"
+                      ? t("statusAll")
+                      : tRequests(`status.${option}` as "status.pending"),
+                )}
               >
                 <SelectTrigger className="h-9">
                   <SelectValue />

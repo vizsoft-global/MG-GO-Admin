@@ -23,7 +23,7 @@ import {
 import { buildCsv, downloadCsv } from "@/features/driver-tracking/csv-export";
 import { useEsignStatusCounts } from "@/features/esign/use-esign";
 import { queryKeys } from "@/lib/query/query-keys";
-import { selectOptions } from "@/lib/select-items";
+import { selectOptions, selectOptionsFrom } from "@/lib/select-items";
 import { fetchAdminRequestsList } from "./requests-actions";
 import {
   fetchAppointmentStatusCounts,
@@ -216,7 +216,15 @@ export function RequestsReportsPanel() {
         ]}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={datePreset} onValueChange={(v) => v && setDatePreset(v as RequestDatePreset)}>
+            <Select
+              value={datePreset}
+              onValueChange={(v) => v && setDatePreset(v as RequestDatePreset)}
+              items={selectOptionsFrom(
+                DATE_PRESETS,
+                (preset) => preset,
+                (preset) => tRoot(`datePresets.${preset}`),
+              )}
+            >
               <SelectTrigger className="h-9 w-[160px]">
                 <SelectValue />
               </SelectTrigger>
