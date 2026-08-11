@@ -237,7 +237,17 @@ Loan submit requires rows in `loan_tenure_options` (empty until client confirms)
 
 **Flutter routes (MG-GO):** Profile → Help & Support → `/profile/support` hub; forms `/profile/support/requests/new?type=…`; list/detail; **Action required** `/profile/support/action-required` (status `needs_clarification`); visit book `/profile/support/visits/book`; my visits `/profile/support/visits`. Feature folder `lib/features/support/`. Attachments upload to Supabase bucket `request-attachments` under `{driver_id}/…`.
 
-**Driver notifications (RCM/Visit):** On admin decide / visit status change, Postgres `notify_driver_transactional` inserts inbox campaign + dispatch item. Deep links: `musallam:///profile/support/requests/{id}`, `musallam:///profile/support/action-required`, `musallam:///profile/support/visits`. `action_params.record_type` = `request` | `visit`. No admin push for RCM attention.
+**Driver notifications (RCM/Visit/E-Sign):** On admin decide / visit status / e-sign send / appointment create, Postgres `notify_driver_transactional` inserts inbox campaign + dispatch item. Deep links: `musallam:///profile/support/requests/{id}`, `…/action-required`, `…/visits`, `…/sign/{id}`, `…/appointments`. `action_params.record_type` = `request` | `visit` | `esign` | `appointment`. No admin push for RCM attention.
+
+### E-Sign + Appointments
+| Piece | Notes |
+|-------|-------|
+| `esign_categories` | Figma-seeded categories + per-category screenshot_restricted |
+| `esign_requests` | Code **SIG-####**; status pending/signed/expired/cancelled; signature PNG in bucket `esign-documents` |
+| Driver RPCs | `driver_list_esign_requests`, `driver_get_esign_request`, `driver_submit_esignature` |
+| Admin RPCs | `admin_list_esign_requests`, `admin_create_esign_request` |
+| Flutter | `/profile/support/sign` inbox → viewer → capture pad → confirmed |
+| Appointments | `driver_list_appointments`, `admin_create_appointment` (APT-####); Flutter `/profile/support/appointments` |
 
 ### Visit booking (Help & Support → Schedule visit)
 | Table | Notes |

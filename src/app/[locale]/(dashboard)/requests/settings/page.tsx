@@ -4,11 +4,14 @@ import { AppPage, AppPageHeader } from "@/components/app";
 import { Link } from "@/i18n/navigation";
 
 const LINKS = [
+  { href: "/requests/esign", key: "esign", status: "ready" },
   { href: "/requests/settings/workflows", key: "workflows", status: "ready" },
   { href: "/requests/settings/categories", key: "categories", status: "ready" },
   { href: "/requests/settings/types", key: "types", status: "ready" },
   { href: "/requests/settings/departments", key: "departments", status: "ready" },
   { href: "/requests/settings/roles", key: "roles", status: "ready" },
+  { href: "/requests/settings/screenshot", key: "screenshot", status: "ready" },
+  { href: "/requests/settings/assets", key: "assets", status: "ready" },
   { href: "/requests/settings/reports", key: "reports", status: "stub" },
   { href: "/requests/settings/audit", key: "audit", status: "ready" },
 ] as const;

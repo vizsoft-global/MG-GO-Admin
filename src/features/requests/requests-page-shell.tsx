@@ -110,6 +110,15 @@ export function RequestsPageShell() {
               variant="outline"
               size="sm"
               className="h-9"
+              render={<Link href="/requests/esign" />}
+            >
+              {t("esignLink")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
               render={<Link href="/requests/settings" />}
             >
               {t("settingsLink")}

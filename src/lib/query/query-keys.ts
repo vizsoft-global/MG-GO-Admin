@@ -106,6 +106,14 @@ export const queryKeys = {
     list: (filters: Record<string, unknown> = {}) => ["requests", "list", filters] as const,
     detail: (id: string) => ["requests", "detail", id] as const,
   },
+  esign: {
+    all: () => ["esign"] as const,
+    list: (filters: Record<string, unknown> = {}) => ["esign", "list", filters] as const,
+    detail: (id: string) => ["esign", "detail", id] as const,
+    categories: () => ["esign", "categories"] as const,
+    driverOptions: () => ["esign", "driver-options"] as const,
+    screenshotDefault: () => ["esign", "screenshot-default"] as const,
+  },
   visits: {
     all: () => ["visits"] as const,
     list: (filters: Record<string, unknown> = {}) => ["visits", "list", filters] as const,

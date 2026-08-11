@@ -2673,6 +2673,7 @@
       "subtitle": "RCM queue — approve, clarify, and resolve rider requests",
       "refresh": "Refresh",
       "settingsLink": "Settings",
+      "esignLink": "E-Sign",
       "search": "Search",
       "searchPlaceholder": "Code, driver name, or driver ID",
       "attentionBadge": "Needs attention",
@@ -2752,20 +2753,26 @@
         "subtitle": "Workflows, categories, roles, and request configuration",
         "stubNote": "Placeholder — full analytics coming later",
         "links": {
+          "esign": "E-Sign hub",
           "workflows": "Workflow builder",
           "categories": "Complaint categories",
           "types": "Request types",
           "departments": "Department staff",
           "roles": "Roles & access",
+          "screenshot": "Screenshot settings",
+          "assets": "Asset inventory",
           "reports": "Reports",
           "audit": "Audit log"
         },
         "linksDesc": {
+          "esign": "Send signature requests and manage categories",
           "workflows": "Edit approval steps per request type",
           "categories": "Manage complaint category options",
           "types": "Built-in request types (read-only)",
           "departments": "Grant staff view or approver access",
           "roles": "View-only vs approver explained",
+          "screenshot": "Default screenshot policy for e-sign",
+          "assets": "Open fleet asset inventory module",
           "audit": "Recent RCM admin activity"
         },
         "workflows": {
@@ -2888,6 +2895,173 @@
           "colEntity": "Entity",
           "errors": {
             "loadFailed": "Could not load audit log"
+          }
+        }
+      },
+      "esign": {
+        "hub": {
+          "requests": "Requests",
+          "title": "E-Sign",
+          "subtitle": "Send documents for rider signature and track completion",
+          "tiles": {
+            "sent": "Sent requests",
+            "signatures": "Signatures list",
+            "categories": "Categories",
+            "screenshot": "Screenshot settings"
+          },
+          "tilesDesc": {
+            "sent": "Create and track outbound signature requests",
+            "signatures": "Filter pending and signed documents",
+            "categories": "Manage signature category options",
+            "screenshot": "Default screenshot restriction policy"
+          }
+        },
+        "status": {
+          "pending": "Pending",
+          "signed": "Signed",
+          "expired": "Expired",
+          "cancelled": "Cancelled"
+        },
+        "sent": {
+          "title": "Sent requests",
+          "subtitle": "Signature requests sent to drivers",
+          "refresh": "Refresh",
+          "create": "New request",
+          "createTitle": "Send signature request",
+          "createSubtitle": "Driver receives an in-app notification",
+          "cancel": "Cancel",
+          "send": "Send",
+          "created": "Request {code} sent",
+          "viewDetails": "View details",
+          "emptyTitle": "No requests sent yet",
+          "emptyDescription": "Create a signature request to notify a driver.",
+          "colCode": "Request ID",
+          "colTitle": "Title",
+          "colDriver": "Driver",
+          "colCategory": "Category",
+          "colDue": "Due date",
+          "colStatus": "Status",
+          "colActions": "Actions",
+          "fieldDriver": "Driver",
+          "fieldDriverPlaceholder": "Select driver…",
+          "fieldDriverSearch": "Search by name, ID, or mobile",
+          "fieldTitle": "Title",
+          "fieldCategory": "Category",
+          "fieldCategoryPlaceholder": "Optional category",
+          "fieldCategoryNone": "No category",
+          "fieldDue": "Due date",
+          "errors": {
+            "missingFields": "Driver and title are required",
+            "createFailed": "Could not create request"
+          }
+        },
+        "signatures": {
+          "title": "Signatures",
+          "subtitle": "Track pending and completed signatures",
+          "refresh": "Refresh",
+          "viewDetails": "View details",
+          "emptyTitle": "No signatures found",
+          "emptyDescription": "Adjust the status filter or send a new request.",
+          "colCode": "Request ID",
+          "colDriver": "Driver",
+          "colTitle": "Title",
+          "colSignedAt": "Signed at",
+          "colSigner": "Signer",
+          "colStatus": "Status",
+          "colActions": "Actions",
+          "filters": {
+            "all": "All",
+            "pending": "Pending",
+            "signed": "Signed"
+          }
+        },
+        "detail": {
+          "notFound": "Request not found",
+          "back": "Back to sent list",
+          "overview": "Overview",
+          "signerSection": "Signer & policy",
+          "status": "Status",
+          "driver": "Driver",
+          "category": "Category",
+          "due": "Due date",
+          "created": "Sent",
+          "signedAt": "Signed at",
+          "signerName": "Signer name",
+          "screenshot": "Screenshot",
+          "screenshotBlocked": "Blocked",
+          "screenshotAllowed": "Allowed",
+          "signerMeta": "Device metadata",
+          "noSignerMeta": "No signer metadata yet"
+        },
+        "categories": {
+          "title": "Signature categories",
+          "subtitle": "Category options for e-sign requests",
+          "key": "Key",
+          "name": "Name",
+          "description": "Description",
+          "screenshot": "Screenshot",
+          "screenshotBlocked": "Blocked",
+          "screenshotAllowed": "Allowed",
+          "active": "Status",
+          "activeOn": "Active",
+          "activeOff": "Inactive",
+          "add": "Add category",
+          "added": "Category added",
+          "empty": "No categories configured",
+          "remove": "Remove",
+          "deleteTitle": "Remove category?",
+          "deleteDescription": "Remove “{label}”? Existing requests keep their category key.",
+          "deleted": "Category removed",
+          "errors": {
+            "saveFailed": "Could not save category",
+            "deleteFailed": "Could not remove category"
+          }
+        },
+        "screenshot": {
+          "title": "Screenshot settings",
+          "subtitle": "Default policy when a category does not override",
+          "defaultLabel": "Default screenshot restriction",
+          "overrideNote": "Each signature category can override this default. Requests without a category use this setting.",
+          "blocked": "Block screenshots",
+          "allowed": "Allow screenshots",
+          "save": "Save default",
+          "saved": "Default saved",
+          "manageCategories": "Manage categories",
+          "errors": {
+            "saveFailed": "Could not save setting"
+          }
+        },
+        "assets": {
+          "title": "Asset inventory",
+          "subtitle": "Fleet assets linked to driver requests",
+          "body": "Asset catalog and assignments are managed in the dedicated inventory module.",
+          "openAssets": "Open asset inventory"
+        },
+        "importExport": {
+          "requests": "Requests",
+          "title": "Import & export",
+          "subtitle": "Bulk tools for RCM and e-sign data",
+          "exportTitle": "Export e-sign requests",
+          "exportBody": "Download up to 500 signature requests as CSV.",
+          "exportButton": "Export CSV",
+          "exportOk": "Exported {count} rows",
+          "exportEmpty": "Nothing to export",
+          "importTitle": "Import",
+          "importBody": "Bulk import for requests and signatures is not available yet.",
+          "importComingSoon": "Coming soon"
+        },
+        "reports": {
+          "requests": "Requests",
+          "title": "RCM reports",
+          "subtitle": "Quick KPIs for the current month",
+          "fullReports": "Full reports",
+          "stubTitle": "Detailed analytics coming soon",
+          "stubBody": "Resolution trends and e-sign completion rates will appear in a future release. Use Settings → Reports for the RCM stub.",
+          "kpi": {
+            "total": "Total requests",
+            "pending": "Pending",
+            "overdue": "Overdue (15d)",
+            "avgResolution": "Avg. resolution"
           }
         }
       }

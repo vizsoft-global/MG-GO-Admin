@@ -2591,6 +2591,7 @@
       "subtitle": "قائمة RCM — الموافقة والتوضيح وحل طلبات السائقين",
       "refresh": "تحديث",
       "settingsLink": "الإعدادات",
+      "esignLink": "التوقيع الإلكتروني",
       "search": "بحث",
       "searchPlaceholder": "الرمز أو اسم السائق أو رقم السائق",
       "attentionBadge": "يحتاج انتباهاً",
@@ -2670,20 +2671,26 @@
         "subtitle": "سير العمل والفئات والأدوار وإعداد الطلبات",
         "stubNote": "عنصر نائب — التحليلات الكاملة لاحقاً",
         "links": {
+          "esign": "مركز التوقيع الإلكتروني",
           "workflows": "منشئ سير العمل",
           "categories": "فئات الشكاوى",
           "types": "أنواع الطلبات",
           "departments": "موظفو الأقسام",
           "roles": "الأدوار والصلاحيات",
+          "screenshot": "إعدادات لقطة الشاشة",
+          "assets": "مخزون الأصول",
           "reports": "التقارير",
           "audit": "سجل التدقيق"
         },
         "linksDesc": {
+          "esign": "إرسال طلبات التوقيع وإدارة الفئات",
           "workflows": "تعديل خطوات الموافقة لكل نوع طلب",
           "categories": "إدارة خيارات فئات الشكاوى",
           "types": "أنواع الطلبات المدمجة (للقراءة فقط)",
           "departments": "منح صلاحية عرض أو موافقة للموظفين",
           "roles": "شرح العرض فقط مقابل الموافق",
+          "screenshot": "سياسة لقطة الشاشة الافتراضية للتوقيع",
+          "assets": "فتح وحدة مخزون الأصول",
           "audit": "نشاط إداري حديث لـ RCM"
         },
         "workflows": {
@@ -2806,6 +2813,173 @@
           "colEntity": "الكيان",
           "errors": {
             "loadFailed": "تعذر تحميل سجل التدقيق"
+          }
+        }
+      },
+      "esign": {
+        "hub": {
+          "requests": "الطلبات",
+          "title": "التوقيع الإلكتروني",
+          "subtitle": "إرسال مستندات لتوقيع السائق ومتابعة الإكمال",
+          "tiles": {
+            "sent": "الطلبات المرسلة",
+            "signatures": "قائمة التوقيعات",
+            "categories": "الفئات",
+            "screenshot": "إعدادات لقطة الشاشة"
+          },
+          "tilesDesc": {
+            "sent": "إنشاء ومتابعة طلبات التوقيع الصادرة",
+            "signatures": "تصفية المستندات المعلقة والموقعة",
+            "categories": "إدارة خيارات فئات التوقيع",
+            "screenshot": "سياسة تقييد لقطة الشاشة الافتراضية"
+          }
+        },
+        "status": {
+          "pending": "معلق",
+          "signed": "موقّع",
+          "expired": "منتهٍ",
+          "cancelled": "ملغى"
+        },
+        "sent": {
+          "title": "الطلبات المرسلة",
+          "subtitle": "طلبات التوقيع المرسلة للسائقين",
+          "refresh": "تحديث",
+          "create": "طلب جديد",
+          "createTitle": "إرسال طلب توقيع",
+          "createSubtitle": "يتلقى السائق إشعاراً داخل التطبيق",
+          "cancel": "إلغاء",
+          "send": "إرسال",
+          "created": "تم إرسال الطلب {code}",
+          "viewDetails": "عرض التفاصيل",
+          "emptyTitle": "لم تُرسل طلبات بعد",
+          "emptyDescription": "أنشئ طلب توقيع لإشعار السائق.",
+          "colCode": "رقم الطلب",
+          "colTitle": "العنوان",
+          "colDriver": "السائق",
+          "colCategory": "الفئة",
+          "colDue": "تاريخ الاستحقاق",
+          "colStatus": "الحالة",
+          "colActions": "إجراءات",
+          "fieldDriver": "السائق",
+          "fieldDriverPlaceholder": "اختر السائق…",
+          "fieldDriverSearch": "بحث بالاسم أو الرقم أو الجوال",
+          "fieldTitle": "العنوان",
+          "fieldCategory": "الفئة",
+          "fieldCategoryPlaceholder": "فئة اختيارية",
+          "fieldCategoryNone": "بدون فئة",
+          "fieldDue": "تاريخ الاستحقاق",
+          "errors": {
+            "missingFields": "السائق والعنوان مطلوبان",
+            "createFailed": "تعذر إنشاء الطلب"
+          }
+        },
+        "signatures": {
+          "title": "التوقيعات",
+          "subtitle": "متابعة التوقيعات المعلقة والمكتملة",
+          "refresh": "تحديث",
+          "viewDetails": "عرض التفاصيل",
+          "emptyTitle": "لا توجد توقيعات",
+          "emptyDescription": "عدّل مرشح الحالة أو أرسل طلباً جديداً.",
+          "colCode": "رقم الطلب",
+          "colDriver": "السائق",
+          "colTitle": "العنوان",
+          "colSignedAt": "وقت التوقيع",
+          "colSigner": "الموقّع",
+          "colStatus": "الحالة",
+          "colActions": "إجراءات",
+          "filters": {
+            "all": "الكل",
+            "pending": "معلق",
+            "signed": "موقّع"
+          }
+        },
+        "detail": {
+          "notFound": "الطلب غير موجود",
+          "back": "العودة للقائمة المرسلة",
+          "overview": "نظرة عامة",
+          "signerSection": "الموقّع والسياسة",
+          "status": "الحالة",
+          "driver": "السائق",
+          "category": "الفئة",
+          "due": "تاريخ الاستحقاق",
+          "created": "تاريخ الإرسال",
+          "signedAt": "وقت التوقيع",
+          "signerName": "اسم الموقّع",
+          "screenshot": "لقطة الشاشة",
+          "screenshotBlocked": "محظورة",
+          "screenshotAllowed": "مسموحة",
+          "signerMeta": "بيانات الجهاز",
+          "noSignerMeta": "لا توجد بيانات موقّع بعد"
+        },
+        "categories": {
+          "title": "فئات التوقيع",
+          "subtitle": "خيارات الفئات لطلبات التوقيع",
+          "key": "المفتاح",
+          "name": "الاسم",
+          "description": "الوصف",
+          "screenshot": "لقطة الشاشة",
+          "screenshotBlocked": "محظورة",
+          "screenshotAllowed": "مسموحة",
+          "active": "الحالة",
+          "activeOn": "نشط",
+          "activeOff": "غير نشط",
+          "add": "إضافة فئة",
+          "added": "تمت إضافة الفئة",
+          "empty": "لا توجد فئات",
+          "remove": "إزالة",
+          "deleteTitle": "إزالة الفئة؟",
+          "deleteDescription": "إزالة «{label}»؟ الطلبات الحالية تحتفظ بمفتاح الفئة.",
+          "deleted": "تمت إزالة الفئة",
+          "errors": {
+            "saveFailed": "تعذر حفظ الفئة",
+            "deleteFailed": "تعذر إزالة الفئة"
+          }
+        },
+        "screenshot": {
+          "title": "إعدادات لقطة الشاشة",
+          "subtitle": "السياسة الافتراضية عندما لا تتجاوزها الفئة",
+          "defaultLabel": "تقييد لقطة الشاشة الافتراضي",
+          "overrideNote": "يمكن لكل فئة توقيع تجاوز هذا الافتراضي. الطلبات بدون فئة تستخدم هذا الإعداد.",
+          "blocked": "منع لقطات الشاشة",
+          "allowed": "السماح بلقطات الشاشة",
+          "save": "حفظ الافتراضي",
+          "saved": "تم الحفظ",
+          "manageCategories": "إدارة الفئات",
+          "errors": {
+            "saveFailed": "تعذر حفظ الإعداد"
+          }
+        },
+        "assets": {
+          "title": "مخزون الأصول",
+          "subtitle": "أصول الأسطول المرتبطة بطلبات السائقين",
+          "body": "يتم إدارة فهرس الأصول والتعيينات في وحدة المخزون المخصصة.",
+          "openAssets": "فتح مخزون الأصول"
+        },
+        "importExport": {
+          "requests": "الطلبات",
+          "title": "استيراد وتصدير",
+          "subtitle": "أدوات جماعية لبيانات RCM والتوقيع",
+          "exportTitle": "تصدير طلبات التوقيع",
+          "exportBody": "تنزيل حتى 500 طلب توقيع كـ CSV.",
+          "exportButton": "تصدير CSV",
+          "exportOk": "تم تصدير {count} صف",
+          "exportEmpty": "لا يوجد ما يُصدَّر",
+          "importTitle": "استيراد",
+          "importBody": "الاستيراد الجماعي للطلبات والتوقيعات غير متاح بعد.",
+          "importComingSoon": "قريباً"
+        },
+        "reports": {
+          "requests": "الطلبات",
+          "title": "تقارير RCM",
+          "subtitle": "مؤشرات سريعة للشهر الحالي",
+          "fullReports": "التقارير الكاملة",
+          "stubTitle": "التحليلات التفصيلية قريباً",
+          "stubBody": "ستظهر اتجاهات الحل ومعدلات إكمال التوقيع في إصدار لاحق. استخدم الإعدادات ← التقارير للعنصر النائب.",
+          "kpi": {
+            "total": "إجمالي الطلبات",
+            "pending": "معلق",
+            "overdue": "متأخر (15 ي)",
+            "avgResolution": "متوسط الحل"
           }
         }
       }
