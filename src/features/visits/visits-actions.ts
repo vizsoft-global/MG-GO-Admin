@@ -54,6 +54,15 @@ export type VisitDetailRow = VisitListRow & {
   completed_at: string | null;
   cancelled_at: string | null;
   updated_at: string;
+  /** Staff-authored instruction for the rider (separate from the rider's purpose). */
+  note_to_rider: string | null;
+};
+
+export type VisitBookingNoteRow = {
+  id: string;
+  body: string;
+  created_at: string;
+  author_name: string | null;
 };
 
 export type VisitDepartmentRow = {
@@ -259,8 +268,110 @@ export async function fetchAdminVisitDetail(
       completed_at: booking.completed_at,
       cancelled_at: booking.cancelled_at,
       updated_at: booking.updated_at,
+      note_to_rider: booking.note_to_rider,
     },
   };
+}
+
+export async function fetchVisitBookingNotes(
+  bookingId: string,
+): Promise<{ rows: VisitBookingNoteRow[]; error?: string }> {
+  await requireVisitsView();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("visit_booking_notes")
+    .select("id, body, created_at, author_id")
+    .eq("booking_id", bookingId)
+    .order("created_at", { ascending: false });
+
+  if (error) return { rows: [], error: error.message };
+
+  const authorIds = [
+    ...new Set(
+      (data ?? [])
+        .map((n) => n.author_id)
+        .filter((id): id is string => typeof id === "string"),
+    ),
+  ];
+
+  const { data: authors } = authorIds.length
+    ? await supabase.from("profiles").select("id, full_name").in("id", authorIds)
+    : { data: [] };
+
+  const nameById = new Map((authors ?? []).map((a) => [a.id, a.full_name]));
+
+  return {
+    rows: (data ?? []).map((n) => ({
+      id: n.id,
+      body: n.body,
+      created_at: n.created_at,
+      author_name: n.author_id ? (nameById.get(n.author_id) ?? null) : null,
+    })),
+  };
+}
+
+export async function addVisitBookingNote(input: {
+  bookingId: string;
+  body: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await requireVisitsView();
+  const body = input.body.trim();
+  if (!body) return { ok: false, error: "note_required" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("visit_booking_notes").insert({
+    booking_id: input.bookingId,
+    author_id: session.id,
+    body,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function updateVisitNoteToRider(input: {
+  bookingId: string;
+  note: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireVisitsOperate();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("visit_bookings")
+    .update({
+      note_to_rider: input.note.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.bookingId);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function rescheduleAdminVisit(input: {
+  bookingId: string;
+  scheduledDate: string;
+  slotId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(session.permissions, "visits.operate", session.isSuperAdmin)
+  ) {
+    return { ok: false, error: "not_authorized" };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_reschedule_visit", {
+    p_booking_id: input.bookingId,
+    p_new_date: input.scheduledDate,
+    p_new_slot_id: input.slotId,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  const payload = data as { ok?: boolean; error?: string };
+  if (payload?.ok === false) return { ok: false, error: payload.error ?? "failed" };
+  return { ok: true };
 }
 
 export async function fetchReceptionVisitsToday(): Promise<{

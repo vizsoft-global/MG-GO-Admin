@@ -2657,7 +2657,11 @@
       "filters": {
         "date": "نطاق التاريخ",
         "type": "النوع",
-        "status": "الحالة"
+        "status": "الحالة",
+        "department": "القسم",
+        "departmentAll": "كل الأقسام",
+        "zone": "المنطقة",
+        "zoneAll": "كل المناطق"
       },
       "statusFilter": {
         "all": "كل الحالات"
@@ -3207,7 +3211,10 @@
             "company": "الشركة",
             "ip_address": "عنوان IP",
             "device": "الجهاز"
-          }
+          },
+          "downloadSignedCopy": "تنزيل النسخة الموقعة",
+          "signedCopyPending": "لا يزال يتم إنشاء النسخة الموقعة — النسخة الأصلية أدناه.",
+          "signedCopyFailed": "تعذر إنشاء النسخة الموقعة ({reason}). النسخة الأصلية فقط متاحة."
         },
         "categories": {
           "title": "فئات التوقيع",
@@ -3346,6 +3353,26 @@
             "avgResolution": "متوسط الحل"
           }
         }
+      },
+      "export": "تصدير",
+      "colDepartment": "القسم",
+      "resultCount": "عرض {shown} من {total}",
+      "bulk": {
+        "selected": "{count} محدد",
+        "selectAll": "تحديد كل الصفوف",
+        "approve": "الموافقة على {count}",
+        "reject": "رفض {count}",
+        "clear": "إلغاء التحديد",
+        "termsExcluded": "{count} تحتاج شروطًا — افتحها بشكل منفصل",
+        "done": "تم تحديث {done} طلبًا",
+        "partial": "تم تحديث {done} وفشل {failed}",
+        "rejectTitle": "رفض الطلبات المحددة",
+        "rejectSubtitle": "سيتم رفض {count} طلبًا بهذا السبب",
+        "reasonLabel": "سبب الرفض",
+        "reasonPlaceholder": "لماذا تم رفض هذه الطلبات؟",
+        "reasonHint": "يتم تسجيل السبب نفسه على {count} طلبًا ويظهر للمندوب.",
+        "confirmReject": "رفض الطلبات",
+        "cancel": "إلغاء"
       }
     },
     "visitBookings": {
@@ -3442,7 +3469,46 @@
         "created": "تم الحجز",
         "checkedIn": "تسجيل الوصول",
         "completed": "مكتمل",
-        "cancelled": "ملغى"
+        "cancelled": "ملغى",
+        "viewProfile": "عرض الملف",
+        "checkInCodeLabel": "رمز تسجيل الوصول",
+        "checkInCodeHint": "يعرض السائق هذا الرمز في الاستقبال لتسجيل الوصول.",
+        "purpose": "الغرض",
+        "purposeEmpty": "لم يذكر السائق غرض الزيارة.",
+        "noteToRider": "ملاحظة للسائق",
+        "noteToRiderEmpty": "لا توجد ملاحظة للسائق بعد.",
+        "noteToRiderTitle": "ملاحظة للسائق",
+        "noteToRiderSubtitle": "تظهر للسائق في التطبيق",
+        "noteToRiderPlaceholder": "ما الذي يجب أن يحضره السائق أو إلى أين يتوجه؟",
+        "visitDetails": "تفاصيل الزيارة",
+        "stepBooked": "تم الحجز",
+        "stepConfirmed": "مؤكد · الموعد محفوظ",
+        "stepCheckedIn": "تم تسجيل الوصول",
+        "stepCompleted": "مكتملة",
+        "stepCancelled": "ملغاة",
+        "stepNoShow": "لم يحضر",
+        "stepAwaitingArrival": "في انتظار الوصول",
+        "stepNotStarted": "لم تبدأ",
+        "stepSkipped": "لم تحدث",
+        "internalNotes": "ملاحظات داخلية",
+        "internalNotePlaceholder": "أضف ملاحظة لفريقك (غير مرئية للسائق)",
+        "internalNotesEmpty": "لا توجد ملاحظات داخلية بعد.",
+        "addNote": "إضافة ملاحظة",
+        "noteAdded": "تمت إضافة الملاحظة",
+        "actions": "الإجراءات",
+        "reschedule": "إعادة الجدولة",
+        "rescheduleTitle": "إعادة جدولة الزيارة",
+        "rescheduleSubtitle": "يبقى رمز الحجز نفسه للاستقبال",
+        "rescheduleDate": "التاريخ الجديد",
+        "rescheduleSlot": "الموعد الجديد",
+        "rescheduleNoSlots": "لا يوجد موعد متاح لهذا القسم في ذلك التاريخ.",
+        "rescheduleSubmit": "نقل الزيارة",
+        "rescheduleOk": "تمت إعادة جدولة الزيارة",
+        "errDuplicate": "لدى السائق حجز نشط لهذا القسم في ذلك التاريخ.",
+        "errSlotFull": "هذا الموعد ممتلئ بالكامل.",
+        "errNotReschedulable": "يمكن إعادة جدولة الزيارات المؤكدة فقط.",
+        "errSlotDateMismatch": "هذا الموعد غير متاح في التاريخ المحدد.",
+        "errUnchanged": "اختر تاريخًا أو موعدًا مختلفًا."
       },
       "calendar": {
         "title": "التقويم",

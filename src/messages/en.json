@@ -2739,7 +2739,11 @@
       "filters": {
         "date": "Date range",
         "type": "Type",
-        "status": "Status"
+        "status": "Status",
+        "department": "Department",
+        "departmentAll": "All departments",
+        "zone": "Zone",
+        "zoneAll": "All zones"
       },
       "statusFilter": {
         "all": "All statuses"
@@ -3289,7 +3293,10 @@
             "company": "Company",
             "ip_address": "IP address",
             "device": "Device"
-          }
+          },
+          "downloadSignedCopy": "Download signed copy",
+          "signedCopyPending": "The signed copy is still being composed — the original is below.",
+          "signedCopyFailed": "Signed copy could not be composed ({reason}). Only the original is available."
         },
         "categories": {
           "title": "Signature categories",
@@ -3428,6 +3435,26 @@
             "avgResolution": "Avg. resolution"
           }
         }
+      },
+      "export": "Export",
+      "colDepartment": "Department",
+      "resultCount": "Showing {shown} of {total}",
+      "bulk": {
+        "selected": "{count} selected",
+        "selectAll": "Select all rows",
+        "approve": "Approve {count}",
+        "reject": "Reject {count}",
+        "clear": "Clear",
+        "termsExcluded": "{count} need terms — open individually",
+        "done": "{done} requests updated",
+        "partial": "{done} updated, {failed} failed",
+        "rejectTitle": "Reject selected requests",
+        "rejectSubtitle": "{count} requests will be rejected with this reason",
+        "reasonLabel": "Rejection reason",
+        "reasonPlaceholder": "Why are these requests rejected?",
+        "reasonHint": "The same reason is recorded on all {count} requests and shown to the rider.",
+        "confirmReject": "Reject requests",
+        "cancel": "Cancel"
       }
     },
     "visitBookings": {
@@ -3524,7 +3551,46 @@
         "created": "Booked",
         "checkedIn": "Checked in",
         "completed": "Completed",
-        "cancelled": "Cancelled"
+        "cancelled": "Cancelled",
+        "viewProfile": "View profile",
+        "checkInCodeLabel": "Check-in code",
+        "checkInCodeHint": "Rider shows this at reception to check in.",
+        "purpose": "Purpose",
+        "purposeEmpty": "No purpose provided by the rider.",
+        "noteToRider": "Note to rider",
+        "noteToRiderEmpty": "No note for the rider yet.",
+        "noteToRiderTitle": "Note to rider",
+        "noteToRiderSubtitle": "Visible to the rider in the app",
+        "noteToRiderPlaceholder": "What should the rider bring or where should they go?",
+        "visitDetails": "Visit details",
+        "stepBooked": "Booked",
+        "stepConfirmed": "Confirmed · slot held",
+        "stepCheckedIn": "Checked-in",
+        "stepCompleted": "Completed",
+        "stepCancelled": "Cancelled",
+        "stepNoShow": "No-show",
+        "stepAwaitingArrival": "Awaiting arrival",
+        "stepNotStarted": "Not started",
+        "stepSkipped": "Did not happen",
+        "internalNotes": "Internal notes",
+        "internalNotePlaceholder": "Add a note for your team (not visible to rider)",
+        "internalNotesEmpty": "No internal notes yet.",
+        "addNote": "Add note",
+        "noteAdded": "Note added",
+        "actions": "Actions",
+        "reschedule": "Reschedule",
+        "rescheduleTitle": "Reschedule visit",
+        "rescheduleSubtitle": "Keeps the same booking code for reception",
+        "rescheduleDate": "New date",
+        "rescheduleSlot": "New slot",
+        "rescheduleNoSlots": "No slot configured for this department on that date.",
+        "rescheduleSubmit": "Move visit",
+        "rescheduleOk": "Visit rescheduled",
+        "errDuplicate": "The rider already has an active booking for this department on that date.",
+        "errSlotFull": "That slot is already full.",
+        "errNotReschedulable": "Only confirmed visits can be rescheduled.",
+        "errSlotDateMismatch": "That slot is not offered on the selected date.",
+        "errUnchanged": "Pick a different date or slot."
       },
       "calendar": {
         "title": "Calendar",

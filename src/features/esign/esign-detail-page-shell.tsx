@@ -228,8 +228,33 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             ) : null}
           </AppListCard>
 
+          {links?.signedDocumentUrl ? (
+            <Button
+              type="button"
+              className="h-9 w-full"
+              render={
+                <a href={links.signedDocumentUrl} target="_blank" rel="noreferrer" />
+              }
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {t("downloadSignedCopy")}
+            </Button>
+          ) : request.status === "signed" ? (
+            <p
+              className={
+                links?.signedDocumentError
+                  ? "rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive"
+                  : "rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800"
+              }
+            >
+              {links?.signedDocumentError
+                ? t("signedCopyFailed", { reason: links.signedDocumentError })
+                : t("signedCopyPending")}
+            </p>
+          ) : null}
           <Button
             type="button"
+            variant={links?.signedDocumentUrl ? "outline" : "default"}
             className="h-9 w-full"
             disabled={!links?.documentUrl}
             render={

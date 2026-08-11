@@ -165,18 +165,32 @@ const ESIGN_BUCKET = "esign-documents";
 const SIGNED_URL_TTL_SECONDS = 300;
 
 /** Short-lived signed URLs for the document preview / signature proof (Figma ESign 03). */
-export async function fetchEsignDocumentLinks(
-  id: string,
-): Promise<{ documentUrl: string | null; signatureUrl: string | null; error?: string }> {
+export async function fetchEsignDocumentLinks(id: string): Promise<{
+  documentUrl: string | null;
+  signatureUrl: string | null;
+  signedDocumentUrl: string | null;
+  signedDocumentError: string | null;
+  error?: string;
+}> {
   await requireRequestsManage();
   const supabase = await createClient();
   const { data, error } = await (supabase as any)
     .from("esign_requests")
-    .select("document_storage_key, signature_storage_key")
+    .select(
+      "document_storage_key, signature_storage_key, signed_document_storage_key, signed_document_error",
+    )
     .eq("id", id)
     .maybeSingle();
 
-  if (error) return { documentUrl: null, signatureUrl: null, error: error.message };
+  if (error) {
+    return {
+      documentUrl: null,
+      signatureUrl: null,
+      signedDocumentUrl: null,
+      signedDocumentError: null,
+      error: error.message,
+    };
+  }
   const row = asRecord(data);
 
   async function signedUrl(key: unknown): Promise<string | null> {
@@ -187,12 +201,19 @@ export async function fetchEsignDocumentLinks(
     return signed?.signedUrl ?? null;
   }
 
-  const [documentUrl, signatureUrl] = await Promise.all([
+  const [documentUrl, signatureUrl, signedDocumentUrl] = await Promise.all([
     signedUrl(row.document_storage_key),
     signedUrl(row.signature_storage_key),
+    signedUrl(row.signed_document_storage_key),
   ]);
 
-  return { documentUrl, signatureUrl };
+  return {
+    documentUrl,
+    signatureUrl,
+    signedDocumentUrl,
+    signedDocumentError:
+      row.signed_document_error != null ? String(row.signed_document_error) : null,
+  };
 }
 
 export async function createEsignRequest(input: {

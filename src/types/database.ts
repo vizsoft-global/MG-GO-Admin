@@ -6101,6 +6101,20 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_create_request: {
+        Args: {
+          p_amount_kwd?: number
+          p_attachments?: Json
+          p_details?: string
+          p_driver_id: string
+          p_end_date?: string
+          p_payload?: Json
+          p_severity?: Database["public"]["Enums"]["severity_level"]
+          p_start_date?: string
+          p_type: Database["public"]["Enums"]["request_type"]
+        }
+        Returns: Json
+      }
       admin_decide_request: {
         Args: {
           p_action: string
