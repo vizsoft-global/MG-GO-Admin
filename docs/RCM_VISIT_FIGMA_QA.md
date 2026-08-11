@@ -89,4 +89,29 @@ Re-tested at 1366×768 with a real admin session; every mutation was rolled back
 | `4195:11133` | VB/06 Departments | PASS + gap | 11 rows above the fold; no branch filter because `visit_departments` has no `branch_id`. |
 | `4195:11679` | VB/08 Reports | PASS | Bars and date presets work; KPI trend deltas need a prior-period aggregate RPC. |
 
-Two environment findings, both outside the visits scope: the dashboard shell logs `No QueryClient set` and 500s intermittently in dev even on `/dashboard` (single deduped `@tanstack/react-query`, so a Turbopack dev module-graph artifact — re-check on the next production build), and the dev server died once from memory exhaustion and was restarted with `--max-old-space-size=6144`. Day view scrolls horizontally with 11 real departments against Figma's 5 mock columns, which is acceptable for a resource calendar. `npx tsc --noEmit` clean.
+Day view scrolls horizontally with 11 real departments against Figma's 5 mock columns, which is acceptable for a resource calendar. The dev server died once from memory exhaustion and was restarted with `--max-old-space-size=6144`. `npx tsc --noEmit` clean.
+
+### 2026-08-12 — Admin RCM detail + typed drawers re-test (11 rows)
+
+| Node | Screen | Result | One-line reason |
+|---|---|---|---|
+| `4149:24728` | Request detail | PASS | `docH == 768` on all 8 requests; approve / reject / clarify / decision-terms round-trips verified against the DB. |
+| `4149:25358` | "detail variant" | OUT OF SCOPE | The node is actually the list page's *Raise a request to a rider* modal, not a detail state. |
+| `4149:26963` | Drawer Leave | PASS | 633px tall, no inner scroll; From/To collapsed into Figma's single "Dates" row. |
+| `4149:27065` | Drawer Asset | PASS | Only populated rows, matching Figma (7 empty "—" rows removed). |
+| `4149:27167` | Drawer Fuel | PASS | Amount reads `18.500 KWD`. |
+| `4149:27269` | Drawer Complaint | BLOCKED (values only) | `complaint_categories` still 0 rows; the gated message renders. |
+| `4149:27371` | Drawer Document | PASS | 534px. |
+| `4332:4342` | Drawer Advance | BLOCKED (values only) | `loan_tenure_options` still 0 rows; everything else correct. |
+| `4332:4455` | Drawer Salary justification | PASS | Reordered to Figma's Period / Net paid / Expected. |
+| `4332:4561` | Drawer Sick leave | PASS | Attachment click reaches the server action (storage object genuinely absent). |
+| `4321:8349` | Status conventions | PASS + gap | Every enum-backed status maps with a dot; `Rescheduled` / `Responded` / `Closed` are not in the `request_status` enum. |
+
+Root cause of the drawer failure: `w-[min(440px,calc(100vw-24px))]` produced invalid CSS (`calc` needs spaces around the operator), so the drawer lost its width **and** height and ran off screen. Sized inline instead. Also removed the duplicate footer Close per ui-system §7.
+
+Gaps needing server or client decisions: approval steps carry `decided_by` as a bare uuid with no `started_at`, so Figma's "Submitted by Divya R" / "Waiting since 09 Jul" cannot render; the requester row cannot show zone because the RPC does not return it; Fuel's "Transfer type (on approval)" is not in the frozen decision-meta key list and would invent a driver-app contract.
+
+Two dev-environment red herrings that three separate re-tests reported, now explained rather than chased:
+
+- The "hydration mismatch on every dashboard page" is `data-cursor-ref` injected into the sidebar by the QA browser tooling itself, not app code.
+- The intermittent `No QueryClient set` 500 arrives with Turbopack panics of the form `process has locked a portion of the file (os error 33)` — Windows file locking on `.next` while several browsers compile at once. `@tanstack/react-query` is a single deduped copy and `QueryProvider` does wrap the tree, so re-confirm on the next production build rather than refactoring the provider. `scripts/qa-manifest-guard.mjs` repairs the manifest those panics corrupt.
