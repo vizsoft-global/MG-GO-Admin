@@ -1,31 +1,102 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { ToggleChip } from "@/components/app/toggle-chip";
-import { Button } from "@/components/ui/button";
-import { Link } from "@/i18n/navigation";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  fetchRequestTypeScreenshotPolicy,
+  updateRequestTypeScreenshotPolicy,
+} from "@/features/requests/requests-settings-actions";
+import type { RequestTypeScreenshotPolicyRow, RequestTypeSlug } from "@/features/requests/settings-types";
+import {
+  useEsignCategories,
   useEsignScreenshotDefault,
   useUpdateEsignScreenshotDefault,
 } from "./use-esign";
+import { upsertEsignCategory } from "./esign-actions";
+import type { EsignCategoryRow } from "./types";
 
 export function EsignScreenshotSettingsShell() {
   const t = useTranslations("pages.requests.esign.screenshot");
+  const tTypes = useTranslations("pages.requests.types");
   const tSettings = useTranslations("pages.requests.settings");
-  const { data, isLoading } = useEsignScreenshotDefault();
-  const update = useUpdateEsignScreenshotDefault();
-  const [restricted, setRestricted] = useState(true);
+  const { data: defaultData, isLoading: defaultLoading } = useEsignScreenshotDefault();
+  const updateDefault = useUpdateEsignScreenshotDefault();
+  const { data: categories, isLoading: categoriesLoading, refetch: refetchCategories } =
+    useEsignCategories();
+
+  const [typePolicies, setTypePolicies] = useState<RequestTypeScreenshotPolicyRow[]>([]);
+  const [typesLoading, setTypesLoading] = useState(true);
+  const [, startTransition] = useTransition();
+
+  const loadTypes = useCallback(async () => {
+    setTypesLoading(true);
+    const result = await fetchRequestTypeScreenshotPolicy();
+    setTypesLoading(false);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    setTypePolicies(result.rows.filter((r) => r.is_active));
+  }, []);
 
   useEffect(() => {
-    if (data?.value != null) setRestricted(data.value);
-  }, [data?.value]);
+    void loadTypes();
+  }, [loadTypes]);
 
-  const save = async () => {
-    const result = await update.mutateAsync(restricted);
+  function toggleType(row: RequestTypeScreenshotPolicyRow) {
+    setTypePolicies((prev) =>
+      prev.map((r) =>
+        r.request_type === row.request_type
+          ? { ...r, screenshot_restricted: !r.screenshot_restricted }
+          : r,
+      ),
+    );
+    startTransition(async () => {
+      const result = await updateRequestTypeScreenshotPolicy(row.request_type, {
+        screenshot_restricted: !row.screenshot_restricted,
+      });
+      if (!result.ok) {
+        toast.error(result.error ?? t("errors.saveFailed"));
+        void loadTypes();
+      }
+    });
+  }
+
+  function toggleCategory(row: EsignCategoryRow) {
+    startTransition(async () => {
+      const result = await upsertEsignCategory({
+        id: row.id,
+        key: row.key,
+        label_en: row.label_en,
+        description: row.description,
+        screenshot_restricted: !row.screenshot_restricted,
+        is_active: row.is_active,
+        sort_order: row.sort_order,
+      });
+      if (!result.ok) {
+        toast.error(result.error ?? t("errors.saveFailed"));
+        return;
+      }
+      await refetchCategories();
+    });
+  }
+
+  const toggleDefault = async () => {
+    const next = !(defaultData?.value ?? true);
+    const result = await updateDefault.mutateAsync(next);
     if (!result.ok) {
       toast.error(result.error ?? t("errors.saveFailed"));
       return;
@@ -44,44 +115,94 @@ export function EsignScreenshotSettingsShell() {
         ]}
       />
 
-      <AppListCard className="space-y-3 p-4">
-        {isLoading ? (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
+      <AppListCard className="flex flex-wrap items-center justify-between gap-3 border-amber-200 bg-amber-50 p-4">
+        <div className="flex items-start gap-2">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+          <div>
+            <p className="text-sm font-semibold text-amber-900">{t("defaultLabel")}</p>
+            <p className="text-[11px] text-amber-800">{t("overrideNote")}</p>
           </div>
+        </div>
+        {defaultLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-amber-700" />
         ) : (
-          <>
-            <p className="text-sm font-medium">{t("defaultLabel")}</p>
-            <p className="text-[11px] text-muted-foreground">{t("overrideNote")}</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <ToggleChip selected={restricted} onClick={() => setRestricted(true)}>
-                {t("blocked")}
-              </ToggleChip>
-              <ToggleChip selected={!restricted} onClick={() => setRestricted(false)}>
-                {t("allowed")}
-              </ToggleChip>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Button
-                type="button"
-                className="h-9"
-                disabled={update.isPending || data?.value === restricted}
-                onClick={() => void save()}
-              >
-                {update.isPending ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                {t("save")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9"
-                render={<Link href="/requests/esign/categories" />}
-              >
-                {t("manageCategories")}
-              </Button>
-            </div>
-          </>
+          <ToggleChip selected={defaultData?.value ?? true} onClick={() => void toggleDefault()}>
+            {defaultData?.value ?? true ? t("blocked") : t("allowed")}
+          </ToggleChip>
         )}
+      </AppListCard>
+
+      <AppListCard className="p-0">
+        <h3 className="border-b border-border px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("sectionRequestTypes")}
+        </h3>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colItem")}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colScreenshot")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {typesLoading ? (
+              <TableRow>
+                <TableCell colSpan={2} className="py-6 text-center text-muted-foreground">
+                  <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                </TableCell>
+              </TableRow>
+            ) : (
+              typePolicies.map((row) => (
+                <TableRow key={row.request_type}>
+                  <TableCell className="text-sm font-medium">
+                    {tTypes(row.request_type as RequestTypeSlug)}
+                  </TableCell>
+                  <TableCell>
+                    <ToggleChip selected={row.screenshot_restricted} onClick={() => toggleType(row)}>
+                      {row.screenshot_restricted ? t("blocked") : t("allowed")}
+                    </ToggleChip>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </AppListCard>
+
+      <AppListCard className="p-0">
+        <h3 className="border-b border-border px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("sectionCategories")}
+        </h3>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colItem")}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colScreenshot")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {categoriesLoading ? (
+              <TableRow>
+                <TableCell colSpan={2} className="py-6 text-center text-muted-foreground">
+                  <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                </TableCell>
+              </TableRow>
+            ) : (categories?.rows ?? [])
+                .filter((row) => row.is_active)
+                .map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="text-sm font-medium">{row.label_en}</TableCell>
+                    <TableCell>
+                      <ToggleChip
+                        selected={row.screenshot_restricted}
+                        onClick={() => toggleCategory(row)}
+                      >
+                        {row.screenshot_restricted ? t("blocked") : t("allowed")}
+                      </ToggleChip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+          </TableBody>
+        </Table>
       </AppListCard>
     </AppPage>
   );

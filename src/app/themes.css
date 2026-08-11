@@ -10,6 +10,8 @@ html[data-theme="shopify"] {
   --warning-bg: oklch(0.96 0.04 85);
   --danger: oklch(0.55 0.2 25);
   --danger-bg: oklch(0.94 0.04 25);
+  --info: oklch(0.5 0.16 250);
+  --info-bg: oklch(0.94 0.03 250);
 
   /* Light mode — flat neutral content, navy sidebar */
   --background: oklch(0.985 0.002 250);
@@ -87,4 +89,6 @@ html[data-theme="shopify"].dark {
   --warning-bg: oklch(0.22 0.04 75);
   --danger: oklch(0.6 0.18 25);
   --danger-bg: oklch(0.22 0.04 25);
+  --info: oklch(0.68 0.15 250);
+  --info-bg: oklch(0.22 0.04 250);
 }

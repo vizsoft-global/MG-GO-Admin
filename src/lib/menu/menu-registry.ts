@@ -220,7 +220,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   },
   {
     id: "requests",
-    defaultLabel: "Requests",
+    defaultLabel: "Request & Complaint",
     defaultIcon: "Inbox",
     href: "/requests",
     defaultGroup: "WIP",
@@ -229,7 +229,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   },
   {
     id: "visit-bookings",
-    defaultLabel: "Visit bookings",
+    defaultLabel: "Visit Bookings",
     defaultIcon: "CalendarCheck",
     href: "/visit-bookings",
     defaultGroup: "WIP",

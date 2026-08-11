@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { KpiCard, type KpiAccent } from "@/components/dashboard/kpi-card";
 
 export type KpiGridItem = {
@@ -6,6 +7,7 @@ export type KpiGridItem = {
   value: string | number;
   icon?: LucideIcon;
   accent?: KpiAccent;
+  caption?: ReactNode;
 };
 
 export function KpiGrid({ items }: { items: KpiGridItem[] }) {
@@ -18,6 +20,7 @@ export function KpiGrid({ items }: { items: KpiGridItem[] }) {
           value={kpi.value}
           icon={kpi.icon}
           accent={kpi.accent}
+          caption={kpi.caption}
         />
       ))}
     </div>

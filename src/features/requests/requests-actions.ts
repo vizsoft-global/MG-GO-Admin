@@ -127,6 +127,7 @@ export async function fetchAdminRequestsList(filters: RequestListFilters): Promi
         attention_at: r.attention_at != null ? String(r.attention_at) : null,
         created_at: String(r.created_at ?? ""),
         severity: r.severity != null ? String(r.severity) : null,
+        awaiting_driver_ack: Boolean(r.awaiting_driver_ack),
       };
     }),
     kpi: {

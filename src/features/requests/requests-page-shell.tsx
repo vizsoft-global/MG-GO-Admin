@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
-import { requestStatusVariant } from "./request-status-utils";
+import { requestStatusLabelKey, requestStatusVariant } from "./request-status-utils";
 import type { RequestDatePreset } from "./types";
 import { useAdminRequestsList } from "./use-requests";
 
@@ -380,8 +380,16 @@ export function RequestsPageShell({
                   {row.current_step_label ?? "—"}
                 </TableCell>
                 <TableCell>
-                  <StatusPill variant={requestStatusVariant(row.status)}>
-                    {t(`status.${row.status}` as "status.pending")}
+                  <StatusPill
+                    variant={requestStatusVariant(row.status, {
+                      awaiting_driver_ack: row.awaiting_driver_ack,
+                    })}
+                  >
+                    {t(
+                      `status.${requestStatusLabelKey(row.status, {
+                        awaiting_driver_ack: row.awaiting_driver_ack,
+                      })}` as "status.pending",
+                    )}
                   </StatusPill>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground tabular-nums">

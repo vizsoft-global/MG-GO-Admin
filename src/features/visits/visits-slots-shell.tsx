@@ -36,6 +36,7 @@ import {
   upsertVisitSlot,
   type VisitSlotRow,
 } from "./visits-actions";
+import { departmentBadgeClass } from "./visit-status-utils";
 import { DAY_OF_WEEK_LABELS } from "./visit-status-utils";
 import { VisitsTabBar } from "./visits-tab-bar";
 
@@ -95,6 +96,7 @@ export function VisitsSlotsShell() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<SlotDraft>(emptyDraft());
+  const [branchFilter, setBranchFilter] = useState("all");
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: queryKeys.visits.slots(),
@@ -111,7 +113,14 @@ export function VisitsSlotsShell() {
     queryFn: () => fetchVisitBranches(),
   });
 
-  const rows = data?.rows ?? [];
+  const allRows = data?.rows ?? [];
+  const rows = useMemo(
+    () =>
+      branchFilter === "all"
+        ? allRows
+        : allRows.filter((r) => r.branch_id === branchFilter),
+    [allRows, branchFilter],
+  );
   const departments = useMemo(
     () => (deptData?.rows ?? []).filter((d) => d.is_active),
     [deptData?.rows],
@@ -185,6 +194,10 @@ export function VisitsSlotsShell() {
   return (
     <AppPage>
       <AppPageHeader
+        breadcrumbs={[
+          { label: t("title"), href: "/visit-bookings" },
+          { label: t("slots.title") },
+        ]}
         title={t("slots.title")}
         description={t("slots.subtitle")}
         actions={
@@ -214,6 +227,24 @@ export function VisitsSlotsShell() {
 
       <VisitsTabBar />
 
+      <div className="flex items-center gap-2">
+        <Select value={branchFilter} onValueChange={(v) => v && setBranchFilter(v)}>
+          <SelectTrigger className="h-9 w-[220px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" label={t("allVisits.filterAllBranches")}>
+              {t("allVisits.filterAllBranches")}
+            </SelectItem>
+            {branches.map((b) => (
+              <SelectItem key={b.id} value={b.id} label={b.name}>
+                {b.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <AppListCard className="mt-2">
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
@@ -238,7 +269,16 @@ export function VisitsSlotsShell() {
           >
             {rows.map((row) => (
               <AppDataTableRow key={row.id}>
-                <TableCell className="text-sm">{row.department_label}</TableCell>
+                <TableCell>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                      departmentBadgeClass(row.department_key),
+                    )}
+                  >
+                    {row.department_label}
+                  </span>
+                </TableCell>
                 <TableCell className="text-sm">{row.branch_name ?? "—"}</TableCell>
                 <TableCell className="text-sm tabular-nums">
                   {formatSchedule(row)}

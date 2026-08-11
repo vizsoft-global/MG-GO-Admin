@@ -12,35 +12,19 @@ import { useAuth } from "@/contexts/auth-context";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { fetchRequestAttachmentUrl } from "./requests-actions";
+import { RequestApprovalTimeline } from "./request-approval-timeline";
 import { RequestTypedDrawer } from "./request-typed-drawer";
-import { requestStatusVariant } from "./request-status-utils";
+import { getTypedFieldRows } from "./request-typed-fields";
+import { requestStatusLabelKey, requestStatusVariant } from "./request-status-utils";
 import { RequesterHeader } from "./requester-header";
 import type { RequestApprovalStep } from "./types";
 import { useAdminRequestDetail, useDecideRequest } from "./use-requests";
 
-function humanizeFieldKey(key: string): string {
-  return key
-    .replace(/_/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function formatFieldValue(value: unknown): string {
-  if (value == null || value === "") return "—";
-  if (Array.isArray(value)) return value.map((v) => formatFieldValue(v)).join(", ");
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "object") return JSON.stringify(value);
-  const str = String(value);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    return new Date(str).toLocaleDateString();
-  }
-  return str;
-}
-
-const NON_TYPED_KEYS = new Set(["awaiting_driver_ack"]);
-
-function typedFields(payload: Record<string, unknown>): Array<[string, unknown]> {
-  return Object.entries(payload).filter(([key]) => !NON_TYPED_KEYS.has(key));
+function formatFileSize(bytes: number | null): string {
+  if (bytes == null) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function currentStepAllowedActions(steps: RequestApprovalStep[]): string[] {
@@ -60,6 +44,12 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const steps = data?.steps ?? [];
   const clarifications = data?.clarifications ?? [];
   const attachments = data?.attachments ?? [];
+  const rows = request ? getTypedFieldRows(request) : [];
+  const subjectRow = rows.find((row) => row.key === "subject" && row.value !== "—");
+  const detailRows = rows.filter((row) => row.key !== "subject" && row.key !== "description");
+  const descriptionRow = rows.find((row) => row.key === "description");
+  const message =
+    descriptionRow && descriptionRow.value !== "—" ? descriptionRow.value : request?.details;
   const closed =
     request?.status === "approved" ||
     request?.status === "rejected" ||
@@ -123,10 +113,10 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         description={`${t(`types.${request.request_type}` as "types.leave")} · ${request.current_step_label ?? "—"}`}
         actions={
           <div className="flex items-center gap-2">
-            <StatusPill variant={requestStatusVariant(request.status)}>
-              {t(`status.${request.status}` as "status.pending")}
+            <StatusPill variant={requestStatusVariant(request.status, request.payload)}>
+              {t(`status.${requestStatusLabelKey(request.status, request.payload)}` as "status.pending")}
             </StatusPill>
-            <RequestTypedDrawer request={request} attachments={attachments} />
+            <RequestTypedDrawer request={request} steps={steps} attachments={attachments} />
             <Button variant="outline" size="sm" className="h-9" render={<Link href="/requests/overview" />}>
               <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
               {t("detail.back")}
@@ -141,38 +131,56 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
 
       <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
         <section className="h-full rounded-xl border border-border bg-card p-4 shadow-sm">
+          {subjectRow || request.details ? (
+            <div className="mb-3 space-y-1.5">
+              {subjectRow ? (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("detail.subject")}
+                  </p>
+                  <p className="text-sm font-semibold">{subjectRow.value}</p>
+                </div>
+              ) : null}
+              {message ? (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("detail.message")}
+                  </p>
+                  <p className="text-sm whitespace-pre-wrap text-foreground/90">{message}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <h2 className="mb-2 text-sm font-semibold">{t("detail.fields")}</h2>
-          <dl className="space-y-2 text-sm">
-            {request.amount_kwd != null ? (
-              <div className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">{t("colAmount")}</dt>
-                <dd className="tabular-nums">{request.amount_kwd}</dd>
-              </div>
-            ) : null}
-            {request.start_date ? (
-              <div className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">{t("detail.from")}</dt>
-                <dd>
-                  {request.start_date}
-                  {request.end_date ? ` → ${request.end_date}` : ""}
-                </dd>
-              </div>
-            ) : null}
-            {request.details ? (
-              <div>
-                <dt className="text-muted-foreground">{t("detail.notes")}</dt>
-                <dd className="mt-1 whitespace-pre-wrap">{request.details}</dd>
-              </div>
-            ) : null}
-            {typedFields(request.payload ?? {}).map(([key, value]) => (
-              <div key={key} className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">{humanizeFieldKey(key)}</dt>
-                <dd className="max-w-[60%] break-words text-end">
-                  {formatFieldValue(value)}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          {detailRows.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{t("detail.noTypedFields")}</p>
+          ) : (
+            <div className="divide-y divide-border rounded-lg border border-border text-sm">
+              {detailRows.map((row) => (
+                <div
+                  key={row.key}
+                  className="flex items-center justify-between gap-2 px-2.5 py-1.5"
+                >
+                  <span className="text-xs text-muted-foreground">{row.label}</span>
+                  {row.gatedKey ? (
+                    <span className="text-[11px] text-warning">
+                      {t(`detail.${row.gatedKey}` as "detail.categoryGated")}
+                    </span>
+                  ) : (
+                    <span
+                      className={cn(
+                        "max-w-[60%] break-words text-end font-medium",
+                        row.value === "—" && "text-muted-foreground",
+                      )}
+                    >
+                      {row.value}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="mt-3 border-t border-border pt-3">
             <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
@@ -192,6 +200,11 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     >
                       <Download className="h-3.5 w-3.5" />
                       {a.file_name ?? a.storage_key.split("/").pop()}
+                      {a.byte_size != null ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          {formatFileSize(a.byte_size)}
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 ))}
@@ -202,36 +215,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
 
         <section className="h-full rounded-xl border border-border bg-card p-4 shadow-sm">
           <h2 className="mb-2 text-sm font-semibold">{t("detail.approval")}</h2>
-          <ol className="space-y-2">
-            {steps.map((step) => (
-              <li
-                key={step.id}
-                className={cn(
-                  "rounded-lg border px-3 py-2 text-sm",
-                  step.status === "in_progress" &&
-                    "border-emerald-500 bg-emerald-50 text-emerald-900",
-                  step.status === "completed" && "border-border bg-muted/30",
-                  step.status === "rejected" &&
-                    "border-destructive/40 bg-destructive/5",
-                  step.status === "pending" && "border-border text-muted-foreground",
-                )}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">
-                    {step.step_order}. {step.step_name}
-                  </span>
-                  <span className="text-[11px] uppercase tracking-wide">
-                    {step.status}
-                  </span>
-                </div>
-                {step.decision_note ? (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {step.decision_note}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ol>
+          <RequestApprovalTimeline steps={steps} />
 
           {clarifications.length > 0 ? (
             <div className="mt-3 space-y-2">
@@ -244,7 +228,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                   {c.answer ? (
                     <p className="mt-1 text-muted-foreground">{c.answer}</p>
                   ) : (
-                    <p className="mt-1 text-amber-700">{t("detail.awaitingAnswer")}</p>
+                    <p className="mt-1 text-warning">{t("detail.awaitingAnswer")}</p>
                   )}
                 </div>
               ))}

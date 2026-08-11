@@ -49,6 +49,15 @@ function addDays(d: Date, n: number): Date {
   return next;
 }
 
+function LegendDot({ className, label }: { className: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-1">
+      <span className={cn("h-1.5 w-1.5 rounded-full", className)} />
+      {label}
+    </span>
+  );
+}
+
 export function VisitsCalendarShell() {
   const t = useTranslations("pages.visitBookings");
   const [mode, setMode] = useState<"day" | "list">("day");
@@ -150,6 +159,10 @@ export function VisitsCalendarShell() {
   return (
     <AppPage>
       <AppPageHeader
+        breadcrumbs={[
+          { label: t("title"), href: "/visit-bookings" },
+          { label: t("calendar.title") },
+        ]}
         title={t("calendar.title")}
         description={
           mode === "day"
@@ -200,6 +213,13 @@ export function VisitsCalendarShell() {
 
       {mode === "day" ? (
         <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+              <LegendDot className="bg-success" label={t("status.confirmed")} />
+              <LegendDot className="bg-primary" label={t("status.checked_in")} />
+              <LegendDot className="bg-danger" label={t("calendar.full")} />
+            </div>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {branches.length > 0 ? (
               <Select
@@ -289,10 +309,17 @@ export function VisitsCalendarShell() {
                         }
                         const booked = bookingsBySlot.get(slot.id) ?? [];
                         const first = booked[0];
+                        const isFull = booked.length >= slot.capacity;
                         return (
                           <td key={dept.key} className="border-s border-border px-3 py-2 align-top">
-                            <p className="text-[10px] font-medium tabular-nums text-muted-foreground">
+                            <p
+                              className={cn(
+                                "text-[10px] font-medium tabular-nums",
+                                isFull ? "text-danger" : "text-muted-foreground",
+                              )}
+                            >
                               {booked.length}/{slot.capacity}
+                              {isFull ? ` · ${t("calendar.full")}` : ""}
                             </p>
                             {first ? (
                               <Link

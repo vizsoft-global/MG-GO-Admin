@@ -34,6 +34,7 @@ export type RequestListRow = {
   attention_at: string | null;
   created_at: string;
   severity: string | null;
+  awaiting_driver_ack: boolean;
 };
 
 export type RequestKpis = {

@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import {
   accentToTone,
   NEUTRAL_TILE,
@@ -13,12 +14,14 @@ export function KpiCard({
   value,
   icon: Icon,
   accent = "default",
+  caption,
   className,
 }: {
   label: string;
   value: string | number;
   icon?: LucideIcon;
   accent?: KpiAccent;
+  caption?: ReactNode;
   className?: string;
 }) {
   const toneStyle = TONE_STYLES[accentToTone(accent)];
@@ -49,6 +52,9 @@ export function KpiCard({
         <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
           {value}
         </p>
+        {caption ? (
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{caption}</p>
+        ) : null}
       </div>
     </div>
   );
