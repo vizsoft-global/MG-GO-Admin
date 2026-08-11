@@ -170,6 +170,35 @@ export function AssetDetailSheet({
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-border px-3 py-2">
+                  <p className="text-[10px] uppercase text-muted-foreground">
+                    {t("colCategory")}
+                  </p>
+                  {display.category ? (
+                    <Badge variant="secondary" className="mt-1 font-normal">
+                      {display.category}
+                    </Badge>
+                  ) : (
+                    <p className="mt-1 text-sm text-muted-foreground">{t("notSet")}</p>
+                  )}
+                </div>
+                <div className="rounded-lg border border-border px-3 py-2">
+                  <p className="text-[10px] uppercase text-muted-foreground">
+                    {t("colPenalty")}
+                  </p>
+                  <p
+                    className={`mt-1 text-sm tabular-nums ${
+                      display.penalty_kwd == null ? "text-muted-foreground" : "font-medium"
+                    }`}
+                  >
+                    {display.penalty_kwd != null
+                      ? `${display.penalty_kwd.toFixed(3)} KWD`
+                      : t("notSet")}
+                  </p>
+                </div>
+              </div>
+
               {display.description ? (
                 <p className="text-sm text-muted-foreground">{display.description}</p>
               ) : null}

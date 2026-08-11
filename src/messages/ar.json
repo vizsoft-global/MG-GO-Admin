@@ -943,8 +943,20 @@
         "invalid_quantity": "أدخل تغييراً صالحاً للكمية",
         "file_too_large": "يجب أن تكون الصورة 2 ميجابايت أو أقل",
         "invalid_type": "استخدم PNG أو JPG أو WebP أو SVG",
-        "upload_failed": "فشل رفع الصورة — تم حفظ الأصل بدونها"
-      }
+        "upload_failed": "فشل رفع الصورة — تم حفظ الأصل بدونها",
+        "invalid_penalty": "أدخل غرامة تساوي 0 أو أكثر"
+      },
+      "colCategory": "الفئة",
+      "colPenalty": "الغرامة",
+      "filterCategory": "الفئة",
+      "filterAllCategories": "كل الفئات",
+      "fieldCategory": "الفئة",
+      "fieldPenalty": "الغرامة (د.ك)",
+      "categoryPlaceholder": "معدات السلامة",
+      "categoryHint": "تصنيف حر يُستخدم لتصفية الكتالوج.",
+      "penaltyPlaceholder": "0.000",
+      "penaltyHint": "تُحتسب على السائق عند فقدان العنصر أو تلفه.",
+      "notSet": "غير محدد"
     },
     "driverDetail": {
       "title": "تفاصيل السائق",

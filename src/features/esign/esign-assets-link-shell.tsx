@@ -6,6 +6,7 @@ import { ExternalLink, Loader2, Package, Search } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { StatusPill } from "@/components/dashboard/status-pill";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +24,7 @@ import type { AssetCatalogRow } from "@/features/assets/types";
 export function EsignAssetsLinkShell() {
   const t = useTranslations("pages.requests.esign.assets");
   const tSettings = useTranslations("pages.requests.settings");
+  const tAssets = useTranslations("pages.assets");
   const [rows, setRows] = useState<AssetCatalogRow[] | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [search, setSearch] = useState("");
@@ -89,20 +91,22 @@ export function EsignAssetsLinkShell() {
             <TableHeader>
               <TableRow>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{tAssets("colCategory")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colStock")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{tAssets("colPenalty")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibleRows === null ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                     <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                   </TableCell>
                 </TableRow>
               ) : visibleRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                     {t("empty")}
                   </TableCell>
                 </TableRow>
@@ -120,6 +124,15 @@ export function EsignAssetsLinkShell() {
                         </div>
                       </div>
                     </TableCell>
+                    <TableCell>
+                      {row.category ? (
+                        <Badge variant="secondary" className="font-normal">
+                          {row.category}
+                        </Badge>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="tabular-nums text-sm">
                       {row.available_qty <= 0 ? (
                         <span className="text-destructive">{t("outOfStock")}</span>
@@ -135,6 +148,13 @@ export function EsignAssetsLinkShell() {
                       <StatusPill variant={row.is_active ? "success" : "neutral"}>
                         {row.is_active ? t("activeOn") : t("activeOff")}
                       </StatusPill>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums text-sm">
+                      {row.penalty_kwd != null ? (
+                        `${row.penalty_kwd.toFixed(3)} KWD`
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

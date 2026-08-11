@@ -54,6 +54,8 @@ function AssetFormBody({
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
+  const [penaltyKwd, setPenaltyKwd] = useState("");
   const [iconKey, setIconKey] = useState("Package");
   const [totalQuantity, setTotalQuantity] = useState("0");
   const [reorderLevel, setReorderLevel] = useState("0");
@@ -66,6 +68,8 @@ function AssetFormBody({
     setName(asset?.name ?? "");
     setCode(asset?.code ?? "");
     setDescription(asset?.description ?? "");
+    setCategory(asset?.category ?? "");
+    setPenaltyKwd(asset?.penalty_kwd != null ? String(asset.penalty_kwd) : "");
     setIconKey(asset?.icon_key ?? "Package");
     setTotalQuantity(String(asset?.total_quantity ?? 0));
     setReorderLevel(String(asset?.reorder_level ?? 0));
@@ -99,12 +103,19 @@ function AssetFormBody({
       toast.error(t("errors.missing_fields"));
       return;
     }
+    const penaltyTrimmed = penaltyKwd.trim();
+    if (penaltyTrimmed && !(Number(penaltyTrimmed) >= 0)) {
+      toast.error(t("errors.invalid_penalty"));
+      return;
+    }
 
     startTransition(async () => {
       const formData = new FormData();
       formData.append("name", name.trim());
       formData.append("code", code.trim());
       formData.append("description", description.trim());
+      formData.append("category", category.trim());
+      formData.append("penaltyKwd", penaltyTrimmed);
       formData.append("iconKey", iconKey);
       formData.append("totalQuantity", String(Math.max(0, total)));
       formData.append("reorderLevel", String(Math.max(0, reorder)));
@@ -173,6 +184,36 @@ function AssetFormBody({
             className="resize-none"
             disabled={!canManage || isPending}
           />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="asset-category">{t("fieldCategory")}</Label>
+            <Input
+              id="asset-category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              disabled={!canManage || isPending}
+              placeholder={t("categoryPlaceholder")}
+              className="rounded-lg bg-background"
+            />
+            <p className="text-[11px] text-muted-foreground">{t("categoryHint")}</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="asset-penalty">{t("fieldPenalty")}</Label>
+            <Input
+              id="asset-penalty"
+              type="number"
+              min={0}
+              step="0.001"
+              value={penaltyKwd}
+              onChange={(e) => setPenaltyKwd(e.target.value)}
+              disabled={!canManage || isPending}
+              placeholder={t("penaltyPlaceholder")}
+              className="rounded-lg bg-background"
+            />
+            <p className="text-[11px] text-muted-foreground">{t("penaltyHint")}</p>
+          </div>
         </div>
 
         <div className="space-y-1.5">

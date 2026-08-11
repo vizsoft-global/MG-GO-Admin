@@ -97,6 +97,9 @@ function parseAssetFormFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const codeRaw = String(formData.get("code") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
+  const category = String(formData.get("category") ?? "").trim();
+  const penaltyRaw = String(formData.get("penaltyKwd") ?? "").trim();
+  const penaltyParsed = Number(penaltyRaw);
   const iconKey = String(formData.get("iconKey") ?? "Package").trim() || "Package";
   const totalQuantity = parseInt(String(formData.get("totalQuantity") ?? "0"), 10);
   const reorderLevel = parseInt(String(formData.get("reorderLevel") ?? "0"), 10);
@@ -106,6 +109,11 @@ function parseAssetFormFields(formData: FormData) {
     name,
     code: (codeRaw || slugifyAssetCode(name)).toLowerCase(),
     description,
+    category,
+    penaltyKwd: penaltyRaw ? penaltyParsed : null,
+    penaltyInvalid: Boolean(
+      penaltyRaw && (!Number.isFinite(penaltyParsed) || penaltyParsed < 0),
+    ),
     iconKey,
     totalQuantity: Number.isFinite(totalQuantity) ? Math.max(0, totalQuantity) : 0,
     reorderLevel: Number.isFinite(reorderLevel) ? Math.max(0, reorderLevel) : 0,
@@ -169,6 +177,8 @@ function mapCatalogRow(
     name: row.name,
     code: row.code,
     description: row.description,
+    category: row.category,
+    penalty_kwd: row.penalty_kwd != null ? Number(row.penalty_kwd) : null,
     icon_key: row.icon_key,
     image_url: row.image_url ?? null,
     total_quantity: row.total_quantity,
@@ -363,6 +373,7 @@ export async function createAssetCatalogItem(
   const fields = parseAssetFormFields(formData);
   if (!fields.name) return { error: "missing_fields" };
   if (!/^[a-z0-9_]+$/.test(fields.code)) return { error: "invalid_code" };
+  if (fields.penaltyInvalid) return { error: "invalid_penalty" };
 
   const imageFile = formData.get("image");
   const supabase = await createClient();
@@ -372,6 +383,8 @@ export async function createAssetCatalogItem(
       name: fields.name,
       code: fields.code,
       description: fields.description || null,
+      category: fields.category || null,
+      penalty_kwd: fields.penaltyKwd,
       icon_key: fields.iconKey,
       total_quantity: fields.totalQuantity,
       reorder_level: fields.reorderLevel,
@@ -421,6 +434,7 @@ export async function updateAssetCatalogItem(
   const fields = parseAssetFormFields(formData);
   if (!fields.name) return { error: "missing_fields" };
   if (!/^[a-z0-9_]+$/.test(fields.code)) return { error: "invalid_code" };
+  if (fields.penaltyInvalid) return { error: "invalid_penalty" };
 
   const imageFile = formData.get("image");
   const removeImage = formData.get("removeImage") === "true";
@@ -455,6 +469,8 @@ export async function updateAssetCatalogItem(
       name: fields.name,
       code: fields.code,
       description: fields.description || null,
+      category: fields.category || null,
+      penalty_kwd: fields.penaltyKwd,
       icon_key: fields.iconKey,
       total_quantity: fields.totalQuantity,
       reorder_level: fields.reorderLevel,

@@ -9,6 +9,7 @@ export const ASSET_ERROR_KEYS = [
   "assignment_not_found",
   "stock_below_assigned",
   "invalid_quantity",
+  "invalid_penalty",
   "file_too_large",
   "invalid_type",
   "upload_failed",

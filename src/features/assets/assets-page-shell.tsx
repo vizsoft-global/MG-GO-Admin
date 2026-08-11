@@ -58,6 +58,8 @@ function exportAssetsCsv(rows: AssetCatalogRow[]) {
     "id",
     "name",
     "code",
+    "category",
+    "penalty_kwd",
     "total_quantity",
     "assigned_qty",
     "available_qty",
@@ -76,6 +78,8 @@ function exportAssetsCsv(rows: AssetCatalogRow[]) {
         row.id,
         row.name,
         row.code,
+        row.category ?? "",
+        row.penalty_kwd ?? "",
         row.total_quantity,
         row.assigned_qty,
         row.available_qty,
@@ -125,13 +129,22 @@ function AssetsPageContent() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetCatalogRow | null>(null);
   const [detailAsset, setDetailAsset] = useState<AssetCatalogRow | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const hasActiveFilters = statusFilter !== "all";
+  const hasActiveFilters = statusFilter !== "all" || categoryFilter !== "all";
+
+  const categories = useMemo(
+    () =>
+      [...new Set(items.map((row) => row.category).filter(Boolean) as string[])].sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    [items],
+  );
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -141,6 +154,7 @@ function AssetsPageContent() {
         !(
           row.name.toLowerCase().includes(q) ||
           row.code.toLowerCase().includes(q) ||
+          (row.category?.toLowerCase().includes(q) ?? false) ||
           (row.description?.toLowerCase().includes(q) ?? false)
         )
       ) {
@@ -149,9 +163,10 @@ function AssetsPageContent() {
       if (statusFilter === "lowStock" && !row.is_low_stock) return false;
       if (statusFilter === "inactive" && row.is_active) return false;
       if (statusFilter === "assigned" && row.holder_count === 0) return false;
+      if (categoryFilter !== "all" && row.category !== categoryFilter) return false;
       return true;
     });
-  }, [items, search, statusFilter]);
+  }, [items, search, statusFilter, categoryFilter]);
 
   const invalidateAssets = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.assets.all() });
@@ -304,7 +319,7 @@ function AssetsPageContent() {
                     variant="secondary"
                     className="ms-2 h-5 min-w-5 rounded-full px-1.5 text-[10px]"
                   >
-                    1
+                    {(statusFilter !== "all" ? 1 : 0) + (categoryFilter !== "all" ? 1 : 0)}
                   </Badge>
                 ) : null}
               </DropdownMenuTrigger>
@@ -322,12 +337,36 @@ function AssetsPageContent() {
                     ))}
                   </DropdownMenuRadioGroup>
                 </DropdownMenuGroup>
+                {categories.length > 0 ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>{t("filterCategory")}</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup
+                        value={categoryFilter}
+                        onValueChange={(v) => setCategoryFilter(v ?? "all")}
+                      >
+                        <DropdownMenuRadioItem value="all">
+                          {t("filterAllCategories")}
+                        </DropdownMenuRadioItem>
+                        {categories.map((category) => (
+                          <DropdownMenuRadioItem key={category} value={category}>
+                            {category}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuGroup>
+                  </>
+                ) : null}
                 {hasActiveFilters ? (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="cursor-pointer text-muted-foreground"
-                      onClick={() => setStatusFilter("all")}
+                      onClick={() => {
+                        setStatusFilter("all");
+                        setCategoryFilter("all");
+                      }}
                     >
                       {t("clearFilters")}
                     </DropdownMenuItem>
@@ -364,7 +403,10 @@ function AssetsPageContent() {
                 type="button"
                 variant="outline"
                 className="mt-4"
-                onClick={() => setStatusFilter("all")}
+                onClick={() => {
+                  setStatusFilter("all");
+                  setCategoryFilter("all");
+                }}
               >
                 {t("clearFilters")}
               </Button>
@@ -379,11 +421,13 @@ function AssetsPageContent() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colAsset")}</TableHead>
+                      <TableHead className={TABLE_HEAD_CLASS}>{t("colCategory")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colInStock")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colAssigned")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colAvailable")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colHolders")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
+                      <TableHead className={TABLE_HEAD_CLASS}>{t("colPenalty")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colActions")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -409,6 +453,15 @@ function AssetsPageContent() {
                                 <p className="text-[11px] text-muted-foreground">{row.code}</p>
                               </div>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {row.category ? (
+                              <Badge variant="secondary" className="font-normal">
+                                {row.category}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell className="tabular-nums">{row.total_quantity}</TableCell>
                           <TableCell className="tabular-nums">{row.assigned_qty}</TableCell>
@@ -444,6 +497,13 @@ function AssetsPageContent() {
                             <Badge variant={row.is_active ? "default" : "secondary"}>
                               {row.is_active ? t("statusActive") : t("statusInactive")}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="tabular-nums whitespace-nowrap">
+                            {row.penalty_kwd != null ? (
+                              `${row.penalty_kwd.toFixed(3)} KWD`
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1">

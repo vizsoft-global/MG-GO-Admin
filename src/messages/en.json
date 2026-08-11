@@ -954,8 +954,20 @@
         "invalid_quantity": "Enter a valid quantity change",
         "file_too_large": "Image must be 2 MB or smaller",
         "invalid_type": "Use PNG, JPG, WebP, or SVG",
-        "upload_failed": "Image upload failed — asset was saved without it"
-      }
+        "upload_failed": "Image upload failed — asset was saved without it",
+        "invalid_penalty": "Enter a penalty of 0 or more"
+      },
+      "colCategory": "Category",
+      "colPenalty": "Penalty",
+      "filterCategory": "Category",
+      "filterAllCategories": "All categories",
+      "fieldCategory": "Category",
+      "fieldPenalty": "Penalty (KWD)",
+      "categoryPlaceholder": "Safety gear",
+      "categoryHint": "Free-form grouping used to filter the catalog.",
+      "penaltyPlaceholder": "0.000",
+      "penaltyHint": "Charged to the driver if the item is lost or damaged.",
+      "notSet": "Not set"
     },
     "driverDetail": {
       "title": "Driver Details",
