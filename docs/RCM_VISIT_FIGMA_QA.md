@@ -130,3 +130,24 @@ Every earlier Rsp verdict in this file, mine included, measured `documentElement
 `KpiCard` / `KpiGrid` gained an opt-in `compact` prop (caption beside the value, as in Figma) — no existing caller changed. Sweep after the fixes: **25/25 routes at `scroll=0px side=0px inner=0`**, one console error in the whole run (a Supabase 429 from the sweep's own request rate).
 
 Deliberate deviation to record: Figma's screenshot-settings mock has 10 rows in one table; production has 15, which cannot fit stacked. The two-column split keeps every row and both group labels.
+
+### 2026-08-12 — Admin E-Sign authenticated re-test (5 screens)
+
+Nodes `4447:4342` (hub), `4345:4342` (Sent), `4345:5006` (Signatures), `4345:5670` (detail), `4345:6334` (Categories) at 1366×768. All five now **PASS**; the detail row carries two BLOCKED columns (Val, Ix) because production has no signed request to exercise. Fixes in `fa10777` and `4de6ba3`:
+
+| Screen | Was | Fix |
+|---|---|---|
+| Detail `4345:5670` | Page scrolled 1194px; Figma's two columns rendered as one | `lg:grid-cols-[1fr,320px]` is invalid CSS — a bare comma inside the bracket makes the whole declaration drop. Now `minmax(0,1fr)_320px`, 768/768. |
+| Detail | Figma's "Viewed" step showed a schema explanation to the user | Renders as an explicit "Not tracked yet" state; proof rows in two columns so a signed request with 8 fields still fits. |
+| Categories `4345:6334` | Switch showed green ON beside **Blocked** — fails the ui-system §5 squint test | ON = Allowed, as in Figma. Headers CATEGORY / SCREENSHOTS / ACTIVE. |
+| Sent + Signatures | KPI labels clipped, a third of the strip empty, ACTIONS column caused horizontal scroll | 4-up KPI strip, ACTIONS dropped (not in Figma) in favour of the §6 "View details" row link. hScroll 0. |
+| Create modal | Category trigger printed raw `__none` | Renders "No category". |
+| `esign-actions.ts` | **Functional:** create never sent `document_storage_key`, so every admin-raised request reached the driver with nothing to sign | Uploads the file (WebP rejected, 10MB cap) and passes the key; categories persist `icon_key`. |
+
+The invalid-bracket-comma bug was checked across `src/` — that was the only occurrence, and the `calc()` cases all sit in Tailwind arbitrary values where the compiler inserts the spaces.
+
+Shared-component defect this surfaced: `KpiGrid` was hard-coded to `xl:grid-cols-6`, so **every** page with fewer than six KPIs clipped its labels (visible on `/requests/settings/reports` as "AVG. RESOLUTI…"). The column count now follows the item count.
+
+Third dev-environment red herring, for the record: the dark disc overlapping the sidebar avatar in every screenshot is `nextjs-portal`, the Next dev-tools indicator, confirmed by hit-testing that point. Not app markup.
+
+E-Sign gaps that need a client or schema decision: `Accepted` / `Completed` statuses exist in Figma but not in `esign_requests`; there is no `viewed_at` column or driver-app write for Figma's "Viewed" timestamp; "Download audit trail" has no artifact defined. Also two QA seed rows (SIG-1400/1401) carry `document_storage_key` values prefixed with the bucket name (`esign-documents/demo/...`) pointing at objects that do not exist, so they can never render a document — real uploads use bucket-relative keys. And all five routes require `requests.manage`, not `requests.view`, which hides E-Sign entirely from read-only operators — fail-closed, but confirm it is intended.
