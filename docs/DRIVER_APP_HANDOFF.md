@@ -256,7 +256,11 @@ Loan submit requires rows in `loan_tenure_options` (empty until client confirms)
 | `visit_branches` | R — Admin catalog; User App shows Central Tower (no branch picker) |
 | `visit_slots` | R — capacity; remaining = capacity − active bookings |
 | `visit_bookings` | **W** own rows; code **VIS-#####**; status confirmed / checked_in / completed / no_show / cancelled |
+| `visit_bookings.note` | Rider-authored **Purpose** of the visit (what the driver types at booking) |
+| `visit_bookings.note_to_rider` | **R** — staff instruction written by Admin (`visits.operate`). Show it on the driver's booking detail; it is not the rider's own note |
+| `visit_booking_notes` | Admin-only internal thread — **no driver policy**; never surface in the app |
 | Duplicate rule | Unique active `(driver_id, scheduled_date, department_key)` where status ∈ confirmed, checked_in. Error: `duplicate_department_date` — “Already booked for this department on this date.” |
+| Admin reschedule | `admin_reschedule_visit` updates `scheduled_date` + `slot_id` **in place** — `booking_code` never changes, so the code the rider already holds stays valid. Refresh the booking detail; the date/slot may move without a new row |
 | RPCs (live) | `driver_list_visit_slots`, `driver_book_visit`, `driver_cancel_visit` |
 
 Legacy `appointment_slots` / `appointments` remain until Visit Booking fully replaces them in the app.
