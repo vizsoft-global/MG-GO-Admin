@@ -38,12 +38,18 @@ export type EsignListRow = {
   status: EsignRequestStatus;
   due_at: string | null;
   screenshot_restricted: boolean;
+  /** Equal to `created_at` today — the only inserter sends on insert. */
+  sent_at: string;
+  /** First time the rider opened the document. */
+  viewed_at: string | null;
+  declined_at: string | null;
   signed_at: string | null;
   signer_display_name: string | null;
   created_at: string;
 };
 
 export type EsignDetail = EsignListRow & {
+  declaration_accepted_at: string | null;
   signer_meta: Record<string, unknown>;
   document_storage_key: string | null;
   signature_storage_key: string | null;

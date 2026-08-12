@@ -44,6 +44,9 @@ function mapListRow(r: Record<string, unknown>): EsignListRow {
     status: String(r.status ?? "pending") as EsignRequestStatus,
     due_at: r.due_at != null ? String(r.due_at) : null,
     screenshot_restricted: Boolean(r.screenshot_restricted),
+    sent_at: String(r.sent_at ?? r.created_at ?? ""),
+    viewed_at: r.viewed_at != null ? String(r.viewed_at) : null,
+    declined_at: r.declined_at != null ? String(r.declined_at) : null,
     signed_at: r.signed_at != null ? String(r.signed_at) : null,
     signer_display_name:
       r.signer_display_name != null ? String(r.signer_display_name) : null,
@@ -150,6 +153,8 @@ export async function fetchEsignRequestDetail(
   return {
     request: {
       ...base,
+      declaration_accepted_at:
+        row.declaration_accepted_at != null ? String(row.declaration_accepted_at) : null,
       signer_meta: asRecord(row.signer_meta),
       document_storage_key:
         row.document_storage_key != null ? String(row.document_storage_key) : null,

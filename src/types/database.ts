@@ -2733,12 +2733,15 @@ export type Database = {
         Row: {
           category_key: string | null
           created_at: string
+          declaration_accepted_at: string | null
+          declined_at: string | null
           document_storage_key: string | null
           driver_id: string
           due_at: string | null
           id: string
           request_code: string
           screenshot_restricted: boolean
+          sent_at: string
           sent_by: string | null
           signature_storage_key: string | null
           signed_at: string | null
@@ -2750,16 +2753,20 @@ export type Database = {
           status: Database["public"]["Enums"]["esign_request_status"]
           title: string
           updated_at: string
+          viewed_at: string | null
         }
         Insert: {
           category_key?: string | null
           created_at?: string
+          declaration_accepted_at?: string | null
+          declined_at?: string | null
           document_storage_key?: string | null
           driver_id: string
           due_at?: string | null
           id?: string
           request_code?: string
           screenshot_restricted?: boolean
+          sent_at?: string
           sent_by?: string | null
           signature_storage_key?: string | null
           signed_at?: string | null
@@ -2771,16 +2778,20 @@ export type Database = {
           status?: Database["public"]["Enums"]["esign_request_status"]
           title: string
           updated_at?: string
+          viewed_at?: string | null
         }
         Update: {
           category_key?: string | null
           created_at?: string
+          declaration_accepted_at?: string | null
+          declined_at?: string | null
           document_storage_key?: string | null
           driver_id?: string
           due_at?: string | null
           id?: string
           request_code?: string
           screenshot_restricted?: boolean
+          sent_at?: string
           sent_by?: string | null
           signature_storage_key?: string | null
           signed_at?: string | null
@@ -2792,6 +2803,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["esign_request_status"]
           title?: string
           updated_at?: string
+          viewed_at?: string | null
         }
         Relationships: [
           {
@@ -5524,6 +5536,7 @@ export type Database = {
         Row: {
           assigned_staff_name: string | null
           avg_handling_minutes: number | null
+          branch_id: string | null
           created_at: string
           desk_location: string | null
           desks_count: number
@@ -5538,6 +5551,7 @@ export type Database = {
         Insert: {
           assigned_staff_name?: string | null
           avg_handling_minutes?: number | null
+          branch_id?: string | null
           created_at?: string
           desk_location?: string | null
           desks_count?: number
@@ -5552,6 +5566,7 @@ export type Database = {
         Update: {
           assigned_staff_name?: string | null
           avg_handling_minutes?: number | null
+          branch_id?: string | null
           created_at?: string
           desk_location?: string | null
           desks_count?: number
@@ -5563,7 +5578,15 @@ export type Database = {
           sort_order?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "visit_departments_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "visit_branches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       visit_slots: {
         Row: {
@@ -6677,6 +6700,7 @@ export type Database = {
         Args: { p_context?: Json; p_event_type: string; p_severity?: string }
         Returns: string
       }
+      driver_mark_esign_viewed: { Args: { p_id: string }; Returns: Json }
       driver_mark_notifications_read: {
         Args: { p_dispatch_item_ids?: string[] }
         Returns: number

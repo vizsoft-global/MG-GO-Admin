@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Activity,
@@ -9,6 +9,8 @@ import {
   FileText,
   Loader2,
   RefreshCw,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
@@ -42,6 +44,31 @@ function isoDate(d: string | null): string {
   return d ? d.slice(0, 10) : "";
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The window of equal length immediately before the selected one. Returns null for an
+ * unbounded range: "the period before all time" has no meaning, so the deltas are hidden
+ * rather than invented.
+ */
+function priorWindow(
+  range: DateRangeValue,
+): { from: string; to: string } | null {
+  const from = isoDate(range.from);
+  const to = isoDate(range.to);
+  if (!from || !to) return null;
+
+  const fromMs = new Date(`${from}T00:00:00Z`).getTime();
+  const toMs = new Date(`${to}T00:00:00Z`).getTime();
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) return null;
+
+  const lengthDays = Math.round((toMs - fromMs) / DAY_MS) + 1;
+  return {
+    from: new Date(fromMs - lengthDays * DAY_MS).toISOString().slice(0, 10),
+    to: new Date(fromMs - DAY_MS).toISOString().slice(0, 10),
+  };
+}
+
 function ReportKpi({
   icon,
   iconClass,
@@ -49,6 +76,7 @@ function ReportKpi({
   value,
   valueClass,
   hint,
+  delta,
 }: {
   icon: React.ReactNode;
   iconClass: string;
@@ -56,6 +84,7 @@ function ReportKpi({
   value: string | number;
   valueClass?: string;
   hint?: string;
+  delta?: React.ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -72,16 +101,58 @@ function ReportKpi({
           {label}
         </p>
       </div>
-      <p
-        className={cn(
-          "mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground",
-          valueClass,
-        )}
-      >
-        {value}
-      </p>
+      <div className="mt-1 flex items-baseline gap-2">
+        <p
+          className={cn(
+            "text-2xl font-semibold tabular-nums tracking-tight text-foreground",
+            valueClass,
+          )}
+        >
+          {value}
+        </p>
+        {delta}
+      </div>
       {hint ? <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p> : null}
     </div>
+  );
+}
+
+/**
+ * Change against the previous window. `lowerIsBetter` flips the colour for metrics like
+ * no-show rate and wait time, where a drop is the good outcome.
+ */
+function Delta({
+  current,
+  previous,
+  suffix = "",
+  lowerIsBetter = false,
+  flatLabel,
+}: {
+  current: number | null;
+  previous: number | null;
+  suffix?: string;
+  lowerIsBetter?: boolean;
+  flatLabel: string;
+}) {
+  if (current == null || previous == null) return null;
+  const diff = current - previous;
+  if (diff === 0) {
+    return <span className="text-[11px] text-muted-foreground">{flatLabel}</span>;
+  }
+  const good = lowerIsBetter ? diff < 0 : diff > 0;
+  const Icon = diff > 0 ? TrendingUp : TrendingDown;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[11px] font-medium tabular-nums",
+        good ? "text-success" : "text-danger",
+      )}
+    >
+      <Icon className="h-3 w-3" />
+      {diff > 0 ? "+" : ""}
+      {diff}
+      {suffix}
+    </span>
   );
 }
 
@@ -130,6 +201,23 @@ function waitMinutes(row: VisitListRow): number | null {
   return diff;
 }
 
+function summarize(rows: VisitListRow[]) {
+  const total = rows.length;
+  const completed = rows.filter((r) => r.status === "completed").length;
+  const noShows = rows.filter((r) => r.status === "no_show").length;
+  const waits = rows.map(waitMinutes).filter((m): m is number => m != null);
+  return {
+    total,
+    completed,
+    noShows,
+    noShowRate: total > 0 ? Math.round((noShows / total) * 100) : 0,
+    avgWait:
+      waits.length > 0
+        ? Math.round(waits.reduce((sum, m) => sum + m, 0) / waits.length)
+        : null,
+  };
+}
+
 function weeklyBuckets(rows: VisitListRow[]): { label: string; count: number }[] {
   if (rows.length === 0) return [];
   const dates = rows.map((r) => new Date(r.scheduled_date).getTime()).filter(Number.isFinite);
@@ -166,16 +254,35 @@ export function VisitsReportsShell() {
       }),
   });
 
+  const priorRange = useMemo(() => priorWindow(dateRange), [dateRange]);
+
+  const { data: priorData } = useQuery({
+    queryKey: queryKeys.visits.list({ reports: true, prior: priorRange }),
+    queryFn: () =>
+      fetchAdminVisitsList({
+        dateFrom: priorRange?.from,
+        dateTo: priorRange?.to,
+        limit: 1000,
+      }),
+    enabled: priorRange != null,
+  });
+
   const { data: branchesData } = useQuery({
     queryKey: queryKeys.visits.branches(),
     queryFn: fetchVisitBranches,
   });
 
-  const rows = useMemo(() => {
-    const all = data?.rows ?? [];
-    if (branchFilter === "all") return all;
-    return all.filter((r) => r.branch_id === branchFilter);
-  }, [data?.rows, branchFilter]);
+  const byBranch = useCallback(
+    (list: VisitListRow[]) =>
+      branchFilter === "all" ? list : list.filter((r) => r.branch_id === branchFilter),
+    [branchFilter],
+  );
+
+  const rows = useMemo(() => byBranch(data?.rows ?? []), [data?.rows, byBranch]);
+  const priorRows = useMemo(
+    () => byBranch(priorData?.rows ?? []),
+    [priorData?.rows, byBranch],
+  );
 
   const branchItems = useMemo(
     () => [
@@ -189,22 +296,11 @@ export function VisitsReportsShell() {
     [branchesData?.rows, t],
   );
 
-  const summary = useMemo(() => {
-    const total = rows.length;
-    const completed = rows.filter((r) => r.status === "completed").length;
-    const noShows = rows.filter((r) => r.status === "no_show").length;
-    const waits = rows.map(waitMinutes).filter((m): m is number => m != null);
-    return {
-      total,
-      completed,
-      noShows,
-      noShowRate: total > 0 ? Math.round((noShows / total) * 100) : 0,
-      avgWait:
-        waits.length > 0
-          ? Math.round(waits.reduce((sum, m) => sum + m, 0) / waits.length)
-          : null,
-    };
-  }, [rows]);
+  const summary = useMemo(() => summarize(rows), [rows]);
+  const priorSummary = useMemo(
+    () => (priorRange ? summarize(priorRows) : null),
+    [priorRange, priorRows],
+  );
 
   const byDepartment = useMemo(() => {
     const map = new Map<
@@ -265,6 +361,11 @@ export function VisitsReportsShell() {
 
   const weekly = useMemo(() => weeklyBuckets(rows), [rows]);
   const maxWeekly = Math.max(1, ...weekly.map((w) => w.count));
+
+  // Only shown for a bounded range, so the comparison window is real.
+  const priorHint = priorRange
+    ? t("reports.vsPrevious", { from: priorRange.from, to: priorRange.to })
+    : t("reports.comparisonNeedsRange");
 
   const exportCsv = () => {
     const csv = toCsv(byDepartment);
@@ -332,6 +433,14 @@ export function VisitsReportsShell() {
           iconClass="bg-primary/10 text-primary"
           label={t("reports.total")}
           value={summary.total}
+          hint={priorHint}
+          delta={
+            <Delta
+              current={summary.total}
+              previous={priorSummary?.total ?? null}
+              flatLabel={t("reports.deltaFlat")}
+            />
+          }
         />
         <ReportKpi
           icon={<Activity className="h-3.5 w-3.5" />}
@@ -339,6 +448,16 @@ export function VisitsReportsShell() {
           label={t("reports.noShowRate")}
           value={`${summary.noShowRate}%`}
           valueClass="text-danger"
+          hint={priorHint}
+          delta={
+            <Delta
+              current={summary.noShowRate}
+              previous={priorSummary?.noShowRate ?? null}
+              suffix="%"
+              lowerIsBetter
+              flatLabel={t("reports.deltaFlat")}
+            />
+          }
         />
         <ReportKpi
           icon={<CheckCircle2 className="h-3.5 w-3.5" />}
@@ -349,7 +468,15 @@ export function VisitsReportsShell() {
               ? t("departments.minutesValue", { minutes: summary.avgWait })
               : "—"
           }
-          hint={summary.avgWait == null ? t("reports.avgWaitEmpty") : undefined}
+          hint={summary.avgWait == null ? t("reports.avgWaitEmpty") : priorHint}
+          delta={
+            <Delta
+              current={summary.avgWait}
+              previous={priorSummary?.avgWait ?? null}
+              lowerIsBetter
+              flatLabel={t("reports.deltaFlat")}
+            />
+          }
         />
       </div>
 

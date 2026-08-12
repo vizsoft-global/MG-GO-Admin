@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
+import { Building2, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
@@ -16,6 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/auth-context";
@@ -23,11 +30,15 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import {
   createVisitDepartment,
+  fetchVisitBranches,
   fetchVisitDepartments,
   updateVisitDepartment,
   type VisitDepartmentRow,
 } from "./visits-actions";
 import { avatarTintClass, departmentBadgeClass, initialsOf } from "./visit-status-utils";
+
+/** Sentinel for "offered at every branch", which is stored as a NULL branch_id. */
+const ALL_BRANCHES = "all";
 
 type DeptDraft = {
   id?: string;
@@ -37,6 +48,7 @@ type DeptDraft = {
   desk_location: string;
   assigned_staff_name: string;
   avg_handling_minutes: string;
+  branch_id: string;
   is_active: boolean;
 };
 
@@ -48,6 +60,7 @@ function emptyDraft(): DeptDraft {
     desk_location: "",
     assigned_staff_name: "",
     avg_handling_minutes: "10",
+    branch_id: ALL_BRANCHES,
     is_active: true,
   };
 }
@@ -61,6 +74,7 @@ function draftFromRow(row: VisitDepartmentRow): DeptDraft {
     desk_location: row.desk_location ?? "",
     assigned_staff_name: row.assigned_staff_name ?? "",
     avg_handling_minutes: row.avg_handling_minutes != null ? String(row.avg_handling_minutes) : "",
+    branch_id: row.branch_id ?? ALL_BRANCHES,
     is_active: row.is_active,
   };
 }
@@ -78,8 +92,18 @@ export function VisitsDepartmentsShell() {
     queryKey: queryKeys.visits.departments(),
     queryFn: () => fetchVisitDepartments(),
   });
+  const { data: branchesData } = useQuery({
+    queryKey: queryKeys.visits.branches(),
+    queryFn: fetchVisitBranches,
+  });
 
   const rows = data?.rows ?? [];
+  const branches = branchesData?.rows ?? [];
+  const branchNameById = new Map(branches.map((b) => [b.id, b.name]));
+  const branchItems = [
+    { value: ALL_BRANCHES, label: t("departments.branchAll") },
+    ...branches.map((b) => ({ value: b.id, label: b.name })),
+  ];
 
   const openCreate = () => {
     setDraft(emptyDraft());
@@ -98,6 +122,8 @@ export function VisitsDepartmentsShell() {
       return;
     }
 
+    const branchId = draft.branch_id === ALL_BRANCHES ? null : draft.branch_id;
+
     setBusy(true);
     const result = draft.id
       ? await updateVisitDepartment({
@@ -105,6 +131,7 @@ export function VisitsDepartmentsShell() {
           desk_location: draft.desk_location.trim() || null,
           assigned_staff_name: draft.assigned_staff_name.trim() || null,
           avg_handling_minutes: minutes,
+          branch_id: branchId,
           is_active: draft.is_active,
         })
       : await createVisitDepartment({
@@ -114,6 +141,7 @@ export function VisitsDepartmentsShell() {
           desk_location: draft.desk_location.trim() || null,
           assigned_staff_name: draft.assigned_staff_name.trim() || null,
           avg_handling_minutes: minutes,
+          branch_id: branchId,
         });
     setBusy(false);
 
@@ -186,6 +214,7 @@ export function VisitsDepartmentsShell() {
           <AppDataTable
             columns={[
               { id: "dept", label: t("colDepartment") },
+              { id: "branch", label: t("colBranch") },
               { id: "desk", label: t("departments.deskCounter") },
               { id: "staff", label: t("departments.assignedStaff") },
               { id: "handling", label: t("departments.avgHandling") },
@@ -204,6 +233,16 @@ export function VisitsDepartmentsShell() {
                   >
                     {row.label_en}
                   </span>
+                </TableCell>
+                <TableCell className="text-sm">
+                  {row.branch_id ? (
+                    <span className="inline-flex items-center gap-1 text-foreground">
+                      <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      {branchNameById.get(row.branch_id) ?? row.branch_id}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">{t("departments.branchAll")}</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {row.desk_location ?? "—"}
@@ -328,6 +367,28 @@ export function VisitsDepartmentsShell() {
                   setDraft((d) => ({ ...d, avg_handling_minutes: e.target.value }))
                 }
               />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("colBranch")}</Label>
+              <Select
+                items={branchItems}
+                value={draft.branch_id}
+                onValueChange={(v) => v && setDraft((d) => ({ ...d, branch_id: v }))}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {branchItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                {t("departments.branchHint")}
+              </p>
             </div>
             {draft.id ? (
               <div className="flex items-center gap-2 sm:col-span-2">

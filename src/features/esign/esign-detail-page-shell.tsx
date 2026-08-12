@@ -14,6 +14,7 @@ import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
+import { cn } from "@/lib/utils";
 import { useEsignDocumentLinks, useEsignRequestDetail } from "./use-esign";
 import type { EsignRequestStatus } from "./types";
 
@@ -44,6 +45,40 @@ const PROOF_KEYS = [
   "ip_address",
   "device",
 ] as const;
+
+function TimelineStep({
+  label,
+  at,
+  pendingLabel,
+  tone = "success",
+}: {
+  label: string;
+  at: string | null;
+  pendingLabel?: string;
+  tone?: "success" | "danger";
+}) {
+  const done = Boolean(at);
+  return (
+    <li className="flex items-start gap-2">
+      <span
+        className={cn(
+          "mt-1 h-2 w-2 shrink-0 rounded-full",
+          !done
+            ? "bg-muted-foreground/30"
+            : tone === "danger"
+              ? "bg-destructive"
+              : "bg-emerald-500",
+        )}
+      />
+      <div>
+        <p className={cn("text-xs font-medium", !done && "text-muted-foreground")}>{label}</p>
+        <p className="text-[10px] text-muted-foreground">
+          {at ? formatStamp(at) : (pendingLabel ?? "—")}
+        </p>
+      </div>
+    </li>
+  );
+}
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -88,6 +123,10 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
     key,
     value: meta[key] != null && String(meta[key]).trim() !== "" ? String(meta[key]) : null,
   })).filter((row) => row.value != null);
+  const declinedReason =
+    meta.declined_reason != null && String(meta.declined_reason).trim() !== ""
+      ? String(meta.declined_reason)
+      : null;
 
   // Client decision: once a request is signed, the preview shows the stamped copy, the same
   // one print and download serve. Falling back to the original is still correct while the
@@ -192,37 +231,21 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               </StatusPill>
             </div>
             <ol className="space-y-2">
-              <li className="flex items-start gap-2">
-                <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-                <div>
-                  <p className="text-xs font-medium">{t("timelineSent")}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {formatStamp(request.created_at)}
-                  </p>
-                </div>
-              </li>
-              {/* Figma has a Viewed step, but no viewed_at column exists yet — render it
-                  explicitly unavailable rather than implying we track it. */}
-              <li className="flex items-start gap-2">
-                <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-muted-foreground/30" />
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">{t("timelineViewed")}</p>
-                  <p className="text-[10px] text-muted-foreground">{t("timelineViewedGap")}</p>
-                </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span
-                  className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
-                    request.signed_at ? "bg-emerald-500" : "bg-muted-foreground/30"
-                  }`}
+              <TimelineStep label={t("timelineSent")} at={request.sent_at} />
+              <TimelineStep label={t("timelineViewed")} at={request.viewed_at} pendingLabel={t("timelinePending")} />
+              {request.declined_at ? (
+                <TimelineStep
+                  label={t("timelineDeclined")}
+                  at={request.declined_at}
+                  tone="danger"
                 />
-                <div>
-                  <p className="text-xs font-medium">{t("timelineSigned")}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {request.signed_at ? formatStamp(request.signed_at) : t("timelinePending")}
-                  </p>
-                </div>
-              </li>
+              ) : (
+                <TimelineStep
+                  label={t("timelineSigned")}
+                  at={request.signed_at}
+                  pendingLabel={t("timelinePending")}
+                />
+              )}
             </ol>
           </AppListCard>
 
@@ -236,7 +259,12 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               />
               <Row label={t("created")} value={formatStamp(request.created_at)} />
               <Row label={t("due")} value={formatStamp(request.due_at)} />
-              <Row label={t("signedAt")} value={formatStamp(request.signed_at)} />
+              <Row label={t("viewedAt")} value={formatStamp(request.viewed_at)} />
+              {request.declined_at ? (
+                <Row label={t("declinedAt")} value={formatStamp(request.declined_at)} />
+              ) : (
+                <Row label={t("signedAt")} value={formatStamp(request.signed_at)} />
+              )}
               <div className="flex items-baseline justify-between gap-3">
                 <dt className="text-[11px] text-muted-foreground">{t("screenshot")}</dt>
                 <dd className="flex items-center gap-1.5 text-xs font-medium">
@@ -278,7 +306,21 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               {request.signed_at ? (
                 <Row label={t("proof.signed_at")} value={formatStamp(request.signed_at)} />
               ) : null}
+              {request.declaration_accepted_at ? (
+                <Row
+                  label={t("proof.declaration_accepted_at")}
+                  value={formatStamp(request.declaration_accepted_at)}
+                />
+              ) : null}
             </dl>
+            {declinedReason ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                <p className="text-[10px] font-semibold text-destructive">
+                  {t("declineReasonLabel")}
+                </p>
+                <p className="mt-0.5 text-xs">{declinedReason}</p>
+              </div>
+            ) : null}
             {proofRows.length === 0 ? (
               <p className="text-[10px] text-muted-foreground">{t("noSignerMeta")}</p>
             ) : null}

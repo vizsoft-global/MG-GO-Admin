@@ -3362,7 +3362,6 @@
           "timelineSent": "Sent to recipient",
           "timelineSigned": "Signed",
           "timelinePending": "Not signed yet",
-          "timelineViewedGap": "Not tracked yet",
           "signedElectronically": "Signed electronically · {at}",
           "noDocumentTitle": "No document attached",
           "noDocumentBody": "This request was sent without a document, or the file has not been uploaded yet.",
@@ -3375,14 +3374,19 @@
             "company": "Company",
             "ip_address": "IP address",
             "device": "Device",
-            "signed_at": "Date / time"
+            "signed_at": "Date / time",
+            "declaration_accepted_at": "Declaration accepted"
           },
           "previewSignedCopy": "Showing the signed copy, with the rider's signature stamped in.",
           "downloadSignedCopy": "Download signed document",
           "signedCopyPending": "The signed copy is still being composed — the original is below.",
           "signedCopyFailed": "Signed copy could not be composed ({reason}). Only the original is available.",
           "print": "Print",
-          "timelineViewed": "Viewed"
+          "timelineViewed": "Viewed",
+          "timelineDeclined": "Declined",
+          "viewedAt": "First viewed",
+          "declinedAt": "Declined at",
+          "declineReasonLabel": "Reason given"
         },
         "categories": {
           "title": "Signature categories",
@@ -3667,6 +3671,17 @@
         "colVisId": "VIS ID",
         "colSlot": "Slot"
       },
+      "bulk": {
+        "selected": "{count} selected",
+        "selectAll": "Select all actionable visits",
+        "clear": "Clear",
+        "checked_in": "Check in ({count})",
+        "completed": "Complete ({count})",
+        "no_show": "No-show ({count})",
+        "cancelled": "Cancel ({count})",
+        "done": "{done} visits updated",
+        "partial": "{done} updated, {failed} failed"
+      },
       "kpi": {
         "today": "Today",
         "todayCheckedIn": "Checked in today",
@@ -3830,7 +3845,10 @@
         "pageTitle": "Reports & analytics",
         "filterBranchAll": "Branch: All branches",
         "filterBranchValue": "Branch: {name}",
-        "weekBarTitle": "{week} · {count} visits"
+        "weekBarTitle": "{week} · {count} visits",
+        "vsPrevious": "vs {from} – {to}",
+        "comparisonNeedsRange": "Pick a date range to compare periods",
+        "deltaFlat": "No change"
       },
       "departments": {
         "title": "Departments",
@@ -3846,6 +3864,8 @@
         "editTitle": "Edit department",
         "addTitle": "New department",
         "modalSubtitle": "Desk assignment and service details",
+        "branchAll": "All branches",
+        "branchHint": "Pin the department to one branch, or leave it available at every branch.",
         "countLabel": "{count, plural, one {# department} other {# departments}}",
         "pageTitle": "Departments & desks",
         "pageSubtitle": "Manage each department's reception desk, assigned staff and availability"

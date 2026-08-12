@@ -76,6 +76,8 @@ export type VisitDepartmentRow = {
   assigned_staff_name: string | null;
   avg_handling_minutes: number | null;
   desks_count: number;
+  /** Branch this department is offered at. `null` = every branch. */
+  branch_id: string | null;
 };
 
 export type VisitBranchRow = {
@@ -410,6 +412,53 @@ export async function updateAdminVisitStatus(input: {
   return { ok: true };
 }
 
+/**
+ * Bulk status change runs the same per-booking RPC in a loop, so permissions and the
+ * rider notification behave exactly as they do for a single row. Failures are reported
+ * per booking instead of aborting the batch — same contract as bulk request decisions.
+ */
+export async function updateAdminVisitStatusBulk(input: {
+  bookingIds: string[];
+  status: "confirmed" | "checked_in" | "completed" | "no_show" | "cancelled";
+}): Promise<{
+  ok: boolean;
+  succeeded: string[];
+  failed: Array<{ bookingId: string; error: string }>;
+  error?: string;
+}> {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(session.permissions, "visits.operate", session.isSuperAdmin)
+  ) {
+    return { ok: false, succeeded: [], failed: [], error: "not_authorized" };
+  }
+  if (input.bookingIds.length === 0) {
+    return { ok: false, succeeded: [], failed: [], error: "no_bookings" };
+  }
+
+  const supabase = await createClient();
+  const succeeded: string[] = [];
+  const failed: Array<{ bookingId: string; error: string }> = [];
+
+  for (const bookingId of input.bookingIds) {
+    const { data, error } = await supabase.rpc("admin_update_visit_status", {
+      p_booking_id: bookingId,
+      p_status: input.status,
+    });
+    const payload = (data ?? {}) as { ok?: boolean; error?: string };
+    if (error) {
+      failed.push({ bookingId, error: error.message });
+    } else if (payload.ok === false) {
+      failed.push({ bookingId, error: payload.error ?? "failed" });
+    } else {
+      succeeded.push(bookingId);
+    }
+  }
+
+  return { ok: failed.length === 0, succeeded, failed };
+}
+
 export async function fetchVisitDepartments(): Promise<{
   rows: VisitDepartmentRow[];
   error?: string;
@@ -419,7 +468,7 @@ export async function fetchVisitDepartments(): Promise<{
   const { data, error } = await supabase
     .from("visit_departments")
     .select(
-      "id, key, label_en, label_ar, is_active, sort_order, desk_location, assigned_staff_name, avg_handling_minutes, desks_count",
+      "id, key, label_en, label_ar, is_active, sort_order, desk_location, assigned_staff_name, avg_handling_minutes, desks_count, branch_id",
     )
     .order("sort_order");
 
@@ -452,6 +501,7 @@ export async function createVisitDepartment(input: {
   desk_location?: string | null;
   assigned_staff_name?: string | null;
   avg_handling_minutes?: number | null;
+  branch_id?: string | null;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   await requireVisitsManageCatalog();
   if (!input.key.trim() || !input.label_en.trim()) {
@@ -467,6 +517,7 @@ export async function createVisitDepartment(input: {
       desk_location: input.desk_location ?? null,
       assigned_staff_name: input.assigned_staff_name ?? null,
       avg_handling_minutes: input.avg_handling_minutes ?? null,
+      branch_id: input.branch_id ?? null,
       is_active: true,
     })
     .select("id")
@@ -482,6 +533,7 @@ export async function updateVisitDepartment(input: {
   desk_location?: string | null;
   assigned_staff_name?: string | null;
   avg_handling_minutes?: number | null;
+  branch_id?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireVisitsManageCatalog();
   const supabase = await createClient();
@@ -495,6 +547,7 @@ export async function updateVisitDepartment(input: {
     ...(input.avg_handling_minutes !== undefined
       ? { avg_handling_minutes: input.avg_handling_minutes }
       : {}),
+    ...(input.branch_id !== undefined ? { branch_id: input.branch_id } : {}),
   };
   const { error } = await supabase.from("visit_departments").update(patch).eq("id", input.id);
 

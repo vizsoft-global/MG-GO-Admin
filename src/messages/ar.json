@@ -3280,7 +3280,6 @@
           "timelineSent": "أُرسل إلى المستلم",
           "timelineSigned": "تم التوقيع",
           "timelinePending": "لم يتم التوقيع بعد",
-          "timelineViewedGap": "غير متتبَّع بعد",
           "signedElectronically": "موقّع إلكترونياً · {at}",
           "noDocumentTitle": "لا يوجد مستند مرفق",
           "noDocumentBody": "أُرسل هذا الطلب بدون مستند، أو لم يتم رفع الملف بعد.",
@@ -3293,14 +3292,19 @@
             "company": "الشركة",
             "ip_address": "عنوان IP",
             "device": "الجهاز",
-            "signed_at": "التاريخ / الوقت"
+            "signed_at": "التاريخ / الوقت",
+            "declaration_accepted_at": "تم قبول الإقرار"
           },
           "previewSignedCopy": "المعروض هو النسخة الموقعة مع توقيع المندوب مضافاً إليها.",
           "downloadSignedCopy": "تنزيل المستند الموقّع",
           "signedCopyPending": "لا يزال يتم إنشاء النسخة الموقعة — النسخة الأصلية أدناه.",
           "signedCopyFailed": "تعذر إنشاء النسخة الموقعة ({reason}). النسخة الأصلية فقط متاحة.",
           "print": "طباعة",
-          "timelineViewed": "تمت المشاهدة"
+          "timelineViewed": "تمت المشاهدة",
+          "timelineDeclined": "مرفوض",
+          "viewedAt": "أول مشاهدة",
+          "declinedAt": "وقت الرفض",
+          "declineReasonLabel": "السبب المذكور"
         },
         "categories": {
           "title": "فئات التوقيع",
@@ -3585,6 +3589,17 @@
         "colVisId": "رقم الزيارة",
         "colSlot": "الموعد"
       },
+      "bulk": {
+        "selected": "تم تحديد {count}",
+        "selectAll": "تحديد كل الزيارات القابلة للتنفيذ",
+        "clear": "إلغاء التحديد",
+        "checked_in": "تسجيل الوصول ({count})",
+        "completed": "إكمال ({count})",
+        "no_show": "عدم حضور ({count})",
+        "cancelled": "إلغاء ({count})",
+        "done": "تم تحديث {done} زيارة",
+        "partial": "تم تحديث {done}، وفشل {failed}"
+      },
       "kpi": {
         "today": "اليوم",
         "todayCheckedIn": "تسجيل الوصول اليوم",
@@ -3748,7 +3763,10 @@
         "pageTitle": "التقارير والتحليلات",
         "filterBranchAll": "الفرع: كل الفروع",
         "filterBranchValue": "الفرع: {name}",
-        "weekBarTitle": "{week} · {count} زيارة"
+        "weekBarTitle": "{week} · {count} زيارة",
+        "vsPrevious": "مقابل {from} – {to}",
+        "comparisonNeedsRange": "اختر نطاق تاريخ لمقارنة الفترات",
+        "deltaFlat": "لا تغيير"
       },
       "departments": {
         "title": "الأقسام",
@@ -3764,6 +3782,8 @@
         "editTitle": "تعديل القسم",
         "addTitle": "قسم جديد",
         "modalSubtitle": "تعيين المكتب وتفاصيل الخدمة",
+        "branchAll": "كل الفروع",
+        "branchHint": "اربط القسم بفرع واحد، أو اتركه متاحاً في كل الفروع.",
         "countLabel": "{count, plural, one {قسم واحد} other {# أقسام}}",
         "pageTitle": "الأقسام والمكاتب",
         "pageSubtitle": "إدارة مكتب الاستقبال والموظف المسؤول والإتاحة لكل قسم"

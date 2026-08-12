@@ -263,17 +263,19 @@ Staff can also raise a request for a rider via `admin_create_request`. Such rows
 | `esign_categories` | Figma-seeded categories + per-category screenshot_restricted |
 | `esign_requests` | Code **SIG-####**; status pending/signed/expired/cancelled/declined; signature PNG in bucket `esign-documents` |
 | `esign-documents` RLS (driver) | Three policies, all scoped to the caller: `esign_documents_driver_own` (write + read under `{uid}/…`), `esign_documents_driver_read_source` (**read the `document_storage_key` of your own request**, whatever prefix the admin used — added `20260829100000`), `esign_documents_driver_read_signed` (read the composed copy under `signed/…`). Before the source policy existed, admin uploads at `admin/{uuid}.{ext}` matched nothing and the viewer could never load its document. |
-| Driver RPCs | `driver_list_esign_requests`, `driver_get_esign_request`, `driver_submit_esignature`, `driver_decline_esignature` |
+| Driver RPCs | `driver_list_esign_requests`, `driver_get_esign_request`, `driver_submit_esignature`, `driver_decline_esignature`, `driver_mark_esign_viewed` |
 | Admin RPCs | `admin_list_esign_requests`, `admin_create_esign_request` |
 | **Decline writes `declined`** | `driver_decline_esignature` set `cancelled` until `20260829110000`; it now sets **`declined`** and returns `{"ok":true,"status":"declined"}`. `cancelled` is reserved for admin-side cancellation, so the app must stop treating it as a decline (`support_models.dart` `isDeclined`). Reason still lands in `signer_meta.declined_reason` + `declined_at`. |
 | **Declaration is now required server-side** | `driver_submit_esignature` rejects with `declaration_required` unless `p_signer_meta.declaration_accepted` is boolean `true`. Send `{"declaration_accepted": true, "declaration_text": "<exact text shown>"}`; the server overwrites `declaration_accepted` and stamps `declaration_accepted_at` with **server** time so the device cannot backdate it. The ticked box was previously client-only and left no record of what the rider agreed to. |
 | Flutter | `/profile/support/sign` inbox → viewer → capture pad → confirmed |
+| **Lifecycle timestamps are real columns** | `20260901100000` adds `sent_at`, `viewed_at`, `declined_at`, `declaration_accepted_at` to `esign_requests`, backfilled from `signer_meta`. `declined_at` and `declaration_accepted_at` previously lived only inside the jsonb, so nothing could filter or report on them; `viewed_at` was never recorded at all, which left the Figma detail timeline with a permanently blank Viewed step. `sent_at` is split from `created_at` so a future draft state has somewhere to land — today the only inserter sends on insert, so the two are equal. |
+| **Read receipt** | `driver_mark_esign_viewed(p_id)` stamps `viewed_at`. First open wins — a later re-open never overwrites the first. Call it once the document is actually visible to the rider, not on screen mount: the app fires it after the signed URL resolves. Decline and submit also back-fill `viewed_at`, so an older build that never calls it still produces an honest timeline. Fire-and-forget: a failed receipt must never block signing. |
 | Appointments | `driver_list_appointments`, `admin_create_appointment` (APT-####); Flutter `/profile/support/appointments` |
 
 ### Visit booking (Help & Support → Schedule visit)
 | Table | Notes |
 |-------|-------|
-| `visit_departments` | R — Figma RSup/12 keys (hr_services, legal, …) |
+| `visit_departments` | R — Figma RSup/12 keys (hr_services, legal, …). `20260901100100` adds nullable **`branch_id`**: `NULL` = offered at every branch (how all 11 existing rows behave), non-null = that branch only. `key` stays globally unique because it is the FK target for `visit_slots.department_key` and `visit_bookings.department_key`, and the one-active-booking-per (driver, date, department) index is a locked rule. **App must filter the department list by the branch it is booking at** — `branch_id IS NULL OR branch_id = <branch>` — or it will offer a department the server then rejects. |
 | `visit_branches` | R — Admin catalog; User App shows Central Tower (no branch picker) |
 | `visit_slots` | R — capacity; remaining = capacity − active bookings |
 | `visit_bookings` | **W** own rows; code **VIS-#####**; status confirmed / checked_in / completed / no_show / cancelled |
@@ -282,6 +284,7 @@ Staff can also raise a request for a rider via `admin_create_request`. Such rows
 | `visit_booking_notes` | Admin-only internal thread — **no driver policy**; never surface in the app |
 | Duplicate rule | Unique active `(driver_id, scheduled_date, department_key)` where status ∈ confirmed, checked_in. Error: `duplicate_department_date` — “Already booked for this department on this date.” |
 | Admin reschedule | `admin_reschedule_visit` updates `scheduled_date` + `slot_id` **in place** — `booking_code` never changes, so the code the rider already holds stays valid. Refresh the booking detail; the date/slot may move without a new row |
+| Branch consistency | `driver_list_visit_slots` hides a slot whose `branch_id` differs from its department's pin; `driver_book_visit` rejects the same mismatch with **`department_not_at_branch`**. Same migration also stops `driver_book_visit` resolving its fallback branch by the hardcoded key `'central_tower'` — it now orders by `visit_branches.is_default`, so renaming or deactivating that branch no longer silently breaks booking. |
 | RPCs (live) | `driver_list_visit_slots`, `driver_book_visit`, `driver_cancel_visit` |
 
 Legacy `appointment_slots` / `appointments` remain until Visit Booking fully replaces them in the app.

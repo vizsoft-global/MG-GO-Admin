@@ -106,12 +106,12 @@ Re-tested at 1366×768 with a real admin session; every mutation was rolled back
 | Node | Screen | Result | One-line reason |
 |---|---|---|---|
 | `4195:11440` | VB/07 Branches | PASS | Footer-first Add/Edit modal with Close outside; edit round-trip written to DB and restored. |
-| `4195:8626` | VB/01 All visits | PASS + gap | Fixed status pill, `12 Aug` date order and a clipped ACTIONS column (`fa9d3ca`); Figma's bulk-select checkbox column has no visits bulk RPC to drive it. |
+| `4195:8626` | VB/01 All visits | PASS | Fixed status pill, `12 Aug` date order and a clipped ACTIONS column (`fa9d3ca`). Bulk-select shipped 2026-08-12: the checkbox column now drives Check in / Complete / No-show / Cancel, looping the existing per-booking RPC rather than a bulk one, so permissions and rider notifications are unchanged. |
 | `4195:8350` | VB/00 Hub | PASS | MANAGE / CONFIGURE grouping with live badge counts. |
 | `4195:9172` | VB/02 Calendar | PASS + gap | Day/Week toggle and branch picker correct; the purple Appointment overlay belongs to the appointments module. |
 | `4195:10894` | VB/05 Slots | PASS | Blocked-date add → verify → remove round-trip, table back to 0 rows. |
-| `4195:11133` | VB/06 Departments | PASS + gap | 11 rows above the fold; no branch filter because `visit_departments` has no `branch_id`. |
-| `4195:11679` | VB/08 Reports | PASS | Bars and date presets work; KPI trend deltas need a prior-period aggregate RPC. |
+| `4195:11133` | VB/06 Departments | PASS | 11 rows above the fold. `visit_departments.branch_id` shipped 2026-08-12 (nullable = every branch), so the Branch column and the modal's branch picker are real; the server enforces the same pin on slot listing and booking. |
+| `4195:11679` | VB/08 Reports | PASS | Bars and date presets work. KPI trend deltas shipped 2026-08-12 against the immediately preceding window of equal length — computed client-side from a second fetch of the same action, so a delta can never disagree with the number above it. |
 
 Day view scrolls horizontally with 11 real departments against Figma's 5 mock columns, which is acceptable for a resource calendar. The dev server died once from memory exhaustion and was restarted with `--max-old-space-size=6144`. `npx tsc --noEmit` clean.
 
@@ -162,7 +162,7 @@ Nodes `4447:4342` (hub), `4345:4342` (Sent), `4345:5006` (Signatures), `4345:567
 | Screen | Was | Fix |
 |---|---|---|
 | Detail `4345:5670` | Page scrolled 1194px; Figma's two columns rendered as one | `lg:grid-cols-[1fr,320px]` is invalid CSS — a bare comma inside the bracket makes the whole declaration drop. Now `minmax(0,1fr)_320px`, 768/768. |
-| Detail | Figma's "Viewed" step showed a schema explanation to the user | Renders as an explicit "Not tracked yet" state; proof rows in two columns so a signed request with 8 fields still fits. |
+| Detail | Figma's "Viewed" step showed a schema explanation to the user | Now a real timestamp: `esign_requests.viewed_at` shipped 2026-08-12, stamped by the app once the document resolves. The timeline also gained Declined, and the proof block gained the declaration acceptance time and the rider's decline reason. Proof rows stay in two columns so a signed request with 8 fields still fits. |
 | Categories `4345:6334` | Switch showed green ON beside **Blocked** — fails the ui-system §5 squint test | ON = Allowed, as in Figma. Headers CATEGORY / SCREENSHOTS / ACTIVE. |
 | Sent + Signatures | KPI labels clipped, a third of the strip empty, ACTIONS column caused horizontal scroll | 4-up KPI strip, ACTIONS dropped (not in Figma) in favour of the §6 "View details" row link. hScroll 0. |
 | Create modal | Category trigger printed raw `__none` | Renders "No category". |
@@ -182,7 +182,7 @@ Also removed the 7 transactional campaigns those QA actions generated, with thei
 
 Consequence to expect: **`/requests`, `/visit-bookings` and `/requests/esign` now show empty states**, because every row in those three tables was QA data — no rider has submitted a real request, visit or signature yet.
 
-E-Sign gaps that need a client or schema decision: `Accepted` / `Completed` statuses exist in Figma but not in `esign_requests`; there is no `viewed_at` column or driver-app write for Figma's "Viewed" timestamp; "Download audit trail" has no artifact defined. Also two QA seed rows (SIG-1400/1401) carry `document_storage_key` values prefixed with the bucket name (`esign-documents/demo/...`) pointing at objects that do not exist, so they can never render a document — real uploads use bucket-relative keys. And all five routes require `requests.manage`, not `requests.view`, which hides E-Sign entirely from read-only operators — fail-closed, but confirm it is intended.
+E-Sign gaps that need a client or schema decision: `Accepted` / `Completed` statuses exist in Figma but not in `esign_requests`; "Download audit trail" has no artifact defined. (The missing `viewed_at` column and its driver-app write were closed on 2026-08-12.) Also two QA seed rows (SIG-1400/1401) carry `document_storage_key` values prefixed with the bucket name (`esign-documents/demo/...`) pointing at objects that do not exist, so they can never render a document — real uploads use bucket-relative keys. And all five routes require `requests.manage`, not `requests.view`, which hides E-Sign entirely from read-only operators — fail-closed, but confirm it is intended.
 
 ### 2026-08-12 — Driver app re-verify (RCM + Visit Booking + E-Sign)
 
@@ -247,7 +247,7 @@ Verdicts: **RSup/11 PARTIAL**, **RSup/25 FAIL**, **RSup/26 PARTIAL**. §11A is n
 | D9 | The viewer re-fetches whenever `_documentUrl == null && !_loadingDoc`, and the failure path re-satisfies its own guard | Infinite retry loop on any load failure |
 | D10 | The capture screen's timestamp is `DateTime.now()` inside `build` | Displays render time, never matches the server's `signed_at` |
 | D5, D6, D11 | Missing in-pad baseline + "×" guides; `EMP-2048` rendered as driver code because `RiderProfile` never selects `drivers.employee_id`; Cancel inherits the theme's blue outline | Figma parity |
-| D12 | `support_service.dart:158` picks a branch by `sort_order` though `visit_branches.is_default` exists | Correct with one branch, wrong the moment a second one sorts ahead |
+| D12 | `support_service.dart:158` picks a branch by `sort_order` though `visit_branches.is_default` exists | Correct with one branch, wrong the moment a second one sorts ahead. Fixed in the app, and on 2026-08-12 the same hardcoded-`central_tower` fallback was removed from `driver_book_visit` server-side |
 
 Security note, not a Figma divergence: `EsignSensitiveScope` wraps the viewer but **not** the capture screen, so a `screenshot_restricted` document's signature capture is freely screenshottable.
 

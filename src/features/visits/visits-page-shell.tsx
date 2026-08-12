@@ -25,6 +25,7 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import { AppListToolbar } from "@/components/app/app-list-toolbar";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DATE_RANGE_ALL,
   DateRangeFilter,
@@ -50,6 +51,7 @@ import {
   fetchVisitBranches,
   fetchVisitDepartments,
   updateAdminVisitStatus,
+  updateAdminVisitStatusBulk,
   type VisitListRow,
 } from "./visits-actions";
 import {
@@ -60,6 +62,22 @@ import {
 } from "./visit-status-utils";
 
 type DataTab = "all" | "today" | "upcoming" | "past";
+
+/**
+ * Only a live booking can be acted on in bulk. Completed, cancelled and no-show rows are
+ * already terminal, so selecting them would only produce per-row failures.
+ */
+const BULK_OPEN_STATUSES = new Set(["confirmed", "checked_in"]);
+
+/** Bulk targets per action — check-in only applies to a booking that is still confirmed. */
+const BULK_ACTIONS = [
+  { status: "checked_in", from: ["confirmed"] },
+  { status: "completed", from: ["checked_in"] },
+  { status: "no_show", from: ["confirmed", "checked_in"] },
+  { status: "cancelled", from: ["confirmed", "checked_in"] },
+] as const;
+
+type BulkStatus = (typeof BULK_ACTIONS)[number]["status"];
 
 const STATUS_KEYS = [
   "confirmed",
@@ -126,6 +144,8 @@ export function VisitsPageShell() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc" | false>(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: queryKeys.visits.list({ dateRange }),
@@ -193,6 +213,62 @@ export function VisitsPageShell() {
       return;
     }
     toast.success(t("actionOk"));
+    await queryClient.invalidateQueries({ queryKey: queryKeys.visits.all() });
+  };
+
+  const selectableRows = useMemo(
+    () => visibleRows.filter((r) => BULK_OPEN_STATUSES.has(r.status)),
+    [visibleRows],
+  );
+  const selectedRows = useMemo(
+    () => visibleRows.filter((r) => selected.has(r.id)),
+    [visibleRows, selected],
+  );
+
+  const toggleRow = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelected((current) =>
+      current.size === selectableRows.length
+        ? new Set()
+        : new Set(selectableRows.map((r) => r.id)),
+    );
+
+  const runBulk = async (status: BulkStatus) => {
+    const action = BULK_ACTIONS.find((a) => a.status === status);
+    const targets = selectedRows.filter((r) =>
+      (action?.from as readonly string[]).includes(r.status),
+    );
+    if (targets.length === 0) return;
+
+    setBulkBusy(true);
+    const result = await updateAdminVisitStatusBulk({
+      bookingIds: targets.map((r) => r.id),
+      status,
+    });
+    setBulkBusy(false);
+
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    if (result.failed.length > 0) {
+      toast.warning(
+        t("bulk.partial", {
+          done: `${result.succeeded.length}`,
+          failed: `${result.failed.length}`,
+        }),
+      );
+    } else {
+      toast.success(t("bulk.done", { done: `${result.succeeded.length}` }));
+    }
+    setSelected(new Set());
     await queryClient.invalidateQueries({ queryKey: queryKeys.visits.all() });
   };
 
@@ -412,6 +488,48 @@ export function VisitsPageShell() {
         }
       />
 
+      {canOperate && selected.size > 0 ? (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+          <p className="text-xs font-medium text-foreground">
+            {t("bulk.selected", { count: `${selected.size}` })}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {BULK_ACTIONS.map((action) => {
+              const count = selectedRows.filter((r) =>
+                (action.from as readonly string[]).includes(r.status),
+              ).length;
+              const destructive =
+                action.status === "cancelled" || action.status === "no_show";
+              return (
+                <Button
+                  key={action.status}
+                  type="button"
+                  size="sm"
+                  variant={destructive ? "ghost" : "default"}
+                  className={cn(
+                    "h-8",
+                    destructive && "text-destructive hover:bg-destructive/10",
+                  )}
+                  disabled={count === 0 || bulkBusy}
+                  onClick={() => void runBulk(action.status)}
+                >
+                  {t(`bulk.${action.status}` as "bulk.checked_in", { count: `${count}` })}
+                </Button>
+              );
+            })}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => setSelected(new Set())}
+            >
+              {t("bulk.clear")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <AppListCard className="mt-2 p-0">
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
@@ -425,6 +543,24 @@ export function VisitsPageShell() {
         ) : (
           <AppDataTable
             columns={[
+              ...(canOperate
+                ? [
+                    {
+                      id: "select",
+                      className: "w-10",
+                      label: (
+                        <Checkbox
+                          aria-label={t("bulk.selectAll")}
+                          checked={
+                            selectableRows.length > 0 &&
+                            selected.size === selectableRows.length
+                          }
+                          onCheckedChange={toggleAll}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               {
                 id: "code",
                 label: (
@@ -450,6 +586,16 @@ export function VisitsPageShell() {
               const variant = visitStatusVariant(row.status);
               return (
                 <AppDataTableRow key={row.id}>
+                  {canOperate ? (
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        aria-label={row.booking_code}
+                        checked={selected.has(row.id)}
+                        disabled={!BULK_OPEN_STATUSES.has(row.status)}
+                        onCheckedChange={() => toggleRow(row.id)}
+                      />
+                    </TableCell>
+                  ) : null}
                   <TableCell className="font-medium tabular-nums">
                     <Link
                       href={`/visit-bookings/${row.id}`}
