@@ -58,6 +58,18 @@ Every other confirmed decision is tracked in [`RCM_VISIT_OPEN_ITEMS.md`](RCM_VIS
 
 ## Changelog
 
+### 2026-08-12 - Phase 3c: the driver-app field renderer
+
+A request type an admin creates is now reachable and fillable on the phone.
+
+**Hub tiles are server-driven.** `support_hub_screen` reads `request_type_definitions` ordered by `sort_order`; a pending or failed fetch falls back to the built-in eight, so the hub is never empty offline. For the eight known keys the tile keeps its ARB label and icon rather than the server's, which preserves the Figma wording ("Sick / Accident leave") and the reviewed Arabic.
+
+**Custom types render from their field definitions.** The router sends any key outside `kBuiltInRequestTypes` to `DynamicRequestFormScreen`, which draws one control per `request_field_definitions` row - text, textarea, number, date, month, select, multiselect, checkbox, file - and routes each value by `target` to a payload key or a `requests` column. The eight built-ins keep their handwritten forms untouched, so there is no regression surface on the forms riders actually use today.
+
+**Verified.** Four widget tests (`test/dynamic_request_form_test.dart`) cover: one control per definition, required-field validation firing before any RPC is attempted, Arabic labels chosen from `label_ar`, and multiselect accumulating every tapped option. The wire contract was checked against production in a self-rolling-back transaction: a temporary custom type with a required select, a required `details` field and `min_attachments = 1` returned ACCEPTED for the payload shape the renderer produces, and `field_required:item`, `field_required:reason`, `attachments_required` for each omission. `flutter analyze` reports the same 7 pre-existing issues as before the change, none in the new files.
+
+**Not covered.** No on-device pass yet; the multiselect and month controls have never been drawn on a real screen, and Arabic bidi for a server-authored label is untested (Phase 4). Static option lists are still not validated server-side, so a stale build can submit an option an admin has since removed.
+
 ### 2026-08-12 - Phase 3b: the request-type builder
 
 Row **06b Request Types** was PASS against Figma while being, in substance, a screenshot/active toggle over eight hardcoded slugs with a disabled Add button. It is now a builder over `request_type_definitions`: the list shows fields, chain steps and live requests per type, Add opens a `?add=1` modal, and each row leads to `/requests/settings/types/[key]` where the form fields are edited against `request_field_definitions`. The workflow builder's type dropdown reads the same table, so a new type can be given a chain without a migration.
