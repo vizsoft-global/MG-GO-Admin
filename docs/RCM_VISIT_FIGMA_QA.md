@@ -3,18 +3,24 @@
 Source of truth for per-screen rows: plan `rcm_visit_booking_d61aff20.plan.md` §11 / §11.1.  
 Figma: `n99SmGz5mrwpWoB363e314` — User `4004:10289` (33) · Admin RCM `3923:25694` (31) · Admin Visit `4539:10327` (9) = **73**.
 
-## Baseline (2026-08-11 pin-to-pin)
+## Score (re-scored 2026-08-12)
 
-| Result | Count |
-|--------|------:|
-| PASS | 23 |
-| FAIL | 44 |
-| BLOCKED | 6 |
-| PENDING | 0 |
-| **Total** | **73** |
-| Figma compliance | **31.5%** |
+| Result | Admin (40) | User (33) | Total |
+|--------|-----------:|----------:|------:|
+| PASS | 30 | 23 | **53** |
+| PARTIAL — Figma element, no server support | 6 | 0 | **6** |
+| BLOCKED — client value list / no signed row | 3 | 3 | **6** |
+| FAIL | 0 | 7 | **7** |
+| OUT OF SCOPE | 1 | 0 | 1 |
+| Figma compliance | **75.0%** | 69.7% | **72.6%** |
 
-**Figma-complete: NOT READY.** Fix → re-test cycle is running; rows flip only after a verified fix.
+Baseline on 2026-08-11 was PASS 23 · FAIL 44 · BLOCKED 6 (31.5%). Counting PARTIAL as shipped-with-a-documented-gap gives 59/73 = 80.8%. Per-row verdicts live in plan §11A / §11B / §11C.
+
+**Admin side has no FAIL rows left** — all 40 rows were re-tested against a real admin session at 1366×768, then re-swept on a production build (25/25 routes fit the viewport).
+
+**The 7 User App FAIL rows are fixed in code but not yet re-verified** (RSup/10b, 10c, 10d, 11, 25, 26, 27, plus BLOCKED 29), so §11A keeps its baseline numbers. A fix without a verification is not a PASS.
+
+**Figma-complete: NOT READY** — blocked on that re-verification, the 6 client value/decision items, and the 6 PARTIAL rows that each need a server-side addition.
 
 ## Backend verification (parent agent, evidence-based)
 
@@ -149,5 +155,13 @@ The invalid-bracket-comma bug was checked across `src/` — that was the only oc
 Shared-component defect this surfaced: `KpiGrid` was hard-coded to `xl:grid-cols-6`, so **every** page with fewer than six KPIs clipped its labels (visible on `/requests/settings/reports` as "AVG. RESOLUTI…"). The column count now follows the item count.
 
 Third dev-environment red herring, for the record: the dark disc overlapping the sidebar avatar in every screenshot is `nextjs-portal`, the Next dev-tools indicator, confirmed by hit-testing that point. Not app markup.
+
+### 2026-08-12 — QA demo data removed from production
+
+The temporary QA rows are gone from `eoksxkdssptgyqyywdju`: 8 requests tagged `payload.demo_qa` (RCM-0002…0007, RCM-0010 approved+ack, RCM-0011 needs_clarification), 3 visits (VIS-00001…00003), and 2 e-sign rows (SIG-1400/1401, the ones whose `document_storage_key` was bucket-prefixed at a non-existent object). Children cascaded cleanly — `request_approval_steps`, `request_clarifications`, `request_attachments`, `loan_terms` and `visit_booking_notes` are all at 0. Configuration was left alone (`esign_categories` still holds its 7 rows, as do the visit branches / departments / slots).
+
+Also removed the 7 transactional campaigns those QA actions generated, with their dispatch runs and items. They deep-linked to records that no longer exist, so a rider tapping one would have opened a dead screen.
+
+Consequence to expect: **`/requests`, `/visit-bookings` and `/requests/esign` now show empty states**, because every row in those three tables was QA data — no rider has submitted a real request, visit or signature yet.
 
 E-Sign gaps that need a client or schema decision: `Accepted` / `Completed` statuses exist in Figma but not in `esign_requests`; there is no `viewed_at` column or driver-app write for Figma's "Viewed" timestamp; "Download audit trail" has no artifact defined. Also two QA seed rows (SIG-1400/1401) carry `document_storage_key` values prefixed with the bucket name (`esign-documents/demo/...`) pointing at objects that do not exist, so they can never render a document — real uploads use bucket-relative keys. And all five routes require `requests.manage`, not `requests.view`, which hides E-Sign entirely from read-only operators — fail-closed, but confirm it is intended.
