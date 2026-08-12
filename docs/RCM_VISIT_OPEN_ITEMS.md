@@ -99,7 +99,22 @@ Children to remove first: `request_approval_steps` (24), `request_clarifications
 
 **Two things the cleanup must not do.** It must not delete the two rider rows: `10001` and `10002` are real drivers that predate the seed by two months, and `10002` has 1,098 deliveries. And it must be scoped by tag rather than by code prefix — `RCM-90xx` is inside the live sequence's range and a future real request could land on it.
 
-**Action needed before go-live:** run the cleanup once QA closes.
+### The cleanup is written and verified — but deliberately not run yet (2026-08-12)
+
+[`scripts/qa-seed-cleanup.mjs`](../scripts/qa-seed-cleanup.mjs) performs it. It resolves every id from the tag, reports and exits unless given `--confirm`, and is safe to re-run because a second pass finds nothing to resolve. Replayed against production inside a rolled-back transaction it removes **33 rows** — 24 steps, 1 clarification, 6 requests, 2 bookings, 2 e-sign rows and 1 notification campaign — clears all three tags to zero, and leaves `drivers` (84), `profiles` (94) and `deliveries` (32,550) at exactly the counts they started with.
+
+Two scopes the original note missed, both now handled:
+
+- `loan_terms` also cascades off `requests` (0 rows today, but a loan seed would have one).
+- Transactional notifications are **not** FK-linked to the row they announce — they only carry a deep link, so nothing cascades. One campaign ("Request resolved — RCM-9001") points at a seed request and is removed by tag-derived id.
+
+**Why it must not run yet.** There is no non-seed data in any of the three modules: `requests`, `visit_bookings` and `esign_requests` each contain **only** the tagged rows. `SIG-9002` is also the only `signed` e-sign row in the database, which is precisely the dependency behind the last BLOCKED matrix row and the two BLOCKED columns on the e-sign detail row. Running the cleanup today would empty the modules and make those rows permanently unverifiable rather than closing them.
+
+**Action needed before go-live:** `node scripts/qa-seed-cleanup.mjs --confirm`, once QA closes and the signed-row verdicts are recorded.
+
+### Pre-existing debris, outside the tagged scope
+
+Four transactional notification campaigns ("Appointment request / confirmed — `APT-1000`…`APT-1002`") deep-link to appointment ids that no longer exist: the `appointments` table is empty, so an earlier QA cleanup deleted the rows and left the notifications behind. A rider tapping one opens a dead record. Left alone deliberately — they are outside the `qa_seed` tag and predate it — but they are the reason the seed cleanup removes its own campaign instead of only its rows.
 
 ---
 
