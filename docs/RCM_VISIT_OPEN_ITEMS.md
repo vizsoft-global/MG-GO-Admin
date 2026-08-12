@@ -6,13 +6,13 @@ This document consolidates every remaining item across RCM, Visit Booking, and E
 
 ## 0. Status Snapshot
 
-A 73-row Figma QA matrix has been scored: **54 PASS, 12 PARTIAL, 6 BLOCKED, 1 OUT OF SCOPE, 0 FAIL.**
+A 73-row Figma QA matrix has been scored: **59 PASS, 12 PARTIAL, 1 BLOCKED, 1 OUT OF SCOPE, 0 FAIL.** [`docs/RCM_VISIT_FIGMA_QA.md`](RCM_VISIT_FIGMA_QA.md) holds the per-row verdicts and is the authority on the count — quote it rather than restating a number here.
 
 - **PASS** — matches Figma and is fully backed by data/logic; nothing further needed.
 - **PARTIAL** — the screen works but is missing a piece (usually a data source or a wording detail) that is tracked as an open item below.
 - **BLOCKED** — cannot be closed without a decision, an asset, or a device that isn't available in this environment.
 
-Admin covers 40 rows with zero FAIL. Driver app covers 33 rows, all scored from code and Figma, since no driver-app screen has been rendered on a physical device in this environment yet (see Section B).
+Admin covers 40 rows with zero FAIL. Driver app covers 33 rows. Those were originally scored from code and Figma alone; as of 2026-08-12 seven of the screens are also rendered and measured under `flutter test` at Pixel 9 metrics in Arabic — the Help & Support hub, the dynamic request form, signature capture, my requests, the request detail, the visit ticket and the e-sign viewer's chrome. No driver-app screen has run on a physical device in this environment, which now matters for only two things: a resolved e-sign preview and system-level chrome (see Section B).
 
 ---
 
