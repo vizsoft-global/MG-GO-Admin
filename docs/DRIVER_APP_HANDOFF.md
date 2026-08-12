@@ -218,7 +218,7 @@ Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settin
 | Column | Type | Notes |
 |--------|------|-------|
 | request_code | text | **RCM-####** (allocator `allocate_request_code`) |
-| request_type | enum | loan, leave, fuel, complaint, document, **sick_leave**, **salary_justification**, **asset** |
+| request_type | text | FK → `request_type_definitions.key`. **Was an enum until 2026-08-12** — same values, same JSON on the wire, but the set is now a table an admin can add to |
 | status | enum | draft, pending, submitted, in_review, needs_clarification, **rescheduled**, approved, rejected, solved, **responded**, **closed**, overdue |
 | payload | jsonb | Type-specific Figma fields (leave_type, tenure_months, category, …) |
 | current_step_label / current_step_order | text / int | Denormalized approval progress |
@@ -238,6 +238,28 @@ Related tables: `request_approval_steps`, `request_clarifications`, `request_att
 Config: `loan_tenure_options` (6 rows: 3/6/9/12/18/24 months) and `complaint_categories` (9 rows) were seeded 2026-08-12, so neither gate fires any more. Both remain admin-editable, so keep handling an empty list.  
 **Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests` (includes `payload`), `driver_get_request`, `driver_submit_clarification`, `driver_acknowledge_request` (clears `payload.awaiting_driver_ack`, sets `driver_ack_at`, raises Admin `needs_attention`). Final admin approve on `loan` / `asset` / `sick_leave` sets `payload.awaiting_driver_ack=true`.  
 Loan submit requires rows in `loan_tenure_options`; complaint submit requires `complaint_categories` rows. Both are seeded as of 2026-08-12; the `tenure_options_not_configured` and `complaint_categories_not_configured` errors now only appear if an admin deactivates every option.
+
+### Request types are data now (2026-08-12)
+
+`public.request_type` was an 8-value Postgres enum. It is gone. A request type is a row in **`request_type_definitions`** (key, labels, `icon_key`, `is_active`, `sort_order`, `screenshot_restricted`, `terminal_status_on_approve`, `requires_driver_ack_on_approve`, `date_range_required`, `min_attachments`), and its form is described by **`request_field_definitions`** (`field_key`, `label_en`/`label_ar`, `kind`, `target`, `is_required`, `sort_order`, `options_source`, `options`, `min_value`/`max_value`). Both are readable by any authenticated rider for active types.
+
+**Nothing in the current app breaks.** `p_type` on `driver_create_request` changed from the enum to `text`, which is the same `"leave"` string on the wire, and `request_type` still comes back as the same string in every RPC payload. Every gate and every error code behaves exactly as before — that was verified case by case against a pre-migration baseline.
+
+Two behaviours are new, both strictly safer: a non-numeric `tenure_months` returns `tenure_options_not_configured` instead of raising an unhandled Postgres cast error, and a request type that has been deactivated is rejected with `request_type_inactive` (all 8 are active today).
+
+Generic error codes a server-defined type can now produce, alongside the legacy ones the app already translates:
+
+| Code | Meaning |
+|---|---|
+| `unknown_request_type` | No definition row for that key |
+| `request_type_inactive` | Definition exists but `is_active = false` |
+| `field_required:<field_key>` | A field with `is_server_required` was empty |
+| `invalid_option:<field_key>` | Value is not in the field's server-backed option list |
+| `attachments_required` | Fewer attachments than `min_attachments` |
+
+The 8 built-ins are **system types with a locked field set**. Their labels, chain and policy are admin-editable, but their fields are not — the app renders those forms from hardcoded Dart, so an edit would break installed builds. That lock is lifted once the app ships a renderer driven by `request_field_definitions`; the hub tile list should come from `request_type_definitions` ordered by `sort_order` in the same release, since that is what makes an admin-created type reachable at all.
+
+One rule worth knowing before the builder ships: the acknowledgement flag only applies when the type ends on `approved`. A type whose `terminal_status_on_approve` is `solved` never sets `payload.awaiting_driver_ack` — you do not acknowledge a resolution.
 
 `driver_create_request` inserts the row with status `submitted`, not `pending` — show "Submitted" for it, including on the post-create confirmation screen. **As of 2026-08-12 `submitted` survives**: `rcm_materialize_approval_steps` no longer overwrites it with `in_review`, so a request reads Submitted until the first staff decision and In review after it.
 

@@ -4354,7 +4354,7 @@ export type Database = {
           created_at: string
           id: string
           is_system_auto: boolean
-          request_type: Database["public"]["Enums"]["request_type"]
+          request_type: string
           role_key: string
           sla_minutes: number | null
           step_name: string
@@ -4367,7 +4367,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_system_auto?: boolean
-          request_type: Database["public"]["Enums"]["request_type"]
+          request_type: string
           role_key: string
           sla_minutes?: number | null
           step_name: string
@@ -4380,14 +4380,22 @@ export type Database = {
           created_at?: string
           id?: string
           is_system_auto?: boolean
-          request_type?: Database["public"]["Enums"]["request_type"]
+          request_type?: string
           role_key?: string
           sla_minutes?: number | null
           step_name?: string
           step_order?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "request_approval_step_templates_request_type_fkey"
+            columns: ["request_type"]
+            isOneToOne: false
+            referencedRelation: "request_type_definitions"
+            referencedColumns: ["key"]
+          },
+        ]
       }
       request_approval_steps: {
         Row: {
@@ -4644,13 +4652,90 @@ export type Database = {
         }
         Relationships: []
       }
+      request_field_definitions: {
+        Row: {
+          created_at: string
+          field_key: string
+          help_ar: string | null
+          help_en: string | null
+          id: string
+          is_required: boolean
+          is_server_required: boolean
+          kind: string
+          label_ar: string | null
+          label_en: string
+          max_value: number | null
+          min_value: number | null
+          options: Json
+          options_error_code: string | null
+          options_source: string | null
+          required_error_code: string | null
+          sort_order: number
+          target: string
+          type_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          field_key: string
+          help_ar?: string | null
+          help_en?: string | null
+          id?: string
+          is_required?: boolean
+          is_server_required?: boolean
+          kind: string
+          label_ar?: string | null
+          label_en: string
+          max_value?: number | null
+          min_value?: number | null
+          options?: Json
+          options_error_code?: string | null
+          options_source?: string | null
+          required_error_code?: string | null
+          sort_order?: number
+          target?: string
+          type_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          field_key?: string
+          help_ar?: string | null
+          help_en?: string | null
+          id?: string
+          is_required?: boolean
+          is_server_required?: boolean
+          kind?: string
+          label_ar?: string | null
+          label_en?: string
+          max_value?: number | null
+          min_value?: number | null
+          options?: Json
+          options_error_code?: string | null
+          options_source?: string | null
+          required_error_code?: string | null
+          sort_order?: number
+          target?: string
+          type_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_field_definitions_type_key_fkey"
+            columns: ["type_key"]
+            isOneToOne: false
+            referencedRelation: "request_type_definitions"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
       request_staff_access: {
         Row: {
           access_level: Database["public"]["Enums"]["request_access_level"]
           created_at: string
           id: string
           profile_id: string
-          request_type: Database["public"]["Enums"]["request_type"]
+          request_type: string
           updated_at: string
         }
         Insert: {
@@ -4658,7 +4743,7 @@ export type Database = {
           created_at?: string
           id?: string
           profile_id: string
-          request_type: Database["public"]["Enums"]["request_type"]
+          request_type: string
           updated_at?: string
         }
         Update: {
@@ -4666,7 +4751,7 @@ export type Database = {
           created_at?: string
           id?: string
           profile_id?: string
-          request_type?: Database["public"]["Enums"]["request_type"]
+          request_type?: string
           updated_at?: string
         }
         Relationships: [
@@ -4677,25 +4762,68 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "request_staff_access_request_type_fkey"
+            columns: ["request_type"]
+            isOneToOne: false
+            referencedRelation: "request_type_definitions"
+            referencedColumns: ["key"]
+          },
         ]
       }
-      request_type_screenshot_policy: {
+      request_type_definitions: {
         Row: {
+          attachments_error_code: string | null
+          created_at: string
+          date_range_required: boolean
+          icon_key: string | null
+          id: string
           is_active: boolean
-          request_type: Database["public"]["Enums"]["request_type"]
+          is_system: boolean
+          key: string
+          label_ar: string | null
+          label_en: string
+          min_attachments: number
+          requires_driver_ack_on_approve: boolean
           screenshot_restricted: boolean
+          sort_order: number
+          terminal_status_on_approve: string
           updated_at: string
         }
         Insert: {
+          attachments_error_code?: string | null
+          created_at?: string
+          date_range_required?: boolean
+          icon_key?: string | null
+          id?: string
           is_active?: boolean
-          request_type: Database["public"]["Enums"]["request_type"]
+          is_system?: boolean
+          key: string
+          label_ar?: string | null
+          label_en: string
+          min_attachments?: number
+          requires_driver_ack_on_approve?: boolean
           screenshot_restricted?: boolean
+          sort_order?: number
+          terminal_status_on_approve?: string
           updated_at?: string
         }
         Update: {
+          attachments_error_code?: string | null
+          created_at?: string
+          date_range_required?: boolean
+          icon_key?: string | null
+          id?: string
           is_active?: boolean
-          request_type?: Database["public"]["Enums"]["request_type"]
+          is_system?: boolean
+          key?: string
+          label_ar?: string | null
+          label_en?: string
+          min_attachments?: number
+          requires_driver_ack_on_approve?: boolean
           screenshot_restricted?: boolean
+          sort_order?: number
+          terminal_status_on_approve?: string
           updated_at?: string
         }
         Relationships: []
@@ -4727,7 +4855,7 @@ export type Database = {
           needs_attention: boolean
           payload: Json
           request_code: string
-          request_type: Database["public"]["Enums"]["request_type"]
+          request_type: string
           severity: Database["public"]["Enums"]["severity_level"] | null
           sla_breach_action: string | null
           sla_due_at: string | null
@@ -4761,7 +4889,7 @@ export type Database = {
           needs_attention?: boolean
           payload?: Json
           request_code: string
-          request_type: Database["public"]["Enums"]["request_type"]
+          request_type: string
           severity?: Database["public"]["Enums"]["severity_level"] | null
           sla_breach_action?: string | null
           sla_due_at?: string | null
@@ -4795,7 +4923,7 @@ export type Database = {
           needs_attention?: boolean
           payload?: Json
           request_code?: string
-          request_type?: Database["public"]["Enums"]["request_type"]
+          request_type?: string
           severity?: Database["public"]["Enums"]["severity_level"] | null
           sla_breach_action?: string | null
           sla_due_at?: string | null
@@ -4831,6 +4959,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "drivers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requests_request_type_fkey"
+            columns: ["request_type"]
+            isOneToOne: false
+            referencedRelation: "request_type_definitions"
+            referencedColumns: ["key"]
           },
         ]
       }
@@ -6184,7 +6319,7 @@ export type Database = {
           p_payload?: Json
           p_severity?: Database["public"]["Enums"]["severity_level"]
           p_start_date?: string
-          p_type: Database["public"]["Enums"]["request_type"]
+          p_type: string
         }
         Returns: Json
       }
@@ -6357,10 +6492,7 @@ export type Database = {
         Returns: Json
       }
       admin_upsert_step_template: {
-        Args: {
-          p_request_type: Database["public"]["Enums"]["request_type"]
-          p_steps: Json
-        }
+        Args: { p_request_type: string; p_steps: Json }
         Returns: Json
       }
       allocate_appointment_code: { Args: never; Returns: string }
@@ -6602,7 +6734,7 @@ export type Database = {
           p_payload?: Json
           p_severity?: Database["public"]["Enums"]["severity_level"]
           p_start_date?: string
-          p_type: Database["public"]["Enums"]["request_type"]
+          p_type: string
         }
         Returns: Json
       }
@@ -6893,6 +7025,19 @@ export type Database = {
         Args: { p_request_id: string }
         Returns: undefined
       }
+      rcm_validate_request_input: {
+        Args: {
+          p_amount_kwd: number
+          p_attachments: Json
+          p_details: string
+          p_end_date: string
+          p_payload: Json
+          p_severity: Database["public"]["Enums"]["severity_level"]
+          p_start_date: string
+          p_type: string
+        }
+        Returns: string
+      }
       recalculate_driver_earnings: {
         Args: {
           p_approved_by?: string
@@ -7130,15 +7275,6 @@ export type Database = {
         | "completed"
         | "rejected"
         | "skipped"
-      request_type:
-        | "loan"
-        | "leave"
-        | "fuel"
-        | "complaint"
-        | "document"
-        | "sick_leave"
-        | "salary_justification"
-        | "asset"
       restaurant_geofence_kind: "inclusion" | "exclusion"
       restaurant_status: "draft" | "published" | "active"
       rule_scope_type: "zone" | "partner" | "restaurant"
@@ -7457,16 +7593,6 @@ export const Constants = {
         "completed",
         "rejected",
         "skipped",
-      ],
-      request_type: [
-        "loan",
-        "leave",
-        "fuel",
-        "complaint",
-        "document",
-        "sick_leave",
-        "salary_justification",
-        "asset",
       ],
       restaurant_geofence_kind: ["inclusion", "exclusion"],
       restaurant_status: ["draft", "published", "active"],

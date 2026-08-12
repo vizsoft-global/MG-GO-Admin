@@ -544,8 +544,8 @@ export async function fetchSettingsHubCounts(): Promise<SettingsHubCounts> {
     await Promise.all([
       supabase.from("request_approval_step_templates").select("request_type"),
       (supabase as any)
-        .from("request_type_screenshot_policy")
-        .select("request_type", { count: "exact", head: true })
+        .from("request_type_definitions")
+        .select("key", { count: "exact", head: true })
         .eq("is_active", true),
       supabase
         .from("asset_catalog")
@@ -652,14 +652,14 @@ export async function fetchRequestTypeScreenshotPolicy(): Promise<{
   await requireRequestsManage();
   const supabase = await createClient();
   const { data, error } = await (supabase as any)
-    .from("request_type_screenshot_policy")
-    .select("request_type, screenshot_restricted, is_active")
-    .order("request_type");
+    .from("request_type_definitions")
+    .select("key, screenshot_restricted, is_active")
+    .order("sort_order");
 
   if (error) return { rows: [], error: error.message };
   return {
     rows: (data ?? []).map((row: Record<string, unknown>) => ({
-      request_type: row.request_type as RequestTypeSlug,
+      request_type: row.key as RequestTypeSlug,
       screenshot_restricted: Boolean(row.screenshot_restricted),
       is_active: Boolean(row.is_active),
     })),
@@ -673,15 +673,15 @@ export async function updateRequestTypeScreenshotPolicy(
   await requireRequestsManage();
   const supabase = await createClient();
   const { error } = await (supabase as any)
-    .from("request_type_screenshot_policy")
+    .from("request_type_definitions")
     .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq("request_type", requestType);
+    .eq("key", requestType);
 
   if (error) return { ok: false, error: error.message };
 
   await logAdminMutation({
     action: "update",
-    entityType: "request_type_screenshot_policy",
+    entityType: "request_type_definitions",
     entityId: requestType,
     routeName: "requests.settings.screenshot.update",
     context: patch,
