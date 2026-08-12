@@ -7,20 +7,20 @@ Figma: `n99SmGz5mrwpWoB363e314` — User `4004:10289` (33) · Admin RCM `3923:25
 
 | Result | Admin (40) | User (33) | Total |
 |--------|-----------:|----------:|------:|
-| PASS | 30 | 24 | **54** |
+| PASS | 33 | 26 | **59** |
 | PARTIAL — Figma element, no server support | 6 | 6 | **12** |
-| BLOCKED — client value list / no signed row | 3 | 3 | **6** |
+| BLOCKED — no signed row / device | 0 | 1 | **1** |
 | FAIL | 0 | 0 | **0** |
 | OUT OF SCOPE | 1 | 0 | 1 |
-| Figma compliance | **75.0%** | 72.7% | **74.0%** |
+| Figma compliance | **82.5%** | 78.8% | **80.8%** |
 
-Baseline on 2026-08-11 was PASS 23 · FAIL 44 · BLOCKED 6 (31.5%). Counting PARTIAL as shipped-with-a-documented-gap gives 66/73 = 90.4%, and no FAIL row remains. Per-row verdicts live in plan §11A / §11B / §11C.
+Baseline on 2026-08-11 was PASS 23 · FAIL 44 · BLOCKED 6 (31.5%). Counting PARTIAL as shipped-with-a-documented-gap gives 71/73 = 97.3%, and no FAIL row remains. Per-row verdicts live in plan §11A / §11B / §11C.
 
 **Admin side has no FAIL rows left** — all 40 rows were re-tested against a real admin session at 1366×768, then re-swept on a production build (25/25 routes fit the viewport).
 
 **The localisation gap that dominated this table is closed.** `lib/features/support/` had zero `AppLocalizations` references; 19 files now go through `context.l10n` with 352 new English/Arabic key pairs, parity proven at 856 keys each side with matching placeholder sets. The Arabic has not been seen rendered, and a handful of coined terms want a Gulf-native reviewer.
 
-**Figma-complete: NOT READY** — what remains is the 6 client value/decision items, the 12 PARTIAL rows that each need a server-side addition, one Arabic review pass on a real device, and the fact that no driver screen has ever been rendered here (no emulator or device), so every User row is a code-and-Figma verdict rather than an observed one.
+**Figma-complete: NOT READY** — what remains is the client decisions now approved and queued as schema work, the 12 PARTIAL rows that each need a server-side addition, one Arabic review pass on a real device, and the fact that no driver screen has ever been rendered here (no emulator or device), so every User row is a code-and-Figma verdict rather than an observed one.
 
 ## Backend verification (parent agent, evidence-based)
 
@@ -37,16 +37,18 @@ Checked directly against project `eoksxkdssptgyqyywdju`.
 | KPI trend | previous-month window (`v_from - 1 month` … `v_to - 1 month`), returned as `prev_*` keys | MATCHES RULE |
 | Admin attention badge | `requests.needs_attention` + `attention_at`; `admin_clear_request_attention` sets `needs_attention=false, attention_cleared_at=now()`, invoked from `admin_get_request` | DB-BACKED, CLEARS ON OPEN |
 | No Admin push | no notification dispatch in any `admin_*` request RPC; `notify_driver_transactional` is driver-directed only | CORRECT |
-| Gated seeds | `loan_tenure_options` = 0 rows · `complaint_categories` = 0 rows | STILL GATED |
+| Gated seeds | `loan_tenure_options` = 6 rows (3/6/9/12/18/24) · `complaint_categories` = 9 rows, all active | SEEDED 2026-08-12 |
 | Permissions present | `requests.approve`, `visits.view`, `visits.manage_catalog`, `visits.operate` | PRESENT |
 | Migrations applied | `20260826100800`, `20260826100900`, `20260827100000` | APPLIED |
 
-## Client confirmations still required
+## Client confirmations received
 
-1. **Loan tenure options** (RSup/03 Advance, Admin Drawer Advance) — Figma shows only a `6 months` sample with no options annotation.
-2. **Complaint categories** (RSup/07 Complaint, Admin Drawer Complaint, Admin `06-Complaint-Categories`) — Figma shows only a `Payments` sample.
+Both value lists came back on 2026-08-12 and are seeded in production, so the five rows that were blocked on them are now scored:
 
-Everything except the value list on those screens is implemented; the seed gap must not block their other QA columns.
+1. **Loan tenure options** — 3, 6, 9, 12, 18 and 24 months. Unblocks RSup/03 Advance and Admin Drawer Advance.
+2. **Complaint categories** — Payments, Salary Issues, Attendance / Check-in, Visit / Booking Issues, Vehicle / Fuel, HR / Workplace, Document / E-Sign Issues, App / Technical Issue, Other. Unblocks RSup/07 Complaint, Admin Drawer Complaint and Admin `06-Complaint-Categories`.
+
+Every other confirmed decision is tracked in [`RCM_VISIT_OPEN_ITEMS.md`](RCM_VISIT_OPEN_ITEMS.md).
 
 ## QA environment
 
@@ -55,6 +57,22 @@ Everything except the value list on those screens is implemented; the seed gap m
 - Exact Figma node IDs per Admin row are recorded in plan §11B / §11C.
 
 ## Changelog
+
+### 2026-08-12 — Phase 1: the client's answers, shipped
+
+Every question in `RCM_VISIT_OPEN_ITEMS.md` section A came back answered, and this is the first of the phased releases against those answers.
+
+**The two value lists are seeded** (`20260830100000`): 6 loan tenures (3/6/9/12/18/24) and 9 complaint categories with Arabic labels. Both tables gate their rider form server-side — `driver_create_request` refused a loan with `tenure_options_not_configured` and a complaint with `complaint_categories_not_configured` — so seeding alone un-gates both flows with no app change. Five QA rows were blocked on nothing but these empty tables and are now scored: RSup/03, RSup/07, Drawer Advance, Drawer Complaint, 06-Categories. The Arabic labels are MSA and still owed a Gulf-native review.
+
+Loan tenure had no admin editor, unlike complaint categories, so the client could not change their own answer later. There is one now at `/requests/settings/tenure`, reachable from the loan row of Request types & fields, with the same add / activate / remove shape as the categories panel. Verified by production build (the route is in `app-path-routes-manifest.json`) and by resolving all 20 of its translation keys in both locales; an authenticated render was not possible in this session because the local login form would not submit.
+
+**`managers` is gone** (`20260830100100`). The loan chain's fourth step carried the plural while asset and fuel used `manager`, and `admin_list_requests` builds its department filter from those role keys, so the same team appeared twice and its queue was split. One template row and one in-flight step row were corrected.
+
+**The e-sign preview now shows what print and download show.** It read `document_storage_key` while print already preferred `signed_document_storage_key`, so a signed request previewed the unsigned original. It now prefers the stamped copy and captions the fact; falling back to the original stays correct while the composer runs or after it fails, and the sidebar already says which of those happened.
+
+**The composer can no longer be killed by a bad image.** It always wrote `signed_document_error` on failure, but a malformed PNG took the worker down with `WORKER_RESOURCE_LIMIT` before that handler ran, leaving the request looking stuck. It now walks the PNG chunk table (IHDR shape, dimensions, a chunk length that fits the file, IDAT before IEND), checks JPEG for a real end-of-image marker, and caps sizes at 15MB source / 4MB signature. Proven end to end against production: a PNG with a valid signature and a bogus IHDR length returns 422 `malformed_signature_image` in 2.7s with the error recorded, and the real signature still composes a 2103-byte PDF.
+
+**Driver app: `submitted` no longer reads "Pending".** `RequestStatusView.of` collapsed `pending` and `submitted` onto one label, and the post-create screen hardcoded the Pending pill even though `driver_create_request` inserts the row as `submitted`. Both fixed; the `submitted` key already existed in both ARBs, so parity stayed at 856/856.
 
 ### 2026-08-11 — Admin RCM settings + ESign Visual/Fields fix pass
 

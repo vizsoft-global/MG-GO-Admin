@@ -2822,8 +2822,8 @@
         "stepRejected": "Rejected",
         "subject": "Subject",
         "message": "Message",
-        "categoryGated": "Category options not yet configured — client confirmation pending",
-        "tenureGated": "Tenure options not yet configured — client confirmation pending",
+        "categoryGated": "No complaint category is active — add one in Settings",
+        "tenureGated": "No loan tenure option is active — add one in Settings",
         "actionLabels": {
           "approve": "Approve",
           "reject": "Reject",
@@ -2931,7 +2931,7 @@
           "hub": "Settings",
           "title": "Complaint categories",
           "subtitle": "Options shown to drivers when filing a complaint",
-          "emptyHint": "No categories yet — add rows when the client confirms the list.",
+          "emptyHint": "Deactivate a category to hide it from new complaints without losing the ones already filed under it.",
           "key": "Key",
           "labelEn": "Label (EN)",
           "labelAr": "Label (AR)",
@@ -2948,6 +2948,29 @@
           "errors": {
             "saveFailed": "Could not save category",
             "deleteFailed": "Could not remove category"
+          }
+        },
+        "tenure": {
+          "hub": "Settings",
+          "title": "Loan tenure options",
+          "subtitle": "Repayment durations drivers can pick when requesting a loan or advance",
+          "hint": "Deactivate an option to hide it from new requests without affecting loans already approved on it.",
+          "months": "Months",
+          "label": "Label",
+          "labelPlaceholder": "{months} months",
+          "add": "Add option",
+          "added": "Tenure option added",
+          "empty": "No tenure options configured",
+          "active": "Status",
+          "activeOn": "Active",
+          "activeOff": "Inactive",
+          "remove": "Remove",
+          "deleteTitle": "Remove tenure option?",
+          "deleteDescription": "Remove the {months}-month option? Drivers will no longer see it.",
+          "deleted": "Tenure option removed",
+          "errors": {
+            "saveFailed": "Could not save tenure option",
+            "deleteFailed": "Could not remove tenure option"
           }
         },
         "types": {
@@ -2968,6 +2991,7 @@
           "activeOff": "Inactive",
           "builtIn": "Built-in",
           "manageCategories": "Categories",
+          "manageTenure": "Tenure options",
           "errors": {
             "saveFailed": "Could not save policy"
           },
@@ -3327,6 +3351,7 @@
             "device": "Device",
             "signed_at": "Date / time"
           },
+          "previewSignedCopy": "Showing the signed copy, with the rider's signature stamped in.",
           "downloadSignedCopy": "Download signed document",
           "signedCopyPending": "The signed copy is still being composed — the original is below.",
           "signedCopyFailed": "Signed copy could not be composed ({reason}). Only the original is available.",
@@ -3551,10 +3576,10 @@
           "high": "High"
         },
         "gated": {
-          "tenure": "Loan tenure options are not configured yet — client confirmation pending, so loan requests cannot be created here.",
-          "tenureShort": "Not configured yet",
-          "category": "Complaint categories are not configured yet — client confirmation pending, so complaints cannot be created here.",
-          "categoryShort": "Not configured yet",
+          "tenure": "No loan tenure option is active, so loan requests cannot be created. Add one under Settings → Loan tenure options.",
+          "tenureShort": "None active",
+          "category": "No complaint category is active, so complaints cannot be created. Add one under Settings → Complaint categories.",
+          "categoryShort": "None active",
           "sickDocs": "Sick / accident requests need the medical documents attached, so the rider must submit them from the app."
         },
         "errors": {

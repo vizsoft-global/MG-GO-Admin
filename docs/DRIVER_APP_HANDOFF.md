@@ -231,9 +231,11 @@ Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settin
 | completed_at | timestamptz | KPI avg resolution |
 
 Related tables: `request_approval_steps`, `request_clarifications`, `request_attachments`.  
-Config (may be empty until client confirms): `loan_tenure_options`, `complaint_categories`.  
+Config: `loan_tenure_options` (6 rows: 3/6/9/12/18/24 months) and `complaint_categories` (9 rows) were seeded 2026-08-12, so neither gate fires any more. Both remain admin-editable, so keep handling an empty list.  
 **Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests` (includes `payload`), `driver_get_request`, `driver_submit_clarification`, `driver_acknowledge_request` (clears `payload.awaiting_driver_ack`, sets `driver_ack_at`, raises Admin `needs_attention`). Final admin approve on `loan` / `asset` / `sick_leave` sets `payload.awaiting_driver_ack=true`.  
-Loan submit requires rows in `loan_tenure_options` (empty until client confirms). Complaint submit requires `complaint_categories` rows (empty until client confirms).
+Loan submit requires rows in `loan_tenure_options`; complaint submit requires `complaint_categories` rows. Both are seeded as of 2026-08-12; the `tenure_options_not_configured` and `complaint_categories_not_configured` errors now only appear if an admin deactivates every option.
+
+`driver_create_request` inserts the row with status `submitted`, not `pending` — show "Submitted" for it, including on the post-create confirmation screen.
 
 Staff can also raise a request for a rider via `admin_create_request`. Such rows are normal `requests` rows the driver sees in **Sent**, with `payload.created_on_behalf = true`, `created_on_behalf_by` (staff uuid), `created_on_behalf_by_name` and `created_on_behalf_at`. If the app shows an author line, use `created_on_behalf_by_name`; the approval chain, clarifications and acknowledgement flow are unchanged.
 

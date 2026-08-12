@@ -180,6 +180,15 @@ export function TypesSettingsPanel() {
                           {t("manageCategories")}
                         </Link>
                       ) : null}
+                      {slug === "loan" ? (
+                        <Link
+                          href="/requests/settings/tenure"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {t("manageTenure")}
+                        </Link>
+                      ) : null}
                       <Button
                         type="button"
                         variant="outline"

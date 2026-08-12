@@ -89,6 +89,12 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
     value: meta[key] != null && String(meta[key]).trim() !== "" ? String(meta[key]) : null,
   })).filter((row) => row.value != null);
 
+  // Client decision: once a request is signed, the preview shows the stamped copy, the same
+  // one print and download serve. Falling back to the original is still correct while the
+  // composer runs or after it fails — the sidebar says which of the two happened.
+  const previewUrl = links?.signedDocumentUrl ?? links?.documentUrl ?? null;
+  const previewIsSignedCopy = Boolean(links?.signedDocumentUrl);
+
   return (
     <AppPage>
       <AppPageHeader
@@ -136,12 +142,17 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
 
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
         <AppListCard className="flex min-h-[420px] flex-col gap-3 bg-muted/30 p-4">
-          {links?.documentUrl ? (
-            <iframe
-              src={links.documentUrl}
-              title={request.title || request.request_code}
-              className="h-[520px] w-full rounded-lg border border-border bg-card"
-            />
+          {previewUrl ? (
+            <div className="flex flex-col gap-1">
+              <iframe
+                src={previewUrl}
+                title={request.title || request.request_code}
+                className="h-[520px] w-full rounded-lg border border-border bg-card"
+              />
+              {previewIsSignedCopy ? (
+                <p className="text-[10px] text-muted-foreground">{t("previewSignedCopy")}</p>
+              ) : null}
+            </div>
           ) : linksLoading ? (
             // The signed URL is minted per view, so it lands a beat after the row. Claiming
             // "sent without a document" in that gap reads as a real defect to an admin.

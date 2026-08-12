@@ -43,6 +43,14 @@ export type ComplaintCategoryRow = {
   sort_order: number;
 };
 
+export type LoanTenureOptionRow = {
+  id: string;
+  months: number;
+  label: string | null;
+  is_active: boolean;
+  sort_order: number;
+};
+
 export type StaffAccessRow = {
   id: string;
   profile_id: string;

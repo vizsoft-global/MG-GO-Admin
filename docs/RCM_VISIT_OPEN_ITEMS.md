@@ -20,7 +20,9 @@ Admin covers 40 rows with zero FAIL. Driver app covers 33 rows, all scored from 
 
 *This section is self-contained — no file paths or internal table names are referenced except where the client already uses the term. It can be forwarded on its own.*
 
-### A.1 Value Lists — ✅ Confirmed
+### A.1 Value Lists — ✅ Confirmed and shipped (2026-08-12)
+
+Both lists are live in production and editable from the admin panel: complaint categories under **Settings → Complaint categories**, tenures under **Settings → Loan tenure options**. Loan and complaint requests are no longer blocked in the driver app.
 
 | Item | Decision |
 |---|---|
@@ -33,13 +35,13 @@ Admin covers 40 rows with zero FAIL. Driver app covers 33 rows, all scored from 
    **Decision: Confirmed as intended.** No change.
 
 2. **Signed document preview** — For a signed request, the preview pane currently shows the original (unsigned) document; only print and download serve the signature-stamped copy.
-   **Decision: Confirmed — preview should also show the stamped copy.** Preview will be updated to match print/download.
+   **Decision: Confirmed — preview should also show the stamped copy.** ✅ Shipped 2026-08-12: the preview prefers the stamped copy and says so, falling back to the original only while composition is pending or after it failed.
 
 3. **Duplicate role key in approval templates** — Approval templates currently carry both `manager` and `managers` as role keys, producing two near-identical department filter options. This sits inside the locked approval chain, so it needed explicit sign-off.
-   **Decision: Consolidate to a single role key — `manager`.** The duplicate `managers` key will be removed and the approval chain corrected.
+   **Decision: Consolidate to a single role key — `manager`.** ✅ Shipped 2026-08-12: the loan chain's step 4 and the one in-flight request carrying the plural were corrected, so the department filter lists one Manager option.
 
 4. **Driver app status wording** — Both the `pending` and `submitted` request states currently display as "Pending" in the app, while Figma shows "Submitted" (and, in one frame, the misspelling "Request Recieved").
-   **Decision: Use "Pending" for `pending` and "Submitted" for `submitted`.** The Figma misspelling ("Request Recieved") will not be carried into the product; "Submitted" is used instead.
+   **Decision: Use "Pending" for `pending` and "Submitted" for `submitted`.** ✅ Shipped 2026-08-12, including the post-create confirmation screen, which hardcoded "Pending" even though the row is inserted as `submitted`. The Figma misspelling ("Request Recieved") was not carried into the product.
 
 ### A.3 Schema Additions — ✅ Confirmed: build all
 
@@ -63,14 +65,14 @@ The list was 11 when it went to the client. One item — requester zone on the o
 ## B. Needs a Device or a Figma Asset (Cannot Be Closed From Here)
 
 - **On-device pass required** — Arabic overflow and bidi behaviour around Latin codes such as `RCM-0001`, the signature export geometry, and the signature pad guides. Nothing in the driver app has been rendered on a physical device in this environment.
-- **Gulf-native Arabic review** — for coined or company-specific terms: E-Sign, Central Tower, salary justification, wrong action, acknowledge, check-in code.
+- **Gulf-native Arabic review** — for coined or company-specific terms: E-Sign, Central Tower, salary justification, wrong action, acknowledge, check-in code. The nine complaint category labels seeded on 2026-08-12 are MSA and belong in the same review pass.
 - **Missing Figma frame** — `RSup/26 Sign Capture` cannot be located in file `n99SmGz5mrwpWoB363e314` (node `4377:4520` resolves to nothing, and the `App` canvas lists no `RSup` frames). Its guides and Cancel button styling were built from a written description only — this is the sole reason that row is still scored PARTIAL.
 
 ---
 
 ## C. Our Work — No Client Input Needed
 
-- **Composer robustness — pre-validation missing.** The function does write a `signed_document_error` when composition fails, but a malformed signature PNG kills the edge worker outright with `WORKER_RESOURCE_LIMIT` before that handler can run, so the request just appears stuck. Fix: a structural PNG/JPEG check and a size cap before `embedPng` in `supabase/functions/esign-compose-signed-document`, so a bad image fails through the existing error path instead of taking the worker down.
+- ~~**Composer robustness — pre-validation missing.**~~ ✅ Fixed and deployed 2026-08-12. The function now walks the PNG chunk table and checks the JPEG end-of-image marker before the decoder sees the bytes, and caps sizes at 15MB source / 4MB signature. A corrupt PNG returns `malformed_signature_image` and records it, instead of taking the worker down with `WORKER_RESOURCE_LIMIT`.
 - **Rotate `SUPABASE_SERVICE_ROLE_KEY`** and mirror the new value into Vercel project `dpdadmin-prod` — the current key was pasted in chat and should be treated as compromised.
 
 ---

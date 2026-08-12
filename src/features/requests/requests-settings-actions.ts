@@ -11,6 +11,7 @@ import type {
   DepartmentMemberRow,
   DepartmentRoleTitle,
   DepartmentRow,
+  LoanTenureOptionRow,
   RequestDepartmentReportRow,
   RequestTypeScreenshotPolicyRow,
   RequestTypeSlug,
@@ -202,6 +203,98 @@ export async function deleteComplaintCategory(
     entityType: "complaint_categories",
     entityId: id,
     routeName: "requests.settings.categories.delete",
+  });
+  return { ok: true };
+}
+
+export async function fetchLoanTenureOptions(): Promise<{
+  rows: LoanTenureOptionRow[];
+  error?: string;
+}> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("loan_tenure_options")
+    .select("id, months, label, is_active, sort_order")
+    .order("sort_order")
+    .order("months");
+
+  if (error) return { rows: [], error: error.message };
+
+  await logAdminRead("requests", "requests.settings.tenure.list", {});
+
+  return {
+    rows: (data ?? []).map((row) => ({
+      id: row.id,
+      months: row.months,
+      label: row.label,
+      is_active: row.is_active,
+      sort_order: row.sort_order,
+    })),
+  };
+}
+
+export async function upsertLoanTenureOption(input: {
+  id?: string;
+  months: number;
+  label?: string | null;
+  is_active?: boolean;
+  sort_order?: number;
+}): Promise<{ ok: boolean; error?: string; id?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const months = Math.trunc(input.months);
+  if (!Number.isFinite(months) || months <= 0) return { ok: false, error: "invalid_months" };
+
+  const row = {
+    months,
+    label: input.label?.trim() || `${months} months`,
+    is_active: input.is_active ?? true,
+    sort_order: input.sort_order ?? months,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (input.id) {
+    const { error } = await supabase.from("loan_tenure_options").update(row).eq("id", input.id);
+    if (error) return { ok: false, error: error.message };
+    await logAdminMutation({
+      action: "update",
+      entityType: "loan_tenure_options",
+      entityId: input.id,
+      routeName: "requests.settings.tenure.update",
+    });
+    return { ok: true, id: input.id };
+  }
+
+  const { data, error } = await supabase
+    .from("loan_tenure_options")
+    .insert(row)
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "create",
+    entityType: "loan_tenure_options",
+    entityId: data.id,
+    routeName: "requests.settings.tenure.create",
+  });
+  return { ok: true, id: data.id };
+}
+
+export async function deleteLoanTenureOption(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { error } = await supabase.from("loan_tenure_options").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "delete",
+    entityType: "loan_tenure_options",
+    entityId: id,
+    routeName: "requests.settings.tenure.delete",
   });
   return { ok: true };
 }
