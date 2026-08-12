@@ -219,7 +219,7 @@ Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settin
 |--------|------|-------|
 | request_code | text | **RCM-####** (allocator `allocate_request_code`) |
 | request_type | enum | loan, leave, fuel, complaint, document, **sick_leave**, **salary_justification**, **asset** |
-| status | enum | draft, pending, submitted, in_review, needs_clarification, approved, rejected, solved, overdue |
+| status | enum | draft, pending, submitted, in_review, needs_clarification, **rescheduled**, approved, rejected, solved, **responded**, **closed**, overdue |
 | payload | jsonb | Type-specific Figma fields (leave_type, tenure_months, category, …) |
 | current_step_label / current_step_order | text / int | Denormalized approval progress |
 | amount_kwd | numeric | Loan/fuel amount (also in payload where typed) |
@@ -229,17 +229,31 @@ Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settin
 | decision_reason | text | Set by admin on reject/clarify |
 | needs_attention | bool | Admin list badge only (cleared on staff open); **no admin push** |
 | completed_at | timestamptz | KPI avg resolution |
+| acknowledged_at | timestamptz | Real column mirroring `payload.driver_ack_at` |
+| sla_due_at | timestamptz | Deadline of the open step; NULL when the step has no SLA |
+| closed_at / closed_by | timestamptz / uuid | Archive stamp (manual or auto-close) |
+| fuel_transfer_type | text | `cash` \| `salary` — approver's payout choice, not rider input |
 
 Related tables: `request_approval_steps`, `request_clarifications`, `request_attachments`.  
 Config: `loan_tenure_options` (6 rows: 3/6/9/12/18/24 months) and `complaint_categories` (9 rows) were seeded 2026-08-12, so neither gate fires any more. Both remain admin-editable, so keep handling an empty list.  
 **Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests` (includes `payload`), `driver_get_request`, `driver_submit_clarification`, `driver_acknowledge_request` (clears `payload.awaiting_driver_ack`, sets `driver_ack_at`, raises Admin `needs_attention`). Final admin approve on `loan` / `asset` / `sick_leave` sets `payload.awaiting_driver_ack=true`.  
 Loan submit requires rows in `loan_tenure_options`; complaint submit requires `complaint_categories` rows. Both are seeded as of 2026-08-12; the `tenure_options_not_configured` and `complaint_categories_not_configured` errors now only appear if an admin deactivates every option.
 
-`driver_create_request` inserts the row with status `submitted`, not `pending` — show "Submitted" for it, including on the post-create confirmation screen.
+`driver_create_request` inserts the row with status `submitted`, not `pending` — show "Submitted" for it, including on the post-create confirmation screen. **As of 2026-08-12 `submitted` survives**: `rcm_materialize_approval_steps` no longer overwrites it with `in_review`, so a request reads Submitted until the first staff decision and In review after it.
+
+**Three statuses that previously had no behaviour now do:**
+
+| Status | Meaning | Rider action |
+|---|---|---|
+| `rescheduled` | An approver proposed different dates. The approval step stays open. `payload.awaiting_driver_reschedule = true` and `payload.reschedule` carries `proposed_start_date`, `proposed_end_date`, `proposed_by`, `proposed_at`, `note`. | **Required.** Call `driver_respond_reschedule(p_request_id, p_accept, p_note)`. Accept applies the dates to `start_date`/`end_date`; either answer returns the request to `in_review` for the same approver. Surface it in Action Required. |
+| `responded` | Terminal. The `send_response` action on a complaint or salary justification; `decision_reason` holds the response text and `completed_at` is stamped. Counts as resolved. | None. |
+| `closed` | Archived after a decision — set by staff, or automatically once `completed_at` is older than `app_settings.request_auto_close_days` (default 30). The decision itself is unchanged. | None. Treat as read-only history. |
+
+Per-step SLA: `request_approval_steps` gained `started_at`, `actor_display_name`, `sla_due_at`, `breach_action`, `sla_breached_at`; `request_approval_step_templates` gained `sla_minutes` and `breach_action` (`notify` \| `escalate`). All SLA values are NULL until an admin configures them, so the breach sweep is inert by default and **never** auto-decides a step.
 
 Staff can also raise a request for a rider via `admin_create_request`. Such rows are normal `requests` rows the driver sees in **Sent**, with `payload.created_on_behalf = true`, `created_on_behalf_by` (staff uuid), `created_on_behalf_by_name` and `created_on_behalf_at`. If the app shows an author line, use `created_on_behalf_by_name`; the approval chain, clarifications and acknowledgement flow are unchanged.
 
-**Flutter routes (MG-GO):** Profile → Help & Support → `/profile/support` hub; forms `/profile/support/requests/new?type=…`; list/detail; **Action required** `/profile/support/action-required` (status `needs_clarification`); visit book `/profile/support/visits/book`; my visits `/profile/support/visits`. Feature folder `lib/features/support/`. Attachments upload to Supabase bucket `request-attachments` under `{driver_id}/…`.
+**Flutter routes (MG-GO):** Profile → Help & Support → `/profile/support` hub; forms `/profile/support/requests/new?type=…`; list/detail; **Action required** `/profile/support/action-required` (status `needs_clarification`, `payload.awaiting_driver_ack`, or `payload.awaiting_driver_reschedule`); visit book `/profile/support/visits/book`; my visits `/profile/support/visits`. Feature folder `lib/features/support/`. Attachments upload to Supabase bucket `request-attachments` under `{driver_id}/…`.
 
 **Driver notifications (RCM/Visit/E-Sign):** On admin decide / visit status / e-sign send / appointment create, Postgres `notify_driver_transactional` inserts inbox campaign + dispatch item. Deep links: `musallam:///profile/support/requests/{id}`, `…/action-required`, `…/visits`, `…/sign/{id}`, `…/appointments`. `action_params.record_type` = `request` | `visit` | `esign` | `appointment`. No admin push for RCM attention.
 

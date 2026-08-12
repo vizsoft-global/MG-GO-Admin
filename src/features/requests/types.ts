@@ -69,6 +69,19 @@ export type RequestApprovalStep = {
   decision_note: string | null;
   allowed_actions: string[];
   meta: Record<string, unknown>;
+  /** When the step became the open one — Figma renders it as "Since 06 Jul". */
+  started_at: string | null;
+  /** Rider name on step 1, deciding staff member after that. */
+  actor_display_name: string | null;
+  sla_due_at: string | null;
+  sla_breached_at: string | null;
+  breach_action: string | null;
+};
+
+/** Dates an approver proposes with the `reschedule` action. */
+export type RequestRescheduleInput = {
+  new_start_date?: string | null;
+  new_end_date?: string | null;
 };
 
 /** Terms the driver app reads from the last completed step's `meta` (RSup/10b–10d). */
@@ -155,4 +168,7 @@ export type RequestDetail = {
   needs_attention: boolean;
   created_at: string;
   completed_at: string | null;
+  acknowledged_at: string | null;
+  sla_due_at: string | null;
+  closed_at: string | null;
 };

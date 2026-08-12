@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   AlertCircle,
+  Archive,
   ArrowLeft,
   ArrowUpRight,
   CalendarClock,
@@ -29,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { fetchRequestAttachmentUrl } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
 import { RequestDecisionTermsDialog } from "./request-decision-terms-dialog";
+import { RequestRescheduleDialog } from "./request-reschedule-dialog";
 import { RequestTypedDrawer } from "./request-typed-drawer";
 import {
   formatFieldValue,
@@ -36,13 +38,19 @@ import {
   getTypedFieldRows,
 } from "./request-typed-fields";
 import {
+  canCloseRequest,
+  isAwaitingRescheduleReply,
   isDriverAcknowledged,
   requestStatusLabelKey,
   requestStatusVariant,
 } from "./request-status-utils";
 import { RequesterHeader } from "./requester-header";
 import { DECISION_TERM_TYPES } from "./types";
-import type { RequestApprovalStep, RequestDecisionTerms } from "./types";
+import type {
+  RequestApprovalStep,
+  RequestDecisionTerms,
+  RequestRescheduleInput,
+} from "./types";
 import {
   useAdminRequestDetail,
   useDecideRequest,
@@ -132,6 +140,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const saveTerms = useSaveDecisionTerms(requestId);
   const [reason, setReason] = useState("");
   const [termsMode, setTermsMode] = useState<"approve" | "edit" | null>(null);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
 
   const request = data?.request;
   const steps = data?.steps ?? [];
@@ -146,12 +155,13 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const descriptionRow = rows.find((row) => row.key === "description");
   const message =
     descriptionRow && descriptionRow.value !== "—" ? descriptionRow.value : request?.details;
-  const closed =
-    request?.status === "approved" ||
-    request?.status === "rejected" ||
-    request?.status === "solved";
+  const decided = request?.completed_at != null;
+  const awaitingRider =
+    request != null && isAwaitingRescheduleReply(request.status, request.payload);
   const stepActions = currentStepAllowedActions(steps);
-  const REASON_REQUIRED_ACTIONS = new Set(["reject", "clarify"]);
+  const REASON_REQUIRED_ACTIONS = new Set(["reject", "clarify", "send_response"]);
+  const canClose =
+    request != null && canDecide && canCloseRequest(request.status, request.completed_at);
   const takesTerms =
     request != null &&
     (DECISION_TERM_TYPES as readonly string[]).includes(request.request_type);
@@ -159,15 +169,24 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const acknowledged = request != null && isDriverAcknowledged(request.status, request.payload);
   const termsOnApprove = takesTerms && isFinalApprovalStep(steps);
 
-  const runAction = async (action: string, terms?: RequestDecisionTerms) => {
-    if (REASON_REQUIRED_ACTIONS.has(action) && !reason.trim()) {
+  const runAction = async (
+    action: string,
+    options?: {
+      terms?: RequestDecisionTerms;
+      reschedule?: RequestRescheduleInput;
+      reasonOverride?: string;
+    },
+  ) => {
+    const note = (options?.reasonOverride ?? reason).trim();
+    if (REASON_REQUIRED_ACTIONS.has(action) && !note) {
       toast.error(t("detail.reasonRequired"));
       return;
     }
     const result = await decide.mutateAsync({
       action,
-      reason: reason.trim() || undefined,
-      terms,
+      reason: note || undefined,
+      terms: options?.terms,
+      reschedule: options?.reschedule,
     });
     if (!result.ok) {
       toast.error(result.error ?? t("detail.actionFailed"));
@@ -176,6 +195,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     toast.success(t("detail.actionOk"));
     setReason("");
     setTermsMode(null);
+    setRescheduleOpen(false);
     await refetch();
   };
 
@@ -352,7 +372,16 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             ) : null}
           </section>
 
-        {canDecide && !closed ? (
+        {awaitingRider ? (
+          <section className="rounded-xl border border-warning/30 bg-warning-bg p-4">
+            <p className="flex items-center gap-1.5 text-xs text-warning">
+              <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+              {t("detail.reschedule.awaitingRider")}
+            </p>
+          </section>
+        ) : null}
+
+        {canDecide && !decided && !awaitingRider ? (
           <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <h2 className="mb-2 text-sm font-semibold">{t("detail.actions")}</h2>
             <Textarea
@@ -377,6 +406,10 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                         onClick={() => {
                           if (action === "approve" && termsOnApprove) {
                             setTermsMode("approve");
+                            return;
+                          }
+                          if (action === "reschedule") {
+                            setRescheduleOpen(true);
                             return;
                           }
                           void runAction(action);
@@ -422,7 +455,29 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
           </section>
         ) : null}
 
-        {takesTerms && closed && request.status !== "rejected" ? (
+        {canClose ? (
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold">{t("detail.closeRequest.title")}</h2>
+                <p className="text-[10px] text-muted-foreground">{t("detail.closeRequest.hint")}</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 shrink-0"
+                disabled={decide.isPending}
+                onClick={() => void runAction("close", { reasonOverride: "" })}
+              >
+                <Archive className="me-1.5 h-3.5 w-3.5" />
+                {t("detail.closeRequest.action")}
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
+        {takesTerms && decided && request.status !== "rejected" ? (
           <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold">{t("detail.terms.cardTitle")}</h2>
@@ -504,10 +559,22 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
               void submitTermsEdit(terms);
               return;
             }
-            void runAction("approve", terms);
+            void runAction("approve", { terms });
           }}
         />
       ) : null}
+
+      <RequestRescheduleDialog
+        open={rescheduleOpen}
+        onOpenChange={setRescheduleOpen}
+        requestCode={request.request_code}
+        currentStartDate={request.start_date}
+        currentEndDate={request.end_date}
+        submitting={decide.isPending}
+        onSubmit={(input, note) =>
+          void runAction("reschedule", { reschedule: input, reasonOverride: note })
+        }
+      />
     </AppPage>
   );
 }

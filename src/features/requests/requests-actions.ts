@@ -17,6 +17,7 @@ import type {
   RequestKpis,
   RequestListFilters,
   RequestListRow,
+  RequestRescheduleInput,
 } from "./types";
 
 async function requireRequestsView() {
@@ -277,6 +278,9 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
       needs_attention: Boolean(r.needs_attention),
       created_at: String(r.created_at ?? ""),
       completed_at: r.completed_at != null ? String(r.completed_at) : null,
+      acknowledged_at: r.acknowledged_at != null ? String(r.acknowledged_at) : null,
+      sla_due_at: r.sla_due_at != null ? String(r.sla_due_at) : null,
+      closed_at: r.closed_at != null ? String(r.closed_at) : null,
     },
     steps: (Array.isArray(payload.steps) ? payload.steps : []).map((step) => {
       const s = asRecord(step);
@@ -293,6 +297,12 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
           ? s.allowed_actions.map((a) => String(a))
           : [],
         meta: asRecord(s.meta),
+        started_at: s.started_at != null ? String(s.started_at) : null,
+        actor_display_name:
+          s.actor_display_name != null ? String(s.actor_display_name) : null,
+        sla_due_at: s.sla_due_at != null ? String(s.sla_due_at) : null,
+        sla_breached_at: s.sla_breached_at != null ? String(s.sla_breached_at) : null,
+        breach_action: s.breach_action != null ? String(s.breach_action) : null,
       };
     }),
     clarifications: (Array.isArray(payload.clarifications)
@@ -372,14 +382,25 @@ export async function decideAdminRequest(input: {
   action: string;
   reason?: string;
   terms?: RequestDecisionTerms;
+  reschedule?: RequestRescheduleInput;
 }): Promise<{ ok: boolean; error?: string; status?: string }> {
   const session = await requireRequestsDecide();
   const supabase = await createClient();
+  const meta: Record<string, string | number> = buildDecisionMeta(
+    input.terms,
+    staffDisplayName(session),
+  );
+  if (input.reschedule?.new_start_date) {
+    meta.new_start_date = input.reschedule.new_start_date;
+  }
+  if (input.reschedule?.new_end_date) {
+    meta.new_end_date = input.reschedule.new_end_date;
+  }
   const { data, error } = await supabase.rpc("admin_decide_request", {
     p_request_id: input.requestId,
     p_action: input.action,
     p_reason: input.reason ?? undefined,
-    p_meta: buildDecisionMeta(input.terms, staffDisplayName(session)),
+    p_meta: meta,
   });
 
   if (error) return { ok: false, error: error.message };

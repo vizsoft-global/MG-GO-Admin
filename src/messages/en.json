@@ -2789,7 +2789,10 @@
         "solved": "Solved",
         "overdue": "Overdue",
         "awaiting_ack": "Awaiting acknowledgement",
-        "acknowledged": "Acknowledged"
+        "acknowledged": "Acknowledged",
+        "rescheduled": "Rescheduled",
+        "responded": "Responded",
+        "closed": "Closed"
       },
       "detail": {
         "back": "Back to list",
@@ -2855,7 +2858,30 @@
           "requiredDocumentPlaceholder": "e.g. Medical certificate",
           "ackDone": "The worker acknowledged these terms in the app."
         },
-        "otherDetails": "Other details"
+        "otherDetails": "Other details",
+        "stepSkipped": "Not needed",
+        "stepSince": "Open since {stamp}",
+        "stepActor": "By {name}",
+        "stepSlaDue": "Due {stamp}",
+        "stepSlaBreached": "Overdue since {stamp}",
+        "closeRequest": {
+          "title": "Close request",
+          "hint": "Archives a decided request. The decision itself does not change.",
+          "action": "Close"
+        },
+        "reschedule": {
+          "title": "Propose new dates",
+          "subtitle": "{code} — the rider must accept before this moves on",
+          "newStart": "New start date",
+          "newEnd": "New end date",
+          "note": "Note to rider",
+          "notePlaceholder": "Why the dates are changing",
+          "hint": "The approval step stays open. Accepting returns the request to review.",
+          "invalidRange": "End date cannot be before the start date",
+          "awaitingRider": "Waiting for the rider to accept or decline the proposed dates.",
+          "cancel": "Cancel",
+          "submit": "Send to rider"
+        }
       },
       "settings": {
         "title": "Settings",

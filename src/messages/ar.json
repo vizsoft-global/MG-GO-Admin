@@ -2707,7 +2707,10 @@
         "solved": "محلول",
         "overdue": "متأخر",
         "awaiting_ack": "بانتظار الإقرار",
-        "acknowledged": "تم الإقرار"
+        "acknowledged": "تم الإقرار",
+        "rescheduled": "أُعيد تحديد الموعد",
+        "responded": "تم الرد",
+        "closed": "مُغلق"
       },
       "detail": {
         "back": "العودة للقائمة",
@@ -2773,7 +2776,30 @@
           "requiredDocumentPlaceholder": "مثال: شهادة طبية",
           "ackDone": "أقرّ العامل بهذه الشروط في التطبيق."
         },
-        "otherDetails": "تفاصيل أخرى"
+        "otherDetails": "تفاصيل أخرى",
+        "stepSkipped": "غير مطلوب",
+        "stepSince": "مفتوح منذ {stamp}",
+        "stepActor": "بواسطة {name}",
+        "stepSlaDue": "الاستحقاق {stamp}",
+        "stepSlaBreached": "متأخر منذ {stamp}",
+        "closeRequest": {
+          "title": "إغلاق الطلب",
+          "hint": "يؤرشف الطلب الذي تم البت فيه. القرار نفسه لا يتغير.",
+          "action": "إغلاق"
+        },
+        "reschedule": {
+          "title": "اقتراح مواعيد جديدة",
+          "subtitle": "{code} — يجب أن يوافق السائق قبل المتابعة",
+          "newStart": "تاريخ البداية الجديد",
+          "newEnd": "تاريخ النهاية الجديد",
+          "note": "ملاحظة للسائق",
+          "notePlaceholder": "سبب تغيير المواعيد",
+          "hint": "تبقى خطوة الموافقة مفتوحة. الموافقة تُعيد الطلب إلى المراجعة.",
+          "invalidRange": "لا يمكن أن يكون تاريخ النهاية قبل تاريخ البداية",
+          "awaitingRider": "في انتظار موافقة السائق على المواعيد المقترحة أو رفضها.",
+          "cancel": "إلغاء",
+          "submit": "إرسال إلى السائق"
+        }
       },
       "settings": {
         "title": "الإعدادات",

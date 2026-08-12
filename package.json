@@ -19,7 +19,7 @@
     "migrate:storage-r2": "node scripts/migrate-storage-to-r2.mjs",
     "migrate:storage-r2:dry": "node scripts/migrate-storage-to-r2.mjs --dry-run",
     "env:push-vercel": "node scripts/push-vercel-env.mjs",
-    "db:types": "supabase gen types typescript --project-id eoksxkdssptgyqyywdju 2>/dev/null > src/types/database.ts && printf '\\nexport type AppRole = Database[\"public\"][\"Enums\"][\"app_role\"];\\nexport type AdminApprovalStatus = Database[\"public\"][\"Enums\"][\"admin_approval_status\"];\\nexport type Profile = Database[\"public\"][\"Tables\"][\"profiles\"][\"Row\"];\\n' >> src/types/database.ts"
+    "db:types": "node scripts/gen-db-types.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1050.0",

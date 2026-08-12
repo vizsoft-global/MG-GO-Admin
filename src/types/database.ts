@@ -397,6 +397,7 @@ export type Database = {
           maintenance_mode: boolean
           performance_score_weights: Json
           pickup_auto_cancel_hours: number
+          request_auto_close_days: number
           super_admin_claimed: boolean
           super_admin_user_id: string | null
           theme_id: string
@@ -431,6 +432,7 @@ export type Database = {
           maintenance_mode?: boolean
           performance_score_weights?: Json
           pickup_auto_cancel_hours?: number
+          request_auto_close_days?: number
           super_admin_claimed?: boolean
           super_admin_user_id?: string | null
           theme_id?: string
@@ -465,6 +467,7 @@ export type Database = {
           maintenance_mode?: boolean
           performance_score_weights?: Json
           pickup_auto_cancel_hours?: number
+          request_auto_close_days?: number
           super_admin_claimed?: boolean
           super_admin_user_id?: string | null
           theme_id?: string
@@ -4335,33 +4338,39 @@ export type Database = {
       request_approval_step_templates: {
         Row: {
           allowed_actions: string[]
+          breach_action: string | null
           created_at: string
           id: string
           is_system_auto: boolean
           request_type: Database["public"]["Enums"]["request_type"]
           role_key: string
+          sla_minutes: number | null
           step_name: string
           step_order: number
           updated_at: string
         }
         Insert: {
           allowed_actions?: string[]
+          breach_action?: string | null
           created_at?: string
           id?: string
           is_system_auto?: boolean
           request_type: Database["public"]["Enums"]["request_type"]
           role_key: string
+          sla_minutes?: number | null
           step_name: string
           step_order: number
           updated_at?: string
         }
         Update: {
           allowed_actions?: string[]
+          breach_action?: string | null
           created_at?: string
           id?: string
           is_system_auto?: boolean
           request_type?: Database["public"]["Enums"]["request_type"]
           role_key?: string
+          sla_minutes?: number | null
           step_name?: string
           step_order?: number
           updated_at?: string
@@ -4370,6 +4379,8 @@ export type Database = {
       }
       request_approval_steps: {
         Row: {
+          actor_display_name: string | null
+          breach_action: string | null
           created_at: string
           decided_at: string | null
           decided_by: string | null
@@ -4378,12 +4389,17 @@ export type Database = {
           meta: Json
           request_id: string
           role_key: string
+          sla_breached_at: string | null
+          sla_due_at: string | null
+          started_at: string | null
           status: Database["public"]["Enums"]["request_step_status"]
           step_name: string
           step_order: number
           updated_at: string
         }
         Insert: {
+          actor_display_name?: string | null
+          breach_action?: string | null
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
@@ -4392,12 +4408,17 @@ export type Database = {
           meta?: Json
           request_id: string
           role_key: string
+          sla_breached_at?: string | null
+          sla_due_at?: string | null
+          started_at?: string | null
           status?: Database["public"]["Enums"]["request_step_status"]
           step_name: string
           step_order: number
           updated_at?: string
         }
         Update: {
+          actor_display_name?: string | null
+          breach_action?: string | null
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
@@ -4406,6 +4427,9 @@ export type Database = {
           meta?: Json
           request_id?: string
           role_key?: string
+          sla_breached_at?: string | null
+          sla_due_at?: string | null
+          started_at?: string | null
           status?: Database["public"]["Enums"]["request_step_status"]
           step_name?: string
           step_order?: number
@@ -4666,12 +4690,15 @@ export type Database = {
       }
       requests: {
         Row: {
+          acknowledged_at: string | null
           amount_kwd: number | null
           assigned_to: string | null
           attachment_url: string | null
           attention_at: string | null
           attention_cleared_at: string | null
           attention_reason: string | null
+          closed_at: string | null
+          closed_by: string | null
           completed_at: string | null
           created_at: string
           current_step_label: string | null
@@ -4683,23 +4710,29 @@ export type Database = {
           driver_id: string
           due_at: string | null
           end_date: string | null
+          fuel_transfer_type: string | null
           id: string
           needs_attention: boolean
           payload: Json
           request_code: string
           request_type: Database["public"]["Enums"]["request_type"]
           severity: Database["public"]["Enums"]["severity_level"] | null
+          sla_breach_action: string | null
+          sla_due_at: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["request_status"]
           updated_at: string
         }
         Insert: {
+          acknowledged_at?: string | null
           amount_kwd?: number | null
           assigned_to?: string | null
           attachment_url?: string | null
           attention_at?: string | null
           attention_cleared_at?: string | null
           attention_reason?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
           completed_at?: string | null
           created_at?: string
           current_step_label?: string | null
@@ -4711,23 +4744,29 @@ export type Database = {
           driver_id: string
           due_at?: string | null
           end_date?: string | null
+          fuel_transfer_type?: string | null
           id?: string
           needs_attention?: boolean
           payload?: Json
           request_code: string
           request_type: Database["public"]["Enums"]["request_type"]
           severity?: Database["public"]["Enums"]["severity_level"] | null
+          sla_breach_action?: string | null
+          sla_due_at?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           updated_at?: string
         }
         Update: {
+          acknowledged_at?: string | null
           amount_kwd?: number | null
           assigned_to?: string | null
           attachment_url?: string | null
           attention_at?: string | null
           attention_cleared_at?: string | null
           attention_reason?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
           completed_at?: string | null
           created_at?: string
           current_step_label?: string | null
@@ -4739,12 +4778,15 @@ export type Database = {
           driver_id?: string
           due_at?: string | null
           end_date?: string | null
+          fuel_transfer_type?: string | null
           id?: string
           needs_attention?: boolean
           payload?: Json
           request_code?: string
           request_type?: Database["public"]["Enums"]["request_type"]
           severity?: Database["public"]["Enums"]["severity_level"] | null
+          sla_breach_action?: string | null
+          sla_due_at?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           updated_at?: string
@@ -4753,6 +4795,13 @@ export type Database = {
           {
             foreignKeyName: "requests_assigned_to_fkey"
             columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requests_closed_by_fkey"
+            columns: ["closed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -6054,6 +6103,7 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_auto_close_requests: { Args: never; Returns: number }
       admin_clear_request_attention: {
         Args: { p_request_id: string }
         Returns: Json
@@ -6236,6 +6286,10 @@ export type Database = {
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
+      admin_request_department_report: {
+        Args: { p_date_from?: string; p_date_to?: string }
+        Returns: Json
+      }
       admin_reschedule_visit: {
         Args: {
           p_booking_id: string
@@ -6253,6 +6307,7 @@ export type Database = {
         }[]
       }
       admin_run_attendance_auto_checkout: { Args: never; Returns: number }
+      admin_run_request_sla_sweep: { Args: never; Returns: number }
       admin_set_request_decision_meta: {
         Args: { p_meta: Json; p_request_id: string }
         Returns: Json
@@ -6677,6 +6732,10 @@ export type Database = {
         }
         Returns: Json
       }
+      driver_respond_reschedule: {
+        Args: { p_accept: boolean; p_note?: string; p_request_id: string }
+        Returns: Json
+      }
       driver_set_duty_state: {
         Args: { p_is_on_duty: boolean; p_is_online: boolean }
         Returns: Json
@@ -7038,6 +7097,9 @@ export type Database = {
         | "needs_clarification"
         | "solved"
         | "overdue"
+        | "rescheduled"
+        | "responded"
+        | "closed"
       request_step_status:
         | "pending"
         | "in_progress"
@@ -7361,6 +7423,9 @@ export const Constants = {
         "needs_clarification",
         "solved",
         "overdue",
+        "rescheduled",
+        "responded",
+        "closed",
       ],
       request_step_status: [
         "pending",

@@ -124,16 +124,16 @@ Day view scrolls horizontally with 11 real departments against Figma's 5 mock co
 | `4149:26963` | Drawer Leave | PASS | 633px tall, no inner scroll; From/To collapsed into Figma's single "Dates" row. |
 | `4149:27065` | Drawer Asset | PASS | Only populated rows, matching Figma (7 empty "—" rows removed). |
 | `4149:27167` | Drawer Fuel | PASS | Amount reads `18.500 KWD`. |
-| `4149:27269` | Drawer Complaint | BLOCKED (values only) | `complaint_categories` still 0 rows; the gated message renders. |
+| `4149:27269` | Drawer Complaint | PASS | `complaint_categories` seeded with 9 rows on 2026-08-12; the gate no longer fires. |
 | `4149:27371` | Drawer Document | PASS | 534px. |
-| `4332:4342` | Drawer Advance | BLOCKED (values only) | `loan_tenure_options` still 0 rows; everything else correct. |
+| `4332:4342` | Drawer Advance | PASS | `loan_tenure_options` seeded with 6 rows on 2026-08-12; everything else was already correct. |
 | `4332:4455` | Drawer Salary justification | PASS | Reordered to Figma's Period / Net paid / Expected. |
 | `4332:4561` | Drawer Sick leave | PASS | Attachment click reaches the server action (storage object genuinely absent). |
-| `4321:8349` | Status conventions | PASS + gap | Every enum-backed status maps with a dot; `Rescheduled` / `Responded` / `Closed` are not in the `request_status` enum. |
+| `4321:8349` | Status conventions | PASS | `rescheduled` / `responded` / `closed` added to the `request_status` enum on 2026-08-12, each with real workflow behind it; the status tab bar and pill map all twelve values. |
 
 Root cause of the drawer failure: `w-[min(440px,calc(100vw-24px))]` produced invalid CSS (`calc` needs spaces around the operator), so the drawer lost its width **and** height and ran off screen. Sized inline instead. Also removed the duplicate footer Close per ui-system §7.
 
-Gaps needing server or client decisions: approval steps carry `decided_by` as a bare uuid with no `started_at`, so Figma's "Submitted by Divya R" / "Waiting since 09 Jul" cannot render; the requester row cannot show zone because the RPC does not return it; Fuel's "Transfer type (on approval)" is not in the frozen decision-meta key list and would invent a driver-app contract.
+Those gaps are closed as of 2026-08-12. Approval steps now carry `started_at` and `actor_display_name` (backfilled for existing rows), so the timeline renders Figma's "By Divya R" and "Open since 09 Jul"; the requester zone turned out to be shipped already (`admin_list_requests` returns it); Fuel's "Transfer type (on approval)" has a real column, `requests.fuel_transfer_type` (`cash` | `salary`), instead of being smuggled into the frozen decision-meta key list — the approver-facing control on the drawer is still to be wired.
 
 Two dev-environment red herrings that three separate re-tests reported, now explained rather than chased:
 

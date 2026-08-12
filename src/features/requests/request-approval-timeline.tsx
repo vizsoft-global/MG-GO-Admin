@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Circle, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, XCircle, MinusCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type { RequestApprovalStep } from "./types";
@@ -30,6 +30,11 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
         const isCompleted = step.status === "completed";
         const isActive = step.status === "in_progress";
         const isRejected = step.status === "rejected";
+        const isSkipped = step.status === "skipped";
+        const breached = isActive && step.sla_breached_at != null;
+        const overdue =
+          breached ||
+          (isActive && step.sla_due_at != null && new Date(step.sla_due_at) < new Date());
 
         return (
           <li key={step.id} className={cn("relative flex gap-2.5", isLast ? "pb-0" : "pb-3")}>
@@ -44,6 +49,10 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
                 <CheckCircle2 className="h-[18px] w-[18px] text-success" />
               ) : isRejected ? (
                 <XCircle className="h-[18px] w-[18px] text-danger" />
+              ) : isSkipped ? (
+                <MinusCircle className="h-[18px] w-[18px] text-muted-foreground/40" />
+              ) : overdue ? (
+                <AlertTriangle className="h-[18px] w-[18px] text-danger" />
               ) : isActive ? (
                 <Circle className="h-[18px] w-[18px] fill-warning text-warning" />
               ) : (
@@ -55,7 +64,7 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
                 className={cn(
                   "text-sm font-medium",
                   isActive && "text-foreground",
-                  step.status === "pending" && "text-muted-foreground",
+                  (step.status === "pending" || isSkipped) && "text-muted-foreground",
                 )}
               >
                 {step.step_order}. {step.step_name}
@@ -65,10 +74,26 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
                   ? formatStamp(step.decided_at)
                   : isRejected
                     ? `${t("detail.stepRejected")}${step.decided_at ? ` · ${formatStamp(step.decided_at)}` : ""}`
-                    : isActive
-                      ? t("detail.stepWaiting")
-                      : t("detail.stepNotStarted")}
+                    : isSkipped
+                      ? t("detail.stepSkipped")
+                      : isActive
+                        ? step.started_at
+                          ? t("detail.stepSince", { stamp: formatStamp(step.started_at) })
+                          : t("detail.stepWaiting")
+                        : t("detail.stepNotStarted")}
               </p>
+              {step.actor_display_name ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {t("detail.stepActor", { name: step.actor_display_name })}
+                </p>
+              ) : null}
+              {isActive && step.sla_due_at ? (
+                <p className={cn("text-[11px]", overdue ? "text-danger" : "text-muted-foreground")}>
+                  {t(overdue ? "detail.stepSlaBreached" : "detail.stepSlaDue", {
+                    stamp: formatStamp(step.sla_due_at),
+                  })}
+                </p>
+              ) : null}
               {step.decision_note ? (
                 <p className="mt-0.5 text-[11px] text-muted-foreground italic">
                   {step.decision_note}

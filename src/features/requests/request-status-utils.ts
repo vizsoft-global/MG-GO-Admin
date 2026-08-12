@@ -5,6 +5,9 @@ export type RequestStatusVariant = "success" | "warning" | "danger" | "info" | "
  * Figma "Status & Acknowledgement Conventions" (node 4321:8349):
  * Pending/needs_clarification = orange, In review/submitted = blue, Approved/Solved = green,
  * Rejected/Overdue = red, Draft = neutral, Awaiting acknowledgement = amber (approved + payload flag).
+ *
+ * `rescheduled` is amber because it is waiting on the rider, like a clarification.
+ * `responded` is green because it is a resolved outcome. `closed` is neutral — archived, done.
  */
 export function requestStatusVariant(
   status: string,
@@ -12,11 +15,33 @@ export function requestStatusVariant(
 ): RequestStatusVariant {
   if (isAwaitingDriverAck(status, payload)) return "warning";
   if (isDriverAcknowledged(status, payload)) return "success";
-  if (status === "approved" || status === "solved") return "success";
+  if (status === "approved" || status === "solved" || status === "responded") return "success";
   if (status === "rejected" || status === "overdue") return "danger";
-  if (status === "pending" || status === "needs_clarification") return "warning";
+  if (
+    status === "pending" ||
+    status === "needs_clarification" ||
+    status === "rescheduled"
+  ) {
+    return "warning";
+  }
   if (status === "in_review" || status === "submitted") return "info";
   return "neutral";
+}
+
+/** The approver proposed dates and the rider has not answered yet. */
+export function isAwaitingRescheduleReply(
+  status: string,
+  payload?: Record<string, unknown> | null,
+): boolean {
+  return status === "rescheduled" && Boolean(payload?.awaiting_driver_reschedule);
+}
+
+/** A request that has been decided can be archived, but only once. */
+export function canCloseRequest(
+  status: string,
+  completedAt: string | null,
+): boolean {
+  return status !== "closed" && completedAt != null;
 }
 
 export function isAwaitingDriverAck(

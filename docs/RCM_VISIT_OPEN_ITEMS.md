@@ -47,15 +47,15 @@ Both lists are live in production and editable from the admin panel: complaint c
 
 The following are drawn in Figma but have no data or workflow behind them today. **Decision: all of them will be built** (schema plus the workflow each one implies).
 
-The list was 11 when it went to the client. One item — requester zone on the overview list — turned out to be already shipped: `admin_list_requests` returns the driver's zone and the overview table renders it under the driver name. **10 remain.**
+The list was 11 when it went to the client. One item — requester zone on the overview list — turned out to be already shipped: `admin_list_requests` returns the driver's zone and the overview table renders it under the driver name. **10 remained; 5 are now shipped.**
 
-1. Workflow SLA and breach-action columns — a time limit per request and a defined action for when it's exceeded.
+1. ~~Workflow SLA and breach-action columns~~ — ✅ Shipped 2026-08-12. `request_approval_step_templates.sla_minutes` / `breach_action`, mirrored onto each live step as `sla_due_at` / `breach_action` / `sla_breached_at` and onto `requests.sla_due_at`. An hourly sweep (`admin_run_request_sla_sweep`) marks the breach and raises the attention badge. **Every SLA is NULL until an admin sets one** — no duration was invented, so the sweep is inert until the workflow builder is used. Breach action never decides a step: `notify` and `escalate` differ only in `attention_reason`, because auto-advancing a step is auto-approving it by another name. **Open question for the client: should `escalate` also re-route the step to the next approver?**
 2. Dynamic request-type builder — the ability to create new request types from the admin side.
 3. E-Sign "Viewed" and "Accepted" timestamps — when a signer opened and accepted a document.
-4. Acknowledgement completion timestamp.
-5. `Rescheduled` / `Responded` / `Closed` status chips — new status values plus the workflow logic behind each.
-6. Approval-step actor name and step start time — who acted and when, per approval step.
-7. Fuel request transfer type.
+4. ~~Acknowledgement completion timestamp~~ — ✅ Shipped 2026-08-12. `requests.acknowledged_at`, backfilled from `payload.driver_ack_at` and written by `driver_acknowledge_request`.
+5. ~~`Rescheduled` / `Responded` / `Closed` status chips~~ — ✅ Shipped 2026-08-12, with the semantics the client confirmed. `rescheduled` holds the step open and waits on the rider (`driver_respond_reschedule`); `responded` is terminal with `completed_at`; `closed` is manual or automatic after `app_settings.request_auto_close_days` (default 30). Also fixed in the same pass: `submitted` used to be overwritten by `in_review` microseconds after insert, so it never appeared anywhere.
+6. ~~Approval-step actor name and step start time~~ — ✅ Shipped 2026-08-12. `request_approval_steps.actor_display_name` and `started_at`, backfilled for existing rows and rendered in the Admin timeline.
+7. ~~Fuel request transfer type~~ — ✅ Column shipped 2026-08-12 (`requests.fuel_transfer_type`, `cash` | `salary`). The approver-facing control on the fuel drawer is not wired yet.
 8. Visit bulk actions — acting on multiple visits at once.
 9. Visit departments tied to a branch.
 10. Visit report prior-period comparison.

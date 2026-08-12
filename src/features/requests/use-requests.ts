@@ -16,6 +16,7 @@ import type {
   RequestCreateInput,
   RequestDecisionTerms,
   RequestListFilters,
+  RequestRescheduleInput,
 } from "./types";
 
 export function useAdminRequestsList(filters: RequestListFilters) {
@@ -63,8 +64,12 @@ export function useAdminRequestDetail(requestId: string) {
 export function useDecideRequest(requestId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { action: string; reason?: string; terms?: RequestDecisionTerms }) =>
-      decideAdminRequest({ requestId, ...input }),
+    mutationFn: (input: {
+      action: string;
+      reason?: string;
+      terms?: RequestDecisionTerms;
+      reschedule?: RequestRescheduleInput;
+    }) => decideAdminRequest({ requestId, ...input }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.requests.all() });
       await queryClient.invalidateQueries({

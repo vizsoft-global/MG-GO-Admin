@@ -152,9 +152,12 @@ const STATUS_FILTERS = [
   "pending",
   "in_review",
   "needs_clarification",
+  "rescheduled",
   "approved",
   "rejected",
   "solved",
+  "responded",
+  "closed",
   "overdue",
 ] as const;
 
