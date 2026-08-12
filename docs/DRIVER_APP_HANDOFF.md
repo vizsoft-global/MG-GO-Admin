@@ -247,8 +247,10 @@ Staff can also raise a request for a rider via `admin_create_request`. Such rows
 | `esign_categories` | Figma-seeded categories + per-category screenshot_restricted |
 | `esign_requests` | Code **SIG-####**; status pending/signed/expired/cancelled/declined; signature PNG in bucket `esign-documents` |
 | `esign-documents` RLS (driver) | Three policies, all scoped to the caller: `esign_documents_driver_own` (write + read under `{uid}/…`), `esign_documents_driver_read_source` (**read the `document_storage_key` of your own request**, whatever prefix the admin used — added `20260829100000`), `esign_documents_driver_read_signed` (read the composed copy under `signed/…`). Before the source policy existed, admin uploads at `admin/{uuid}.{ext}` matched nothing and the viewer could never load its document. |
-| Driver RPCs | `driver_list_esign_requests`, `driver_get_esign_request`, `driver_submit_esignature` |
+| Driver RPCs | `driver_list_esign_requests`, `driver_get_esign_request`, `driver_submit_esignature`, `driver_decline_esignature` |
 | Admin RPCs | `admin_list_esign_requests`, `admin_create_esign_request` |
+| **Decline writes `declined`** | `driver_decline_esignature` set `cancelled` until `20260829110000`; it now sets **`declined`** and returns `{"ok":true,"status":"declined"}`. `cancelled` is reserved for admin-side cancellation, so the app must stop treating it as a decline (`support_models.dart` `isDeclined`). Reason still lands in `signer_meta.declined_reason` + `declined_at`. |
+| **Declaration is now required server-side** | `driver_submit_esignature` rejects with `declaration_required` unless `p_signer_meta.declaration_accepted` is boolean `true`. Send `{"declaration_accepted": true, "declaration_text": "<exact text shown>"}`; the server overwrites `declaration_accepted` and stamps `declaration_accepted_at` with **server** time so the device cannot backdate it. The ticked box was previously client-only and left no record of what the rider agreed to. |
 | Flutter | `/profile/support/sign` inbox → viewer → capture pad → confirmed |
 | Appointments | `driver_list_appointments`, `admin_create_appointment` (APT-####); Flutter `/profile/support/appointments` |
 
