@@ -58,7 +58,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
   const t = useTranslations("pages.requests.esign.detail");
   const tCommon = useTranslations("pages.requests.esign");
   const { data, isLoading } = useEsignRequestDetail(requestId);
-  const { data: links } = useEsignDocumentLinks(requestId);
+  const { data: links, isLoading: linksLoading } = useEsignDocumentLinks(requestId);
   const request = data?.request;
 
   if (isLoading) {
@@ -142,6 +142,12 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               title={request.title || request.request_code}
               className="h-[520px] w-full rounded-lg border border-border bg-card"
             />
+          ) : linksLoading ? (
+            // The signed URL is minted per view, so it lands a beat after the row. Claiming
+            // "sent without a document" in that gap reads as a real defect to an admin.
+            <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border bg-card py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card py-16 text-center">
               <FileText className="h-8 w-8 text-muted-foreground/50" />
