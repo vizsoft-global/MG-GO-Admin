@@ -245,7 +245,8 @@ Staff can also raise a request for a rider via `admin_create_request`. Such rows
 | Piece | Notes |
 |-------|-------|
 | `esign_categories` | Figma-seeded categories + per-category screenshot_restricted |
-| `esign_requests` | Code **SIG-####**; status pending/signed/expired/cancelled; signature PNG in bucket `esign-documents` |
+| `esign_requests` | Code **SIG-####**; status pending/signed/expired/cancelled/declined; signature PNG in bucket `esign-documents` |
+| `esign-documents` RLS (driver) | Three policies, all scoped to the caller: `esign_documents_driver_own` (write + read under `{uid}/…`), `esign_documents_driver_read_source` (**read the `document_storage_key` of your own request**, whatever prefix the admin used — added `20260829100000`), `esign_documents_driver_read_signed` (read the composed copy under `signed/…`). Before the source policy existed, admin uploads at `admin/{uuid}.{ext}` matched nothing and the viewer could never load its document. |
 | Driver RPCs | `driver_list_esign_requests`, `driver_get_esign_request`, `driver_submit_esignature` |
 | Admin RPCs | `admin_list_esign_requests`, `admin_create_esign_request` |
 | Flutter | `/profile/support/sign` inbox → viewer → capture pad → confirmed |

@@ -208,3 +208,29 @@ Worth a product decision, not changed here: for a **signed** request the preview
 **Defect 2 — a malformed signature PNG takes the composer worker down instead of failing cleanly.** `esign-compose-signed-document` sniffs only the leading magic bytes, then hands the buffer to `pdf-lib`'s `embedPng`. Feeding it a byte-plausible but structurally invalid PNG returned `WORKER_RESOURCE_LIMIT` (546) after 95 seconds on the first attempt and ~5s after, with **no** `signed_document_error` written — so the driver and the admin both see an opaque failure and the row records nothing. The `try/catch` around composition cannot help, because the worker is killed rather than throwing. A truncated upload from a mobile client is the realistic path into this. Not fixed: it needs a decision on where to validate (structural PNG/JPEG check before embedding, plus a signature size cap).
 
 For the record, this is also why the composer looked broken at first: the failure was my invalid test PNG, not the revert deploy. With a genuine PNG the function returns 200 in 2.7s and stamps the last page bottom-right as specified.
+
+### 2026-08-12 — RSup/11, 25, 26 verified properly, and a rider-blocking RLS gap fixed
+
+These are the three rows the earlier re-test never actually looked at, because the brief I wrote mis-numbered them. Resolved this time by Figma **frame name** rather than number: `RSup/11-Tower-Intro` `4004:13714`, `RSup/25-Sign-Viewer` `4377:4431`, `RSup/26-Sign-Capture` `4377:4520`. The file key in that brief was also truncated — the real key is `n99SmGz5mrwpWoB363e314`, as recorded at the top of this file.
+
+Verdicts: **RSup/11 PARTIAL**, **RSup/25 FAIL**, **RSup/26 PARTIAL**. §11A is now PASS 23 · PARTIAL 6 · BLOCKED 3 · FAIL 1, leaving exactly one FAIL row in the whole 73-row matrix.
+
+**Fixed — riders could not open the document they were asked to sign.** The Sign Viewer calls `createSignedUrl` on `esign_requests.document_storage_key`, but the only rider policies on `esign-documents` allowed `{uid}/…` or `signed/…`, and the admin uploader writes `admin/{uuid}.{ext}` (`esign-actions.ts:242`). Every admin-sent request therefore had an unloadable document, and the viewer's retry guard turned that into a continuous stream of failing storage requests for as long as the screen stayed open. Migration `20260829100000_esign_driver_read_source_document.sql` adds `esign_documents_driver_read_source`, scoped exactly like the existing signed-copy policy: SELECT is allowed only when the object is the source document of a request owned by `auth.uid()`. Verified by impersonating both riders in a rolled-back transaction — each sees only their own document and not the other's. It also tolerates a `esign-documents/` key prefix, because the composer already documents that such rows exist and a prefix mismatch is how this bug hid.
+
+**Remaining Sign Viewer divergences (why it stays FAIL):** the screenshot banner is lavender/blue with a camera glyph, where Figma is amber (`#fff7ed` / `#fed7aa` / `#b45309`) with ?? and reads "Screenshots disabled for this document"; and Decline is styled destructive-red, where Figma node `4388:17181` has it neutral. Both are in `lib/features/support/`, which another task currently owns, so they are queued rather than patched here.
+
+**Driver-app defects found and queued** (all in `lib/features/support/`, deliberately untouched while the localisation task holds those files):
+
+| # | Defect | Why it matters |
+|---|---|---|
+| D4 | `esign_capture_screen.dart:54` exports the signature at a hardcoded `Size(360, 180)` while strokes are recorded at the pad's real laid-out width | The stored **legal** signature is cropped on any device that is not 392pt wide — roughly 9% lost at 430pt, about half on a tablet |
+| D7 | `driver_decline_esignature` writes `cancelled` although `esign_request_status` has a dedicated `declined` value, and `support_models.dart:431` hard-codes `isDeclined => status == 'cancelled'` | A rider's decline is indistinguishable from an admin cancellation; needs the RPC and the model changed together |
+| D8 | The legal declaration checkbox gates submission client-side only — it never reaches `signer_meta` or the RPC | Nothing records that the rider accepted the declaration |
+| D9 | The viewer re-fetches whenever `_documentUrl == null && !_loadingDoc`, and the failure path re-satisfies its own guard | Infinite retry loop on any load failure |
+| D10 | The capture screen's timestamp is `DateTime.now()` inside `build` | Displays render time, never matches the server's `signed_at` |
+| D5, D6, D11 | Missing in-pad baseline + "×" guides; `EMP-2048` rendered as driver code because `RiderProfile` never selects `drivers.employee_id`; Cancel inherits the theme's blue outline | Figma parity |
+| D12 | `support_service.dart:158` picks a branch by `sort_order` though `visit_branches.is_default` exists | Correct with one branch, wrong the moment a second one sorts ahead |
+
+Security note, not a Figma divergence: `EsignSensitiveScope` wraps the viewer but **not** the capture screen, so a `screenshot_restricted` document's signature capture is freely screenshottable.
+
+Nothing on these three screens was verified at runtime — there is no device or emulator, and the RLS conclusion came from evaluating the policy predicates in SQL rather than observing a 403.
