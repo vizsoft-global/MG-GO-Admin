@@ -6466,6 +6466,10 @@ export type Database = {
       }
       admin_run_attendance_auto_checkout: { Args: never; Returns: number }
       admin_run_request_sla_sweep: { Args: never; Returns: number }
+      admin_set_fuel_transfer_type: {
+        Args: { p_request_id: string; p_transfer_type: string }
+        Returns: Json
+      }
       admin_set_request_decision_meta: {
         Args: { p_meta: Json; p_request_id: string }
         Returns: Json

@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { fetchRequestAttachmentUrl } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
 import { RequestDecisionTermsDialog } from "./request-decision-terms-dialog";
+import { RequestFuelTransferCard } from "./request-fuel-transfer-card";
 import { RequestRescheduleDialog } from "./request-reschedule-dialog";
 import { RequestTypedDrawer } from "./request-typed-drawer";
 import {
@@ -379,6 +380,14 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
               {t("detail.reschedule.awaitingRider")}
             </p>
           </section>
+        ) : null}
+
+        {request.request_type === "fuel" ? (
+          <RequestFuelTransferCard
+            requestId={request.id}
+            value={request.fuel_transfer_type}
+            editable={canDecide && request.status !== "closed"}
+          />
         ) : null}
 
         {canDecide && !decided && !awaitingRider ? (

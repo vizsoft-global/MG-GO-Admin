@@ -11,8 +11,10 @@ import {
   fetchRequestCreateOptions,
   fetchRequestTypeCounts,
   saveRequestDecisionTerms,
+  setFuelTransferType,
 } from "./requests-actions";
 import type {
+  FuelTransferType,
   RequestCreateInput,
   RequestDecisionTerms,
   RequestListFilters,
@@ -89,6 +91,19 @@ export function useBulkDecideRequests() {
     }) => decideAdminRequestsBulk(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.requests.all() });
+    },
+  });
+}
+
+export function useSetFuelTransferType(requestId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (transferType: FuelTransferType | null) =>
+      setFuelTransferType({ requestId, transferType }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.requests.detail(requestId),
+      });
     },
   });
 }

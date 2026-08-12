@@ -171,4 +171,10 @@ export type RequestDetail = {
   acknowledged_at: string | null;
   sla_due_at: string | null;
   closed_at: string | null;
+  /** Fuel only — the approver's payout choice, never rider input. */
+  fuel_transfer_type: FuelTransferType | null;
 };
+
+export const FUEL_TRANSFER_TYPES = ["cash", "salary"] as const;
+
+export type FuelTransferType = (typeof FUEL_TRANSFER_TYPES)[number];

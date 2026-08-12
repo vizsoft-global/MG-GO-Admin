@@ -157,7 +157,7 @@ Day view scrolls horizontally with 11 real departments against Figma's 5 mock co
 
 Root cause of the drawer failure: `w-[min(440px,calc(100vw-24px))]` produced invalid CSS (`calc` needs spaces around the operator), so the drawer lost its width **and** height and ran off screen. Sized inline instead. Also removed the duplicate footer Close per ui-system §7.
 
-Those gaps are closed as of 2026-08-12. Approval steps now carry `started_at` and `actor_display_name` (backfilled for existing rows), so the timeline renders Figma's "By Divya R" and "Open since 09 Jul"; the requester zone turned out to be shipped already (`admin_list_requests` returns it); Fuel's "Transfer type (on approval)" has a real column, `requests.fuel_transfer_type` (`cash` | `salary`), instead of being smuggled into the frozen decision-meta key list — the approver-facing control on the drawer is still to be wired.
+Those gaps are closed as of 2026-08-12. Approval steps now carry `started_at` and `actor_display_name` (backfilled for existing rows), so the timeline renders Figma's "By Divya R" and "Open since 09 Jul"; the requester zone turned out to be shipped already (`admin_list_requests` returns it); Fuel's "Transfer type (on approval)" has a real column, `requests.fuel_transfer_type` (`cash` | `salary`), instead of being smuggled into the frozen decision-meta key list — **and the approver-facing control is now wired** (see the Fuel transfer type note at the end of this file).
 
 Two dev-environment red herrings that three separate re-tests reported, now explained rather than chased:
 
@@ -308,3 +308,18 @@ Re-tested pin-to-pin against the real frame, two geometry gaps were real and are
 Reviewing those renders confirmed the RTL mirroring is right where it counts: Clear moves to the leading edge, the checkbox sits on the right of its label, and Cancel/Confirm swap sides. Three things came out of it that are **not** defects but want a decision — the ink colour (Figma's sample is navy, the app stores black, and changing it alters a legal artefact and mismatches signatures already on file), the signature guide not mirroring in RTL (Figma has no RTL variant to copy), and a long Arabic label on a *custom* request type making its hub tile taller than its row neighbours. All three are recorded in the open-items doc rather than decided here.
 
 What a device would still add: `my_requests`, request detail, the visit ticket, the e-sign viewer, and system chrome — the OS back gesture and the user's own font-size setting.
+
+---
+
+## Fuel transfer type — control wired (2026-08-12)
+
+`4149:27167` scored PASS on its amount, and the one thing on that frame with no write path was **Transfer type (on approval)**. It now has one: `admin_set_fuel_transfer_type` (migration `20260904100000`) behind a two-option segment on `/requests/[id]`, sitting directly above the approve/reject actions the way Figma places it above the remark box.
+
+It is not a parameter on `admin_decide_request`, and that is the whole design: a payout method is a standing instruction Accounts may correct after approval, so folding it into the decide call would have made it settable only at the instant of approval. Clicking the selected option clears it, which is why the RPC accepts an empty value as legal rather than only `cash` / `salary`. Only a `closed` request refuses the write; `rejected` stays writable, since a stale payout method on a rejected row is worse than none.
+
+Two divergences from the frame, both deliberate:
+
+1. **Nothing is pre-selected.** Figma shows *In cash* highlighted. Shipping that would make an untouched request claim a payout decision nobody took, so an unset request instead shows warning text naming the consequence — "payroll will not know how to pay this out" — the same shape as the loan/asset "Not set" row.
+2. **Approving without one is not blocked.** The existing decision-terms dialog lets a loan be approved with no amount, so gating fuel would have been stricter than any comparable screen, and it would have broken bulk approve for a whole request type.
+
+Verified in the browser against the real server action on `RCM-9006`: unset → *In cash* → survives a reload → the read-only **Transfer type** row appears on both the details card and the drawer → switching to *With salary* replaces rather than adds → clicking the selected option clears it, and the clear survives a reload too. Zero console errors. Server-side, a rolled-back production probe confirms `salary`, a whitespace-and-caps `' CASH '`, and the clear all land correctly, and that `cheque`, a non-fuel request and a missing id are refused with named errors.

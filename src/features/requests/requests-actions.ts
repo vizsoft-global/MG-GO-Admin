@@ -5,7 +5,9 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { datePresetToBounds } from "./date-presets";
+import { FUEL_TRANSFER_TYPES } from "./types";
 import type {
+  FuelTransferType,
   RequestApprovalStep,
   RequestAttachment,
   RequestClarification,
@@ -281,6 +283,9 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
       acknowledged_at: r.acknowledged_at != null ? String(r.acknowledged_at) : null,
       sla_due_at: r.sla_due_at != null ? String(r.sla_due_at) : null,
       closed_at: r.closed_at != null ? String(r.closed_at) : null,
+      fuel_transfer_type: isFuelTransferType(r.fuel_transfer_type)
+        ? r.fuel_transfer_type
+        : null,
     },
     steps: (Array.isArray(payload.steps) ? payload.steps : []).map((step) => {
       const s = asRecord(step);
@@ -334,6 +339,10 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
       };
     }),
   };
+}
+
+function isFuelTransferType(value: unknown): value is FuelTransferType {
+  return (FUEL_TRANSFER_TYPES as readonly string[]).includes(String(value));
 }
 
 export async function fetchRequestAttachmentUrl(
@@ -582,6 +591,39 @@ export async function createRequestOnBehalf(input: RequestCreateInput): Promise<
     requestId,
     requestCode: payload.request_code != null ? String(payload.request_code) : undefined,
   };
+}
+
+/**
+ * Payout method on a fuel reimbursement. Separate from the decide call because Accounts may
+ * correct it after approval, and clearing it (`null`) has to stay possible.
+ */
+export async function setFuelTransferType(input: {
+  requestId: string;
+  transferType: FuelTransferType | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsDecide();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_set_fuel_transfer_type", {
+    p_request_id: input.requestId,
+    // The RPC folds an empty string back to NULL, which is how a choice is cleared.
+    p_transfer_type: input.transferType ?? "",
+  });
+
+  if (error) return { ok: false, error: error.message };
+  const payload = asRecord(data);
+  if (payload.ok === false) {
+    return { ok: false, error: String(payload.error ?? "failed") };
+  }
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "requests",
+    entityId: input.requestId,
+    routeName: "requests.fuelTransferType",
+    context: { transferType: input.transferType },
+  });
+
+  return { ok: true };
 }
 
 /** Edit path for requests already decided — merges into the last completed step. */

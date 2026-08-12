@@ -2869,6 +2869,17 @@
           "hint": "Archives a decided request. The decision itself does not change.",
           "action": "Close"
         },
+        "fuelTransfer": {
+          "title": "Transfer type (on approval)",
+          "hint": "Select how the reimbursement is paid out. Click the selected option to clear it.",
+          "notSet": "Not set — payroll will not know how to pay this out.",
+          "saved": "Transfer type saved",
+          "failed": "Could not save the transfer type",
+          "options": {
+            "cash": "In cash",
+            "salary": "With salary"
+          }
+        },
         "reschedule": {
           "title": "Propose new dates",
           "subtitle": "{code} — the rider must accept before this moves on",

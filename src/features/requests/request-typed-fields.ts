@@ -44,6 +44,7 @@ export const TYPE_FIELDS: Record<string, TypedField[]> = {
     { key: "amount_kwd", label: "Amount", from: "column", format: "currency" },
     { key: "period_month", label: "Period" },
     { key: "distance_km", label: "Distance (km)" },
+    { key: "fuel_transfer_type", label: "Transfer type", from: "column" },
   ],
   document: [
     { key: "document_type", label: "Document type" },
@@ -128,6 +129,10 @@ function readTypedField(request: RequestDetail, field: TypedField): unknown {
     if (field.key === "start_date") return request.start_date;
     if (field.key === "end_date") return request.end_date;
     if (field.key === "severity") return request.severity;
+    if (field.key === "fuel_transfer_type") {
+      if (request.fuel_transfer_type == null) return null;
+      return request.fuel_transfer_type === "cash" ? "In cash" : "With salary";
+    }
   }
   if (field.from === "derived") {
     if (field.key === "date_range") return dateRange(request);
