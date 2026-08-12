@@ -58,6 +58,18 @@ Every other confirmed decision is tracked in [`RCM_VISIT_OPEN_ITEMS.md`](RCM_VIS
 
 ## Changelog
 
+### 2026-08-12 - Phase 3b: the request-type builder
+
+Row **06b Request Types** was PASS against Figma while being, in substance, a screenshot/active toggle over eight hardcoded slugs with a disabled Add button. It is now a builder over `request_type_definitions`: the list shows fields, chain steps and live requests per type, Add opens a `?add=1` modal, and each row leads to `/requests/settings/types/[key]` where the form fields are edited against `request_field_definitions`. The workflow builder's type dropdown reads the same table, so a new type can be given a chain without a migration.
+
+Verified in a real admin session at 1366x768 rather than from the build manifest: the eight built-ins render with lock badges; the Add modal fits in 400px of a 768px viewport with no inner scroller, auto-derives `uniform_replacement` from "Uniform Replacement", and disables the acknowledgement switch the moment the terminal status is set to Solved (a resolved request has nothing to acknowledge). On `/types/leave` all 43 inputs and 15 selects are inert, the switches refuse to toggle, Add field and Save are disabled and no Delete button is rendered. A full create -> add field -> save -> delete round trip through the real server actions was run against production and cleaned up.
+
+**The lock is a trigger, not a disabled button.** The panel writes to these tables through PostgREST under a staff policy that permits any write, so `rcm_guard_system_request_type` (`20260903100000`) is what actually stops a built-in from being edited. Nine cases were replayed in a rolled-back block: field insert/update/delete on a system type, key rename, system delete, and minting `is_system` from outside a migration were all rejected; a label edit on a built-in, full CRUD on a custom type, and the `SET LOCAL rcm.allow_system_edit = 'on'` escape hatch were all allowed. A type created purely through the builder is then enforced by `rcm_validate_request_input` exactly as a built-in is (`field_required:uniform_size`, `attachments_required`, `request_type_inactive`), with `leave` unchanged alongside it.
+
+Two links moved rather than being dropped: `Tenure options` and `Complaint categories` were reachable only from the types list, so they now sit on the loan and complaint detail pages, next to the value lists they populate.
+
+Still honest about the gap: a custom type has no form anywhere until the app ships the field renderer, and the admin on-behalf dialog is likewise still hardcoded to the eight. The Add modal says exactly that instead of implying riders can already see it.
+
 ### 2026-08-12 — Phase 1: the client's answers, shipped
 
 Every question in `RCM_VISIT_OPEN_ITEMS.md` section A came back answered, and this is the first of the phased releases against those answers.

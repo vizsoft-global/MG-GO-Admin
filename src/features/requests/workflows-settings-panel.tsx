@@ -29,8 +29,8 @@ import {
   fetchStepTemplates,
   upsertStepTemplates,
 } from "./requests-settings-actions";
+import { fetchRequestTypeDefinitions } from "./request-type-builder-actions";
 import {
-  REQUEST_TYPE_SLUGS,
   STEP_ALLOWED_ACTIONS,
   type RequestTypeSlug,
   type StepTemplateRow,
@@ -64,9 +64,9 @@ function ChainConnector() {
 
 export function WorkflowsSettingsPanel() {
   const t = useTranslations("pages.requests.settings.workflows");
-  const tTypes = useTranslations("pages.requests.types");
   const tRequests = useTranslations("pages.requests");
   const [requestType, setRequestType] = useState<RequestTypeSlug>("leave");
+  const [typeOptions, setTypeOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [steps, setSteps] = useState<StepTemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
@@ -89,13 +89,18 @@ export function WorkflowsSettingsPanel() {
     void loadSteps(requestType);
   }, [requestType, loadSteps]);
 
-  const typeOptions = useMemo(
-    () =>
-      REQUEST_TYPE_SLUGS.map((slug) => ({
-        value: slug,
-        label: tTypes(slug),
-      })),
-    [tTypes],
+  // Types are data now, so a chain can be built for one the admin just created.
+  useEffect(() => {
+    void fetchRequestTypeDefinitions().then((result) => {
+      setTypeOptions(
+        result.rows.map((row) => ({ value: row.key, label: row.label_en })),
+      );
+    });
+  }, []);
+
+  const selectedTypeLabel = useMemo(
+    () => typeOptions.find((opt) => opt.value === requestType)?.label ?? requestType,
+    [typeOptions, requestType],
   );
 
   function updateStep(index: number, patch: Partial<StepTemplateRow>) {
@@ -163,8 +168,8 @@ export function WorkflowsSettingsPanel() {
   return (
     <AppPage>
       <AppPageHeader
-        title={t("titleFor", { type: tTypes(requestType) })}
-        description={t("subtitleFor", { type: tTypes(requestType) })}
+        title={t("titleFor", { type: selectedTypeLabel })}
+        description={t("subtitleFor", { type: selectedTypeLabel })}
         breadcrumbs={[
           { label: tRequests("title"), href: "/requests" },
           { label: t("hub"), href: "/requests/settings" },
@@ -220,7 +225,7 @@ export function WorkflowsSettingsPanel() {
               <div className="flex justify-center">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
                   <LogIn className="h-3.5 w-3.5" />
-                  {t("chainStart", { type: tTypes(requestType) })}
+                  {t("chainStart", { type: selectedTypeLabel })}
                 </span>
               </div>
 

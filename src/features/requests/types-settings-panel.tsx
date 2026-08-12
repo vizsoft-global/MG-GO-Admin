@@ -1,26 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Banknote,
-  Calendar,
-  Coins,
-  ExternalLink,
-  FileText,
-  Fuel,
-  MessageSquareWarning,
-  Package,
-  Plus,
-  Stethoscope,
-  type LucideIcon,
-} from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Lock, Plus, Shapes } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Link } from "@/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import {
   Table,
   TableBody,
@@ -29,68 +18,64 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TYPE_FIELDS } from "./request-typed-fields";
 import {
-  fetchRequestTypeScreenshotPolicy,
-  updateRequestTypeScreenshotPolicy,
-} from "./requests-settings-actions";
-import { REQUEST_TYPE_SLUGS, type RequestTypeSlug } from "./settings-types";
-
-const TYPE_ICONS: Record<RequestTypeSlug, LucideIcon> = {
-  leave: Calendar,
-  loan: Coins,
-  sick_leave: Stethoscope,
-  asset: Package,
-  fuel: Fuel,
-  document: FileText,
-  complaint: MessageSquareWarning,
-  salary_justification: Banknote,
-};
-
-type PolicyState = { screenshot_restricted: boolean; is_active: boolean };
+  fetchRequestTypeDefinitions,
+  updateRequestType,
+} from "./request-type-builder-actions";
+import { RequestTypeFormDialog } from "./request-type-form-dialog";
+import type { RequestTypeDefinitionRow } from "./settings-types";
 
 export function TypesSettingsPanel() {
   const t = useTranslations("pages.requests.settings.types");
-  const tTypes = useTranslations("pages.requests.types");
   const tRoot = useTranslations("pages.requests");
-  const [policies, setPolicies] = useState<Record<string, PolicyState>>({});
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const addOpen = searchParams.get("add") === "1";
+
+  const [rows, setRows] = useState<RequestTypeDefinitionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [, startTransition] = useTransition();
 
   const load = useCallback(async () => {
     setLoading(true);
-    const result = await fetchRequestTypeScreenshotPolicy();
+    const result = await fetchRequestTypeDefinitions();
     setLoading(false);
     if (result.error) {
       toast.error(result.error);
       return;
     }
-    const map: Record<string, PolicyState> = {};
-    for (const row of result.rows) {
-      map[row.request_type] = {
-        screenshot_restricted: row.screenshot_restricted,
-        is_active: row.is_active,
-      };
-    }
-    setPolicies(map);
+    setRows(result.rows);
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  function toggle(slug: RequestTypeSlug, field: keyof PolicyState) {
-    const current = policies[slug];
-    if (!current) return;
-    const next = { ...current, [field]: !current[field] };
-    setPolicies((prev) => ({ ...prev, [slug]: next }));
+  const nextSortOrder = useMemo(
+    () => rows.reduce((max, row) => Math.max(max, row.sort_order), 0) + 1,
+    [rows],
+  );
+
+  function setAddOpen(open: boolean) {
+    router.replace(open ? `${pathname}?add=1` : pathname);
+  }
+
+  function toggle(
+    row: RequestTypeDefinitionRow,
+    field: "screenshot_restricted" | "is_active",
+  ) {
+    const next = !row[field];
+    setRows((prev) =>
+      prev.map((r) => (r.key === row.key ? { ...r, [field]: next } : r)),
+    );
     startTransition(async () => {
-      const result = await updateRequestTypeScreenshotPolicy(slug, {
-        [field]: next[field],
-      });
+      const result = await updateRequestType(row.key, { [field]: next });
       if (!result.ok) {
         toast.error(result.error ?? t("errors.saveFailed"));
-        setPolicies((prev) => ({ ...prev, [slug]: current }));
+        setRows((prev) =>
+          prev.map((r) => (r.key === row.key ? { ...r, [field]: !next } : r)),
+        );
       }
     });
   }
@@ -106,7 +91,7 @@ export function TypesSettingsPanel() {
           { label: t("title") },
         ]}
         actions={
-          <Button type="button" size="sm" className="h-9" disabled title={t("deferredNote")}>
+          <Button type="button" size="sm" className="h-9" onClick={() => setAddOpen(true)}>
             <Plus className="me-1.5 h-3.5 w-3.5" />
             {t("addRequestType")}
           </Button>
@@ -119,96 +104,96 @@ export function TypesSettingsPanel() {
             <TableRow>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colType")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colFields")}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colChain")}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colRequests")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colScreenshots")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS} />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {REQUEST_TYPE_SLUGS.map((slug) => {
-              const Icon = TYPE_ICONS[slug];
-              const fields = TYPE_FIELDS[slug] ?? [];
-              const policy = policies[slug];
-              return (
-                <TableRow key={slug}>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
+                  {t("loading")}
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((row) => (
+                <TableRow key={row.key}>
                   <TableCell>
                     <div className="flex items-center gap-2.5">
                       <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-                        <Icon className="h-4 w-4" />
+                        <Shapes className="h-4 w-4" />
                       </span>
-                      <span className="text-sm font-medium">{tTypes(slug)}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">
-                    {fields.slice(0, 3).map((f) => f.label).join(", ") || "—"}
-                  </TableCell>
-                  <TableCell>
-                    {loading || !policy ? (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={policy.screenshot_restricted}
-                          onCheckedChange={() => toggle(slug, "screenshot_restricted")}
-                          aria-label={t("colScreenshots")}
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {policy.screenshot_restricted ? t("blocked") : t("allowed")}
-                        </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium">{row.label_en}</span>
+                          {row.is_system ? (
+                            <span
+                              title={t("systemLockHint")}
+                              className="inline-flex items-center gap-0.5 rounded-full border border-primary/20 bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary"
+                            >
+                              <Lock className="h-2.5 w-2.5" />
+                              {t("systemBadge")}
+                            </span>
+                          ) : null}
+                        </div>
+                        <Link
+                          href={`/requests/settings/types/${row.key}`}
+                          className="text-[11px] text-primary hover:underline"
+                        >
+                          {t("viewDetails")}
+                        </Link>
                       </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {loading || !policy ? (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    ) : (
-                      <Switch
-                        checked={policy.is_active}
-                        onCheckedChange={() => toggle(slug, "is_active")}
-                        aria-label={t("colStatus")}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-2">
-                      {slug === "complaint" ? (
-                        <Link
-                          href="/requests/settings/categories"
-                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          {t("manageCategories")}
-                        </Link>
-                      ) : null}
-                      {slug === "loan" ? (
-                        <Link
-                          href="/requests/settings/tenure"
-                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          {t("manageTenure")}
-                        </Link>
-                      ) : null}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8"
-                        disabled
-                        title={t("deferredNote")}
-                      >
-                        {t("edit")}
-                      </Button>
                     </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {row.field_count}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {row.step_count > 0 ? (
+                      t("stepsCount", { count: row.step_count })
+                    ) : (
+                      <span className="text-warning">{t("noChain")}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {row.request_count}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={row.screenshot_restricted}
+                        onCheckedChange={() => toggle(row, "screenshot_restricted")}
+                        aria-label={t("colScreenshots")}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {row.screenshot_restricted ? t("blocked") : t("allowed")}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={row.is_active}
+                      onCheckedChange={() => toggle(row, "is_active")}
+                      aria-label={t("colStatus")}
+                    />
                   </TableCell>
                 </TableRow>
-              );
-            })}
+              ))
+            )}
           </TableBody>
         </Table>
       </AppListCard>
 
-      <p className="text-[10px] text-muted-foreground">{t("deferredNote")}</p>
+      <p className="text-[10px] text-muted-foreground">{t("systemLockNote")}</p>
+
+      <RequestTypeFormDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        nextSortOrder={nextSortOrder}
+        onSaved={load}
+      />
     </AppPage>
   );
 }
