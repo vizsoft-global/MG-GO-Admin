@@ -8,19 +8,19 @@ Figma: `n99SmGz5mrwpWoB363e314` — User `4004:10289` (33) · Admin RCM `3923:25
 | Result | Admin (40) | User (33) | Total |
 |--------|-----------:|----------:|------:|
 | PASS | 30 | 23 | **53** |
-| PARTIAL — Figma element, no server support | 6 | 0 | **6** |
+| PARTIAL — Figma element, no server support | 6 | 4 | **10** |
 | BLOCKED — client value list / no signed row | 3 | 3 | **6** |
-| FAIL | 0 | 7 | **7** |
+| FAIL | 0 | 3 | **3** |
 | OUT OF SCOPE | 1 | 0 | 1 |
 | Figma compliance | **75.0%** | 69.7% | **72.6%** |
 
-Baseline on 2026-08-11 was PASS 23 · FAIL 44 · BLOCKED 6 (31.5%). Counting PARTIAL as shipped-with-a-documented-gap gives 59/73 = 80.8%. Per-row verdicts live in plan §11A / §11B / §11C.
+Baseline on 2026-08-11 was PASS 23 · FAIL 44 · BLOCKED 6 (31.5%). Counting PARTIAL as shipped-with-a-documented-gap gives 63/73 = 86.3%. Per-row verdicts live in plan §11A / §11B / §11C.
 
 **Admin side has no FAIL rows left** — all 40 rows were re-tested against a real admin session at 1366×768, then re-swept on a production build (25/25 routes fit the viewport).
 
-**The 7 User App FAIL rows are fixed in code but not yet re-verified** (RSup/10b, 10c, 10d, 11, 25, 26, 27, plus BLOCKED 29), so §11A keeps its baseline numbers. A fix without a verification is not a PASS.
+**The largest remaining defect is not in this table.** The driver app's `lib/features/support/` has zero `AppLocalizations` references, so every RCM / Visit Booking / E-Sign string in the rider app is hardcoded English while the rest of the app ships `app_en.arb` and `app_ar.arb`. No User row has Arabic parity; the 69.7% above is English-only parity.
 
-**Figma-complete: NOT READY** — blocked on that re-verification, the 6 client value/decision items, and the 6 PARTIAL rows that each need a server-side addition.
+**Figma-complete: NOT READY** — blocked on that localisation gap, the 3 unverified User rows (RSup/11, 25, 26), the 6 client value/decision items, and the 6 PARTIAL rows that each need a server-side addition.
 
 ## Backend verification (parent agent, evidence-based)
 
@@ -165,3 +165,21 @@ Also removed the 7 transactional campaigns those QA actions generated, with thei
 Consequence to expect: **`/requests`, `/visit-bookings` and `/requests/esign` now show empty states**, because every row in those three tables was QA data — no rider has submitted a real request, visit or signature yet.
 
 E-Sign gaps that need a client or schema decision: `Accepted` / `Completed` statuses exist in Figma but not in `esign_requests`; there is no `viewed_at` column or driver-app write for Figma's "Viewed" timestamp; "Download audit trail" has no artifact defined. Also two QA seed rows (SIG-1400/1401) carry `document_storage_key` values prefixed with the bucket name (`esign-documents/demo/...`) pointing at objects that do not exist, so they can never render a document — real uploads use bucket-relative keys. And all five routes require `requests.manage`, not `requests.view`, which hides E-Sign entirely from read-only operators — fail-closed, but confirm it is intended.
+
+### 2026-08-12 � Driver app re-verify (RCM + Visit Booking + E-Sign)
+
+Verified in the Flutter repo (`MGgo(DPD)-USER/MG-GO`, branch `vikram-dev`) against Figma, `pg_proc` and the admin implementation. No emulator or device was available, so this is contract-and-layout verification, not runtime.
+
+The good news first: **all 14 RPC calls in `support_service.dart` match the real function signatures exactly** � every function name, every argument name, all 8 `request_type` values and all 3 `severity_level` values. So none of the earlier User FAIL rows was a silent-failure defect. Two names in the re-test brief do not exist server-side and the app already used the correct ones (`driver_list_my_requests`, `driver_submit_clarification`). `listMyVisits()` deliberately queries `visit_bookings` directly rather than through an RPC, which works because of the `drivers_select_own_visit_bookings` policy.
+
+Three commits: `03c22fb` � the rider check-in QR now encodes the bare `booking_code` through a shared `booking_qr.dart` (ticket step 88px, confirmed-visit row 48px), matching the admin's `<QRCodeSVG value={visit.booking_code} level="M">`; the previous code fell back to the literal string `visit` when the code was empty, which rendered a perfectly scannable QR pointing at no booking. It also adds a white background and padding, because `QrImageView` defaults to transparent and scanners read that as low contrast. `04df327` � approval-step decision times render in local time instead of UTC. `7517f36` � Figma's step wording, replacing a row that read "In review since" with nothing after it (`request_approval_steps` has no `started_at`, and `decided_at` is null while a step is open).
+
+`qr_flutter` was already a dependency at `^4.1.0` resolving to 4.1.0 under `sdk: ^3.11.0`, so no version bump was needed. `flutter analyze`: 7 issues, 0 errors, all pre-existing.
+
+**Release blocker found:** `lib/features/support/` contains **zero** `AppLocalizations` references. Every string across RCM, Visit Booking and E-Sign is hardcoded English, in an app whose other ~75 files are driven by `app_en.arb` / `app_ar.arb`. Roughly 20 files and several hundred strings. Too large to fix surgically inside a QA pass � needs its own task.
+
+Smaller items flagged and deliberately left alone: `support_models.dart` maps both `pending` and `submitted` to the label "Pending" while Figma RSup/10b shows "Submitted" (changing it ripples through every list); the tab reads "Request Recieved", which is Figma's own spelling; and `DriverAppointment.needsResponse` checks only `status == 'pending'` although `driver_respond_appointment` accepts `pending` or `scheduled` � the getter is currently unused, so it is a trap rather than a live bug.
+
+Server-side gaps that cap these screens: `request_approval_steps.decided_by` is a bare uuid with no name join, so Figma's "Ahmed K � 12 Jul, 09:14" can only ever render the timestamp; there is no `started_at`; and loan / complaint submission is blocked by design until `loan_tenure_options` and `complaint_categories` are seeded.
+
+One consequence of the demo purge to keep in mind: because all four tables are now empty, nobody can exercise these screens with real data until a rider submits something or a staging seed is agreed.
