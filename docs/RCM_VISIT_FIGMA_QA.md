@@ -345,3 +345,23 @@ The hub golden changed as a side effect, for a good reason: the hub reads `myReq
 Reading the goldens: icon glyphs render as empty boxes because `MaterialIcons` is not loaded under `flutter test`. That is a harness artefact, not a rendering fault — the boxes occupy the correct slots and sizes.
 
 Suite is green at 42.
+
+---
+
+## The device pass, on an emulator (2026-08-12)
+
+An Android emulator was available after all, so the two rows that were still argued rather than observed — a **resolved** e-sign preview and system chrome — were run for real. Pixel 9 image, Android 15, 1080x2424 at 420dpi (device pixel ratio 2.625), a debug build of 1.1.7 pointed at production, signed in as rider `10001`.
+
+Two things had to be worked around before anything could be seen, both worth recording. The emulator resolves no hostnames unless it is launched with `-dns-server`, which is why the first run looked like a backend outage. And the app sets `FLAG_SECURE`, so every `screencap` came back pure black until `flutter.security_bypass_enabled` was written into its shared preferences through `run-as` — the same debug switch the vehicle screen exposes behind a hidden tap.
+
+**One real defect, and only a device could have shown it.** `Image.network` with no width constraint sizes itself to the image's *pixel* dimensions divided by the device pixel ratio, so the image branch of the e-sign viewer drew a document scan at roughly 40% of the card on this 2.625x screen — and would draw it at a third on a 3x phone. Figma's frame has the document filling the card. The preview is now given a tight width with `BoxFit.contain` under a 420pt height cap, so it fills the card and a tall portrait scan still cannot run away with the page. There is no test guarding it: `Image.network` cannot resolve under `flutter test` without an HTTP fake, so the evidence is the before and after screenshots.
+
+**The PDF branch does not follow Figma, and now that is observed rather than inferred.** Figma renders the document page inside the card; the app shows a *PDF document / Tap to open* row and hands the signed URL to `url_launcher`, which opens Chrome. It works — the QA sample rendered — but it leaves the app, so the row stays PARTIAL for the reason it always did.
+
+**`viewed_at` is proven end to end.** Opening `SIG-9001` stamped `2026-08-12 17:31:46Z`, so `driver_mark_esign_viewed`'s first-open-wins path fires from a real client and the Admin detail's **Viewed** row shows a real value for the first time.
+
+**Arabic on glass matches what the tests concluded.** The viewer and the hub mirror correctly — back arrow, icon side, and Decline / Sign order all swap — and nothing clipped. One thing to record: the due line reads `Due 2026-08-18` in English and reorders visually to `18-08-2026` in Arabic. That is the Unicode bidi algorithm behaving correctly on a numeric-only date, but it is ambiguous to read, and the request detail already avoids it by formatting with ARB month names. Worth doing the same here; not changed in this pass.
+
+**System chrome passes.** The OS back gesture pops the viewer to the inbox rather than exiting. At the user's own font setting of 1.3x and again at 2.0x the Help & Support hub grows its tiles, wraps every label, keeps paired tiles the same height and stays scrollable — no overflow and nothing clipped, which is what `arabic_overflow_test.dart` predicted at 1.3x and had never been asked about at 2.0x.
+
+**The score table is unchanged.** The one remaining BLOCKED row needs a *signed* request seen on the device, and the only signed row in production (`SIG-9002`) belongs to a different rider, so it was not exercised. Everything the emulator did touch was put back: the build uninstalled, font scale returned to 1.0, the rider unbound from the device, its push token deleted, the temporary selfie-gate exemption reverted, and `SIG-9001`'s document key restored to the PDF. `viewed_at` was deliberately left in place — it is genuine evidence, on a row that is queued for deletion anyway.
