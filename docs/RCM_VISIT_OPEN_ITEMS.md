@@ -64,28 +64,37 @@ The list was 11 when it went to the client. One item — requester zone on the o
 
 ## B. Needs a Device or a Figma Asset (Cannot Be Closed From Here)
 
-- **On-device pass required** — Arabic overflow and bidi behaviour around Latin codes such as `RCM-0001`, the signature export geometry, and the signature pad guides. Nothing in the driver app has been rendered on a physical device in this environment.
-- **Gulf-native Arabic review** — for coined or company-specific terms: E-Sign, Central Tower, salary justification, wrong action, acknowledge, check-in code. The nine complaint category labels seeded on 2026-08-12 are MSA and belong in the same review pass.
-- **Missing Figma frame** — `RSup/26 Sign Capture` cannot be located in file `n99SmGz5mrwpWoB363e314` (node `4377:4520` resolves to nothing, and the `App` canvas lists no `RSup` frames). Its guides and Cancel button styling were built from a written description only — this is the sole reason that row is still scored PARTIAL.
+- ~~**Signature pad guides**~~ — ✅ Closed 2026-08-12. The Figma frame turned up (see below), so the guides are no longer built from a description: the baseline sits at 145/190 of the pad height and runs inset 30/361 either side, with the `x` marker sharing the line's start x rather than standing clear of it. The pad itself is 190 tall, not 180. Locked by the golden `test/goldens/signature_pad_guides.png`.
+- ~~**Signature export geometry**~~ — ✅ Closed 2026-08-12 by `test/signature_pad_test.dart`, which is decisive without a device: the exported PNG is exactly `padSize x devicePixelRatio` at ratios 1/2/3, ink lands at the same relative position at every ratio (so nothing is clipped or letterboxed), and the guides are never baked into the export.
+- ~~**Bidi around Latin codes**~~ — ✅ Closed 2026-08-12. Ordering is a property of the Unicode bidi algorithm rather than the typeface, so it was settled by rendering the six real composite strings under RTL (`test/arabic_bidi_probe_test.dart`, golden `arabic_bidi_probe.png`). Codes, `·` separators, digits, the comma in `2026, 13:52` and a sentence-final full stop all resolve correctly. **No LRM or isolate wrapping is needed** — there is nothing to fix here.
+- **Arabic overflow — still open.** Line-breaking is font-specific and the app pulls its typeface from `google_fonts` at runtime, so a widget test cannot answer it. It needs a real run. The blocker is not the device: a Pixel 9 emulator is available, but `Env` hard-asserts the app may only ever point at the production Supabase project, so reaching any RCM screen means signing in as a live rider. Of the two riders in the QA seed, `10002` has 1,098 deliveries and an active device session that a login would terminate, and opening a seeded document as `10001` would permanently stamp `viewed_at` via the first-open-wins `driver_mark_esign_viewed`. **Needs a decision:** mint a throwaway QA rider, or accept the side effects on `10001`.
+- **Gulf-native Arabic review** — the sheet is ready at [`docs/ARABIC_REVIEW_SHEET.md`](ARABIC_REVIEW_SHEET.md): 15 coined or company-specific terms plus the 9 complaint categories, each with the current Arabic and a Verdict column. It also names the four specific doubts worth a native speaker's time, chief among them `مخالفة` for "Wrong Action" (reads as a disciplinary violation) and `تسجيل الدخول` for check-in (the same phrase the app uses for signing in). The categories are DB-backed and editable from the panel, so those verdicts ship without an app release; the 15 terms need one.
+- ~~**Missing Figma frame**~~ — ✅ Resolved 2026-08-12. `RSup/26-Sign-Capture` `4377:4520` **does** resolve in `n99SmGz5mrwpWoB363e314`; the earlier lookup failure was transient, not a missing frame. Worth knowing for next time: a full `get_metadata` dump of page `0:1` returns neither this node nor `RSup/25`, which is what made the frame look absent — query the node id directly instead of searching the page dump. The row is re-scored in the QA matrix.
 
 ---
 
 ## C. Our Work — No Client Input Needed
 
 - ~~**Composer robustness — pre-validation missing.**~~ ✅ Fixed and deployed 2026-08-12. The function now walks the PNG chunk table and checks the JPEG end-of-image marker before the decoder sees the bytes, and caps sizes at 15MB source / 4MB signature. A corrupt PNG returns `malformed_signature_image` and records it, instead of taking the worker down with `WORKER_RESOURCE_LIMIT`.
-- **Rotate `SUPABASE_SERVICE_ROLE_KEY`** and mirror the new value into Vercel project `dpdadmin-prod` — the current key was pasted in chat and should be treated as compromised.
+- ~~**Rotate `SUPABASE_SERVICE_ROLE_KEY`**~~ — ✅ Done 2026-08-12. The new key (`dpd_userapp`) is verified to carry service-role rights, is in `.env.local` and in Vercel production, and production has been redeployed onto it. Note that `vercel env pull` returns an empty value for every sensitive variable — `CRON_SECRET` and the R2 keys included — so it cannot be used to confirm a secret was stored; confirmation came from a runtime probe instead. **Still to do by hand:** revoke the old `default` key in the Supabase dashboard.
 
 ---
 
 ## D. Production Housekeeping
 
-Tagged QA seed data is currently live in production:
+Tagged QA seed data is currently live in production. The tags are now recorded (2026-08-12) — they are not uniform, because each table was seeded through a different path:
 
-- 6 requests, with 24 approval steps and 1 clarification
-- 2 visits
-- 2 E-Sign rows, including one real composed signed copy
+| Table | Tag | Rows |
+|---|---|---|
+| `requests` | `payload->>'qa_seed' = '2026-08-12'` | 6 — `RCM-9001`…`RCM-9006` |
+| `visit_bookings` | `note like '%[qa_seed 2026-08-12]%'` | 2 — `VIS-99001`, `VIS-99002` |
+| `esign_requests` | `signer_meta->>'qa_seed' = '2026-08-12'` | 2 — `SIG-9001`, `SIG-9002` |
 
-**Action needed before go-live:** record the exact tags used and the delete order (children must be removed before parents, since deletes cascade), then run the cleanup once QA closes.
+Children to remove first: `request_approval_steps` (24), `request_clarifications` (1) and `request_attachments` for those 6 requests; `visit_booking_notes` for those 2 bookings. `SIG-9002` also owns a composed signed copy in the `esign-documents` bucket, which a row delete will not reclaim.
+
+**Two things the cleanup must not do.** It must not delete the two rider rows: `10001` and `10002` are real drivers that predate the seed by two months, and `10002` has 1,098 deliveries. And it must be scoped by tag rather than by code prefix — `RCM-90xx` is inside the live sequence's range and a future real request could land on it.
+
+**Action needed before go-live:** run the cleanup once QA closes.
 
 ---
 
