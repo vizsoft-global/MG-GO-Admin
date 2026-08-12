@@ -7,20 +7,20 @@ Figma: `n99SmGz5mrwpWoB363e314` — User `4004:10289` (33) · Admin RCM `3923:25
 
 | Result | Admin (40) | User (33) | Total |
 |--------|-----------:|----------:|------:|
-| PASS | 30 | 23 | **53** |
-| PARTIAL — Figma element, no server support | 6 | 4 | **10** |
+| PASS | 30 | 24 | **54** |
+| PARTIAL — Figma element, no server support | 6 | 6 | **12** |
 | BLOCKED — client value list / no signed row | 3 | 3 | **6** |
-| FAIL | 0 | 3 | **3** |
+| FAIL | 0 | 0 | **0** |
 | OUT OF SCOPE | 1 | 0 | 1 |
-| Figma compliance | **75.0%** | 69.7% | **72.6%** |
+| Figma compliance | **75.0%** | 72.7% | **74.0%** |
 
-Baseline on 2026-08-11 was PASS 23 · FAIL 44 · BLOCKED 6 (31.5%). Counting PARTIAL as shipped-with-a-documented-gap gives 63/73 = 86.3%. Per-row verdicts live in plan §11A / §11B / §11C.
+Baseline on 2026-08-11 was PASS 23 · FAIL 44 · BLOCKED 6 (31.5%). Counting PARTIAL as shipped-with-a-documented-gap gives 66/73 = 90.4%, and no FAIL row remains. Per-row verdicts live in plan §11A / §11B / §11C.
 
 **Admin side has no FAIL rows left** — all 40 rows were re-tested against a real admin session at 1366×768, then re-swept on a production build (25/25 routes fit the viewport).
 
-**The largest remaining defect is not in this table.** The driver app's `lib/features/support/` has zero `AppLocalizations` references, so every RCM / Visit Booking / E-Sign string in the rider app is hardcoded English while the rest of the app ships `app_en.arb` and `app_ar.arb`. No User row has Arabic parity; the 69.7% above is English-only parity.
+**The localisation gap that dominated this table is closed.** `lib/features/support/` had zero `AppLocalizations` references; 19 files now go through `context.l10n` with 352 new English/Arabic key pairs, parity proven at 856 keys each side with matching placeholder sets. The Arabic has not been seen rendered, and a handful of coined terms want a Gulf-native reviewer.
 
-**Figma-complete: NOT READY** — blocked on that localisation gap, the 3 unverified User rows (RSup/11, 25, 26), the 6 client value/decision items, and the 6 PARTIAL rows that each need a server-side addition.
+**Figma-complete: NOT READY** — what remains is the 6 client value/decision items, the 12 PARTIAL rows that each need a server-side addition, one Arabic review pass on a real device, and the fact that no driver screen has ever been rendered here (no emulator or device), so every User row is a code-and-Figma verdict rather than an observed one.
 
 ## Backend verification (parent agent, evidence-based)
 
@@ -238,3 +238,13 @@ Security note, not a Figma divergence: `EsignSensitiveScope` wraps the viewer bu
 Worth being honest about the limit of “server-side enforcement” here: the tick itself can only ever happen on the device, so what the server guarantees is that no signature is stored without an explicit acceptance and that the acceptance time is ours, not the phone’s. Both changes are breaking for the driver app — the decline path must stop reading `cancelled` as a decline, and the submit path must send the flag or every signature will be refused.
 
 Nothing on these three screens was verified at runtime — there is no device or emulator, and the RLS conclusion came from evaluating the policy predicates in SQL rather than observing a 403.
+
+### 2026-08-12 — Driver e-sign defect batch, and the two decisions that came with it
+
+The nine queued driver-app defects are fixed, which clears the last FAIL row in the matrix. The one worth calling out is **D4**: the signature was rasterised at a hardcoded `Size(360, 180)` while strokes are recorded in the pad's real coordinate space, so on anything other than a 392pt-wide phone the stored **legal** signature was cropped — about 9% lost at 430pt and roughly half on a tablet. It now exports at the pad's laid-out size scaled by the device pixel ratio. The new in-pad guides are painted only in the widget's painter, never in `toPngBytes`, so the stored image stays the rider's ink alone.
+
+Also fixed: the viewer's failed-load retry loop is terminal with an explicit Retry (and no longer flashes that failure on its first frame, before the fetch has even started), the capture timestamp is stamped at submit instead of recomputed in `build`, `RiderProfile` selects `drivers.employee_id` so the receipt stops showing the driver code, the branch picker honours `visit_branches.is_default` ahead of `sort_order`, two `Alignment.centerRight` sites became `AlignmentDirectional.centerEnd` so trailing content stops pinning to the leading edge in Arabic, and the capture screen is wrapped in `EsignSensitiveScope` — a `screenshot_restricted` document's *signature* was previously screenshottable, which is the one item here that was a security gap rather than a parity gap.
+
+**D7 and D8 client side landed with the RPCs.** `isDeclined` now reads `declined`; `cancelled` means an admin withdrawal and gets its own neutral treatment in the inbox rather than being mislabelled a decline. The capture screen sends `declaration_accepted`, the exact declaration text and the locale it was read in, so the record shows what the rider agreed to and in which language.
+
+Verified: `flutter analyze` unchanged at 7 issues / 0 errors, ARB parity `PARITY OK` at 856 keys each side, no new ARB keys needed (only the banner wording changed value, in both locales). **Nothing was rendered** — no emulator or device — so D4's geometry is a reasoned argument about coordinate spaces, not an observed screenshot, and the Figma colours were matched to node values rather than to pixels. `RSup/26`'s frame could not be found in the file at all, so its guides and Cancel treatment came from a written description; that is why the row stays PARTIAL even though every listed gap is closed.
