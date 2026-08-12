@@ -307,7 +307,7 @@ Re-tested pin-to-pin against the real frame, two geometry gaps were real and are
 
 Reviewing those renders confirmed the RTL mirroring is right where it counts: Clear moves to the leading edge, the checkbox sits on the right of its label, and Cancel/Confirm swap sides. Three things came out of it that are **not** defects but want a decision — the ink colour (Figma's sample is navy, the app stores black, and changing it alters a legal artefact and mismatches signatures already on file), the signature guide not mirroring in RTL (Figma has no RTL variant to copy), and a long Arabic label on a *custom* request type making its hub tile taller than its row neighbours. All three are recorded in the open-items doc rather than decided here.
 
-What a device would still add: `my_requests`, request detail, the visit ticket, the e-sign viewer, and system chrome — the OS back gesture and the user's own font-size setting.
+What a device would still add: the e-sign viewer, and system chrome — the OS back gesture and the user's own font-size setting. (`my_requests`, request detail and the visit ticket were closed off-device the same day — see the next section.)
 
 ---
 
@@ -323,3 +323,23 @@ Two divergences from the frame, both deliberate:
 2. **Approving without one is not blocked.** The existing decision-terms dialog lets a loan be approved with no amount, so gating fuel would have been stricter than any comparable screen, and it would have broken bulk approve for a whole request type.
 
 Verified in the browser against the real server action on `RCM-9006`: unset → *In cash* → survives a reload → the read-only **Transfer type** row appears on both the details card and the drawer → switching to *With salary* replaces rather than adds → clicking the selected option clears it, and the clear survives a reload too. Zero console errors. Server-side, a rolled-back production probe confirms `salary`, a whitespace-and-caps `' CASH '`, and the clear all land correctly, and that `cheque`, a non-fuel request and a missing id are refused with named errors.
+
+---
+
+## Three more Arabic screens closed off-device (2026-08-12)
+
+`my_requests`, the request detail and the visit ticket were listed as device-only. They were not: every one of them takes its data from a `FutureProvider`, so overriding four of them with Arabic fixtures renders the real widget tree at Pixel 9 metrics under `flutter test`. `test/arabic_overflow_test.dart` now covers all three.
+
+- **RSup/09 my requests** — four rows, one per shape the list can take (plain sent, needs-clarification, awaiting-acknowledgement, awaiting-reschedule), so the amber attention banner renders too. The row is a `ListTile`, which gives the trailing status pill its intrinsic width first and leaves the type label the remainder; at Arabic pill lengths (`إجراء مطلوب`, `بانتظار الإقرار`) nothing is squeezed or ellipsised.
+- **RSup/10 request detail** — a loan sent back for clarification, which is the widest the screen gets: typed rows, reason card, three-step timeline and the response form at once. The longest strings (the clarification question and `إدارة الموارد البشرية والشؤون الإدارية`) both stay inside the card.
+- **RSup/16 visit ticket** — a confirmed upcoming booking plus a completed past one. The QR is the one element that must not be squeezed, since it shares a `Row` with wrapping text; it holds 48pt and sits on the trailing (right) edge under RTL.
+
+**One real defect fell out of it.** The detail timeline formatted decided steps with `DateFormat('d MMM')`, which resolves against intl's default locale, not the app's — so the Arabic timeline read `9 Aug` while the list one tap away read `9 أغس`. It now reads the ARB month strings like the rest of the app; English output is unchanged (`9 Aug, 15:30`). The test asserts the Arabic detail contains no Latin month name, so it cannot come back.
+
+**One thing worth recording, not fixing.** `my_visits` renders a department as `label_en` whatever the locale — already known, and the fixtures deliberately mix an Arabic-named department with an English one to show what a Kuwait tenant actually sees today.
+
+The hub golden changed as a side effect, for a good reason: the hub reads `myRequestsProvider` for its action-required badge, and until these fixtures existed that provider never resolved under test, so the badge path had never been rendered. It now shows **3** — the clarification, the acknowledgement and the reschedule row — which is the count the screen should derive, so the new golden covers strictly more than the old one.
+
+Reading the goldens: icon glyphs render as empty boxes because `MaterialIcons` is not loaded under `flutter test`. That is a harness artefact, not a rendering fault — the boxes occupy the correct slots and sizes.
+
+Suite is green at 42.
