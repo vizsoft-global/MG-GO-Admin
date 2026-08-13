@@ -233,7 +233,7 @@ export type OperationCategoryCount = {
  */
 export async function fetchOperationCategoryCounts(range: {
   from: string;
-  to: string;
+  to?: string | null;
   driverId?: string | null;
 }): Promise<OperationCategoryCount[]> {
   await requireOpsView();
@@ -243,10 +243,10 @@ export async function fetchOperationCategoryCounts(range: {
     .from("driver_operation_events")
     .select("category, success")
     .gte("occurred_at", range.from)
-    .lte("occurred_at", range.to)
     .order("occurred_at", { ascending: false })
     .limit(10000);
 
+  if (range.to) query = query.lte("occurred_at", range.to);
   if (range.driverId) query = query.eq("driver_id", range.driverId);
 
   const { data, error } = await query;

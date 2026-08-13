@@ -50,16 +50,21 @@ const CATEGORIES = [
 
 type ActivityRange = "today" | "24h" | "7d";
 
-function rangeBounds(range: ActivityRange): { from: string; to: string } {
+/**
+ * Only the lower bound is bounded. An upper bound of `now` is captured at mount,
+ * so every event that arrives afterwards — the whole point of a live feed —
+ * would be filtered out of the refetch that realtime just triggered.
+ */
+function rangeBounds(range: ActivityRange): { from: string; to: null } {
   const now = new Date();
   if (range === "today") {
     const kuwaitDate = new Intl.DateTimeFormat("en-CA", { timeZone: KUWAIT_TZ }).format(now);
-    return { from: `${kuwaitDate}T00:00:00+03:00`, to: now.toISOString() };
+    return { from: `${kuwaitDate}T00:00:00+03:00`, to: null };
   }
   const hours = range === "24h" ? 24 : 24 * 7;
   return {
     from: new Date(now.getTime() - hours * 3600 * 1000).toISOString(),
-    to: now.toISOString(),
+    to: null,
   };
 }
 
