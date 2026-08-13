@@ -51,7 +51,7 @@ import {
   parseCancelReason,
 } from "./parse-cancel-reason";
 import { useDeleteDelivery, useUpdateDeliveryStatus } from "./use-deliveries";
-import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
+import { resolveDeliveryStatusVariant } from "./delivery-status-variant";
 import type { DeliveryListRow, DeliveryMapPoint, DeliveryStatus } from "./types";
 import { REVIEWABLE_DELIVERY_STATUSES, type ReviewableDeliveryStatus } from "./types";
 
@@ -316,7 +316,7 @@ export function DeliveryDetailSheet({
   delivery: DeliveryListRow | null;
   open: boolean;
   onClose: () => void;
-  onUpdated?: () => void;
+  onUpdated?: () => void | Promise<void>;
   navigation?: DeliveryDetailNavigation;
 }) {
   const t = useTranslations("pages.deliveries");
@@ -477,7 +477,7 @@ export function DeliveryDetailSheet({
       return;
     }
     toast.success(t("statusChangeSuccess"));
-    onUpdated?.();
+    await onUpdated?.();
     onClose();
   };
 
@@ -553,7 +553,7 @@ export function DeliveryDetailSheet({
                   <DetailRow
                     label={t("colStatus")}
                     value={
-                      <StatusPill variant={resolveStatusVariant(delivery.status)} dot>
+                      <StatusPill variant={resolveDeliveryStatusVariant(delivery.status)} dot>
                         {statusLabel}
                       </StatusPill>
                     }
@@ -774,7 +774,7 @@ export function DeliveryDetailSheet({
                 subtitle={`#${delivery.short_id}`}
                 meta={
                   <span className="inline-flex flex-wrap items-center gap-2">
-                    <StatusPill variant={resolveStatusVariant(delivery.status)} dot>
+                    <StatusPill variant={resolveDeliveryStatusVariant(delivery.status)} dot>
                       {statusLabel}
                     </StatusPill>
                     {navigation?.positionLabel ? (

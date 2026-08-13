@@ -85,7 +85,7 @@ import {
   type CancelReasonCode,
 } from "./parse-cancel-reason";
 import { formatRelativeMinutesAgo } from "./delivery-sort-utils";
-import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
+import { resolveDeliveryStatusVariant } from "./delivery-status-variant";
 import type { DeliveryListRow } from "./types";
 
 function formatDateTime(iso: string): string {
@@ -744,7 +744,7 @@ function DeliveriesPageContent() {
                         isVisible={isColumnVisible}
                         className="text-end"
                       >
-                        <StatusPill variant={resolveStatusVariant(delivery.status)} dot>
+                        <StatusPill variant={resolveDeliveryStatusVariant(delivery.status)} dot>
                           {t(deliveryStatusMessageKey(delivery.status))}
                         </StatusPill>
                       </VisibleTableCell>
