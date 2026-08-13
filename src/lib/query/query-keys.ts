@@ -37,6 +37,12 @@ export const queryKeys = {
     restaurantPins: (driverId: string) =>
       ["live-tracking", "restaurant-pins", driverId] as const,
     partnerOptions: () => ["live-tracking", "partner-options"] as const,
+    operations: (filters: Record<string, unknown> = {}) =>
+      ["live-tracking", "operations", filters] as const,
+    operationCategories: (filters: Record<string, unknown> = {}) =>
+      ["live-tracking", "operation-categories", filters] as const,
+    driverOperations: (driverId: string, limit: number) =>
+      ["live-tracking", "driver-operations", driverId, limit] as const,
   },
   partners: {
     all: () => ["partners"] as const,
