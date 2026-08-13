@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { restaurantSyncPlan } from "./restaurant-sync-plan";
+import {
+  accountStatusToRestoreAfterRestaurantSync,
+  restaurantSyncPlan,
+} from "./restaurant-sync-plan";
 
 describe("restaurantSyncPlan", () => {
   it("does nothing when the mapping is unchanged so an active driver is not emptied", () => {
@@ -28,5 +31,40 @@ describe("restaurantSyncPlan", () => {
       toAdd: [],
       toRemove: ["a", "b"],
     });
+  });
+});
+
+describe("accountStatusToRestoreAfterRestaurantSync", () => {
+  it("restores Active when the restaurant trigger dropped the driver to Pending", () => {
+    assert.equal(
+      accountStatusToRestoreAfterRestaurantSync({
+        statusBefore: "active",
+        intended: null,
+        statusNow: "pending",
+      }),
+      "active",
+    );
+  });
+
+  it("does not restore when Login Status was left as intended", () => {
+    assert.equal(
+      accountStatusToRestoreAfterRestaurantSync({
+        statusBefore: "active",
+        intended: null,
+        statusNow: "active",
+      }),
+      null,
+    );
+  });
+
+  it("re-asserts Suspended when the restaurant trigger dropped the driver to Pending during Inactive save", () => {
+    assert.equal(
+      accountStatusToRestoreAfterRestaurantSync({
+        statusBefore: "active",
+        intended: "suspended",
+        statusNow: "pending",
+      }),
+      "suspended",
+    );
   });
 });

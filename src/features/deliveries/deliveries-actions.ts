@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { fetchLocationEventByDeliveryId } from "@/features/locations/locations-actions";
+import { fetchLocationEventByDeliveryId, fetchLocationEventsForDelivery } from "@/features/locations/locations-actions";
+import { trailPathFromEvents } from "./delivery-gps-audit";
 import type { DriverLocationEvent } from "@/features/locations/types";
 import { resolveOrderProofUrl } from "@/lib/storage/order-proof-url";
 import { earningsRecalcDateFromDeliveredAt } from "./delivery-earn-date";
@@ -586,17 +587,26 @@ export async function fetchDeliveryDetailExtras(params: {
 /** GPS audit event for the detail modal. Loaded independently from proofs. */
 export async function fetchDeliveryGpsAudit(
   deliveryId: string,
-): Promise<{ gpsEvent: DriverLocationEvent | null }> {
+): Promise<{
+  gpsEvent: DriverLocationEvent | null;
+  trail: Array<{ lat: number; lng: number }>;
+}> {
   await requireDeliveriesView();
 
   let gpsEvent: DriverLocationEvent | null = null;
+  let trail: Array<{ lat: number; lng: number }> = [];
   try {
-    gpsEvent = await fetchLocationEventByDeliveryId(deliveryId);
+    const [event, events] = await Promise.all([
+      fetchLocationEventByDeliveryId(deliveryId),
+      fetchLocationEventsForDelivery(deliveryId),
+    ]);
+    gpsEvent = event;
+    trail = trailPathFromEvents(events);
   } catch (err) {
     console.error("[fetchDeliveryGpsAudit] gps event lookup failed", err);
   }
 
-  return { gpsEvent };
+  return { gpsEvent, trail };
 }
 
 /**

@@ -13,6 +13,7 @@ export type DriverLiveLocation = {
   driverCode: string;
   employeeId: string | null;
   isOnDuty: boolean;
+  isBlocked: boolean;
   restaurantName: string | null;
   latitude: number;
   longitude: number;

@@ -28,11 +28,19 @@ export const DEFAULT_LIVE_TRACKING_FILTERS: LiveTrackingFilterState = {
   gpsSignal: "all",
 };
 
+export function resetLiveTrackingFilters(): LiveTrackingFilterState {
+  return {
+    ...DEFAULT_LIVE_TRACKING_FILTERS,
+    statusChips: [...DEFAULT_LIVE_TRACKING_FILTERS.statusChips],
+  };
+}
+
 export function matchesLiveTrackingFilters(
   loc: {
     driverName: string;
     driverCode: string;
     isOnDuty: boolean;
+    isBlocked?: boolean;
     trackingStatus: TrackingStatus;
     pinStatus: "active" | "idle" | "alert";
     batteryPct: number | null;
@@ -46,6 +54,7 @@ export function matchesLiveTrackingFilters(
   filters: LiveTrackingFilterState,
   meta?: { zoneId: string | null; partnerId: string | null; zoneName: string | null },
   zoneShapes: LiveTrackingZoneShape[] = [],
+  now?: number,
 ): boolean {
   if (filters.onDutyOnly && !loc.isOnDuty) return false;
   if (filters.trackingStatus !== "all" && loc.trackingStatus !== filters.trackingStatus) {
@@ -75,22 +84,28 @@ export function matchesLiveTrackingFilters(
     if (bucket !== filters.gpsSignal) return false;
   }
 
-  if (filters.statusChips.length > 0) {
-    const listStatus = liveListStatus({
-      isOnDuty: loc.isOnDuty,
-      trackingStatus: loc.trackingStatus,
-      speedMps: loc.speedMps ?? null,
-      lastSeenAt: loc.lastSeenAt ?? "",
-    });
-    const matchesChip =
-      (filters.statusChips.includes("online") &&
-        (listStatus === "moving" || listStatus === "delivery_submit")) ||
-      (filters.statusChips.includes("on_duty") && loc.isOnDuty) ||
-      (filters.statusChips.includes("idle") && listStatus === "idle") ||
-      (filters.statusChips.includes("alert") && loc.pinStatus === "alert") ||
-      (filters.statusChips.includes("offline") && listStatus === "offline");
-    if (!matchesChip) return false;
-  }
+  if (filters.statusChips.length === 0) return false;
+
+  const listStatus = liveListStatus({
+    isOnDuty: loc.isOnDuty,
+    isBlocked: loc.isBlocked,
+    trackingStatus: loc.trackingStatus,
+    speedMps: loc.speedMps ?? null,
+    lastSeenAt: loc.lastSeenAt ?? "",
+    now,
+  });
+  const isOnline =
+    listStatus === "moving" ||
+    listStatus === "idle" ||
+    listStatus === "delivery_submit";
+  const matchesChip =
+    (filters.statusChips.includes("online") && isOnline) ||
+    (filters.statusChips.includes("on_duty") && loc.isOnDuty && !loc.isBlocked) ||
+    (filters.statusChips.includes("idle") && listStatus === "idle") ||
+    (filters.statusChips.includes("alert") && loc.pinStatus === "alert") ||
+    (filters.statusChips.includes("offline") &&
+      (listStatus === "offline" || listStatus === "blocked"));
+  if (!matchesChip) return false;
 
   const q = filters.search.trim().toLowerCase();
   if (!q) return true;

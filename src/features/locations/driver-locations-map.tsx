@@ -50,7 +50,7 @@ function approxMoved(
   a: { lat: number; lng: number },
   b: { lat: number; lng: number },
 ): boolean {
-  return Math.abs(a.lat - b.lat) > 0.00001 || Math.abs(a.lng - b.lng) > 0.00001;
+  return a.lat !== b.lat || a.lng !== b.lng;
 }
 
 export function DriverLocationsMap({
@@ -134,6 +134,7 @@ export function DriverLocationsMap({
   const mapClickListenerRef = useRef<{ remove: () => void } | null>(null);
   const hasInitialFitRef = useRef(false);
   const lastFitMarkerKeyRef = useRef("");
+  const markerSyncGenRef = useRef(0);
   const onMarkerSelectRef = useRef(onMarkerSelect);
   const focusMarkerIdRef = useRef(focusMarkerId);
   onMarkerSelectRef.current = onMarkerSelect;
@@ -261,7 +262,9 @@ export function DriverLocationsMap({
     const map = mapRef.current;
     if (!map || mapState !== "ready") return;
 
+    const syncGen = ++markerSyncGenRef.current;
     void loadGoogleMaps().then((google) => {
+      if (syncGen !== markerSyncGenRef.current) return;
       if (!google?.maps?.Map || !mapRef.current) return;
 
       const MarkerCtor = google.maps.Marker;
@@ -280,6 +283,10 @@ export function DriverLocationsMap({
         if (pin.trackingStatus === "moving") pulseEligible.add(pin.id);
       }
 
+      const created: import("@/lib/google-maps/load").GoogleMarkerInstance[] = [];
+      let anyMoved = false;
+      let anyRemoved = false;
+
       for (const [id, entry] of byId) {
         if (nextIds.has(id)) continue;
         entry.clickListener?.remove?.();
@@ -292,10 +299,8 @@ export function DriverLocationsMap({
         }
         byId.delete(id);
         lastMarkerPosRef.current.delete(id);
+        anyRemoved = true;
       }
-
-      const created: import("@/lib/google-maps/load").GoogleMarkerInstance[] = [];
-      let anyMoved = false;
 
       for (const pin of validMarkers) {
         const iconKey = `${pin.pinStatus ?? ""}|${pin.vehicleType ?? "bike"}|${pin.highlight ? "1" : "0"}|${pin.trackingStatus ?? ""}`;
@@ -324,6 +329,7 @@ export function DriverLocationsMap({
               }),
             );
             existing.iconKey = iconKey;
+            anyMoved = true;
           }
           if (existing.pulse) {
             existing.pulse.setPosition(pin.lat, pin.lng);
@@ -468,11 +474,14 @@ export function DriverLocationsMap({
             },
           });
           anyMoved = true;
-        } else if (created.length > 0) {
-          clustererRef.current.addMarkers(created);
+        } else if (created.length > 0 || anyMoved || anyRemoved) {
+          clustererRef.current.clearMarkers();
+          if (allDriverMarkers.length > 0) {
+            clustererRef.current.addMarkers(allDriverMarkers);
+          }
           anyMoved = true;
         }
-        if (anyMoved) scheduleClusterRender();
+        if (anyMoved || anyRemoved) scheduleClusterRender();
       }
     });
   }, [

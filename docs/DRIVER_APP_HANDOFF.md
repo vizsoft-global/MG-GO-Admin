@@ -67,8 +67,8 @@ The admin panel auto-issues a **6-digit numeric passcode** (`drivers.app_passcod
 - `app_passcode ~ '^[0-9]{6}$'` (check constraint)
 - `UNIQUE` partial index across non-null values (no two drivers share a code)
 - `BEFORE INSERT OR UPDATE OF status` trigger mints a code the first time `status` becomes `active`
-- **`drivers.status = 'active'` is blocked** unless the driver has ≥1 **published + active** restaurant in `driver_restaurants` (helper `driver_has_active_restaurant`, trigger on `drivers` + auto-downgrade when restaurants are removed). Admins set status via RPC `set_driver_account_status(p_driver_id, p_status)` on `/drivers/[id]`.
-- **Admin app block** (`drivers.is_blocked`, `drivers.blocked_reason`): separate from account status. Admins block/unblock on `/drivers/[id]` via RPC `set_driver_blocked(p_driver_id, p_blocked, p_reason)`. Blocking forces `is_on_duty = false`. On login, `driver_app_lookup_by_passcode` returns `{ ok: false, error: 'driver_blocked', message: '<reason>' }`. For signed-in sessions, subscribe to `drivers` realtime and read `is_blocked` + `blocked_reason`; show a full-screen block view when blocked.
+- **`drivers.status = 'active'` is blocked** unless the driver has ≥1 **published + active** restaurant in `driver_restaurants` (helper `driver_has_active_restaurant`, trigger on `drivers` + auto-downgrade when restaurants are removed). Admins set status via RPC `set_driver_account_status(p_driver_id, p_status)` on `/drivers/[id]`. Leaving `active` (Operations **Inactive** → `suspended`, or `pending`) **clocks the driver out immediately**: `is_on_duty = false`, open `driver_sessions` row closed, open `attendance_logs` row stamped `check_out_reason = admin`, last-known GPS kept. `driver_set_duty_state` raises `inactive` if the rider tries to clock back in. The app already syncs duty off via `drivers` realtime (`remoteDutyMonitor`) so Time in today stops without a manual clock-out.
+- **Admin app block** (`drivers.is_blocked`, `drivers.blocked_reason`): separate from account status. Admins block/unblock on `/drivers/[id]` via RPC `set_driver_blocked(p_driver_id, p_blocked, p_reason)`. Blocking forces `is_on_duty = false` **and clocks out** the open `driver_sessions` row plus the open `attendance_logs` row (`check_out_reason = admin`) so a leftover `is_online = true` cannot keep the home Online toggle on after unblock + login. Last-known `driver_locations` are kept. On login, `driver_app_lookup_by_passcode` returns `{ ok: false, error: 'driver_blocked', message: '<reason>' }`. For signed-in sessions, subscribe to `drivers` realtime and read `is_blocked` + `blocked_reason`; show a full-screen block view when blocked.
 
 ### 2b. Admin-first provisioning (default)
 
@@ -168,9 +168,9 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | avatar_object_key | text | Profile photo R2 key (`driver-avatars/{id}/…` from the app, or `drivers/{id}/avatar.{ext}` from admin). Kept in lockstep with `profiles.avatar_url` and the linked intake. |
 | avatar_updated_at | timestamptz | Set whenever the photo changes. |
 
-**Live Tracking map:** pins come from `driver_locations`. Active (non-archived) drivers keep a last-known pin, including **Offline / off-duty**. Cron `cleanup_stale_driver_locations` (every 2 min) deletes stale rows only when the driver is missing or `archived_at` is set. The duty tracker must keep sending heartbeats while In: indoor/coarse GPS (>100 m) re-sends the last good **pin**, but **motion status** (`idle`/`moving`) is classified from the live GPS speed, not that last-good pin — otherwise a moving rider is stamped Idle on the admin map. Off-duty / logged-out riders must display **Offline**, never the last `tracking_status`.
+**Live Tracking map:** pins come from `driver_locations`. Active (non-archived) drivers keep a last-known pin, including **Offline / off-duty**. Cron `cleanup_stale_driver_locations` (every 2 min) deletes stale rows only when the driver is missing or `archived_at` is set. The duty tracker must keep sending heartbeats while In: indoor/coarse GPS (>100 m) re-sends the last good **pin** when stationary; when live speed is ≥1.5 m/s it reports the live fix so the admin pin travels. Motion (`idle`/`moving`) is classified from the **live GPS sample** (speed or ≥15 m displacement), not the frozen last-good pin. While `duty_active_delivery_id` is set, reports stay `delivery_submit` (On Delivery); the next tick after the order ends reports idle/moving immediately. Off-duty / logged-out riders must display **Offline**, never the last `tracking_status`.
 
-**Profile photo (admin ↔ app):** upload `entityType: driver_avatar`, then `driver_update_avatar(p_object_key)` (or rely on confirm/proxy, which now stamp the same columns). Display: read `drivers.avatar_object_key` (fallback `profiles.avatar_url`) and resolve with `GET /api/driver-uploads/read?objectKey=…`. That read route allows the rider’s current avatar key even when admin uploaded it (`uploaded_by` is staff). Do **not** treat `driver_selfie` or login-verification shots as the profile photo. Cache-bust the signed `readUrl` with a URL **fragment** (`#v={epoch}`), never an extra query param — `?v=` / `&v=` invalidates the R2 signature and the image falls back to initials after the in-memory preview is gone. Take a Photo must request camera permission *before* `ImagePicker`; a deny/dismiss shows a user-facing prompt, never a raw `PlatformException`.
+**Profile photo (admin ↔ app):** upload `entityType: driver_avatar`, then `driver_update_avatar(p_object_key)` (or rely on confirm/proxy, which now stamp the same columns). Display: read `drivers.avatar_object_key` (fallback `profiles.avatar_url`) and resolve with `GET /api/driver-uploads/read?objectKey=…`. That read route allows the rider’s current avatar key even when admin uploaded it (`uploaded_by` is staff). Do **not** treat `driver_selfie` or login-verification shots as the profile photo. Cache-bust the signed `readUrl` with a URL **fragment** (`#v={epoch}`), never an extra query param — `?v=` / `&v=` invalidates the R2 signature. The app also writes the photo bytes to disk keyed by `avatar_object_key` so Profile still shows the image after process death (in-memory picker preview is gone; `Image.network` of a signed URL is not required for the retained photo). Any Take a Photo path (Profile, pickup/finish proof, request-detail Capture) must request camera permission *before* `ImagePicker`; a deny/dismiss or in-flight `PermissionHandler.PermissionManager` shows “Camera access is needed…”, never a raw `PlatformException`.
 
 ### `deliveries`
 | Column | Type | Notes |
@@ -179,7 +179,7 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | partner_id | uuid | Selected partner |
 | zone_id | uuid | Zone at time of delivery |
 | restaurant_id | uuid | Optional FK → `restaurants` (merchant) |
-| external_order_id | text | Order # from partner app. Unique index `deliveries_external_order_id_unique_idx`. Pickup RPC raises **`duplicate_order_id`** (including when the unique index fires). App must show a friendly string such as “This Order ID already exists.” — never the raw Postgres constraint message. |
+| external_order_id | text | Order # from partner app. **Format:** ASCII digits `0-9` only, length **1–32** (hint e.g. `12345`). `driver_create_pickup` / insert trigger raise **`invalid_order_id`** otherwise — show “Order ID must be 1–32 digits.” Unique index `deliveries_external_order_id_unique_idx`. Pickup RPC raises **`duplicate_order_id`** (including when the unique index fires). App must show a friendly string such as “This Order ID already exists.” — never the raw Postgres constraint message. |
 | order_proof_url | text | R2 object key (`drivers/{id}/order_proof/...`) |
 | status | enum | pending → admin sets verified/rejected |
 | rejection_reason | text | Admin-authored when `status = rejected`. **Required on Delivery Details overlay** — select the column and show it under Status. Do not reuse `cancel_reason` (that is the rider cancel code). |
@@ -392,6 +392,7 @@ Admin RPCs (staff): `get_driver_earnings_detail`, `list_driver_earnings_daily`, 
 - Written by `driver_set_duty_state` (same RPC as sessions) — no separate attendance button in v1.
 - **Auto-checkout (server cron):** if the driver stays **on duty** and is continuously **offline** (`driver_sessions.went_offline_at`) **or** continuously **outside assigned zone** (`driver_locations.out_of_zone_since`, maintained from `drivers.zone_id` geometry on location upserts) for `app_settings.attendance_auto_checkout_minutes` (default **45**), RPC `admin_run_attendance_auto_checkout` checks them out with reason `auto_offline` / `auto_out_of_zone`. Returning online or in-zone before the threshold **resets** that timer (no checkout). Cron: `/api/cron/attendance-auto-checkout` every 5 minutes (`CRON_SECRET`).
 - **Driver app (MG-GO):** `remoteDutyMonitorProvider` listens to `drivers` realtime/poll via `liveDbRefreshCoordinator`, patches home duty UI off, refreshes dashboard, and shows snackbar for `auto_offline` / `auto_out_of_zone`. Local duty-off / client zone timeout suppress that toast. Client idle outside-zone countdown is **45 minutes** (aligned with server default).
+- **Duty OS permissions:** the readiness sheet is not only for Clock In. After re-login (or resume) while `is_on_duty` is still true, Home audits location / background / notifications / battery / overlay / camera and shows the same sheet if any required permission was revoked. Add Delivery / Go In while already on duty must not skip that audit.
 - `zone_compliance`: `inside` | `outside` (geofence reporting — future writer).
 - `admin_note`: set when staff corrects a record via admin panel RPC `admin_correct_attendance` (sets `check_out_reason = admin` when checkout is written).
 - Driver **SELECT** own rows (`driver_id = auth.uid()`). Admin module: `/attendance` (today / history / problems / analytics).
@@ -409,7 +410,7 @@ select id, log_date, check_in_at, check_out_at, check_out_reason, status, zone_c
 select public.driver_set_duty_state(p_is_on_duty := true, p_is_online := true);  -- check in
 select public.driver_set_duty_state(p_is_on_duty := false, p_is_online := false); -- check out (manual)
 ```
-Returns full home dashboard payload (`driver_get_home_dashboard()` shape).
+Returns full home dashboard payload (`driver_get_home_dashboard()` shape). `shift_adherence.minutes_early_out` is minutes before **shift end**, clamped to the scheduled window — clocking out before shift start is the remaining shift length, not start-to-end plus the pre-shift gap.
 
 **Working hours:** wall-clock `check_out_at - check_in_at` (admin list uses reporting `duty_seconds`). Midnight-spanning shifts are one continuous interval on the check-in `log_date`.
 
@@ -510,6 +511,8 @@ Parse `action_params` and `media` as JSON on the client. Parse `screenshot_restr
 `driver_list_notifications` also returns `screenshot_restricted` (boolean) on each inbox item — **prefer the inbox/RPC value over a stale push payload** on next sync.
 
 **Inbox clear / remove (required):** Riders must be able to clear old notifications from the list. Stamp `notification_dispatch_items.dismissed_at` via `driver_dismiss_notifications(p_dispatch_item_ids uuid[] default null)` (`null` = all of that rider’s undismissed rows). Do **not** DELETE dispatch rows — admin analytics stay. List + unread count omit dismissed rows. Fallback: `DELETE /api/driver-app/notifications` with `{ "dispatch_item_ids": uuid[] | omit-for-all }`.
+
+**Profile Notifications toggle (required):** SharedPreferences `profile.notifications.enabled` (default `true`). When `false`, Home Important Notifications, the Notifications inbox, and the unread badge must show empty; do not show foreground/local banners; deactivate the FCM token so OS tray campaigns also stop. Re-register the token when the rider turns the toggle back on. Dispatch rows stay on the server — this is a client mute, not a dismiss.
 
 #### Screenshot restriction (sensitive notifications)
 
@@ -1012,7 +1015,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-13 — [admin+app] Admin employee ID is 4–8 digits, matching app login (`^\d{4,8}$`). One existing 3-digit production row is left as-is (DB CHECK stays 1–8); new create/edit/import reject shorter IDs.*
+*Last synced: 2026-08-13 — [admin+app] Live Tracking: Cluster is a count not a chip; Idle stays yellow; Break legend removed; Overspeed 60 km/h; GPS Offline ~90s after heartbeats stop. Pickup/finish stamp battery; delivery map draws GPS trail. Distance between is pickup→delivery.*
 
 *Prior: 2026-08-13 — [admin+app] Sign out of the active device clocks the driver out (`driver_release_device_session` + Profile `clockOut: true`) so work-time stops and Clocked In does not survive logout. Migration `20260907160000`.*
 

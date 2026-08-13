@@ -1,13 +1,47 @@
 import type { ZoneStatus } from "@/features/locations/types";
+import {
+  isGpsLive,
+  MOVING_SPEED_THRESHOLD_MPS,
+  normalizeBatteryPct,
+} from "@/features/locations/location-status";
+
+export { normalizeBatteryPct } from "@/features/locations/location-status";
+
+/** Kuwait urban delivery fleet cap. Speeds above this count as Overspeeding. */
+export const OVERSPEED_KMH = 60;
+
+/** Idle heartbeats are 45–60s; after this the GPS Offline insight should tick. */
+export const GPS_HEARTBEAT_STALE_MS = 90_000;
+
+export function displaySpeedMps(speedMps: number | null | undefined): number | null {
+  if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0) return null;
+  if (speedMps < MOVING_SPEED_THRESHOLD_MPS) return 0;
+  return speedMps;
+}
 
 export function formatSpeedKmh(speedMps: number | null | undefined): string {
-  if (speedMps == null || !Number.isFinite(speedMps)) return "—";
-  return `${(speedMps * 3.6).toFixed(0)} km/h`;
+  const mps = displaySpeedMps(speedMps);
+  if (mps == null) return "—";
+  return `${(mps * 3.6).toFixed(0)} km/h`;
+}
+
+export function isOverspeeding(
+  speedMps: number | null | undefined,
+  limitKmh = OVERSPEED_KMH,
+): boolean {
+  if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0) return false;
+  return speedMps * 3.6 > limitKmh;
+}
+
+export function isGpsHeartbeatStale(lastSeenAt: string, now = Date.now()): boolean {
+  const age = now - new Date(lastSeenAt).getTime();
+  return Number.isFinite(age) && age > GPS_HEARTBEAT_STALE_MS;
 }
 
 export function formatBatteryLevel(pct: number | null | undefined): string {
-  if (pct == null || !Number.isFinite(pct)) return "—";
-  return `${Math.round(pct)}%`;
+  const normalized = normalizeBatteryPct(pct);
+  if (normalized == null) return "—";
+  return `${normalized}%`;
 }
 
 export function formatAccuracyMeters(meters: number | null | undefined): string {
@@ -61,10 +95,21 @@ export function gpsSignalBucket(
 export function batteryLevelBucket(
   pct: number | null | undefined,
 ): "low" | "medium" | "high" | "unknown" {
-  if (pct == null || !Number.isFinite(pct)) return "unknown";
-  if (pct < 20) return "low";
-  if (pct < 50) return "medium";
+  const normalized = normalizeBatteryPct(pct);
+  if (normalized == null) return "unknown";
+  if (normalized < 20) return "low";
+  if (normalized < 50) return "medium";
   return "high";
+}
+
+export function liveZoneStatus(
+  status: ZoneStatus | null | undefined,
+  lastSeenAt: string,
+  now?: number,
+): ZoneStatus {
+  if (!lastSeenAt || !isGpsLive(lastSeenAt, now)) return "unknown";
+  if (status === "in_zone" || status === "out_of_zone") return status;
+  return "unknown";
 }
 
 export function zoneStatusLabelKey(

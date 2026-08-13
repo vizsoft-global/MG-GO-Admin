@@ -4,6 +4,8 @@ import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { haversineMeters } from "@/features/locations/location-status";
+import { formatBatteryLevel } from "@/features/live-tracking/tracking-metrics";
+import { pickupDeliveryDistanceMeters } from "./delivery-gps-audit";
 import type { DriverLocationEvent } from "@/features/locations/types";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +55,14 @@ export function DeliveryGpsAuditPanel({
   const referenceLat = deliveredLat ?? cancelLat ?? null;
   const referenceLng = deliveredLng ?? cancelLng ?? null;
 
+  const tripMeters = pickupDeliveryDistanceMeters(
+    { lat: pickupLat, lng: pickupLng },
+    {
+      lat: deliveredLat ?? cancelLat ?? null,
+      lng: deliveredLng ?? cancelLng ?? null,
+    },
+  );
+
   const divergenceM =
     event && referenceLat != null && referenceLng != null
       ? haversineMeters(event.latitude, event.longitude, referenceLat, referenceLng)
@@ -101,10 +111,10 @@ export function DeliveryGpsAuditPanel({
         {event ? (
           <CoordRow label={t("trackingCoords")} lat={event.latitude} lng={event.longitude} />
         ) : null}
-        {divergenceM != null ? (
+        {tripMeters != null ? (
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">{t("divergence")}</dt>
-            <dd>{Math.round(divergenceM)} m</dd>
+            <dd>{Math.round(tripMeters)} m</dd>
           </div>
         ) : null}
         {event ? (
@@ -117,7 +127,7 @@ export function DeliveryGpsAuditPanel({
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-muted-foreground">{t("battery")}</dt>
-              <dd>{event.batteryPct != null ? `${event.batteryPct}%` : "—"}</dd>
+              <dd>{formatBatteryLevel(event.batteryPct)}</dd>
             </div>
             {event.headingDeg != null ? (
               <div className="flex justify-between gap-3">

@@ -39,10 +39,12 @@ function averageCenter(points: DeliveryMapPoint[]): { lat: number; lng: number }
 
 function DeliveryMapCanvas({
   points,
+  path,
   mapHeightClass,
   showZoomControl,
 }: {
   points: DeliveryMapPoint[];
+  path?: Array<{ lat: number; lng: number }>;
   mapHeightClass: string;
   showZoomControl: boolean;
 }) {
@@ -59,6 +61,7 @@ function DeliveryMapCanvas({
   );
 
   const pointsKey = JSON.stringify(points);
+  const pathKey = JSON.stringify(path ?? []);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +80,9 @@ function DeliveryMapCanvas({
 
       const bounds = new google.maps.LatLngBounds();
       for (const p of points) {
+        bounds.extend({ lat: p.lat, lng: p.lng });
+      }
+      for (const p of path ?? []) {
         bounds.extend({ lat: p.lat, lng: p.lng });
       }
 
@@ -118,7 +124,11 @@ function DeliveryMapCanvas({
       }
 
       const routePoints = points.filter((p) => p.kind !== "live");
-      if (routePoints.length >= 2 && "Polyline" in google.maps) {
+      const traveled =
+        path && path.length >= 2
+          ? path
+          : routePoints.map((p) => ({ lat: p.lat, lng: p.lng }));
+      if (traveled.length >= 2 && "Polyline" in google.maps) {
         const Polyline = (
           google.maps as unknown as {
             Polyline: new (opts: {
@@ -131,7 +141,7 @@ function DeliveryMapCanvas({
           }
         ).Polyline;
         const polyline = new Polyline({
-          path: routePoints.map((p) => ({ lat: p.lat, lng: p.lng })),
+          path: traveled,
           geodesic: true,
           strokeColor: MAP_COLORS.routeStroke,
           strokeOpacity: 0.8,
@@ -154,7 +164,7 @@ function DeliveryMapCanvas({
     return () => {
       cancelled = true;
     };
-  }, [pointsKey, points, showZoomControl, t]);
+  }, [pointsKey, pathKey, points, path, showZoomControl, t]);
 
   useEffect(() => {
     return () => {
@@ -190,11 +200,13 @@ function DeliveryMapCanvas({
 
 export function DeliveryLocationMap({
   points,
+  path,
   className,
   mapHeightClass = "h-[200px]",
   expandable = false,
 }: {
   points: DeliveryMapPoint[];
+  path?: Array<{ lat: number; lng: number }>;
   className?: string;
   mapHeightClass?: string;
   expandable?: boolean;
@@ -250,6 +262,7 @@ export function DeliveryLocationMap({
         </div>
         <DeliveryMapCanvas
           points={points}
+          path={path}
           mapHeightClass={mapHeightClass}
           showZoomControl={false}
         />
@@ -264,6 +277,7 @@ export function DeliveryLocationMap({
             <div className="min-h-0 flex-1 overflow-hidden p-4">
               <DeliveryMapCanvas
                 points={points}
+                path={path}
                 mapHeightClass="h-[min(70vh,640px)]"
                 showZoomControl
               />

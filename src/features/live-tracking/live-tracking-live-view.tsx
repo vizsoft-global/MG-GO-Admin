@@ -199,7 +199,7 @@ export function LiveTrackingLiveView({
   const filtered = useMemo(() => {
     return liveDrivers.filter((loc) => {
       const meta = profileMeta.get(loc.driverId);
-      if (!matchesLiveTrackingFilters(loc, filters, meta, zoneShapes)) return false;
+      if (!matchesLiveTrackingFilters(loc, filters, meta, zoneShapes, nowTick)) return false;
       const status = fleetStatusFromLocation({
         pinStatus: loc.pinStatus,
         trackingStatus: loc.trackingStatus,

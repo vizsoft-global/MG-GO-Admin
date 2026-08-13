@@ -350,7 +350,7 @@ export function DriversFiltersDialog({
               variant="outline"
               className="h-9 cursor-pointer"
               onClick={() => {
-                onApply(DEFAULT_DRIVERS_FILTERS);
+                onApply({ ...DEFAULT_DRIVERS_FILTERS });
                 onOpenChange(false);
               }}
             >

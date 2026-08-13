@@ -4,12 +4,12 @@ import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, BatteryLow, Gauge, Timer } from "lucide-react";
 import type { DriverLiveLocation } from "@/features/locations/types";
+import { isGpsLive, normalizeBatteryPct } from "@/features/locations/location-status";
 import { liveListStatus } from "./tracking-status";
 import { INSIGHTS_GRID_CLASS } from "./live-tracking-density";
 import { cn } from "@/lib/utils";
 import { TrackingGlassCard } from "./tracking-shell";
-
-const OVERSPEED_KMH = 80;
+import { isOverspeeding } from "./tracking-metrics";
 
 export function TrackingInsightsPanel({
   drivers,
@@ -23,15 +23,16 @@ export function TrackingInsightsPanel({
   const t = useTranslations("pages.liveTracking");
 
   const insights = useMemo(() => {
-    const overspeed = drivers.filter(
-      (d) => d.speedMps != null && d.speedMps * 3.6 > OVERSPEED_KMH,
-    ).length;
+    const overspeed = drivers.filter((d) => isOverspeeding(d.speedMps)).length;
     const idle = drivers.filter((d) => liveListStatus(d) === "idle").length;
-    const batteryLow = drivers.filter(
-      (d) => d.batteryPct != null && d.batteryPct < 20,
-    ).length;
+    const batteryLow = drivers.filter((d) => {
+      const pct = normalizeBatteryPct(d.batteryPct);
+      return pct != null && pct < 20;
+    }).length;
     const gpsAlerts = drivers.filter((d) => d.pinStatus === "alert").length;
-    const outOfZone = drivers.filter((d) => d.zoneStatus === "out_of_zone").length;
+    const outOfZone = drivers.filter(
+      (d) => isGpsLive(d.lastSeenAt) && d.zoneStatus === "out_of_zone",
+    ).length;
 
     return [
       {

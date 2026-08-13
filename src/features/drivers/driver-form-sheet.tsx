@@ -23,6 +23,7 @@ import {
   type DriverFormField,
 } from "./driver-form-validation";
 import { createDriverIntake, getDriverUploadStorageStatus, updateDriverIntake } from "./drivers-actions";
+import { workflowFromAccountStatus } from "./driver-operations-status";
 import {
   DOCUMENT_TYPES,
   EMPTY_DOCUMENT_EXPIRY,
@@ -180,7 +181,11 @@ export function DriverFormSheet({
       setRestaurantIds(activeDriver.restaurant_ids);
       setZoneId(activeDriver.zone_id ?? "");
       setVehicleId(activeDriver.vehicle_id ?? NONE_VEHICLE);
-      setWorkflowStatus(activeDriver.workflow_status);
+      setWorkflowStatus(
+        activeDriver.linked || activeDriver.linked_profile_id
+          ? workflowFromAccountStatus(activeDriver.account_status)
+          : activeDriver.workflow_status,
+      );
       setDocuments(EMPTY_DOCS);
       setDocumentExpiries(EMPTY_EXPIRIES);
       setRemoteDocuments({});
@@ -607,7 +612,9 @@ export function DriverFormSheet({
               <DriverFormOperationsCard
                 workflowStatus={workflowStatus}
                 onWorkflowStatusChange={setWorkflowStatus}
-                linked={Boolean(isEdit && activeDriver?.linked)}
+                linked={Boolean(
+                  isEdit && (activeDriver?.linked || activeDriver?.linked_profile_id),
+                )}
                 catalogItems={assetCatalog}
                 selectedCatalogIds={selectedCatalogIds}
                 onToggleCatalogItem={(catalogItemId) =>

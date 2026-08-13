@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { LIVE_GPS_MAX_AGE_MS, derivePinStatus, isGpsLive, shouldShowOnLiveMap } from "./location-status";
+import {
+  LIVE_GPS_MAX_AGE_MS,
+  derivePinStatus,
+  isGpsLive,
+  liveLocationPayloadChanged,
+  shouldShowOnLiveMap,
+} from "./location-status";
 
 const NOW = Date.parse("2026-08-13T09:00:00.000Z");
 
@@ -53,6 +59,70 @@ describe("derivePinStatus", () => {
         speedMps: 8,
       }),
       "idle",
+    );
+  });
+
+  it("keeps Idle yellow — stale-but-still-live GPS is not Alert red", () => {
+    assert.equal(
+      derivePinStatus({
+        zoneStatus: "in_zone",
+        trackingStatus: "idle",
+        lastSeenAt: isoMinutesAgo(3),
+        isOnDuty: true,
+        speedMps: 0,
+      }),
+      "idle",
+    );
+  });
+
+  it("uses Alert only for a live out-of-zone pin", () => {
+    assert.equal(
+      derivePinStatus({
+        zoneStatus: "out_of_zone",
+        trackingStatus: "idle",
+        lastSeenAt: new Date(Date.now() - 10_000).toISOString(),
+        isOnDuty: true,
+        speedMps: 0,
+      }),
+      "alert",
+    );
+  });
+});
+
+describe("liveLocationPayloadChanged", () => {
+  const base = {
+    latitude: 29.3759,
+    longitude: 47.9774,
+    trackingStatus: "idle" as const,
+    zoneStatus: "in_zone" as const,
+    pinStatus: "idle" as const,
+    isOnDuty: true,
+    isBlocked: false,
+    speedMps: 0,
+    batteryPct: 80,
+    lastSeenAt: "2026-08-13T09:00:00.000Z",
+  };
+
+  it("notifies on any coordinate or last-seen change so the map pin can travel", () => {
+    assert.equal(liveLocationPayloadChanged(undefined, base), true);
+    assert.equal(liveLocationPayloadChanged(base, base), false);
+    assert.equal(
+      liveLocationPayloadChanged(base, { ...base, latitude: 29.376 }),
+      true,
+    );
+    assert.equal(
+      liveLocationPayloadChanged(base, {
+        ...base,
+        lastSeenAt: "2026-08-13T09:00:05.000Z",
+      }),
+      true,
+    );
+    assert.equal(
+      liveLocationPayloadChanged(base, {
+        ...base,
+        trackingStatus: "moving",
+      }),
+      true,
     );
   });
 });

@@ -13,7 +13,11 @@ import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
-import { restaurantSyncPlan } from "./restaurant-sync-plan";
+import {
+  accountStatusToRestoreAfterRestaurantSync,
+  restaurantSyncPlan,
+} from "./restaurant-sync-plan";
+import { accountStatusToSyncFromOperations } from "./driver-operations-status";
 import { civilIdExists, employeeIdExists } from "./driver-uniqueness";
 import {
   allDriverAvatarKeys,
@@ -953,12 +957,15 @@ export async function updateDriverIntake(
   const existing = existingResp.data;
   if (!existing) return { error: "save_failed" };
 
+  let currentAccountStatus: DriverAccountStatus | null = null;
   if (existing.linked_profile_id) {
     const { data: linkedDriver } = await supabase
       .from("drivers")
       .select("status")
       .eq("id", existing.linked_profile_id)
       .maybeSingle();
+
+    currentAccountStatus = (linkedDriver?.status as DriverAccountStatus | null) ?? null;
 
     if (linkedDriver?.status === "active") {
       if (restaurantIds.length === 0) {
@@ -1077,6 +1084,40 @@ export async function updateDriverIntake(
     const driverUpdateResp = results[2];
     if (driverUpdateResp.error) {
       return { error: mapDriverDbError(driverUpdateResp.error, "employee_id") };
+    }
+
+    const nextAccount = accountStatusToSyncFromOperations({
+      linked: true,
+      currentAccountStatus,
+      operationsWorkflow: resolvedWorkflowStatus,
+    });
+    const { data: afterSync } = await supabase
+      .from("drivers")
+      .select("status")
+      .eq("id", linkedProfileId)
+      .maybeSingle();
+    const restoreAccount = accountStatusToRestoreAfterRestaurantSync({
+      statusBefore: currentAccountStatus,
+      intended: nextAccount,
+      statusNow: (afterSync?.status as DriverAccountStatus | null) ?? null,
+    });
+    const writeAccount = nextAccount ?? restoreAccount;
+    if (writeAccount) {
+      const { data: statusData, error: statusError } = await supabase.rpc(
+        "set_driver_account_status",
+        {
+          p_driver_id: linkedProfileId,
+          p_status: writeAccount,
+        },
+      );
+      if (statusError) return { error: "save_failed" };
+      const payload = (statusData ?? {}) as { ok?: boolean; error?: string };
+      if (!payload.ok) {
+        if (payload.error === "driver_missing_active_restaurant") {
+          return { error: "missing_active_restaurant" };
+        }
+        return { error: "save_failed" };
+      }
     }
 
     if (profileAvatarPath !== undefined) {

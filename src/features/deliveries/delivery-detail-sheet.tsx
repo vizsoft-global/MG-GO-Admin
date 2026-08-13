@@ -16,7 +16,10 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { proofFilenameFromKey } from "@/lib/storage/order-proof-url";
+import {
+  proofDownloadHref,
+  proofFilenameFromKey,
+} from "@/lib/storage/order-proof-url";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import {
@@ -34,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusPill } from "@/components/dashboard/status-pill";
+import { displayExternalOrderId } from "./order-id";
 import { cn } from "@/lib/utils";
 import { selectOptionsFrom } from "@/lib/select-items";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -102,7 +106,10 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 
 async function fetchDeliveryGpsFromApi(
   deliveryId: string,
-): Promise<{ gpsEvent: import("@/features/locations/types").DriverLocationEvent | null }> {
+): Promise<{
+  gpsEvent: import("@/features/locations/types").DriverLocationEvent | null;
+  trail?: Array<{ lat: number; lng: number }>;
+}> {
   const res = await fetch(`/api/deliveries/${deliveryId}/gps`, {
     credentials: "same-origin",
   });
@@ -110,6 +117,9 @@ async function fetchDeliveryGpsFromApi(
   if (!res.ok) throw new Error("gps_failed");
   return res.json();
 }
+
+const PROOF_ICON_BTN_CLASS =
+  "shrink-0 cursor-pointer rounded-lg text-primary hover:bg-primary/10 hover:text-primary";
 
 function DeliveryProofColumn({
   objectKey,
@@ -139,32 +149,33 @@ function DeliveryProofColumn({
   }, [trimmedKey, displayUrl]);
 
   const filename = proofFilenameFromKey(objectKey) ?? t("proofImage");
+  const downloadHref = proofDownloadHref(trimmedKey);
   const isImage = contentType?.startsWith("image/") || (!contentType && displayUrl);
   const isPdf = contentType === "application/pdf";
 
   const actionButtons =
     openUrl && trimmedKey ? (
       <div className="flex shrink-0 gap-1">
+        {downloadHref ? (
+          <Button
+            variant="outline"
+            size="icon-lg"
+            className={PROOF_ICON_BTN_CLASS}
+            render={
+              <a
+                href={downloadHref}
+                download={filename}
+                aria-label={t("proofDownload")}
+              />
+            }
+          >
+            <Download className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
         <Button
           variant="outline"
           size="icon-lg"
-          className="shrink-0 cursor-pointer rounded-lg"
-          render={
-            <a
-              href={openUrl}
-              download={filename}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={t("proofDownload")}
-            />
-          }
-        >
-          <Download className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon-lg"
-          className="shrink-0 cursor-pointer rounded-lg text-primary hover:bg-primary/10"
+          className={PROOF_ICON_BTN_CLASS}
           render={
             <a
               href={openUrl}
@@ -305,6 +316,9 @@ export type DeliveryDetailNavigation = {
   isLoadingNext?: boolean;
   positionLabel?: string;
 };
+
+const DETAIL_NAV_BTN_CLASS =
+  "pointer-events-auto absolute top-1/2 z-[1102] size-9 -translate-y-1/2 cursor-pointer rounded-full border border-border bg-background shadow-md active:!translate-y-[-50%] disabled:opacity-40";
 
 export function DeliveryDetailSheet({
   delivery,
@@ -477,8 +491,8 @@ export function DeliveryDetailSheet({
       return;
     }
     toast.success(t("statusChangeSuccess"));
-    await onUpdated?.();
     onClose();
+    void onUpdated?.();
   };
 
   const handleDelete = async () => {
@@ -495,8 +509,8 @@ export function DeliveryDetailSheet({
     }
     toast.success(t("deleteSuccess"));
     setDeleteOpen(false);
-    onUpdated?.();
     onClose();
+    void onUpdated?.();
   };
 
   return (
@@ -513,10 +527,7 @@ export function DeliveryDetailSheet({
               type="button"
               variant="outline"
               size="icon-sm"
-              className={cn(
-                "pointer-events-auto absolute top-1/2 z-[1102] start-2 size-9 -translate-y-1/2 cursor-pointer rounded-full border border-border bg-background/95 shadow-md backdrop-blur-sm active:!translate-y-[-50%]",
-                (!navigation.hasPrevious || isBusy) && "opacity-50",
-              )}
+              className={cn(DETAIL_NAV_BTN_CLASS, "start-2 sm:-start-12")}
               onClick={navigation.onPrevious}
               disabled={!navigation.hasPrevious || isBusy}
               aria-label={t("detailPrevious")}
@@ -527,10 +538,7 @@ export function DeliveryDetailSheet({
               type="button"
               variant="outline"
               size="icon-sm"
-              className={cn(
-                "pointer-events-auto absolute top-1/2 z-[1102] end-2 size-9 -translate-y-1/2 cursor-pointer rounded-full border border-border bg-background/95 shadow-md backdrop-blur-sm active:!translate-y-[-50%]",
-                (!navigation.hasNext || navigation.isLoadingNext || isBusy) && "opacity-50",
-              )}
+              className={cn(DETAIL_NAV_BTN_CLASS, "end-2 sm:-end-12")}
               onClick={navigation.onNext}
               disabled={
                 !navigation.hasNext || navigation.isLoadingNext || isBusy
@@ -562,8 +570,8 @@ export function DeliveryDetailSheet({
                     <DetailRow
                       label={t("colOrderId")}
                       value={
-                        <span className="font-mono tabular-nums">
-                          {delivery.external_order_id}
+                        <span className="max-w-[12rem] truncate font-mono tabular-nums">
+                          {displayExternalOrderId(delivery.external_order_id)}
                         </span>
                       }
                     />
@@ -843,6 +851,7 @@ export function DeliveryDetailSheet({
                   {mapPoints.length > 0 ? (
                     <DeliveryLocationMap
                       points={mapPoints}
+                      path={gpsAudit?.trail}
                       mapHeightClass="h-40 md:h-48"
                       expandable
                     />

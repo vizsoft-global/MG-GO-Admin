@@ -264,6 +264,34 @@ export async function copyObject(sourceKey: string, destKey: string): Promise<vo
   );
 }
 
+export async function getObjectBytes(
+  key: string,
+): Promise<{ bytes: Uint8Array; contentType?: string } | null> {
+  try {
+    const s3 = await getR2Client();
+    const bucket = await getR2BucketName();
+    const res = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+    );
+    const bytes = await res.Body?.transformToByteArray();
+    if (!bytes) return null;
+    return { bytes, contentType: res.ContentType };
+  } catch (e) {
+    const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (
+      err.name === "NoSuchKey" ||
+      err.name === "NotFound" ||
+      err.$metadata?.httpStatusCode === 404
+    ) {
+      return null;
+    }
+    throw e;
+  }
+}
+
 export async function getPresignedGetUrl(
   key: string,
   expiresInSeconds = DEFAULT_PRESIGN_SECONDS,

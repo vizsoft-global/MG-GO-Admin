@@ -4,6 +4,7 @@ import { buildPolygonFeature } from "@/lib/geo/zone-geometry";
 import {
   DEFAULT_LIVE_TRACKING_FILTERS,
   matchesLiveTrackingFilters,
+  resetLiveTrackingFilters,
   type LiveTrackingFilterState,
 } from "./live-tracking-filters";
 
@@ -30,6 +31,7 @@ function loc(overrides: Record<string, unknown> = {}) {
     driverName: "Ali",
     driverCode: "10084",
     isOnDuty: true,
+    isBlocked: false,
     trackingStatus: "idle" as const,
     pinStatus: "idle" as const,
     batteryPct: 80,
@@ -98,6 +100,97 @@ describe("matchesLiveTrackingFilters zone", () => {
   });
 });
 
+describe("matchesLiveTrackingFilters status chips", () => {
+  const meta = { zoneId: null, partnerId: null, zoneName: null };
+
+  it("hides every driver when no status chip is selected", () => {
+    assert.equal(
+      matchesLiveTrackingFilters(loc(), filters({ statusChips: [] }), meta, zoneShapes, NOW),
+      false,
+    );
+  });
+
+  it("shows a GPS-live idle on-duty driver when only Online is selected", () => {
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ isOnDuty: true, trackingStatus: "idle", speedMps: 0 }),
+        filters({ statusChips: ["online"] }),
+        meta,
+        zoneShapes,
+        NOW,
+      ),
+      true,
+    );
+  });
+
+  it("hides a logged-out driver when only Online is selected", () => {
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ isOnDuty: false, trackingStatus: "moving", speedMps: 8 }),
+        filters({ statusChips: ["online"] }),
+        meta,
+        zoneShapes,
+        NOW,
+      ),
+      false,
+    );
+  });
+
+  it("shows an on-duty driver when only On duty is selected", () => {
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ isOnDuty: true, trackingStatus: "idle", speedMps: 0 }),
+        filters({ statusChips: ["on_duty"] }),
+        meta,
+        zoneShapes,
+        NOW,
+      ),
+      true,
+    );
+  });
+
+  it("hides a logged-out driver when only On duty is selected", () => {
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ isOnDuty: false, trackingStatus: "idle" }),
+        filters({ statusChips: ["on_duty"] }),
+        meta,
+        zoneShapes,
+        NOW,
+      ),
+      false,
+    );
+  });
+
+  it("hides a stale-GPS on-duty driver when only Online is selected", () => {
+    const stale = new Date(NOW - 10 * 60 * 1000).toISOString();
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ isOnDuty: true, lastSeenAt: stale, trackingStatus: "idle" }),
+        filters({ statusChips: ["online"] }),
+        meta,
+        zoneShapes,
+        NOW,
+      ),
+      false,
+    );
+  });
+
+  it("shows a stale-GPS on-duty driver when only On duty is selected", () => {
+    const stale = new Date(NOW - 10 * 60 * 1000).toISOString();
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ isOnDuty: true, lastSeenAt: stale, trackingStatus: "idle" }),
+        filters({ statusChips: ["on_duty"] }),
+        meta,
+        zoneShapes,
+        NOW,
+      ),
+      true,
+    );
+  });
+});
+
 describe("matchesLiveTrackingFilters offline chip", () => {
   it("shows logged-out drivers when every status chip is selected", () => {
     assert.equal(
@@ -121,5 +214,55 @@ describe("matchesLiveTrackingFilters offline chip", () => {
       ),
       false,
     );
+  });
+
+  it("does not treat GPS-lost or blocked drivers as Idle", () => {
+    const stale = new Date(Date.now() - 9 * 60_000).toISOString();
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ lastSeenAt: stale, trackingStatus: "idle" }),
+        filters({ statusChips: ["idle"] }),
+        { zoneId: null, partnerId: null, zoneName: null },
+        zoneShapes,
+      ),
+      false,
+    );
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ isBlocked: true, trackingStatus: "moving", speedMps: 8 }),
+        filters({ statusChips: ["idle"] }),
+        { zoneId: null, partnerId: null, zoneName: null },
+        zoneShapes,
+      ),
+      false,
+    );
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ isBlocked: true, trackingStatus: "moving", speedMps: 8 }),
+        filters({ statusChips: ["offline"] }),
+        { zoneId: null, partnerId: null, zoneName: null },
+        zoneShapes,
+      ),
+      true,
+    );
+  });
+});
+
+describe("resetLiveTrackingFilters", () => {
+  it("clears search, zone, partner, battery, gps, and restores every status chip", () => {
+    const dirty: LiveTrackingFilterState = {
+      search: "ali",
+      zoneId: "zone-kuwait",
+      partnerId: "partner-1",
+      trackingStatus: "idle",
+      onDutyOnly: true,
+      statusChips: ["idle"],
+      batteryLevel: "low",
+      gpsSignal: "weak",
+    };
+    const reset = resetLiveTrackingFilters();
+    assert.deepEqual(reset, DEFAULT_LIVE_TRACKING_FILTERS);
+    assert.notEqual(reset.statusChips, dirty.statusChips);
+    assert.notEqual(reset, dirty);
   });
 });
