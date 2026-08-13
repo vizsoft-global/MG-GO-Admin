@@ -520,7 +520,7 @@ Screens go in `context.screen` (`delivery_list`, `pickup_form`, `profile`), whic
 
 Stripped keys are recorded in `context_stripped_keys` and shown in Admin, so a build sending the wrong shape is visible rather than silently lossy. `context` must be ≤ 1024 chars after sanitising, or the event is rejected.
 
-**Queue:** bounded FIFO, cap 2000, drop oldest on overflow and emit `queue.created` with `dropped: n`. Persist across restarts. Flush on: app foreground, network restored, queue ≥ 50, and a 60s timer. Never flush per event.
+**Queue:** bounded FIFO, cap 2000, drop oldest on overflow and emit `queue.created` with `dropped: n` (at most one such notice per flush cycle, and a drop caused by writing the notice itself is not counted — otherwise a permanently full queue would keep reporting itself). Persist across restarts. Flush on: app background, app foreground, network restored, login/auth transition, queue ≥ 25, and a 60s timer. Never flush per event. Background *and* foreground both flush: background drains before the process can be killed, foreground picks up what a kill left behind.
 
 **Response — the RPC returns a result object instead of raising, so you can tell "drop this" from "retry later":**
 
