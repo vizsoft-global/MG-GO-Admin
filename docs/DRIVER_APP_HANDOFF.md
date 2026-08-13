@@ -483,6 +483,66 @@ Retention: 90 days (`app_settings.driver_operation_events_retention_days`), trim
 
 ---
 
+## 6c. Client telemetry (`driver_ingest_telemetry`) — app work required
+
+Unlike 6b, this one is yours to build. It is the only stream the app authors itself, so it is allowlisted and sanitised server-side; it is **additive and best-effort** — a telemetry failure must never surface to the driver, block an action, or retry hard enough to be noticed.
+
+```dart
+final res = await supabase.rpc('driver_ingest_telemetry', params: {'p_events': batch});
+```
+
+One call, ≤ 100 events. Never one call per event. `driver_id` is taken from the rider JWT — sending one in the body is ignored, not an error.
+
+**Per event:** `event_id` (UUID v4 generated at enqueue — this is the idempotency key, so a retried batch inserts nothing twice), `event_name` (from the table below), `client_ts` (**stamped at enqueue, not at flush** — otherwise the offline timeline collapses onto the reconnect moment), and optionally `session_id`, `correlation_id`, `platform`, `os_version`, `device_model`, `app_version_name`, `app_version_code`, `network_state`, `severity`, `context`.
+
+**Events and the context keys each one accepts:**
+
+| event | context keys |
+|---|---|
+| `app.startup` | `cold_start`, `boot_ms` |
+| `app.foreground` / `app.background` | `screen`, `duration_ms` |
+| `app.client_info` | `platform`, `os_version`, `device_model`, `app_version_name`, `app_version_code`, `locale` |
+| `screen.open` | `screen`, `from_screen`, `load_ms` |
+| `action.tap` | `action`, `screen`, `result` |
+| `permission.location_granted` / `.location_denied` / `.notification_granted` / `.notification_denied` / `.camera_denied` | `status`, `screen`, `is_permanent`, `attempt` |
+| `network.offline` / `network.online` | `network_state`, `offline_ms` |
+| `queue.created` | `queue`, `depth`, `dropped`, `reason` |
+| `queue.flushed` | `queue`, `depth`, `batch_count`, `flush_ms`, `reason` |
+| `client.error` | `code`, `screen`, `http_status`, `retryable` |
+
+Screens go in `context.screen` (`delivery_list`, `pickup_form`, `profile`), which is why there is no `delivery_screen.open` event — the name list is fixed so the app can add screens without a migration. `action.tap` is for decision-grade taps only: clock in/out, pickup submit, finish submit, retry, sign out. Not scrolls, not renders, not keystrokes.
+
+**Do not emit telemetry for a business operation.** `duty.on`, `duty.off`, `delivery.pickup_create`, `delivery.complete`, `delivery.cancel`, `request.acknowledge`, `esign.sign` are already recorded server-side by 6b and are the source of truth. Telemetry describes the *context* around them.
+
+**The context contract is enforced in SQL, so an unknown key is silently stripped rather than stored.** Values must be JSON scalars — a nested object or array is dropped, which is deliberately what prevents a stack trace, a headers map or a request body from landing. Strings are truncated at 120 chars, and `screen`, `from_screen`, `action`, `code`, `queue`, `reason`, `result`, `status`, `network_state` must match `^[a-z][a-z0-9_.-]{0,63}$`. A key whose name contains `token`, `password`, `passcode`, `secret`, `jwt`, `phone`, `civil`, `address`, `email`, `stack`, `message`, `header`, `body`, `auth` (and `pin`, `otp`, `lat`, `lng`, `iban`, `dob` as whole words) is stripped even if it is otherwise allowlisted.
+
+**`client.error` takes a code, never a message.** There is no `message` key and no `stack` key. Send `code: 'upload_failed'`, the screen, and optionally `http_status`. Full errors belong in the app's crash reporter, not here.
+
+Stripped keys are recorded in `context_stripped_keys` and shown in Admin, so a build sending the wrong shape is visible rather than silently lossy. `context` must be ≤ 1024 chars after sanitising, or the event is rejected.
+
+**Queue:** bounded FIFO, cap 2000, drop oldest on overflow and emit `queue.created` with `dropped: n`. Persist across restarts. Flush on: app foreground, network restored, queue ≥ 50, and a 60s timer. Never flush per event.
+
+**Response — the RPC returns a result object instead of raising, so you can tell "drop this" from "retry later":**
+
+```json
+{"ok":true,"accepted":8,"duplicates":1,"rejected":1,"throttled":false,
+ "rejects":[{"event_id":"…","reason":"unknown_event"}]}
+```
+
+| response | what to do |
+|---|---|
+| `ok:false, error:'not_authenticated'` | keep the queue, flush after login |
+| `ok:false, error:'batch_too_large'` / `'invalid_payload'` | client bug: split or fix, do not loop |
+| `ok:true, throttled:true` | **clear the batch and stop** — the hourly quota is closed, retrying only burns battery |
+| an entry in `rejects[]` | delete that event permanently (`unknown_event`, `client_ts_out_of_range`, `context_too_large`, `event_id_required`) |
+| network / 5xx | backoff 5s → 15s → 60s → 300s, then wait for the next trigger |
+
+Caps: 100 events per call, 1024-char context, `client_ts` within ±7 days of server time, and 2000 events/hour per driver (`app_settings.driver_telemetry_max_events_per_hour`).
+
+Admin can turn any of this off without an app release — deactivate one event, revoke a context key, or set the hourly quota to 0. All three arrive as `throttled` or a reject reason, so the app must treat "told to stop" as normal, not as an error. The app has no read, update or delete access to telemetry: there is no RLS policy granting it, for its own rows or anyone's. Details in [`docs/DRIVER_TELEMETRY.md`](DRIVER_TELEMETRY.md).
+
+---
+
 ## 7. Push notifications (Notification Center v2)
 
 Admin now sends via `notification_campaigns` + `notification_dispatch_items` (FCM provider), not direct inserts to legacy `notifications`.

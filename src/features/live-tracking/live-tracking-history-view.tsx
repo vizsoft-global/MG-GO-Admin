@@ -73,10 +73,12 @@ export function LiveTrackingHistoryView({
   activeTab,
   onTabChange,
   showActivityTab,
+  showDiagnosticsTab,
 }: {
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
   showActivityTab?: boolean;
+  showDiagnosticsTab?: boolean;
 }) {
   const t = useTranslations("pages.liveTracking");
   const locale = useLocale();
@@ -274,6 +276,7 @@ export function LiveTrackingHistoryView({
                 value={activeTab}
                 onChange={onTabChange}
                 showActivity={showActivityTab}
+                showDiagnostics={showDiagnosticsTab}
                 className="mb-2"
               />
               <HistorySummaryKpis summary={summary} loading={isLoading} />

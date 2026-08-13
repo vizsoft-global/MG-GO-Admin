@@ -28,6 +28,16 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     label: "Export driver app activity",
     category: "drivers",
   },
+  {
+    slug: "driver_telemetry.view",
+    label: "View driver app diagnostics",
+    category: "drivers",
+  },
+  {
+    slug: "driver_telemetry.export",
+    label: "Export driver app diagnostics",
+    category: "drivers",
+  },
   { slug: "partners.view", label: "View partners", category: "partners" },
   { slug: "partners.manage", label: "Manage partners", category: "partners" },
   { slug: "restaurants.view", label: "View restaurants", category: "restaurants" },

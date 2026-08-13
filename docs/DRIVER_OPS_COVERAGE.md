@@ -99,7 +99,7 @@ These produce no row, on purpose. Each one is a decision, not an oversight.
 
 **6. No-op writes** — marking an already-read notification, or reporting an unchanged app version. These are chatter, and logging them would bury real state changes.
 
-**7. Client-side telemetry** — screen views, taps, offline queue depth, permission prompts. Phase 3, not built. Nothing here depends on it.
+**7. Client-side telemetry** — screen views, decision-grade taps, offline queue depth, permission prompts, app foreground/background. Still excluded from *this* stream, and now for a sharper reason than "not built": these are client-authored, so they cannot be trusted the way a server-authored operation row can, and their volume is an order of magnitude higher. They live in `driver_telemetry_events` with their own allowlist, sanitiser, 14-day retention and Admin tab, and no realtime — see [`docs/DRIVER_TELEMETRY.md`](DRIVER_TELEMETRY.md). Deliberately **no** telemetry mirror of any operation listed above: `duty.*`, `delivery.*`, `request.*` and `esign.*` remain server-authored here and are the single source of truth. Nothing in this stream depends on telemetry, and Diagnostics can overlay operations onto a telemetry timeline read-only.
 
 ---
 
@@ -117,8 +117,9 @@ It does nonetheless retain `USAGE` on `public`, because that is granted to the `
 |---|---|---|
 | `driver_operation_events` | `app_settings.driver_ops_log_retention_days` | 90 |
 | `driver_location_events` | `app_settings.driver_location_events_retention_days` | 180 |
+| `driver_telemetry_events` | `app_settings.driver_telemetry_retention_days` | 14 |
 
-`/api/cron/driver-ops-retention` runs daily at 01:20, trims both, and reports the audit health probe.
+`/api/cron/driver-ops-retention` runs daily at 01:20, trims the first two, and reports the audit health probe. Telemetry is trimmed by its own cron at 01:40 so that a telemetry failure can never hide the audit health probe.
 
 ## Known behaviour, not a defect
 

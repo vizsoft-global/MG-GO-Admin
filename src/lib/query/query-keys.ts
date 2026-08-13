@@ -43,6 +43,10 @@ export const queryKeys = {
       ["live-tracking", "operation-categories", filters] as const,
     driverOperations: (driverId: string, limit: number) =>
       ["live-tracking", "driver-operations", driverId, limit] as const,
+    telemetry: (filters: Record<string, unknown> = {}) =>
+      ["live-tracking", "telemetry", filters] as const,
+    telemetrySummary: (filters: Record<string, unknown> = {}) =>
+      ["live-tracking", "telemetry-summary", filters] as const,
   },
   partners: {
     all: () => ["partners"] as const,

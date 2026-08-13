@@ -39,6 +39,7 @@ export function FleetOverviewPanel({
   activeTab,
   onTabChange,
   showActivityTab,
+  showDiagnosticsTab,
   avatarByDriverId,
   className,
 }: {
@@ -57,6 +58,7 @@ export function FleetOverviewPanel({
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
   showActivityTab?: boolean;
+  showDiagnosticsTab?: boolean;
   avatarByDriverId?: Map<string, string | null>;
   className?: string;
 }) {
@@ -147,6 +149,7 @@ export function FleetOverviewPanel({
           value={activeTab}
           onChange={onTabChange}
           showActivity={showActivityTab}
+          showDiagnostics={showDiagnosticsTab}
           className="mb-2"
         />
         <div className="grid grid-cols-2 gap-2">

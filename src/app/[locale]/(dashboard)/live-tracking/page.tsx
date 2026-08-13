@@ -22,5 +22,24 @@ export default async function LiveTrackingPage({
     session.isSuperAdmin,
   );
 
-  return <LiveTrackingPageShell canViewActivity={canViewActivity} />;
+  // Diagnostics reads client telemetry, which is a different surface again, so it
+  // has its own slug rather than riding on driver_ops.view.
+  const canViewTelemetry = hasPermissionInSet(
+    session.permissions,
+    "driver_telemetry.view",
+    session.isSuperAdmin,
+  );
+  const canExportTelemetry = hasPermissionInSet(
+    session.permissions,
+    "driver_telemetry.export",
+    session.isSuperAdmin,
+  );
+
+  return (
+    <LiveTrackingPageShell
+      canViewActivity={canViewActivity}
+      canViewTelemetry={canViewTelemetry}
+      canExportTelemetry={canExportTelemetry}
+    />
+  );
 }

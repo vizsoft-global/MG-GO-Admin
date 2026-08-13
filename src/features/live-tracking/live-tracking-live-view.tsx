@@ -60,12 +60,14 @@ export function LiveTrackingLiveView({
   activeTab,
   onTabChange,
   showActivityTab,
+  showDiagnosticsTab,
   onViewDriverActivity,
 }: {
   fullscreen?: boolean;
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
   showActivityTab?: boolean;
+  showDiagnosticsTab?: boolean;
   onViewDriverActivity?: (driverId: string) => void;
 }) {
   const t = useTranslations("pages.liveTracking");
@@ -372,6 +374,7 @@ export function LiveTrackingLiveView({
           activeTab={activeTab}
           onTabChange={onTabChange}
           showActivityTab={showActivityTab}
+          showDiagnosticsTab={showDiagnosticsTab}
         />
       }
       footer={

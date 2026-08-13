@@ -105,11 +105,13 @@ export function LiveTrackingActivityView({
   activeTab,
   onTabChange,
   showActivityTab,
+  showDiagnosticsTab,
   initialDriverId,
 }: {
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
   showActivityTab?: boolean;
+  showDiagnosticsTab?: boolean;
   /** Set when arriving from a driver popup's View all. */
   initialDriverId?: string | null;
 }) {
@@ -256,6 +258,7 @@ export function LiveTrackingActivityView({
               value={activeTab}
               onChange={onTabChange}
               showActivity={showActivityTab}
+              showDiagnostics={showDiagnosticsTab}
               className="mb-2"
             />
             <div className="grid grid-cols-2 gap-2">

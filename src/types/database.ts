@@ -390,6 +390,8 @@ export type Database = {
           driver_app_title: string
           driver_location_events_retention_days: number
           driver_ops_log_retention_days: number
+          driver_telemetry_max_events_per_hour: number
+          driver_telemetry_retention_days: number
           esign_screenshot_default: boolean
           feature_two_stage_delivery: boolean
           font_family: string
@@ -427,6 +429,8 @@ export type Database = {
           driver_app_title?: string
           driver_location_events_retention_days?: number
           driver_ops_log_retention_days?: number
+          driver_telemetry_max_events_per_hour?: number
+          driver_telemetry_retention_days?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           font_family?: string
@@ -464,6 +468,8 @@ export type Database = {
           driver_app_title?: string
           driver_location_events_retention_days?: number
           driver_ops_log_retention_days?: number
+          driver_telemetry_max_events_per_hour?: number
+          driver_telemetry_retention_days?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           font_family?: string
@@ -2561,6 +2567,111 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "drivers"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_telemetry_event_types: {
+        Row: {
+          category: string
+          context_keys: string[]
+          created_at: string
+          is_active: boolean
+          label: string | null
+          name: string
+        }
+        Insert: {
+          category: string
+          context_keys?: string[]
+          created_at?: string
+          is_active?: boolean
+          label?: string | null
+          name: string
+        }
+        Update: {
+          category?: string
+          context_keys?: string[]
+          created_at?: string
+          is_active?: boolean
+          label?: string | null
+          name?: string
+        }
+        Relationships: []
+      }
+      driver_telemetry_events: {
+        Row: {
+          app_version_code: number | null
+          app_version_name: string | null
+          category: string
+          client_ts: string
+          clock_skew_ms: number | null
+          context: Json
+          context_stripped_keys: number
+          correlation_id: string | null
+          device_id: string | null
+          driver_id: string
+          event_id: string
+          event_name: string
+          id: number
+          network_state: string | null
+          platform: string | null
+          server_received_at: string
+          session_id: string | null
+          severity: string
+        }
+        Insert: {
+          app_version_code?: number | null
+          app_version_name?: string | null
+          category: string
+          client_ts: string
+          clock_skew_ms?: number | null
+          context?: Json
+          context_stripped_keys?: number
+          correlation_id?: string | null
+          device_id?: string | null
+          driver_id: string
+          event_id: string
+          event_name: string
+          id?: number
+          network_state?: string | null
+          platform?: string | null
+          server_received_at?: string
+          session_id?: string | null
+          severity?: string
+        }
+        Update: {
+          app_version_code?: number | null
+          app_version_name?: string | null
+          category?: string
+          client_ts?: string
+          clock_skew_ms?: number | null
+          context?: Json
+          context_stripped_keys?: number
+          correlation_id?: string | null
+          device_id?: string | null
+          driver_id?: string
+          event_id?: string
+          event_name?: string
+          id?: number
+          network_state?: string | null
+          platform?: string | null
+          server_received_at?: string
+          session_id?: string | null
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_telemetry_events_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_telemetry_events_event_name_fkey"
+            columns: ["event_name"]
+            isOneToOne: false
+            referencedRelation: "driver_telemetry_event_types"
+            referencedColumns: ["name"]
           },
         ]
       }
@@ -6310,6 +6421,10 @@ export type Database = {
         }
         Returns: Json
       }
+      _telemetry_sanitize_context: {
+        Args: { p_context: Json; p_event_name: string }
+        Returns: Json
+      }
       _zone_geography_from_feature: {
         Args: {
           p_geometry: Json
@@ -6597,6 +6712,10 @@ export type Database = {
         Returns: number
       }
       cleanup_driver_operation_events: {
+        Args: { p_batch?: number; p_keep?: string }
+        Returns: number
+      }
+      cleanup_driver_telemetry_events: {
         Args: { p_batch?: number; p_keep?: string }
         Returns: number
       }
@@ -6905,6 +7024,7 @@ export type Database = {
         Returns: boolean
       }
       driver_heartbeat: { Args: { p_device_id: string }; Returns: Json }
+      driver_ingest_telemetry: { Args: { p_events: Json }; Returns: Json }
       driver_is_within_delivery_range: {
         Args: {
           p_driver_id: string

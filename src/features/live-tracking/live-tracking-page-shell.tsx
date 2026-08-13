@@ -10,12 +10,17 @@ import { Button } from "@/components/ui/button";
 import { LiveTrackingLiveView } from "./live-tracking-live-view";
 import { LiveTrackingHistoryView } from "./live-tracking-history-view";
 import { LiveTrackingActivityView } from "./live-tracking-activity-view";
+import { LiveTrackingDiagnosticsView } from "./live-tracking-diagnostics-view";
 import type { TrackingViewTab } from "./tracking-tab-switcher";
 
 export function LiveTrackingPageShell({
   canViewActivity = false,
+  canViewTelemetry = false,
+  canExportTelemetry = false,
 }: {
   canViewActivity?: boolean;
+  canViewTelemetry?: boolean;
+  canExportTelemetry?: boolean;
 }) {
   const t = useTranslations("pages.liveTracking");
   const [isCommandFullscreen, setIsCommandFullscreen] = useState(false);
@@ -38,6 +43,7 @@ export function LiveTrackingPageShell({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showActivityTab={canViewActivity}
+        showDiagnosticsTab={canViewTelemetry}
         onViewDriverActivity={
           canViewActivity
             ? (driverId) => {
@@ -52,12 +58,23 @@ export function LiveTrackingPageShell({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showActivityTab={canViewActivity}
+        showDiagnosticsTab={canViewTelemetry}
+      />
+    ) : activeTab === "diagnostics" ? (
+      <LiveTrackingDiagnosticsView
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        showActivityTab={canViewActivity}
+        showDiagnosticsTab={canViewTelemetry}
+        canExport={canExportTelemetry}
+        canViewOperations={canViewActivity}
       />
     ) : (
       <LiveTrackingActivityView
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showActivityTab={canViewActivity}
+        showDiagnosticsTab={canViewTelemetry}
         initialDriverId={activityDriverId}
       />
     );
