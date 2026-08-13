@@ -227,6 +227,32 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-13` — **Driver operations tracking.** Append-only `driver_operation_events` (staff SELECT only, in `supabase_realtime`) records every driver-app RPC: auth, device, duty, shift, location/geofence, delivery, requests, e-sign, visits, notifications, profile, security. Two emitters: `log_driver_operation` in-transaction for RPCs that return an error object, and `log_driver_operation_autonomous` over `dblink` for RPCs that `RAISE EXCEPTION` (so `active_pickup_exists`, `delivery_out_of_range`, `duplicate_order_id`, `shift_required` survive the rollback). The autonomous path reads its DSN from vault secret `driver_ops_audit_dsn` and no-ops when it is absent — `driver_ops_audit_health()` reports that, and the retention cron surfaces it to Sentry. Hot paths are deliberately partial: accepted heartbeats, no-op notification marks and unchanged app versions are not logged. `driver_locations.last_report_at` / `coalesced_since_count` give liveness without flooding realtime (throttled to 60s), and `driver_report_location` finally writes `geofence_events` on zone flips. Admin: `driver_ops.view` / `driver_ops.export`, Live Tracking **Activity** tab (keyset pagination, live pause with an "N new" pill), driver-popup timeline and a per-driver Activity tab with CSV export on `/drivers/[id]`. Migrations `20260908100000`–`20260908200000`; cron `/api/cron/driver-ops-retention` (01:20 daily).
+
+- `[admin+app] 2026-08-13` — **Pickup Order ID is 1–32 ASCII digits.** RPC + insert trigger raise `invalid_order_id` for letters, emoji, symbols, unicode digits, or >32 chars. App field is digits-only with maxLength 32. Admin list truncates historical junk. Migration `20260909100000`.
+
+- `[admin only] 2026-08-13` — **Live Tracking status chips: empty = no pins; Online = GPS-live; On duty = clocked in.** Online no longer means moving-only (idle on-duty pins were disappearing). Stale map marker syncs cannot put filtered-out pins back.
+
+- `[admin only] 2026-08-13` — **Operations Inactive writes Suspended, not Pending.** Restaurant trigger can still drop `drivers.status` to pending mid-save; after sync we re-assert Suspended (Inactive) or Active (Active) so Details Account Status matches the edit form.
+
+- `[admin only] 2026-08-13` — **Driver Status Active on edit save updates Details to Active.** Operations Active writes `drivers.status = active` so the details pill matches the edit form; the pill uses account status whenever a profile is linked.
+
+- `[admin only] 2026-08-13` — **Edit-save keeps an Active driver's Login Status.** Restaurant mapping trigger still sets `drivers.status = pending` if mappings go empty mid-save; after sync we re-assert Active unless Operations was set Inactive.
+
+- `[admin only] 2026-08-13` — **Rejecting a delivery no longer reopens the detail sheet.** Close first, then refresh the list; a late refetch cannot `setSelectedDelivery` after the user closed it.
+
+- `[admin only] 2026-08-13` — **Delivery Details previous-order arrow is visible.** Prev/next sit outside the dialog (same as Close) with a solid background so the left chevron is not lost on the light details pane.
+
+- `[admin only] 2026-08-13` — **Delivery proof Download saves the file.** The icon no longer opens a new tab (cross-origin `download` is ignored). Same-origin `/api/deliveries/proof-download` streams R2 with `Content-Disposition: attachment`. Hover on Download and Open-in-new-tab still match.
+
+- `[admin only] 2026-08-13` — **Delivery proof Download and Open-in-new-tab share the same hover** (`text-primary` + `hover:bg-primary/10`). Pickup Proof and Delivery Proof icon buttons no longer diverge.
+
+- `[admin+app] 2026-08-13` — **Live Tracking legend / Idle color / Overspeed / GPS Offline / delivery trail.** Cluster count is not a chip. Idle stays yellow (Alert = out of zone only). Break removed from the legend (no app Break state). Overspeed uses 60 km/h; speed display matches the app 1.5 m/s floor. GPS Offline ticks ~90s after heartbeats stop. Delivery map draws the GPS trail; audit Distance between is pickup→delivery and Battery at submit is stamped on pickup/finish.
+
+- `[admin+app] 2026-08-13` — **Live Tracking empty chips / realtime pin / On Delivery / block clock-out.** Unselecting every status chip hides all map pins. MarkerClusterer rebuilds on move/remove so pins travel without refresh; legend Cluster is count-only. App classifies motion from the live GPS fix, follows coarse coords while moving, holds `delivery_submit` for an active pickup, and reports idle/moving immediately after. `set_driver_blocked` clocks out session + attendance. Migration `20260907190000`.
+
+- `[admin only] 2026-08-13` — **Live Tracking GPS-off / blocked / battery / filters.** Stale GPS and blocked drivers show Offline/Blocked (not last Idle/Moving) and hide last-known In Zone. Edit Operations Active/Inactive syncs `drivers.status`. Filter Reset restores defaults including the map legend.
+
 - `[admin+app] 2026-08-13` — **Live Tracking zone / heatmap / recent orders / Offline.** Zone filter matches assigned `drivers.zone_id` or GPS-in-geofence (intakes were all null). Heatmap uses LatLng WeightedLocations. Recent orders use Order ID + created_at. Offline last-known pins are kept. Migration `20260907180000`.
 
 - `[admin only] 2026-08-13` — **Live Tracking KPI icons stay inside their tiles**, and driver-popup / Fleet insights labels wrap instead of clipping (`CURRE…`, `ACCUR…`). Compact `MetricTile` + 2-col stats + responsive insights grid.
