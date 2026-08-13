@@ -2,7 +2,6 @@
 
 import { useTranslations } from "next-intl";
 import { Bike, Package, Phone, X, MapPin } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Pill, SignalBars, StatusDot, type Tone } from "@/components/ui/metric-tile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "@/i18n/navigation";
@@ -19,8 +18,10 @@ import {
   gpsQualityFromAccuracy,
 } from "./tracking-metrics";
 import { TrackingGlassCard } from "./tracking-shell";
+import { DriverOperationTimeline } from "./driver-operation-timeline";
 import type { LiveDriverMeta, LiveRecentDelivery } from "./live-tracking-types";
 import { cn } from "@/lib/utils";
+import { COMPACT_STAT_LABEL_CLASS } from "./live-tracking-density";
 
 export function LiveDriverDetailsPanel({
   driver,
@@ -29,6 +30,8 @@ export function LiveDriverDetailsPanel({
   restaurantPins = [],
   variant = "sidebar",
   onClose,
+  canViewActivity = false,
+  onViewAllActivity,
 }: {
   driver: DriverLiveLocation | null;
   meta?: LiveDriverMeta;
@@ -42,6 +45,8 @@ export function LiveDriverDetailsPanel({
   }>;
   variant?: "sidebar" | "stacked";
   onClose?: () => void;
+  canViewActivity?: boolean;
+  onViewAllActivity?: () => void;
 }) {
   const t = useTranslations("pages.liveTracking");
 
@@ -68,8 +73,20 @@ export function LiveDriverDetailsPanel({
   const latestOrder = recentOrders[0] ?? null;
 
   const gpsLive = isGpsLive(driver.lastSeenAt);
-  const dutyLabel = !gpsLive ? t("gpsLost") : driver.isOnDuty ? t("onDuty") : t("offDuty");
-  const dutyTone = !gpsLive ? "neutral" : driver.isOnDuty ? "success" : "neutral";
+  const dutyLabel = driver.isBlocked
+    ? t("chipBlocked")
+    : !gpsLive
+      ? t("gpsLost")
+      : driver.isOnDuty
+        ? t("onDuty")
+        : t("offDuty");
+  const dutyTone = driver.isBlocked
+    ? "danger"
+    : !gpsLive
+      ? "neutral"
+      : driver.isOnDuty
+        ? "success"
+        : "neutral";
 
   if (variant === "stacked") {
     return (
@@ -116,7 +133,7 @@ export function LiveDriverDetailsPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-1.5 px-3 py-2">
+        <div className="grid grid-cols-2 gap-1.5 px-3 py-2">
           <CompactStat label={t("currentSpeed")} value={formatSpeedKmh(driver.speedMps)} />
           <CompactStat label={t("colBattery")} value={formatBatteryLevel(driver.batteryPct)} />
           <CompactStat label={t("colAccuracy")} value={formatAccuracyMeters(driver.accuracyMeters)} />
@@ -148,7 +165,7 @@ export function LiveDriverDetailsPanel({
               </p>
             </div>
           ) : (
-            <p className="text-[10px] text-slate-500 dark:text-slate-300">{t("noHistory")}</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-300">{t("noRecentOrders")}</p>
           )}
         </div>
 
@@ -171,6 +188,15 @@ export function LiveDriverDetailsPanel({
               ))}
             </ul>
           </div>
+        ) : null}
+
+        {canViewActivity ? (
+          <DriverOperationTimeline
+            driverId={driver.driverId}
+            limit={4}
+            onViewAll={onViewAllActivity}
+            className="rounded-none border-0 border-t border-slate-200 bg-transparent px-3 py-2 dark:border-slate-700/80 dark:bg-transparent"
+          />
         ) : null}
       </TrackingGlassCard>
     );
@@ -278,7 +304,7 @@ export function LiveDriverDetailsPanel({
             {t("recentOrders")}
           </h4>
           {recentOrders.length === 0 ? (
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{t("noHistory")}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{t("noRecentOrders")}</p>
           ) : (
             <ul className="mt-2 space-y-2">
               {recentOrders.map((order) => (
@@ -325,19 +351,12 @@ export function LiveDriverDetailsPanel({
           </section>
         ) : null}
 
-        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex items-center justify-between gap-2">
-            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t("activityTimeline")}
-            </h4>
-            <Badge variant="secondary" className="text-[10px]">
-              {t("comingSoon")}
-            </Badge>
-          </div>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-300">
-            {t("comingSoon")}
-          </p>
-        </section>
+        {canViewActivity ? (
+          <DriverOperationTimeline
+            driverId={driver.driverId}
+            onViewAll={onViewAllActivity}
+          />
+        ) : null}
       </div>
     </TrackingGlassCard>
   );
@@ -359,9 +378,7 @@ function IconButton({ icon: Icon, compact }: { icon: typeof Phone; compact?: boo
 function CompactStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 dark:border-slate-700 dark:bg-slate-800/60">
-      <p className="truncate text-[9px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        {label}
-      </p>
+      <p className={COMPACT_STAT_LABEL_CLASS}>{label}</p>
       <p className="truncate text-[11px] font-semibold tabular-nums text-slate-900 dark:text-slate-100">
         {value}
       </p>

@@ -9,12 +9,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LiveTrackingLiveView } from "./live-tracking-live-view";
 import { LiveTrackingHistoryView } from "./live-tracking-history-view";
+import { LiveTrackingActivityView } from "./live-tracking-activity-view";
+import { LiveTrackingDiagnosticsView } from "./live-tracking-diagnostics-view";
 import type { TrackingViewTab } from "./tracking-tab-switcher";
 
-export function LiveTrackingPageShell() {
+export function LiveTrackingPageShell({
+  canViewActivity = false,
+  canViewTelemetry = false,
+  canExportTelemetry = false,
+}: {
+  canViewActivity?: boolean;
+  canViewTelemetry?: boolean;
+  canExportTelemetry?: boolean;
+}) {
   const t = useTranslations("pages.liveTracking");
   const [isCommandFullscreen, setIsCommandFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState<TrackingViewTab>("live");
+  const [activityDriverId, setActivityDriverId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isCommandFullscreen) return;
@@ -31,9 +42,41 @@ export function LiveTrackingPageShell() {
         fullscreen={isCommandFullscreen}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        showActivityTab={canViewActivity}
+        showDiagnosticsTab={canViewTelemetry}
+        onViewDriverActivity={
+          canViewActivity
+            ? (driverId) => {
+                setActivityDriverId(driverId);
+                setActiveTab("activity");
+              }
+            : undefined
+        }
+      />
+    ) : activeTab === "history" ? (
+      <LiveTrackingHistoryView
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        showActivityTab={canViewActivity}
+        showDiagnosticsTab={canViewTelemetry}
+      />
+    ) : activeTab === "diagnostics" ? (
+      <LiveTrackingDiagnosticsView
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        showActivityTab={canViewActivity}
+        showDiagnosticsTab={canViewTelemetry}
+        canExport={canExportTelemetry}
+        canViewOperations={canViewActivity}
       />
     ) : (
-      <LiveTrackingHistoryView activeTab={activeTab} onTabChange={setActiveTab} />
+      <LiveTrackingActivityView
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        showActivityTab={canViewActivity}
+        showDiagnosticsTab={canViewTelemetry}
+        initialDriverId={activityDriverId}
+      />
     );
 
   if (isCommandFullscreen) {

@@ -5,9 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { fetchLocationEventByDeliveryId } from "@/features/locations/locations-actions";
+import { fetchLocationEventByDeliveryId, fetchLocationEventsForDelivery } from "@/features/locations/locations-actions";
+import { trailPathFromEvents } from "./delivery-gps-audit";
 import type { DriverLocationEvent } from "@/features/locations/types";
 import { resolveOrderProofUrl } from "@/lib/storage/order-proof-url";
+import { earningsRecalcDateFromDeliveredAt } from "./delivery-earn-date";
 import { deleteObject } from "@/lib/storage/r2-client";
 import { isR2ObjectKey } from "@/lib/storage/r2-keys";
 import type {
@@ -125,13 +127,11 @@ async function resolveDeliveryRestaurantId(
 }
 
 function earnDateFromDeliveredAt(deliveredAt: string): string {
-  const d = new Date(deliveredAt);
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kuwait",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d);
+  const earnDate = earningsRecalcDateFromDeliveredAt(deliveredAt);
+  if (!earnDate) {
+    throw new Error("delivered_at required for earnings recalc");
+  }
+  return earnDate;
 }
 
 /**
@@ -261,7 +261,8 @@ async function recalcEarningsForDelivery(
   driverId: string,
   deliveredAt: string,
 ) {
-  const earnDate = earnDateFromDeliveredAt(deliveredAt);
+  const earnDate = earningsRecalcDateFromDeliveredAt(deliveredAt);
+  if (!earnDate) return;
   await supabase.rpc("recalculate_driver_earnings", {
     p_driver_id: driverId,
     p_earn_date: earnDate,
@@ -513,7 +514,9 @@ type RecentDeliveryDbRow = {
   id: string;
   driver_id: string;
   status: DeliveryStatus;
-  delivered_at: string;
+  delivered_at: string | null;
+  created_at?: string;
+  external_order_id?: string | null;
   partners: { name: string } | { name: string }[] | null;
 };
 
@@ -523,7 +526,9 @@ export type RecentDeliveryForDriver = {
   short_id: string;
   status: DeliveryStatus;
   partner_name: string;
-  delivered_at: string;
+  delivered_at: string | null;
+  created_at: string;
+  external_order_id: string | null;
 };
 
 export async function resolveDeliveryProofForDisplay(
@@ -582,17 +587,26 @@ export async function fetchDeliveryDetailExtras(params: {
 /** GPS audit event for the detail modal. Loaded independently from proofs. */
 export async function fetchDeliveryGpsAudit(
   deliveryId: string,
-): Promise<{ gpsEvent: DriverLocationEvent | null }> {
+): Promise<{
+  gpsEvent: DriverLocationEvent | null;
+  trail: Array<{ lat: number; lng: number }>;
+}> {
   await requireDeliveriesView();
 
   let gpsEvent: DriverLocationEvent | null = null;
+  let trail: Array<{ lat: number; lng: number }> = [];
   try {
-    gpsEvent = await fetchLocationEventByDeliveryId(deliveryId);
+    const [event, events] = await Promise.all([
+      fetchLocationEventByDeliveryId(deliveryId),
+      fetchLocationEventsForDelivery(deliveryId),
+    ]);
+    gpsEvent = event;
+    trail = trailPathFromEvents(events);
   } catch (err) {
     console.error("[fetchDeliveryGpsAudit] gps event lookup failed", err);
   }
 
-  return { gpsEvent };
+  return { gpsEvent, trail };
 }
 
 /**
@@ -842,16 +856,20 @@ export async function fetchRecentDeliveriesForDriver(
       driver_id,
       status,
       delivered_at,
+      created_at,
+      external_order_id,
       partners (name)
     `,
     )
     .eq("driver_id", driverId)
-    .order("delivered_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(safeLimit);
 
   if (error) throw error;
 
-  const rows = (data ?? []) as unknown as RecentDeliveryDbRow[];
+  const rows = (data ?? []) as unknown as Array<
+    RecentDeliveryDbRow & { created_at: string; external_order_id: string | null }
+  >;
   return rows.map((row) => ({
     id: row.id,
     driver_id: row.driver_id,
@@ -859,6 +877,8 @@ export async function fetchRecentDeliveriesForDriver(
     status: row.status,
     partner_name: relName(row.partners),
     delivered_at: row.delivered_at,
+    created_at: row.created_at,
+    external_order_id: row.external_order_id,
   }));
 }
 

@@ -23,6 +23,12 @@ function canReadStorageKey(
     }
     return hasPermissionInSet(permissions, "drivers.manage", isSuperAdmin);
   }
+  if (key.startsWith("driver-avatars/")) {
+    return (
+      hasPermissionInSet(permissions, "drivers.view", isSuperAdmin) ||
+      hasPermissionInSet(permissions, "drivers.manage", isSuperAdmin)
+    );
+  }
   if (key.startsWith("partners/")) {
     return (
       hasPermissionInSet(permissions, "partners.view", isSuperAdmin) ||

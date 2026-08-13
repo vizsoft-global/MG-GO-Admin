@@ -55,6 +55,7 @@ function mapLiveRow(row: {
     driver_code: string;
     employee_id: string | null;
     is_on_duty: boolean;
+    is_blocked?: boolean;
     profiles: { full_name: string | null } | { full_name: string | null }[] | null;
     driver_restaurants?: Array<{
       restaurants: { name: string } | { name: string }[] | null;
@@ -71,6 +72,7 @@ function mapLiveRow(row: {
     driverCode: driver?.driver_code ?? "—",
     employeeId: driver?.employee_id ?? null,
     isOnDuty: driver?.is_on_duty ?? false,
+    isBlocked: driver?.is_blocked ?? false,
     restaurantName: restaurantFromDriver(driver),
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
@@ -111,6 +113,7 @@ export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> 
         driver_code,
         employee_id,
         is_on_duty,
+        is_blocked,
         profiles ( full_name ),
         driver_restaurants (
           restaurants ( name )
@@ -328,6 +331,66 @@ export async function fetchLocationEventByDeliveryId(
   return events[0] ?? null;
 }
 
+export async function fetchLocationEventsForDelivery(
+  deliveryId: string,
+): Promise<DriverLocationEvent[]> {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(session.permissions, "deliveries.view", session.isSuperAdmin)
+  ) {
+    throw new Error("not_authorized");
+  }
+
+  const admin = createAdminClient() as unknown as {
+    from: (table: string) => {
+      select: (columns: string) => Record<string, unknown>;
+    };
+  };
+
+  const selectColumns =
+    "id, driver_id, latitude, longitude, speed_mps, accuracy_meters, battery_pct, heading_deg, altitude_m, network_type, charging_state, is_mocked, location_provider, active_delivery_id, tracking_status, zone_status, delivery_id, recorded_at";
+
+  type ListEventQuery = {
+    eq: (
+      column: string,
+      value: string,
+    ) => {
+      order: (
+        column: string,
+        options: { ascending: boolean },
+      ) => {
+        limit: (count: number) => Promise<{
+          data: Array<Record<string, unknown>> | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+  };
+
+  const fetchAll = async (column: "delivery_id" | "active_delivery_id") => {
+    const q = admin.from("driver_location_events").select(selectColumns) as ListEventQuery;
+    return q.eq(column, deliveryId).order("recorded_at", { ascending: true }).limit(500);
+  };
+
+  const [{ data: byDelivery, error: err1 }, { data: byActive, error: err2 }] =
+    await Promise.all([fetchAll("delivery_id"), fetchAll("active_delivery_id")]);
+
+  if (err1) throw new Error(err1.message);
+  if (err2) throw new Error(err2.message);
+
+  const byId = new Map<string, DriverLocationEvent>();
+  for (const row of [...(byDelivery ?? []), ...(byActive ?? [])]) {
+    const mapped = mapLocationEventRow(
+      row as unknown as Parameters<typeof mapLocationEventRow>[0],
+    );
+    byId.set(mapped.id, mapped);
+  }
+  return [...byId.values()].sort(
+    (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+  );
+}
+
 function mapLocationEventRow(data: {
   id: string;
   driver_id: string;
@@ -447,7 +510,7 @@ export async function fetchDriverAssignedRestaurantPins(
     }));
 }
 
-/** Cron: delete driver_locations rows with GPS older than 10 minutes. */
+/** Cron: delete off-duty GPS rows older than 10 minutes. On-duty last-known stays. */
 export async function cleanupStaleDriverLocations(): Promise<number> {
   const supabase = createAdminClient();
   const { data, error } = await supabase.rpc("cleanup_stale_driver_locations", {

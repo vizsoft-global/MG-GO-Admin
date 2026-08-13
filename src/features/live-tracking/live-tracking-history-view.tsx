@@ -72,9 +72,13 @@ function formatDateLabel(date: string, locale?: string): string {
 export function LiveTrackingHistoryView({
   activeTab,
   onTabChange,
+  showActivityTab,
+  showDiagnosticsTab,
 }: {
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
+  showActivityTab?: boolean;
+  showDiagnosticsTab?: boolean;
 }) {
   const t = useTranslations("pages.liveTracking");
   const locale = useLocale();
@@ -268,7 +272,13 @@ export function LiveTrackingHistoryView({
         left={
           <TrackingGlassCard className="flex min-h-0 flex-1 flex-col overflow-hidden border-slate-200 bg-white dark:border-slate-700/80 dark:bg-slate-900">
             <div className="shrink-0 border-b border-slate-200 px-3 py-2.5 dark:border-slate-700/80">
-              <TrackingTabSwitcher value={activeTab} onChange={onTabChange} className="mb-2" />
+              <TrackingTabSwitcher
+                value={activeTab}
+                onChange={onTabChange}
+                showActivity={showActivityTab}
+                showDiagnostics={showDiagnosticsTab}
+                className="mb-2"
+              />
               <HistorySummaryKpis summary={summary} loading={isLoading} />
             </div>
 

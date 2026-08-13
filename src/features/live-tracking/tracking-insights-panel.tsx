@@ -4,10 +4,12 @@ import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, BatteryLow, Gauge, Timer } from "lucide-react";
 import type { DriverLiveLocation } from "@/features/locations/types";
+import { isGpsLive, normalizeBatteryPct } from "@/features/locations/location-status";
+import { liveListStatus } from "./tracking-status";
+import { INSIGHTS_GRID_CLASS } from "./live-tracking-density";
 import { cn } from "@/lib/utils";
 import { TrackingGlassCard } from "./tracking-shell";
-
-const OVERSPEED_KMH = 80;
+import { isOverspeeding } from "./tracking-metrics";
 
 export function TrackingInsightsPanel({
   drivers,
@@ -21,15 +23,16 @@ export function TrackingInsightsPanel({
   const t = useTranslations("pages.liveTracking");
 
   const insights = useMemo(() => {
-    const overspeed = drivers.filter(
-      (d) => d.speedMps != null && d.speedMps * 3.6 > OVERSPEED_KMH,
-    ).length;
-    const idle = drivers.filter((d) => d.trackingStatus === "idle").length;
-    const batteryLow = drivers.filter(
-      (d) => d.batteryPct != null && d.batteryPct < 20,
-    ).length;
+    const overspeed = drivers.filter((d) => isOverspeeding(d.speedMps)).length;
+    const idle = drivers.filter((d) => liveListStatus(d) === "idle").length;
+    const batteryLow = drivers.filter((d) => {
+      const pct = normalizeBatteryPct(d.batteryPct);
+      return pct != null && pct < 20;
+    }).length;
     const gpsAlerts = drivers.filter((d) => d.pinStatus === "alert").length;
-    const outOfZone = drivers.filter((d) => d.zoneStatus === "out_of_zone").length;
+    const outOfZone = drivers.filter(
+      (d) => isGpsLive(d.lastSeenAt) && d.zoneStatus === "out_of_zone",
+    ).length;
 
     return [
       {
@@ -89,19 +92,21 @@ export function TrackingInsightsPanel({
           {t("aiInsights")}
         </h3>
       </div>
-      <ul className="grid grid-cols-6 gap-1.5">
+      <ul className={INSIGHTS_GRID_CLASS}>
         {insights.map((item) => (
           <li
             key={item.id}
-            className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-xs transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:hover:bg-slate-800"
+            className="flex min-w-0 flex-col gap-0.5 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1.5 text-xs transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:hover:bg-slate-800"
           >
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white dark:bg-slate-900">
-              <item.icon className={cnIcon(item.tone)} />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[10px] leading-tight text-slate-700 dark:text-slate-200">
+            <div className="flex items-center justify-between gap-1">
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white dark:bg-slate-900">
+                <item.icon className={cnIcon(item.tone)} />
+              </span>
+              <span className={cnCount(item.count)}>{item.count}</span>
+            </div>
+            <span className="text-[10px] leading-tight text-slate-700 dark:text-slate-200">
               {item.label}
             </span>
-            <span className={cnCount(item.count)}>{item.count}</span>
           </li>
         ))}
       </ul>

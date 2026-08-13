@@ -11,6 +11,7 @@ export type LiveDriverMeta = {
   phone: string | null;
   detailHref: string | null;
   avatarUrl: string | null;
+  isBlocked: boolean;
 };
 
 export type LiveTrackingEnrichedDriver = DriverLiveLocation & {

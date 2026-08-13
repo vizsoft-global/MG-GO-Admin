@@ -10,18 +10,25 @@ import {
   formatBatteryPct,
   formatSpeedMps,
 } from "@/features/locations/location-status";
-import type { DriverLiveLocation, PinStatus, TrackingStatus } from "@/features/locations/types";
+import type { DriverLiveLocation } from "@/features/locations/types";
+import { liveListStatus, type LiveListStatus } from "./tracking-status";
+import { liveZoneStatus } from "./tracking-metrics";
 
-function pinVariant(status: PinStatus): "success" | "warning" | "danger" {
-  if (status === "active") return "success";
+function listStatusVariant(
+  status: LiveListStatus,
+): "success" | "warning" | "danger" | "neutral" {
+  if (status === "moving" || status === "delivery_submit") return "success";
   if (status === "idle") return "warning";
-  return "danger";
+  if (status === "blocked") return "danger";
+  return "neutral";
 }
 
 function trackingLabel(
   t: ReturnType<typeof useTranslations<"pages.liveTracking">>,
-  status: TrackingStatus,
+  status: LiveListStatus,
 ) {
+  if (status === "offline") return t("chipOffline");
+  if (status === "blocked") return t("chipBlocked");
   if (status === "moving") return t("statusMoving");
   if (status === "delivery_submit") return t("statusDeliverySubmit");
   return t("statusIdle");
@@ -50,7 +57,10 @@ export function LiveDriverList({
 
   return (
     <ul className="divide-y divide-border/70 overflow-y-auto">
-      {drivers.map((loc) => (
+      {drivers.map((loc) => {
+        const status = liveListStatus(loc);
+        const zone = liveZoneStatus(loc.zoneStatus, loc.lastSeenAt);
+        return (
         <li key={loc.driverId}>
           <button
             type="button"
@@ -82,8 +92,8 @@ export function LiveDriverList({
                   ) : null}
                 </div>
               </div>
-              <StatusPill variant={pinVariant(loc.pinStatus)} dot>
-                {trackingLabel(t, loc.trackingStatus)}
+              <StatusPill variant={listStatusVariant(status)} dot>
+                {trackingLabel(t, status)}
               </StatusPill>
             </div>
 
@@ -93,12 +103,12 @@ export function LiveDriverList({
               <span>
                 ±{loc.accuracyMeters != null ? loc.accuracyMeters.toFixed(0) : "—"} m
               </span>
-              {loc.zoneStatus ? (
+              {zone !== "unknown" ? (
                 <Badge
-                  variant={loc.zoneStatus === "out_of_zone" ? "destructive" : "secondary"}
+                  variant={zone === "out_of_zone" ? "destructive" : "secondary"}
                   className="text-[10px]"
                 >
-                  {t(`zoneStatus.${loc.zoneStatus}`)}
+                  {t(`zoneStatus.${zone}`)}
                 </Badge>
               ) : null}
             </div>
@@ -113,7 +123,8 @@ export function LiveDriverList({
             </p>
           </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

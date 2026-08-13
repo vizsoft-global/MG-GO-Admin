@@ -13,13 +13,21 @@ import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
+import {
+  accountStatusToRestoreAfterRestaurantSync,
+  restaurantSyncPlan,
+} from "./restaurant-sync-plan";
+import { accountStatusToSyncFromOperations } from "./driver-operations-status";
 import { civilIdExists, employeeIdExists } from "./driver-uniqueness";
 import {
+  allDriverAvatarKeys,
   allIntakeAvatarKeys,
   allIntakeDocumentKeys,
   buildIntakeDocumentKey,
   extensionFromMime,
 } from "@/lib/storage/r2-keys";
+import { pickDriverAvatarKey } from "@/lib/storage/driver-avatar-key";
+import { syncDriverAvatarKey } from "@/lib/storage/sync-driver-avatar";
 import { isR2Configured } from "@/lib/storage/r2-config";
 import { deleteObjects, putObject } from "@/lib/storage/r2-client";
 import { listExistingDriverDocuments } from "@/lib/storage/driver-documents";
@@ -167,11 +175,28 @@ async function syncDriverRestaurants(
   driverId: string,
   restaurantIds: string[],
 ) {
-  await supabase.from("driver_restaurants").delete().eq("driver_id", driverId);
-  if (restaurantIds.length === 0) return;
-  await supabase.from("driver_restaurants").insert(
-    restaurantIds.map((restaurant_id) => ({ driver_id: driverId, restaurant_id })),
+  const { data: existing } = await supabase
+    .from("driver_restaurants")
+    .select("restaurant_id")
+    .eq("driver_id", driverId);
+  const { toAdd, toRemove } = restaurantSyncPlan(
+    (existing ?? []).map((r) => r.restaurant_id),
+    restaurantIds,
   );
+  // Insert first: a delete-all sync fires driver_restaurants_sync_status and
+  // drops an active driver to pending even when the mapping is unchanged.
+  if (toAdd.length > 0) {
+    await supabase.from("driver_restaurants").insert(
+      toAdd.map((restaurant_id) => ({ driver_id: driverId, restaurant_id })),
+    );
+  }
+  if (toRemove.length > 0) {
+    await supabase
+      .from("driver_restaurants")
+      .delete()
+      .eq("driver_id", driverId)
+      .in("restaurant_id", toRemove);
+  }
 }
 
 async function fetchIntakeRestaurantIds(
@@ -575,6 +600,8 @@ export async function fetchDriversForAdmin(options?: {
       blocked_reason: string | null;
       app_passcode: string | null;
       employee_id: string | null;
+      avatar_object_key: string | null;
+      zone_id: string | null;
     }
   >();
   const deliveryCountByDriverId = new Map<string, number>();
@@ -631,7 +658,7 @@ export async function fetchDriversForAdmin(options?: {
     const [{ data: driverRows }, { data: deliveryRows }] = await Promise.all([
       supabase
         .from("drivers")
-        .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id")
+        .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id")
         .in("id", linkedIds),
       (() => {
         const { start, end } = kuwaitDayBounds();
@@ -652,6 +679,8 @@ export async function fetchDriversForAdmin(options?: {
         blocked_reason: driver.blocked_reason ?? null,
         app_passcode: driver.app_passcode ?? null,
         employee_id: driver.employee_id ?? null,
+        avatar_object_key: driver.avatar_object_key ?? null,
+        zone_id: driver.zone_id ?? null,
       });
     }
 
@@ -693,7 +722,10 @@ export async function fetchDriversForAdmin(options?: {
         linkedDriver?.status,
       );
 
-      const avatarKey = row.avatar_url?.trim() ?? "";
+      const avatarKey = pickDriverAvatarKey({
+        avatarObjectKey: linkedDriver?.avatar_object_key,
+        intakeAvatarUrl: row.avatar_url,
+      });
       let avatar_display_url: string | null = null;
       if (avatarKey) {
         if (avatarCache.has(avatarKey)) {
@@ -715,7 +747,7 @@ export async function fetchDriversForAdmin(options?: {
         partner_id: row.partner_id,
         partner_name: relName(row.partners),
         partner_logo_url,
-        zone_id: row.zone_id,
+        zone_id: linkedDriver?.zone_id ?? row.zone_id,
         zone_name: zoneRow?.name ?? "—",
         restaurant_ids: row.linked_profile_id
           ? (restaurantIdsByDriverId.get(row.linked_profile_id) ??
@@ -925,12 +957,15 @@ export async function updateDriverIntake(
   const existing = existingResp.data;
   if (!existing) return { error: "save_failed" };
 
+  let currentAccountStatus: DriverAccountStatus | null = null;
   if (existing.linked_profile_id) {
     const { data: linkedDriver } = await supabase
       .from("drivers")
       .select("status")
       .eq("id", existing.linked_profile_id)
       .maybeSingle();
+
+    currentAccountStatus = (linkedDriver?.status as DriverAccountStatus | null) ?? null;
 
     if (linkedDriver?.status === "active") {
       if (restaurantIds.length === 0) {
@@ -953,7 +988,12 @@ export async function updateDriverIntake(
   if (removeAvatar) {
     intakeAvatarPath = null;
     try {
-      await deleteObjects(allIntakeAvatarKeys(intakeId));
+      await deleteObjects([
+        ...allIntakeAvatarKeys(intakeId),
+        ...(existing.linked_profile_id
+          ? allDriverAvatarKeys(existing.linked_profile_id)
+          : []),
+      ]);
     } catch {
       /* best-effort */
     }
@@ -1045,6 +1085,44 @@ export async function updateDriverIntake(
     if (driverUpdateResp.error) {
       return { error: mapDriverDbError(driverUpdateResp.error, "employee_id") };
     }
+
+    const nextAccount = accountStatusToSyncFromOperations({
+      linked: true,
+      currentAccountStatus,
+      operationsWorkflow: resolvedWorkflowStatus,
+    });
+    const { data: afterSync } = await supabase
+      .from("drivers")
+      .select("status")
+      .eq("id", linkedProfileId)
+      .maybeSingle();
+    const restoreAccount = accountStatusToRestoreAfterRestaurantSync({
+      statusBefore: currentAccountStatus,
+      intended: nextAccount,
+      statusNow: (afterSync?.status as DriverAccountStatus | null) ?? null,
+    });
+    const writeAccount = nextAccount ?? restoreAccount;
+    if (writeAccount) {
+      const { data: statusData, error: statusError } = await supabase.rpc(
+        "set_driver_account_status",
+        {
+          p_driver_id: linkedProfileId,
+          p_status: writeAccount,
+        },
+      );
+      if (statusError) return { error: "save_failed" };
+      const payload = (statusData ?? {}) as { ok?: boolean; error?: string };
+      if (!payload.ok) {
+        if (payload.error === "driver_missing_active_restaurant") {
+          return { error: "missing_active_restaurant" };
+        }
+        return { error: "save_failed" };
+      }
+    }
+
+    if (profileAvatarPath !== undefined) {
+      await syncDriverAvatarKey(linkedProfileId, profileAvatarPath);
+    }
   } else {
     await syncIntakeRestaurants(supabase, intakeId, restaurantIds);
   }
@@ -1125,6 +1203,7 @@ export async function fetchDriverDetail(
       blocked_reason: string | null;
       blocked_at: string | null;
       login_verification_exempt: boolean;
+      avatar_object_key: string | null;
     } | null = null;
     if (linkedId) {
       const [{ data: prof }, { data: drv }] = await Promise.all([
@@ -1135,7 +1214,7 @@ export async function fetchDriverDetail(
           .maybeSingle(),
         supabase
           .from("drivers")
-          .select("app_passcode, status, employee_id, nationality, rider_category, is_blocked, blocked_reason, blocked_at, login_verification_exempt")
+          .select("app_passcode, status, employee_id, nationality, rider_category, is_blocked, blocked_reason, blocked_at, login_verification_exempt, avatar_object_key")
           .eq("id", linkedId)
           .maybeSingle(),
       ]);
@@ -1151,6 +1230,7 @@ export async function fetchDriverDetail(
             blocked_reason: drv.blocked_reason ?? null,
             blocked_at: drv.blocked_at ?? null,
             login_verification_exempt: drv.login_verification_exempt ?? false,
+            avatar_object_key: drv.avatar_object_key ?? null,
           }
         : null;
     }
@@ -1172,7 +1252,13 @@ export async function fetchDriverDetail(
       await Promise.all([
       loadRestaurantNames(supabase, restaurant_ids),
       hasPublishedActiveRestaurants(supabase, restaurant_ids),
-      resolveDriverAvatarUrl(profile?.avatar_url ?? intake.avatar_url),
+      resolveDriverAvatarUrl(
+        pickDriverAvatarKey({
+          avatarObjectKey: linkedDriver?.avatar_object_key,
+          profileAvatarUrl: profile?.avatar_url,
+          intakeAvatarUrl: intake.avatar_url,
+        }),
+      ),
       fetchDriverAssetAssignments(intake.id, linkedId),
     ]);
 
@@ -1250,6 +1336,7 @@ export async function fetchDriverDetail(
       login_verification_exempt,
       archived_at,
       custom_fields,
+      avatar_object_key,
       partners (name),
       zones (name, code)
     `,
@@ -1288,7 +1375,13 @@ export async function fetchDriverDetail(
     await Promise.all([
     loadRestaurantNames(supabase, restaurant_ids),
     hasPublishedActiveRestaurants(supabase, restaurant_ids),
-    resolveDriverAvatarUrl(prof?.avatar_url ?? intakeForDriver?.avatar_url ?? null),
+    resolveDriverAvatarUrl(
+      pickDriverAvatarKey({
+        avatarObjectKey: driverRow.avatar_object_key,
+        profileAvatarUrl: prof?.avatar_url,
+        intakeAvatarUrl: intakeForDriver?.avatar_url,
+      }),
+    ),
     fetchDriverAssetAssignments(intakeForDriver?.id ?? null, id),
   ]);
 

@@ -36,6 +36,12 @@ export type UseRealtimeInvalidatorOptions = {
   enabled?: boolean;
   /** Optional debounce window (ms) — coalesces rapid bursts of changes. */
   debounceMs?: number;
+  /**
+   * Fires once per received change, undebounced. Debouncing is a refetch
+   * concern; a caller counting events (e.g. an "N new events" pill) must see
+   * every one of them.
+   */
+  onChange?: () => void;
 };
 
 export function useRealtimeInvalidator({
@@ -44,13 +50,19 @@ export function useRealtimeInvalidator({
   invalidateKeys,
   enabled = true,
   debounceMs = 300,
+  onChange,
 }: UseRealtimeInvalidatorOptions): void {
   const queryClient = useQueryClient();
   const keysRef = useRef(invalidateKeys);
+  const onChangeRef = useRef(onChange);
 
   useEffect(() => {
     keysRef.current = invalidateKeys;
   }, [invalidateKeys]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   // Serialize tables config so the effect re-runs only on shape changes,
   // not on every render that creates a new array literal.
@@ -84,6 +96,7 @@ export function useRealtimeInvalidator({
           ...(sub.filter ? { filter: sub.filter } : {}),
         },
         () => {
+          onChangeRef.current?.();
           triggerInvalidate();
         },
       );

@@ -36,6 +36,17 @@ export const queryKeys = {
       ["live-tracking", "history-active-dates", driverId, yearMonth] as const,
     restaurantPins: (driverId: string) =>
       ["live-tracking", "restaurant-pins", driverId] as const,
+    partnerOptions: () => ["live-tracking", "partner-options"] as const,
+    operations: (filters: Record<string, unknown> = {}) =>
+      ["live-tracking", "operations", filters] as const,
+    operationCategories: (filters: Record<string, unknown> = {}) =>
+      ["live-tracking", "operation-categories", filters] as const,
+    driverOperations: (driverId: string, limit: number) =>
+      ["live-tracking", "driver-operations", driverId, limit] as const,
+    telemetry: (filters: Record<string, unknown> = {}) =>
+      ["live-tracking", "telemetry", filters] as const,
+    telemetrySummary: (filters: Record<string, unknown> = {}) =>
+      ["live-tracking", "telemetry-summary", filters] as const,
   },
   partners: {
     all: () => ["partners"] as const,

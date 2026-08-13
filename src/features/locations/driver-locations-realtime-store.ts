@@ -6,8 +6,10 @@ import type { Database } from "@/types/database";
 import {
   enrichLiveLocation,
   isGpsLive,
+  liveLocationPayloadChanged,
   parseTrackingStatus,
   parseZoneStatus,
+  shouldShowOnLiveMap,
 } from "./location-status";
 import type { DriverLiveLocation } from "./types";
 
@@ -16,6 +18,7 @@ type LiveRow = Database["public"]["Tables"]["driver_locations"]["Row"] & {
     driver_code: string;
     employee_id: string | null;
     is_on_duty: boolean;
+    is_blocked?: boolean;
     profiles?: { full_name: string | null } | { full_name: string | null }[] | null;
     driver_restaurants?: Array<{
       restaurants?: { name: string } | { name: string }[] | null;
@@ -27,9 +30,6 @@ type Listener = (locations: DriverLiveLocation[]) => void;
 
 /** Coalesce realtime floods so React + maps update at most ~4×/sec. */
 const NOTIFY_BATCH_MS = 250;
-/** Drop drivers with no GPS in this window from initial hydrate (keeps boot light). */
-const INITIAL_MAX_AGE_MS = 15 * 60 * 1000;
-
 let channel: RealtimeChannel | null = null;
 let listeners = new Set<Listener>();
 /** O(1) live upserts under high write volume. */
@@ -43,6 +43,7 @@ let nameCache = new Map<
     driverCode: string;
     employeeId: string | null;
     isOnDuty: boolean;
+    isBlocked: boolean;
     restaurantName: string | null;
   }
 >();
@@ -103,6 +104,7 @@ function rowToLocation(row: LiveRow): DriverLiveLocation {
       driverCode: driver.driver_code,
       employeeId: driver.employee_id,
       isOnDuty: driver.is_on_duty,
+      isBlocked: driver.is_blocked ?? false,
       restaurantName: restaurantFromDriver(driver),
     });
   }
@@ -115,6 +117,7 @@ function rowToLocation(row: LiveRow): DriverLiveLocation {
     driverCode: names?.driverCode ?? "—",
     employeeId: names?.employeeId ?? null,
     isOnDuty: names?.isOnDuty ?? false,
+    isBlocked: names?.isBlocked ?? false,
     restaurantName: names?.restaurantName ?? restaurantFromDriver(driver),
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
@@ -133,61 +136,51 @@ function rowToLocation(row: LiveRow): DriverLiveLocation {
 
 /** Skip no-op payloads (same coords / status) that still flood realtime after coalescing edges. */
 function meaningfullyChanged(prev: DriverLiveLocation | undefined, next: DriverLiveLocation): boolean {
-  if (!prev) return true;
-  if (prev.trackingStatus !== next.trackingStatus) return true;
-  if (prev.zoneStatus !== next.zoneStatus) return true;
-  if (prev.pinStatus !== next.pinStatus) return true;
-  if (prev.isOnDuty !== next.isOnDuty) return true;
-  // ~1.1m at equator — ignore GPS jitter smaller than this for UI invalidation.
-  if (Math.abs(prev.latitude - next.latitude) > 0.00001) return true;
-  if (Math.abs(prev.longitude - next.longitude) > 0.00001) return true;
-  if ((prev.speedMps ?? 0) !== (next.speedMps ?? 0)) return true;
-  if (prev.batteryPct !== next.batteryPct) return true;
-  // Always accept fresher lastSeen for idle heartbeats so age badges stay accurate
-  // without forcing a position re-layout if coords unchanged.
-  if (prev.lastSeenAt !== next.lastSeenAt) {
-    const prevTs = new Date(prev.lastSeenAt).getTime();
-    const nextTs = new Date(next.lastSeenAt).getTime();
-    // Only push if age-sensitive fields matter later (every 20s+)
-    if (Math.abs(nextTs - prevTs) >= 20_000) return true;
-  }
-  return false;
+  return liveLocationPayloadChanged(prev, next);
 }
 
-function patchDriverDuty(driverId: string, isOnDuty: boolean) {
+function patchDriverFlags(
+  driverId: string,
+  patch: { isOnDuty?: boolean; isBlocked?: boolean },
+) {
   const meta = nameCache.get(driverId);
   if (meta) {
-    nameCache.set(driverId, { ...meta, isOnDuty });
+    nameCache.set(driverId, {
+      ...meta,
+      isOnDuty: patch.isOnDuty ?? meta.isOnDuty,
+      isBlocked: patch.isBlocked ?? meta.isBlocked,
+    });
   }
 
   const prev = cacheById.get(driverId);
-  if (!prev || prev.isOnDuty === isOnDuty) return;
+  if (!prev) return;
+  const isOnDuty = patch.isOnDuty ?? prev.isOnDuty;
+  const isBlocked = patch.isBlocked ?? prev.isBlocked;
+  if (prev.isOnDuty === isOnDuty && prev.isBlocked === isBlocked) return;
 
-  cacheById.set(driverId, { ...prev, isOnDuty });
+  const { pinStatus: _pin, ...rest } = prev;
+  cacheById.set(driverId, enrichLiveLocation({ ...rest, isOnDuty, isBlocked }));
   scheduleNotify();
 }
 
 async function loadInitial() {
   const supabase = createClient();
-  const since = new Date(Date.now() - INITIAL_MAX_AGE_MS).toISOString();
-
-  const { data, error } = await supabase
-    .from("driver_locations")
-    .select(
-      `
+  const select = `
       *,
       drivers (
         driver_code,
         employee_id,
         is_on_duty,
+        is_blocked,
         profiles ( full_name ),
         driver_restaurants ( restaurants ( name ) )
       )
-    `,
-    )
-    .gte("last_seen_at", since)
+    `;
+
+  const { data, error } = await supabase
+    .from("driver_locations")
+    .select(select)
     .order("last_seen_at", { ascending: false })
-    // Hard cap so a bloated table cannot block first paint of Live Tracking.
     .limit(2500);
 
   if (error) {
@@ -198,7 +191,7 @@ async function loadInitial() {
   const next = new Map<string, DriverLiveLocation>();
   for (const row of data ?? []) {
     const loc = rowToLocation(row as LiveRow);
-    if (!isGpsLive(loc.lastSeenAt)) continue;
+    if (!shouldShowOnLiveMap(loc)) continue;
     next.set(loc.driverId, loc);
   }
   cacheById = next;
@@ -221,13 +214,15 @@ function applyPayload(
 
   if (!row?.driver_id) return;
 
-  // Drop extremely stale realtime events if connection backlog delivers late.
+  // Drop extremely stale realtime events if connection backlog delivers late,
+  // unless we already have a last-known pin — keep it for Offline / on-duty.
   if (row.last_seen_at && !isGpsLive(row.last_seen_at)) {
-    if (cacheById.has(row.driver_id)) {
-      cacheById.delete(row.driver_id);
-      scheduleNotify();
+    const prev = cacheById.get(row.driver_id);
+    const onDuty =
+      nameCache.get(row.driver_id)?.isOnDuty ?? prev?.isOnDuty ?? false;
+    if (!onDuty && !prev) {
+      return;
     }
-    return;
   }
 
   const prev = cacheById.get(row.driver_id);
@@ -242,6 +237,7 @@ function applyPayload(
         driverCode: next.driverCode !== "—" ? next.driverCode : prev.driverCode,
         employeeId: next.employeeId ?? prev.employeeId,
         isOnDuty: nameCache.get(row.driver_id)?.isOnDuty ?? prev.isOnDuty,
+        isBlocked: nameCache.get(row.driver_id)?.isBlocked ?? prev.isBlocked,
         restaurantName: next.restaurantName ?? prev.restaurantName,
       }
     : next;
@@ -279,10 +275,16 @@ function ensureChannel() {
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "drivers" },
       (payload) => {
-        const row = payload.new as { id?: string; is_on_duty?: boolean } | null;
-        if (row?.id && typeof row.is_on_duty === "boolean") {
-          patchDriverDuty(row.id, row.is_on_duty);
-        }
+        const row = payload.new as {
+          id?: string;
+          is_on_duty?: boolean;
+          is_blocked?: boolean;
+        } | null;
+        if (!row?.id) return;
+        patchDriverFlags(row.id, {
+          ...(typeof row.is_on_duty === "boolean" ? { isOnDuty: row.is_on_duty } : {}),
+          ...(typeof row.is_blocked === "boolean" ? { isBlocked: row.is_blocked } : {}),
+        });
       },
     )
     .subscribe();
@@ -324,6 +326,7 @@ export function seedDriverLocationNames(
     driverCode: string;
     employeeId?: string | null;
     isOnDuty?: boolean;
+    isBlocked?: boolean;
   }>,
 ) {
   for (const e of entries) {
@@ -332,6 +335,7 @@ export function seedDriverLocationNames(
       driverCode: e.driverCode,
       employeeId: e.employeeId ?? null,
       isOnDuty: e.isOnDuty ?? false,
+      isBlocked: e.isBlocked ?? false,
       restaurantName: null,
     });
   }

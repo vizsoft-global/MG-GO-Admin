@@ -388,6 +388,10 @@ export type Database = {
           driver_app_sideload_updates_enabled: boolean
           driver_app_splash_url: string | null
           driver_app_title: string
+          driver_location_events_retention_days: number
+          driver_ops_log_retention_days: number
+          driver_telemetry_max_events_per_hour: number
+          driver_telemetry_retention_days: number
           esign_screenshot_default: boolean
           feature_two_stage_delivery: boolean
           font_family: string
@@ -423,6 +427,10 @@ export type Database = {
           driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
+          driver_location_events_retention_days?: number
+          driver_ops_log_retention_days?: number
+          driver_telemetry_max_events_per_hour?: number
+          driver_telemetry_retention_days?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           font_family?: string
@@ -458,6 +466,10 @@ export type Database = {
           driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
+          driver_location_events_retention_days?: number
+          driver_ops_log_retention_days?: number
+          driver_telemetry_max_events_per_hour?: number
+          driver_telemetry_retention_days?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           font_family?: string
@@ -2135,10 +2147,12 @@ export type Database = {
           altitude_m: number | null
           battery_pct: number | null
           charging_state: string | null
+          coalesced_since_count: number
           distance_today_meters: number
           driver_id: string
           heading_deg: number | null
           is_mocked: boolean | null
+          last_report_at: string | null
           last_seen_at: string
           latitude: number
           location_provider: string | null
@@ -2156,10 +2170,12 @@ export type Database = {
           altitude_m?: number | null
           battery_pct?: number | null
           charging_state?: string | null
+          coalesced_since_count?: number
           distance_today_meters?: number
           driver_id: string
           heading_deg?: number | null
           is_mocked?: boolean | null
+          last_report_at?: string | null
           last_seen_at?: string
           latitude: number
           location_provider?: string | null
@@ -2177,10 +2193,12 @@ export type Database = {
           altitude_m?: number | null
           battery_pct?: number | null
           charging_state?: string | null
+          coalesced_since_count?: number
           distance_today_meters?: number
           driver_id?: string
           heading_deg?: number | null
           is_mocked?: boolean | null
+          last_report_at?: string | null
           last_seen_at?: string
           latitude?: number
           location_provider?: string | null
@@ -2240,6 +2258,71 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "driver_login_verifications_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_operation_events: {
+        Row: {
+          app_version_code: number | null
+          category: string
+          context: Json
+          device_id: string | null
+          driver_id: string
+          entity_id: string | null
+          entity_type: string | null
+          error_code: string | null
+          id: number
+          latitude: number | null
+          longitude: number | null
+          occurred_at: string
+          operation_key: string
+          source: string
+          source_name: string | null
+          success: boolean
+        }
+        Insert: {
+          app_version_code?: number | null
+          category: string
+          context?: Json
+          device_id?: string | null
+          driver_id: string
+          entity_id?: string | null
+          entity_type?: string | null
+          error_code?: string | null
+          id?: number
+          latitude?: number | null
+          longitude?: number | null
+          occurred_at?: string
+          operation_key: string
+          source?: string
+          source_name?: string | null
+          success?: boolean
+        }
+        Update: {
+          app_version_code?: number | null
+          category?: string
+          context?: Json
+          device_id?: string | null
+          driver_id?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          error_code?: string | null
+          id?: number
+          latitude?: number | null
+          longitude?: number | null
+          occurred_at?: string
+          operation_key?: string
+          source?: string
+          source_name?: string | null
+          success?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_operation_events_driver_id_fkey"
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
@@ -2484,6 +2567,111 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "drivers"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_telemetry_event_types: {
+        Row: {
+          category: string
+          context_keys: string[]
+          created_at: string
+          is_active: boolean
+          label: string | null
+          name: string
+        }
+        Insert: {
+          category: string
+          context_keys?: string[]
+          created_at?: string
+          is_active?: boolean
+          label?: string | null
+          name: string
+        }
+        Update: {
+          category?: string
+          context_keys?: string[]
+          created_at?: string
+          is_active?: boolean
+          label?: string | null
+          name?: string
+        }
+        Relationships: []
+      }
+      driver_telemetry_events: {
+        Row: {
+          app_version_code: number | null
+          app_version_name: string | null
+          category: string
+          client_ts: string
+          clock_skew_ms: number | null
+          context: Json
+          context_stripped_keys: number
+          correlation_id: string | null
+          device_id: string | null
+          driver_id: string
+          event_id: string
+          event_name: string
+          id: number
+          network_state: string | null
+          platform: string | null
+          server_received_at: string
+          session_id: string | null
+          severity: string
+        }
+        Insert: {
+          app_version_code?: number | null
+          app_version_name?: string | null
+          category: string
+          client_ts: string
+          clock_skew_ms?: number | null
+          context?: Json
+          context_stripped_keys?: number
+          correlation_id?: string | null
+          device_id?: string | null
+          driver_id: string
+          event_id: string
+          event_name: string
+          id?: number
+          network_state?: string | null
+          platform?: string | null
+          server_received_at?: string
+          session_id?: string | null
+          severity?: string
+        }
+        Update: {
+          app_version_code?: number | null
+          app_version_name?: string | null
+          category?: string
+          client_ts?: string
+          clock_skew_ms?: number | null
+          context?: Json
+          context_stripped_keys?: number
+          correlation_id?: string | null
+          device_id?: string | null
+          driver_id?: string
+          event_id?: string
+          event_name?: string
+          id?: number
+          network_state?: string | null
+          platform?: string | null
+          server_received_at?: string
+          session_id?: string | null
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_telemetry_events_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_telemetry_events_event_name_fkey"
+            columns: ["event_name"]
+            isOneToOne: false
+            referencedRelation: "driver_telemetry_event_types"
+            referencedColumns: ["name"]
           },
         ]
       }
@@ -3769,6 +3957,7 @@ export type Database = {
           clicked_at: string | null
           created_at: string
           delivered_at: string | null
+          dismissed_at: string | null
           driver_id: string
           error_code: string | null
           error_message: string | null
@@ -3791,6 +3980,7 @@ export type Database = {
           clicked_at?: string | null
           created_at?: string
           delivered_at?: string | null
+          dismissed_at?: string | null
           driver_id: string
           error_code?: string | null
           error_message?: string | null
@@ -3813,6 +4003,7 @@ export type Database = {
           clicked_at?: string | null
           created_at?: string
           delivered_at?: string | null
+          dismissed_at?: string | null
           driver_id?: string
           error_code?: string | null
           error_message?: string | null
@@ -6192,6 +6383,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      _end_driver_duty_keep_gps: {
+        Args: { p_driver_id: string; p_reason?: string }
+        Returns: undefined
+      }
       _haversine_meters: {
         Args: { p_lat1: number; p_lat2: number; p_lng1: number; p_lng2: number }
         Returns: number
@@ -6224,6 +6419,10 @@ export type Database = {
           p_now?: string
           p_row: Database["public"]["Tables"]["driver_daily_shifts"]["Row"]
         }
+        Returns: Json
+      }
+      _telemetry_sanitize_context: {
+        Args: { p_context: Json; p_event_name: string }
         Returns: Json
       }
       _zone_geography_from_feature: {
@@ -6506,7 +6705,20 @@ export type Database = {
       allocate_visit_booking_code: { Args: never; Returns: string }
       approve_payout_run: { Args: { p_run_id: string }; Returns: undefined }
       archive_driver_intake: { Args: { p_intake_id: string }; Returns: Json }
+      assert_external_order_id: { Args: { p_raw: string }; Returns: string }
       claim_super_admin: { Args: { p_user_id: string }; Returns: boolean }
+      cleanup_driver_location_events: {
+        Args: { p_batch?: number; p_keep?: string }
+        Returns: number
+      }
+      cleanup_driver_operation_events: {
+        Args: { p_batch?: number; p_keep?: string }
+        Returns: number
+      }
+      cleanup_driver_telemetry_events: {
+        Args: { p_batch?: number; p_keep?: string }
+        Returns: number
+      }
       cleanup_stale_driver_locations: {
         Args: { p_max_age?: string }
         Returns: number
@@ -6746,6 +6958,14 @@ export type Database = {
         Args: { p_id: string; p_reason?: string }
         Returns: Json
       }
+      driver_delivery_performance_counts: {
+        Args: { p_driver_id: string }
+        Returns: Json
+      }
+      driver_dismiss_notifications: {
+        Args: { p_dispatch_item_ids?: string[] }
+        Returns: number
+      }
       driver_finalize_reconciliation: {
         Args: { p_device_id: string }
         Returns: undefined
@@ -6793,6 +7013,7 @@ export type Database = {
         Returns: Json
       }
       driver_get_delivery_proximity_context: { Args: never; Returns: Json }
+      driver_get_earnings_summary: { Args: never; Returns: Json }
       driver_get_esign_request: { Args: { p_id: string }; Returns: Json }
       driver_get_extra_earnings: { Args: never; Returns: Json }
       driver_get_home_dashboard: { Args: never; Returns: Json }
@@ -6803,6 +7024,7 @@ export type Database = {
         Returns: boolean
       }
       driver_heartbeat: { Args: { p_device_id: string }; Returns: Json }
+      driver_ingest_telemetry: { Args: { p_events: Json }; Returns: Json }
       driver_is_within_delivery_range: {
         Args: {
           p_driver_id: string
@@ -6842,6 +7064,18 @@ export type Database = {
         Returns: number
       }
       driver_notifications_unread_count: { Args: never; Returns: number }
+      driver_ops_audit_health: { Args: never; Returns: Json }
+      driver_ops_fail: {
+        Args: {
+          p_category: string
+          p_context?: Json
+          p_driver_id: string
+          p_error_code: string
+          p_operation_key: string
+          p_source_name: string
+        }
+        Returns: undefined
+      }
       driver_record_app_version: {
         Args: {
           p_channel?: string
@@ -6929,6 +7163,10 @@ export type Database = {
         Returns: Json
       }
       driver_update_avatar: { Args: { p_object_key: string }; Returns: Json }
+      driver_week_online_seconds: {
+        Args: { p_driver_id: string; p_today: string; p_week_start: string }
+        Returns: number
+      }
       enqueue_notification_automation_event: {
         Args: {
           p_driver_id?: string
@@ -7001,6 +7239,34 @@ export type Database = {
           p_start_date: string
         }
         Returns: Json
+      }
+      log_driver_operation: {
+        Args: {
+          p_category: string
+          p_context?: Json
+          p_driver_id: string
+          p_entity_id?: string
+          p_entity_type?: string
+          p_error_code?: string
+          p_latitude?: number
+          p_longitude?: number
+          p_operation_key: string
+          p_source?: string
+          p_source_name?: string
+          p_success?: boolean
+        }
+        Returns: undefined
+      }
+      log_driver_operation_autonomous: {
+        Args: {
+          p_category: string
+          p_context?: Json
+          p_driver_id: string
+          p_error_code: string
+          p_operation_key: string
+          p_source_name: string
+        }
+        Returns: undefined
       }
       mark_driver_intake_linked: {
         Args: { p_phone: string; p_profile_id: string }

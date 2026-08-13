@@ -13,10 +13,12 @@ import {
   fetchDeliveriesPage,
   fetchDeliveryFilterOptions,
   updateDeliveryStatus,
+  type DeliveriesPage,
   type DeliveriesQueryFilter,
 } from "./deliveries-actions";
 import type { ReviewableDeliveryStatus } from "./types";
 import type { DeliveryStatusFilterValue } from "./delivery-status-filter";
+import { patchDeliveryStatusInPages } from "./patch-delivery-status-pages";
 
 /** @deprecated Use DeliveryStatusFilterValue */
 export type DeliveriesTabFilter = DeliveryStatusFilterValue;
@@ -61,9 +63,21 @@ export function useUpdateDeliveryStatus() {
       status: ReviewableDeliveryStatus;
       rejectionReason?: string;
     }) => updateDeliveryStatus(deliveryId, status, rejectionReason),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.deliveries.all() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.verifications.all() });
+    onSuccess: async (result, vars) => {
+      if (result && "ok" in result) {
+        queryClient.setQueriesData<{ pages: DeliveriesPage[]; pageParams: unknown[] }>(
+          { queryKey: ["deliveries", "list"] },
+          (old) => {
+            if (!old?.pages) return old;
+            return {
+              ...old,
+              pages: patchDeliveryStatusInPages(old.pages, vars.deliveryId, vars.status),
+            };
+          },
+        );
+      }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.deliveries.all() });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.verifications.all() });
     },
   });
 }
@@ -72,8 +86,8 @@ export function useDeleteDelivery() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (deliveryId: string) => deleteDelivery(deliveryId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.deliveries.all() });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.deliveries.all() });
     },
   });
 }

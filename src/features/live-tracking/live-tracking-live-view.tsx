@@ -5,19 +5,23 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { DriverLocationsMap } from "@/features/locations/driver-locations-map";
 import { useDriverLocationsRealtime } from "@/features/locations/use-driver-locations-realtime";
-import { isGpsLive } from "@/features/locations/location-status";
+import { isGpsLive, shouldShowOnLiveMap } from "@/features/locations/location-status";
+import { isGpsHeartbeatStale } from "./tracking-metrics";
 import { fetchDriversForAdmin } from "@/features/drivers/drivers-actions";
 import { fetchRecentDeliveriesForDriver } from "@/features/deliveries/deliveries-actions";
 import { fetchDriverAssignedRestaurantPins } from "@/features/locations/locations-actions";
 import { fetchZones } from "@/features/zones/use-zones";
+import { fetchPartnerSelectOptions } from "@/features/partners/use-partners";
 import { normalizeZoneColor } from "@/features/zones/zone-colors";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import {
   DEFAULT_LIVE_TRACKING_FILTERS,
   matchesLiveTrackingFilters,
+  resetLiveTrackingFilters,
   type LiveTrackingFilterState,
 } from "./live-tracking-filters";
+import { buildPartnerFilterOptions } from "./partner-filter-options";
 import { FleetOverviewPanel } from "./fleet-overview-panel";
 import { LiveDriverDetailsPanel } from "./live-driver-details-panel";
 import { TrackingInsightsPanel } from "./tracking-insights-panel";
@@ -26,6 +30,7 @@ import {
   TrackingCommandLayout,
   TrackingMapStage,
 } from "./tracking-shell";
+import { trackingMapFrameFillClass } from "./tracking-command-layout";
 import {
   TrackingMapLegend,
   TrackingMapToolbar,
@@ -36,6 +41,7 @@ import {
   fleetStatusFromLocation,
   type FleetStatusKey,
 } from "./tracking-status";
+import { liveOrderDisplayId, liveOrderTimestamp } from "./live-recent-orders";
 import type { LiveDriverMeta, LiveRecentDelivery } from "./live-tracking-types";
 import type { GeofenceMapOverlay } from "@/features/locations/geofence-map-overlays";
 import { buildTrackingMapStyles } from "./tracking-map-google-styles";
@@ -53,10 +59,16 @@ export function LiveTrackingLiveView({
   fullscreen,
   activeTab,
   onTabChange,
+  showActivityTab,
+  showDiagnosticsTab,
+  onViewDriverActivity,
 }: {
   fullscreen?: boolean;
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
+  showActivityTab?: boolean;
+  showDiagnosticsTab?: boolean;
+  onViewDriverActivity?: (driverId: string) => void;
 }) {
   const t = useTranslations("pages.liveTracking");
   const { locations } = useDriverLocationsRealtime();
@@ -92,6 +104,11 @@ export function LiveTrackingLiveView({
     queryFn: () => fetchDriversForAdmin({ archived: false }),
   });
 
+  const { data: partners = [] } = useQuery({
+    queryKey: queryKeys.liveTracking.partnerOptions(),
+    queryFn: fetchPartnerSelectOptions,
+  });
+
   const { data: zones = [] } = useQuery({
     queryKey: queryKeys.zones.list(),
     queryFn: fetchZones,
@@ -108,10 +125,12 @@ export function LiveTrackingLiveView({
       { table: "driver_intakes" },
       { table: "zones" },
       { table: "zone_geofence_settings" },
+      { table: "partners" },
     ],
     invalidateKeys: [
       queryKeys.drivers.all(),
       queryKeys.zones.all(),
+      queryKeys.liveTracking.partnerOptions(),
     ],
   });
 
@@ -122,7 +141,7 @@ export function LiveTrackingLiveView({
       map.set(row.linked_profile_id, {
         fullName: row.full_name ?? null,
         driverCode: row.driver_code ?? null,
-        zoneId: row.zone_id ?? null,
+        zoneId: row.zone_id || null,
         partnerId: row.partner_id ?? null,
         zoneName: row.zone_name ?? null,
         partnerName: row.partner_name ?? null,
@@ -130,6 +149,7 @@ export function LiveTrackingLiveView({
         phone: row.phone ?? null,
         detailHref: `/drivers/${row.id}?tab=location`,
         avatarUrl: row.avatar_display_url ?? null,
+        isBlocked: row.is_blocked,
       });
     }
     return map;
@@ -144,36 +164,56 @@ export function LiveTrackingLiveView({
         ...loc,
         driverName: hasFallbackName ? (meta?.fullName ?? loc.driverName) : loc.driverName,
         driverCode: loc.driverCode === "—" ? (meta?.driverCode ?? loc.driverCode) : loc.driverCode,
+        isBlocked: loc.isBlocked || Boolean(meta?.isBlocked),
       };
     });
   }, [locations, profileMeta]);
 
-  /** Only drivers with GPS updated within the last 10 minutes appear on the live map. */
+  /** On-duty drivers stay pinned at last-known GPS; others need a fresh ping. */
   const liveDrivers = useMemo(
-    () => enrichedLocations.filter((loc) => isGpsLive(loc.lastSeenAt, nowTick)),
+    () =>
+      enrichedLocations.filter((loc) =>
+        shouldShowOnLiveMap({ lastSeenAt: loc.lastSeenAt, isOnDuty: loc.isOnDuty }, nowTick),
+      ),
     [enrichedLocations, nowTick],
   );
 
   const staleOnDutyCount = useMemo(
     () =>
       enrichedLocations.filter(
-        (loc) => !isGpsLive(loc.lastSeenAt, nowTick) && loc.isOnDuty,
+        (loc) => loc.isOnDuty && isGpsHeartbeatStale(loc.lastSeenAt, nowTick),
       ).length,
     [enrichedLocations, nowTick],
+  );
+
+  const zoneShapes = useMemo(
+    () =>
+      zones
+        .filter((z) => z.geometry)
+        .map((z) => ({
+          id: z.id,
+          zone_type: z.zone_type,
+          geometry: z.geometry,
+        })),
+    [zones],
   );
 
   const filtered = useMemo(() => {
     return liveDrivers.filter((loc) => {
       const meta = profileMeta.get(loc.driverId);
-      if (!matchesLiveTrackingFilters(loc, filters, meta)) return false;
+      if (!matchesLiveTrackingFilters(loc, filters, meta, zoneShapes, nowTick)) return false;
       const status = fleetStatusFromLocation({
         pinStatus: loc.pinStatus,
         trackingStatus: loc.trackingStatus,
         isOnDuty: loc.isOnDuty,
+        isBlocked: loc.isBlocked,
+        speedMps: loc.speedMps,
+        lastSeenAt: loc.lastSeenAt,
+        now: nowTick,
       });
       return visibleStatuses.includes(status);
     });
-  }, [liveDrivers, filters, profileMeta, visibleStatuses]);
+  }, [liveDrivers, filters, profileMeta, visibleStatuses, zoneShapes, nowTick]);
 
   const selectedDriver = useMemo(
     () => filtered.find((d) => d.driverId === selectedId) ?? null,
@@ -221,24 +261,28 @@ export function LiveTrackingLiveView({
     queryFn: async () => {
       if (!selectedId) return [];
       try {
-        const rows = await fetchRecentDeliveriesForDriver(selectedId, 1);
+        const rows = await fetchRecentDeliveriesForDriver(selectedId, 3);
         return rows.map<LiveRecentDelivery>((row) => ({
           id: row.id,
           driverId: row.driver_id,
-          shortId: row.short_id,
+          shortId: liveOrderDisplayId(row),
           status: row.status,
           partnerName: row.partner_name,
-          deliveredAt: row.delivered_at,
+          deliveredAt: liveOrderTimestamp(row),
         }));
-      } catch {
+      } catch (error) {
+        console.error("[live-tracking] recent deliveries failed", error);
         return [];
       }
     },
   });
 
   const alertsCount = useMemo(
-    () => liveDrivers.filter((l) => l.zoneStatus === "out_of_zone").length,
-    [liveDrivers],
+    () =>
+      liveDrivers.filter(
+        (l) => isGpsLive(l.lastSeenAt, nowTick) && l.zoneStatus === "out_of_zone",
+      ).length,
+    [liveDrivers, nowTick],
   );
 
   const mapMarkers = useMemo(
@@ -289,7 +333,7 @@ export function LiveTrackingLiveView({
   }, [zones, geofencesEnabled, zoneDriverCounts]);
 
   const mapHeightClass =
-    fullscreen || mapOnlyFullscreen ? "min-h-0 flex-1 h-full" : "min-h-0 flex-1";
+    fullscreen || mapOnlyFullscreen ? "min-h-0 flex-1 h-full" : undefined;
 
   const zoneFilterOptions = useMemo(
     () => [
@@ -299,14 +343,10 @@ export function LiveTrackingLiveView({
     [t, zones],
   );
 
-  const partnerFilterOptions = useMemo(() => {
-    const uniq = new Map<string, string>();
-    for (const row of driversMeta) {
-      if (!row.partner_id || !row.partner_name) continue;
-      uniq.set(row.partner_id, row.partner_name);
-    }
-    return [{ id: "all", label: t("allPartners") }, ...Array.from(uniq, ([id, label]) => ({ id, label }))];
-  }, [driversMeta, t]);
+  const partnerFilterOptions = useMemo(
+    () => buildPartnerFilterOptions(partners, t("allPartners")),
+    [partners, t],
+  );
 
   return (
     <TrackingCommandLayout
@@ -325,10 +365,16 @@ export function LiveTrackingLiveView({
           avatarByDriverId={avatarByDriverId}
           filters={filters}
           onChange={setFilters}
+          onReset={() => {
+            setFilters(resetLiveTrackingFilters());
+            setVisibleStatuses([...LEGEND_FILTERABLE_STATUSES]);
+          }}
           zoneOptions={zoneFilterOptions}
           partnerOptions={partnerFilterOptions}
           activeTab={activeTab}
           onTabChange={onTabChange}
+          showActivityTab={showActivityTab}
+          showDiagnosticsTab={showDiagnosticsTab}
         />
       }
       footer={
@@ -345,7 +391,7 @@ export function LiveTrackingLiveView({
           fillParent={!fullscreen && !mapOnlyFullscreen}
           mapHeightClass={mapHeightClass}
           frameClassName={cn(
-            !fullscreen && !mapOnlyFullscreen && "min-h-0 flex-1 shrink",
+            !fullscreen && !mapOnlyFullscreen && trackingMapFrameFillClass(),
             mapOnlyFullscreen && "fixed inset-2 z-50 rounded-xl border bg-background shadow-2xl",
           )}
         >
@@ -376,6 +422,7 @@ export function LiveTrackingLiveView({
             onToggleGeofences={() => setGeofencesEnabled((prev) => !prev)}
             onRecenter={() => mapActions?.recenter()}
             onMapFullscreen={() => setMapOnlyFullscreen((prev) => !prev)}
+            isMapFullscreen={mapOnlyFullscreen}
             onZoomIn={() => mapActions?.zoomIn()}
             onZoomOut={() => mapActions?.zoomOut()}
             prefs={mapPrefs}
@@ -405,6 +452,12 @@ export function LiveTrackingLiveView({
                   restaurantPins={selectedRestaurantPins}
                   variant="stacked"
                   onClose={() => setSelectedId(null)}
+                  canViewActivity={showActivityTab}
+                  onViewAllActivity={
+                    onViewDriverActivity
+                      ? () => onViewDriverActivity(selectedDriver.driverId)
+                      : undefined
+                  }
                 />
               </div>
             </div>

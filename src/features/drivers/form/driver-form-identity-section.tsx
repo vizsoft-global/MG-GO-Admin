@@ -77,6 +77,8 @@ export function DriverFormIdentitySection({
   placeholders: {
     fullName: string;
     civilId: string;
+    employeeId?: string;
+    employeeIdHelp?: string;
     nationality: string;
     searchNationality: string;
   };
@@ -182,12 +184,19 @@ export function DriverFormIdentitySection({
             disabled={disabled}
             inputMode="numeric"
             maxLength={8}
+            minLength={4}
+            placeholder={placeholders.employeeId}
             onChange={(event) =>
               onEmployeeIdChange(restrictDigits(event.target.value, 8))
             }
             className="h-9 rounded-md font-mono text-sm tabular-nums"
             aria-invalid={Boolean(errors.employeeId)}
           />
+          {placeholders.employeeIdHelp ? (
+            <p className="text-[10px] leading-tight text-muted-foreground">
+              {placeholders.employeeIdHelp}
+            </p>
+          ) : null}
           <FieldError message={errors.employeeId} />
         </FieldBlock>
 

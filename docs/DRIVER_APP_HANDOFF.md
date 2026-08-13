@@ -57,7 +57,7 @@ The **admin panel** verifies deliveries, approves requests, manages zones/vehicl
 The admin panel auto-issues a **6-digit numeric passcode** (`drivers.app_passcode`) the moment a driver row transitions to `status = 'active'`. Admins share it privately with the driver and the driver enters `driver_code + passcode` on the login screen.
 
 1. App calls RPC `select * from public.driver_app_lookup_by_passcode(p_driver_code, p_passcode)` (granted to `anon`).
-2. RPC returns `{ ok: true, user_id }` only when the driver row is `active`, not archived, not blocked, and both values match. Errors: `invalid_credentials`, `driver_not_active`, `driver_archived`, `driver_blocked` (includes `message` = admin reason).
+2. RPC returns `{ ok: true, user_id }` only when the driver row is `active`, not archived, not blocked, and both values match. Errors: `invalid_credentials`, `driver_not_active`, `driver_archived`, `driver_blocked` (includes `message` = admin reason). Edge `driver-passcode-login` forwards those codes. The login screen **must** map `driver_archived` to a dedicated “account has been archived” message — never to invalid employee ID / passcode.
 3. With `user_id` in hand, exchange for a real Supabase session — easiest path: call a service-role edge function that issues an OTP / magic-link / signed JWT for that `auth.users.id` (we do **not** ship the service-role key in the app).
 4. Admin can rotate via `select public.regenerate_driver_app_passcode(p_driver_id)` (staff only via RLS helper `is_admin_panel_user()`); rotation invalidates the old code immediately.
 5. The passcode is plaintext in `drivers.app_passcode` so admin staff can read it out to the driver. Treat it as a shared secret — show it only behind the staff "reveal" gesture.
@@ -67,8 +67,8 @@ The admin panel auto-issues a **6-digit numeric passcode** (`drivers.app_passcod
 - `app_passcode ~ '^[0-9]{6}$'` (check constraint)
 - `UNIQUE` partial index across non-null values (no two drivers share a code)
 - `BEFORE INSERT OR UPDATE OF status` trigger mints a code the first time `status` becomes `active`
-- **`drivers.status = 'active'` is blocked** unless the driver has ≥1 **published + active** restaurant in `driver_restaurants` (helper `driver_has_active_restaurant`, trigger on `drivers` + auto-downgrade when restaurants are removed). Admins set status via RPC `set_driver_account_status(p_driver_id, p_status)` on `/drivers/[id]`.
-- **Admin app block** (`drivers.is_blocked`, `drivers.blocked_reason`): separate from account status. Admins block/unblock on `/drivers/[id]` via RPC `set_driver_blocked(p_driver_id, p_blocked, p_reason)`. Blocking forces `is_on_duty = false`. On login, `driver_app_lookup_by_passcode` returns `{ ok: false, error: 'driver_blocked', message: '<reason>' }`. For signed-in sessions, subscribe to `drivers` realtime and read `is_blocked` + `blocked_reason`; show a full-screen block view when blocked.
+- **`drivers.status = 'active'` is blocked** unless the driver has ≥1 **published + active** restaurant in `driver_restaurants` (helper `driver_has_active_restaurant`, trigger on `drivers` + auto-downgrade when restaurants are removed). Admins set status via RPC `set_driver_account_status(p_driver_id, p_status)` on `/drivers/[id]`. Leaving `active` (Operations **Inactive** → `suspended`, or `pending`) **clocks the driver out immediately**: `is_on_duty = false`, open `driver_sessions` row closed, open `attendance_logs` row stamped `check_out_reason = admin`, last-known GPS kept. `driver_set_duty_state` raises `inactive` if the rider tries to clock back in. The app already syncs duty off via `drivers` realtime (`remoteDutyMonitor`) so Time in today stops without a manual clock-out.
+- **Admin app block** (`drivers.is_blocked`, `drivers.blocked_reason`): separate from account status. Admins block/unblock on `/drivers/[id]` via RPC `set_driver_blocked(p_driver_id, p_blocked, p_reason)`. Blocking forces `is_on_duty = false` **and clocks out** the open `driver_sessions` row plus the open `attendance_logs` row (`check_out_reason = admin`) so a leftover `is_online = true` cannot keep the home Online toggle on after unblock + login. Last-known `driver_locations` are kept. On login, `driver_app_lookup_by_passcode` returns `{ ok: false, error: 'driver_blocked', message: '<reason>' }`. For signed-in sessions, subscribe to `drivers` realtime and read `is_blocked` + `blocked_reason`; show a full-screen block view when blocked.
 
 ### 2b. Admin-first provisioning (default)
 
@@ -77,7 +77,7 @@ Staff use **Verify & approve** on `/drivers/[id]` (or bulk import with **Approve
 - Inserts `profiles` + `drivers`, copies `driver_intake_restaurants` → `driver_restaurants`, sets `drivers.status = 'active'`, mints `app_passcode`, marks intake `linked`.
 - Driver signs in with **driver_code + passcode** via edge function `driver-passcode-login` (magic link on synthetic email).
 
-`employee_id` on intakes/drivers: **required**, 1–8 digits, unique.
+`employee_id` on intakes/drivers: **required**, 4–8 digits, unique (same as app login).
 
 `nationality` on intakes/drivers: **optional**, ISO 3166-1 alpha-2 code (e.g. `KW`, `IN`). Admin create/edit uses searchable country list; copied to `drivers` on **Verify & approve**.
 
@@ -101,7 +101,7 @@ For intakes still `linked = false` from before admin-first approval, the driver 
 3. **Else** (no intake): create minimal `profiles` + `drivers` (self-signup path).
 
 Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edit; auth users are created on **Verify & approve** (not on intake insert alone).
-- `employee_id` required on every intake (1–8 digits)
+- `employee_id` required on every intake (4–8 digits)
 - `linked = false` until **Verify & approve** (or legacy OTP link)
 
 | Table / bucket | Admin | Driver app |
@@ -149,7 +149,7 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 ### `profiles` (existing)
 - `id` uuid PK (= auth.uid)
 - `role` — must be `rider`
-- `phone`, `full_name`, `locale`, `avatar_url`, `zone_id`
+- `phone`, `full_name`, `locale`, `avatar_url` (R2 object key — same value as `drivers.avatar_object_key`), `zone_id`
 
 ### `drivers`
 | Column | Type | Notes |
@@ -165,6 +165,12 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | current_lat, current_lng | numeric | Updated while online |
 | vehicle_id | uuid | FK → vehicles |
 | custom_fields | jsonb | Admin-defined dynamic fields (`custom_field_definitions`). Values are scalars (`string` / `number` / `boolean`) or, for **checkbox** defs that have `options`, a `string[]` of selected option values. Checkbox with empty options remains a boolean. |
+| avatar_object_key | text | Profile photo R2 key (`driver-avatars/{id}/…` from the app, or `drivers/{id}/avatar.{ext}` from admin). Kept in lockstep with `profiles.avatar_url` and the linked intake. |
+| avatar_updated_at | timestamptz | Set whenever the photo changes. |
+
+**Live Tracking map:** pins come from `driver_locations`. Active (non-archived) drivers keep a last-known pin, including **Offline / off-duty**. Cron `cleanup_stale_driver_locations` (every 2 min) deletes stale rows only when the driver is missing or `archived_at` is set. The duty tracker must keep sending heartbeats while In: indoor/coarse GPS (>100 m) re-sends the last good **pin** when stationary; when live speed is ≥1.5 m/s it reports the live fix so the admin pin travels. Motion (`idle`/`moving`) is classified from the **live GPS sample** (speed or ≥15 m displacement), not the frozen last-good pin. While `duty_active_delivery_id` is set, reports stay `delivery_submit` (On Delivery); the next tick after the order ends reports idle/moving immediately. Off-duty / logged-out riders must display **Offline**, never the last `tracking_status`.
+
+**Profile photo (admin ↔ app):** upload `entityType: driver_avatar`, then `driver_update_avatar(p_object_key)` (or rely on confirm/proxy, which now stamp the same columns). Display: read `drivers.avatar_object_key` (fallback `profiles.avatar_url`) and resolve with `GET /api/driver-uploads/read?objectKey=…`. That read route allows the rider’s current avatar key even when admin uploaded it (`uploaded_by` is staff). Do **not** treat `driver_selfie` or login-verification shots as the profile photo. Cache-bust the signed `readUrl` with a URL **fragment** (`#v={epoch}`), never an extra query param — `?v=` / `&v=` invalidates the R2 signature. The app also writes the photo bytes to disk keyed by `avatar_object_key` so Profile still shows the image after process death (in-memory picker preview is gone; `Image.network` of a signed URL is not required for the retained photo). Any Take a Photo path (Profile, pickup/finish proof, request-detail Capture) must request camera permission *before* `ImagePicker`; a deny/dismiss or in-flight `PermissionHandler.PermissionManager` shows “Camera access is needed…”, never a raw `PlatformException`.
 
 ### `deliveries`
 | Column | Type | Notes |
@@ -173,9 +179,10 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | partner_id | uuid | Selected partner |
 | zone_id | uuid | Zone at time of delivery |
 | restaurant_id | uuid | Optional FK → `restaurants` (merchant) |
-| external_order_id | text | Order # from partner app (globally unique when normalized) |
+| external_order_id | text | Order # from partner app. **Format:** ASCII digits `0-9` only, length **1–32** (hint e.g. `12345`). `driver_create_pickup` / insert trigger raise **`invalid_order_id`** otherwise — show “Order ID must be 1–32 digits.” Unique index `deliveries_external_order_id_unique_idx`. Pickup RPC raises **`duplicate_order_id`** (including when the unique index fires). App must show a friendly string such as “This Order ID already exists.” — never the raw Postgres constraint message. |
 | order_proof_url | text | R2 object key (`drivers/{id}/order_proof/...`) |
 | status | enum | pending → admin sets verified/rejected |
+| rejection_reason | text | Admin-authored when `status = rejected`. **Required on Delivery Details overlay** — select the column and show it under Status. Do not reuse `cancel_reason` (that is the rider cancel code). |
 | delivered_at | timestamptz | Set on driver submit |
 | delivered_lat, delivered_lng | numeric | GPS at submit time |
 
@@ -351,6 +358,17 @@ const { data } = await supabase
 
 Sum `amount_kwd` where `entry_type = 'earning_credit'` for “approved earnings this week”. Future payout runs will insert `payout_debit` rows against the same ledger.
 
+**Earnings → Performance Summary (required):** `driver_earnings_daily.deliveries` / `week.deliveries_count` are **verified-only** (payroll). Do **not** use them for “Total Delivery Count”.
+
+**Home → This Week’s Progress Time in:** `week.online_seconds` is `SUM(driver_attendance.online_seconds)` for `kuwait_week_start`..today, plus live elapsed only if the open `driver_sessions` row started today. Do **not** sum `driver_sessions` across the week — leftover `is_online` rows from prior days inflate the total with wall-clock hours.
+
+```sql
+select public.driver_get_earnings_summary();
+-- { ok, total_deliveries, verified_deliveries, pending_deliveries, rejected_deliveries }
+```
+
+`total_deliveries` = lifetime submitted (pending + in_transit + verified + rejected; **excludes cancelled**). Same object is also `driver_get_home_dashboard().performance`. For driver `10085` that is `10` made / `5` verified — summing daily verified rows is what produced the wrong `5`.
+
 Admin RPCs (staff): `get_driver_earnings_detail`, `list_driver_earnings_daily`, `recalculate_earnings_for_range`.
 
 ### `driver_earnings_daily` (legacy read — still available)
@@ -368,12 +386,13 @@ Admin RPCs (staff): `get_driver_earnings_detail`, `list_driver_earnings_daily`, 
 
 ### `attendance_logs`
 - One row per `(driver_id, log_date)` where `log_date` uses **Asia/Kuwait** calendar date of **check-in**.
-- **Check-in / check-out:** the Home **duty toggle ON** upserts today's row (`check_in_at`, `status = present` unless `on_leave`); **toggle OFF** sets `check_out_at` with `check_out_reason = manual`.
+- **Check-in / check-out:** the Home **duty toggle ON** upserts today's row (`check_in_at`, `status = present` unless `on_leave`); **toggle OFF** sets `check_out_at` with `check_out_reason = manual`. **Sign out of the active device** also clocks out (`driver_release_device_session` → `_attendance_apply_checkout`, reason `manual`) so work-time stops and the next login is not still Clocked In. A kicked/old device must **not** clock out — only when `p_device_id` matches `drivers.active_device_id`.
 - Checkout finds the latest **open** log (`check_in_at` set, `check_out_at` null) — not only “today” — so overnight shifts that span midnight keep hours on the check-in day.
 - `check_out_reason`: `manual` | `auto_offline` | `auto_out_of_zone` | `admin` (null until checked out).
 - Written by `driver_set_duty_state` (same RPC as sessions) — no separate attendance button in v1.
 - **Auto-checkout (server cron):** if the driver stays **on duty** and is continuously **offline** (`driver_sessions.went_offline_at`) **or** continuously **outside assigned zone** (`driver_locations.out_of_zone_since`, maintained from `drivers.zone_id` geometry on location upserts) for `app_settings.attendance_auto_checkout_minutes` (default **45**), RPC `admin_run_attendance_auto_checkout` checks them out with reason `auto_offline` / `auto_out_of_zone`. Returning online or in-zone before the threshold **resets** that timer (no checkout). Cron: `/api/cron/attendance-auto-checkout` every 5 minutes (`CRON_SECRET`).
 - **Driver app (MG-GO):** `remoteDutyMonitorProvider` listens to `drivers` realtime/poll via `liveDbRefreshCoordinator`, patches home duty UI off, refreshes dashboard, and shows snackbar for `auto_offline` / `auto_out_of_zone`. Local duty-off / client zone timeout suppress that toast. Client idle outside-zone countdown is **45 minutes** (aligned with server default).
+- **Duty OS permissions:** the readiness sheet is not only for Clock In. After re-login (or resume) while `is_on_duty` is still true, Home audits location / background / notifications / battery / overlay / camera and shows the same sheet if any required permission was revoked. Add Delivery / Go In while already on duty must not skip that audit.
 - `zone_compliance`: `inside` | `outside` (geofence reporting — future writer).
 - `admin_note`: set when staff corrects a record via admin panel RPC `admin_correct_attendance` (sets `check_out_reason = admin` when checkout is written).
 - Driver **SELECT** own rows (`driver_id = auth.uid()`). Admin module: `/attendance` (today / history / problems / analytics).
@@ -391,7 +410,7 @@ select id, log_date, check_in_at, check_out_at, check_out_reason, status, zone_c
 select public.driver_set_duty_state(p_is_on_duty := true, p_is_online := true);  -- check in
 select public.driver_set_duty_state(p_is_on_duty := false, p_is_online := false); -- check out (manual)
 ```
-Returns full home dashboard payload (`driver_get_home_dashboard()` shape).
+Returns full home dashboard payload (`driver_get_home_dashboard()` shape). `shift_adherence.minutes_early_out` is minutes before **shift end**, clamped to the scheduled window — clocking out before shift start is the remaining shift length, not start-to-end plus the pre-shift gap.
 
 **Working hours:** wall-clock `check_out_at - check_in_at` (admin list uses reporting `duty_seconds`). Midnight-spanning shifts are one continuous interval on the check-in `log_date`.
 
@@ -445,6 +464,85 @@ supabase.channel(`notifications:driver:${driverId}`).on(...)
 
 ---
 
+## 6b. Operation audit stream (`driver_operation_events`)
+
+**Nothing to implement.** This is recorded server-side, inside the RPCs the app already calls. It is documented here because it changes what Admin can see, and because two rules constrain future RPC changes.
+
+Every meaningful operation a driver performs now writes an append-only row: auth and device, duty and shift, delivery, location zone flips, requests, e-sign, visits, notifications, profile and security. Both outcomes are recorded — a successful pickup and a pickup refused for `delivery_out_of_range` both leave a row, and failures that `RAISE` are written on a separate connection so they survive the rollback that discards everything else.
+
+**Error contract is unchanged.** Every code the app matches on (`active_pickup_exists`, `duplicate_order_id`, `delivery_out_of_range`, `location_required`, `invalid_order_id`, `shift_required`, `shift_locked`, `sessions_overlap`, `object_key_required`, `invalid_object_key`, …) still arrives with the same message and the same SQLSTATE. If a code ever appears to change, that is a bug in the audit layer, not a new contract.
+
+Two rules for anyone adding a driver RPC:
+
+- Never call `log_driver_operation_autonomous` from `driver_report_location` or `driver_heartbeat`. Each call opens a database connection; at heartbeat frequency that exhausts the pool.
+- A failure that raises needs the autonomous emitter (or `driver_ops_fail`) to be recorded at all. A failure returned as `{ok:false}` can use the plain in-transaction emitter.
+
+What the driver sees in Admin: **Live Tracking → Activity** (live feed, filters, CSV export), a recent-operations timeline in the map popup, and an **Activity** tab on `/drivers/[id]`. Staff need `driver_ops.view`; export needs `driver_ops.export`. Riders cannot read the table — RLS grants SELECT to admin panel users only, and no role can INSERT except through the emitters.
+
+Retention: 90 days (`app_settings.driver_operation_events_retention_days`), trimmed daily. Full operation-by-operation coverage, including what is deliberately **not** recorded and why, is in [`docs/DRIVER_OPS_COVERAGE.md`](DRIVER_OPS_COVERAGE.md).
+
+---
+
+## 6c. Client telemetry (`driver_ingest_telemetry`) — app work required
+
+Unlike 6b, this one is yours to build. It is the only stream the app authors itself, so it is allowlisted and sanitised server-side; it is **additive and best-effort** — a telemetry failure must never surface to the driver, block an action, or retry hard enough to be noticed.
+
+```dart
+final res = await supabase.rpc('driver_ingest_telemetry', params: {'p_events': batch});
+```
+
+One call, ≤ 100 events. Never one call per event. `driver_id` is taken from the rider JWT — sending one in the body is ignored, not an error.
+
+**Per event:** `event_id` (UUID v4 generated at enqueue — this is the idempotency key, so a retried batch inserts nothing twice), `event_name` (from the table below), `client_ts` (**stamped at enqueue, not at flush** — otherwise the offline timeline collapses onto the reconnect moment), and optionally `session_id`, `correlation_id`, `platform`, `os_version`, `device_model`, `app_version_name`, `app_version_code`, `network_state`, `severity`, `context`.
+
+**Events and the context keys each one accepts:**
+
+| event | context keys |
+|---|---|
+| `app.startup` | `cold_start`, `boot_ms` |
+| `app.foreground` / `app.background` | `screen`, `duration_ms` |
+| `app.client_info` | `platform`, `os_version`, `device_model`, `app_version_name`, `app_version_code`, `locale` |
+| `screen.open` | `screen`, `from_screen`, `load_ms` |
+| `action.tap` | `action`, `screen`, `result` |
+| `permission.location_granted` / `.location_denied` / `.notification_granted` / `.notification_denied` / `.camera_denied` | `status`, `screen`, `is_permanent`, `attempt` |
+| `network.offline` / `network.online` | `network_state`, `offline_ms` |
+| `queue.created` | `queue`, `depth`, `dropped`, `reason` |
+| `queue.flushed` | `queue`, `depth`, `batch_count`, `flush_ms`, `reason` |
+| `client.error` | `code`, `screen`, `http_status`, `retryable` |
+
+Screens go in `context.screen` (`delivery_list`, `pickup_form`, `profile`), which is why there is no `delivery_screen.open` event — the name list is fixed so the app can add screens without a migration. `action.tap` is for decision-grade taps only: clock in/out, pickup submit, finish submit, retry, sign out. Not scrolls, not renders, not keystrokes.
+
+**Do not emit telemetry for a business operation.** `duty.on`, `duty.off`, `delivery.pickup_create`, `delivery.complete`, `delivery.cancel`, `request.acknowledge`, `esign.sign` are already recorded server-side by 6b and are the source of truth. Telemetry describes the *context* around them.
+
+**The context contract is enforced in SQL, so an unknown key is silently stripped rather than stored.** Values must be JSON scalars — a nested object or array is dropped, which is deliberately what prevents a stack trace, a headers map or a request body from landing. Strings are truncated at 120 chars, and `screen`, `from_screen`, `action`, `code`, `queue`, `reason`, `result`, `status`, `network_state` must match `^[a-z][a-z0-9_.-]{0,63}$`. A key whose name contains `token`, `password`, `passcode`, `secret`, `jwt`, `phone`, `civil`, `address`, `email`, `stack`, `message`, `header`, `body`, `auth` (and `pin`, `otp`, `lat`, `lng`, `iban`, `dob` as whole words) is stripped even if it is otherwise allowlisted.
+
+**`client.error` takes a code, never a message.** There is no `message` key and no `stack` key. Send `code: 'upload_failed'`, the screen, and optionally `http_status`. Full errors belong in the app's crash reporter, not here.
+
+Stripped keys are recorded in `context_stripped_keys` and shown in Admin, so a build sending the wrong shape is visible rather than silently lossy. `context` must be ≤ 1024 chars after sanitising, or the event is rejected.
+
+**Queue:** bounded FIFO, cap 2000, drop oldest on overflow and emit `queue.created` with `dropped: n` (at most one such notice per flush cycle, and a drop caused by writing the notice itself is not counted — otherwise a permanently full queue would keep reporting itself). Persist across restarts. Flush on: app background, app foreground, network restored, login/auth transition, queue ≥ 25, and a 60s timer. Never flush per event. Background *and* foreground both flush: background drains before the process can be killed, foreground picks up what a kill left behind.
+
+**Response — the RPC returns a result object instead of raising, so you can tell "drop this" from "retry later":**
+
+```json
+{"ok":true,"accepted":8,"duplicates":1,"rejected":1,"throttled":false,
+ "rejects":[{"event_id":"…","reason":"unknown_event"}]}
+```
+
+| response | what to do |
+|---|---|
+| `ok:false, error:'not_authenticated'` | keep the queue, flush after login |
+| `ok:false, error:'batch_too_large'` / `'invalid_payload'` | client bug: split or fix, do not loop |
+| `ok:true, throttled:true` | **clear the batch and stop** — the hourly quota is closed, retrying only burns battery |
+| an entry in `rejects[]` | delete that event permanently (`unknown_event`, `client_ts_out_of_range`, `context_too_large`, `event_id_required`) |
+| network / 5xx | backoff 5s → 15s → 60s → 300s, then wait for the next trigger |
+
+Caps: 100 events per call, 1024-char context, `client_ts` within ±7 days of server time, and 2000 events/hour per driver (`app_settings.driver_telemetry_max_events_per_hour`).
+
+Admin can turn any of this off without an app release — deactivate one event, revoke a context key, or set the hourly quota to 0. All three arrive as `throttled` or a reject reason, so the app must treat "told to stop" as normal, not as an error. The app has no read, update or delete access to telemetry: there is no RLS policy granting it, for its own rows or anyone's. Details in [`docs/DRIVER_TELEMETRY.md`](DRIVER_TELEMETRY.md).
+
+---
+
 ## 7. Push notifications (Notification Center v2)
 
 Admin now sends via `notification_campaigns` + `notification_dispatch_items` (FCM provider), not direct inserts to legacy `notifications`.
@@ -471,6 +569,10 @@ Admin dispatch sends FCM with notification title/body plus a flat string `data` 
 Parse `action_params` and `media` as JSON on the client. Parse `screenshot_restricted` as a boolean (`"true"` → true). Unknown keys must be ignored for forward compatibility.
 
 `driver_list_notifications` also returns `screenshot_restricted` (boolean) on each inbox item — **prefer the inbox/RPC value over a stale push payload** on next sync.
+
+**Inbox clear / remove (required):** Riders must be able to clear old notifications from the list. Stamp `notification_dispatch_items.dismissed_at` via `driver_dismiss_notifications(p_dispatch_item_ids uuid[] default null)` (`null` = all of that rider’s undismissed rows). Do **not** DELETE dispatch rows — admin analytics stay. List + unread count omit dismissed rows. Fallback: `DELETE /api/driver-app/notifications` with `{ "dispatch_item_ids": uuid[] | omit-for-all }`.
+
+**Profile Notifications toggle (required):** SharedPreferences `profile.notifications.enabled` (default `true`). When `false`, Home Important Notifications, the Notifications inbox, and the unread badge must show empty; do not show foreground/local banners; deactivate the FCM token so OS tray campaigns also stop. Re-register the token when the rider turns the toggle back on. Dispatch rows stay on the server — this is a client mute, not a dismiss.
 
 #### Screenshot restriction (sensitive notifications)
 
@@ -860,7 +962,9 @@ Driver images and documents use the **same private R2 bucket** as the admin pane
 | `order_proof` | 10 MB | `image/*`, `application/pdf` |
 | `login_verification` | 5 MB | `image/*` |
 
-Object keys are server-generated: `drivers/{driverId}/{entityType}/{date}/{uuid}.{ext}`.
+Object keys are server-generated: `drivers/{driverId}/{entityType}/{date}/{uuid}.{ext}`, except `driver_avatar` which uses `driver-avatars/{driverId}/{date}/{uuid}.{ext}`.
+
+Confirm or proxy of `driver_avatar` writes `drivers.avatar_object_key`, `profiles.avatar_url`, and the linked intake `avatar_url`. Still call `driver_update_avatar(p_object_key)` after confirm (idempotent; also validates the key belongs to the caller).
 
 Login identity selfies use `login_verification` after on-device blink liveness. After confirm, the app calls `driver_record_login_verification(p_object_key, p_liveness_passed, p_liveness_method)` to write `driver_login_verifications` (Phase 1 soft liveness — defaults allow old APKs). See **`docs/LOGIN_VERIFICATION_HANDOFF.md`**.
 
@@ -961,7 +1065,7 @@ No new RPC was added; the existing function's restaurant objects gained the `geo
 | `driver_log_security_event(p_event_type, p_severity, p_context)` | Log security events. Accepts `p_event_type = 'zone_timeout_checkout'` with `p_severity = 'warning'`. Context JSON may include `mode` (`idle` \| `return_grace`), `window_seconds`, coordinates, `zone_status`, `outside_since`. Stored in `driver_security_events`. |
 | `driver_complete_delivery` / `driver_cancel_delivery` | **Idempotent retry**: if delivery already completed (`pending`/`verified`) or cancelled, returns the existing row instead of raising `invalid_delivery_status`. |
 | `driver_create_pickup` / complete / cancel | **Only** the overloads with `p_device_id` remain (pre-device overloads dropped). Always pass `p_device_id`. |
-| `driver_release_device_session` | Unchanged — clears active session only when `p_device_id` matches `drivers.active_device_id`. |
+| `driver_release_device_session` | Clears this device row. **When it is the active device**, clocks the driver out (`is_on_duty = false`, close open session + attendance log) so work-time stops. Kicked devices (id ≠ `active_device_id`) only revoke their own session. Profile Sign out must call this **and** `driver_set_duty_state(false, false)` first (`clockOut: true`); device-kick sign-out must not pass `clockOut`. |
 | `driver_heartbeat` | Unchanged — `flush_grace_active: true` for ~5 min after device override (via `flush_deadline_at`). |
 | `driver_finalize_reconciliation` | Unchanged — accepts flushed rows during override grace. |
 | Weekly/monthly incentives | Accrue **once** on period end day (Kuwait week/month end) in `driver_earnings_daily.incentive_kwd`. |
@@ -971,7 +1075,15 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-08 — [admin+app] Driver app collapsed to single production stack (no Android flavors / no OTA / no update channels); driver targets `dpdadmin-prod` + Supabase `eoksxkdssptgyqyywdju` + Firebase `musallam-delivery-prod` only; Play Store distribution; `/api/driver-app/active-release` always returns `null`; admin App Releases remain tombstoned. Migrations `20260823100000_disable_driver_app_sideload.sql`, `20260823110000_single_release_channel.sql`.*
+*Last synced: 2026-08-13 — [admin+app] Live Tracking: Cluster is a count not a chip; Idle stays yellow; Break legend removed; Overspeed 60 km/h; GPS Offline ~90s after heartbeats stop. Pickup/finish stamp battery; delivery map draws GPS trail. Distance between is pickup→delivery.*
+
+*Prior: 2026-08-13 — [admin+app] Sign out of the active device clocks the driver out (`driver_release_device_session` + Profile `clockOut: true`) so work-time stops and Clocked In does not survive logout. Migration `20260907160000`.*
+
+*Prior: 2026-08-13 — [admin+app] Home This Week’s Progress Time in uses attendance days in the current Kuwait week (`driver_week_online_seconds`); stale last-week `is_online` sessions are ignored. Migration `20260907140000`.*
+
+*Prior: 2026-08-13 — [admin+app] Archived-driver login shows “Your driver account has been archived” (maps `driver_archived`); do not collapse it into invalid credentials.*
+
+*Prior: 2026-08-08 — [admin+app] Driver app collapsed to single production stack (no Android flavors / no OTA / no update channels); driver targets `dpdadmin-prod` + Supabase `eoksxkdssptgyqyywdju` + Firebase `musallam-delivery-prod` only; Play Store distribution; `/api/driver-app/active-release` always returns `null`; admin App Releases remain tombstoned. Migrations `20260823100000_disable_driver_app_sideload.sql`, `20260823110000_single_release_channel.sql`.*
 
 *Prior: 2026-07-29 — [admin+app] Ops audit: security events RPC, delivery idempotency, device-guard overload cleanup, published restaurant gate, period incentive accrual fix.*
 

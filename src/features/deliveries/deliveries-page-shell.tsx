@@ -78,6 +78,7 @@ import {
   type DeliveryExportRow,
 } from "./deliveries-actions";
 import { DeliveryDetailSheet } from "./delivery-detail-sheet";
+import { deliveryDetailNav, nextSelectedDeliveryAfterRefresh } from "./delivery-detail-nav";
 import { OrdersReportDialog } from "./orders-report-dialog";
 import {
   CANCEL_REASON_CODES,
@@ -85,7 +86,8 @@ import {
   type CancelReasonCode,
 } from "./parse-cancel-reason";
 import { formatRelativeMinutesAgo } from "./delivery-sort-utils";
-import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
+import { resolveDeliveryStatusVariant } from "./delivery-status-variant";
+import { displayExternalOrderId } from "./order-id";
 import type { DeliveryListRow } from "./types";
 
 function formatDateTime(iso: string): string {
@@ -188,9 +190,17 @@ function DeliveriesPageContent() {
   const [ordersReportOpen, setOrdersReportOpen] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryListRow | null>(null);
   const [isNavigatingNext, setIsNavigatingNext] = useState(false);
+  const selectedDeliveryIdRef = useRef<string | null>(null);
+  selectedDeliveryIdRef.current = selectedDelivery?.id ?? null;
 
   const openDeliveryDetail = useCallback((delivery: DeliveryListRow) => {
+    selectedDeliveryIdRef.current = delivery.id;
     setSelectedDelivery(delivery);
+  }, []);
+
+  const closeDeliveryDetail = useCallback(() => {
+    selectedDeliveryIdRef.current = null;
+    setSelectedDelivery(null);
   }, []);
 
   // Debounce free-text search so we don't refetch on every keystroke.
@@ -252,10 +262,8 @@ function DeliveriesPageContent() {
     }
   }, [selectedDelivery, selectedDeliveryIndex, visible, queryClient]);
 
-  const hasPreviousDelivery = selectedDeliveryIndex > 0;
-  const hasNextDelivery =
-    selectedDeliveryIndex >= 0 &&
-    (selectedDeliveryIndex < visible.length - 1 || hasNextPage);
+  const { hasPrevious: hasPreviousDelivery, hasNext: hasNextDelivery } =
+    deliveryDetailNav(selectedDeliveryIndex, visible.length, hasNextPage);
 
   const goToPreviousDelivery = useCallback(() => {
     if (!hasPreviousDelivery || selectedDeliveryIndex <= 0) return;
@@ -744,16 +752,17 @@ function DeliveriesPageContent() {
                         isVisible={isColumnVisible}
                         className="text-end"
                       >
-                        <StatusPill variant={resolveStatusVariant(delivery.status)} dot>
+                        <StatusPill variant={resolveDeliveryStatusVariant(delivery.status)} dot>
                           {t(deliveryStatusMessageKey(delivery.status))}
                         </StatusPill>
                       </VisibleTableCell>
                       <VisibleTableCell
                         columnId="orderId"
                         isVisible={isColumnVisible}
-                        className="font-mono text-sm tabular-nums text-muted-foreground"
+                        className="max-w-[9rem] truncate font-mono text-sm tabular-nums text-muted-foreground"
+                        title={displayExternalOrderId(delivery.external_order_id)}
                       >
-                        {delivery.external_order_id ?? "—"}
+                        {displayExternalOrderId(delivery.external_order_id)}
                       </VisibleTableCell>
                       <VisibleTableCell
                         columnId="when"
@@ -819,7 +828,7 @@ function DeliveriesPageContent() {
       <DeliveryDetailSheet
         delivery={selectedDelivery}
         open={selectedDelivery !== null}
-        onClose={() => setSelectedDelivery(null)}
+        onClose={closeDeliveryDetail}
         navigation={
           selectedDelivery
             ? {
@@ -834,12 +843,12 @@ function DeliveriesPageContent() {
         }
         onUpdated={async () => {
           const { data: refreshed } = await refetch();
-          if (selectedDelivery && refreshed) {
-            const fresh = refreshed.pages
-              .flatMap((page) => page.rows)
-              .find((row) => row.id === selectedDelivery.id);
-            if (fresh) setSelectedDelivery(fresh);
-          }
+          const rows = refreshed?.pages.flatMap((page) => page.rows) ?? [];
+          const next = nextSelectedDeliveryAfterRefresh(
+            selectedDeliveryIdRef.current,
+            rows,
+          );
+          if (next) setSelectedDelivery(next);
         }}
       />
 

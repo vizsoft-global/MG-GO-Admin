@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Pill, StatusDot, type Tone } from "@/components/ui/metric-tile";
 import type { PinStatus, TrackingStatus } from "@/features/locations/types";
+import { isGpsLive, isMovingSpeed } from "@/features/locations/location-status";
 
 export type FleetStatusKey =
   | "available"
@@ -12,6 +13,8 @@ export type FleetStatusKey =
   | "offline"
   | "alert"
   | "cluster";
+
+export type LiveListStatus = "offline" | "moving" | "idle" | "delivery_submit" | "blocked";
 
 const STATUS_TONES: Record<FleetStatusKey, Tone> = {
   available: "success",
@@ -23,15 +26,41 @@ const STATUS_TONES: Record<FleetStatusKey, Tone> = {
   cluster: "primary",
 };
 
+export function liveListStatus(input: {
+  isOnDuty: boolean;
+  trackingStatus: TrackingStatus;
+  speedMps: number | null;
+  lastSeenAt: string;
+  now?: number;
+  isBlocked?: boolean;
+}): LiveListStatus {
+  if (input.isBlocked) return "blocked";
+  if (!input.isOnDuty) return "offline";
+  if (!input.lastSeenAt || !isGpsLive(input.lastSeenAt, input.now)) return "offline";
+  if (input.trackingStatus === "delivery_submit") return "delivery_submit";
+  if (input.trackingStatus === "moving") return "moving";
+  if (isMovingSpeed(input.speedMps)) return "moving";
+  return "idle";
+}
+
 export function fleetStatusFromLocation(input: {
   pinStatus: PinStatus;
   trackingStatus: TrackingStatus;
   isOnDuty: boolean;
+  speedMps?: number | null;
+  lastSeenAt?: string;
+  now?: number;
+  isBlocked?: boolean;
 }): FleetStatusKey {
-  if (input.pinStatus === "alert") return "alert";
+  if (input.isBlocked) return "offline";
   if (!input.isOnDuty) return "offline";
+  if (input.lastSeenAt != null && !isGpsLive(input.lastSeenAt, input.now)) {
+    return "offline";
+  }
+  if (input.pinStatus === "alert") return "alert";
   if (input.trackingStatus === "delivery_submit") return "delivering";
   if (input.trackingStatus === "moving") return "available";
+  if (isMovingSpeed(input.speedMps)) return "available";
   if (input.trackingStatus === "idle") return "idle";
   return "available";
 }
@@ -74,17 +103,14 @@ export const LEGEND_STATUSES: FleetStatusKey[] = [
   "available",
   "delivering",
   "idle",
-  "break",
   "offline",
   "alert",
-  "cluster",
 ];
 
 export const LEGEND_FILTERABLE_STATUSES: FleetStatusKey[] = [
   "available",
   "delivering",
   "idle",
-  "break",
   "offline",
   "alert",
 ];

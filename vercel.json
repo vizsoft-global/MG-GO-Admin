@@ -29,6 +29,14 @@
     {
       "path": "/api/cron/requests-sweep",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/driver-ops-retention",
+      "schedule": "20 1 * * *"
+    },
+    {
+      "path": "/api/cron/driver-telemetry-retention",
+      "schedule": "40 1 * * *"
     }
   ]
 }

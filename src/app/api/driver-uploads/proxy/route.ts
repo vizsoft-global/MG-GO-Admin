@@ -63,6 +63,11 @@ async function handler(request: Request): Promise<Response> {
     return NextResponse.json({ error: "upload_failed" }, { status: 500 });
   }
 
+  if (validation.entityType === "driver_avatar") {
+    const { syncDriverAvatarKey } = await import("@/lib/storage/sync-driver-avatar");
+    await syncDriverAvatarKey(auth.driverId, objectKey);
+  }
+
   return NextResponse.json({
     ok: true,
     objectKey,

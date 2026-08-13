@@ -5,12 +5,20 @@ import { Badge } from "@/components/ui/badge";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 import type { DriverWorkflowStatus } from "./types";
 
+export function isLinkedDriver(driver: {
+  linked: boolean;
+  linked_profile_id?: string | null;
+}): boolean {
+  return driver.linked || Boolean(driver.linked_profile_id);
+}
+
 export function resolveWorkflowPillStatus(driver: {
   linked: boolean;
+  linked_profile_id?: string | null;
   account_status: string;
   workflow_status: DriverWorkflowStatus;
 }): string {
-  if (driver.linked) return driver.account_status;
+  if (isLinkedDriver(driver)) return driver.account_status;
   if (driver.workflow_status === "draft") return "draft";
   return "pending";
 }

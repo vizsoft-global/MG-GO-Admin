@@ -1,4 +1,4 @@
-const DEFAULT_METHODS = "GET, POST, OPTIONS";
+const DEFAULT_METHODS = "GET, POST, DELETE, OPTIONS";
 const DEFAULT_HEADERS = "Authorization, Content-Type";
 
 function normalizeOrigin(value: string): string {

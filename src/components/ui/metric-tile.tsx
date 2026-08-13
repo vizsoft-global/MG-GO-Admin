@@ -23,6 +23,7 @@ export function MetricTile({
   trendPercent,
   trendDirection = "up",
   hint,
+  compact = false,
   className,
 }: {
   label: string;
@@ -33,6 +34,7 @@ export function MetricTile({
   trendPercent?: string;
   trendDirection?: "up" | "down";
   hint?: string;
+  compact?: boolean;
   className?: string;
 }) {
   const resolvedTone = normalizeTone(tone);
@@ -44,31 +46,43 @@ export function MetricTile({
   return (
     <article
       className={cn(
-        "rounded-xl p-3",
+        "min-w-0 overflow-hidden rounded-xl",
+        compact ? "p-2.5" : "p-3",
         NEUTRAL_TILE,
         toneStyle.accentBar,
         selected && "ring-2 ring-primary/50 ring-offset-1 ring-offset-background",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-start justify-between gap-1.5">
+        <p
+          className={cn(
+            "min-w-0 flex-1 font-semibold uppercase tracking-wide text-muted-foreground",
+            compact ? "text-[10px] leading-tight" : "text-[11px]",
+          )}
+        >
           {label}
         </p>
         {Icon ? (
           <span
             className={cn(
-              "inline-flex size-9 shrink-0 items-center justify-center rounded-lg",
+              "inline-flex shrink-0 items-center justify-center rounded-lg",
+              compact ? "size-7" : "size-9",
               toneStyle.iconChip,
             )}
             aria-hidden
           >
-            <Icon className="size-4" />
+            <Icon className={compact ? "size-3.5" : "size-4"} />
           </span>
         ) : null}
       </div>
 
-      <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+      <p
+        className={cn(
+          "mt-1 font-semibold tabular-nums tracking-tight text-foreground",
+          compact ? "text-xl" : "text-2xl",
+        )}
+      >
         {value}
       </p>
 

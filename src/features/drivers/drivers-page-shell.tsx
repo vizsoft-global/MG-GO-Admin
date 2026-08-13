@@ -592,7 +592,7 @@ function DriversPageContent() {
         key="clear-all"
         type="button"
         className="cursor-pointer text-xs text-primary hover:underline"
-        onClick={() => setFilters(DEFAULT_DRIVERS_FILTERS)}
+        onClick={() => setFilters({ ...DEFAULT_DRIVERS_FILTERS })}
       >
         {t("clearFilters")}
       </button>,

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
   Expand,
+  Shrink,
   X,
   LocateFixed,
   Mail,
@@ -16,6 +17,7 @@ import {
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Pill, SignalBars, StatusDot, type Tone } from "@/components/ui/metric-tile";
 import { cn } from "@/lib/utils";
+import { isGpsLive } from "@/features/locations/location-status";
 import type { DriverLiveLocation } from "@/features/locations/types";
 import {
   formatBatteryLevel,
@@ -34,6 +36,7 @@ import { TrackingGlassCard } from "./tracking-shell";
 import type { LiveDriverMeta } from "./live-tracking-types";
 import type { TrackingMapLayerPrefs } from "./tracking-map-layer-prefs";
 import { TrackingMapLayersPopover } from "./tracking-map-layers-popover";
+import { mapFullscreenTooltipKey } from "./map-fullscreen-tooltip";
 
 export type MapLayerToggle = "live" | "traffic" | "heatmap";
 
@@ -44,6 +47,7 @@ export function TrackingMapToolbar({
   onToggleGeofences,
   onRecenter,
   onMapFullscreen,
+  isMapFullscreen = false,
   onZoomIn,
   onZoomOut,
   prefs,
@@ -56,6 +60,7 @@ export function TrackingMapToolbar({
   onToggleGeofences: () => void;
   onRecenter: () => void;
   onMapFullscreen: () => void;
+  isMapFullscreen?: boolean;
   onZoomIn: () => void;
   onZoomOut: () => void;
   prefs: TrackingMapLayerPrefs;
@@ -148,9 +153,10 @@ export function TrackingMapToolbar({
           type="button"
           onClick={onMapFullscreen}
           className="pointer-events-auto inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-card/95 text-foreground shadow-sm transition-colors hover:bg-accent"
-          title={t("fullscreen")}
+          title={t(mapFullscreenTooltipKey(isMapFullscreen))}
+          aria-label={t(mapFullscreenTooltipKey(isMapFullscreen))}
         >
-          <Expand className="h-4 w-4" />
+          {isMapFullscreen ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
         </button>
       </div>
     </>
@@ -202,7 +208,10 @@ export function TrackingMapLegend({
               </li>
             );
           })}
-          <li className="inline-flex items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-200">
+          <li
+            className="inline-flex cursor-default items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-200"
+            aria-label={`${t("fleetStatus.cluster")} ${clusterCount}`}
+          >
             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
               {clusterCount}
             </span>
@@ -226,13 +235,31 @@ export function TrackingSelectedDriverPopup({
   onClose?: () => void;
 }) {
   const t = useTranslations("pages.liveTracking");
+  const gpsLive = isGpsLive(driver.lastSeenAt);
   const fleetStatus = fleetStatusFromLocation({
     pinStatus: driver.pinStatus,
     trackingStatus: driver.trackingStatus,
     isOnDuty: driver.isOnDuty,
+    isBlocked: driver.isBlocked,
+    speedMps: driver.speedMps,
+    lastSeenAt: driver.lastSeenAt,
   });
   const speed = formatSpeedKmh(driver.speedMps);
   const gpsQuality = gpsQualityFromAccuracy(driver.accuracyMeters);
+  const dutyLabel = driver.isBlocked
+    ? t("chipBlocked")
+    : !gpsLive
+      ? t("gpsLost")
+      : driver.isOnDuty
+        ? t("onDuty")
+        : t("offDuty");
+  const dutyTone: Tone = driver.isBlocked
+    ? "danger"
+    : !gpsLive
+      ? "neutral"
+      : driver.isOnDuty
+        ? "success"
+        : "neutral";
 
   const toneByStatus: Record<FleetStatusKey, Tone> = {
     available: "success",
@@ -265,8 +292,8 @@ export function TrackingSelectedDriverPopup({
             <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
               {driver.driverName}
             </p>
-            <Pill tone={driver.isOnDuty ? "success" : "neutral"} variant="solid">
-              {driver.isOnDuty ? t("onDuty") : t("offDuty")}
+            <Pill tone={dutyTone} variant="solid">
+              {dutyLabel}
             </Pill>
           </div>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-300">

@@ -37,7 +37,18 @@ async function handler(request: Request): Promise<Response> {
       .eq("object_key", objectKey)
       .maybeSingle();
 
-    if (!upload) {
+    const { data: driverRow } = await admin
+      .from("drivers")
+      .select("avatar_object_key")
+      .eq("id", auth.driverId)
+      .maybeSingle();
+
+    const { isDriverOwnedAvatarKey } = await import("@/lib/storage/driver-avatar-key");
+    const ownsAvatar =
+      driverRow?.avatar_object_key === objectKey ||
+      isDriverOwnedAvatarKey(auth.driverId, objectKey);
+
+    if (!upload && !ownsAvatar) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
   }
