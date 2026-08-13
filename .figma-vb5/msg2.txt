@@ -1,6 +1,0 @@
-visits: name the departments page after its Figma role and keep every row above the fold
-
-The page is the desk catalog, not just an on/off list, so it now carries the
-Figma title and subtitle. Folding the standalone count row into the header and
-dropping the card padding around the table brings all 11 departments back inside
-a 1366x768 viewport, which previously scrolled.
