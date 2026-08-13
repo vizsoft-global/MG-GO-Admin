@@ -214,17 +214,104 @@ Configured in admin **Settings → DPD → Restaurants**.
 
 Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settings/dpd` redirects to `/dpd`.
 
-### `requests`
+### `requests` (RCM — Request & Complaint)
 | Column | Type | Notes |
 |--------|------|-------|
-| request_code | text | RQ-#### |
-| request_type | enum | loan, leave, fuel, complaint, document |
-| status | enum | pending, approved, rejected |
-| amount_kwd | numeric | Loan/fuel amount |
+| request_code | text | **RCM-####** (allocator `allocate_request_code`) |
+| request_type | text | FK → `request_type_definitions.key`. **Was an enum until 2026-08-12** — same values, same JSON on the wire, but the set is now a table an admin can add to |
+| status | enum | draft, pending, submitted, in_review, needs_clarification, **rescheduled**, approved, rejected, solved, **responded**, **closed**, overdue |
+| payload | jsonb | Type-specific Figma fields (leave_type, tenure_months, category, …) |
+| current_step_label / current_step_order | text / int | Denormalized approval progress |
+| amount_kwd | numeric | Loan/fuel amount (also in payload where typed) |
 | start_date, end_date | date | Leave range |
-| details | text | Reason |
-| attachment_url | text | Receipt etc. |
-| decision_reason | text | Set by admin on reject |
+| details | text | Legacy reason (prefer payload) |
+| attachment_url | text | Legacy single file; prefer `request_attachments` |
+| decision_reason | text | Set by admin on reject/clarify |
+| needs_attention | bool | Admin list badge only (cleared on staff open); **no admin push** |
+| completed_at | timestamptz | KPI avg resolution |
+| acknowledged_at | timestamptz | Real column mirroring `payload.driver_ack_at` |
+| sla_due_at | timestamptz | Deadline of the open step; NULL when the step has no SLA |
+| closed_at / closed_by | timestamptz / uuid | Archive stamp (manual or auto-close) |
+| fuel_transfer_type | text | `cash` \| `salary` — approver's payout choice, not rider input |
+
+Related tables: `request_approval_steps`, `request_clarifications`, `request_attachments`.  
+Config: `loan_tenure_options` (6 rows: 3/6/9/12/18/24 months) and `complaint_categories` (9 rows) were seeded 2026-08-12, so neither gate fires any more. Both remain admin-editable, so keep handling an empty list.  
+**Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests` (includes `payload`), `driver_get_request`, `driver_submit_clarification`, `driver_acknowledge_request` (clears `payload.awaiting_driver_ack`, sets `driver_ack_at`, raises Admin `needs_attention`). Final admin approve on `loan` / `asset` / `sick_leave` sets `payload.awaiting_driver_ack=true`.  
+Loan submit requires rows in `loan_tenure_options`; complaint submit requires `complaint_categories` rows. Both are seeded as of 2026-08-12; the `tenure_options_not_configured` and `complaint_categories_not_configured` errors now only appear if an admin deactivates every option.
+
+### Request types are data now (2026-08-12)
+
+`public.request_type` was an 8-value Postgres enum. It is gone. A request type is a row in **`request_type_definitions`** (key, labels, `icon_key`, `is_active`, `sort_order`, `screenshot_restricted`, `terminal_status_on_approve`, `requires_driver_ack_on_approve`, `date_range_required`, `min_attachments`), and its form is described by **`request_field_definitions`** (`field_key`, `label_en`/`label_ar`, `kind`, `target`, `is_required`, `sort_order`, `options_source`, `options`, `min_value`/`max_value`). Both are readable by any authenticated rider for active types.
+
+**Nothing in the current app breaks.** `p_type` on `driver_create_request` changed from the enum to `text`, which is the same `"leave"` string on the wire, and `request_type` still comes back as the same string in every RPC payload. Every gate and every error code behaves exactly as before — that was verified case by case against a pre-migration baseline.
+
+Two behaviours are new, both strictly safer: a non-numeric `tenure_months` returns `tenure_options_not_configured` instead of raising an unhandled Postgres cast error, and a request type that has been deactivated is rejected with `request_type_inactive` (all 8 are active today).
+
+Generic error codes a server-defined type can now produce, alongside the legacy ones the app already translates:
+
+| Code | Meaning |
+|---|---|
+| `unknown_request_type` | No definition row for that key |
+| `request_type_inactive` | Definition exists but `is_active = false` |
+| `field_required:<field_key>` | A field with `is_server_required` was empty |
+| `invalid_option:<field_key>` | Value is not in the field's option list (DB-backed **or** static) |
+| `attachments_required` | Fewer attachments than `min_attachments` |
+
+The 8 built-ins are **system types**. Their key cannot be renamed and they cannot be deleted or demoted, but their **fields are editable** as of 2026-08-13: the app renders every type — built-in and custom — from `request_field_definitions` (`DynamicRequestFormScreen`). A DB trigger (`rcm_guard_system_request_type`) still blocks delete / key rename / `is_system` flips. Static select/multiselect options are now validated server-side the same way as loan tenure and complaint categories (`invalid_option:<field_key>`). Older app builds that still ship handwritten forms will ignore extra fields and will not send newly required ones — `is_server_required` stays a separate toggle for that reason.
+
+**Shipped in the app 2026-08-13.** The hub tiles come from `request_type_definitions` ordered by `sort_order` — an admin-created type is reachable without an app release — and **every** type is rendered by a generic form built from `request_field_definitions` (`lib/features/support/dynamic_request_form_screen.dart`). Built-in types keep their ARB titles and option labels so the Figma wording survives. A failed or pending tile fetch falls back to the built-in eight so the hub is never empty offline. `kind` values the renderer draws: `text`, `textarea`, `number`, `date`, `month`, `select`, `multiselect` (JSON string array in the payload), `checkbox`, `file`; `target` routes the value to the payload key or to the matching `requests` column. Client-side it enforces `is_required`, `date_range_required` and `min_attachments` before calling the RPC, and greys out submit when a field's `options_source` list is empty — the same rule the loan and complaint forms already used.
+
+One rule worth knowing before the builder ships: the acknowledgement flag only applies when the type ends on `approved`. A type whose `terminal_status_on_approve` is `solved` never sets `payload.awaiting_driver_ack` — you do not acknowledge a resolution.
+
+`driver_create_request` inserts the row with status `submitted`, not `pending` — show "Submitted" for it, including on the post-create confirmation screen. **As of 2026-08-12 `submitted` survives**: `rcm_materialize_approval_steps` no longer overwrites it with `in_review`, so a request reads Submitted until the first staff decision and In review after it.
+
+**Three statuses that previously had no behaviour now do:**
+
+| Status | Meaning | Rider action |
+|---|---|---|
+| `rescheduled` | An approver proposed different dates. The approval step stays open. `payload.awaiting_driver_reschedule = true` and `payload.reschedule` carries `proposed_start_date`, `proposed_end_date`, `proposed_by`, `proposed_at`, `note`. | **Required.** Call `driver_respond_reschedule(p_request_id, p_accept, p_note)`. Accept applies the dates to `start_date`/`end_date`; either answer returns the request to `in_review` for the same approver. Surface it in Action Required. |
+| `responded` | Terminal. The `send_response` action on a complaint or salary justification; `decision_reason` holds the response text and `completed_at` is stamped. Counts as resolved. | None. |
+| `closed` | Archived after a decision — set by staff, or automatically once `completed_at` is older than `app_settings.request_auto_close_days` (default 30). The decision itself is unchanged. | None. Treat as read-only history. |
+
+Per-step SLA: `request_approval_steps` gained `started_at`, `actor_display_name`, `sla_due_at`, `breach_action`, `sla_breached_at`; `request_approval_step_templates` gained `sla_minutes` and `breach_action` (`notify` \| `escalate`). Admins set both from the workflow builder; values stay NULL until then, so the breach sweep is inert by default and **never** auto-decides a step.
+
+Staff can also raise a request for a rider via `admin_create_request`. `p_type` is any active `request_type_definitions.key` (the Admin New-request dialog lists them all). Such rows are normal `requests` rows the driver sees in **Sent**, with `payload.created_on_behalf = true`, `created_on_behalf_by` (staff uuid), `created_on_behalf_by_name` and `created_on_behalf_at`. If the app shows an author line, use `created_on_behalf_by_name`; the approval chain, clarifications and acknowledgement flow are unchanged.
+
+**Flutter routes (MG-GO):** Profile → Help & Support → `/profile/support` hub; forms `/profile/support/requests/new?type=…`; list/detail; **Action required** `/profile/support/action-required` (status `needs_clarification`, `payload.awaiting_driver_ack`, or `payload.awaiting_driver_reschedule`); visit book `/profile/support/visits/book`; my visits `/profile/support/visits`. Feature folder `lib/features/support/`. Attachments upload to Supabase bucket `request-attachments` under `{driver_id}/…`.
+
+**Driver notifications (RCM/Visit/E-Sign):** On admin decide / visit status / e-sign send / appointment create, Postgres `notify_driver_transactional` inserts inbox campaign + dispatch item. Deep links: `musallam:///profile/support/requests/{id}`, `…/action-required`, `…/visits`, `…/sign/{id}`, `…/appointments`. `action_params.record_type` = `request` | `visit` | `esign` | `appointment`. No admin push for RCM attention.
+
+### E-Sign + Appointments
+| Piece | Notes |
+|-------|-------|
+| `esign_categories` | Figma-seeded categories + per-category screenshot_restricted |
+| `esign_requests` | Code **SIG-####**; status pending/signed/expired/cancelled/declined; signature PNG in bucket `esign-documents` |
+| `esign-documents` RLS (driver) | Three policies, all scoped to the caller: `esign_documents_driver_own` (write + read under `{uid}/…`), `esign_documents_driver_read_source` (**read the `document_storage_key` of your own request**, whatever prefix the admin used — added `20260829100000`), `esign_documents_driver_read_signed` (read the composed copy under `signed/…`). Before the source policy existed, admin uploads at `admin/{uuid}.{ext}` matched nothing and the viewer could never load its document. |
+| Driver RPCs | `driver_list_esign_requests`, `driver_get_esign_request`, `driver_submit_esignature`, `driver_decline_esignature`, `driver_mark_esign_viewed` |
+| Admin RPCs | `admin_list_esign_requests`, `admin_create_esign_request` |
+| **Decline writes `declined`** | `driver_decline_esignature` set `cancelled` until `20260829110000`; it now sets **`declined`** and returns `{"ok":true,"status":"declined"}`. `cancelled` is reserved for admin-side cancellation, so the app must stop treating it as a decline (`support_models.dart` `isDeclined`). Reason still lands in `signer_meta.declined_reason` + `declined_at`. |
+| **Declaration is now required server-side** | `driver_submit_esignature` rejects with `declaration_required` unless `p_signer_meta.declaration_accepted` is boolean `true`. Send `{"declaration_accepted": true, "declaration_text": "<exact text shown>"}`; the server overwrites `declaration_accepted` and stamps `declaration_accepted_at` with **server** time so the device cannot backdate it. The ticked box was previously client-only and left no record of what the rider agreed to. |
+| Flutter | `/profile/support/sign` inbox → viewer → capture pad → confirmed |
+| **Lifecycle timestamps are real columns** | `20260901100000` adds `sent_at`, `viewed_at`, `declined_at`, `declaration_accepted_at` to `esign_requests`, backfilled from `signer_meta`. `declined_at` and `declaration_accepted_at` previously lived only inside the jsonb, so nothing could filter or report on them; `viewed_at` was never recorded at all, which left the Figma detail timeline with a permanently blank Viewed step. `sent_at` is split from `created_at` so a future draft state has somewhere to land — today the only inserter sends on insert, so the two are equal. |
+| **Read receipt** | `driver_mark_esign_viewed(p_id)` stamps `viewed_at`. First open wins — a later re-open never overwrites the first. Call it once the document is actually visible to the rider, not on screen mount: the app fires it after the signed URL resolves. Decline and submit also back-fill `viewed_at`, so an older build that never calls it still produces an honest timeline. Fire-and-forget: a failed receipt must never block signing. |
+| Appointments | `driver_list_appointments`, `admin_create_appointment` (APT-####); Flutter `/profile/support/appointments` |
+
+### Visit booking (Help & Support → Schedule visit)
+| Table | Notes |
+|-------|-------|
+| `visit_departments` | R — Figma RSup/12 keys (hr_services, legal, …). `20260901100100` adds nullable **`branch_id`**: `NULL` = offered at every branch (how all 11 existing rows behave), non-null = that branch only. `key` stays globally unique because it is the FK target for `visit_slots.department_key` and `visit_bookings.department_key`, and the one-active-booking-per (driver, date, department) index is a locked rule. **App must filter the department list by the branch it is booking at** — `branch_id IS NULL OR branch_id = <branch>` — or it will offer a department the server then rejects. |
+| `visit_branches` | R — Admin catalog; User App shows Central Tower (no branch picker) |
+| `visit_slots` | R — capacity; remaining = capacity − active bookings |
+| `visit_bookings` | **W** own rows; code **VIS-#####**; status confirmed / checked_in / completed / no_show / cancelled |
+| `visit_bookings.note` | Rider-authored **Purpose** of the visit (what the driver types at booking) |
+| `visit_bookings.note_to_rider` | **R** — staff instruction written by Admin (`visits.operate`). Show it on the driver's booking detail; it is not the rider's own note |
+| `visit_booking_notes` | Admin-only internal thread — **no driver policy**; never surface in the app |
+| Duplicate rule | Unique active `(driver_id, scheduled_date, department_key)` where status ∈ confirmed, checked_in. Error: `duplicate_department_date` — “Already booked for this department on this date.” |
+| Admin reschedule | `admin_reschedule_visit` updates `scheduled_date` + `slot_id` **in place** — `booking_code` never changes, so the code the rider already holds stays valid. Refresh the booking detail; the date/slot may move without a new row |
+| Branch consistency | `driver_list_visit_slots` hides a slot whose `branch_id` differs from its department's pin; `driver_book_visit` rejects the same mismatch with **`department_not_at_branch`**. Same migration also stops `driver_book_visit` resolving its fallback branch by the hardcoded key `'central_tower'` — it now orders by `visit_branches.is_default`, so renaming or deactivating that branch no longer silently breaks booking. |
+| RPCs (live) | `driver_list_visit_slots`, `driver_book_visit`, `driver_cancel_visit` |
+
+Legacy `appointment_slots` / `appointments` remain until Visit Booking fully replaces them in the app.
 
 ### `loan_terms` (read only for driver after approve)
 - `total_kwd`, `deduction_kwd`, `months`, `installment_remaining`
@@ -336,6 +423,7 @@ Legacy Supabase buckets `driver-intakes` and `partner-logos` are deprecated; mig
 | fuel-receipts | Yes | `{driver_id}/{request_id}.jpg` |
 | hygiene-photos | Yes | `{driver_id}/{task_id}.jpg` |
 | support-attachments | Yes | `{thread_id}/{uuid}` |
+| request-attachments | Yes (RCM) | `{driver_id}/{request_id}/{file}` — JPEG/PNG/WebP/PDF; metadata in `request_attachments` |
 
 RLS: authenticated user can write only under their `driver_id` prefix where applicable.
 

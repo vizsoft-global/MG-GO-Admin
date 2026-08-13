@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
@@ -28,7 +28,12 @@ function friendlyDeliveryStatus(item: NotificationDispatchItemRow, t: ReturnType
       ? t("engagementInAppOnly")
       : t("engagementInAppPushSkipped");
   }
-  if (isHardPushFailure(item) || item.status === "skipped") return t("engagementNotDelivered");
+  if (isHardPushFailure(item)) {
+    return item.engagement_seen || item.status === "opened" || item.status === "clicked"
+      ? t("engagementInAppPushFailed")
+      : t("engagementNotDelivered");
+  }
+  if (item.status === "skipped") return t("engagementNotDelivered");
   if (
     item.status === "sent" ||
     item.status === "delivered" ||
@@ -53,23 +58,37 @@ export function NotificationEngagementReport({
   const [tab, setTab] = useState<EngagementTab>("all");
   const [pending, startTransition] = useTransition();
 
+  useEffect(() => {
+    if (!trackEngagement && (tab === "seen" || tab === "not_seen" || tab === "tapped")) {
+      setTab("all");
+    }
+  }, [trackEngagement, tab]);
+
   const stats = useMemo(() => {
     const sent = items.filter(
       (i) =>
         !isPushSkippedNoToken(i) &&
+        !isHardPushFailure(i) &&
         (i.status === "sent" ||
           i.status === "delivered" ||
           i.status === "opened" ||
           i.status === "clicked"),
     ).length;
-    const seen = items.filter((i) => i.engagement_seen).length;
-    const tapped = items.filter((i) => i.engagement_tapped).length;
+    const seen = trackEngagement
+      ? items.filter((i) => i.engagement_seen).length
+      : null;
+    const tapped = trackEngagement
+      ? items.filter((i) => i.engagement_tapped).length
+      : null;
     const failed = items.filter((i) => isHardPushFailure(i)).length;
     const pushSkipped = items.filter((i) => isPushSkippedNoToken(i)).length;
     return { sent, seen, tapped, failed, noApp: pushSkipped, total: items.length };
-  }, [items]);
+  }, [items, trackEngagement]);
 
   const filtered = useMemo(() => {
+    if (!trackEngagement && (tab === "seen" || tab === "not_seen" || tab === "tapped")) {
+      return items;
+    }
     switch (tab) {
       case "seen":
         return items.filter((i) => i.engagement_seen);
@@ -82,9 +101,12 @@ export function NotificationEngagementReport({
       default:
         return items;
     }
-  }, [items, tab]);
+  }, [items, tab, trackEngagement]);
 
-  const seenRate = stats.sent > 0 ? Math.round((stats.seen / stats.sent) * 100) : 0;
+  const seenRate =
+    trackEngagement && stats.sent > 0 && stats.seen != null
+      ? Math.round((stats.seen / stats.sent) * 100)
+      : 0;
 
   const handleExport = () => {
     startTransition(async () => {
@@ -116,11 +138,17 @@ export function NotificationEngagementReport({
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {[
-          { label: t("engagementSent"), value: stats.sent },
-          { label: t("engagementSeen"), value: stats.seen },
-          { label: t("engagementTapped"), value: stats.tapped },
-          { label: t("engagementFailed"), value: stats.failed },
-          { label: t("engagementPushSkipped"), value: stats.noApp },
+          { label: t("engagementSent"), value: String(stats.sent) },
+          {
+            label: t("engagementSeen"),
+            value: stats.seen == null ? t("engagementNotTracked") : String(stats.seen),
+          },
+          {
+            label: t("engagementTapped"),
+            value: stats.tapped == null ? t("engagementNotTracked") : String(stats.tapped),
+          },
+          { label: t("engagementFailed"), value: String(stats.failed) },
+          { label: t("engagementPushSkipped"), value: String(stats.noApp) },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-lg border border-border bg-muted/20 px-3 py-2">
             <p className="text-[10px] text-muted-foreground">{kpi.label}</p>
@@ -143,13 +171,20 @@ export function NotificationEngagementReport({
       )}
       <div className="flex flex-wrap gap-1">
         {(
-          [
-            ["all", t("engagementTabAll")],
-            ["seen", t("engagementTabSeen")],
-            ["not_seen", t("engagementTabNotSeen")],
-            ["tapped", t("engagementTabTapped")],
-            ["failed", t("engagementTabPushIssues")],
-          ] as const
+          (
+            trackEngagement
+              ? ([
+                  ["all", t("engagementTabAll")],
+                  ["seen", t("engagementTabSeen")],
+                  ["not_seen", t("engagementTabNotSeen")],
+                  ["tapped", t("engagementTabTapped")],
+                  ["failed", t("engagementTabPushIssues")],
+                ] as const)
+              : ([
+                  ["all", t("engagementTabAll")],
+                  ["failed", t("engagementTabPushIssues")],
+                ] as const)
+          )
         ).map(([id, label]) => (
           <button
             key={id}
@@ -183,19 +218,29 @@ export function NotificationEngagementReport({
                 <TableCell>{item.driver_label}</TableCell>
                 <TableCell>{item.employee_id ?? "—"}</TableCell>
                 <TableCell>
-                  <StatusPill variant={item.engagement_seen ? "success" : "neutral"}>
-                    {item.engagement_seen ? t("engagementYes") : t("engagementNo")}
-                  </StatusPill>
-                  {item.opened_at ? (
-                    <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                      {new Date(item.opened_at).toLocaleString()}
-                    </span>
-                  ) : null}
+                  {trackEngagement ? (
+                    <>
+                      <StatusPill variant={item.engagement_seen ? "success" : "neutral"}>
+                        {item.engagement_seen ? t("engagementYes") : t("engagementNo")}
+                      </StatusPill>
+                      {item.opened_at ? (
+                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                          {new Date(item.opened_at).toLocaleString()}
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <StatusPill variant="neutral">{t("engagementNotTracked")}</StatusPill>
+                  )}
                 </TableCell>
                 <TableCell>
-                  <StatusPill variant={item.engagement_tapped ? "success" : "neutral"}>
-                    {item.engagement_tapped ? t("engagementYes") : t("engagementNo")}
-                  </StatusPill>
+                  {trackEngagement ? (
+                    <StatusPill variant={item.engagement_tapped ? "success" : "neutral"}>
+                      {item.engagement_tapped ? t("engagementYes") : t("engagementNo")}
+                    </StatusPill>
+                  ) : (
+                    <StatusPill variant="neutral">{t("engagementNotTracked")}</StatusPill>
+                  )}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {friendlyDeliveryStatus(item, t)}

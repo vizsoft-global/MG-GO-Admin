@@ -1,0 +1,11 @@
+visits: make the All visits row read and fit like the Figma board
+
+The STATUS cell was bare dot + text, but the Figma status conventions frame
+uses a filled pill with a dot everywhere, so it now renders StatusPill.
+
+The DATE cell showed "Aug 12": toLocaleDateString puts the month first on
+en-US, so build "12 Aug" from the parts instead.
+
+The ACTIONS column pushed the table past the card at 1366x768 and clipped
+Cancel; icon-only check / cancel / complete buttons (labelled for a11y) bring
+the table back inside the card.

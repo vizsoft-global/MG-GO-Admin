@@ -76,7 +76,11 @@ import {
   type HistoryGroupKey,
 } from "./attendance-list-utils";
 import { AttendanceResolveSheet } from "./attendance-resolve-sheet";
-import { AttendancePaginationFooter, AttendanceTableShell } from "./attendance-table-shell";
+import {
+  AttendancePaginationFooter,
+  AttendancePaginationSummary,
+  AttendanceTableShell,
+} from "./attendance-table-shell";
 import { isAutoCheckoutReason } from "./auto-checkout-rules";
 import { exportAttendanceDailyCsv } from "./attendance-reporting-actions";
 import type {
@@ -568,13 +572,6 @@ function AttendancePageContent() {
     tab === "problems"
       ? (exceptionsData?.totalCount ?? 0)
       : (dailyData?.totalCount ?? 0);
-  const rangeFrom = totalCount === 0 ? 0 : page * PAGE_SIZE + 1;
-  const rangeTo = Math.min(totalCount, (page + 1) * PAGE_SIZE);
-  const rangeSummary = t("paginationSummary", {
-    from: rangeFrom,
-    to: rangeTo,
-    total: totalCount,
-  });
 
   const isLoading = tab === "problems" ? exceptionsLoading : dailyLoading;
   const isEmpty = !isLoading && totalCount === 0;
@@ -667,7 +664,14 @@ function AttendancePageContent() {
                   sortItems={sortItems}
                   sortVariant="menu"
                   sortLabel={t("sortBy")}
-                  resultSummary={rangeSummary}
+                  resultSummary={
+                    <AttendancePaginationSummary
+                      page={page}
+                      pageSize={PAGE_SIZE}
+                      totalCount={totalCount}
+                      className="text-xs"
+                    />
+                  }
                   onRefresh={() => void handleRefresh()}
                   isRefreshing={isRefreshing}
                   refreshLabel={t("refresh")}

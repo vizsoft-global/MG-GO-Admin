@@ -624,9 +624,16 @@ export async function approveNotificationCampaign(
   return { ok: true };
 }
 
+export type NotificationDispatchResult = {
+  ok: true;
+  sent: number;
+  failed: number;
+  skipped: number;
+};
+
 export async function dispatchNotificationCampaign(
   campaignId: string,
-): Promise<{ ok: true; sent: number; failed: number } | { error: NotificationActionError }> {
+): Promise<NotificationDispatchResult | { error: NotificationActionError }> {
   const session = await requireNotificationsSend();
   if (!session) return { error: "not_authorized" };
 
@@ -639,7 +646,7 @@ export async function dispatchNotificationCampaign(
 async function executeNotificationDispatch(
   campaignId: string,
   actorUserId: string | null,
-): Promise<{ ok: true; sent: number; failed: number } | { error: NotificationActionError }> {
+): Promise<NotificationDispatchResult | { error: NotificationActionError }> {
   let service;
   try {
     service = notificationsAdminDb();
@@ -875,10 +882,18 @@ async function executeNotificationDispatch(
   }
 
   if (deadTokenIds.length > 0) {
-    await service
+    const uniqueDead = [...new Set(deadTokenIds)];
+    const { error: deactivateError } = await service
       .from("driver_push_tokens")
       .update({ is_active: false, updated_at: nowIso })
-      .in("id", deadTokenIds);
+      .in("id", uniqueDead);
+    if (deactivateError) {
+      console.error(
+        "[notifications] failed to deactivate dead push tokens:",
+        deactivateError.message,
+        uniqueDead,
+      );
+    }
   }
 
   const pushSentCount = batchResult.successCount;
@@ -927,10 +942,12 @@ async function executeNotificationDispatch(
       },
     });
   }
+  // `failed` = hard FCM errors only. Missing tokens are `skipped` (inbox still delivered).
   return {
     ok: true,
     sent: pushSentCount,
-    failed: pushHardFailedCount + pushSkippedNoToken,
+    failed: pushHardFailedCount,
+    skipped: pushSkippedNoToken,
   };
 }
 
@@ -1137,6 +1154,8 @@ export async function exportNotificationDispatchItemsCsv(
   ) {
     return { error: "not_authorized" };
   }
+  const campaign = await getNotificationCampaign(campaignId);
+  const trackEngagement = campaign?.track_engagement ?? true;
   const items = await getNotificationDispatchItems(campaignId);
   const header = [
     "driver",
@@ -1153,10 +1172,10 @@ export async function exportNotificationDispatchItemsCsv(
       `"${item.driver_label.replace(/"/g, '""')}"`,
       item.employee_id ?? "",
       item.status,
-      item.engagement_seen ? "yes" : "no",
-      item.opened_at ?? "",
-      item.engagement_tapped ? "yes" : "no",
-      item.clicked_at ?? "",
+      trackEngagement ? (item.engagement_seen ? "yes" : "no") : "not_tracked",
+      trackEngagement ? (item.opened_at ?? "") : "",
+      trackEngagement ? (item.engagement_tapped ? "yes" : "no") : "not_tracked",
+      trackEngagement ? (item.clicked_at ?? "") : "",
       item.error_code ?? "",
     ].join(","),
   );

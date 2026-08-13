@@ -104,6 +104,25 @@ export const queryKeys = {
   requests: {
     all: () => ["requests"] as const,
     list: (filters: Record<string, unknown> = {}) => ["requests", "list", filters] as const,
+    detail: (id: string) => ["requests", "detail", id] as const,
+    typeCounts: () => ["requests", "typeCounts"] as const,
+  },
+  esign: {
+    all: () => ["esign"] as const,
+    list: (filters: Record<string, unknown> = {}) => ["esign", "list", filters] as const,
+    detail: (id: string) => ["esign", "detail", id] as const,
+    categories: () => ["esign", "categories"] as const,
+    driverOptions: () => ["esign", "driver-options"] as const,
+    screenshotDefault: () => ["esign", "screenshot-default"] as const,
+  },
+  visits: {
+    all: () => ["visits"] as const,
+    list: (filters: Record<string, unknown> = {}) => ["visits", "list", filters] as const,
+    detail: (id: string) => ["visits", "detail", id] as const,
+    departments: () => ["visits", "departments"] as const,
+    branches: () => ["visits", "branches"] as const,
+    slots: () => ["visits", "slots"] as const,
+    reception: (date: string) => ["visits", "reception", date] as const,
   },
   attendance: {
     all: () => ["attendance"] as const,

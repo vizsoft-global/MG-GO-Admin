@@ -175,7 +175,29 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
                     const result = await dispatchNotificationCampaign(campaign.id);
                     if ("error" in result) toast.error(t(`errors.${result.error}`));
                     else {
-                      toast.success(t("sentSuccess", { sent: result.sent, failed: result.failed }));
+                      if (result.failed > 0) {
+                        toast.error(
+                          t("sentPartial", {
+                            sent: result.sent,
+                            failed: result.failed,
+                            skipped: result.skipped,
+                          }),
+                        );
+                      } else if (result.skipped > 0 && result.sent === 0) {
+                        toast.warning(
+                          t("sentInAppOnly", {
+                            sent: result.sent,
+                            skipped: result.skipped,
+                          }),
+                        );
+                      } else {
+                        toast.success(
+                          t("sentSuccess", {
+                            sent: result.sent,
+                            failed: result.failed,
+                          }),
+                        );
+                      }
                       await invalidateNotificationCaches(queryClient, { campaignId: campaign.id });
                       void refetch();
                       void refetchDispatch();
@@ -280,12 +302,17 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
                     })}
               </p>
             ) : null}
-            {displayStatus === "failed" && dispatchSummary.hardFailed > 0 ? (
+            {dispatchSummary.hardFailed > 0 ? (
               <p className="sm:col-span-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive">
-                {t("dispatchFailedSummary", {
-                  failed: dispatchSummary.hardFailed,
-                  total: campaign.recipient_count || campaign.estimated_audience_count,
-                })}
+                {dispatchSummary.inboxDelivered > 0
+                  ? t("dispatchPushFailedInAppOk", {
+                      failed: dispatchSummary.hardFailed,
+                      total: campaign.recipient_count || campaign.estimated_audience_count,
+                    })
+                  : t("dispatchFailedSummary", {
+                      failed: dispatchSummary.hardFailed,
+                      total: campaign.recipient_count || campaign.estimated_audience_count,
+                    })}
               </p>
             ) : null}
           </div>

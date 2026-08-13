@@ -1,0 +1,14 @@
+rcm(detail): make the typed quick view match the Figma request drawer
+
+The drawer had lost its width and height entirely (twMerge strips the base
+w-full/max-w-lg and Tailwind never emitted the nested calc() arbitrary values),
+so it shrank to content width and ran off a 1366x768 screen. Size it inline
+instead, drop the duplicate footer Close (the outside top-right X is the only
+close per ui-system section 7), and stop padding the details table with empty
+rows the driver never sent - Figma lists only populated rows, and a leave range
+is one "Dates" row.
+
+Money now reads as "300.000 KWD" everywhere (details and decision terms) and the
+deduction start date is formatted; approval timestamps are pinned to
+en-GB/Asia-Kuwait so SSR and the browser agree; the acknowledgement hint is a
+real banner that flips to success once the worker has acknowledged.

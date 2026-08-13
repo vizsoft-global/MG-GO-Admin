@@ -28,4 +28,14 @@ describe("dispatch-outcome", () => {
     assert.equal(resolveCampaignDisplayStatus("failed", items), "failed");
     assert.equal(isHardPushFailure(items[0]!), true);
   });
+
+  it("keeps SenderId mismatch as hard failure after in-app opened", () => {
+    const item = {
+      status: "opened",
+      error_code: "messaging/mismatched-credential",
+      provider_message_id: null,
+    };
+    assert.equal(isHardPushFailure(item), true);
+    assert.equal(resolveCampaignDisplayStatus("failed", [item]), "failed");
+  });
 });

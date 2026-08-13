@@ -49,6 +49,26 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { slug: "requests.view", label: "View requests", category: "requests" },
   { slug: "requests.manage", label: "Manage requests", category: "requests" },
   {
+    slug: "requests.approve",
+    label: "Approve / decide requests (Approver)",
+    category: "requests",
+  },
+  {
+    slug: "visits.view",
+    label: "View visit bookings (Head Office)",
+    category: "visits",
+  },
+  {
+    slug: "visits.manage_catalog",
+    label: "Manage visit slots, branches, departments (Head Office)",
+    category: "visits",
+  },
+  {
+    slug: "visits.operate",
+    label: "Check-in / reschedule / cancel / change visit status (Operator)",
+    category: "visits",
+  },
+  {
     slug: "wrong_actions.view",
     label: "View wrong actions",
     category: "compliance",

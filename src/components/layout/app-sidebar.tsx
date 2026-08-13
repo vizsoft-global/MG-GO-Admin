@@ -30,6 +30,7 @@ import { Logo } from "@/components/brand/logo";
 import { useAuth } from "@/contexts/auth-context";
 import { signOut } from "@/features/auth/actions";
 import { useHasMounted } from "@/hooks/use-has-mounted";
+import { useNavBadges } from "@/hooks/use-nav-badges";
 import { useSidebarMenu } from "@/hooks/use-sidebar-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -64,6 +65,7 @@ import {
 } from "@/components/ui/sidebar";
 
 const ActiveNavContext = createContext<string | null>(null);
+const NavBadgeContext = createContext<Record<string, number>>({});
 
 function sidebarGroupStorageKey(groupId: string) {
   return `sidebar-group:${groupId}`;
@@ -135,8 +137,10 @@ function NavItemLink({
   label: string;
 }) {
   const activeLeafId = useContext(ActiveNavContext);
+  const badges = useContext(NavBadgeContext);
   if (!node.href) return null;
   const isActive = node.id === activeLeafId;
+  const badge = badges[node.id];
 
   return (
     <SidebarMenuItem>
@@ -148,6 +152,11 @@ function NavItemLink({
           <Link href={node.href} prefetch>
             <MenuIcon name={node.icon} className="h-3.5 w-3.5 shrink-0" />
             <span>{label}</span>
+            {badge ? (
+              <span className="ms-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sidebar-accent px-1 text-[10px] font-semibold tabular-nums text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden">
+                {badge > 999 ? "999+" : badge}
+              </span>
+            ) : null}
           </Link>
         }
       />
@@ -322,6 +331,7 @@ function NavTree({ nodes }: { nodes: ResolvedMenuNode[] }) {
   const tItemLabel = useItemLabel();
   const tGroupLabel = useGroupLabel();
   const activeLeafId = findActiveLeafId(nodes, pathname);
+  const badges = useNavBadges();
 
   const main: ResolvedMenuNode[] = [];
   const footer: ResolvedMenuNode[] = [];
@@ -340,6 +350,7 @@ function NavTree({ nodes }: { nodes: ResolvedMenuNode[] }) {
 
   return (
     <ActiveNavContext.Provider value={activeLeafId}>
+      <NavBadgeContext.Provider value={badges}>
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu>
@@ -362,6 +373,7 @@ function NavTree({ nodes }: { nodes: ResolvedMenuNode[] }) {
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
+      </NavBadgeContext.Provider>
     </ActiveNavContext.Provider>
   );
 }

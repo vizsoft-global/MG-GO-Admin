@@ -1,0 +1,7 @@
+[0812/044409.385:INFO:CONSOLE:8898] "[Client Instrumentation Hook] Slow execution detected: 27ms (Note: Code download overhead is not included in this measurement)", source: http://localhost:3000/_next/static/chunks/node_modules_%40sentry_core_build_esm_0~uyv3d._.js (8898)
+[0812/044409.395:INFO:CONSOLE:8898] "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold", source: http://localhost:3000/_next/static/chunks/node_modules_%40sentry_core_build_esm_0~uyv3d._.js (8898)
+[0812/044409.472:INFO:CONSOLE:8898] "[HMR] connected", source: http://localhost:3000/_next/static/chunks/node_modules_%40sentry_core_build_esm_0~uyv3d._.js (8898)
+[0812/044415.694:INFO:CONSOLE:8898] "[Fast Refresh] rebuilding", source: http://localhost:3000/_next/static/chunks/node_modules_%40sentry_core_build_esm_0~uyv3d._.js (8898)
+[0812/044415.813:INFO:CONSOLE:8898] "[Fast Refresh] done in 230ms", source: http://localhost:3000/_next/static/chunks/node_modules_%40sentry_core_build_esm_0~uyv3d._.js (8898)
+[0812/044416.799:INFO:CONSOLE:8898] "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold", source: http://localhost:3000/_next/static/chunks/node_modules_%40sentry_core_build_esm_0~uyv3d._.js (8898)
+[0812/044416.864:INFO:CONSOLE:8898] "[HMR] connected", source: http://localhost:3000/_next/static/chunks/node_modules_%40sentry_core_build_esm_0~uyv3d._.js (8898)

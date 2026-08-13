@@ -3,6 +3,8 @@ export type AssetCatalogRow = {
   name: string;
   code: string;
   description: string | null;
+  category: string | null;
+  penalty_kwd: number | null;
   icon_key: string;
   image_url: string | null;
   total_quantity: number;

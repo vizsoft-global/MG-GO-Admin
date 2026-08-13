@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -388,6 +388,7 @@ export type Database = {
           driver_app_sideload_updates_enabled: boolean
           driver_app_splash_url: string | null
           driver_app_title: string
+          esign_screenshot_default: boolean
           feature_two_stage_delivery: boolean
           font_family: string
           id: number
@@ -396,6 +397,7 @@ export type Database = {
           maintenance_mode: boolean
           performance_score_weights: Json
           pickup_auto_cancel_hours: number
+          request_auto_close_days: number
           super_admin_claimed: boolean
           super_admin_user_id: string | null
           theme_id: string
@@ -421,6 +423,7 @@ export type Database = {
           driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
+          esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           font_family?: string
           id?: number
@@ -429,6 +432,7 @@ export type Database = {
           maintenance_mode?: boolean
           performance_score_weights?: Json
           pickup_auto_cancel_hours?: number
+          request_auto_close_days?: number
           super_admin_claimed?: boolean
           super_admin_user_id?: string | null
           theme_id?: string
@@ -454,6 +458,7 @@ export type Database = {
           driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
+          esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           font_family?: string
           id?: number
@@ -462,6 +467,7 @@ export type Database = {
           maintenance_mode?: boolean
           performance_score_weights?: Json
           pickup_auto_cancel_hours?: number
+          request_auto_close_days?: number
           super_admin_claimed?: boolean
           super_admin_user_id?: string | null
           theme_id?: string
@@ -535,36 +541,67 @@ export type Database = {
       }
       appointments: {
         Row: {
+          admin_note: string | null
+          appointment_code: string | null
           created_at: string
+          created_by: string | null
           driver_id: string
+          driver_response_note: string | null
           id: string
+          location_label: string | null
+          proposed_for: string | null
           reason: string | null
+          responded_at: string | null
           scheduled_for: string
           slot_id: string
           status: Database["public"]["Enums"]["appointment_status"]
+          title: string | null
           updated_at: string
         }
         Insert: {
+          admin_note?: string | null
+          appointment_code?: string | null
           created_at?: string
+          created_by?: string | null
           driver_id: string
+          driver_response_note?: string | null
           id?: string
+          location_label?: string | null
+          proposed_for?: string | null
           reason?: string | null
+          responded_at?: string | null
           scheduled_for: string
           slot_id: string
           status?: Database["public"]["Enums"]["appointment_status"]
+          title?: string | null
           updated_at?: string
         }
         Update: {
+          admin_note?: string | null
+          appointment_code?: string | null
           created_at?: string
+          created_by?: string | null
           driver_id?: string
+          driver_response_note?: string | null
           id?: string
+          location_label?: string | null
+          proposed_for?: string | null
           reason?: string | null
+          responded_at?: string | null
           scheduled_for?: string
           slot_id?: string
           status?: Database["public"]["Enums"]["appointment_status"]
+          title?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "appointments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "appointments_driver_id_fkey"
             columns: ["driver_id"]
@@ -650,6 +687,7 @@ export type Database = {
       }
       asset_catalog: {
         Row: {
+          category: string | null
           code: string
           created_at: string
           description: string | null
@@ -658,11 +696,13 @@ export type Database = {
           image_url: string | null
           is_active: boolean
           name: string
+          penalty_kwd: number | null
           reorder_level: number
           total_quantity: number
           updated_at: string
         }
         Insert: {
+          category?: string | null
           code: string
           created_at?: string
           description?: string | null
@@ -671,11 +711,13 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean
           name: string
+          penalty_kwd?: number | null
           reorder_level?: number
           total_quantity?: number
           updated_at?: string
         }
         Update: {
+          category?: string | null
           code?: string
           created_at?: string
           description?: string | null
@@ -684,6 +726,7 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean
           name?: string
+          penalty_kwd?: number | null
           reorder_level?: number
           total_quantity?: number
           updated_at?: string
@@ -819,6 +862,39 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+        }
+        Relationships: []
+      }
+      complaint_categories: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          key: string
+          label_ar: string | null
+          label_en: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key: string
+          label_ar?: string | null
+          label_en: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key?: string
+          label_ar?: string | null
+          label_en?: string
+          sort_order?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2614,6 +2690,145 @@ export type Database = {
           },
         ]
       }
+      esign_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          icon_key: string | null
+          id: string
+          is_active: boolean
+          key: string
+          label_en: string
+          screenshot_restricted: boolean
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          icon_key?: string | null
+          id?: string
+          is_active?: boolean
+          key: string
+          label_en: string
+          screenshot_restricted?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          icon_key?: string | null
+          id?: string
+          is_active?: boolean
+          key?: string
+          label_en?: string
+          screenshot_restricted?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      esign_requests: {
+        Row: {
+          category_key: string | null
+          created_at: string
+          declaration_accepted_at: string | null
+          declined_at: string | null
+          document_storage_key: string | null
+          driver_id: string
+          due_at: string | null
+          id: string
+          request_code: string
+          screenshot_restricted: boolean
+          sent_at: string
+          sent_by: string | null
+          signature_storage_key: string | null
+          signed_at: string | null
+          signed_document_error: string | null
+          signed_document_generated_at: string | null
+          signed_document_storage_key: string | null
+          signer_display_name: string | null
+          signer_meta: Json
+          status: Database["public"]["Enums"]["esign_request_status"]
+          title: string
+          updated_at: string
+          viewed_at: string | null
+        }
+        Insert: {
+          category_key?: string | null
+          created_at?: string
+          declaration_accepted_at?: string | null
+          declined_at?: string | null
+          document_storage_key?: string | null
+          driver_id: string
+          due_at?: string | null
+          id?: string
+          request_code?: string
+          screenshot_restricted?: boolean
+          sent_at?: string
+          sent_by?: string | null
+          signature_storage_key?: string | null
+          signed_at?: string | null
+          signed_document_error?: string | null
+          signed_document_generated_at?: string | null
+          signed_document_storage_key?: string | null
+          signer_display_name?: string | null
+          signer_meta?: Json
+          status?: Database["public"]["Enums"]["esign_request_status"]
+          title: string
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          category_key?: string | null
+          created_at?: string
+          declaration_accepted_at?: string | null
+          declined_at?: string | null
+          document_storage_key?: string | null
+          driver_id?: string
+          due_at?: string | null
+          id?: string
+          request_code?: string
+          screenshot_restricted?: boolean
+          sent_at?: string
+          sent_by?: string | null
+          signature_storage_key?: string | null
+          signed_at?: string | null
+          signed_document_error?: string | null
+          signed_document_generated_at?: string | null
+          signed_document_storage_key?: string | null
+          signer_display_name?: string | null
+          signer_meta?: Json
+          status?: Database["public"]["Enums"]["esign_request_status"]
+          title?: string
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "esign_requests_category_key_fkey"
+            columns: ["category_key"]
+            isOneToOne: false
+            referencedRelation: "esign_categories"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "esign_requests_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_requests_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       geofence_events: {
         Row: {
           accuracy_meters: number | null
@@ -2942,6 +3157,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      loan_tenure_options: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+          months: number
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label: string
+          months: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          months?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       loan_terms: {
         Row: {
@@ -4102,59 +4347,605 @@ export type Database = {
           },
         ]
       }
+      request_approval_step_templates: {
+        Row: {
+          allowed_actions: string[]
+          breach_action: string | null
+          created_at: string
+          id: string
+          is_system_auto: boolean
+          request_type: string
+          role_key: string
+          sla_minutes: number | null
+          step_name: string
+          step_order: number
+          updated_at: string
+        }
+        Insert: {
+          allowed_actions?: string[]
+          breach_action?: string | null
+          created_at?: string
+          id?: string
+          is_system_auto?: boolean
+          request_type: string
+          role_key: string
+          sla_minutes?: number | null
+          step_name: string
+          step_order: number
+          updated_at?: string
+        }
+        Update: {
+          allowed_actions?: string[]
+          breach_action?: string | null
+          created_at?: string
+          id?: string
+          is_system_auto?: boolean
+          request_type?: string
+          role_key?: string
+          sla_minutes?: number | null
+          step_name?: string
+          step_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_approval_step_templates_request_type_fkey"
+            columns: ["request_type"]
+            isOneToOne: false
+            referencedRelation: "request_type_definitions"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      request_approval_steps: {
+        Row: {
+          actor_display_name: string | null
+          breach_action: string | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: string
+          meta: Json
+          request_id: string
+          role_key: string
+          sla_breached_at: string | null
+          sla_due_at: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["request_step_status"]
+          step_name: string
+          step_order: number
+          updated_at: string
+        }
+        Insert: {
+          actor_display_name?: string | null
+          breach_action?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          meta?: Json
+          request_id: string
+          role_key: string
+          sla_breached_at?: string | null
+          sla_due_at?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["request_step_status"]
+          step_name: string
+          step_order: number
+          updated_at?: string
+        }
+        Update: {
+          actor_display_name?: string | null
+          breach_action?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          meta?: Json
+          request_id?: string
+          role_key?: string
+          sla_breached_at?: string | null
+          sla_due_at?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["request_step_status"]
+          step_name?: string
+          step_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_approval_steps_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_approval_steps_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_attachments: {
+        Row: {
+          byte_size: number | null
+          content_type: string | null
+          created_at: string
+          file_name: string | null
+          id: string
+          request_id: string
+          storage_key: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          byte_size?: number | null
+          content_type?: string | null
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          request_id: string
+          storage_key: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          byte_size?: number | null
+          content_type?: string | null
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          request_id?: string
+          storage_key?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_attachments_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_attachments_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_clarifications: {
+        Row: {
+          answer: string | null
+          answer_attachment_keys: string[]
+          answered_at: string | null
+          asked_at: string
+          asked_by: string | null
+          created_at: string
+          id: string
+          question: string
+          request_id: string
+          step_order: number | null
+        }
+        Insert: {
+          answer?: string | null
+          answer_attachment_keys?: string[]
+          answered_at?: string | null
+          asked_at?: string
+          asked_by?: string | null
+          created_at?: string
+          id?: string
+          question: string
+          request_id: string
+          step_order?: number | null
+        }
+        Update: {
+          answer?: string | null
+          answer_attachment_keys?: string[]
+          answered_at?: string | null
+          asked_at?: string
+          asked_by?: string | null
+          created_at?: string
+          id?: string
+          question?: string
+          request_id?: string
+          step_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_clarifications_asked_by_fkey"
+            columns: ["asked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_clarifications_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_department_members: {
+        Row: {
+          created_at: string
+          department_id: string
+          id: string
+          is_active: boolean
+          profile_id: string
+          role_title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          id?: string
+          is_active?: boolean
+          profile_id: string
+          role_title?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          id?: string
+          is_active?: boolean
+          profile_id?: string
+          role_title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_department_members_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "request_departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_department_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_departments: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          key: string
+          label_ar: string | null
+          label_en: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key: string
+          label_ar?: string | null
+          label_en: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key?: string
+          label_ar?: string | null
+          label_en?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      request_field_definitions: {
+        Row: {
+          created_at: string
+          field_key: string
+          help_ar: string | null
+          help_en: string | null
+          id: string
+          is_required: boolean
+          is_server_required: boolean
+          kind: string
+          label_ar: string | null
+          label_en: string
+          max_value: number | null
+          min_value: number | null
+          options: Json
+          options_error_code: string | null
+          options_source: string | null
+          required_error_code: string | null
+          sort_order: number
+          target: string
+          type_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          field_key: string
+          help_ar?: string | null
+          help_en?: string | null
+          id?: string
+          is_required?: boolean
+          is_server_required?: boolean
+          kind: string
+          label_ar?: string | null
+          label_en: string
+          max_value?: number | null
+          min_value?: number | null
+          options?: Json
+          options_error_code?: string | null
+          options_source?: string | null
+          required_error_code?: string | null
+          sort_order?: number
+          target?: string
+          type_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          field_key?: string
+          help_ar?: string | null
+          help_en?: string | null
+          id?: string
+          is_required?: boolean
+          is_server_required?: boolean
+          kind?: string
+          label_ar?: string | null
+          label_en?: string
+          max_value?: number | null
+          min_value?: number | null
+          options?: Json
+          options_error_code?: string | null
+          options_source?: string | null
+          required_error_code?: string | null
+          sort_order?: number
+          target?: string
+          type_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_field_definitions_type_key_fkey"
+            columns: ["type_key"]
+            isOneToOne: false
+            referencedRelation: "request_type_definitions"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      request_staff_access: {
+        Row: {
+          access_level: Database["public"]["Enums"]["request_access_level"]
+          created_at: string
+          id: string
+          profile_id: string
+          request_type: string
+          updated_at: string
+        }
+        Insert: {
+          access_level: Database["public"]["Enums"]["request_access_level"]
+          created_at?: string
+          id?: string
+          profile_id: string
+          request_type: string
+          updated_at?: string
+        }
+        Update: {
+          access_level?: Database["public"]["Enums"]["request_access_level"]
+          created_at?: string
+          id?: string
+          profile_id?: string
+          request_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_staff_access_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_staff_access_request_type_fkey"
+            columns: ["request_type"]
+            isOneToOne: false
+            referencedRelation: "request_type_definitions"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      request_type_definitions: {
+        Row: {
+          attachments_error_code: string | null
+          created_at: string
+          date_range_required: boolean
+          icon_key: string | null
+          id: string
+          is_active: boolean
+          is_system: boolean
+          key: string
+          label_ar: string | null
+          label_en: string
+          min_attachments: number
+          requires_driver_ack_on_approve: boolean
+          screenshot_restricted: boolean
+          sort_order: number
+          terminal_status_on_approve: string
+          updated_at: string
+        }
+        Insert: {
+          attachments_error_code?: string | null
+          created_at?: string
+          date_range_required?: boolean
+          icon_key?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          key: string
+          label_ar?: string | null
+          label_en: string
+          min_attachments?: number
+          requires_driver_ack_on_approve?: boolean
+          screenshot_restricted?: boolean
+          sort_order?: number
+          terminal_status_on_approve?: string
+          updated_at?: string
+        }
+        Update: {
+          attachments_error_code?: string | null
+          created_at?: string
+          date_range_required?: boolean
+          icon_key?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          key?: string
+          label_ar?: string | null
+          label_en?: string
+          min_attachments?: number
+          requires_driver_ack_on_approve?: boolean
+          screenshot_restricted?: boolean
+          sort_order?: number
+          terminal_status_on_approve?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       requests: {
         Row: {
+          acknowledged_at: string | null
           amount_kwd: number | null
+          assigned_to: string | null
           attachment_url: string | null
+          attention_at: string | null
+          attention_cleared_at: string | null
+          attention_reason: string | null
+          closed_at: string | null
+          closed_by: string | null
+          completed_at: string | null
           created_at: string
+          current_step_label: string | null
+          current_step_order: number | null
           decided_at: string | null
           decided_by: string | null
           decision_reason: string | null
           details: string | null
           driver_id: string
+          due_at: string | null
           end_date: string | null
+          fuel_transfer_type: string | null
           id: string
+          needs_attention: boolean
+          payload: Json
           request_code: string
-          request_type: Database["public"]["Enums"]["request_type"]
+          request_type: string
+          severity: Database["public"]["Enums"]["severity_level"] | null
+          sla_breach_action: string | null
+          sla_due_at: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["request_status"]
           updated_at: string
         }
         Insert: {
+          acknowledged_at?: string | null
           amount_kwd?: number | null
+          assigned_to?: string | null
           attachment_url?: string | null
+          attention_at?: string | null
+          attention_cleared_at?: string | null
+          attention_reason?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          completed_at?: string | null
           created_at?: string
+          current_step_label?: string | null
+          current_step_order?: number | null
           decided_at?: string | null
           decided_by?: string | null
           decision_reason?: string | null
           details?: string | null
           driver_id: string
+          due_at?: string | null
           end_date?: string | null
+          fuel_transfer_type?: string | null
           id?: string
+          needs_attention?: boolean
+          payload?: Json
           request_code: string
-          request_type: Database["public"]["Enums"]["request_type"]
+          request_type: string
+          severity?: Database["public"]["Enums"]["severity_level"] | null
+          sla_breach_action?: string | null
+          sla_due_at?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           updated_at?: string
         }
         Update: {
+          acknowledged_at?: string | null
           amount_kwd?: number | null
+          assigned_to?: string | null
           attachment_url?: string | null
+          attention_at?: string | null
+          attention_cleared_at?: string | null
+          attention_reason?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          completed_at?: string | null
           created_at?: string
+          current_step_label?: string | null
+          current_step_order?: number | null
           decided_at?: string | null
           decided_by?: string | null
           decision_reason?: string | null
           details?: string | null
           driver_id?: string
+          due_at?: string | null
           end_date?: string | null
+          fuel_transfer_type?: string | null
           id?: string
+          needs_attention?: boolean
+          payload?: Json
           request_code?: string
-          request_type?: Database["public"]["Enums"]["request_type"]
+          request_type?: string
+          severity?: Database["public"]["Enums"]["severity_level"] | null
+          sla_breach_action?: string | null
+          sla_due_at?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "requests_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requests_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "requests_decided_by_fkey"
             columns: ["decided_by"]
@@ -4168,6 +4959,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "drivers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requests_request_type_fkey"
+            columns: ["request_type"]
+            isOneToOne: false
+            referencedRelation: "request_type_definitions"
+            referencedColumns: ["key"]
           },
         ]
       }
@@ -4614,6 +5412,371 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_blocked_dates: {
+        Row: {
+          blocked_date: string
+          branch_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          blocked_date: string
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          blocked_date?: string
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_blocked_dates_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "visit_branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_blocked_dates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_booking_notes: {
+        Row: {
+          author_id: string | null
+          body: string
+          booking_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          booking_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          booking_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_booking_notes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_booking_notes_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "visit_bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_bookings: {
+        Row: {
+          booking_code: string
+          branch_id: string | null
+          cancelled_at: string | null
+          checked_in_at: string | null
+          completed_at: string | null
+          created_at: string
+          department_key: string
+          driver_id: string
+          id: string
+          note: string | null
+          note_to_rider: string | null
+          rescheduled_from_id: string | null
+          scheduled_date: string
+          slot_id: string
+          status: Database["public"]["Enums"]["visit_booking_status"]
+          updated_at: string
+        }
+        Insert: {
+          booking_code: string
+          branch_id?: string | null
+          cancelled_at?: string | null
+          checked_in_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          department_key: string
+          driver_id: string
+          id?: string
+          note?: string | null
+          note_to_rider?: string | null
+          rescheduled_from_id?: string | null
+          scheduled_date: string
+          slot_id: string
+          status?: Database["public"]["Enums"]["visit_booking_status"]
+          updated_at?: string
+        }
+        Update: {
+          booking_code?: string
+          branch_id?: string | null
+          cancelled_at?: string | null
+          checked_in_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          department_key?: string
+          driver_id?: string
+          id?: string
+          note?: string | null
+          note_to_rider?: string | null
+          rescheduled_from_id?: string | null
+          scheduled_date?: string
+          slot_id?: string
+          status?: Database["public"]["Enums"]["visit_booking_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_bookings_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "visit_branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_bookings_department_key_fkey"
+            columns: ["department_key"]
+            isOneToOne: false
+            referencedRelation: "visit_departments"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "visit_bookings_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_bookings_rescheduled_from_id_fkey"
+            columns: ["rescheduled_from_id"]
+            isOneToOne: false
+            referencedRelation: "visit_bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_bookings_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "visit_slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_branches: {
+        Row: {
+          address: string | null
+          booking_window_days: number
+          city: string | null
+          closing_time: string | null
+          contact_phone: string | null
+          created_at: string
+          default_slot_capacity: number
+          desks_count: number
+          id: string
+          is_active: boolean
+          is_default: boolean
+          key: string
+          lunch_end: string | null
+          lunch_start: string | null
+          name: string
+          opening_time: string | null
+          slot_buffer_minutes: number
+          slot_length_minutes: number
+          sort_order: number
+          updated_at: string
+          working_days: string | null
+          working_dows: number[]
+          working_hours: string | null
+        }
+        Insert: {
+          address?: string | null
+          booking_window_days?: number
+          city?: string | null
+          closing_time?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          default_slot_capacity?: number
+          desks_count?: number
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          key: string
+          lunch_end?: string | null
+          lunch_start?: string | null
+          name: string
+          opening_time?: string | null
+          slot_buffer_minutes?: number
+          slot_length_minutes?: number
+          sort_order?: number
+          updated_at?: string
+          working_days?: string | null
+          working_dows?: number[]
+          working_hours?: string | null
+        }
+        Update: {
+          address?: string | null
+          booking_window_days?: number
+          city?: string | null
+          closing_time?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          default_slot_capacity?: number
+          desks_count?: number
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          key?: string
+          lunch_end?: string | null
+          lunch_start?: string | null
+          name?: string
+          opening_time?: string | null
+          slot_buffer_minutes?: number
+          slot_length_minutes?: number
+          sort_order?: number
+          updated_at?: string
+          working_days?: string | null
+          working_dows?: number[]
+          working_hours?: string | null
+        }
+        Relationships: []
+      }
+      visit_departments: {
+        Row: {
+          assigned_staff_name: string | null
+          avg_handling_minutes: number | null
+          branch_id: string | null
+          created_at: string
+          desk_location: string | null
+          desks_count: number
+          id: string
+          is_active: boolean
+          key: string
+          label_ar: string | null
+          label_en: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          assigned_staff_name?: string | null
+          avg_handling_minutes?: number | null
+          branch_id?: string | null
+          created_at?: string
+          desk_location?: string | null
+          desks_count?: number
+          id?: string
+          is_active?: boolean
+          key: string
+          label_ar?: string | null
+          label_en: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          assigned_staff_name?: string | null
+          avg_handling_minutes?: number | null
+          branch_id?: string | null
+          created_at?: string
+          desk_location?: string | null
+          desks_count?: number
+          id?: string
+          is_active?: boolean
+          key?: string
+          label_ar?: string | null
+          label_en?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_departments_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "visit_branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      visit_slots: {
+        Row: {
+          branch_id: string | null
+          capacity: number
+          created_at: string
+          day_of_week: number | null
+          department_key: string | null
+          end_time: string
+          id: string
+          is_active: boolean
+          slot_date: string | null
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          branch_id?: string | null
+          capacity?: number
+          created_at?: string
+          day_of_week?: number | null
+          department_key?: string | null
+          end_time: string
+          id?: string
+          is_active?: boolean
+          slot_date?: string | null
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          branch_id?: string | null
+          capacity?: number
+          created_at?: string
+          day_of_week?: number | null
+          department_key?: string | null
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          slot_date?: string | null
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visit_slots_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "visit_branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visit_slots_department_key_fkey"
+            columns: ["department_key"]
+            isOneToOne: false
+            referencedRelation: "visit_departments"
+            referencedColumns: ["key"]
           },
         ]
       }
@@ -5098,6 +6261,11 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_auto_close_requests: { Args: never; Returns: number }
+      admin_clear_request_attention: {
+        Args: { p_request_id: string }
+        Returns: Json
+      }
       admin_correct_attendance: {
         Args: {
           p_check_in_at?: string
@@ -5118,6 +6286,52 @@ export type Database = {
         }
         Returns: number
       }
+      admin_count_requests_by_type: { Args: never; Returns: Json }
+      admin_create_appointment: {
+        Args: {
+          p_driver_id: string
+          p_location_label?: string
+          p_reason?: string
+          p_scheduled_for: string
+          p_slot_id?: string
+          p_title?: string
+        }
+        Returns: Json
+      }
+      admin_create_esign_request: {
+        Args: {
+          p_category_key?: string
+          p_document_storage_key?: string
+          p_driver_id: string
+          p_due_at?: string
+          p_screenshot_restricted?: boolean
+          p_title: string
+        }
+        Returns: Json
+      }
+      admin_create_request: {
+        Args: {
+          p_amount_kwd?: number
+          p_attachments?: Json
+          p_details?: string
+          p_driver_id: string
+          p_end_date?: string
+          p_payload?: Json
+          p_severity?: Database["public"]["Enums"]["severity_level"]
+          p_start_date?: string
+          p_type: string
+        }
+        Returns: Json
+      }
+      admin_decide_request: {
+        Args: {
+          p_action: string
+          p_meta?: Json
+          p_reason?: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
       admin_driver_device_overview: {
         Args: { p_driver_id: string; p_history_limit?: number }
         Returns: Json
@@ -5130,14 +6344,12 @@ export type Database = {
           latest_activity_at: string
         }[]
       }
-      admin_expire_stale_pickups: {
-        Args: never
-        Returns: number
-      }
+      admin_expire_stale_pickups: { Args: never; Returns: number }
       admin_force_sign_out_driver: {
         Args: { p_driver_id: string }
         Returns: undefined
       }
+      admin_get_request: { Args: { p_request_id: string }; Returns: Json }
       admin_get_shift_adherence: {
         Args: { p_date: string; p_driver_id: string }
         Returns: Json
@@ -5184,6 +6396,24 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_list_esign_requests: {
+        Args: { p_limit?: number; p_offset?: number; p_status?: string }
+        Returns: Json
+      }
+      admin_list_requests: {
+        Args: {
+          p_date_from?: string
+          p_date_to?: string
+          p_department_key?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_status?: string
+          p_type?: string
+          p_zone_id?: string
+        }
+        Returns: Json
+      }
       admin_list_shift_adherence: {
         Args: { p_driver_ids?: string[]; p_from: string; p_to: string }
         Returns: {
@@ -5191,6 +6421,16 @@ export type Database = {
           driver_id: string
           shift_adherence: Json
         }[]
+      }
+      admin_list_visits: {
+        Args: {
+          p_date_from?: string
+          p_date_to?: string
+          p_limit?: number
+          p_offset?: number
+          p_status?: string
+        }
+        Returns: Json
       }
       admin_preview_purge: {
         Args: { p_entity_type: string; p_ids: string[] }
@@ -5204,6 +6444,18 @@ export type Database = {
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
+      admin_request_department_report: {
+        Args: { p_date_from?: string; p_date_to?: string }
+        Returns: Json
+      }
+      admin_reschedule_visit: {
+        Args: {
+          p_booking_id: string
+          p_new_date: string
+          p_new_slot_id: string
+        }
+        Returns: Json
+      }
       admin_resolve_driver_incentive_target: {
         Args: { p_driver_id: string; p_on_date: string }
         Returns: {
@@ -5213,6 +6465,24 @@ export type Database = {
         }[]
       }
       admin_run_attendance_auto_checkout: { Args: never; Returns: number }
+      admin_run_request_sla_sweep: { Args: never; Returns: number }
+      admin_set_fuel_transfer_type: {
+        Args: { p_request_id: string; p_transfer_type: string }
+        Returns: Json
+      }
+      admin_set_request_decision_meta: {
+        Args: { p_meta: Json; p_request_id: string }
+        Returns: Json
+      }
+      admin_update_visit_status: {
+        Args: {
+          p_booking_id: string
+          p_new_date?: string
+          p_new_slot_id?: string
+          p_status: Database["public"]["Enums"]["visit_booking_status"]
+        }
+        Returns: Json
+      }
       admin_upsert_exception_action: {
         Args: {
           p_action?: string
@@ -5225,7 +6495,15 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_upsert_step_template: {
+        Args: { p_request_type: string; p_steps: Json }
+        Returns: Json
+      }
+      allocate_appointment_code: { Args: never; Returns: string }
       allocate_driver_code: { Args: never; Returns: string }
+      allocate_esign_code: { Args: never; Returns: string }
+      allocate_request_code: { Args: never; Returns: string }
+      allocate_visit_booking_code: { Args: never; Returns: string }
       approve_payout_run: { Args: { p_run_id: string }; Returns: undefined }
       archive_driver_intake: { Args: { p_intake_id: string }; Returns: Json }
       claim_super_admin: { Args: { p_user_id: string }; Returns: boolean }
@@ -5269,8 +6547,21 @@ export type Database = {
         Args: { p_driver_id: string; p_rule_id: string }
         Returns: boolean
       }
+      driver_acknowledge_request: {
+        Args: { p_note?: string; p_request_id: string }
+        Returns: Json
+      }
       driver_app_lookup_by_passcode: {
         Args: { p_driver_code: string; p_passcode: string }
+        Returns: Json
+      }
+      driver_book_visit: {
+        Args: {
+          p_date: string
+          p_department_key: string
+          p_note?: string
+          p_slot_id: string
+        }
         Returns: Json
       }
       driver_cancel_delivery: {
@@ -5314,6 +6605,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      driver_cancel_visit: { Args: { p_booking_id: string }; Returns: Json }
       driver_check_order_id_available: {
         Args: { p_external_order_id: string }
         Returns: boolean
@@ -5437,6 +6729,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      driver_create_request: {
+        Args: {
+          p_amount_kwd?: number
+          p_attachments?: Json
+          p_details?: string
+          p_end_date?: string
+          p_payload?: Json
+          p_severity?: Database["public"]["Enums"]["severity_level"]
+          p_start_date?: string
+          p_type: string
+        }
+        Returns: Json
+      }
+      driver_decline_esignature: {
+        Args: { p_id: string; p_reason?: string }
+        Returns: Json
+      }
       driver_finalize_reconciliation: {
         Args: { p_device_id: string }
         Returns: undefined
@@ -5484,8 +6793,10 @@ export type Database = {
         Returns: Json
       }
       driver_get_delivery_proximity_context: { Args: never; Returns: Json }
+      driver_get_esign_request: { Args: { p_id: string }; Returns: Json }
       driver_get_extra_earnings: { Args: never; Returns: Json }
       driver_get_home_dashboard: { Args: never; Returns: Json }
+      driver_get_request: { Args: { p_request_id: string }; Returns: Json }
       driver_get_today_shift: { Args: never; Returns: Json }
       driver_has_active_restaurant: {
         Args: { p_driver_id: string }
@@ -5501,14 +6812,31 @@ export type Database = {
         }
         Returns: boolean
       }
+      driver_list_appointments: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
+      driver_list_esign_requests: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
+      driver_list_my_requests: {
+        Args: { p_limit?: number; p_offset?: number; p_status?: string }
+        Returns: Json
+      }
       driver_list_notifications: {
         Args: { p_before?: string; p_limit?: number; p_unread_only?: boolean }
+        Returns: Json
+      }
+      driver_list_visit_slots: {
+        Args: { p_date: string; p_department_key: string }
         Returns: Json
       }
       driver_log_security_event: {
         Args: { p_context?: Json; p_event_type: string; p_severity?: string }
         Returns: string
       }
+      driver_mark_esign_viewed: { Args: { p_id: string }; Returns: Json }
       driver_mark_notifications_read: {
         Args: { p_dispatch_item_ids?: string[] }
         Returns: number
@@ -5555,8 +6883,29 @@ export type Database = {
         }
         Returns: Json
       }
+      driver_respond_appointment: {
+        Args: {
+          p_action: string
+          p_id: string
+          p_note?: string
+          p_proposed_for?: string
+        }
+        Returns: Json
+      }
+      driver_respond_reschedule: {
+        Args: { p_accept: boolean; p_note?: string; p_request_id: string }
+        Returns: Json
+      }
       driver_set_duty_state: {
         Args: { p_is_on_duty: boolean; p_is_online: boolean }
+        Returns: Json
+      }
+      driver_submit_clarification: {
+        Args: {
+          p_answer: string
+          p_attachment_keys?: string[]
+          p_request_id: string
+        }
         Returns: Json
       }
       driver_submit_daily_shift: {
@@ -5567,6 +6916,15 @@ export type Database = {
           p_session2_start?: string
           p_shift_date?: string
           p_shift_type: string
+        }
+        Returns: Json
+      }
+      driver_submit_esignature: {
+        Args: {
+          p_id: string
+          p_signature_storage_key: string
+          p_signer_display_name?: string
+          p_signer_meta?: Json
         }
         Returns: Json
       }
@@ -5654,7 +7012,36 @@ export type Database = {
       }
       next_restaurant_code: { Args: never; Returns: string }
       normalize_external_order_id: { Args: { p_raw: string }; Returns: string }
+      notify_driver_transactional: {
+        Args: {
+          p_action_params?: Json
+          p_body: string
+          p_category?: Database["public"]["Enums"]["notification_category"]
+          p_deep_link?: string
+          p_driver_id: string
+          p_priority?: Database["public"]["Enums"]["notification_priority"]
+          p_title: string
+        }
+        Returns: Json
+      }
       preview_driver_earnings: { Args: { p_earn_date: string }; Returns: Json }
+      rcm_materialize_approval_steps: {
+        Args: { p_request_id: string }
+        Returns: undefined
+      }
+      rcm_validate_request_input: {
+        Args: {
+          p_amount_kwd: number
+          p_attachments: Json
+          p_details: string
+          p_end_date: string
+          p_payload: Json
+          p_severity: Database["public"]["Enums"]["severity_level"]
+          p_start_date: string
+          p_type: string
+        }
+        Returns: string
+      }
       recalculate_driver_earnings: {
         Args: {
           p_approved_by?: string
@@ -5725,6 +7112,7 @@ export type Database = {
         Args: { p_day_offset?: number; p_shift_date: string; p_time: string }
         Returns: string
       }
+      staff_has_permission: { Args: { p_slug: string }; Returns: boolean }
       sync_driver_wallet_earning_credit: {
         Args: {
           p_approved_by?: string
@@ -5753,8 +7141,15 @@ export type Database = {
         | "export"
         | "recalculate"
       admin_approval_status: "pending" | "approved" | "rejected"
-      app_role: "rider" | "staff"
-      appointment_status: "scheduled" | "completed" | "cancelled"
+      app_role: "staff" | "rider"
+      appointment_status:
+        | "scheduled"
+        | "completed"
+        | "cancelled"
+        | "pending"
+        | "accepted"
+        | "rejected"
+        | "reschedule_requested"
       asset_assignment_status: "assigned" | "returned"
       asset_type:
         | "gps"
@@ -5771,14 +7166,18 @@ export type Database = {
         | "under_review"
         | "in_transit"
         | "cancelled"
-      delivery_verification_status: "pending" | "verified"
       document_type: "license" | "civil_id" | "work_permit" | "passport"
       driver_import_batch_status: "previewed" | "applied" | "failed"
       driver_intake_status: "awaiting_app_link" | "linked" | "cancelled"
       driver_rider_category: "in_house" | "outsourced"
       driver_status: "active" | "suspended" | "pending"
       driver_workflow_status: "draft" | "pending" | "approved"
-      fuel_expense_status: "pending" | "approved" | "refused"
+      esign_request_status:
+        | "pending"
+        | "signed"
+        | "expired"
+        | "cancelled"
+        | "declined"
       hygiene_submission_status: "pending" | "completed" | "rejected"
       hygiene_task_status: "draft" | "active" | "ended"
       incentive_payout_mode: "milestone" | "cumulative"
@@ -5860,16 +7259,33 @@ export type Database = {
       offer_type: "daily" | "weekly" | "monthly"
       payout_run_status: "draft" | "approved" | "paid" | "voided"
       project_type: "group" | "rent"
-      request_status: "pending" | "approved" | "rejected"
-      request_type: "loan" | "leave" | "fuel" | "complaint" | "document"
+      request_access_level: "view_only" | "approver"
+      request_status:
+        | "pending"
+        | "approved"
+        | "rejected"
+        | "draft"
+        | "submitted"
+        | "in_review"
+        | "needs_clarification"
+        | "solved"
+        | "overdue"
+        | "rescheduled"
+        | "responded"
+        | "closed"
+      request_step_status:
+        | "pending"
+        | "in_progress"
+        | "completed"
+        | "rejected"
+        | "skipped"
       restaurant_geofence_kind: "inclusion" | "exclusion"
-      restaurant_status: "draft" | "published" | "archived"
+      restaurant_status: "draft" | "published" | "active"
       rule_scope_type: "zone" | "partner" | "restaurant"
       rule_status: "draft" | "active" | "ended"
       severity_level: "low" | "medium" | "high"
       support_ticket_status: "open" | "resolved"
       thread_status: "active" | "resolved"
-      vehicle_document_type: "rc" | "permit" | "insurance"
       vehicle_status: "active" | "suspended" | "maintenance"
       verification_import_batch_status: "previewed" | "applied" | "reverted"
       verification_source: "manual" | "import"
@@ -5880,6 +7296,12 @@ export type Database = {
         | "deficit"
         | "conflict"
         | "reverted"
+      visit_booking_status:
+        | "confirmed"
+        | "checked_in"
+        | "completed"
+        | "no_show"
+        | "cancelled"
       wallet_entry_status: "approved" | "pending" | "voided"
       wallet_entry_type: "earning_credit" | "manual_adjustment" | "payout_debit"
       wrong_action_source: "system" | "admin"
@@ -6032,8 +7454,16 @@ export const Constants = {
         "recalculate",
       ],
       admin_approval_status: ["pending", "approved", "rejected"],
-      app_role: ["rider", "staff"],
-      appointment_status: ["scheduled", "completed", "cancelled"],
+      app_role: ["staff", "rider"],
+      appointment_status: [
+        "scheduled",
+        "completed",
+        "cancelled",
+        "pending",
+        "accepted",
+        "rejected",
+        "reschedule_requested",
+      ],
       asset_assignment_status: ["assigned", "returned"],
       asset_type: ["gps", "sim", "phone", "delivery_bag", "helmet", "uniform"],
       attendance_status: ["present", "late", "absent", "on_leave"],
@@ -6045,14 +7475,19 @@ export const Constants = {
         "in_transit",
         "cancelled",
       ],
-      delivery_verification_status: ["pending", "verified"],
       document_type: ["license", "civil_id", "work_permit", "passport"],
       driver_import_batch_status: ["previewed", "applied", "failed"],
       driver_intake_status: ["awaiting_app_link", "linked", "cancelled"],
       driver_rider_category: ["in_house", "outsourced"],
       driver_status: ["active", "suspended", "pending"],
       driver_workflow_status: ["draft", "pending", "approved"],
-      fuel_expense_status: ["pending", "approved", "refused"],
+      esign_request_status: [
+        "pending",
+        "signed",
+        "expired",
+        "cancelled",
+        "declined",
+      ],
       hygiene_submission_status: ["pending", "completed", "rejected"],
       hygiene_task_status: ["draft", "active", "ended"],
       incentive_payout_mode: ["milestone", "cumulative"],
@@ -6141,16 +7576,35 @@ export const Constants = {
       offer_type: ["daily", "weekly", "monthly"],
       payout_run_status: ["draft", "approved", "paid", "voided"],
       project_type: ["group", "rent"],
-      request_status: ["pending", "approved", "rejected"],
-      request_type: ["loan", "leave", "fuel", "complaint", "document"],
+      request_access_level: ["view_only", "approver"],
+      request_status: [
+        "pending",
+        "approved",
+        "rejected",
+        "draft",
+        "submitted",
+        "in_review",
+        "needs_clarification",
+        "solved",
+        "overdue",
+        "rescheduled",
+        "responded",
+        "closed",
+      ],
+      request_step_status: [
+        "pending",
+        "in_progress",
+        "completed",
+        "rejected",
+        "skipped",
+      ],
       restaurant_geofence_kind: ["inclusion", "exclusion"],
-      restaurant_status: ["draft", "published", "archived"],
+      restaurant_status: ["draft", "published", "active"],
       rule_scope_type: ["zone", "partner", "restaurant"],
       rule_status: ["draft", "active", "ended"],
       severity_level: ["low", "medium", "high"],
       support_ticket_status: ["open", "resolved"],
       thread_status: ["active", "resolved"],
-      vehicle_document_type: ["rc", "permit", "insurance"],
       vehicle_status: ["active", "suspended", "maintenance"],
       verification_import_batch_status: ["previewed", "applied", "reverted"],
       verification_source: ["manual", "import"],
@@ -6161,6 +7615,13 @@ export const Constants = {
         "deficit",
         "conflict",
         "reverted",
+      ],
+      visit_booking_status: [
+        "confirmed",
+        "checked_in",
+        "completed",
+        "no_show",
+        "cancelled",
       ],
       wallet_entry_status: ["approved", "pending", "voided"],
       wallet_entry_type: [

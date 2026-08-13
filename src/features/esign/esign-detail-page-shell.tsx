@@ -1,0 +1,385 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import {
+  ArrowLeft,
+  Download,
+  FileText,
+  Loader2,
+  Printer,
+  Shield,
+  ShieldOff,
+} from "lucide-react";
+import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { StatusPill } from "@/components/dashboard/status-pill";
+import { Button } from "@/components/ui/button";
+import { Link } from "@/i18n/navigation";
+import { cn } from "@/lib/utils";
+import { useEsignDocumentLinks, useEsignRequestDetail } from "./use-esign";
+import type { EsignRequestStatus } from "./types";
+
+function statusVariant(
+  status: EsignRequestStatus,
+): "success" | "warning" | "danger" | "neutral" {
+  if (status === "signed") return "success";
+  if (status === "declined") return "danger";
+  if (status === "expired" || status === "cancelled") return "neutral";
+  if (status === "pending") return "warning";
+  return "neutral";
+}
+
+function formatStamp(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+/** Signature proof keys the driver app writes into `esign_requests.signer_meta`. */
+const PROOF_KEYS = [
+  "employee_id",
+  "phone",
+  "civil_id",
+  "company",
+  "ip_address",
+  "device",
+] as const;
+
+function TimelineStep({
+  label,
+  at,
+  pendingLabel,
+  tone = "success",
+}: {
+  label: string;
+  at: string | null;
+  pendingLabel?: string;
+  tone?: "success" | "danger";
+}) {
+  const done = Boolean(at);
+  return (
+    <li className="flex items-start gap-2">
+      <span
+        className={cn(
+          "mt-1 h-2 w-2 shrink-0 rounded-full",
+          !done
+            ? "bg-muted-foreground/30"
+            : tone === "danger"
+              ? "bg-destructive"
+              : "bg-emerald-500",
+        )}
+      />
+      <div>
+        <p className={cn("text-xs font-medium", !done && "text-muted-foreground")}>{label}</p>
+        <p className="text-[10px] text-muted-foreground">
+          {at ? formatStamp(at) : (pendingLabel ?? "—")}
+        </p>
+      </div>
+    </li>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="text-end text-xs font-medium">{value}</dd>
+    </div>
+  );
+}
+
+export function EsignDetailPageShell({ requestId }: { requestId: string }) {
+  const t = useTranslations("pages.requests.esign.detail");
+  const tCommon = useTranslations("pages.requests.esign");
+  const { data, isLoading } = useEsignRequestDetail(requestId);
+  const { data: links, isLoading: linksLoading } = useEsignDocumentLinks(requestId);
+  const request = data?.request;
+
+  if (isLoading) {
+    return (
+      <AppPage>
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </AppPage>
+    );
+  }
+
+  if (!request) {
+    return (
+      <AppPage>
+        <AppPageHeader title={t("notFound")} />
+        <Button variant="outline" className="h-9" render={<Link href="/requests/esign/sent" />}>
+          <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
+          {t("back")}
+        </Button>
+      </AppPage>
+    );
+  }
+
+  const meta = request.signer_meta ?? {};
+  const proofRows = PROOF_KEYS.map((key) => ({
+    key,
+    value: meta[key] != null && String(meta[key]).trim() !== "" ? String(meta[key]) : null,
+  })).filter((row) => row.value != null);
+  const declinedReason =
+    meta.declined_reason != null && String(meta.declined_reason).trim() !== ""
+      ? String(meta.declined_reason)
+      : null;
+
+  // Client decision: once a request is signed, the preview shows the stamped copy, the same
+  // one print and download serve. Falling back to the original is still correct while the
+  // composer runs or after it fails — the sidebar says which of the two happened.
+  const previewUrl = links?.signedDocumentUrl ?? links?.documentUrl ?? null;
+  const previewIsSignedCopy = Boolean(links?.signedDocumentUrl);
+
+  return (
+    <AppPage>
+      <AppPageHeader
+        title={request.title || request.request_code}
+        description={request.request_code}
+        breadcrumbs={[
+          { label: tCommon("hub.title"), href: "/requests/esign" },
+          { label: tCommon("signatures.title"), href: "/requests/esign/signatures" },
+          { label: request.request_code },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              disabled={!links?.signedDocumentUrl && !links?.documentUrl}
+              // Opens the document itself (signed copy first) — printing this page would only
+              // capture the admin chrome, and the preview iframe is cross-origin.
+              onClick={() =>
+                window.open(
+                  links?.signedDocumentUrl ?? links?.documentUrl ?? "",
+                  "_blank",
+                  "noopener",
+                )
+              }
+            >
+              <Printer className="me-1.5 h-3.5 w-3.5" />
+              {t("print")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              render={<Link href="/requests/esign/sent" />}
+            >
+              <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
+              {t("back")}
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <AppListCard className="flex min-h-[420px] flex-col gap-3 bg-muted/30 p-4">
+          {previewUrl ? (
+            <div className="flex flex-col gap-1">
+              <iframe
+                src={previewUrl}
+                title={request.title || request.request_code}
+                className="h-[520px] w-full rounded-lg border border-border bg-card"
+              />
+              {previewIsSignedCopy ? (
+                <p className="text-[10px] text-muted-foreground">{t("previewSignedCopy")}</p>
+              ) : null}
+            </div>
+          ) : linksLoading ? (
+            // The signed URL is minted per view, so it lands a beat after the row. Claiming
+            // "sent without a document" in that gap reads as a real defect to an admin.
+            <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border bg-card py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card py-16 text-center">
+              <FileText className="h-8 w-8 text-muted-foreground/50" />
+              <p className="text-sm font-medium">{t("noDocumentTitle")}</p>
+              <p className="max-w-xs text-[11px] text-muted-foreground">
+                {t("noDocumentBody")}
+              </p>
+            </div>
+          )}
+
+          {links?.signatureUrl ? (
+            <div className="rounded-lg border border-border bg-card p-3">
+              <img
+                src={links.signatureUrl}
+                alt={request.signer_display_name ?? t("signerName")}
+                className="h-16 object-contain"
+              />
+              <p className="mt-1 border-t border-border pt-1 text-[10px] text-muted-foreground">
+                {t("signedElectronically", { at: formatStamp(request.signed_at) })}
+              </p>
+            </div>
+          ) : null}
+        </AppListCard>
+
+        <div className="space-y-2">
+          <AppListCard className="space-y-2 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">{t("statusSection")}</h3>
+              <StatusPill variant={statusVariant(request.status)}>
+                {tCommon(`status.${request.status}`)}
+              </StatusPill>
+            </div>
+            <ol className="space-y-2">
+              <TimelineStep label={t("timelineSent")} at={request.sent_at} />
+              <TimelineStep label={t("timelineViewed")} at={request.viewed_at} pendingLabel={t("timelinePending")} />
+              {request.declined_at ? (
+                <TimelineStep
+                  label={t("timelineDeclined")}
+                  at={request.declined_at}
+                  tone="danger"
+                />
+              ) : (
+                <TimelineStep
+                  label={t("timelineSigned")}
+                  at={request.signed_at}
+                  pendingLabel={t("timelinePending")}
+                />
+              )}
+            </ol>
+          </AppListCard>
+
+          <AppListCard className="space-y-2 p-4">
+            <h3 className="text-sm font-semibold">{t("detailsSection")}</h3>
+            <dl className="space-y-1.5">
+              <Row label={t("category")} value={request.category_label ?? "—"} />
+              <Row
+                label={t("recipient")}
+                value={`${request.driver_name} · ${request.driver_code}`}
+              />
+              <Row label={t("created")} value={formatStamp(request.created_at)} />
+              <Row label={t("due")} value={formatStamp(request.due_at)} />
+              <Row label={t("viewedAt")} value={formatStamp(request.viewed_at)} />
+              {request.declined_at ? (
+                <Row label={t("declinedAt")} value={formatStamp(request.declined_at)} />
+              ) : (
+                <Row label={t("signedAt")} value={formatStamp(request.signed_at)} />
+              )}
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-[11px] text-muted-foreground">{t("screenshot")}</dt>
+                <dd className="flex items-center gap-1.5 text-xs font-medium">
+                  {request.screenshot_restricted ? (
+                    <>
+                      <Shield className="h-3.5 w-3.5 text-emerald-700" />
+                      {t("screenshotBlocked")}
+                    </>
+                  ) : (
+                    <>
+                      <ShieldOff className="h-3.5 w-3.5 text-muted-foreground" />
+                      {t("screenshotAllowed")}
+                    </>
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </AppListCard>
+
+          <AppListCard className="space-y-2 p-4">
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  request.signed_at ? "bg-emerald-500" : "bg-muted-foreground/30"
+                }`}
+              />
+              <h3 className="text-sm font-semibold">{t("proofSection")}</h3>
+            </div>
+            {/* Two-up so a fully populated proof record (8 fields) still fits one viewport. */}
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+              <Row label={t("signerName")} value={request.signer_display_name ?? "—"} />
+              {proofRows.map((row) => (
+                <Row
+                  key={row.key}
+                  label={t(`proof.${row.key}` as "proof.phone")}
+                  value={row.value as string}
+                />
+              ))}
+              {request.signed_at ? (
+                <Row label={t("proof.signed_at")} value={formatStamp(request.signed_at)} />
+              ) : null}
+              {request.declaration_accepted_at ? (
+                <Row
+                  label={t("proof.declaration_accepted_at")}
+                  value={formatStamp(request.declaration_accepted_at)}
+                />
+              ) : null}
+            </dl>
+            {declinedReason ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                <p className="text-[10px] font-semibold text-destructive">
+                  {t("declineReasonLabel")}
+                </p>
+                <p className="mt-0.5 text-xs">{declinedReason}</p>
+              </div>
+            ) : null}
+            {proofRows.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground">{t("noSignerMeta")}</p>
+            ) : null}
+          </AppListCard>
+
+          {links?.signedDocumentUrl ? (
+            <Button
+              type="button"
+              className="h-9 w-full"
+              render={
+                <a href={links.signedDocumentUrl} target="_blank" rel="noreferrer" />
+              }
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {t("downloadSignedCopy")}
+            </Button>
+          ) : request.status === "signed" ? (
+            <p
+              className={
+                links?.signedDocumentError
+                  ? "rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive"
+                  : "rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800"
+              }
+            >
+              {links?.signedDocumentError
+                ? t("signedCopyFailed", { reason: links.signedDocumentError })
+                : t("signedCopyPending")}
+            </p>
+          ) : null}
+          <Button
+            type="button"
+            variant={links?.signedDocumentUrl ? "outline" : "default"}
+            className="h-9 w-full"
+            disabled={!links?.documentUrl}
+            render={
+              links?.documentUrl ? (
+                <a href={links.documentUrl} target="_blank" rel="noreferrer" />
+              ) : undefined
+            }
+          >
+            <Download className="me-1.5 h-3.5 w-3.5" />
+            {t("downloadDocument")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 w-full"
+            disabled={!links?.signatureUrl}
+            render={
+              links?.signatureUrl ? (
+                <a href={links.signatureUrl} target="_blank" rel="noreferrer" />
+              ) : undefined
+            }
+          >
+            <Download className="me-1.5 h-3.5 w-3.5" />
+            {t("downloadSignature")}
+          </Button>
+        </div>
+      </div>
+    </AppPage>
+  );
+}

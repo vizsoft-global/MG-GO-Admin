@@ -12,6 +12,7 @@ import {
   parseRestaurantFormData,
   validateRestaurantCoordinates,
 } from "@/features/restaurants/parse-restaurant-form";
+import { toDbRestaurantStatus } from "@/features/restaurants/restaurant-status";
 import { isDpdErrorKey, type DpdErrorKey } from "./dpd-errors";
 import {
   getDriverEarningsDetail,
@@ -518,8 +519,8 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
     map_link: mapLink || null,
     latitude,
     longitude,
-    status,
-    is_active: isActive,
+    status: toDbRestaurantStatus(status),
+    is_active: isActive && status !== "archived",
     updated_at: new Date().toISOString(),
   };
 
