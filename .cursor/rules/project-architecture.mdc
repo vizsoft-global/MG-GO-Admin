@@ -227,6 +227,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-13` — **Request & Complaint hub matches Figma `4152:8349`.** Dark stage, 96px tiles, Figma glyphs, cream pending badges. Global sidebar/theme unchanged.
+
 - `[admin+app] 2026-08-13` — **On-behalf types, dead APT campaigns, unused form deleted.** Admin New request lists every active `request_type_definitions` row (custom types render from field definitions; attachment-gated types stay rider-only). Deleted four leftover `APT-1000`…`APT-1002` transactional campaigns. Flutter dropped unused `request_form_screen.dart`.
 
 - `[admin+app] 2026-08-13` — **Eleven PARTIAL Figma rows closed.** Workflow builder now writes `sla_minutes` / `breach_action` (`20260906100000`); the other ten were stale scores (ack terms, types builder, status chips, visit bulk/branch/deltas, appointment notify, e-sign capture/confirmed, tower 🏢 glyph). Matrix: 72 PASS / 0 PARTIAL / 0 BLOCKED / 1 OUT OF SCOPE.
