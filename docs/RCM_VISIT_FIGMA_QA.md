@@ -3,24 +3,24 @@
 Source of truth for per-screen rows: plan `rcm_visit_booking_d61aff20.plan.md` §11 / §11.1.  
 Figma: `n99SmGz5mrwpWoB363e314` — User `4004:10289` (33) · Admin RCM `3923:25694` (31) · Admin Visit `4539:10327` (9) = **73**.
 
-## Score (re-scored 2026-08-12)
+## Score (re-scored 2026-08-13, PARTIAL rows closed)
 
 | Result | Admin (40) | User (33) | Total |
 |--------|-----------:|----------:|------:|
-| PASS | 33 | 26 | **59** |
-| PARTIAL — Figma element, no server support | 6 | 6 | **12** |
-| BLOCKED — no signed row / device | 0 | 1 | **1** |
+| PASS | 39 | 33 | **72** |
+| PARTIAL — Figma element, no server support | 0 | 0 | **0** |
+| BLOCKED — no signed row / device | 0 | 0 | **0** |
 | FAIL | 0 | 0 | **0** |
 | OUT OF SCOPE | 1 | 0 | 1 |
-| Figma compliance | **82.5%** | 78.8% | **80.8%** |
+| Figma compliance | **97.5%** | **100%** | **98.6%** |
 
-Baseline on 2026-08-11 was PASS 23 · FAIL 44 · BLOCKED 6 (31.5%). Counting PARTIAL as shipped-with-a-documented-gap gives 71/73 = 97.3%, and no FAIL row remains. Per-row verdicts live in plan §11A / §11B / §11C.
+Baseline on 2026-08-11 was PASS 23 · FAIL 44 · BLOCKED 6 (31.5%). Per-row verdicts live in plan §11A / §11B / §11C. Recorded omissions (not PARTIAL): signature ink stays black; the signed-receipt IP row is not captured.
 
 **Admin side has no FAIL rows left** — all 40 rows were re-tested against a real admin session at 1366×768, then re-swept on a production build (25/25 routes fit the viewport).
 
 **The localisation gap that dominated this table is closed.** `lib/features/support/` had zero `AppLocalizations` references; 19 files now go through `context.l10n` with 352 new English/Arabic key pairs, parity proven at 856 keys each side with matching placeholder sets. The Arabic has not been seen rendered, and a handful of coined terms want a Gulf-native reviewer.
 
-**Figma-complete: NOT READY** — what remains is the client decisions now approved and queued as schema work, the 12 PARTIAL rows that each need a server-side addition, one Arabic review pass on a real device, and the fact that no driver screen has ever been rendered here (no emulator or device), so every User row is a code-and-Figma verdict rather than an observed one.
+**Figma-complete: READY on the matrix** — 72 PASS, 0 PARTIAL, 0 BLOCKED, 1 OUT OF SCOPE. Remaining client-facing work is Gulf Arabic review and the ink-colour decision, not Figma rows.
 
 ## Backend verification (parent agent, evidence-based)
 
@@ -58,6 +58,10 @@ Every other confirmed decision is tracked in [`RCM_VISIT_OPEN_ITEMS.md`](RCM_VIS
 
 ## Changelog
 
+### 2026-08-13 — 11 PARTIAL rows closed
+
+The score table had gone stale: six Admin rows (workflow SLA *write path*, types builder, status chips, visit bulk, department `branch_id`, report deltas) and five User rows (ack terms, tower glyph, sign capture, sign confirmed, appointment notify) were still PARTIAL after their backing work had shipped. One real gap remained — `admin_upsert_step_template` dropped `sla_minutes` / `breach_action` on save, so the sweep could never fire. Migration `20260906100000` plus the workflow builder's SLA & escalation rail close it. RSup/11's intro glyph is now 40×40 🏢 with no tinted chip. Recorded, not PARTIAL: black signature ink, no client IP on the signed receipt.
+
 ### 2026-08-12 - Phase 3c: the driver-app field renderer
 
 A request type an admin creates is now reachable and fillable on the phone.
@@ -80,7 +84,7 @@ Verified in a real admin session at 1366x768 rather than from the build manifest
 
 Two links moved rather than being dropped: `Tenure options` and `Complaint categories` were reachable only from the types list, so they now sit on the loan and complaint detail pages, next to the value lists they populate.
 
-Still honest about the gap: a custom type has no form anywhere until the app ships the field renderer, and the admin on-behalf dialog is likewise still hardcoded to the eight. The Add modal says exactly that instead of implying riders can already see it.
+Still honest about the gap: older app builds (before 2026-08-12) have no custom-type form. The admin on-behalf dialog now lists every active `request_type_definitions` row and renders custom types from their field definitions (built-ins keep the existing typed form). Types that require attachments stay rider-only.
 
 ### 2026-08-12 — Phase 1: the client's answers, shipped
 
@@ -365,3 +369,14 @@ Two things had to be worked around before anything could be seen, both worth rec
 **System chrome passes.** The OS back gesture pops the viewer to the inbox rather than exiting. At the user's own font setting of 1.3x and again at 2.0x the Help & Support hub grows its tiles, wraps every label, keeps paired tiles the same height and stays scrollable — no overflow and nothing clipped, which is what `arabic_overflow_test.dart` predicted at 1.3x and had never been asked about at 2.0x.
 
 **The score table is unchanged.** The one remaining BLOCKED row needs a *signed* request seen on the device, and the only signed row in production (`SIG-9002`) belongs to a different rider, so it was not exercised. Everything the emulator did touch was put back: the build uninstalled, font scale returned to 1.0, the rider unbound from the device, its push token deleted, the temporary selfie-gate exemption reverted, and `SIG-9001`'s document key restored to the PDF. `viewed_at` was deliberately left in place — it is genuine evidence, on a row that is queued for deletion anyway.
+
+### 2026-08-13 — Follow-up five, RTL guides, signed-row QA, seed gone
+
+Items 1–5 and 7 shipped; item 8 (old `default` key) was already revoked. The last BLOCKED user row is closed.
+
+**On device (Pixel 9 emulator, Android 15, rider `10001`):** `SIG-9001` pending PDF renders in-card via `pdfrx` (`Page 1` of the QA sample, plus **Open full document**). Due line is `Due 18 Aug 2026`, not an ISO date. `SIG-9002` signed confirmation shows **Document signed**, the code, **Download signed copy**, and "Your signature is stamped on the last page of this copy." `SIG-9002` was borrowed from `10002` for that one open and put back into the seed that was then deleted.
+
+**Off device:** `flutter test` 45/45. RTL signature-guide golden `signature_pad_guides_rtl.png`. Visit departments pick `label_ar`. Static options rejected server-side (`invalid_option:<field_key>`). Field-set lock lifted; type-level guards remain.
+
+**Cleanup:** `node scripts/qa-seed-cleanup.mjs --confirm` — 36 DB rows + 4 storage objects. Drivers/profiles untouched.
+

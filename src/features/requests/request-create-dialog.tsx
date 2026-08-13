@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Loader2, Plus, TriangleAlert } from "lucide-react";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -20,19 +20,15 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { TYPE_FIELDS } from "./request-typed-fields";
-import type { RequestCreateOptions } from "./types";
+import { REQUEST_TYPE_SLUGS } from "./settings-types";
+import type {
+  RequestCreateFieldOption,
+  RequestCreateOptions,
+  RequestCreateTypeOption,
+} from "./types";
 import { useCreateRequestOnBehalf, useRequestCreateOptions } from "./use-requests";
 
-const CREATABLE_TYPES = [
-  "leave",
-  "sick_leave",
-  "loan",
-  "asset",
-  "fuel",
-  "document",
-  "complaint",
-  "salary_justification",
-] as const;
+const SYSTEM_TYPES = new Set<string>(REQUEST_TYPE_SLUGS);
 
 const SEVERITIES = ["low", "medium", "high"] as const;
 
@@ -67,15 +63,36 @@ const LONG_TEXT_KEYS = new Set([
 
 type Draft = Record<string, string>;
 
+function typeLabel(
+  t: ReturnType<typeof useTranslations<"pages.requests">>,
+  locale: string,
+  row: RequestCreateTypeOption,
+): string {
+  if (SYSTEM_TYPES.has(row.key)) return t(`types.${row.key}` as "types.leave");
+  if (locale.startsWith("ar") && row.label_ar) return row.label_ar;
+  return row.label_en || row.key;
+}
+
+function fieldLabelFor(
+  t: ReturnType<typeof useTranslations<"pages.requests">>,
+  locale: string,
+  field: RequestCreateFieldOption,
+): string {
+  if (locale.startsWith("ar") && field.label_ar) return field.label_ar;
+  return field.label_en || field.field_key;
+}
+
 function isBlocked(
   type: string,
   options: RequestCreateOptions | undefined,
-): "tenure" | "category" | "sickDocs" | null {
+): "tenure" | "category" | "sickDocs" | "attachments" | null {
   if (type === "sick_leave") return "sickDocs";
   if (type === "loan" && (options?.loanTenures.length ?? 0) === 0) return "tenure";
   if (type === "complaint" && (options?.complaintCategories.length ?? 0) === 0) {
     return "category";
   }
+  const def = options?.types.find((row) => row.key === type);
+  if (def && !SYSTEM_TYPES.has(type) && def.min_attachments > 0) return "attachments";
   return null;
 }
 
@@ -87,6 +104,7 @@ export function RequestCreateDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const t = useTranslations("pages.requests");
+  const locale = useLocale();
   const [driverId, setDriverId] = useState<string | null>(null);
   const [type, setType] = useState<string>("leave");
   const [draft, setDraft] = useState<Draft>({});
@@ -94,6 +112,31 @@ export function RequestCreateDialog({
 
   const { data: options, isLoading } = useRequestCreateOptions(open);
   const create = useCreateRequestOnBehalf();
+
+  const typeDef = options?.types.find((row) => row.key === type);
+  const isTyped = Boolean(TYPE_FIELDS[type]);
+  const dynamicFields = useMemo(
+    () =>
+      (options?.fields ?? [])
+        .filter((field) => field.type_key === type)
+        .sort((a, b) => a.sort_order - b.sort_order),
+    [options?.fields, type],
+  );
+
+  useEffect(() => {
+    const keys = options?.types.map((row) => row.key) ?? [];
+    if (keys.length > 0 && !keys.includes(type)) setType(keys[0]);
+  }, [options?.types, type]);
+
+  const typeItems = useMemo<SearchSelectItem[]>(
+    () =>
+      (options?.types ?? []).map((row) => ({
+        value: row.key,
+        label: typeLabel(t, locale, row),
+        keywords: [row.key, row.label_en, row.label_ar ?? ""],
+      })),
+    [options?.types, locale, t],
+  );
 
   const driverItems = useMemo<SearchSelectItem[]>(
     () =>
@@ -117,10 +160,19 @@ export function RequestCreateDialog({
   const payloadFields = fields.filter(
     (field) => field.from !== "column" && field.key !== "declaration_accepted",
   );
-  const hasDeclaration = fields.some((field) => field.key === "declaration_accepted");
-  const hasAmount = fields.some((field) => field.key === "amount_kwd");
-  const hasDates = fields.some((field) => field.key === "start_date");
-  const hasSeverity = fields.some((field) => field.key === "severity");
+  const hasDeclaration = isTyped
+    ? fields.some((field) => field.key === "declaration_accepted")
+    : dynamicFields.some((field) => field.field_key === "declaration_accepted");
+  const hasAmount = isTyped
+    ? fields.some((field) => field.key === "amount_kwd")
+    : dynamicFields.some((field) => field.target === "amount_kwd");
+  const hasDates = isTyped
+    ? fields.some((field) => field.key === "start_date")
+    : Boolean(typeDef?.date_range_required) ||
+      dynamicFields.some((field) => field.target === "start_date" || field.target === "end_date");
+  const hasSeverity = isTyped
+    ? fields.some((field) => field.key === "severity")
+    : dynamicFields.some((field) => field.target === "severity");
   const blocked = isBlocked(type, options);
 
   const value = (key: string) => draft[key] ?? "";
@@ -134,19 +186,58 @@ export function RequestCreateDialog({
     setDeclaration(false);
   };
 
+  const extraDynamic = dynamicFields.filter(
+    (field) =>
+      field.kind !== "file" &&
+      field.target !== "attachments" &&
+      field.target !== "start_date" &&
+      field.target !== "end_date" &&
+      field.target !== "amount_kwd" &&
+      field.target !== "severity" &&
+      field.field_key !== "declaration_accepted",
+  );
+
   const missingRequired =
     !driverId ||
     (hasDates && (!value("start_date") || !value("end_date"))) ||
-    (hasDeclaration && !declaration);
+    (hasDeclaration && !declaration) ||
+    extraDynamic.some(
+      (field) =>
+        field.is_required &&
+        (field.kind === "checkbox"
+          ? value(field.field_key) !== "true"
+          : !value(field.field_key).trim()),
+    );
 
   const submit = async () => {
     if (!driverId || blocked) return;
 
-    const payload: Record<string, string | number | boolean> = {};
-    for (const field of payloadFields) {
-      const raw = value(field.key).trim();
-      if (!raw) continue;
-      payload[field.key] = NUMBER_KEYS.has(field.key) ? Number(raw) : raw;
+    const payload: Record<string, string | number | boolean | string[]> = {};
+    let details: string | null = null;
+    if (isTyped) {
+      for (const field of payloadFields) {
+        const raw = value(field.key).trim();
+        if (!raw) continue;
+        payload[field.key] = NUMBER_KEYS.has(field.key) ? Number(raw) : raw;
+      }
+    } else {
+      for (const field of extraDynamic) {
+        const raw = value(field.field_key).trim();
+        if (!raw && field.kind !== "checkbox") continue;
+        const parsed =
+          field.kind === "number"
+            ? Number(raw)
+            : field.kind === "checkbox"
+              ? value(field.field_key) === "true"
+              : field.kind === "multiselect"
+                ? raw.split(",").filter(Boolean)
+                : raw;
+        if (field.target === "details") {
+          details = String(parsed);
+          continue;
+        }
+        payload[field.field_key] = parsed;
+      }
     }
     if (hasDeclaration) payload.declaration_accepted = declaration;
 
@@ -159,6 +250,7 @@ export function RequestCreateDialog({
       startDate: hasDates ? value("start_date") || null : null,
       endDate: hasDates ? value("end_date") || null : null,
       severity: hasSeverity ? value("severity") || null : null,
+      details,
     });
 
     if (!result.ok) {
@@ -206,30 +298,22 @@ export function RequestCreateDialog({
               <Label>
                 {t("create.fieldType")} <span className="text-destructive">*</span>
               </Label>
-              <Select
-                items={CREATABLE_TYPES.map((key) => ({
-                  value: key,
-                  label: t(`types.${key}`),
-                }))}
+              <SearchSelect
+                items={typeItems}
                 value={type}
-                onValueChange={(next) => {
+                onChange={(next) => {
                   if (!next) return;
                   setType(next);
                   setDraft({});
                   setDeclaration(false);
                 }}
-              >
-                <SelectTrigger className="h-9 w-full">
-                  <SelectValue placeholder={t("create.fieldType")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {CREATABLE_TYPES.map((key) => (
-                    <SelectItem key={key} value={key} label={t(`types.${key}`)}>
-                      {t(`types.${key}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder={isLoading ? t("create.loading") : t("create.fieldType")}
+                searchPlaceholder={t("create.typeSearchPlaceholder")}
+                emptyText={t("create.typeEmpty")}
+                recentsKey="requests-create-type"
+                disabled={isLoading}
+                clearable={false}
+              />
             </div>
           </div>
 
@@ -418,6 +502,103 @@ export function RequestCreateDialog({
                 </div>
               );
             })}
+
+            {!isTyped
+              ? extraDynamic.map((field) => {
+                  const key = field.field_key;
+                  const label = (
+                    <>
+                      {fieldLabelFor(t, locale, field)}
+                      {field.is_required ? (
+                        <span className="text-destructive"> *</span>
+                      ) : null}
+                    </>
+                  );
+                  const selectOpts =
+                    field.options_source === "loan_tenure_options"
+                      ? (options?.loanTenures ?? []).map((option) => ({
+                          value: String(option.months),
+                          label: option.label,
+                        }))
+                      : field.options_source === "complaint_categories"
+                        ? (options?.complaintCategories ?? []).map((option) => ({
+                            value: option.key,
+                            label: option.label,
+                          }))
+                        : field.options.map((option) => ({ value: option, label: option }));
+
+                  if (field.kind === "checkbox") {
+                    return (
+                      <label key={key} className="flex items-start gap-2 sm:col-span-2">
+                        <Checkbox
+                          checked={value(key) === "true"}
+                          onCheckedChange={(checked) =>
+                            set(key, checked === true ? "true" : "")
+                          }
+                        />
+                        <span className="text-[11px] text-muted-foreground">{label}</span>
+                      </label>
+                    );
+                  }
+
+                  if (field.kind === "select" || field.kind === "multiselect") {
+                    return (
+                      <div key={key} className="space-y-1">
+                        <Label>{label}</Label>
+                        <Select
+                          items={selectOpts}
+                          value={value(key)}
+                          onValueChange={(next) => set(key, next ?? "")}
+                        >
+                          <SelectTrigger className="h-9 w-full" disabled={selectOpts.length === 0}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {selectOpts.map((option) => (
+                              <SelectItem key={option.value} value={option.value} label={option.label}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  }
+
+                  if (field.kind === "textarea" || field.target === "details") {
+                    return (
+                      <div key={key} className="space-y-1 sm:col-span-2">
+                        <Label>{label}</Label>
+                        <Textarea
+                          rows={2}
+                          value={value(key)}
+                          onChange={(e) => set(key, e.target.value)}
+                        />
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={key} className="space-y-1">
+                      <Label>{label}</Label>
+                      <Input
+                        className="h-9"
+                        type={
+                          field.kind === "number"
+                            ? "number"
+                            : field.kind === "month"
+                              ? "month"
+                              : field.kind === "date"
+                                ? "date"
+                                : "text"
+                        }
+                        value={value(key)}
+                        onChange={(e) => set(key, e.target.value)}
+                      />
+                    </div>
+                  );
+                })
+              : null}
 
             {hasDeclaration ? (
               <label className="flex items-start gap-2 sm:col-span-2">

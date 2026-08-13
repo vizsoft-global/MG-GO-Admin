@@ -108,20 +108,45 @@ export type RequestDriverOption = {
  * Config the create form needs. `loanTenures` and `complaintCategories` stay empty until the
  * client confirms them — the form must show that instead of inventing options.
  */
+export type RequestCreateTypeOption = {
+  key: string;
+  label_en: string;
+  label_ar: string | null;
+  is_system: boolean;
+  date_range_required: boolean;
+  min_attachments: number;
+};
+
+export type RequestCreateFieldOption = {
+  type_key: string;
+  field_key: string;
+  label_en: string;
+  label_ar: string | null;
+  kind: string;
+  target: string;
+  is_required: boolean;
+  sort_order: number;
+  options_source: string | null;
+  options: string[];
+};
+
 export type RequestCreateOptions = {
   drivers: RequestDriverOption[];
   loanTenures: Array<{ months: number; label: string }>;
   complaintCategories: Array<{ key: string; label: string }>;
+  types: RequestCreateTypeOption[];
+  fields: RequestCreateFieldOption[];
 };
 
 export type RequestCreateInput = {
   driverId: string;
   type: string;
-  payload: Record<string, string | number | boolean>;
+  payload: Record<string, string | number | boolean | string[]>;
   amountKwd?: number | null;
   startDate?: string | null;
   endDate?: string | null;
   severity?: string | null;
+  details?: string | null;
 };
 
 export type RequestClarification = {

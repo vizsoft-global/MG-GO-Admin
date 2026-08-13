@@ -150,12 +150,13 @@ const counts = {
 
 for (const [table, n] of Object.entries(counts)) console.log(`  deleted ${n} from ${table}`);
 
-for (const key of objects) {
-  const res = await fetch(`${URL_BASE}/storage/v1/object/esign-documents/${key}`, {
+if (objects.length) {
+  const res = await fetch(`${URL_BASE}/storage/v1/object/esign-documents`, {
     method: "DELETE",
     headers,
+    body: JSON.stringify({ prefixes: objects }),
   });
-  console.log(`  ${res.status} storage esign-documents/${key}`);
+  console.log(`  ${res.status} storage esign-documents (${objects.length} prefixes)`);
 }
 
 console.log("\nDone. Re-run without --confirm to confirm the tag is gone.");

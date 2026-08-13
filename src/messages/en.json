@@ -2962,7 +2962,18 @@
           },
           "breadcrumb": "Workflow builder",
           "titleFor": "Approval workflow · {type}",
-          "slaGapNote": "Per-step SLA and escalation targets from the design have no column on request_approval_step_templates yet — pending schema sign-off."
+          "slaPanelTitle": "SLA & escalation",
+          "slaPanelSubtitle": "Applies to the selected step.",
+          "slaPerStep": "SLA per step",
+          "slaNone": "No SLA",
+          "slaHours": "{hours} hours",
+          "slaChip": "SLA {hours} hours",
+          "slaChipNone": "No SLA",
+          "onBreach": "On SLA breach",
+          "breachNotify": "Notify",
+          "breachEscalate": "Escalate",
+          "slaHelp": "If a step is not actioned in time, the request is flagged overdue. Escalate is a louder flag — it never auto-approves or re-assigns the step.",
+          "slaAutoNote": "Auto steps complete immediately and have no deadline."
         },
         "categories": {
           "hub": "Settings",
@@ -3030,8 +3041,8 @@
           "notFound": "This request type no longer exists.",
           "viewDetails": "View details",
           "systemBadge": "Built-in",
-          "systemLockHint": "Built-in type — its fields are rendered by installed app builds and cannot be edited",
-          "systemLockNote": "Built-in types can be renamed, deactivated and re-routed, but their fields are fixed: the driver app renders those forms from code, so a field change would break riders on older builds.",
+          "systemLockHint": "Built-in type — cannot be deleted or have its key renamed",
+          "systemLockNote": "Built-in types can be renamed, deactivated and re-routed, but not deleted. Their fields are editable: the driver app now renders the form from these definitions.",
           "stepsCount": "{count} steps",
           "noChain": "No chain",
           "edit": "Edit",
@@ -3659,6 +3670,8 @@
         "riderPlaceholder": "Select rider",
         "riderSearchPlaceholder": "Search by name, rider code or phone",
         "riderEmpty": "No riders match this search",
+        "typeSearchPlaceholder": "Search request types…",
+        "typeEmpty": "No request types match this search",
         "loading": "Loading riders…",
         "asRiderStated": "As stated by the rider",
         "declaration": "The rider confirmed this request and its declaration over the phone",
@@ -3708,7 +3721,8 @@
           "tenureShort": "None active",
           "category": "No complaint category is active, so complaints cannot be created. Add one under Settings → Complaint categories.",
           "categoryShort": "None active",
-          "sickDocs": "Sick / accident requests need the medical documents attached, so the rider must submit them from the app."
+          "sickDocs": "Sick / accident requests need the medical documents attached, so the rider must submit them from the app.",
+          "attachments": "This type requires attachments, so the rider must submit it from the app."
         },
         "errors": {
           "failed": "Could not create the request",

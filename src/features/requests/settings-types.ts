@@ -25,6 +25,10 @@ export const STEP_ALLOWED_ACTIONS = [
 
 export type StepAllowedAction = (typeof STEP_ALLOWED_ACTIONS)[number];
 
+export const SLA_HOUR_OPTIONS = [4, 8, 24, 48, 72] as const;
+
+export type StepBreachAction = "notify" | "escalate";
+
 export type StepTemplateRow = {
   id?: string;
   step_order: number;
@@ -32,6 +36,8 @@ export type StepTemplateRow = {
   role_key: string;
   is_system_auto: boolean;
   allowed_actions: string[];
+  sla_minutes: number | null;
+  breach_action: StepBreachAction | null;
 };
 
 export type ComplaintCategoryRow = {

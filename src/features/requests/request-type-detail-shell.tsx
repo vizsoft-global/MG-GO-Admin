@@ -106,7 +106,7 @@ export function RequestTypeDetailShell({ typeKey }: { typeKey: string }) {
     void load();
   }, [load]);
 
-  const locked = definition?.is_system ?? true;
+  const locked = false;
 
   function updateField(index: number, patch: Partial<RequestFieldDefinitionRow>) {
     setFields((prev) => prev.map((f, i) => (i === index ? { ...f, ...patch } : f)));

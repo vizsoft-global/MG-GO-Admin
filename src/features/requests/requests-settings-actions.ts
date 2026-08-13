@@ -49,7 +49,7 @@ export async function fetchStepTemplates(requestType: RequestTypeSlug): Promise<
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("request_approval_step_templates")
-    .select("id, step_order, step_name, role_key, is_system_auto, allowed_actions")
+    .select("id, step_order, step_name, role_key, is_system_auto, allowed_actions, sla_minutes, breach_action")
     .eq("request_type", requestType)
     .order("step_order");
 
@@ -67,6 +67,11 @@ export async function fetchStepTemplates(requestType: RequestTypeSlug): Promise<
       role_key: row.role_key,
       is_system_auto: row.is_system_auto,
       allowed_actions: Array.isArray(row.allowed_actions) ? row.allowed_actions : [],
+      sla_minutes: row.sla_minutes,
+      breach_action:
+        row.breach_action === "notify" || row.breach_action === "escalate"
+          ? row.breach_action
+          : null,
     })),
   };
 }
@@ -84,6 +89,8 @@ export async function upsertStepTemplates(
     role_key: step.role_key.trim(),
     is_system_auto: step.is_system_auto,
     allowed_actions: step.is_system_auto ? [] : step.allowed_actions,
+    sla_minutes: step.is_system_auto ? null : step.sla_minutes,
+    breach_action: step.is_system_auto ? null : step.breach_action,
   }));
 
   const { data, error } = await supabase.rpc("admin_upsert_step_template", {

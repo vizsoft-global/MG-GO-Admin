@@ -499,30 +499,56 @@ export async function fetchRequestCreateOptions(): Promise<
   await requireRequestsManage();
   const supabase = await createClient();
 
-  const [driversResult, tenuresResult, categoriesResult] = await Promise.all([
-    supabase
-      .from("drivers")
-      .select("id, driver_code, employee_id, profiles(full_name, phone)")
-      .is("archived_at", null)
-      .order("driver_code"),
-    supabase
-      .from("loan_tenure_options")
-      .select("months, label, is_active")
-      .eq("is_active", true)
-      .order("sort_order")
-      .order("months"),
-    supabase
-      .from("complaint_categories")
-      .select("key, label_en, is_active")
-      .eq("is_active", true)
-      .order("sort_order")
-      .order("label_en"),
-  ]);
+  const [driversResult, tenuresResult, categoriesResult, typesResult, fieldsResult] =
+    await Promise.all([
+      supabase
+        .from("drivers")
+        .select("id, driver_code, employee_id, profiles(full_name, phone)")
+        .is("archived_at", null)
+        .order("driver_code"),
+      supabase
+        .from("loan_tenure_options")
+        .select("months, label, is_active")
+        .eq("is_active", true)
+        .order("sort_order")
+        .order("months"),
+      supabase
+        .from("complaint_categories")
+        .select("key, label_en, is_active")
+        .eq("is_active", true)
+        .order("sort_order")
+        .order("label_en"),
+      supabase
+        .from("request_type_definitions")
+        .select(
+          "key, label_en, label_ar, is_system, is_active, sort_order, date_range_required, min_attachments",
+        )
+        .eq("is_active", true)
+        .order("sort_order"),
+      supabase
+        .from("request_field_definitions")
+        .select(
+          "type_key, field_key, label_en, label_ar, kind, target, is_required, sort_order, options_source, options",
+        )
+        .order("sort_order"),
+    ]);
 
   const error =
     driversResult.error?.message ??
     tenuresResult.error?.message ??
-    categoriesResult.error?.message;
+    categoriesResult.error?.message ??
+    typesResult.error?.message ??
+    fieldsResult.error?.message;
+
+  const types = (typesResult.data ?? []).map((row) => ({
+    key: row.key,
+    label_en: row.label_en,
+    label_ar: row.label_ar,
+    is_system: Boolean(row.is_system),
+    date_range_required: Boolean(row.date_range_required),
+    min_attachments: Number(row.min_attachments ?? 0),
+  }));
+  const typeKeys = new Set(types.map((row) => row.key));
 
   return {
     drivers: (driversResult.data ?? []).map((row) => {
@@ -543,6 +569,23 @@ export async function fetchRequestCreateOptions(): Promise<
       key: row.key,
       label: row.label_en ?? row.key,
     })),
+    types,
+    fields: (fieldsResult.data ?? [])
+      .filter((row) => typeKeys.has(String(row.type_key)))
+      .map((row) => ({
+        type_key: String(row.type_key),
+        field_key: String(row.field_key),
+        label_en: String(row.label_en ?? row.field_key),
+        label_ar: row.label_ar != null ? String(row.label_ar) : null,
+        kind: String(row.kind),
+        target: String(row.target),
+        is_required: Boolean(row.is_required),
+        sort_order: Number(row.sort_order ?? 0),
+        options_source: row.options_source != null ? String(row.options_source) : null,
+        options: Array.isArray(row.options)
+          ? row.options.filter((item): item is string => typeof item === "string")
+          : [],
+      })),
     ...(error ? { error } : {}),
   };
 }
@@ -569,6 +612,7 @@ export async function createRequestOnBehalf(input: RequestCreateInput): Promise<
     p_start_date: input.startDate ?? undefined,
     p_end_date: input.endDate ?? undefined,
     p_severity: (input.severity as "low") ?? undefined,
+    p_details: input.details ?? undefined,
   });
 
   if (error) return { ok: false, error: error.message };

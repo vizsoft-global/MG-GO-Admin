@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ArrowUp,
   CircleCheck,
+  Clock,
   Loader2,
   LogIn,
   Plus,
@@ -16,6 +17,7 @@ import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -31,8 +33,10 @@ import {
 } from "./requests-settings-actions";
 import { fetchRequestTypeDefinitions } from "./request-type-builder-actions";
 import {
+  SLA_HOUR_OPTIONS,
   STEP_ALLOWED_ACTIONS,
   type RequestTypeSlug,
+  type StepBreachAction,
   type StepTemplateRow,
 } from "./settings-types";
 
@@ -43,7 +47,21 @@ function emptyStep(order: number): StepTemplateRow {
     role_key: "",
     is_system_auto: false,
     allowed_actions: ["approve", "reject"],
+    sla_minutes: null,
+    breach_action: null,
   };
+}
+
+function slaHoursValue(minutes: number | null): string {
+  if (minutes == null || minutes <= 0) return "none";
+  return String(minutes / 60);
+}
+
+function minutesFromHoursValue(value: string): number | null {
+  if (value === "none" || value === "") return null;
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours <= 0) return null;
+  return Math.round(hours * 60);
 }
 
 function normalizeOrders(steps: StepTemplateRow[]): StepTemplateRow[] {
@@ -68,6 +86,7 @@ export function WorkflowsSettingsPanel() {
   const [requestType, setRequestType] = useState<RequestTypeSlug>("leave");
   const [typeOptions, setTypeOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [steps, setSteps] = useState<StepTemplateRow[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -81,7 +100,10 @@ export function WorkflowsSettingsPanel() {
       setSteps([]);
       return;
     }
-    setSteps(result.steps.length > 0 ? result.steps : [emptyStep(1)]);
+    const loaded = result.steps.length > 0 ? result.steps : [emptyStep(1)];
+    setSteps(loaded);
+    const firstStaff = loaded.findIndex((step) => !step.is_system_auto);
+    setSelectedIndex(firstStaff >= 0 ? firstStaff : 0);
     setDirty(false);
   }, []);
 
@@ -102,6 +124,21 @@ export function WorkflowsSettingsPanel() {
     () => typeOptions.find((opt) => opt.value === requestType)?.label ?? requestType,
     [typeOptions, requestType],
   );
+
+  const selectedStep = steps[selectedIndex] ?? null;
+
+  const slaHourItems = useMemo(() => {
+    const hours = new Set<number>(SLA_HOUR_OPTIONS);
+    if (selectedStep?.sla_minutes && selectedStep.sla_minutes > 0) {
+      hours.add(selectedStep.sla_minutes / 60);
+    }
+    return [
+      { value: "none", label: t("slaNone") },
+      ...[...hours]
+        .sort((a, b) => a - b)
+        .map((h) => ({ value: String(h), label: t("slaHours", { hours: h }) })),
+    ];
+  }, [selectedStep?.sla_minutes, t]);
 
   function updateStep(index: number, patch: Partial<StepTemplateRow>) {
     setSteps((prev) => prev.map((step, i) => (i === index ? { ...step, ...patch } : step)));
@@ -132,16 +169,29 @@ export function WorkflowsSettingsPanel() {
       [next[index], next[target]] = [next[target], next[index]];
       return normalizeOrders(next);
     });
+    setSelectedIndex((prev) => {
+      if (prev === index) return index + direction;
+      if (prev === index + direction) return index;
+      return prev;
+    });
     setDirty(true);
   }
 
   function addStep() {
-    setSteps((prev) => normalizeOrders([...prev, emptyStep(prev.length + 1)]));
+    setSteps((prev) => {
+      const next = normalizeOrders([...prev, emptyStep(prev.length + 1)]);
+      setSelectedIndex(next.length - 1);
+      return next;
+    });
     setDirty(true);
   }
 
   function removeStep(index: number) {
-    setSteps((prev) => normalizeOrders(prev.filter((_, i) => i !== index)));
+    setSteps((prev) => {
+      const next = normalizeOrders(prev.filter((_, i) => i !== index));
+      setSelectedIndex((cur) => Math.min(cur === index ? index : cur > index ? cur - 1 : cur, next.length - 1));
+      return next;
+    });
     setDirty(true);
   }
 
@@ -232,7 +282,14 @@ export function WorkflowsSettingsPanel() {
               {steps.map((step, index) => (
                 <div key={`${step.id ?? "new"}-${index}`}>
                   <ChainConnector />
-                  <div className="rounded-xl border border-border bg-background px-3 py-1.5 shadow-sm">
+                  <div
+                    className={
+                      selectedIndex === index
+                        ? "cursor-pointer rounded-xl border border-primary bg-background px-3 py-1.5 shadow-sm ring-1 ring-primary/40"
+                        : "cursor-pointer rounded-xl border border-border bg-background px-3 py-1.5 shadow-sm"
+                    }
+                    onClick={() => setSelectedIndex(index)}
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                         {step.step_order}
@@ -258,6 +315,8 @@ export function WorkflowsSettingsPanel() {
                             updateStep(index, {
                               is_system_auto: !step.is_system_auto,
                               allowed_actions: !step.is_system_auto ? [] : ["approve", "reject"],
+                              sla_minutes: !step.is_system_auto ? null : step.sla_minutes,
+                              breach_action: !step.is_system_auto ? null : step.breach_action,
                             })
                           }
                           size="md"
@@ -298,7 +357,7 @@ export function WorkflowsSettingsPanel() {
                         </div>
                       </div>
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-1 ps-8">
+                    <div className="mt-1 flex flex-wrap items-center gap-1 ps-8">
                       {STEP_ALLOWED_ACTIONS.map((action) => (
                         <ToggleChip
                           key={action}
@@ -310,6 +369,12 @@ export function WorkflowsSettingsPanel() {
                           {t(`actions.${action}` as "actions.approve")}
                         </ToggleChip>
                       ))}
+                      <span className="ms-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {step.is_system_auto || !step.sla_minutes
+                          ? t("slaChipNone")
+                          : t("slaChip", { hours: step.sla_minutes / 60 })}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -340,7 +405,64 @@ export function WorkflowsSettingsPanel() {
         </AppListCard>
 
         <AppListCard className="space-y-2 p-4">
-          <h3 className="text-sm font-semibold">{t("howRoutingWorks")}</h3>
+          <h3 className="text-sm font-semibold">{t("slaPanelTitle")}</h3>
+          <p className="text-[11px] text-muted-foreground">{t("slaPanelSubtitle")}</p>
+          {selectedStep?.is_system_auto ? (
+            <p className="text-[11px] text-muted-foreground">{t("slaAutoNote")}</p>
+          ) : selectedStep ? (
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label className="text-[11px]">{t("slaPerStep")}</Label>
+                <Select
+                  value={slaHoursValue(selectedStep.sla_minutes)}
+                  onValueChange={(v) => {
+                    if (!v) return;
+                    const minutes = minutesFromHoursValue(v);
+                    updateStep(selectedIndex, {
+                      sla_minutes: minutes,
+                      breach_action: minutes == null ? null : selectedStep.breach_action ?? "notify",
+                    });
+                  }}
+                  items={selectOptions(slaHourItems)}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {slaHourItems.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">{t("onBreach")}</Label>
+                <Select
+                  value={selectedStep.breach_action ?? "notify"}
+                  onValueChange={(v) => {
+                    if (!v || selectedStep.sla_minutes == null) return;
+                    updateStep(selectedIndex, { breach_action: v as StepBreachAction });
+                  }}
+                  items={selectOptions([
+                    { value: "notify", label: t("breachNotify") },
+                    { value: "escalate", label: t("breachEscalate") },
+                  ])}
+                >
+                  <SelectTrigger className="h-9" disabled={selectedStep.sla_minutes == null}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="notify">{t("breachNotify")}</SelectItem>
+                    <SelectItem value="escalate">{t("breachEscalate")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">{t("slaHelp")}</p>
+            </div>
+          ) : null}
+          <h3 className="border-t border-border pt-2 text-sm font-semibold">{t("howRoutingWorks")}</h3>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             {t("howRoutingWorksBody")}
           </p>
@@ -349,9 +471,6 @@ export function WorkflowsSettingsPanel() {
             <Link href="/requests/settings/roles" className="text-primary hover:underline">
               {t("rolesLink")}
             </Link>
-          </p>
-          <p className="border-t border-border pt-2 text-[10px] text-muted-foreground">
-            {t("slaGapNote")}
           </p>
         </AppListCard>
       </div>
