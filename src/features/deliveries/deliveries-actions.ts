@@ -8,6 +8,7 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { fetchLocationEventByDeliveryId } from "@/features/locations/locations-actions";
 import type { DriverLocationEvent } from "@/features/locations/types";
 import { resolveOrderProofUrl } from "@/lib/storage/order-proof-url";
+import { earningsRecalcDateFromDeliveredAt } from "./delivery-earn-date";
 import { deleteObject } from "@/lib/storage/r2-client";
 import { isR2ObjectKey } from "@/lib/storage/r2-keys";
 import type {
@@ -125,13 +126,11 @@ async function resolveDeliveryRestaurantId(
 }
 
 function earnDateFromDeliveredAt(deliveredAt: string): string {
-  const d = new Date(deliveredAt);
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kuwait",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d);
+  const earnDate = earningsRecalcDateFromDeliveredAt(deliveredAt);
+  if (!earnDate) {
+    throw new Error("delivered_at required for earnings recalc");
+  }
+  return earnDate;
 }
 
 /**
@@ -261,7 +260,8 @@ async function recalcEarningsForDelivery(
   driverId: string,
   deliveredAt: string,
 ) {
-  const earnDate = earnDateFromDeliveredAt(deliveredAt);
+  const earnDate = earningsRecalcDateFromDeliveredAt(deliveredAt);
+  if (!earnDate) return;
   await supabase.rpc("recalculate_driver_earnings", {
     p_driver_id: driverId,
     p_earn_date: earnDate,

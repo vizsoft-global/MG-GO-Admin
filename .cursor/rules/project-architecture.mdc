@@ -227,6 +227,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-13` — **Deleting a cancelled delivery no longer fails on earnings.** The recalc trigger passed a null `earn_date` into `driver_earnings_daily` (23502). Skip when `delivered_at` is missing. Migration `20260907170000`.
+
 - `[admin only] 2026-08-13` — **Map-only fullscreen tooltip says Exit Fullscreen.** The Live Tracking toolbar always used the enter-mode `fullscreen` label even after the map filled the viewport.
 
 - `[admin+app] 2026-08-13` — **Add Driver employee ID is 4–8 digits**, matching app login. Admin previously allowed 1–8 so a 3-digit ID could be saved and then rejected on the login screen.
