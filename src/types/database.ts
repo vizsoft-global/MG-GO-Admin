@@ -2247,6 +2247,71 @@ export type Database = {
           },
         ]
       }
+      driver_operation_events: {
+        Row: {
+          app_version_code: number | null
+          category: string
+          context: Json
+          device_id: string | null
+          driver_id: string
+          entity_id: string | null
+          entity_type: string | null
+          error_code: string | null
+          id: number
+          latitude: number | null
+          longitude: number | null
+          occurred_at: string
+          operation_key: string
+          source: string
+          source_name: string | null
+          success: boolean
+        }
+        Insert: {
+          app_version_code?: number | null
+          category: string
+          context?: Json
+          device_id?: string | null
+          driver_id: string
+          entity_id?: string | null
+          entity_type?: string | null
+          error_code?: string | null
+          id?: number
+          latitude?: number | null
+          longitude?: number | null
+          occurred_at?: string
+          operation_key: string
+          source?: string
+          source_name?: string | null
+          success?: boolean
+        }
+        Update: {
+          app_version_code?: number | null
+          category?: string
+          context?: Json
+          device_id?: string | null
+          driver_id?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          error_code?: string | null
+          id?: number
+          latitude?: number | null
+          longitude?: number | null
+          occurred_at?: string
+          operation_key?: string
+          source?: string
+          source_name?: string | null
+          success?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_operation_events_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_payouts: {
         Row: {
           adjustment_kwd: number
@@ -7017,6 +7082,34 @@ export type Database = {
           p_start_date: string
         }
         Returns: Json
+      }
+      log_driver_operation: {
+        Args: {
+          p_category: string
+          p_context?: Json
+          p_driver_id: string
+          p_entity_id?: string
+          p_entity_type?: string
+          p_error_code?: string
+          p_latitude?: number
+          p_longitude?: number
+          p_operation_key: string
+          p_source?: string
+          p_source_name?: string
+          p_success?: boolean
+        }
+        Returns: undefined
+      }
+      log_driver_operation_autonomous: {
+        Args: {
+          p_category: string
+          p_context?: Json
+          p_driver_id: string
+          p_error_code: string
+          p_operation_key: string
+          p_source_name: string
+        }
+        Returns: undefined
       }
       mark_driver_intake_linked: {
         Args: { p_phone: string; p_profile_id: string }
