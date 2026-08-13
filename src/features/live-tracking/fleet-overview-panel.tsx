@@ -33,10 +33,12 @@ export function FleetOverviewPanel({
   onSelectDriver,
   filters,
   onChange,
+  onReset,
   zoneOptions,
   partnerOptions,
   activeTab,
   onTabChange,
+  showActivityTab,
   avatarByDriverId,
   className,
 }: {
@@ -49,10 +51,12 @@ export function FleetOverviewPanel({
   onSelectDriver: (driverId: string | null) => void;
   filters: LiveTrackingFilterState;
   onChange: (next: LiveTrackingFilterState) => void;
+  onReset: () => void;
   zoneOptions: Array<{ id: string; label: string }>;
   partnerOptions: Array<{ id: string; label: string }>;
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
+  showActivityTab?: boolean;
   avatarByDriverId?: Map<string, string | null>;
   className?: string;
 }) {
@@ -139,7 +143,12 @@ export function FleetOverviewPanel({
       )}
     >
       <div className="border-b border-slate-200 px-3 py-2.5 dark:border-slate-700/80">
-        <TrackingTabSwitcher value={activeTab} onChange={onTabChange} className="mb-2" />
+        <TrackingTabSwitcher
+          value={activeTab}
+          onChange={onTabChange}
+          showActivity={showActivityTab}
+          className="mb-2"
+        />
         <div className="grid grid-cols-2 gap-2">
           {stats.map((tile) => (
             <MetricTile
@@ -175,18 +184,7 @@ export function FleetOverviewPanel({
             <button
               type="button"
               className="cursor-pointer text-xs font-medium text-blue-600 transition-colors hover:text-blue-700 dark:text-blue-400"
-              onClick={() =>
-                onChange({
-                  ...filters,
-                  statusChips: ["online", "on_duty", "idle", "alert", "offline"],
-                  search: "",
-                  zoneId: "all",
-                  partnerId: "all",
-                  trackingStatus: "all",
-                  batteryLevel: "all",
-                  gpsSignal: "all",
-                })
-              }
+              onClick={onReset}
             >
               {t("reset")}
             </button>

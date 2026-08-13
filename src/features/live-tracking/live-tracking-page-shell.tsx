@@ -9,9 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LiveTrackingLiveView } from "./live-tracking-live-view";
 import { LiveTrackingHistoryView } from "./live-tracking-history-view";
+import { LiveTrackingActivityView } from "./live-tracking-activity-view";
 import type { TrackingViewTab } from "./tracking-tab-switcher";
 
-export function LiveTrackingPageShell() {
+export function LiveTrackingPageShell({
+  canViewActivity = false,
+}: {
+  canViewActivity?: boolean;
+}) {
   const t = useTranslations("pages.liveTracking");
   const [isCommandFullscreen, setIsCommandFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState<TrackingViewTab>("live");
@@ -31,9 +36,20 @@ export function LiveTrackingPageShell() {
         fullscreen={isCommandFullscreen}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        showActivityTab={canViewActivity}
+      />
+    ) : activeTab === "history" ? (
+      <LiveTrackingHistoryView
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        showActivityTab={canViewActivity}
       />
     ) : (
-      <LiveTrackingHistoryView activeTab={activeTab} onTabChange={setActiveTab} />
+      <LiveTrackingActivityView
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        showActivityTab={canViewActivity}
+      />
     );
 
   if (isCommandFullscreen) {

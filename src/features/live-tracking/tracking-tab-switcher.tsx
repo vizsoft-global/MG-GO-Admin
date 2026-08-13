@@ -1,20 +1,23 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { History } from "lucide-react";
+import { History, ListChecks } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
-export type TrackingViewTab = "live" | "history";
+export type TrackingViewTab = "live" | "history" | "activity";
 
 export function TrackingTabSwitcher({
   value,
   onChange,
   className,
+  showActivity = false,
 }: {
   value: TrackingViewTab;
   onChange: (tab: TrackingViewTab) => void;
   className?: string;
+  /** Activity reads the wider driver_ops audit surface, so it is permission-gated. */
+  showActivity?: boolean;
 }) {
   const t = useTranslations("pages.liveTracking");
 
@@ -48,6 +51,17 @@ export function TrackingTabSwitcher({
         />
         {t("tabHistory")}
       </TabButton>
+      {showActivity ? (
+        <TabButton active={value === "activity"} onClick={() => onChange("activity")}>
+          <ListChecks
+            className={cn(
+              "h-3.5 w-3.5 shrink-0",
+              value === "activity" ? "text-foreground" : "text-muted-foreground",
+            )}
+          />
+          {t("tabActivity")}
+        </TabButton>
+      ) : null}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { DriverLocationsMap } from "@/features/locations/driver-locations-map";
 import { useDriverLocationsRealtime } from "@/features/locations/use-driver-locations-realtime";
 import { isGpsLive, shouldShowOnLiveMap } from "@/features/locations/location-status";
+import { isGpsHeartbeatStale } from "./tracking-metrics";
 import { fetchDriversForAdmin } from "@/features/drivers/drivers-actions";
 import { fetchRecentDeliveriesForDriver } from "@/features/deliveries/deliveries-actions";
 import { fetchDriverAssignedRestaurantPins } from "@/features/locations/locations-actions";
@@ -17,6 +18,7 @@ import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator"
 import {
   DEFAULT_LIVE_TRACKING_FILTERS,
   matchesLiveTrackingFilters,
+  resetLiveTrackingFilters,
   type LiveTrackingFilterState,
 } from "./live-tracking-filters";
 import { buildPartnerFilterOptions } from "./partner-filter-options";
@@ -57,10 +59,12 @@ export function LiveTrackingLiveView({
   fullscreen,
   activeTab,
   onTabChange,
+  showActivityTab,
 }: {
   fullscreen?: boolean;
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
+  showActivityTab?: boolean;
 }) {
   const t = useTranslations("pages.liveTracking");
   const { locations } = useDriverLocationsRealtime();
@@ -141,6 +145,7 @@ export function LiveTrackingLiveView({
         phone: row.phone ?? null,
         detailHref: `/drivers/${row.id}?tab=location`,
         avatarUrl: row.avatar_display_url ?? null,
+        isBlocked: row.is_blocked,
       });
     }
     return map;
@@ -155,6 +160,7 @@ export function LiveTrackingLiveView({
         ...loc,
         driverName: hasFallbackName ? (meta?.fullName ?? loc.driverName) : loc.driverName,
         driverCode: loc.driverCode === "—" ? (meta?.driverCode ?? loc.driverCode) : loc.driverCode,
+        isBlocked: loc.isBlocked || Boolean(meta?.isBlocked),
       };
     });
   }, [locations, profileMeta]);
@@ -171,7 +177,7 @@ export function LiveTrackingLiveView({
   const staleOnDutyCount = useMemo(
     () =>
       enrichedLocations.filter(
-        (loc) => !isGpsLive(loc.lastSeenAt, nowTick) && loc.isOnDuty,
+        (loc) => loc.isOnDuty && isGpsHeartbeatStale(loc.lastSeenAt, nowTick),
       ).length,
     [enrichedLocations, nowTick],
   );
@@ -196,12 +202,14 @@ export function LiveTrackingLiveView({
         pinStatus: loc.pinStatus,
         trackingStatus: loc.trackingStatus,
         isOnDuty: loc.isOnDuty,
+        isBlocked: loc.isBlocked,
         speedMps: loc.speedMps,
         lastSeenAt: loc.lastSeenAt,
+        now: nowTick,
       });
       return visibleStatuses.includes(status);
     });
-  }, [liveDrivers, filters, profileMeta, visibleStatuses, zoneShapes]);
+  }, [liveDrivers, filters, profileMeta, visibleStatuses, zoneShapes, nowTick]);
 
   const selectedDriver = useMemo(
     () => filtered.find((d) => d.driverId === selectedId) ?? null,
@@ -266,8 +274,11 @@ export function LiveTrackingLiveView({
   });
 
   const alertsCount = useMemo(
-    () => liveDrivers.filter((l) => l.zoneStatus === "out_of_zone").length,
-    [liveDrivers],
+    () =>
+      liveDrivers.filter(
+        (l) => isGpsLive(l.lastSeenAt, nowTick) && l.zoneStatus === "out_of_zone",
+      ).length,
+    [liveDrivers, nowTick],
   );
 
   const mapMarkers = useMemo(
@@ -350,10 +361,15 @@ export function LiveTrackingLiveView({
           avatarByDriverId={avatarByDriverId}
           filters={filters}
           onChange={setFilters}
+          onReset={() => {
+            setFilters(resetLiveTrackingFilters());
+            setVisibleStatuses([...LEGEND_FILTERABLE_STATUSES]);
+          }}
           zoneOptions={zoneFilterOptions}
           partnerOptions={partnerFilterOptions}
           activeTab={activeTab}
           onTabChange={onTabChange}
+          showActivityTab={showActivityTab}
         />
       }
       footer={
