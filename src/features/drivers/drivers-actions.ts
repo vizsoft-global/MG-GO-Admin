@@ -13,6 +13,7 @@ import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
+import { restaurantSyncPlan } from "./restaurant-sync-plan";
 import { civilIdExists, employeeIdExists } from "./driver-uniqueness";
 import {
   allDriverAvatarKeys,
@@ -170,11 +171,28 @@ async function syncDriverRestaurants(
   driverId: string,
   restaurantIds: string[],
 ) {
-  await supabase.from("driver_restaurants").delete().eq("driver_id", driverId);
-  if (restaurantIds.length === 0) return;
-  await supabase.from("driver_restaurants").insert(
-    restaurantIds.map((restaurant_id) => ({ driver_id: driverId, restaurant_id })),
+  const { data: existing } = await supabase
+    .from("driver_restaurants")
+    .select("restaurant_id")
+    .eq("driver_id", driverId);
+  const { toAdd, toRemove } = restaurantSyncPlan(
+    (existing ?? []).map((r) => r.restaurant_id),
+    restaurantIds,
   );
+  // Insert first: a delete-all sync fires driver_restaurants_sync_status and
+  // drops an active driver to pending even when the mapping is unchanged.
+  if (toAdd.length > 0) {
+    await supabase.from("driver_restaurants").insert(
+      toAdd.map((restaurant_id) => ({ driver_id: driverId, restaurant_id })),
+    );
+  }
+  if (toRemove.length > 0) {
+    await supabase
+      .from("driver_restaurants")
+      .delete()
+      .eq("driver_id", driverId)
+      .in("restaurant_id", toRemove);
+  }
 }
 
 async function fetchIntakeRestaurantIds(

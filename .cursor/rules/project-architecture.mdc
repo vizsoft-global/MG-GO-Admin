@@ -227,6 +227,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-13` — **Editing an Active driver no longer resets status to Pending.** Restaurant save used delete-all-then-insert; the mapping trigger saw a empty set and downgraded `drivers.status`. Sync now inserts first, then removes extras.
+
 - `[admin+app] 2026-08-13` — **Sign out clocks the driver out.** Releasing the active device (`driver_release_device_session`) now closes the open attendance log and online session (`check_out_reason = manual`). Profile Sign out calls `driver_set_duty_state(false, false)` first; a kicked device does not. Work-time stops and the next login is not still Clocked In. Migration `20260907160000`.
 
 - `[admin+app] 2026-08-13` — **On-duty drivers stay on the Live Tracking map.** Cleanup no longer deletes `driver_locations` for `is_on_duty` rows; the map shows last-known coords past the 8-minute live window. App heartbeats the last accurate pin when GPS accuracy is >100 m (indoor) instead of going silent. Migration `20260907150000`.

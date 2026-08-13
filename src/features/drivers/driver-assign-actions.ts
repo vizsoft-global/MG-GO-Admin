@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { pickDriverAvatarKey } from "@/lib/storage/driver-avatar-key";
 import { resolveDriverAvatarUrl } from "@/lib/storage/driver-avatar-url";
+import { restaurantSyncPlan } from "./restaurant-sync-plan";
 import type {
   AssignDriverRow,
   DriverAssignMutationResult,
@@ -75,11 +76,26 @@ async function syncDriverRestaurants(
   driverId: string,
   restaurantIds: string[],
 ) {
-  await supabase.from("driver_restaurants").delete().eq("driver_id", driverId);
-  if (restaurantIds.length === 0) return;
-  await supabase.from("driver_restaurants").insert(
-    restaurantIds.map((restaurant_id) => ({ driver_id: driverId, restaurant_id })),
+  const { data: existing } = await supabase
+    .from("driver_restaurants")
+    .select("restaurant_id")
+    .eq("driver_id", driverId);
+  const { toAdd, toRemove } = restaurantSyncPlan(
+    (existing ?? []).map((r) => r.restaurant_id),
+    restaurantIds,
   );
+  if (toAdd.length > 0) {
+    await supabase.from("driver_restaurants").insert(
+      toAdd.map((restaurant_id) => ({ driver_id: driverId, restaurant_id })),
+    );
+  }
+  if (toRemove.length > 0) {
+    await supabase
+      .from("driver_restaurants")
+      .delete()
+      .eq("driver_id", driverId)
+      .in("restaurant_id", toRemove);
+  }
 }
 
 async function validatePublishedRestaurants(
