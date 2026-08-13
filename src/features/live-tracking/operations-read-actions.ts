@@ -1,6 +1,6 @@
 "use server";
 
-import { logAdminRead } from "@/lib/audit/log-admin-activity";
+import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
@@ -265,4 +265,62 @@ export async function fetchOperationCategoryCounts(range: {
   }
 
   return [...byCategory.values()].sort((a, b) => b.total - a.total);
+}
+
+const EXPORT_MAX_ROWS = 5000;
+
+/**
+ * Export needs its own slug: the rows carry request payload context and failed
+ * login attempts, so reading them in the UI and taking them out of the panel are
+ * different privileges.
+ */
+export async function exportDriverOperations(filters: {
+  driverId?: string | null;
+  categories?: string[] | null;
+  failuresOnly?: boolean;
+  from?: string | null;
+  to?: string | null;
+}): Promise<DriverOperationEvent[]> {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(session.permissions, "driver_ops.export", session.isSuperAdmin)
+  ) {
+    throw new Error("not_authorized");
+  }
+
+  const supabase = await createClient();
+  let query = supabase
+    .from("driver_operation_events")
+    .select(SELECT_COLUMNS)
+    .order("occurred_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(EXPORT_MAX_ROWS);
+
+  if (filters.driverId) query = query.eq("driver_id", filters.driverId);
+  if (filters.categories?.length) query = query.in("category", filters.categories);
+  if (filters.failuresOnly) query = query.eq("success", false);
+  if (filters.from) query = query.gte("occurred_at", filters.from);
+  if (filters.to) query = query.lte("occurred_at", filters.to);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const events = ((data ?? []) as unknown as RawEventRow[]).map(mapEventRow);
+
+  void logAdminMutation({
+    action: "export",
+    entityType: "driver_operation_events",
+    entityId: filters.driverId ?? undefined,
+    routeName: "driverOps.export",
+    context: {
+      rows: events.length,
+      truncated: events.length === EXPORT_MAX_ROWS,
+      from: filters.from ?? null,
+      to: filters.to ?? null,
+      failuresOnly: filters.failuresOnly ?? false,
+    },
+  });
+
+  return events;
 }

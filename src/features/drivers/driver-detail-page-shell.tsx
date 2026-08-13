@@ -19,6 +19,7 @@ import {
   EyeOff,
   Camera,
   FileText,
+  ListChecks,
   Loader2,
   MapPin,
   Minus,
@@ -48,11 +49,12 @@ import { DriverLoginVerificationTab } from "./driver-login-verification-tab";
 import { DriverDevicesTab } from "./driver-devices-tab";
 import { DriverLocationTab } from "./driver-location-tab";
 import { DriverAttendanceTab } from "./driver-attendance-tab";
+import { DriverActivityTab } from "./driver-activity-tab";
 import { DriverEditSheet } from "./driver-edit-sheet";
 import { getCountryLabel } from "@/lib/geo/countries";
 import { riderCategoryMessageKey } from "./driver-rider-category";
 import { avatarTintFromName } from "./form/driver-form-primitives";
-import { LinkedBadge, WorkflowStatusPill, resolveWorkflowPillStatus } from "./driver-workflow-ui";
+import { LinkedBadge, WorkflowStatusPill, isLinkedDriver, resolveWorkflowPillStatus } from "./driver-workflow-ui";
 import { formatPhoneDisplay } from "./driver-phone";
 import { AssetCatalogIcon } from "@/features/assets/asset-catalog-icon";
 import type { DriverWorkflowStatus } from "./types";
@@ -77,6 +79,7 @@ import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
 
 type DetailTabId =
   | "attendance"
+  | "activity"
   | "location"
   | "documents"
   | "login-verification"
@@ -245,6 +248,8 @@ function DriverDetailContent({ id }: { id: string }) {
   const router = useRouter();
   const { can } = useAuth();
   const canManage = can("drivers.manage");
+  const canViewOps = can("driver_ops.view");
+  const canExportOps = can("driver_ops.export");
   const { data: driver, isLoading, isError } = useDriverDetail(id);
   const { data: customFieldDefs = [] } = useCustomFieldDefinitions({
     includeInactive: true,
@@ -319,7 +324,10 @@ function DriverDetailContent({ id }: { id: string }) {
     if (tab === "documents") {
       setActiveTab("documents");
     }
-  }, [searchParams, driver?.linked_profile_id]);
+    if (tab === "activity" && driver?.linked_profile_id && canViewOps) {
+      setActiveTab("activity");
+    }
+  }, [searchParams, driver?.linked_profile_id, canViewOps]);
 
   const handleEditOpenChange = (open: boolean) => {
     setEditOpen(open);
@@ -332,6 +340,9 @@ function DriverDetailContent({ id }: { id: string }) {
     { id: "attendance", label: t("tabAttendance"), icon: CalendarClock },
     ...(driver?.linked_profile_id
       ? [{ id: "location" as const, label: t("tabLocation"), icon: MapPin }]
+      : []),
+    ...(canViewOps && driver?.linked_profile_id
+      ? [{ id: "activity" as const, label: t("tabActivity"), icon: ListChecks }]
       : []),
     { id: "documents", label: t("tabDocuments"), icon: FileText },
     { id: "login-verification", label: t("tabLoginVerification"), icon: Camera },
@@ -378,7 +389,7 @@ function DriverDetailContent({ id }: { id: string }) {
   };
 
   const workflowLabel = (status: DriverWorkflowStatus) => {
-    if (driver.linked) {
+    if (isLinkedDriver(driver)) {
       return accountStatusLabel(driver.account_status);
     }
     if (status === "draft") {
@@ -466,6 +477,16 @@ function DriverDetailContent({ id }: { id: string }) {
 
     if (activeTab === "attendance" && driver.linked_profile_id) {
       return <DriverAttendanceTab driverId={driver.linked_profile_id} />;
+    }
+
+    if (activeTab === "activity" && driver.linked_profile_id && canViewOps) {
+      return (
+        <DriverActivityTab
+          driverId={driver.linked_profile_id}
+          driverCode={driver.driver_code}
+          canExport={canExportOps}
+        />
+      );
     }
 
     if (activeTab === "attendance") {
