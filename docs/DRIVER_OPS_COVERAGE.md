@@ -115,7 +115,7 @@ It does nonetheless retain `USAGE` on `public`, because that is granted to the `
 
 | Stream | Setting | Default |
 |---|---|---|
-| `driver_operation_events` | `app_settings.driver_operation_events_retention_days` | 90 |
+| `driver_operation_events` | `app_settings.driver_ops_log_retention_days` | 90 |
 | `driver_location_events` | `app_settings.driver_location_events_retention_days` | 180 |
 
 `/api/cron/driver-ops-retention` runs daily at 01:20, trims both, and reports the audit health probe.
