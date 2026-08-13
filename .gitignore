@@ -61,3 +61,9 @@ graphify-out/
 
 .vercel
 .qa/
+
+# Local Figma QA dumps / screenshots (do not commit)
+.figma-*/
+.tmp-figma/
+.eslint-visits.json
+qa-esign-*.png
