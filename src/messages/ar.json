@@ -234,6 +234,7 @@
       "signalStrong": "إشارة قوية",
       "activeOrders": "الطلبات النشطة",
       "recentOrders": "أحدث الطلبات",
+      "noRecentOrders": "لا توجد طلبات حديثة",
       "eta": "الوقت المتوقع",
       "viewAll": "عرض الكل",
       "searchPlaceholder": "بحث بالاسم أو الرمز…",

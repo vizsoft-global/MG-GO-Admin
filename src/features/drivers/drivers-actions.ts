@@ -597,6 +597,7 @@ export async function fetchDriversForAdmin(options?: {
       app_passcode: string | null;
       employee_id: string | null;
       avatar_object_key: string | null;
+      zone_id: string | null;
     }
   >();
   const deliveryCountByDriverId = new Map<string, number>();
@@ -653,7 +654,7 @@ export async function fetchDriversForAdmin(options?: {
     const [{ data: driverRows }, { data: deliveryRows }] = await Promise.all([
       supabase
         .from("drivers")
-        .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key")
+        .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id")
         .in("id", linkedIds),
       (() => {
         const { start, end } = kuwaitDayBounds();
@@ -675,6 +676,7 @@ export async function fetchDriversForAdmin(options?: {
         app_passcode: driver.app_passcode ?? null,
         employee_id: driver.employee_id ?? null,
         avatar_object_key: driver.avatar_object_key ?? null,
+        zone_id: driver.zone_id ?? null,
       });
     }
 
@@ -741,7 +743,7 @@ export async function fetchDriversForAdmin(options?: {
         partner_id: row.partner_id,
         partner_name: relName(row.partners),
         partner_logo_url,
-        zone_id: row.zone_id,
+        zone_id: linkedDriver?.zone_id ?? row.zone_id,
         zone_name: zoneRow?.name ?? "—",
         restaurant_ids: row.linked_profile_id
           ? (restaurantIdsByDriverId.get(row.linked_profile_id) ??

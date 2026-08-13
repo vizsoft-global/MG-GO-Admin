@@ -513,7 +513,9 @@ type RecentDeliveryDbRow = {
   id: string;
   driver_id: string;
   status: DeliveryStatus;
-  delivered_at: string;
+  delivered_at: string | null;
+  created_at?: string;
+  external_order_id?: string | null;
   partners: { name: string } | { name: string }[] | null;
 };
 
@@ -523,7 +525,9 @@ export type RecentDeliveryForDriver = {
   short_id: string;
   status: DeliveryStatus;
   partner_name: string;
-  delivered_at: string;
+  delivered_at: string | null;
+  created_at: string;
+  external_order_id: string | null;
 };
 
 export async function resolveDeliveryProofForDisplay(
@@ -842,16 +846,20 @@ export async function fetchRecentDeliveriesForDriver(
       driver_id,
       status,
       delivered_at,
+      created_at,
+      external_order_id,
       partners (name)
     `,
     )
     .eq("driver_id", driverId)
-    .order("delivered_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(safeLimit);
 
   if (error) throw error;
 
-  const rows = (data ?? []) as unknown as RecentDeliveryDbRow[];
+  const rows = (data ?? []) as unknown as Array<
+    RecentDeliveryDbRow & { created_at: string; external_order_id: string | null }
+  >;
   return rows.map((row) => ({
     id: row.id,
     driver_id: row.driver_id,
@@ -859,6 +867,8 @@ export async function fetchRecentDeliveriesForDriver(
     status: row.status,
     partner_name: relName(row.partners),
     delivered_at: row.delivered_at,
+    created_at: row.created_at,
+    external_order_id: row.external_order_id,
   }));
 }
 

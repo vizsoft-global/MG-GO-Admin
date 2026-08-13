@@ -39,6 +39,7 @@ import {
   fleetStatusFromLocation,
   type FleetStatusKey,
 } from "./tracking-status";
+import { liveOrderDisplayId, liveOrderTimestamp } from "./live-recent-orders";
 import type { LiveDriverMeta, LiveRecentDelivery } from "./live-tracking-types";
 import type { GeofenceMapOverlay } from "@/features/locations/geofence-map-overlays";
 import { buildTrackingMapStyles } from "./tracking-map-google-styles";
@@ -132,7 +133,7 @@ export function LiveTrackingLiveView({
       map.set(row.linked_profile_id, {
         fullName: row.full_name ?? null,
         driverCode: row.driver_code ?? null,
-        zoneId: row.zone_id ?? null,
+        zoneId: row.zone_id || null,
         partnerId: row.partner_id ?? null,
         zoneName: row.zone_name ?? null,
         partnerName: row.partner_name ?? null,
@@ -175,10 +176,22 @@ export function LiveTrackingLiveView({
     [enrichedLocations, nowTick],
   );
 
+  const zoneShapes = useMemo(
+    () =>
+      zones
+        .filter((z) => z.geometry)
+        .map((z) => ({
+          id: z.id,
+          zone_type: z.zone_type,
+          geometry: z.geometry,
+        })),
+    [zones],
+  );
+
   const filtered = useMemo(() => {
     return liveDrivers.filter((loc) => {
       const meta = profileMeta.get(loc.driverId);
-      if (!matchesLiveTrackingFilters(loc, filters, meta)) return false;
+      if (!matchesLiveTrackingFilters(loc, filters, meta, zoneShapes)) return false;
       const status = fleetStatusFromLocation({
         pinStatus: loc.pinStatus,
         trackingStatus: loc.trackingStatus,
@@ -188,7 +201,7 @@ export function LiveTrackingLiveView({
       });
       return visibleStatuses.includes(status);
     });
-  }, [liveDrivers, filters, profileMeta, visibleStatuses]);
+  }, [liveDrivers, filters, profileMeta, visibleStatuses, zoneShapes]);
 
   const selectedDriver = useMemo(
     () => filtered.find((d) => d.driverId === selectedId) ?? null,
@@ -236,16 +249,17 @@ export function LiveTrackingLiveView({
     queryFn: async () => {
       if (!selectedId) return [];
       try {
-        const rows = await fetchRecentDeliveriesForDriver(selectedId, 1);
+        const rows = await fetchRecentDeliveriesForDriver(selectedId, 3);
         return rows.map<LiveRecentDelivery>((row) => ({
           id: row.id,
           driverId: row.driver_id,
-          shortId: row.short_id,
+          shortId: liveOrderDisplayId(row),
           status: row.status,
           partnerName: row.partner_name,
-          deliveredAt: row.delivered_at,
+          deliveredAt: liveOrderTimestamp(row),
         }));
-      } catch {
+      } catch (error) {
+        console.error("[live-tracking] recent deliveries failed", error);
         return [];
       }
     },

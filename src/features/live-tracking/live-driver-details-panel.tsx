@@ -149,7 +149,7 @@ export function LiveDriverDetailsPanel({
               </p>
             </div>
           ) : (
-            <p className="text-[10px] text-slate-500 dark:text-slate-300">{t("noHistory")}</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-300">{t("noRecentOrders")}</p>
           )}
         </div>
 
@@ -279,7 +279,7 @@ export function LiveDriverDetailsPanel({
             {t("recentOrders")}
           </h4>
           {recentOrders.length === 0 ? (
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{t("noHistory")}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">{t("noRecentOrders")}</p>
           ) : (
             <ul className="mt-2 space-y-2">
               {recentOrders.map((order) => (

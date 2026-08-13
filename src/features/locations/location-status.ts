@@ -26,13 +26,12 @@ export function isMovingSpeed(speedMps: number | null | undefined): boolean {
   return speedMps != null && Number.isFinite(speedMps) && speedMps >= MOVING_SPEED_THRESHOLD_MPS;
 }
 
-/** On-duty drivers stay on the live map at last-known coords when GPS goes quiet. */
+/** Last-known pin stays on the live map for on-duty and offline drivers. */
 export function shouldShowOnLiveMap(
-  input: { lastSeenAt: string; isOnDuty: boolean },
-  now = Date.now(),
+  _input?: { lastSeenAt: string; isOnDuty: boolean },
+  _now = Date.now(),
 ): boolean {
-  if (input.isOnDuty) return true;
-  return isGpsLive(input.lastSeenAt, now);
+  return true;
 }
 
 export function isGpsStale(

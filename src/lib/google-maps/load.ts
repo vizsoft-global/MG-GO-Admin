@@ -191,6 +191,7 @@ export type GoogleMapsApi = {
     TransitLayer: new () => GoogleOverlayLayer;
     BicyclingLayer: new () => GoogleOverlayLayer;
     OverlayView: GoogleOverlayViewClass;
+    importLibrary?: (id: string) => Promise<unknown>;
     event: {
       clearInstanceListeners: (instance: object) => void;
       addListener: (
@@ -278,6 +279,15 @@ function installAuthFailureHandler() {
   };
 }
 
+async function ensureVisualizationLibrary(api: GoogleMapsApi): Promise<void> {
+  if (api.maps.visualization?.HeatmapLayer) return;
+  try {
+    await api.maps.importLibrary?.("visualization");
+  } catch {
+    /* Heatmap stays off if the library is blocked on the key. */
+  }
+}
+
 /** Lazy-load Google Maps JS API with Places and Visualization libraries. */
 export function loadGoogleMaps(): Promise<GoogleMapsApi | null> {
   if (typeof window === "undefined") {
@@ -296,7 +306,7 @@ export function loadGoogleMaps(): Promise<GoogleMapsApi | null> {
 
   if (window.google?.maps?.Map && window.google.maps.places) {
     lastFailure = null;
-    return Promise.resolve(window.google);
+    return ensureVisualizationLibrary(window.google).then(() => window.google ?? null);
   }
 
   if (!loadPromise) {

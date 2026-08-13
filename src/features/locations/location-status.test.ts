@@ -9,13 +9,13 @@ function isoMinutesAgo(minutes: number): string {
 }
 
 describe("shouldShowOnLiveMap", () => {
-  it("hides off-duty drivers after the live GPS window", () => {
+  it("keeps off-duty drivers at last-known coords so Offline can list them", () => {
     assert.equal(
       shouldShowOnLiveMap(
         { lastSeenAt: isoMinutesAgo(9), isOnDuty: false },
         NOW,
       ),
-      false,
+      true,
     );
   });
 

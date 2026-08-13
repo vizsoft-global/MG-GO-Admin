@@ -234,6 +234,7 @@
       "signalStrong": "Strong",
       "activeOrders": "Active orders",
       "recentOrders": "Recent orders",
+      "noRecentOrders": "No recent orders",
       "eta": "ETA",
       "viewAll": "View all",
       "searchPlaceholder": "Search by name or code…",

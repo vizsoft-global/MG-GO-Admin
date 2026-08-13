@@ -25,6 +25,7 @@ import type {
 import { createDriverPulseOverlay } from "./driver-marker-pulse-overlay";
 import {
   buildHeatmapPoints,
+  heatmapLayerDataFromPoints,
   isHeatmapLayerEnabled,
   isTrafficLayerEnabled,
 } from "@/features/live-tracking/tracking-map-layer-controller";
@@ -132,6 +133,7 @@ export function DriverLocationsMap({
   const lastMarkerPosRef = useRef(new Map<string, { lat: number; lng: number }>());
   const mapClickListenerRef = useRef<{ remove: () => void } | null>(null);
   const hasInitialFitRef = useRef(false);
+  const lastFitMarkerKeyRef = useRef("");
   const onMarkerSelectRef = useRef(onMarkerSelect);
   const focusMarkerIdRef = useRef(focusMarkerId);
   onMarkerSelectRef.current = onMarkerSelect;
@@ -383,14 +385,18 @@ export function DriverLocationsMap({
         anyMoved = true;
       }
 
-      if (fitToMarkers && !hasInitialFitRef.current && validMarkers.length > 0) {
-        const bounds = new google.maps.LatLngBounds();
-        for (const pin of validMarkers) bounds.extend({ lat: pin.lat, lng: pin.lng });
-        for (const pin of restaurantMarkers) {
-          if (isValidLatLng(pin.lat, pin.lng)) bounds.extend({ lat: pin.lat, lng: pin.lng });
+      if (fitToMarkers && validMarkers.length > 0) {
+        const markerKey = validMarkers.map((pin) => pin.id).sort().join("|");
+        if (markerKey !== lastFitMarkerKeyRef.current) {
+          const bounds = new google.maps.LatLngBounds();
+          for (const pin of validMarkers) bounds.extend({ lat: pin.lat, lng: pin.lng });
+          for (const pin of restaurantMarkers) {
+            if (isValidLatLng(pin.lat, pin.lng)) bounds.extend({ lat: pin.lat, lng: pin.lng });
+          }
+          mapRef.current.fitBounds(bounds, initialFitPadding);
+          lastFitMarkerKeyRef.current = markerKey;
+          hasInitialFitRef.current = true;
         }
-        mapRef.current.fitBounds(bounds, initialFitPadding);
-        hasInitialFitRef.current = true;
       }
 
       const allDriverMarkers = [...byId.values()].map((e) => e.marker);
@@ -403,12 +409,23 @@ export function DriverLocationsMap({
         clustererRef.current?.clearMarkers();
         clustererRef.current = null;
         trafficRef.current?.setMap(null);
-        if (!heatmapRef.current && google.maps.visualization?.HeatmapLayer) {
-          heatmapRef.current = new google.maps.visualization.HeatmapLayer({});
+        const HeatmapLayer = google.maps.visualization?.HeatmapLayer;
+        if (!HeatmapLayer) {
+          for (const entry of byId.values()) {
+            entry.marker.setMap(mapRef.current);
+          }
+          onClusterCountChange?.(0);
+          return;
         }
-        const heatmapPoints = buildHeatmapPoints(validMarkers);
-        heatmapRef.current?.setData(heatmapPoints);
-        heatmapRef.current?.setOptions({
+        if (!heatmapRef.current) {
+          heatmapRef.current = new HeatmapLayer({});
+        }
+        const heatmapPoints = heatmapLayerDataFromPoints(
+          buildHeatmapPoints(validMarkers),
+          google.maps.LatLng,
+        );
+        heatmapRef.current.setData(heatmapPoints);
+        heatmapRef.current.setOptions({
           radius: 34,
           opacity: 0.7,
           gradient: [
@@ -419,7 +436,7 @@ export function DriverLocationsMap({
             "rgba(239, 68, 68, 0.95)",
           ],
         });
-        heatmapRef.current?.setMap(mapRef.current);
+        heatmapRef.current.setMap(mapRef.current);
         onClusterCountChange?.(0);
       } else {
         heatmapRef.current?.setMap(null);

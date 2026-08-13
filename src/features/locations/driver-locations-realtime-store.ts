@@ -28,9 +28,6 @@ type Listener = (locations: DriverLiveLocation[]) => void;
 
 /** Coalesce realtime floods so React + maps update at most ~4×/sec. */
 const NOTIFY_BATCH_MS = 250;
-/** Drop drivers with no GPS in this window from initial hydrate (keeps boot light). */
-const INITIAL_MAX_AGE_MS = 15 * 60 * 1000;
-
 let channel: RealtimeChannel | null = null;
 let listeners = new Set<Listener>();
 /** O(1) live upserts under high write volume. */
@@ -171,7 +168,6 @@ function patchDriverDuty(driverId: string, isOnDuty: boolean) {
 
 async function loadInitial() {
   const supabase = createClient();
-  const since = new Date(Date.now() - INITIAL_MAX_AGE_MS).toISOString();
   const select = `
       *,
       drivers (
@@ -183,40 +179,19 @@ async function loadInitial() {
       )
     `;
 
-  const [recent, onDuty] = await Promise.all([
-    supabase
-      .from("driver_locations")
-      .select(select)
-      .gte("last_seen_at", since)
-      .order("last_seen_at", { ascending: false })
-      .limit(2500),
-    supabase
-      .from("driver_locations")
-      .select(
-        `
-      *,
-      drivers!inner (
-        driver_code,
-        employee_id,
-        is_on_duty,
-        profiles ( full_name ),
-        driver_restaurants ( restaurants ( name ) )
-      )
-    `,
-      )
-      .eq("drivers.is_on_duty", true),
-  ]);
+  const { data, error } = await supabase
+    .from("driver_locations")
+    .select(select)
+    .order("last_seen_at", { ascending: false })
+    .limit(2500);
 
-  if (recent.error) {
-    console.error("[driver_locations] initial fetch failed", recent.error);
+  if (error) {
+    console.error("[driver_locations] initial fetch failed", error);
     return;
-  }
-  if (onDuty.error) {
-    console.error("[driver_locations] on-duty fetch failed", onDuty.error);
   }
 
   const next = new Map<string, DriverLiveLocation>();
-  for (const row of [...(recent.data ?? []), ...(onDuty.data ?? [])]) {
+  for (const row of data ?? []) {
     const loc = rowToLocation(row as LiveRow);
     if (!shouldShowOnLiveMap(loc)) continue;
     next.set(loc.driverId, loc);
@@ -242,16 +217,12 @@ function applyPayload(
   if (!row?.driver_id) return;
 
   // Drop extremely stale realtime events if connection backlog delivers late,
-  // unless the driver is still on duty — keep last-known pin for the map.
+  // unless we already have a last-known pin — keep it for Offline / on-duty.
   if (row.last_seen_at && !isGpsLive(row.last_seen_at)) {
     const prev = cacheById.get(row.driver_id);
     const onDuty =
       nameCache.get(row.driver_id)?.isOnDuty ?? prev?.isOnDuty ?? false;
-    if (!onDuty) {
-      if (prev) {
-        cacheById.delete(row.driver_id);
-        scheduleNotify();
-      }
+    if (!onDuty && !prev) {
       return;
     }
   }
