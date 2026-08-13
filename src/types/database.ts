@@ -2135,10 +2135,12 @@ export type Database = {
           altitude_m: number | null
           battery_pct: number | null
           charging_state: string | null
+          coalesced_since_count: number
           distance_today_meters: number
           driver_id: string
           heading_deg: number | null
           is_mocked: boolean | null
+          last_report_at: string | null
           last_seen_at: string
           latitude: number
           location_provider: string | null
@@ -2156,10 +2158,12 @@ export type Database = {
           altitude_m?: number | null
           battery_pct?: number | null
           charging_state?: string | null
+          coalesced_since_count?: number
           distance_today_meters?: number
           driver_id: string
           heading_deg?: number | null
           is_mocked?: boolean | null
+          last_report_at?: string | null
           last_seen_at?: string
           latitude: number
           location_provider?: string | null
@@ -2177,10 +2181,12 @@ export type Database = {
           altitude_m?: number | null
           battery_pct?: number | null
           charging_state?: string | null
+          coalesced_since_count?: number
           distance_today_meters?: number
           driver_id?: string
           heading_deg?: number | null
           is_mocked?: boolean | null
+          last_report_at?: string | null
           last_seen_at?: string
           latitude?: number
           location_provider?: string | null
