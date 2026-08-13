@@ -10,7 +10,7 @@ type NotificationsRpc = {
 };
 
 async function handler(request: Request): Promise<Response> {
-  if (request.method !== "GET" && request.method !== "POST") {
+  if (request.method !== "GET" && request.method !== "POST" && request.method !== "DELETE") {
     return NextResponse.json({ error: "method_not_allowed" }, { status: 405 });
   }
 
@@ -43,6 +43,26 @@ async function handler(request: Request): Promise<Response> {
     return NextResponse.json(data ?? { items: [], unread_count: 0 });
   }
 
+  if (request.method === "DELETE") {
+    let body: { dispatch_item_ids?: string[] } = {};
+    try {
+      body = await request.json();
+    } catch {
+      body = {};
+    }
+
+    const { data, error } = await (supabase as unknown as NotificationsRpc).rpc(
+      "driver_dismiss_notifications",
+      {
+        p_dispatch_item_ids: body.dispatch_item_ids ?? null,
+      },
+    );
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    return NextResponse.json({ updated: data ?? 0 });
+  }
+
   // POST → mark read
   let body: { dispatch_item_ids?: string[] } = {};
   try {
@@ -65,4 +85,5 @@ async function handler(request: Request): Promise<Response> {
 
 export const GET = withCors(handler);
 export const POST = withCors(handler);
+export const DELETE = withCors(handler);
 export const OPTIONS = withCors(handler);

@@ -96,7 +96,7 @@ export async function confirmPendingUpload(
 
   const { data: row, error: fetchErr } = await admin
     .from("storage_uploads")
-    .select("id, object_key, uploaded_by, status")
+    .select("id, object_key, uploaded_by, status, entity_type")
     .eq("id", uploadId)
     .maybeSingle();
 
@@ -114,6 +114,11 @@ export async function confirmPendingUpload(
     .eq("id", uploadId);
 
   if (updateErr) return { error: "update_failed" };
+
+  if (row.entity_type === "driver_avatar") {
+    const { syncDriverAvatarKey } = await import("@/lib/storage/sync-driver-avatar");
+    await syncDriverAvatarKey(authUid, row.object_key);
+  }
 
   return { ok: true, objectKey: row.object_key };
 }

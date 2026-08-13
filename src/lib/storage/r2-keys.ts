@@ -2,6 +2,7 @@ import type { DriverDocumentType } from "@/features/drivers/types";
 
 const ALLOWED_PREFIXES = [
   "drivers/",
+  "driver-avatars/",
   "partners/",
   "restaurants/",
   "notifications/",

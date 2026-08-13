@@ -57,7 +57,7 @@ The **admin panel** verifies deliveries, approves requests, manages zones/vehicl
 The admin panel auto-issues a **6-digit numeric passcode** (`drivers.app_passcode`) the moment a driver row transitions to `status = 'active'`. Admins share it privately with the driver and the driver enters `driver_code + passcode` on the login screen.
 
 1. App calls RPC `select * from public.driver_app_lookup_by_passcode(p_driver_code, p_passcode)` (granted to `anon`).
-2. RPC returns `{ ok: true, user_id }` only when the driver row is `active`, not archived, not blocked, and both values match. Errors: `invalid_credentials`, `driver_not_active`, `driver_archived`, `driver_blocked` (includes `message` = admin reason).
+2. RPC returns `{ ok: true, user_id }` only when the driver row is `active`, not archived, not blocked, and both values match. Errors: `invalid_credentials`, `driver_not_active`, `driver_archived`, `driver_blocked` (includes `message` = admin reason). Edge `driver-passcode-login` forwards those codes. The login screen **must** map `driver_archived` to a dedicated “account has been archived” message — never to invalid employee ID / passcode.
 3. With `user_id` in hand, exchange for a real Supabase session — easiest path: call a service-role edge function that issues an OTP / magic-link / signed JWT for that `auth.users.id` (we do **not** ship the service-role key in the app).
 4. Admin can rotate via `select public.regenerate_driver_app_passcode(p_driver_id)` (staff only via RLS helper `is_admin_panel_user()`); rotation invalidates the old code immediately.
 5. The passcode is plaintext in `drivers.app_passcode` so admin staff can read it out to the driver. Treat it as a shared secret — show it only behind the staff "reveal" gesture.
@@ -149,7 +149,7 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 ### `profiles` (existing)
 - `id` uuid PK (= auth.uid)
 - `role` — must be `rider`
-- `phone`, `full_name`, `locale`, `avatar_url`, `zone_id`
+- `phone`, `full_name`, `locale`, `avatar_url` (R2 object key — same value as `drivers.avatar_object_key`), `zone_id`
 
 ### `drivers`
 | Column | Type | Notes |
@@ -165,6 +165,12 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | current_lat, current_lng | numeric | Updated while online |
 | vehicle_id | uuid | FK → vehicles |
 | custom_fields | jsonb | Admin-defined dynamic fields (`custom_field_definitions`). Values are scalars (`string` / `number` / `boolean`) or, for **checkbox** defs that have `options`, a `string[]` of selected option values. Checkbox with empty options remains a boolean. |
+| avatar_object_key | text | Profile photo R2 key (`driver-avatars/{id}/…` from the app, or `drivers/{id}/avatar.{ext}` from admin). Kept in lockstep with `profiles.avatar_url` and the linked intake. |
+| avatar_updated_at | timestamptz | Set whenever the photo changes. |
+
+**Live Tracking map:** pins come from `driver_locations`. On-duty drivers stay on the map at last-known coords even when GPS is quieter than 8 minutes (shown as a stale/alert pin). Cron `cleanup_stale_driver_locations` (every 2 min) deletes stale rows **except** `drivers.is_on_duty = true`. The duty tracker must keep sending heartbeats while In: indoor/coarse GPS (>100 m) re-sends the last good pin instead of skipping the report.
+
+**Profile photo (admin ↔ app):** upload `entityType: driver_avatar`, then `driver_update_avatar(p_object_key)` (or rely on confirm/proxy, which now stamp the same columns). Display: read `drivers.avatar_object_key` (fallback `profiles.avatar_url`) and resolve with `GET /api/driver-uploads/read?objectKey=…`. That read route allows the rider’s current avatar key even when admin uploaded it (`uploaded_by` is staff). Do **not** treat `driver_selfie` or login-verification shots as the profile photo. Cache-bust the signed `readUrl` with a URL **fragment** (`#v={epoch}`), never an extra query param — `?v=` / `&v=` invalidates the R2 signature and the image falls back to initials after the in-memory preview is gone. Take a Photo must request camera permission *before* `ImagePicker`; a deny/dismiss shows a user-facing prompt, never a raw `PlatformException`.
 
 ### `deliveries`
 | Column | Type | Notes |
@@ -173,9 +179,10 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | partner_id | uuid | Selected partner |
 | zone_id | uuid | Zone at time of delivery |
 | restaurant_id | uuid | Optional FK → `restaurants` (merchant) |
-| external_order_id | text | Order # from partner app (globally unique when normalized) |
+| external_order_id | text | Order # from partner app. Unique index `deliveries_external_order_id_unique_idx`. Pickup RPC raises **`duplicate_order_id`** (including when the unique index fires). App must show a friendly string such as “This Order ID already exists.” — never the raw Postgres constraint message. |
 | order_proof_url | text | R2 object key (`drivers/{id}/order_proof/...`) |
 | status | enum | pending → admin sets verified/rejected |
+| rejection_reason | text | Admin-authored when `status = rejected`. **Required on Delivery Details overlay** — select the column and show it under Status. Do not reuse `cancel_reason` (that is the rider cancel code). |
 | delivered_at | timestamptz | Set on driver submit |
 | delivered_lat, delivered_lng | numeric | GPS at submit time |
 
@@ -351,6 +358,17 @@ const { data } = await supabase
 
 Sum `amount_kwd` where `entry_type = 'earning_credit'` for “approved earnings this week”. Future payout runs will insert `payout_debit` rows against the same ledger.
 
+**Earnings → Performance Summary (required):** `driver_earnings_daily.deliveries` / `week.deliveries_count` are **verified-only** (payroll). Do **not** use them for “Total Delivery Count”.
+
+**Home → This Week’s Progress Time in:** `week.online_seconds` is `SUM(driver_attendance.online_seconds)` for `kuwait_week_start`..today, plus live elapsed only if the open `driver_sessions` row started today. Do **not** sum `driver_sessions` across the week — leftover `is_online` rows from prior days inflate the total with wall-clock hours.
+
+```sql
+select public.driver_get_earnings_summary();
+-- { ok, total_deliveries, verified_deliveries, pending_deliveries, rejected_deliveries }
+```
+
+`total_deliveries` = lifetime submitted (pending + in_transit + verified + rejected; **excludes cancelled**). Same object is also `driver_get_home_dashboard().performance`. For driver `10085` that is `10` made / `5` verified — summing daily verified rows is what produced the wrong `5`.
+
 Admin RPCs (staff): `get_driver_earnings_detail`, `list_driver_earnings_daily`, `recalculate_earnings_for_range`.
 
 ### `driver_earnings_daily` (legacy read — still available)
@@ -368,7 +386,7 @@ Admin RPCs (staff): `get_driver_earnings_detail`, `list_driver_earnings_daily`, 
 
 ### `attendance_logs`
 - One row per `(driver_id, log_date)` where `log_date` uses **Asia/Kuwait** calendar date of **check-in**.
-- **Check-in / check-out:** the Home **duty toggle ON** upserts today's row (`check_in_at`, `status = present` unless `on_leave`); **toggle OFF** sets `check_out_at` with `check_out_reason = manual`.
+- **Check-in / check-out:** the Home **duty toggle ON** upserts today's row (`check_in_at`, `status = present` unless `on_leave`); **toggle OFF** sets `check_out_at` with `check_out_reason = manual`. **Sign out of the active device** also clocks out (`driver_release_device_session` → `_attendance_apply_checkout`, reason `manual`) so work-time stops and the next login is not still Clocked In. A kicked/old device must **not** clock out — only when `p_device_id` matches `drivers.active_device_id`.
 - Checkout finds the latest **open** log (`check_in_at` set, `check_out_at` null) — not only “today” — so overnight shifts that span midnight keep hours on the check-in day.
 - `check_out_reason`: `manual` | `auto_offline` | `auto_out_of_zone` | `admin` (null until checked out).
 - Written by `driver_set_duty_state` (same RPC as sessions) — no separate attendance button in v1.
@@ -471,6 +489,8 @@ Admin dispatch sends FCM with notification title/body plus a flat string `data` 
 Parse `action_params` and `media` as JSON on the client. Parse `screenshot_restricted` as a boolean (`"true"` → true). Unknown keys must be ignored for forward compatibility.
 
 `driver_list_notifications` also returns `screenshot_restricted` (boolean) on each inbox item — **prefer the inbox/RPC value over a stale push payload** on next sync.
+
+**Inbox clear / remove (required):** Riders must be able to clear old notifications from the list. Stamp `notification_dispatch_items.dismissed_at` via `driver_dismiss_notifications(p_dispatch_item_ids uuid[] default null)` (`null` = all of that rider’s undismissed rows). Do **not** DELETE dispatch rows — admin analytics stay. List + unread count omit dismissed rows. Fallback: `DELETE /api/driver-app/notifications` with `{ "dispatch_item_ids": uuid[] | omit-for-all }`.
 
 #### Screenshot restriction (sensitive notifications)
 
@@ -860,7 +880,9 @@ Driver images and documents use the **same private R2 bucket** as the admin pane
 | `order_proof` | 10 MB | `image/*`, `application/pdf` |
 | `login_verification` | 5 MB | `image/*` |
 
-Object keys are server-generated: `drivers/{driverId}/{entityType}/{date}/{uuid}.{ext}`.
+Object keys are server-generated: `drivers/{driverId}/{entityType}/{date}/{uuid}.{ext}`, except `driver_avatar` which uses `driver-avatars/{driverId}/{date}/{uuid}.{ext}`.
+
+Confirm or proxy of `driver_avatar` writes `drivers.avatar_object_key`, `profiles.avatar_url`, and the linked intake `avatar_url`. Still call `driver_update_avatar(p_object_key)` after confirm (idempotent; also validates the key belongs to the caller).
 
 Login identity selfies use `login_verification` after on-device blink liveness. After confirm, the app calls `driver_record_login_verification(p_object_key, p_liveness_passed, p_liveness_method)` to write `driver_login_verifications` (Phase 1 soft liveness — defaults allow old APKs). See **`docs/LOGIN_VERIFICATION_HANDOFF.md`**.
 
@@ -961,7 +983,7 @@ No new RPC was added; the existing function's restaurant objects gained the `geo
 | `driver_log_security_event(p_event_type, p_severity, p_context)` | Log security events. Accepts `p_event_type = 'zone_timeout_checkout'` with `p_severity = 'warning'`. Context JSON may include `mode` (`idle` \| `return_grace`), `window_seconds`, coordinates, `zone_status`, `outside_since`. Stored in `driver_security_events`. |
 | `driver_complete_delivery` / `driver_cancel_delivery` | **Idempotent retry**: if delivery already completed (`pending`/`verified`) or cancelled, returns the existing row instead of raising `invalid_delivery_status`. |
 | `driver_create_pickup` / complete / cancel | **Only** the overloads with `p_device_id` remain (pre-device overloads dropped). Always pass `p_device_id`. |
-| `driver_release_device_session` | Unchanged — clears active session only when `p_device_id` matches `drivers.active_device_id`. |
+| `driver_release_device_session` | Clears this device row. **When it is the active device**, clocks the driver out (`is_on_duty = false`, close open session + attendance log) so work-time stops. Kicked devices (id ≠ `active_device_id`) only revoke their own session. Profile Sign out must call this **and** `driver_set_duty_state(false, false)` first (`clockOut: true`); device-kick sign-out must not pass `clockOut`. |
 | `driver_heartbeat` | Unchanged — `flush_grace_active: true` for ~5 min after device override (via `flush_deadline_at`). |
 | `driver_finalize_reconciliation` | Unchanged — accepts flushed rows during override grace. |
 | Weekly/monthly incentives | Accrue **once** on period end day (Kuwait week/month end) in `driver_earnings_daily.incentive_kwd`. |
@@ -971,7 +993,13 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-08 — [admin+app] Driver app collapsed to single production stack (no Android flavors / no OTA / no update channels); driver targets `dpdadmin-prod` + Supabase `eoksxkdssptgyqyywdju` + Firebase `musallam-delivery-prod` only; Play Store distribution; `/api/driver-app/active-release` always returns `null`; admin App Releases remain tombstoned. Migrations `20260823100000_disable_driver_app_sideload.sql`, `20260823110000_single_release_channel.sql`.*
+*Last synced: 2026-08-13 — [admin+app] Sign out of the active device clocks the driver out (`driver_release_device_session` + Profile `clockOut: true`) so work-time stops and Clocked In does not survive logout. Migration `20260907160000`.*
+
+*Prior: 2026-08-13 — [admin+app] Home This Week’s Progress Time in uses attendance days in the current Kuwait week (`driver_week_online_seconds`); stale last-week `is_online` sessions are ignored. Migration `20260907140000`.*
+
+*Prior: 2026-08-13 — [admin+app] Archived-driver login shows “Your driver account has been archived” (maps `driver_archived`); do not collapse it into invalid credentials.*
+
+*Prior: 2026-08-08 — [admin+app] Driver app collapsed to single production stack (no Android flavors / no OTA / no update channels); driver targets `dpdadmin-prod` + Supabase `eoksxkdssptgyqyywdju` + Firebase `musallam-delivery-prod` only; Play Store distribution; `/api/driver-app/active-release` always returns `null`; admin App Releases remain tombstoned. Migrations `20260823100000_disable_driver_app_sideload.sql`, `20260823110000_single_release_channel.sql`.*
 
 *Prior: 2026-07-29 — [admin+app] Ops audit: security events RPC, delivery idempotency, device-guard overload cleanup, published restaurant gate, period incentive accrual fix.*
 

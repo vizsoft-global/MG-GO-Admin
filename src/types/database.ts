@@ -3769,6 +3769,7 @@ export type Database = {
           clicked_at: string | null
           created_at: string
           delivered_at: string | null
+          dismissed_at: string | null
           driver_id: string
           error_code: string | null
           error_message: string | null
@@ -3791,6 +3792,7 @@ export type Database = {
           clicked_at?: string | null
           created_at?: string
           delivered_at?: string | null
+          dismissed_at?: string | null
           driver_id: string
           error_code?: string | null
           error_message?: string | null
@@ -3813,6 +3815,7 @@ export type Database = {
           clicked_at?: string | null
           created_at?: string
           delivered_at?: string | null
+          dismissed_at?: string | null
           driver_id?: string
           error_code?: string | null
           error_message?: string | null
@@ -6746,6 +6749,14 @@ export type Database = {
         Args: { p_id: string; p_reason?: string }
         Returns: Json
       }
+      driver_delivery_performance_counts: {
+        Args: { p_driver_id: string }
+        Returns: Json
+      }
+      driver_dismiss_notifications: {
+        Args: { p_dispatch_item_ids?: string[] }
+        Returns: number
+      }
       driver_finalize_reconciliation: {
         Args: { p_device_id: string }
         Returns: undefined
@@ -6793,6 +6804,7 @@ export type Database = {
         Returns: Json
       }
       driver_get_delivery_proximity_context: { Args: never; Returns: Json }
+      driver_get_earnings_summary: { Args: never; Returns: Json }
       driver_get_esign_request: { Args: { p_id: string }; Returns: Json }
       driver_get_extra_earnings: { Args: never; Returns: Json }
       driver_get_home_dashboard: { Args: never; Returns: Json }
@@ -6929,6 +6941,10 @@ export type Database = {
         Returns: Json
       }
       driver_update_avatar: { Args: { p_object_key: string }; Returns: Json }
+      driver_week_online_seconds: {
+        Args: { p_driver_id: string; p_today: string; p_week_start: string }
+        Returns: number
+      }
       enqueue_notification_automation_event: {
         Args: {
           p_driver_id?: string

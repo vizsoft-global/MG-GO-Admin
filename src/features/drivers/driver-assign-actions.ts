@@ -4,6 +4,7 @@ import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { pickDriverAvatarKey } from "@/lib/storage/driver-avatar-key";
 import { resolveDriverAvatarUrl } from "@/lib/storage/driver-avatar-url";
 import type {
   AssignDriverRow,
@@ -153,6 +154,7 @@ type DriverCoreRow = {
   partner_id: string | null;
   zone_id: string | null;
   is_on_duty: boolean;
+  avatar_object_key: string | null;
   profiles:
     | { full_name: string | null; phone: string | null; avatar_url: string | null }
     | { full_name: string | null; phone: string | null; avatar_url: string | null }[]
@@ -177,7 +179,7 @@ async function enrichAssignDriverRows(
       supabase
         .from("drivers")
         .select(
-          "id, driver_code, partner_id, zone_id, is_on_duty, profiles(full_name, phone, avatar_url), partners(name), zones(name)",
+          "id, driver_code, partner_id, zone_id, is_on_duty, avatar_object_key, profiles(full_name, phone, avatar_url), partners(name), zones(name)",
         )
         .in("id", driverIds),
       supabase.from("driver_restaurants").select("driver_id, restaurant_id").in("driver_id", driverIds),
@@ -238,7 +240,11 @@ async function enrichAssignDriverRows(
       const row = raw as unknown as DriverCoreRow;
       const profile = relOne(row.profiles);
       const intake = intakeByProfileId.get(row.id);
-      const avatarKey = profile?.avatar_url ?? intake?.avatar_url ?? null;
+      const avatarKey = pickDriverAvatarKey({
+        avatarObjectKey: row.avatar_object_key,
+        profileAvatarUrl: profile?.avatar_url,
+        intakeAvatarUrl: intake?.avatar_url,
+      });
       let avatar_url: string | null = null;
       if (avatarKey) {
         if (avatarCache.has(avatarKey)) {

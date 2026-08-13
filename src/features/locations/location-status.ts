@@ -20,6 +20,15 @@ export function isGpsLive(lastSeenAt: string, now = Date.now()): boolean {
   return age <= LIVE_GPS_MAX_AGE_MS;
 }
 
+/** On-duty drivers stay on the live map at last-known coords when GPS goes quiet. */
+export function shouldShowOnLiveMap(
+  input: { lastSeenAt: string; isOnDuty: boolean },
+  now = Date.now(),
+): boolean {
+  if (input.isOnDuty) return true;
+  return isGpsLive(input.lastSeenAt, now);
+}
+
 export function isGpsStale(
   lastSeenAt: string,
   trackingStatus: TrackingStatus,

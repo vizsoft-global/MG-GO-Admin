@@ -447,7 +447,7 @@ export async function fetchDriverAssignedRestaurantPins(
     }));
 }
 
-/** Cron: delete driver_locations rows with GPS older than 10 minutes. */
+/** Cron: delete off-duty GPS rows older than 10 minutes. On-duty last-known stays. */
 export async function cleanupStaleDriverLocations(): Promise<number> {
   const supabase = createAdminClient();
   const { data, error } = await supabase.rpc("cleanup_stale_driver_locations", {

@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { DriverLocationsMap } from "@/features/locations/driver-locations-map";
 import { useDriverLocationsRealtime } from "@/features/locations/use-driver-locations-realtime";
-import { isGpsLive } from "@/features/locations/location-status";
+import { isGpsLive, shouldShowOnLiveMap } from "@/features/locations/location-status";
 import { fetchDriversForAdmin } from "@/features/drivers/drivers-actions";
 import { fetchRecentDeliveriesForDriver } from "@/features/deliveries/deliveries-actions";
 import { fetchDriverAssignedRestaurantPins } from "@/features/locations/locations-actions";
@@ -148,9 +148,12 @@ export function LiveTrackingLiveView({
     });
   }, [locations, profileMeta]);
 
-  /** Only drivers with GPS updated within the last 10 minutes appear on the live map. */
+  /** On-duty drivers stay pinned at last-known GPS; others need a fresh ping. */
   const liveDrivers = useMemo(
-    () => enrichedLocations.filter((loc) => isGpsLive(loc.lastSeenAt, nowTick)),
+    () =>
+      enrichedLocations.filter((loc) =>
+        shouldShowOnLiveMap({ lastSeenAt: loc.lastSeenAt, isOnDuty: loc.isOnDuty }, nowTick),
+      ),
     [enrichedLocations, nowTick],
   );
 

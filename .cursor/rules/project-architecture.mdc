@@ -227,6 +227,28 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-13` — **Sign out clocks the driver out.** Releasing the active device (`driver_release_device_session`) now closes the open attendance log and online session (`check_out_reason = manual`). Profile Sign out calls `driver_set_duty_state(false, false)` first; a kicked device does not. Work-time stops and the next login is not still Clocked In. Migration `20260907160000`.
+
+- `[admin+app] 2026-08-13` — **On-duty drivers stay on the Live Tracking map.** Cleanup no longer deletes `driver_locations` for `is_on_duty` rows; the map shows last-known coords past the 8-minute live window. App heartbeats the last accurate pin when GPS accuracy is >100 m (indoor) instead of going silent. Migration `20260907150000`.
+
+- `[admin+app] 2026-08-13` — **Profile Take a Photo camera deny is human copy.** Request camera before ImagePicker; deny/dismiss shows “Camera access is needed…”, never `PlatformException(camera_access_denied, …)`.
+
+- `[admin+app] 2026-08-13` — **Profile photo survives app restart.** Signed R2 `readUrl`s were cache-busted with `?v=` / `&v=`, which invalidates SigV4. The in-memory picker preview hid it until the driver left Profile. Cache-bust with `#v={epoch}` instead.
+
+- `[admin+app] 2026-08-13` — **This Week’s Progress Time in is this week only.** `week.online_seconds` sums `driver_attendance.online_seconds` for the Kuwait week (plus a live session that started today). Stale `is_online` sessions from last week no longer fill the week with wall-clock hours. Migration `20260907140000`.
+
+- `[admin+app] 2026-08-13` — **Archived driver login copy.** RPC already returns `driver_archived`; the app was mapping it to invalid credentials. Login now shows “Your driver account has been archived. Contact your administrator.”
+
+- `[admin+app] 2026-08-13` — **Pickup duplicate Order ID is user-facing.** `driver_create_pickup` remaps unique-index `23505` to `duplicate_order_id`. App maps that (and the raw constraint text) to “This Order ID already exists.” Migration `20260907130000`.
+
+- `[admin+app] 2026-08-13` — **Driver inbox can clear notifications.** `notification_dispatch_items.dismissed_at` + RPC `driver_dismiss_notifications` (null ids = clear all). List/unread omit dismissed rows; dispatch rows stay for analytics. App: Clear all, swipe, and per-row remove. Migration `20260907120000`.
+
+- `[admin+app] 2026-08-13` — **Delivery Details shows admin rejection reason.** Admin already writes `deliveries.rejection_reason` on reject; the driver app omitted the column from its select and overlay. App now reads it and renders **Rejection reason** / **سبب الرفض** under Status.
+
+- `[admin+app] 2026-08-13` — **Earnings Performance Summary total deliveries.** `driver_get_earnings_summary()` + `driver_get_home_dashboard().performance` return lifetime `total_deliveries` (non-cancelled) vs `verified_deliveries`. App must not sum `driver_earnings_daily.deliveries` for that KPI (that column is verified-only payroll). Migration `20260907110000`.
+
+- `[admin+app] 2026-08-13` — **Driver profile photo syncs both ways.** App wrote `drivers.avatar_object_key` via `driver_update_avatar`; admin read `profiles.avatar_url` / intake `avatar_url` — they never met. RPC + admin edit + `driver_avatar` confirm/proxy now stamp all three; admin list/detail prefer the app key; `GET /api/driver-uploads/read` allows the rider to resolve an admin-uploaded `drivers/{id}/avatar.*` key. Approve copies the intake photo onto the new profile. Migration `20260907100000`.
+
 - `[admin only] 2026-08-13` — **Request & Complaint hub matches Figma `4152:8349`.** Dark stage, 96px tiles, Figma glyphs, cream pending badges. Global sidebar/theme unchanged.
 
 - `[admin+app] 2026-08-13` — **On-behalf types, dead APT campaigns, unused form deleted.** Admin New request lists every active `request_type_definitions` row (custom types render from field definitions; attachment-gated types stay rider-only). Deleted four leftover `APT-1000`…`APT-1002` transactional campaigns. Flutter dropped unused `request_form_screen.dart`.

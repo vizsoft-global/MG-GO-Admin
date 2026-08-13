@@ -8,6 +8,7 @@ import {
   isGpsLive,
   parseTrackingStatus,
   parseZoneStatus,
+  shouldShowOnLiveMap,
 } from "./location-status";
 import type { DriverLiveLocation } from "./types";
 
@@ -170,11 +171,7 @@ function patchDriverDuty(driverId: string, isOnDuty: boolean) {
 async function loadInitial() {
   const supabase = createClient();
   const since = new Date(Date.now() - INITIAL_MAX_AGE_MS).toISOString();
-
-  const { data, error } = await supabase
-    .from("driver_locations")
-    .select(
-      `
+  const select = `
       *,
       drivers (
         driver_code,
@@ -183,22 +180,44 @@ async function loadInitial() {
         profiles ( full_name ),
         driver_restaurants ( restaurants ( name ) )
       )
-    `,
-    )
-    .gte("last_seen_at", since)
-    .order("last_seen_at", { ascending: false })
-    // Hard cap so a bloated table cannot block first paint of Live Tracking.
-    .limit(2500);
+    `;
 
-  if (error) {
-    console.error("[driver_locations] initial fetch failed", error);
+  const [recent, onDuty] = await Promise.all([
+    supabase
+      .from("driver_locations")
+      .select(select)
+      .gte("last_seen_at", since)
+      .order("last_seen_at", { ascending: false })
+      .limit(2500),
+    supabase
+      .from("driver_locations")
+      .select(
+        `
+      *,
+      drivers!inner (
+        driver_code,
+        employee_id,
+        is_on_duty,
+        profiles ( full_name ),
+        driver_restaurants ( restaurants ( name ) )
+      )
+    `,
+      )
+      .eq("drivers.is_on_duty", true),
+  ]);
+
+  if (recent.error) {
+    console.error("[driver_locations] initial fetch failed", recent.error);
     return;
+  }
+  if (onDuty.error) {
+    console.error("[driver_locations] on-duty fetch failed", onDuty.error);
   }
 
   const next = new Map<string, DriverLiveLocation>();
-  for (const row of data ?? []) {
+  for (const row of [...(recent.data ?? []), ...(onDuty.data ?? [])]) {
     const loc = rowToLocation(row as LiveRow);
-    if (!isGpsLive(loc.lastSeenAt)) continue;
+    if (!shouldShowOnLiveMap(loc)) continue;
     next.set(loc.driverId, loc);
   }
   cacheById = next;
@@ -221,13 +240,19 @@ function applyPayload(
 
   if (!row?.driver_id) return;
 
-  // Drop extremely stale realtime events if connection backlog delivers late.
+  // Drop extremely stale realtime events if connection backlog delivers late,
+  // unless the driver is still on duty — keep last-known pin for the map.
   if (row.last_seen_at && !isGpsLive(row.last_seen_at)) {
-    if (cacheById.has(row.driver_id)) {
-      cacheById.delete(row.driver_id);
-      scheduleNotify();
+    const prev = cacheById.get(row.driver_id);
+    const onDuty =
+      nameCache.get(row.driver_id)?.isOnDuty ?? prev?.isOnDuty ?? false;
+    if (!onDuty) {
+      if (prev) {
+        cacheById.delete(row.driver_id);
+        scheduleNotify();
+      }
+      return;
     }
-    return;
   }
 
   const prev = cacheById.get(row.driver_id);
