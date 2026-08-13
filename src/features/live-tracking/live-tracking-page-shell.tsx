@@ -20,6 +20,7 @@ export function LiveTrackingPageShell({
   const t = useTranslations("pages.liveTracking");
   const [isCommandFullscreen, setIsCommandFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState<TrackingViewTab>("live");
+  const [activityDriverId, setActivityDriverId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isCommandFullscreen) return;
@@ -37,6 +38,14 @@ export function LiveTrackingPageShell({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showActivityTab={canViewActivity}
+        onViewDriverActivity={
+          canViewActivity
+            ? (driverId) => {
+                setActivityDriverId(driverId);
+                setActiveTab("activity");
+              }
+            : undefined
+        }
       />
     ) : activeTab === "history" ? (
       <LiveTrackingHistoryView
@@ -49,6 +58,7 @@ export function LiveTrackingPageShell({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showActivityTab={canViewActivity}
+        initialDriverId={activityDriverId}
       />
     );
 

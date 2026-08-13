@@ -2,7 +2,6 @@
 
 import { useTranslations } from "next-intl";
 import { Bike, Package, Phone, X, MapPin } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Pill, SignalBars, StatusDot, type Tone } from "@/components/ui/metric-tile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "@/i18n/navigation";
@@ -19,6 +18,7 @@ import {
   gpsQualityFromAccuracy,
 } from "./tracking-metrics";
 import { TrackingGlassCard } from "./tracking-shell";
+import { DriverOperationTimeline } from "./driver-operation-timeline";
 import type { LiveDriverMeta, LiveRecentDelivery } from "./live-tracking-types";
 import { cn } from "@/lib/utils";
 import { COMPACT_STAT_LABEL_CLASS } from "./live-tracking-density";
@@ -30,6 +30,8 @@ export function LiveDriverDetailsPanel({
   restaurantPins = [],
   variant = "sidebar",
   onClose,
+  canViewActivity = false,
+  onViewAllActivity,
 }: {
   driver: DriverLiveLocation | null;
   meta?: LiveDriverMeta;
@@ -43,6 +45,8 @@ export function LiveDriverDetailsPanel({
   }>;
   variant?: "sidebar" | "stacked";
   onClose?: () => void;
+  canViewActivity?: boolean;
+  onViewAllActivity?: () => void;
 }) {
   const t = useTranslations("pages.liveTracking");
 
@@ -69,8 +73,20 @@ export function LiveDriverDetailsPanel({
   const latestOrder = recentOrders[0] ?? null;
 
   const gpsLive = isGpsLive(driver.lastSeenAt);
-  const dutyLabel = !gpsLive ? t("gpsLost") : driver.isOnDuty ? t("onDuty") : t("offDuty");
-  const dutyTone = !gpsLive ? "neutral" : driver.isOnDuty ? "success" : "neutral";
+  const dutyLabel = driver.isBlocked
+    ? t("chipBlocked")
+    : !gpsLive
+      ? t("gpsLost")
+      : driver.isOnDuty
+        ? t("onDuty")
+        : t("offDuty");
+  const dutyTone = driver.isBlocked
+    ? "danger"
+    : !gpsLive
+      ? "neutral"
+      : driver.isOnDuty
+        ? "success"
+        : "neutral";
 
   if (variant === "stacked") {
     return (
@@ -172,6 +188,15 @@ export function LiveDriverDetailsPanel({
               ))}
             </ul>
           </div>
+        ) : null}
+
+        {canViewActivity ? (
+          <DriverOperationTimeline
+            driverId={driver.driverId}
+            limit={4}
+            onViewAll={onViewAllActivity}
+            className="rounded-none border-0 border-t border-slate-200 bg-transparent px-3 py-2 dark:border-slate-700/80 dark:bg-transparent"
+          />
         ) : null}
       </TrackingGlassCard>
     );
@@ -326,19 +351,12 @@ export function LiveDriverDetailsPanel({
           </section>
         ) : null}
 
-        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex items-center justify-between gap-2">
-            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t("activityTimeline")}
-            </h4>
-            <Badge variant="secondary" className="text-[10px]">
-              {t("comingSoon")}
-            </Badge>
-          </div>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-300">
-            {t("comingSoon")}
-          </p>
-        </section>
+        {canViewActivity ? (
+          <DriverOperationTimeline
+            driverId={driver.driverId}
+            onViewAll={onViewAllActivity}
+          />
+        ) : null}
       </div>
     </TrackingGlassCard>
   );

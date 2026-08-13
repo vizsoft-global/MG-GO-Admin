@@ -100,16 +100,19 @@ export function LiveTrackingActivityView({
   activeTab,
   onTabChange,
   showActivityTab,
+  initialDriverId,
 }: {
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
   showActivityTab?: boolean;
+  /** Set when arriving from a driver popup's View all. */
+  initialDriverId?: string | null;
 }) {
   const t = useTranslations("pages.liveTracking");
   const locale = useLocale();
   const queryClient = useQueryClient();
 
-  const [driverId, setDriverId] = useState<string>("");
+  const [driverId, setDriverId] = useState<string>(initialDriverId ?? "");
   const [range, setRange] = useState<ActivityRange>("today");
   const [categories, setCategories] = useState<string[]>([]);
   const [failuresOnly, setFailuresOnly] = useState(false);

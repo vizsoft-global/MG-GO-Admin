@@ -60,11 +60,13 @@ export function LiveTrackingLiveView({
   activeTab,
   onTabChange,
   showActivityTab,
+  onViewDriverActivity,
 }: {
   fullscreen?: boolean;
   activeTab: TrackingViewTab;
   onTabChange: (tab: TrackingViewTab) => void;
   showActivityTab?: boolean;
+  onViewDriverActivity?: (driverId: string) => void;
 }) {
   const t = useTranslations("pages.liveTracking");
   const { locations } = useDriverLocationsRealtime();
@@ -447,6 +449,12 @@ export function LiveTrackingLiveView({
                   restaurantPins={selectedRestaurantPins}
                   variant="stacked"
                   onClose={() => setSelectedId(null)}
+                  canViewActivity={showActivityTab}
+                  onViewAllActivity={
+                    onViewDriverActivity
+                      ? () => onViewDriverActivity(selectedDriver.driverId)
+                      : undefined
+                  }
                 />
               </div>
             </div>
