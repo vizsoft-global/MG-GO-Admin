@@ -547,6 +547,8 @@ export function DriverFormSheet({
               placeholders={{
                 fullName: tNew("placeholders.fullName"),
                 civilId: tNew("placeholders.civilId"),
+                employeeId: tDrivers("employeeIdPlaceholder"),
+                employeeIdHelp: tDrivers("employeeIdHelp"),
                 nationality: tNew("placeholders.nationality"),
                 searchNationality: tNew("placeholders.searchNationality"),
               }}

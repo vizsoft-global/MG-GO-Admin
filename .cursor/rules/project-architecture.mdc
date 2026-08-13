@@ -227,6 +227,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-13` — **Add Driver employee ID is 4–8 digits**, matching app login. Admin previously allowed 1–8 so a 3-digit ID could be saved and then rejected on the login screen.
+
 - `[admin only] 2026-08-13` — **Editing an Active driver no longer resets status to Pending.** Restaurant save used delete-all-then-insert; the mapping trigger saw a empty set and downgraded `drivers.status`. Sync now inserts first, then removes extras.
 
 - `[admin+app] 2026-08-13` — **Sign out clocks the driver out.** Releasing the active device (`driver_release_device_session`) now closes the open attendance log and online session (`check_out_reason = manual`). Profile Sign out calls `driver_set_duty_state(false, false)` first; a kicked device does not. Work-time stops and the next login is not still Clocked In. Migration `20260907160000`.

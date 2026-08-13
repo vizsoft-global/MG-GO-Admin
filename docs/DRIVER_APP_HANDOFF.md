@@ -77,7 +77,7 @@ Staff use **Verify & approve** on `/drivers/[id]` (or bulk import with **Approve
 - Inserts `profiles` + `drivers`, copies `driver_intake_restaurants` → `driver_restaurants`, sets `drivers.status = 'active'`, mints `app_passcode`, marks intake `linked`.
 - Driver signs in with **driver_code + passcode** via edge function `driver-passcode-login` (magic link on synthetic email).
 
-`employee_id` on intakes/drivers: **required**, 1–8 digits, unique.
+`employee_id` on intakes/drivers: **required**, 4–8 digits, unique (same as app login).
 
 `nationality` on intakes/drivers: **optional**, ISO 3166-1 alpha-2 code (e.g. `KW`, `IN`). Admin create/edit uses searchable country list; copied to `drivers` on **Verify & approve**.
 
@@ -101,7 +101,7 @@ For intakes still `linked = false` from before admin-first approval, the driver 
 3. **Else** (no intake): create minimal `profiles` + `drivers` (self-signup path).
 
 Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edit; auth users are created on **Verify & approve** (not on intake insert alone).
-- `employee_id` required on every intake (1–8 digits)
+- `employee_id` required on every intake (4–8 digits)
 - `linked = false` until **Verify & approve** (or legacy OTP link)
 
 | Table / bucket | Admin | Driver app |
@@ -993,7 +993,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-13 — [admin+app] Sign out of the active device clocks the driver out (`driver_release_device_session` + Profile `clockOut: true`) so work-time stops and Clocked In does not survive logout. Migration `20260907160000`.*
+*Last synced: 2026-08-13 — [admin+app] Admin employee ID is 4–8 digits, matching app login (`^\d{4,8}$`). One existing 3-digit production row is left as-is (DB CHECK stays 1–8); new create/edit/import reject shorter IDs.*
+
+*Prior: 2026-08-13 — [admin+app] Sign out of the active device clocks the driver out (`driver_release_device_session` + Profile `clockOut: true`) so work-time stops and Clocked In does not survive logout. Migration `20260907160000`.*
 
 *Prior: 2026-08-13 — [admin+app] Home This Week’s Progress Time in uses attendance days in the current Kuwait week (`driver_week_online_seconds`); stale last-week `is_online` sessions are ignored. Migration `20260907140000`.*
 

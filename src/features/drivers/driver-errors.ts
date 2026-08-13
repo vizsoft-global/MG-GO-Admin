@@ -52,7 +52,7 @@ export function mapDriverDbError(
   return "save_failed";
 }
 
-const EMPLOYEE_ID_RE = /^[0-9]{1,8}$/;
+const EMPLOYEE_ID_RE = /^[0-9]{4,8}$/;
 
 export function normalizeEmployeeId(raw: string): string | null {
   const trimmed = raw.trim();
