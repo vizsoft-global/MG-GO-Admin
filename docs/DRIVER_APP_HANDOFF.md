@@ -463,6 +463,25 @@ supabase.channel(`notifications:driver:${driverId}`).on(...)
 
 ---
 
+## 6b. Operation audit stream (`driver_operation_events`)
+
+**Nothing to implement.** This is recorded server-side, inside the RPCs the app already calls. It is documented here because it changes what Admin can see, and because two rules constrain future RPC changes.
+
+Every meaningful operation a driver performs now writes an append-only row: auth and device, duty and shift, delivery, location zone flips, requests, e-sign, visits, notifications, profile and security. Both outcomes are recorded — a successful pickup and a pickup refused for `delivery_out_of_range` both leave a row, and failures that `RAISE` are written on a separate connection so they survive the rollback that discards everything else.
+
+**Error contract is unchanged.** Every code the app matches on (`active_pickup_exists`, `duplicate_order_id`, `delivery_out_of_range`, `location_required`, `invalid_order_id`, `shift_required`, `shift_locked`, `sessions_overlap`, `object_key_required`, `invalid_object_key`, …) still arrives with the same message and the same SQLSTATE. If a code ever appears to change, that is a bug in the audit layer, not a new contract.
+
+Two rules for anyone adding a driver RPC:
+
+- Never call `log_driver_operation_autonomous` from `driver_report_location` or `driver_heartbeat`. Each call opens a database connection; at heartbeat frequency that exhausts the pool.
+- A failure that raises needs the autonomous emitter (or `driver_ops_fail`) to be recorded at all. A failure returned as `{ok:false}` can use the plain in-transaction emitter.
+
+What the driver sees in Admin: **Live Tracking → Activity** (live feed, filters, CSV export), a recent-operations timeline in the map popup, and an **Activity** tab on `/drivers/[id]`. Staff need `driver_ops.view`; export needs `driver_ops.export`. Riders cannot read the table — RLS grants SELECT to admin panel users only, and no role can INSERT except through the emitters.
+
+Retention: 90 days (`app_settings.driver_operation_events_retention_days`), trimmed daily. Full operation-by-operation coverage, including what is deliberately **not** recorded and why, is in [`docs/DRIVER_OPS_COVERAGE.md`](DRIVER_OPS_COVERAGE.md).
+
+---
+
 ## 7. Push notifications (Notification Center v2)
 
 Admin now sends via `notification_campaigns` + `notification_dispatch_items` (FCM provider), not direct inserts to legacy `notifications`.

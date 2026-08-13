@@ -6272,6 +6272,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      _end_driver_duty_keep_gps: {
+        Args: { p_driver_id: string; p_reason?: string }
+        Returns: undefined
+      }
       _haversine_meters: {
         Args: { p_lat1: number; p_lat2: number; p_lng1: number; p_lng2: number }
         Returns: number
@@ -6586,6 +6590,7 @@ export type Database = {
       allocate_visit_booking_code: { Args: never; Returns: string }
       approve_payout_run: { Args: { p_run_id: string }; Returns: undefined }
       archive_driver_intake: { Args: { p_intake_id: string }; Returns: Json }
+      assert_external_order_id: { Args: { p_raw: string }; Returns: string }
       claim_super_admin: { Args: { p_user_id: string }; Returns: boolean }
       cleanup_driver_location_events: {
         Args: { p_batch?: number; p_keep?: string }
@@ -6940,6 +6945,17 @@ export type Database = {
       }
       driver_notifications_unread_count: { Args: never; Returns: number }
       driver_ops_audit_health: { Args: never; Returns: Json }
+      driver_ops_fail: {
+        Args: {
+          p_category: string
+          p_context?: Json
+          p_driver_id: string
+          p_error_code: string
+          p_operation_key: string
+          p_source_name: string
+        }
+        Returns: undefined
+      }
       driver_record_app_version: {
         Args: {
           p_channel?: string
