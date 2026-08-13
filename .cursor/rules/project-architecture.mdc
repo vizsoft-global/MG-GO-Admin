@@ -227,6 +227,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-13` — **Map-only fullscreen tooltip says Exit Fullscreen.** The Live Tracking toolbar always used the enter-mode `fullscreen` label even after the map filled the viewport.
+
 - `[admin+app] 2026-08-13` — **Add Driver employee ID is 4–8 digits**, matching app login. Admin previously allowed 1–8 so a 3-digit ID could be saved and then rejected on the login screen.
 
 - `[admin only] 2026-08-13` — **Editing an Active driver no longer resets status to Pending.** Restaurant save used delete-all-then-insert; the mapping trigger saw a empty set and downgraded `drivers.status`. Sync now inserts first, then removes extras.

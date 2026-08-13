@@ -379,6 +379,7 @@ export function LiveTrackingLiveView({
             onToggleGeofences={() => setGeofencesEnabled((prev) => !prev)}
             onRecenter={() => mapActions?.recenter()}
             onMapFullscreen={() => setMapOnlyFullscreen((prev) => !prev)}
+            isMapFullscreen={mapOnlyFullscreen}
             onZoomIn={() => mapActions?.zoomIn()}
             onZoomOut={() => mapActions?.zoomOut()}
             prefs={mapPrefs}
