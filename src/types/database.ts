@@ -388,6 +388,8 @@ export type Database = {
           driver_app_sideload_updates_enabled: boolean
           driver_app_splash_url: string | null
           driver_app_title: string
+          driver_location_events_retention_days: number
+          driver_ops_log_retention_days: number
           esign_screenshot_default: boolean
           feature_two_stage_delivery: boolean
           font_family: string
@@ -423,6 +425,8 @@ export type Database = {
           driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
+          driver_location_events_retention_days?: number
+          driver_ops_log_retention_days?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           font_family?: string
@@ -458,6 +462,8 @@ export type Database = {
           driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
+          driver_location_events_retention_days?: number
+          driver_ops_log_retention_days?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           font_family?: string
@@ -6581,6 +6587,14 @@ export type Database = {
       approve_payout_run: { Args: { p_run_id: string }; Returns: undefined }
       archive_driver_intake: { Args: { p_intake_id: string }; Returns: Json }
       claim_super_admin: { Args: { p_user_id: string }; Returns: boolean }
+      cleanup_driver_location_events: {
+        Args: { p_batch?: number; p_keep?: string }
+        Returns: number
+      }
+      cleanup_driver_operation_events: {
+        Args: { p_batch?: number; p_keep?: string }
+        Returns: number
+      }
       cleanup_stale_driver_locations: {
         Args: { p_max_age?: string }
         Returns: number
@@ -6925,6 +6939,7 @@ export type Database = {
         Returns: number
       }
       driver_notifications_unread_count: { Args: never; Returns: number }
+      driver_ops_audit_health: { Args: never; Returns: Json }
       driver_record_app_version: {
         Args: {
           p_channel?: string
