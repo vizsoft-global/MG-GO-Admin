@@ -227,6 +227,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-13` — **Live Tracking KPI icons stay inside their tiles**, and driver-popup / Fleet insights labels wrap instead of clipping (`CURRE…`, `ACCUR…`). Compact `MetricTile` + 2-col stats + responsive insights grid.
+
 - `[admin+app] 2026-08-13` — **Live Tracking Partner filter lists the Partner module**, not only partners that currently have assigned drivers. Driver list/map status uses duty + live speed: logged-out is Offline (not last `moving` stamp); coarse GPS still heartbeats last-good coords but classifies motion from live speed.
 
 - `[admin only] 2026-08-13` — **Delivery status updates refresh the list immediately**, and delivery chips match the app (Under Review amber, Cancelled grey).

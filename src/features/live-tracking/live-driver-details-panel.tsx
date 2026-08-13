@@ -21,6 +21,7 @@ import {
 import { TrackingGlassCard } from "./tracking-shell";
 import type { LiveDriverMeta, LiveRecentDelivery } from "./live-tracking-types";
 import { cn } from "@/lib/utils";
+import { COMPACT_STAT_LABEL_CLASS } from "./live-tracking-density";
 
 export function LiveDriverDetailsPanel({
   driver,
@@ -116,7 +117,7 @@ export function LiveDriverDetailsPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-1.5 px-3 py-2">
+        <div className="grid grid-cols-2 gap-1.5 px-3 py-2">
           <CompactStat label={t("currentSpeed")} value={formatSpeedKmh(driver.speedMps)} />
           <CompactStat label={t("colBattery")} value={formatBatteryLevel(driver.batteryPct)} />
           <CompactStat label={t("colAccuracy")} value={formatAccuracyMeters(driver.accuracyMeters)} />
@@ -359,9 +360,7 @@ function IconButton({ icon: Icon, compact }: { icon: typeof Phone; compact?: boo
 function CompactStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 dark:border-slate-700 dark:bg-slate-800/60">
-      <p className="truncate text-[9px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        {label}
-      </p>
+      <p className={COMPACT_STAT_LABEL_CLASS}>{label}</p>
       <p className="truncate text-[11px] font-semibold tabular-nums text-slate-900 dark:text-slate-100">
         {value}
       </p>

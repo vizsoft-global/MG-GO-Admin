@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { AlertTriangle, BatteryLow, Gauge, Timer } from "lucide-react";
 import type { DriverLiveLocation } from "@/features/locations/types";
 import { liveListStatus } from "./tracking-status";
+import { INSIGHTS_GRID_CLASS } from "./live-tracking-density";
 import { cn } from "@/lib/utils";
 import { TrackingGlassCard } from "./tracking-shell";
 
@@ -90,19 +91,21 @@ export function TrackingInsightsPanel({
           {t("aiInsights")}
         </h3>
       </div>
-      <ul className="grid grid-cols-6 gap-1.5">
+      <ul className={INSIGHTS_GRID_CLASS}>
         {insights.map((item) => (
           <li
             key={item.id}
-            className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-xs transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:hover:bg-slate-800"
+            className="flex min-w-0 flex-col gap-0.5 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1.5 text-xs transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:hover:bg-slate-800"
           >
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white dark:bg-slate-900">
-              <item.icon className={cnIcon(item.tone)} />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[10px] leading-tight text-slate-700 dark:text-slate-200">
+            <div className="flex items-center justify-between gap-1">
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-white dark:bg-slate-900">
+                <item.icon className={cnIcon(item.tone)} />
+              </span>
+              <span className={cnCount(item.count)}>{item.count}</span>
+            </div>
+            <span className="text-[10px] leading-tight text-slate-700 dark:text-slate-200">
               {item.label}
             </span>
-            <span className={cnCount(item.count)}>{item.count}</span>
           </li>
         ))}
       </ul>

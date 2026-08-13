@@ -148,6 +148,7 @@ export function FleetOverviewPanel({
               value={tile.value}
               tone={tile.tone}
               icon={tile.icon}
+              compact
               trendPercent={undefined}
             />
           ))}
