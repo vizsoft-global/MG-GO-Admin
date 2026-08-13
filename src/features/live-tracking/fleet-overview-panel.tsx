@@ -18,6 +18,7 @@ import { SearchSelect } from "@/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { LiveDriverList } from "./live-driver-list";
+import { DRIVER_LIST_STACKED_MAX } from "./tracking-command-layout";
 import { TrackingGlassCard } from "./tracking-shell";
 import type { LiveTrackingFilterState } from "./live-tracking-filters";
 import { TrackingTabSwitcher, type TrackingViewTab } from "./tracking-tab-switcher";
@@ -133,7 +134,7 @@ export function FleetOverviewPanel({
   return (
     <TrackingGlassCard
       className={cn(
-        "flex h-full min-h-0 flex-1 flex-col overflow-hidden border-slate-200 bg-white dark:border-slate-700/80 dark:bg-slate-900",
+        "flex h-full min-h-0 flex-1 flex-col overflow-hidden border-slate-200 bg-white dark:border-slate-700/80 dark:bg-slate-900 max-xl:h-auto max-xl:flex-none",
         className,
       )}
     >
@@ -153,9 +154,8 @@ export function FleetOverviewPanel({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="space-y-3 px-3 py-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden max-xl:h-auto max-xl:overflow-visible">
+        <div className="shrink-0 space-y-3 px-3 py-3">
             <div className="relative">
           <Search className="pointer-events-none absolute start-2.5 top-2.5 h-4 w-4 text-slate-400" />
           <Input
@@ -351,8 +351,14 @@ export function FleetOverviewPanel({
             </SelectContent>
           </Select>
             </div>
-          </div>
+        </div>
 
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto",
+            DRIVER_LIST_STACKED_MAX,
+          )}
+        >
           <div className="border-t border-slate-200 dark:border-slate-700/80">
             <div className="border-b border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700/70 dark:bg-slate-900/40 dark:text-slate-400">
               {t("trackedCount", { count: drivers.length })}

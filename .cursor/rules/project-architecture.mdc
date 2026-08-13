@@ -227,7 +227,15 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-13` — **Live Tracking Partner filter lists the Partner module**, not only partners that currently have assigned drivers. Driver list/map status uses duty + live speed: logged-out is Offline (not last `moving` stamp); coarse GPS still heartbeats last-good coords but classifies motion from live speed.
+
+- `[admin only] 2026-08-13` — **Delivery status updates refresh the list immediately**, and delivery chips match the app (Under Review amber, Cancelled grey).
+
+- `[admin only] 2026-08-13` — **Live Tracking stacks the driver list above a usable map below 1280px.** The whole sidebar was capped at 420px (hiding the list) and the map collapsed to a sliver because `flex-1 min-h-0` had no parent height.
+
 - `[admin only] 2026-08-13` — **Deleting a cancelled delivery no longer fails on earnings.** The recalc trigger passed a null `earn_date` into `driver_earnings_daily` (23502). Skip when `delivered_at` is missing. Migration `20260907170000`.
+
+- `[admin only] 2026-08-13` — **Live Tracking stacked map keeps above-fold height.** Below `xl`, fillParent no longer uses `min-h-0` + `%` of an auto parent (map collapsed to a sliver above Insights/Quick Actions at 768–900px). Map frame/stage use `min-h-[480px]` + `h-[calc(100dvh-9rem)]`; footer stays `md` 2-col.
 
 - `[admin only] 2026-08-13` — **Map-only fullscreen tooltip says Exit Fullscreen.** The Live Tracking toolbar always used the enter-mode `fullscreen` label even after the map filled the viewport.
 

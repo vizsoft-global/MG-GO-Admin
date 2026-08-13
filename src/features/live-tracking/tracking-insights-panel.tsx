@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, BatteryLow, Gauge, Timer } from "lucide-react";
 import type { DriverLiveLocation } from "@/features/locations/types";
+import { liveListStatus } from "./tracking-status";
 import { cn } from "@/lib/utils";
 import { TrackingGlassCard } from "./tracking-shell";
 
@@ -24,7 +25,7 @@ export function TrackingInsightsPanel({
     const overspeed = drivers.filter(
       (d) => d.speedMps != null && d.speedMps * 3.6 > OVERSPEED_KMH,
     ).length;
-    const idle = drivers.filter((d) => d.trackingStatus === "idle").length;
+    const idle = drivers.filter((d) => liveListStatus(d) === "idle").length;
     const batteryLow = drivers.filter(
       (d) => d.batteryPct != null && d.batteryPct < 20,
     ).length;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { LIVE_GPS_MAX_AGE_MS, isGpsLive, shouldShowOnLiveMap } from "./location-status";
+import { LIVE_GPS_MAX_AGE_MS, derivePinStatus, isGpsLive, shouldShowOnLiveMap } from "./location-status";
 
 const NOW = Date.parse("2026-08-13T09:00:00.000Z");
 
@@ -38,6 +38,21 @@ describe("shouldShowOnLiveMap", () => {
         NOW,
       ),
       true,
+    );
+  });
+});
+
+describe("derivePinStatus", () => {
+  it("does not keep a logged-out driver as an active/moving pin", () => {
+    assert.equal(
+      derivePinStatus({
+        zoneStatus: "in_zone",
+        trackingStatus: "moving",
+        lastSeenAt: isoMinutesAgo(0.1),
+        isOnDuty: false,
+        speedMps: 8,
+      }),
+      "idle",
     );
   });
 });

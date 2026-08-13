@@ -10,6 +10,7 @@ import { fetchDriversForAdmin } from "@/features/drivers/drivers-actions";
 import { fetchRecentDeliveriesForDriver } from "@/features/deliveries/deliveries-actions";
 import { fetchDriverAssignedRestaurantPins } from "@/features/locations/locations-actions";
 import { fetchZones } from "@/features/zones/use-zones";
+import { fetchPartnerSelectOptions } from "@/features/partners/use-partners";
 import { normalizeZoneColor } from "@/features/zones/zone-colors";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
@@ -18,6 +19,7 @@ import {
   matchesLiveTrackingFilters,
   type LiveTrackingFilterState,
 } from "./live-tracking-filters";
+import { buildPartnerFilterOptions } from "./partner-filter-options";
 import { FleetOverviewPanel } from "./fleet-overview-panel";
 import { LiveDriverDetailsPanel } from "./live-driver-details-panel";
 import { TrackingInsightsPanel } from "./tracking-insights-panel";
@@ -26,6 +28,7 @@ import {
   TrackingCommandLayout,
   TrackingMapStage,
 } from "./tracking-shell";
+import { trackingMapFrameFillClass } from "./tracking-command-layout";
 import {
   TrackingMapLegend,
   TrackingMapToolbar,
@@ -92,6 +95,11 @@ export function LiveTrackingLiveView({
     queryFn: () => fetchDriversForAdmin({ archived: false }),
   });
 
+  const { data: partners = [] } = useQuery({
+    queryKey: queryKeys.liveTracking.partnerOptions(),
+    queryFn: fetchPartnerSelectOptions,
+  });
+
   const { data: zones = [] } = useQuery({
     queryKey: queryKeys.zones.list(),
     queryFn: fetchZones,
@@ -108,10 +116,12 @@ export function LiveTrackingLiveView({
       { table: "driver_intakes" },
       { table: "zones" },
       { table: "zone_geofence_settings" },
+      { table: "partners" },
     ],
     invalidateKeys: [
       queryKeys.drivers.all(),
       queryKeys.zones.all(),
+      queryKeys.liveTracking.partnerOptions(),
     ],
   });
 
@@ -173,6 +183,8 @@ export function LiveTrackingLiveView({
         pinStatus: loc.pinStatus,
         trackingStatus: loc.trackingStatus,
         isOnDuty: loc.isOnDuty,
+        speedMps: loc.speedMps,
+        lastSeenAt: loc.lastSeenAt,
       });
       return visibleStatuses.includes(status);
     });
@@ -292,7 +304,7 @@ export function LiveTrackingLiveView({
   }, [zones, geofencesEnabled, zoneDriverCounts]);
 
   const mapHeightClass =
-    fullscreen || mapOnlyFullscreen ? "min-h-0 flex-1 h-full" : "min-h-0 flex-1";
+    fullscreen || mapOnlyFullscreen ? "min-h-0 flex-1 h-full" : undefined;
 
   const zoneFilterOptions = useMemo(
     () => [
@@ -302,14 +314,10 @@ export function LiveTrackingLiveView({
     [t, zones],
   );
 
-  const partnerFilterOptions = useMemo(() => {
-    const uniq = new Map<string, string>();
-    for (const row of driversMeta) {
-      if (!row.partner_id || !row.partner_name) continue;
-      uniq.set(row.partner_id, row.partner_name);
-    }
-    return [{ id: "all", label: t("allPartners") }, ...Array.from(uniq, ([id, label]) => ({ id, label }))];
-  }, [driversMeta, t]);
+  const partnerFilterOptions = useMemo(
+    () => buildPartnerFilterOptions(partners, t("allPartners")),
+    [partners, t],
+  );
 
   return (
     <TrackingCommandLayout
@@ -348,7 +356,7 @@ export function LiveTrackingLiveView({
           fillParent={!fullscreen && !mapOnlyFullscreen}
           mapHeightClass={mapHeightClass}
           frameClassName={cn(
-            !fullscreen && !mapOnlyFullscreen && "min-h-0 flex-1 shrink",
+            !fullscreen && !mapOnlyFullscreen && trackingMapFrameFillClass(),
             mapOnlyFullscreen && "fixed inset-2 z-50 rounded-xl border bg-background shadow-2xl",
           )}
         >

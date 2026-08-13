@@ -4,6 +4,8 @@ const MOVING_STALE_MS = 45 * 1000;
 const IDLE_STALE_MS = 2 * 60 * 1000;
 /** Drivers with GPS older than this are excluded from the live map and counts. */
 export const LIVE_GPS_MAX_AGE_MS = 8 * 60 * 1000;
+/** Matches driver-app AdaptiveLocationScheduler.movingSpeedThresholdMps. */
+export const MOVING_SPEED_THRESHOLD_MPS = 1.5;
 
 export function parseTrackingStatus(value: string): TrackingStatus {
   if (value === "moving" || value === "delivery_submit") return value;
@@ -18,6 +20,10 @@ export function parseZoneStatus(value: string | null): ZoneStatus | null {
 export function isGpsLive(lastSeenAt: string, now = Date.now()): boolean {
   const age = now - new Date(lastSeenAt).getTime();
   return age <= LIVE_GPS_MAX_AGE_MS;
+}
+
+export function isMovingSpeed(speedMps: number | null | undefined): boolean {
+  return speedMps != null && Number.isFinite(speedMps) && speedMps >= MOVING_SPEED_THRESHOLD_MPS;
 }
 
 /** On-duty drivers stay on the live map at last-known coords when GPS goes quiet. */
@@ -43,10 +49,17 @@ export function derivePinStatus(input: {
   zoneStatus: ZoneStatus | null;
   trackingStatus: TrackingStatus;
   lastSeenAt: string;
+  isOnDuty?: boolean;
+  speedMps?: number | null;
 }): PinStatus {
+  if (input.isOnDuty === false) return "idle";
   if (input.zoneStatus === "out_of_zone") return "alert";
-  if (isGpsStale(input.lastSeenAt, input.trackingStatus)) return "alert";
-  if (input.trackingStatus === "moving") return "active";
+  const moving =
+    input.trackingStatus === "moving" ||
+    input.trackingStatus === "delivery_submit" ||
+    (isMovingSpeed(input.speedMps) && isGpsLive(input.lastSeenAt));
+  if (isGpsStale(input.lastSeenAt, moving ? "moving" : input.trackingStatus)) return "alert";
+  if (moving) return "active";
   return "idle";
 }
 
@@ -93,6 +106,8 @@ export function enrichLiveLocation(
       zoneStatus: row.zoneStatus,
       trackingStatus: row.trackingStatus,
       lastSeenAt: row.lastSeenAt,
+      isOnDuty: row.isOnDuty,
+      speedMps: row.speedMps,
     }),
   };
 }

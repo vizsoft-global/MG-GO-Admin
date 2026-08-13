@@ -4,6 +4,14 @@ import type { ReactNode } from "react";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { cn } from "@/lib/utils";
+import {
+  trackingCommandAsideClass,
+  trackingCommandGridClass,
+  trackingCommandMapSectionClass,
+  trackingCommandShellClass,
+  trackingMapInnerFillClass,
+  trackingMapStageFillParentClass,
+} from "./tracking-command-layout";
 
 export function TrackingGlassCard({
   children,
@@ -37,48 +45,24 @@ export function TrackingCommandLayout({
   className?: string;
   fullscreen?: boolean;
 }) {
-  const sharedHeight = cn(LAYOUT.mapAboveFoldHeight, LAYOUT.mapAboveFoldMin);
   const hasFooter = Boolean(footer);
-  const fullViewport = cn(LAYOUT.commandViewportHeight, LAYOUT.commandViewportMin);
 
   return (
-    <div
-      className={cn(
-        "flex min-h-0 flex-col",
-        LAYOUT.panelGap,
-        fullscreen && "h-full",
-        !fullscreen && hasFooter && cn(fullViewport, "max-xl:h-auto"),
-      )}
-    >
+    <div className={trackingCommandShellClass({ fullscreen: Boolean(fullscreen), hasFooter })}>
       <div
         className={cn(
-          "grid min-h-0 flex-1",
-          LAYOUT.panelGap,
-          fullscreen
-            ? "h-full grid-rows-1 xl:grid-cols-[minmax(240px,1fr)_minmax(0,4fr)]"
-            : cn("xl:grid-cols-[minmax(240px,1fr)_minmax(0,4fr)]", "xl:items-stretch"),
-          "max-xl:grid-cols-1",
+          trackingCommandGridClass({ fullscreen: Boolean(fullscreen) }),
           className,
         )}
       >
-        <aside
-          className={cn(
-            "flex min-h-0 flex-col overflow-hidden",
-            LAYOUT.panelGap,
-            !fullscreen && !hasFooter && cn("max-xl:max-h-[420px]", sharedHeight),
-            !fullscreen && hasFooter && "max-xl:max-h-[420px]",
-            fullscreen && "h-full min-h-0",
-          )}
-        >
+        <aside className={trackingCommandAsideClass({ fullscreen: Boolean(fullscreen), hasFooter })}>
           {left}
         </aside>
         <section
-          className={cn(
-            "flex min-h-0 flex-col",
-            LAYOUT.panelGap,
-            fullscreen && "h-full min-h-0",
-            !fullscreen && !hasFooter && sharedHeight,
-          )}
+          className={trackingCommandMapSectionClass({
+            fullscreen: Boolean(fullscreen),
+            hasFooter,
+          })}
         >
           {center}
         </section>
@@ -105,7 +89,7 @@ export function TrackingMapFrame({
         className,
       )}
     >
-      <div className={cn("relative min-h-0", mapHeightClass)}>{children}</div>
+      <div className={cn("relative", mapHeightClass)}>{children}</div>
     </div>
   );
 }
@@ -129,21 +113,22 @@ export function TrackingMapStage({
   fillParent?: boolean;
 }) {
   const aboveFoldHeight = cn(LAYOUT.mapAboveFoldHeight, LAYOUT.mapAboveFoldMin);
-  const useExternalHeight = fullscreen || fillParent;
-  const resolvedMapHeight = useExternalHeight
+  const resolvedMapHeight = fullscreen
     ? (mapHeightClass ?? "min-h-0 h-full flex-1")
-    : footer
-      ? aboveFoldHeight
-      : (mapHeightClass ?? aboveFoldHeight);
+    : fillParent
+      ? trackingMapInnerFillClass()
+      : footer
+        ? aboveFoldHeight
+        : (mapHeightClass ?? aboveFoldHeight);
 
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-col",
+        "flex flex-col",
         LAYOUT.panelGap,
         fullscreen && "h-full min-h-0",
-        fillParent && !fullscreen && "min-h-0 flex-1",
-        !useExternalHeight && !footer && aboveFoldHeight,
+        fillParent && !fullscreen && trackingMapStageFillParentClass(),
+        !fullscreen && !fillParent && !footer && aboveFoldHeight,
       )}
     >
       <TrackingMapFrame mapHeightClass={resolvedMapHeight} className={frameClassName}>

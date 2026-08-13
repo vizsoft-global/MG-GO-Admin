@@ -36,6 +36,7 @@ export const queryKeys = {
       ["live-tracking", "history-active-dates", driverId, yearMonth] as const,
     restaurantPins: (driverId: string) =>
       ["live-tracking", "restaurant-pins", driverId] as const,
+    partnerOptions: () => ["live-tracking", "partner-options"] as const,
   },
   partners: {
     all: () => ["partners"] as const,

@@ -164,7 +164,8 @@ function patchDriverDuty(driverId: string, isOnDuty: boolean) {
   const prev = cacheById.get(driverId);
   if (!prev || prev.isOnDuty === isOnDuty) return;
 
-  cacheById.set(driverId, { ...prev, isOnDuty });
+  const { pinStatus: _pin, ...rest } = prev;
+  cacheById.set(driverId, enrichLiveLocation({ ...rest, isOnDuty }));
   scheduleNotify();
 }
 

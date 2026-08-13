@@ -235,6 +235,8 @@ export function TrackingSelectedDriverPopup({
     pinStatus: driver.pinStatus,
     trackingStatus: driver.trackingStatus,
     isOnDuty: driver.isOnDuty,
+    speedMps: driver.speedMps,
+    lastSeenAt: driver.lastSeenAt,
   });
   const speed = formatSpeedKmh(driver.speedMps);
   const gpsQuality = gpsQualityFromAccuracy(driver.accuracyMeters);
