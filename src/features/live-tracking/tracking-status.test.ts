@@ -5,6 +5,7 @@ import {
   LEGEND_FILTERABLE_STATUSES,
   LEGEND_STATUSES,
   liveListStatus,
+  liveListStatusTone,
 } from "./tracking-status";
 
 const NOW = Date.parse("2026-08-13T12:00:00.000Z");
@@ -74,6 +75,46 @@ describe("liveListStatus", () => {
       "blocked",
     );
   });
+
+  it("shows Delivered after finish when there is no active pickup", () => {
+    assert.equal(
+      liveListStatus({
+        isOnDuty: true,
+        trackingStatus: "delivery_submit",
+        speedMps: 0,
+        lastSeenAt: fresh,
+        now: NOW,
+        activeDeliveryId: null,
+      }),
+      "delivered",
+    );
+  });
+
+  it("keeps On Delivery while an active pickup is still open", () => {
+    assert.equal(
+      liveListStatus({
+        isOnDuty: true,
+        trackingStatus: "delivery_submit",
+        speedMps: 0,
+        lastSeenAt: fresh,
+        now: NOW,
+        activeDeliveryId: "del-1",
+      }),
+      "delivery_submit",
+    );
+  });
+});
+
+describe("liveListStatusTone", () => {
+  it("paints Moving and Idle red when the driver is out of zone", () => {
+    assert.equal(liveListStatusTone("moving", "out_of_zone"), "danger");
+    assert.equal(liveListStatusTone("idle", "out_of_zone"), "danger");
+  });
+
+  it("keeps in-zone Idle yellow and Moving green", () => {
+    assert.equal(liveListStatusTone("idle", "in_zone"), "warning");
+    assert.equal(liveListStatusTone("moving", "in_zone"), "success");
+  });
 });
 
 describe("fleetStatusFromLocation", () => {
@@ -88,6 +129,21 @@ describe("fleetStatusFromLocation", () => {
         now: NOW,
       }),
       "offline",
+    );
+  });
+
+  it("does not keep Delivering after the active pickup is cleared", () => {
+    assert.equal(
+      fleetStatusFromLocation({
+        pinStatus: "idle",
+        trackingStatus: "delivery_submit",
+        isOnDuty: true,
+        speedMps: 0,
+        lastSeenAt: fresh,
+        now: NOW,
+        activeDeliveryId: null,
+      }),
+      "idle",
     );
   });
 

@@ -245,6 +245,7 @@ export function TrackingSelectedDriverPopup({
     isBlocked: driver.isBlocked,
     speedMps: driver.speedMps,
     lastSeenAt: driver.lastSeenAt,
+    activeDeliveryId: driver.activeDeliveryId,
   });
   const speed = formatSpeedKmh(driver.speedMps);
   const gpsQuality = gpsQualityFromAccuracy(driver.accuracyMeters);

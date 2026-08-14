@@ -120,6 +120,7 @@ export function liveLocationPayloadChanged(
         | "isBlocked"
         | "speedMps"
         | "batteryPct"
+        | "activeDeliveryId"
         | "lastSeenAt"
       >
     | undefined,
@@ -134,6 +135,7 @@ export function liveLocationPayloadChanged(
     | "isBlocked"
     | "speedMps"
     | "batteryPct"
+    | "activeDeliveryId"
     | "lastSeenAt"
   >,
 ): boolean {
@@ -141,6 +143,7 @@ export function liveLocationPayloadChanged(
   if (prev.latitude !== next.latitude || prev.longitude !== next.longitude) return true;
   if (prev.trackingStatus !== next.trackingStatus) return true;
   if (prev.zoneStatus !== next.zoneStatus) return true;
+  if (prev.activeDeliveryId !== next.activeDeliveryId) return true;
   if (prev.pinStatus !== next.pinStatus) return true;
   if (prev.isOnDuty !== next.isOnDuty) return true;
   if (prev.isBlocked !== next.isBlocked) return true;

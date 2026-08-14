@@ -210,6 +210,7 @@ export function LiveTrackingLiveView({
         speedMps: loc.speedMps,
         lastSeenAt: loc.lastSeenAt,
         now: nowTick,
+        activeDeliveryId: loc.activeDeliveryId,
       });
       return visibleStatuses.includes(status);
     });
@@ -302,7 +303,10 @@ export function LiveTrackingLiveView({
   );
 
   const inProgressCount = useMemo(
-    () => liveDrivers.filter((loc) => loc.trackingStatus === "delivery_submit").length,
+    () =>
+      liveDrivers.filter(
+        (loc) => loc.trackingStatus === "delivery_submit" && loc.activeDeliveryId,
+      ).length,
     [liveDrivers],
   );
 

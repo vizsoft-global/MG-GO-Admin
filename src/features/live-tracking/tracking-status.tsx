@@ -14,7 +14,13 @@ export type FleetStatusKey =
   | "alert"
   | "cluster";
 
-export type LiveListStatus = "offline" | "moving" | "idle" | "delivery_submit" | "blocked";
+export type LiveListStatus =
+  | "offline"
+  | "moving"
+  | "idle"
+  | "delivery_submit"
+  | "delivered"
+  | "blocked";
 
 const STATUS_TONES: Record<FleetStatusKey, Tone> = {
   available: "success",
@@ -33,14 +39,28 @@ export function liveListStatus(input: {
   lastSeenAt: string;
   now?: number;
   isBlocked?: boolean;
+  activeDeliveryId?: string | null;
 }): LiveListStatus {
   if (input.isBlocked) return "blocked";
   if (!input.isOnDuty) return "offline";
   if (!input.lastSeenAt || !isGpsLive(input.lastSeenAt, input.now)) return "offline";
-  if (input.trackingStatus === "delivery_submit") return "delivery_submit";
+  if (input.trackingStatus === "delivery_submit") {
+    return input.activeDeliveryId ? "delivery_submit" : "delivered";
+  }
   if (input.trackingStatus === "moving") return "moving";
   if (isMovingSpeed(input.speedMps)) return "moving";
   return "idle";
+}
+
+export function liveListStatusTone(
+  status: LiveListStatus,
+  zoneStatus: "in_zone" | "out_of_zone" | "unknown" | null,
+): "success" | "warning" | "danger" | "neutral" {
+  if (status === "offline") return "neutral";
+  if (status === "blocked") return "danger";
+  if (zoneStatus === "out_of_zone") return "danger";
+  if (status === "idle") return "warning";
+  return "success";
 }
 
 export function fleetStatusFromLocation(input: {
@@ -51,6 +71,7 @@ export function fleetStatusFromLocation(input: {
   lastSeenAt?: string;
   now?: number;
   isBlocked?: boolean;
+  activeDeliveryId?: string | null;
 }): FleetStatusKey {
   if (input.isBlocked) return "offline";
   if (!input.isOnDuty) return "offline";
@@ -58,11 +79,12 @@ export function fleetStatusFromLocation(input: {
     return "offline";
   }
   if (input.pinStatus === "alert") return "alert";
-  if (input.trackingStatus === "delivery_submit") return "delivering";
+  if (input.trackingStatus === "delivery_submit" && input.activeDeliveryId) {
+    return "delivering";
+  }
   if (input.trackingStatus === "moving") return "available";
   if (isMovingSpeed(input.speedMps)) return "available";
-  if (input.trackingStatus === "idle") return "idle";
-  return "available";
+  return "idle";
 }
 
 export function TrackingStatusDot({

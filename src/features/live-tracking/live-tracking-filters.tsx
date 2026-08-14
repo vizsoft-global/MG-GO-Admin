@@ -50,6 +50,7 @@ export function matchesLiveTrackingFilters(
     lastSeenAt?: string;
     latitude?: number;
     longitude?: number;
+    activeDeliveryId?: string | null;
   },
   filters: LiveTrackingFilterState,
   meta?: { zoneId: string | null; partnerId: string | null; zoneName: string | null },
@@ -93,11 +94,13 @@ export function matchesLiveTrackingFilters(
     speedMps: loc.speedMps ?? null,
     lastSeenAt: loc.lastSeenAt ?? "",
     now,
+    activeDeliveryId: loc.activeDeliveryId,
   });
   const isOnline =
     listStatus === "moving" ||
     listStatus === "idle" ||
-    listStatus === "delivery_submit";
+    listStatus === "delivery_submit" ||
+    listStatus === "delivered";
   const matchesChip =
     (filters.statusChips.includes("online") && isOnline) ||
     (filters.statusChips.includes("on_duty") && loc.isOnDuty && !loc.isBlocked) ||

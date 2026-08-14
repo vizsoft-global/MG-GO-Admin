@@ -100,6 +100,7 @@ describe("liveLocationPayloadChanged", () => {
     isBlocked: false,
     speedMps: 0,
     batteryPct: 80,
+    activeDeliveryId: null,
     lastSeenAt: "2026-08-13T09:00:00.000Z",
   };
 

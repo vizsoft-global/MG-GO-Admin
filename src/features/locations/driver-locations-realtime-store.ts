@@ -127,6 +127,7 @@ function rowToLocation(row: LiveRow): DriverLiveLocation {
     accuracyMeters: row.accuracy_meters != null ? Number(row.accuracy_meters) : null,
     batteryPct: row.battery_pct,
     heading: row.heading_deg != null ? Number(row.heading_deg) : null,
+    activeDeliveryId: row.active_delivery_id ?? null,
     trackingStatus: parseTrackingStatus(row.tracking_status),
     zoneStatus: parseZoneStatus(row.zone_status),
     lastSeenAt: row.last_seen_at,

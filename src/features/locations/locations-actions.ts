@@ -47,6 +47,7 @@ function mapLiveRow(row: {
   accuracy_meters: number | null;
   battery_pct: number | null;
   heading_deg: number | null;
+  active_delivery_id: string | null;
   tracking_status: string;
   zone_status: string | null;
   last_seen_at: string;
@@ -82,6 +83,7 @@ function mapLiveRow(row: {
     accuracyMeters: row.accuracy_meters != null ? Number(row.accuracy_meters) : null,
     batteryPct: row.battery_pct,
     heading: row.heading_deg != null ? Number(row.heading_deg) : null,
+    activeDeliveryId: row.active_delivery_id ?? null,
     trackingStatus: parseTrackingStatus(row.tracking_status),
     zoneStatus: parseZoneStatus(row.zone_status),
     lastSeenAt: row.last_seen_at,
@@ -105,6 +107,7 @@ export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> 
       accuracy_meters,
       battery_pct,
       heading_deg,
+      active_delivery_id,
       tracking_status,
       zone_status,
       last_seen_at,
