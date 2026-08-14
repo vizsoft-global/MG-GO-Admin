@@ -206,11 +206,17 @@ Conditions this exception depends on — if any stops being true, the page is ba
 - Overlays use logical insets (`start-*` / `end-*` / `inset-x-*`), so the whole canvas mirrors under RTL without a second layout.
 - Fullscreen uses the Fullscreen API on the canvas element, not a CSS class swap — re-parenting the WebGL canvas would drop its context.
 
-V2 also renders drivers through `deck.gl` (`GoogleMapsOverlay`) rather than DOM markers + `MarkerClusterer`. Marker *language* is unchanged (vehicle glyph inside a colour-coded teardrop, status colour from the status machine, zone fill at 0.22, all three deselect paths); only the draw path differs, because DOM markers cannot hold 60fps at 500 animated pins.
+V2 also renders drivers through `deck.gl` (`GoogleMapsOverlay`) rather than DOM markers + `MarkerClusterer`, because DOM markers cannot hold 60fps at 500 animated pins. Status colour still comes from the status machine, zone fill is still 0.22, and all three deselect paths still work.
+
+**Two marker divergences, scoped to this route.** V1's teardrop-with-a-glyph is a *pin*: it marks a location and its orientation is meaningless, which is correct for a map that repaints every few seconds. V2 draws a **top-down bike sprite on a status-coloured puck**, rotated by the rider's bearing (`fleet-marker-atlas.ts`, centre-anchored ~48px cells). A vehicle seen from above is the one shape whose rotation carries information, and once a marker glides continuously the direction it faces is the difference between watching traffic and watching dots. The bearing is held across fixes that carry none, so a stopped bike keeps facing the way it was travelling rather than snapping north — a marker that snaps north at every red light reads as a bug. The old separate heading chevron is gone: it existed because a teardrop could not be rotated.
+
+Each rider also has a **10-minute trail** (`PathLayer`, deterministic per-rider hue from `fleetTrailColor`), capped per frame and always drawn for the selected rider. Two riders on the same street have to stay tellable apart, which a single accent colour cannot do.
+
+Do not port either to `/live-tracking`: V1's contract is a pin per driver from `driver_locations`, and a rotated vehicle there would be claiming a bearing its 5-second repaint cannot support.
 
 ### Map behavior
 
-- **Marker shape + icon:** use lucide-style vehicle icon inside a colored teardrop marker; status color comes from `pinStatus`.
+- **Marker shape + icon:** use lucide-style vehicle icon inside a colored teardrop marker; status color comes from `pinStatus`. (Live Tracking **V2** uses a rotated top-down vehicle sprite on a status puck instead — see the sanctioned exception above.)
 - **Unknown vehicle default:** if vehicle type is missing, default to `bike`; never infer vehicle type from tracking status.
 - **Zones:** render zone polygons/circles using the zone palette at `0.22` fill opacity and show a DOM label overlay (zone name + optional driver-count chip).
 - **Driver deselect:** always support all three paths: popup close `X`, map background click, and clicking the same marker again.

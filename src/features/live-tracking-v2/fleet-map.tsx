@@ -37,6 +37,7 @@ import {
   fleetPinIcon,
 } from "./fleet-marker-atlas";
 import { fleetZoneRing } from "./fleet-zones";
+import type { FleetTrail } from "./fleet-trail";
 import {
   useFleetFrame,
   useFleetSnapshot,
@@ -54,6 +55,18 @@ const MAX_ZOOM = 20;
 const ZONE_FALLBACK_RGB: [number, number, number] = [99, 102, 241];
 /** Coral, the scoped data-layer accent: routes, stops and the playhead — never status. */
 const ROUTE_RGB: [number, number, number] = [255, 106, 77];
+
+/**
+ * Trails drawn at once, besides the selected rider who is always drawn.
+ *
+ * A trail is 200 segments where a marker is one quad, so the honest limit here is
+ * tesselation cost, not pin count. At a city-wide zoom the tails also overlap into a
+ * single unreadable mat, so the cap costs the operator nothing they could have read.
+ */
+const MAX_TRAILS_DRAWN = 150;
+
+/** How often expired trail points are swept. See `FleetTrailStore.prune`. */
+const TRAIL_PRUNE_INTERVAL_MS = 5_000;
 
 export type FleetRouteStop = {
   id: string;
@@ -89,7 +102,6 @@ type FleetEntity = {
   angle: number;
   tone: FleetTone;
   icon: string;
-  moving: boolean;
   alert: boolean;
   selected: boolean;
   located: boolean;
@@ -154,6 +166,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
   /** Bumped whenever a deck accessor would return something new. */
   const revisionRef = useRef(0);
   const reducedMotionRef = useRef(false);
+  const lastTrailPruneRef = useRef(0);
 
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
 
@@ -186,7 +199,6 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           angle: driver.headingDeg,
           tone,
           icon: fleetPinIcon(tone, stale),
-          moving: false,
           alert: false,
           selected: false,
           located: driver.lat != null && driver.lng != null,
@@ -197,7 +209,6 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       entity.name = driver.meta.driverName || driver.meta.driverCode || driverId;
       entity.tone = tone;
       entity.icon = fleetPinIcon(tone, stale);
-      entity.moving = driver.status === "moving" || driver.status === "on_delivery";
       entity.alert = isFleetAlert(driver.status, driver.flags);
       entity.selected = driverId === selectedDriverId;
       if (driver.lat != null && driver.lng != null && !entity.located) {
@@ -333,6 +344,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       classes;
     const layers: DeckLayer[] = [];
     const revision = revisionRef.current;
+    const trailRevision = store.trails.revision;
 
     if (showZones && zoneData.length > 0) {
       layers.push(
@@ -410,6 +422,54 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
 
     const drawable = entitiesRef.current.filter((entity) => entity.located);
 
+    // Trails first, so a tail passes under every marker rather than over the rider it
+    // belongs to. The entity list is already what the room decided this socket can
+    // see, so iterating it *is* the viewport-and-filter restriction.
+    const trailData: FleetTrail[] = [];
+    let selectedTrail: FleetTrail | null = null;
+    for (const entity of drawable) {
+      const trail = store.trails.get(entity.driverId);
+      // deck.gl needs two points to make a segment.
+      if (!trail || trail.coords.length < 4) continue;
+      if (entity.selected) {
+        selectedTrail = trail;
+      } else if (trailData.length < MAX_TRAILS_DRAWN) {
+        trailData.push(trail);
+      }
+    }
+    // Pushed last so the followed rider's history sits on top of everyone else's.
+    if (selectedTrail) trailData.push(selectedTrail);
+
+    if (trailData.length > 0) {
+      layers.push(
+        new Path<FleetTrail>({
+          id: "fleet-trails",
+          data: trailData,
+          // Flat `lng, lat` buffers straight from the trail store — no per-point
+          // array to allocate on the way to the GPU.
+          positionFormat: "XY",
+          getPath: (d) => d.coords,
+          getColor: (d) => [
+            d.color[0],
+            d.color[1],
+            d.color[2],
+            d.driverId === selectedDriverId ? 240 : 130,
+          ],
+          getWidth: (d) => (d.driverId === selectedDriverId ? 4 : 2.5),
+          widthUnits: "pixels",
+          widthMinPixels: 1.5,
+          capRounded: true,
+          jointRounded: true,
+          pickable: false,
+          updateTriggers: {
+            getPath: trailRevision,
+            getColor: `${trailRevision}:${selectedDriverId ?? ""}`,
+            getWidth: selectedDriverId ?? "",
+          },
+        }),
+      );
+    }
+
     if (drawable.length > 0) {
       const selected = drawable.filter((entity) => entity.selected);
       if (selected.length > 0) {
@@ -440,7 +500,18 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           getSize: (d) =>
             d.selected ? FLEET_ICON_SIZE.height * 1.15 : FLEET_ICON_SIZE.height,
           sizeUnits: "pixels",
-          updateTriggers: { getPosition: revision, getIcon: revision, getSize: revision },
+          // The marker is a vehicle now, so the bearing rotates the sprite itself
+          // rather than a chevron beside it. deck.gl rotates counter-clockwise;
+          // compass bearings run clockwise. The store holds the last known bearing
+          // when a fix carries none, so a stopped bike keeps facing the way it was
+          // travelling instead of snapping north.
+          getAngle: (d) => -d.angle,
+          updateTriggers: {
+            getPosition: revision,
+            getIcon: revision,
+            getSize: revision,
+            getAngle: revision,
+          },
           pickable: true,
           onClick: (info) => {
             if (info.object) store.selectDriver(info.object.driverId);
@@ -448,26 +519,6 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           },
         }),
       );
-
-      const heading = drawable.filter((entity) => entity.moving);
-      if (heading.length > 0) {
-        layers.push(
-          new Icon<FleetEntity>({
-            id: "fleet-heading",
-            data: heading,
-            iconAtlas,
-            iconMapping,
-            getIcon: () => "heading",
-            getPosition: (d) => d.position,
-            getSize: FLEET_ICON_SIZE.height * 0.62,
-            sizeUnits: "pixels",
-            // deck.gl rotates counter-clockwise; compass bearings run clockwise.
-            getAngle: (d) => -d.angle,
-            updateTriggers: { getPosition: revision, getAngle: revision },
-            pickable: false,
-          }),
-        );
-      }
     }
 
     return layers;
@@ -477,6 +528,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     playheadPosition,
     routePath,
     routeStops,
+    selectedDriverId,
     showZones,
     store,
     zoneData,
@@ -494,6 +546,13 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         const interpolator = store.interpolator;
         const reduced = reducedMotionRef.current;
         let moved = false;
+
+        // Sweeping here rather than on a timer keeps the trail store free of its own
+        // scheduler, and a driver who stopped reporting still has their tail expire.
+        if (serverNowMs - lastTrailPruneRef.current >= TRAIL_PRUNE_INTERVAL_MS) {
+          lastTrailPruneRef.current = serverNowMs;
+          store.trails.prune(serverNowMs);
+        }
 
         for (const entity of entitiesRef.current) {
           const sample = reduced

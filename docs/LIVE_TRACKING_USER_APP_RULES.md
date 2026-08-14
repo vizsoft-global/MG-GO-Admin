@@ -13,17 +13,20 @@ Related: [`DRIVER_APP_HANDOFF.md`](DRIVER_APP_HANDOFF.md) (Live Tracking map + L
 | Rule | Value | Source |
 |---|---|---|
 | FGS tick | **15s** — a **watchdog**, not the sampling clock | [`duty_background_service.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/duty_background_service.dart) `ForegroundTaskEventAction.repeat(15000)` |
-| Moving report | **5s fixed** (was 10–15s jittered) | [`adaptive_location_scheduler.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/adaptive_location_scheduler.dart) `movingReportInterval` |
+| Moving report | **1s fixed** (was 5s; before that 10–15s jittered) | [`adaptive_location_scheduler.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/adaptive_location_scheduler.dart) `movingReportInterval` |
 | Idle heartbeat | **30s fixed** (was 45–60s jittered) | same file, `idleReportInterval` |
+| Edge batch | **2 fixes, or ≤2s** — whichever comes first | [`live_position_publisher.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_position_publisher.dart) `LiveCadence.batchSize` / `maxBufferHold` |
 | Immediate | first on-duty sample, idle→moving, pickup/finish (`delivery_submit`) | `shouldReportToServer` (`force`, `needsInitialReport`, `movementJustStarted`, `deliverySubmit`) |
 
 Android-only foreground service.
 
-**The jitter was removed on purpose.** Randomised spacing is the right call when the server only needs a fresh row, and the wrong one the moment a client interpolates between fixes: a 10–15s window means the renderer cannot know when the next fix is due, so it either lags by the worst case or overshoots and snaps back. §11 depends on the fixed 5s.
+**The jitter was removed on purpose.** Randomised spacing is the right call when the server only needs a fresh row, and the wrong one the moment a client interpolates between fixes: a 10–15s window means the renderer cannot know when the next fix is due, so it either lags by the worst case or overshoots and snaps back. §11 depends on the fixed interval.
+
+**Why 1Hz, and why idle did not follow.** The V2 renderer draws one buffer *behind* the newest fix so it interpolates between two known points instead of predicting past the last one. At 5s spacing that buffer would have to be seconds long to work, which is visible lag; at 1Hz a ~1.2s buffer both hides the network and stays continuously between fixes. Idle stayed at **30s** deliberately: a parked phone at 1Hz is the same coordinate thirty times over, and each copy costs a Durable Object turn to learn nothing. Batching 2 fixes halves the request rate without adding lag, because each point carries its own `client_ts` — a batch is not a coarser trail.
 
 Two clocks now exist, and only one of them writes to Postgres:
 
-- **Sampling** is continuous (`positionStream`, 10m `distanceFilter`) and feeds the edge rail at the cadence above.
+- **Sampling** is continuous (`positionStream`, `distanceFilter: 0` with `AndroidSettings.intervalDuration` = 1s) and feeds the edge rail at the cadence above. A distance filter and a fixed rate are mutually exclusive, and the rate is what the renderer needs; a stationary rider is handled by the 30s idle interval rather than by starving the stream.
 - **Durable writes** still happen on the 15s watchdog tick via `driver_report_location`, and are *skipped* while a recent edge publish already guarantees the row (`_edgeDurableGrace` = **25s**). State changes, the first sample and `delivery_submit` always write directly.
 
 On a build with no `LIVE_INGEST_URL` the stream is never started, so behaviour collapses to the pre-V2 path: watchdog-driven writes, now due on nearly every tick while moving and every other tick while idle. Server coalescing (§9) is what keeps that from becoming a write storm — a stationary rider still writes at most once per **60s**.
@@ -111,8 +114,10 @@ Clock-out / profile sign-out: [`on_duty_gate.dart`](C:/Users/Admin/Desktop/Vizso
 | What | Delay |
 |---|---|
 | Moving pin lag — V1 map | **~15s** (watchdog tick) |
-| Moving pin lag — V2 map | **~5s** minus interpolation, so the pin is continuously in motion |
+| Moving pin lag — V2 map | **~1.2s** — one adaptive render buffer behind the newest fix, and continuously in motion between fixes rather than jumping on arrival |
 | Idle heartbeat | **~30s** |
+| Trail window — V2 map | **10 min** per rider, held in the Durable Object (nothing to query, nothing persisted) |
+| `driver_locations` rows while moving | **~17/min/rider** — the flush gate keeps 1Hz from becoming ~60/min, and the rate does not scale with speed |
 | Clock-out Offline | **~1s** (realtime) |
 | Silent → Offline chip | **~8 min** (`LIVE_GPS_MAX_AGE_MS`) |
 | GPS Offline insight | **~90s** (`GPS_HEARTBEAT_STALE_MS`) |
@@ -170,13 +175,31 @@ V2 (`/live-tracking-v2`) does not replace anything above. `driver_report_locatio
 
 ### App → edge
 
-`POST {LIVE_INGEST_URL}/ingest`, driver Supabase JWT as `Authorization: Bearer`, batched up to **3** fixes ([`live_position_publisher.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_position_publisher.dart)).
+`POST {LIVE_INGEST_URL}/ingest`, driver Supabase JWT as `Authorization: Bearer`, batched **2** fixes or ≤2s ([`live_position_publisher.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_position_publisher.dart)).
 
 | Field | Meaning |
 |---|---|
 | `points[]` | `lat`, `lng`, `accuracy_m`, `speed_mps`, `heading_deg`, `battery_pct`, `network`, `tracking_status`, `active_delivery_id`, `is_mocked`, `captured_at` |
+| `points[].heading_source` | `gps` / `compass` / `none` — where `heading_deg` came from. Absent on pre-fusion builds, which the Worker reads as `gps` when a bearing is present, so their markers keep rotating |
+| `points[].compass_deg` | Smoothed compass bearing, sent alongside the fused value. Edge only; the durable RPC has a fixed signature and provenance is a live-map concern, not history |
 | `points[].replay` | **History only.** A fix drained from `pending_location_reports` must never move the live pin — a reconnecting phone would otherwise teleport its marker back through the last hour |
 | `duty_state_version` | Monotonic counter bumped on every clock-in / clock-out ([`duty_session_storage.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/duty_session_storage.dart)) |
+
+### Heading (fused)
+
+[`heading_fuser.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/heading_fuser.dart) is a pure function with an injected clock, so every rule below is unit-tested without a sensor.
+
+| Rule | Value |
+|---|---|
+| GPS course wins | course ≥ 0 **and** speed **≥ 1.0 m/s**, aged out after **6s** |
+| Compass fills the gap | only when there is no usable course; dropped after **3s** of silence or reported accuracy worse than **±45°** |
+| Compass smoothing | low-pass **0.2** per sensor event (~20Hz) |
+| Published slew ceiling | **90°/s** |
+| No bearing at all | `heading_source: none`, and the admin marker holds its previous bearing |
+
+A GPS course is published **unfiltered** — a bike genuinely turns 90° in a second, and slew-limiting that would leave the marker pointing down the street the rider just left. The ceiling exists for the compass path, where a magnet near the mount or the gps→compass handover at a red light would otherwise spin the marker.
+
+`heading_deg` keeps its existing meaning (the fused value), so nothing downstream of it changed. **The compass reports phone orientation, not bike orientation** — a phone flat in a delivery bag says nothing about where the bike is headed, which is the whole reason the GPS course stays authoritative while moving and the admin card labels the source.
 
 `duty_state_version` exists because the batch and the duty state race: a flush in flight when the rider clocks out would re-animate a driver who is already Offline. The Durable Object answers `409 stale_duty_state` to anything older than the version it has seen, and the app treats that as final, not as a retry.
 
@@ -204,7 +227,34 @@ Shared by the Worker and the browser from one file, [`src/features/live-tracking
 
 Status is one value; **flags are independent booleans** (`out_of_zone`, `overspeed`, `low_battery`, `mocked_gps`, `shift_late`, …), so "Moving" and "out of zone" no longer have to fight over one pill the way V1's single status does.
 
-Class B events (overspeed, idle, battery, zone, range, shift) are derived at the edge with hysteresis and cooldowns and stored in `fleet_events`; Class A events stay server-authored in `driver_operation_events`. Anything that oscillates on a boundary must produce **one** event, not one per sample — [`scripts/fleet-sim.mjs`](../scripts/fleet-sim.mjs) exists to check exactly that, and prints an explicit `OK` / `SUSPECT` verdict per flap scenario.
+Class B events (overspeed, idle, battery, zone, range, shift) are derived at the edge with hysteresis and cooldowns and stored in `fleet_events`; Class A events stay server-authored in `driver_operation_events`. Anything that oscillates on a boundary must produce **one** event per cooldown window, not one per sample — [`scripts/fleet-sim.mjs`](../scripts/fleet-sim.mjs) exists to check exactly that, and prints an explicit `OK` / `SUSPECT` verdict per flap scenario.
+
+### Trails and marker (V2 only)
+
+| Rule | Value |
+|---|---|
+| Trail window | **10 min** per rider, in Durable Object memory — never persisted, never queried per client |
+| Trail point gate | ≥ **5 m** or ≥ **3s** from the last kept point, both edge and client side |
+| Trail delivery | one `trail` frame the first time a rider enters a socket's view; extended from the delta frames that socket already receives |
+| Trail colour | deterministic per rider, so two riders on one street stay tellable apart |
+| Marker | top-down vehicle sprite on a status-coloured puck, rotated by `heading_deg`; holds the last bearing when a fix carries none |
+
+### Durable write rate under 1Hz
+
+The room flushes to `driver_locations` every 10s, thinning each batch first ([`fleet-room.ts`](../infra/workers/dpd-live/src/fleet-room.ts) `downsampleForDurability`): the first and last point of a batch always survive, as does anything significant (status change, `delivery_submit`, mocked, replay); everything else needs **≥5s and ≥5m** since the last kept point.
+
+Both halves of that gate matter. Time alone would keep a parked phone's duplicates; distance *as an alternative trigger* — the first cut — made the write rate scale with speed, ~23 rows/min for a rider at 35km/h against 12 at the old cadence. As a joint requirement the ceiling is one row per 5s per rider whatever the speed, landing at ~17 rows/min. Nothing reads `driver_locations` at finer resolution: the day route simplifies it in PostGIS, and the live map takes its points from the room.
+
+### Capacity
+
+`node --import tsx scripts/fleet-sim.mjs --target room --drivers 500 --cadence 1000 --batch 2 --duration 90` runs the real `FleetRoom` in-process with Supabase stubbed at the `fetch` boundary. A Durable Object is single-threaded, so the number that decides capacity is CPU per second, not mean latency.
+
+| Cadence | Requests/s | Room CPU p50 / p95 per budget | Load |
+|---|---|---|---|
+| 5s (pre-1Hz) | 100 | 321ms / 892ms per 5000ms | 18% |
+| **1s** | **250** | **239ms / 374ms per 1000ms** | **37%** |
+
+One room absorbs 500 riders at 1Hz with ~2.7x headroom, so `FLEET_ROOM` is **not** sharded. Re-run this before raising the cadence again or the fleet past ~1000 riders; the figures exclude workerd's own request overhead and real network.
 
 ---
 

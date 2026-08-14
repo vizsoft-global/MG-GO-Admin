@@ -10,7 +10,15 @@
 
 import { memo } from "react";
 import { useTranslations } from "next-intl";
-import { Battery, BatteryLow, Clock, Map as MapIcon, Navigation, Package } from "lucide-react";
+import {
+  Battery,
+  BatteryLow,
+  Clock,
+  Compass,
+  Map as MapIcon,
+  Navigation,
+  Package,
+} from "lucide-react";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
@@ -175,6 +183,28 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             <span className="inline-flex items-center gap-1">
               <Clock className="size-3" aria-hidden />
               {onDutyFor}
+            </span>
+          ) : null}
+          {/* Bearing, with the icon saying where it came from: a GPS course while
+              moving is a stronger claim than a compass reading at a standstill, and an
+              operator judging whether a rider is heading the wrong way needs to know
+              which one they are looking at. Also: the compass reports *phone*
+              orientation, which a mount can rotate independently of the bike. */}
+          {driver.headingSource !== "none" ? (
+            <span
+              className="inline-flex items-center gap-1"
+              title={t(`rail.headingSource.${driver.headingSource}`)}
+            >
+              {driver.headingSource === "gps" ? (
+                <Navigation
+                  className="size-3"
+                  style={{ transform: `rotate(${driver.headingDeg}deg)` }}
+                  aria-hidden
+                />
+              ) : (
+                <Compass className="size-3 opacity-70" aria-hidden />
+              )}
+              {Math.round(driver.headingDeg)}°
             </span>
           ) : null}
           {meta.batteryPct != null ? (

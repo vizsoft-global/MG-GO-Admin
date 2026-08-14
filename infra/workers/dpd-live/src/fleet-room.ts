@@ -38,14 +38,21 @@ import {
 import {
   emptyView,
   encodePosition,
+  encodeTrailPoint,
+  trailDistanceMeters,
+  TRAIL_MIN_GAP_MS,
+  TRAIL_MIN_MOVE_M,
+  TRAIL_WINDOW_MS,
   WIRE_VERSION,
   type ClientFrame,
   type DriverMeta,
   type FleetEventFrame,
+  type HeadingSource,
   type OpsEventFrame,
   type PositionTuple,
   type ServerFrame,
   type SocketView,
+  type TrailTrack,
 } from "../../../../src/features/live-tracking-v2/fleet-wire";
 import {
   fleetFlags,
@@ -60,18 +67,47 @@ import {
 
 const ROSTER_TTL_MS = 60_000;
 const TOKEN_CACHE_TTL_MS = 10 * 60_000;
-/** Points held per driver between durable flushes. 10s at a 5s cadence is 2. */
-const MAX_PENDING_POINTS = 8;
+/** Points held per driver between durable flushes. 10s at a 1Hz cadence is 10. */
+const MAX_PENDING_POINTS = 16;
 /** Entities with no report for this long leave the room entirely. */
 const EVICT_AFTER_MS = 30 * 60_000;
 const OPS_POLL_LIMIT = 200;
 
-type PendingPoint = {
+/**
+ * Durable-write gates. Deliberately ~the old 5s report cadence, so raising the app to
+ * 1Hz leaves the `driver_locations` write rate where it was: 1Hz ungated would be
+ * ~43M rows/day, and nothing reads that resolution — the day route simplifies it away
+ * and the live map takes its points from this room, not from Postgres.
+ */
+const FLUSH_MIN_GAP_MS = 5_000;
+
+/**
+ * Movement required *in addition* to the gap, not as an alternative to it.
+ *
+ * As an alternative trigger (the first cut of this) the write rate scaled with
+ * speed: a rider at 35km/h crossed 25m every 2.6s and wrote ~23 rows/minute where
+ * the old 5s cadence wrote 12 — measurable with `fleet-sim --target room`. As a
+ * requirement it does the opposite job, dropping a parked phone's duplicates while
+ * pinning the ceiling at one row per [FLUSH_MIN_GAP_MS] whatever the speed.
+ */
+const FLUSH_MIN_MOVE_M = 5;
+
+/**
+ * Hard cap per trail. The gates alone bound it to `TRAIL_WINDOW_MS / TRAIL_MIN_GAP_MS`
+ * (200), so this only guards against a clock jumping backwards.
+ */
+const MAX_TRAIL_POINTS = 240;
+
+/** Trails per frame. A first frame carrying 500 tails would block the room's thread. */
+const MAX_TRAIL_TRACKS_PER_FRAME = 120;
+
+export type PendingPoint = {
   lat: number;
   lng: number;
   speedMps: number | null;
   accuracyM: number | null;
   headingDeg: number | null;
+  headingSource: HeadingSource;
   batteryPct: number | null;
   altitudeM: number | null;
   networkType: string | null;
@@ -92,10 +128,18 @@ type Entity = {
   lng: number | null;
   speedMps: number | null;
   headingDeg: number | null;
+  headingSource: HeadingSource;
   accuracyM: number | null;
   batteryPct: number | null;
   isMocked: boolean;
   lastFixAtMs: number | null;
+  /**
+   * Recent history as flat `lat*1e5, lng*1e5, unix seconds` triplets, gated and
+   * trimmed to `TRAIL_WINDOW_MS`. Held here rather than queried per client: a socket
+   * that pans across the city would otherwise re-read ten minutes of
+   * `driver_locations` for every driver it uncovers.
+   */
+  trail: number[];
   trackingStatus: FleetTrackingStatus;
   activeDeliveryId: string | null;
   rangeStatus: "in_zone" | "out_of_zone" | "unknown" | null;
@@ -131,6 +175,11 @@ type SocketRuntime = {
   view: SocketView;
   posSeen: Map<number, number>;
   metaSeen: Map<number, number>;
+  /**
+   * Drivers whose history this socket already holds. History is sent once on first
+   * sight and extended client-side from the delta frames the socket receives anyway.
+   */
+  trailSeen: Set<number>;
 };
 
 export class FleetRoom implements DurableObject {
@@ -172,6 +221,7 @@ export class FleetRoom implements DurableObject {
         view: (ws.deserializeAttachment() as SocketView | null) ?? emptyView(),
         posSeen: new Map(),
         metaSeen: new Map(),
+        trailSeen: new Set(),
       });
     }
   }
@@ -356,10 +406,15 @@ export class FleetRoom implements DurableObject {
       lng: numberOrNull(row.longitude),
       speedMps: numberOrNull(row.speed_mps),
       headingDeg: numberOrNull(row.heading_deg),
+      // Postgres does not record where a bearing came from, and every build that
+      // wrote `heading_deg` before fusion wrote a GPS course — so a persisted bearing
+      // is reported as `gps` rather than inventing a third "unknown but present".
+      headingSource: numberOrNull(row.heading_deg) == null ? "none" : "gps",
       accuracyM: numberOrNull(row.accuracy_meters),
       batteryPct: numberOrNull(row.battery_pct),
       isMocked: row.is_mocked === true,
       lastFixAtMs: snapshotFixMs > 0 ? snapshotFixMs : null,
+      trail: [],
       trackingStatus: normalizeTracking(row.tracking_status),
       activeDeliveryId: row.active_delivery_id ?? null,
       rangeStatus: normalizeRange(row.zone_status),
@@ -400,6 +455,7 @@ export class FleetRoom implements DurableObject {
         entity.lng = numberOrNull(row.longitude) ?? entity.lng;
         entity.speedMps = numberOrNull(row.speed_mps);
         entity.headingDeg = numberOrNull(row.heading_deg);
+        entity.headingSource = numberOrNull(row.heading_deg) == null ? "none" : "gps";
         entity.batteryPct = numberOrNull(row.battery_pct);
         entity.accuracyM = numberOrNull(row.accuracy_meters);
         entity.trackingStatus = normalizeTracking(row.tracking_status);
@@ -502,10 +558,13 @@ export class FleetRoom implements DurableObject {
       // An out-of-order point must not teleport the pin backwards.
       if (entity.lastFixAtMs != null && clientMs < entity.lastFixAtMs) continue;
 
+      this.appendTrail(entity, point.lat, point.lng, clientMs);
+
       entity.lat = point.lat;
       entity.lng = point.lng;
       entity.speedMps = point.speedMps;
       entity.headingDeg = point.headingDeg;
+      entity.headingSource = point.headingSource;
       entity.accuracyM = point.accuracyM;
       entity.batteryPct = point.batteryPct ?? entity.batteryPct;
       entity.isMocked = point.isMocked === true;
@@ -544,6 +603,45 @@ export class FleetRoom implements DurableObject {
     const row = (snapshot.drivers ?? []).find((d) => d.driver_id === driverId);
     if (!row) return null;
     return this.upsertFromSnapshot(row);
+  }
+
+  // -------------------------------------------------------------------------
+  // Trails
+  // -------------------------------------------------------------------------
+
+  /**
+   * Appends a point to a driver's trail, gated and trimmed.
+   *
+   * The gates are what make ten minutes of history affordable: 1Hz raw is 600 points
+   * per rider (~7MB across 500 riders, all of it invisible at any zoom, since 5m of
+   * movement is a sub-pixel step until you are practically at street level).
+   *
+   * Called only for live points — a replayed fix is older than what is already in the
+   * buffer, and appending it would draw the trail backwards through the city.
+   */
+  private appendTrail(entity: Entity, lat: number, lng: number, tsMs: number): void {
+    const trail = entity.trail;
+    const n = trail.length;
+
+    if (n >= 3) {
+      const lastLat = trail[n - 3]! / 1e5;
+      const lastLng = trail[n - 2]! / 1e5;
+      const lastMs = trail[n - 1]! * 1000;
+      if (tsMs <= lastMs) return;
+      const moved = trailDistanceMeters(lastLat, lastLng, lat, lng);
+      if (moved < TRAIL_MIN_MOVE_M && tsMs - lastMs < TRAIL_MIN_GAP_MS) return;
+    }
+
+    const [latE5, lngE5, tsSec] = encodeTrailPoint(lat, lng, tsMs);
+    trail.push(latE5, lngE5, tsSec);
+
+    const cutoffSec = Math.round((tsMs - TRAIL_WINDOW_MS) / 1000);
+    let drop = 0;
+    while (drop + 2 < trail.length && trail[drop + 2]! < cutoffSec) drop += 3;
+    if (drop > 0) trail.splice(0, drop);
+
+    const overflow = trail.length / 3 - MAX_TRAIL_POINTS;
+    if (overflow > 0) trail.splice(0, Math.ceil(overflow) * 3);
   }
 
   // -------------------------------------------------------------------------
@@ -673,6 +771,7 @@ export class FleetRoom implements DurableObject {
       view: emptyView(),
       posSeen: new Map(),
       metaSeen: new Map(),
+      trailSeen: new Set(),
     };
     server.serializeAttachment(runtime.view);
     this.sockets.set(server, runtime);
@@ -715,6 +814,7 @@ export class FleetRoom implements DurableObject {
       view: (ws.deserializeAttachment() as SocketView | null) ?? emptyView(),
       posSeen: new Map<number, number>(),
       metaSeen: new Map<number, number>(),
+      trailSeen: new Set<number>(),
     };
     this.sockets.set(ws, runtime);
 
@@ -736,6 +836,9 @@ export class FleetRoom implements DurableObject {
       // Filters changed, so what this socket has is no longer what it should have.
       runtime.posSeen.clear();
       runtime.metaSeen.clear();
+      // `trailSeen` is deliberately kept: a driver who survives the filter change
+      // still has their history on the client, and one who does not is reported in
+      // `gone`, which drops the entry so the trail is re-sent if they come back.
       this.pushToSocket(ws, runtime, Date.now(), true);
       await this.scheduleAlarm();
     }
@@ -778,6 +881,7 @@ export class FleetRoom implements DurableObject {
   ): void {
     const tuples: PositionTuple[] = [];
     const meta: DriverMeta[] = [];
+    const tracks: TrailTrack[] = [];
     const stillVisible = new Set<number>();
 
     for (const entity of this.entities.values()) {
@@ -787,6 +891,17 @@ export class FleetRoom implements DurableObject {
       if (runtime.metaSeen.get(entity.idIdx) !== entity.metaVersion) {
         meta.push(entity.meta);
         runtime.metaSeen.set(entity.idIdx, entity.metaVersion);
+      }
+
+      if (
+        !runtime.trailSeen.has(entity.idIdx) &&
+        entity.trail.length >= 6 &&
+        tracks.length < MAX_TRAIL_TRACKS_PER_FRAME
+      ) {
+        // Copied, not referenced: the buffer is mutated in place on every ingest and
+        // `JSON.stringify` runs after this function returns.
+        tracks.push({ idIdx: entity.idIdx, pts: entity.trail.slice() });
+        runtime.trailSeen.add(entity.idIdx);
       }
 
       if (!force && runtime.posSeen.get(entity.idIdx) === entity.posVersion) continue;
@@ -799,6 +914,7 @@ export class FleetRoom implements DurableObject {
           lng: entity.lng!,
           speedMps: entity.speedMps,
           headingDeg: entity.headingDeg,
+          headingSource: entity.headingSource,
           status: entity.status,
           flags: entity.flags,
           ageMs: entity.lastFixAtMs == null ? 0 : Math.max(0, nowMs - entity.lastFixAtMs),
@@ -812,9 +928,17 @@ export class FleetRoom implements DurableObject {
       gone.push(idIdx);
       runtime.posSeen.delete(idIdx);
       runtime.metaSeen.delete(idIdx);
+      // Dropped too, so a driver who is panned back into view gets their history
+      // again — the client prunes trails it is no longer told about.
+      runtime.trailSeen.delete(idIdx);
     }
 
     if (meta.length > 0) this.send(ws, { t: "meta", drivers: meta });
+    // Trails before the delta: the client hydrates history, then extends it with the
+    // point in the same batch, so a tail never renders with a gap at its head.
+    if (tracks.length > 0) {
+      this.send(ws, { t: "trail", windowMs: TRAIL_WINDOW_MS, tracks });
+    }
     if (tuples.length === 0 && gone.length === 0 && !force) return;
     this.send(ws, { t: "delta", seq: this.seq, ts: nowMs, e: tuples, gone });
   }
@@ -912,7 +1036,7 @@ export class FleetRoom implements DurableObject {
     const events: Array<Record<string, unknown>> = [];
     for (const entity of this.entities.values()) {
       if (entity.pending.length === 0) continue;
-      for (const point of entity.pending) {
+      for (const point of downsampleForDurability(entity.pending)) {
         events.push({
           driver_id: entity.driverId,
           lat: point.lat,
@@ -975,6 +1099,7 @@ export class FleetRoom implements DurableObject {
         lng: Math.round(entity.lng * 1e5) / 1e5,
         sp: entity.speedMps == null ? null : Math.round(entity.speedMps * 10) / 10,
         hd: entity.headingDeg,
+        hs: entity.headingSource,
         st: entity.status,
         fl: Object.entries(entity.flags)
           .filter(([, on]) => on)
@@ -1190,6 +1315,10 @@ function normalizePoint(raw: unknown): PendingPoint | null {
     speedMps: numberOrNull(point.speed_mps as number),
     accuracyM: numberOrNull(point.accuracy_m as number),
     headingDeg: numberOrNull(point.heading_deg as number),
+    headingSource: normalizeHeadingSource(
+      stringOrNull(point.heading_source),
+      numberOrNull(point.heading_deg as number),
+    ),
     batteryPct: numberOrNull(point.battery_pct as number),
     altitudeM: numberOrNull(point.altitude_m as number),
     networkType: stringOrNull(point.network_type),
@@ -1206,4 +1335,58 @@ function normalizePoint(raw: unknown): PendingPoint | null {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+/**
+ * Older app builds send no `heading_source`. Their `heading_deg` was always a GPS
+ * course, so that is what they are reported as — the alternative, defaulting to
+ * `none`, would make every pre-fusion build's marker stop rotating.
+ */
+function normalizeHeadingSource(
+  raw: string | null,
+  headingDeg: number | null,
+): HeadingSource {
+  if (raw === "gps" || raw === "compass" || raw === "none") return raw;
+  return headingDeg == null ? "none" : "gps";
+}
+
+/**
+ * Thins a flush batch down to what `driver_locations` is actually for.
+ *
+ * First and last always survive — the first anchors distance from the previous flush
+ * and the last is the pin any other reader will see. Between them a point earns its
+ * row by being far enough, old enough, or *significant*: a tracking-status change, a
+ * delivery stamp, a mocked fix or a replayed one. Dropping those would be the one
+ * failure mode that matters here, because the audit trail reads this table to answer
+ * where a rider was when they submitted a delivery.
+ */
+export function downsampleForDurability(points: PendingPoint[]): PendingPoint[] {
+  if (points.length <= 2) return points;
+
+  const kept: PendingPoint[] = [points[0]!];
+  let anchor = points[0]!;
+  let anchorMs = Date.parse(anchor.clientTs);
+
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const point = points[i]!;
+    const significant =
+      point.replay ||
+      point.isMocked === true ||
+      point.deliveryId != null ||
+      point.trackingStatus !== anchor.trackingStatus ||
+      point.activeDeliveryId !== anchor.activeDeliveryId;
+
+    const ms = Date.parse(point.clientTs);
+    const gap = Number.isFinite(ms) && Number.isFinite(anchorMs) ? ms - anchorMs : Infinity;
+    const moved = trailDistanceMeters(anchor.lat, anchor.lng, point.lat, point.lng);
+
+    if (significant || (gap >= FLUSH_MIN_GAP_MS && moved >= FLUSH_MIN_MOVE_M)) {
+      kept.push(point);
+      anchor = point;
+      anchorMs = ms;
+    }
+  }
+
+  kept.push(points[points.length - 1]!);
+  return kept;
 }

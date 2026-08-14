@@ -202,6 +202,9 @@ export class FleetTransport {
       case "meta":
         this.store.applyMeta(frame.drivers);
         break;
+      case "trail":
+        this.store.applyTrail({ tracks: frame.tracks });
+        break;
       case "delta":
         this.store.applyDelta({ ts: frame.ts, e: frame.e, gone: frame.gone });
         break;

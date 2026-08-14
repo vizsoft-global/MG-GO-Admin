@@ -38,6 +38,7 @@ import {
   type FleetTrackingStatus,
 } from "./fleet-status";
 import { FleetInterpolator } from "./fleet-interpolator";
+import { FleetTrailStore } from "./fleet-trail";
 import {
   emptyFleetFilters,
   type FleetConnectionState,
@@ -56,8 +57,10 @@ import {
   flagsFromNames,
   type DriverMeta,
   type FleetEventFrame,
+  type HeadingSource,
   type OpsEventFrame,
   type PositionTuple,
+  type TrailTrack,
 } from "./fleet-wire";
 
 /** Feed depth. Anything older belongs in the Activity tab, which is paginated. */
@@ -117,6 +120,7 @@ export type FleetMirrorDriver = {
   lng: number;
   sp: number | null;
   hd: number | null;
+  hs?: HeadingSource | null;
   st: string;
   fl: string[];
   age: number | null;
@@ -128,6 +132,7 @@ export class FleetStore {
   private readonly byIdIdx = new Map<number, string>();
 
   readonly interpolator = new FleetInterpolator();
+  readonly trails = new FleetTrailStore();
 
   private zones: FleetZone[] = [];
   private thresholds: FleetThresholds = resolveFleetThresholds(null);
@@ -311,6 +316,7 @@ export class FleetStore {
           lng: null,
           speedMps: 0,
           headingDeg: 0,
+          headingSource: "none",
           fixAtMs: 0,
           gpsAgeMs: 0,
         });
@@ -319,6 +325,19 @@ export class FleetStore {
     }
     this.publish();
     this.scheduleDriverFlush();
+  }
+
+  /**
+   * History for drivers this socket has just started seeing. The room sends it once
+   * per driver; everything after that arrives as ordinary position frames.
+   */
+  applyTrail(input: { tracks: TrailTrack[] }): void {
+    const nowMs = this.serverNow();
+    for (const track of input.tracks) {
+      const driverId = this.byIdIdx.get(track.idIdx);
+      if (!driverId) continue;
+      this.trails.hydrate(driverId, track.pts, nowMs);
+    }
   }
 
   applyDelta(input: { ts: number; e: PositionTuple[]; gone: number[] }): void {
@@ -338,6 +357,12 @@ export class FleetStore {
       const fixAtMs = input.ts - decoded.ageMs;
       if (existing.status !== decoded.status) structural = true;
 
+      // A fix with no bearing keeps the last one. This is the single place that
+      // decision is made, so the marker, the interpolator and the driver card cannot
+      // disagree about which way a stopped bike is facing — and none of them has to
+      // treat "no heading" as "due north".
+      const headingDeg = decoded.headingKnown ? decoded.headingDeg : existing.headingDeg;
+
       const next: FleetDriver = {
         ...existing,
         status: decoded.status,
@@ -346,17 +371,19 @@ export class FleetStore {
         lat: decoded.lat,
         lng: decoded.lng,
         speedMps: decoded.speedMps,
-        headingDeg: decoded.headingDeg,
+        headingDeg,
+        headingSource: decoded.headingSource,
         fixAtMs,
         gpsAgeMs: decoded.ageMs,
       };
       this.drivers.set(driverId, next);
       this.dirtyDrivers.add(driverId);
+      this.trails.append(driverId, decoded.lat, decoded.lng, fixAtMs);
 
       const sample = {
         lat: decoded.lat,
         lng: decoded.lng,
-        headingDeg: decoded.headingDeg,
+        headingDeg,
         speedMps: decoded.speedMps,
         tMs: fixAtMs,
       };
@@ -373,6 +400,7 @@ export class FleetStore {
       this.byIdIdx.delete(idIdx);
       this.drivers.delete(driverId);
       this.interpolator.remove(driverId);
+      this.trails.remove(driverId);
       this.dirtyDrivers.add(driverId);
       structural = true;
     }
@@ -410,11 +438,16 @@ export class FleetStore {
         lng: row.lng,
         speedMps: row.sp ?? 0,
         headingDeg: row.hd ?? existing.headingDeg,
+        headingSource: row.hs ?? (row.hd == null ? existing.headingSource : "gps"),
         fixAtMs,
         gpsAgeMs: (row.age ?? 0) * 1000,
       };
       this.drivers.set(row.id, next);
       this.dirtyDrivers.add(row.id);
+      // The mirror is a 1Hz stream of the same room, so it can extend a trail; the
+      // gate inside `append` is what stops it doubling up with the edge rail's points
+      // during the brief window where both are delivering.
+      this.trails.append(row.id, row.lat, row.lng, fixAtMs);
       this.interpolator.push(row.id, {
         lat: row.lat,
         lng: row.lng,
@@ -529,6 +562,10 @@ export class FleetStore {
         lng,
         speedMps: toNumber(row.speed_mps) ?? 0,
         headingDeg: toNumber(row.heading_deg) ?? existing?.headingDeg ?? 0,
+        headingSource:
+          toNumber(row.heading_deg) == null
+            ? (existing?.headingSource ?? "none")
+            : "gps",
         fixAtMs: fixAtMs || 0,
         gpsAgeMs: fixAtMs ? Math.max(0, nowMs - fixAtMs) : 0,
       });
@@ -552,6 +589,7 @@ export class FleetStore {
       if (seen.has(driverId)) continue;
       this.drivers.delete(driverId);
       this.interpolator.remove(driverId);
+      this.trails.remove(driverId);
       this.dirtyDrivers.add(driverId);
     }
 
@@ -804,6 +842,7 @@ export class FleetStore {
     this.drivers.clear();
     this.byIdIdx.clear();
     this.interpolator.clear();
+    this.trails.clear();
   }
 }
 
