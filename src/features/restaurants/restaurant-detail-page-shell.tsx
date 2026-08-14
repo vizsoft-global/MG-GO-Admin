@@ -42,7 +42,7 @@ import {
   useRestaurantDeliveries,
   useRestaurantDetail,
 } from "./use-restaurants";
-import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
+import { resolveDeliveryStatusVariant } from "@/features/deliveries/delivery-status-variant";
 import type { RestaurantActivityKind } from "./types";
 
 type DetailTabId = "overview" | "drivers" | "deliveries" | "activity";
@@ -585,7 +585,7 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
                         </p>
                       </TableCell>
                       <TableCell className="align-top">
-                        <StatusPill variant={resolveStatusVariant(row.status)}>
+                        <StatusPill variant={resolveDeliveryStatusVariant(row.status)}>
                           {deliveryStatusLabel(row.status)}
                         </StatusPill>
                       </TableCell>

@@ -1,5 +1,7 @@
 /** Minimal Google Maps JS API surface (avoids @types/google.maps dependency). */
 
+import { ensureVisualizationLibrary } from "./visualization";
+
 export type GoogleMapLatLng = { lat: number; lng: number };
 
 export type GoogleMapLatLngLiteral = GoogleMapLatLng;
@@ -279,15 +281,6 @@ function installAuthFailureHandler() {
   };
 }
 
-async function ensureVisualizationLibrary(api: GoogleMapsApi): Promise<void> {
-  if (api.maps.visualization?.HeatmapLayer) return;
-  try {
-    await api.maps.importLibrary?.("visualization");
-  } catch {
-    /* Heatmap stays off if the library is blocked on the key. */
-  }
-}
-
 /** Lazy-load Google Maps JS API with Places and Visualization libraries. */
 export function loadGoogleMaps(): Promise<GoogleMapsApi | null> {
   if (typeof window === "undefined") {
@@ -324,7 +317,7 @@ export function loadGoogleMaps(): Promise<GoogleMapsApi | null> {
           return;
         }
         lastFailure = null;
-        resolve(api);
+        void ensureVisualizationLibrary(api).then(() => resolve(api));
       };
 
       const callbackName = "__dpdGoogleMapsInit";

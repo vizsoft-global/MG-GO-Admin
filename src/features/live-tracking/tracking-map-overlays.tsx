@@ -209,10 +209,12 @@ export function TrackingMapLegend({
             );
           })}
           <li
-            className="inline-flex cursor-default items-center gap-1.5 text-[11px] text-slate-700 dark:text-slate-200"
+            className="ms-1 inline-flex cursor-default select-none items-center gap-1.5 border-s border-border ps-3 text-[11px] text-muted-foreground"
+            role="status"
+            title={t("legendClusterHint")}
             aria-label={`${t("fleetStatus.cluster")} ${clusterCount}`}
           >
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-semibold tabular-nums text-foreground">
               {clusterCount}
             </span>
             <span>{t("fleetStatus.cluster")}</span>

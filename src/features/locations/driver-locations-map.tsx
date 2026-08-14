@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { loadGoogleMaps } from "@/lib/google-maps/load";
+import { ensureVisualizationLibrary } from "@/lib/google-maps/visualization";
 import { GoogleMapsStatusBanner } from "@/features/restaurants/google-maps-status-banner";
 import {
   circleFromZoneFeature,
@@ -263,7 +264,7 @@ export function DriverLocationsMap({
     if (!map || mapState !== "ready") return;
 
     const syncGen = ++markerSyncGenRef.current;
-    void loadGoogleMaps().then((google) => {
+    void loadGoogleMaps().then(async (google) => {
       if (syncGen !== markerSyncGenRef.current) return;
       if (!google?.maps?.Map || !mapRef.current) return;
 
@@ -415,6 +416,7 @@ export function DriverLocationsMap({
         clustererRef.current?.clearMarkers();
         clustererRef.current = null;
         trafficRef.current?.setMap(null);
+        await ensureVisualizationLibrary(google);
         const HeatmapLayer = google.maps.visualization?.HeatmapLayer;
         if (!HeatmapLayer) {
           for (const entry of byId.values()) {

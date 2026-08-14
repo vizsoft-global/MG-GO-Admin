@@ -56,7 +56,7 @@ export function LiveDriverList({
   }
 
   return (
-    <ul className="divide-y divide-border/70 overflow-y-auto">
+    <ul className="divide-y divide-border/70">
       {drivers.map((loc) => {
         const status = liveListStatus(loc);
         const zone = liveZoneStatus(loc.zoneStatus, loc.lastSeenAt);

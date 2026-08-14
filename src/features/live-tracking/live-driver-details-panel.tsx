@@ -421,13 +421,15 @@ function deliveryStatusTone(status: LiveRecentDelivery["status"]): Tone {
     case "verified":
       return "success";
     case "pending":
+    case "under_review":
       return "warning";
     case "rejected":
-    case "cancelled":
       return "danger";
+    case "cancelled":
+      return "neutral";
     case "in_transit":
       return "primary";
     default:
-      return "primary";
+      return "warning";
   }
 }
