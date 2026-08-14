@@ -6,6 +6,7 @@ import type { Database } from "@/types/database";
 import {
   enrichLiveLocation,
   isGpsLive,
+  latestGpsAt,
   liveLocationPayloadChanged,
   parseTrackingStatus,
   parseZoneStatus,
@@ -30,7 +31,10 @@ type Listener = (locations: DriverLiveLocation[]) => void;
 
 /** Coalesce realtime floods so React + maps update at most ~4×/sec. */
 const NOTIFY_BATCH_MS = 250;
+/** Safety net when the websocket drops — pins must not freeze until refresh. */
+const RESYNC_MS = 15_000;
 let channel: RealtimeChannel | null = null;
+let resyncTimer: ReturnType<typeof setInterval> | null = null;
 let listeners = new Set<Listener>();
 /** O(1) live upserts under high write volume. */
 let cacheById = new Map<string, DriverLiveLocation>();
@@ -130,7 +134,7 @@ function rowToLocation(row: LiveRow): DriverLiveLocation {
     activeDeliveryId: row.active_delivery_id ?? null,
     trackingStatus: parseTrackingStatus(row.tracking_status),
     zoneStatus: parseZoneStatus(row.zone_status),
-    lastSeenAt: row.last_seen_at,
+    lastSeenAt: latestGpsAt(row.last_seen_at, row.last_report_at),
     updatedAt: row.updated_at,
   });
 }
@@ -217,7 +221,10 @@ function applyPayload(
 
   // Drop extremely stale realtime events if connection backlog delivers late,
   // unless we already have a last-known pin — keep it for Offline / on-duty.
-  if (row.last_seen_at && !isGpsLive(row.last_seen_at)) {
+  if (
+    row.last_seen_at &&
+    !isGpsLive(row.last_seen_at, Date.now(), row.last_report_at)
+  ) {
     const prev = cacheById.get(row.driver_id);
     const onDuty =
       nameCache.get(row.driver_id)?.isOnDuty ?? prev?.isOnDuty ?? false;
@@ -288,7 +295,23 @@ function ensureChannel() {
         });
       },
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (status !== "CHANNEL_ERROR" && status !== "TIMED_OUT") return;
+      const dead = channel;
+      channel = null;
+      if (dead) void createClient().removeChannel(dead);
+      if (listeners.size === 0) return;
+      ensureChannel();
+      void loadInitial();
+    });
+}
+
+function ensureResync() {
+  if (resyncTimer != null) return;
+  resyncTimer = setInterval(() => {
+    if (listeners.size === 0) return;
+    void loadInitial();
+  }, RESYNC_MS);
 }
 
 export function subscribeDriverLocations(listener: Listener): () => void {
@@ -296,6 +319,7 @@ export function subscribeDriverLocations(listener: Listener): () => void {
   listener(snapshot());
 
   ensureChannel();
+  ensureResync();
 
   if (!fetchPromise) {
     fetchPromise = loadInitial().finally(() => {
@@ -311,6 +335,10 @@ export function subscribeDriverLocations(listener: Listener): () => void {
       if (notifyTimer != null) {
         clearTimeout(notifyTimer);
         notifyTimer = null;
+      }
+      if (resyncTimer != null) {
+        clearInterval(resyncTimer);
+        resyncTimer = null;
       }
     }
   };

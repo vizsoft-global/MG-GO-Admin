@@ -20,6 +20,7 @@ import {
 import { TrackingGlassCard } from "./tracking-shell";
 import { DriverOperationTimeline } from "./driver-operation-timeline";
 import type { LiveDriverMeta, LiveRecentDelivery } from "./live-tracking-types";
+import { liveRecentOrderDisplayStatus } from "./live-recent-orders";
 import { cn } from "@/lib/utils";
 import { COMPACT_STAT_LABEL_CLASS } from "./live-tracking-density";
 
@@ -316,7 +317,9 @@ export function LiveDriverDetailsPanel({
                     <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
                       #{order.shortId}
                     </p>
-                    <Pill tone={deliveryStatusTone(order.status)}>{deliveryStatusLabel(order.status)}</Pill>
+                    <Pill tone={deliveryStatusTone(order.status, order.deliveredAt)}>
+                      {deliveryStatusLabel(t, order.status, order.deliveredAt)}
+                    </Pill>
                   </div>
                   <p className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-300">
                     {order.partnerName}
@@ -399,16 +402,23 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function deliveryStatusLabel(status: LiveRecentDelivery["status"]): string {
-  switch (status) {
+function deliveryStatusLabel(
+  t: ReturnType<typeof useTranslations<"pages.liveTracking">>,
+  status: LiveRecentDelivery["status"],
+  deliveredAt: string | null,
+): string {
+  const display = liveRecentOrderDisplayStatus({ status, deliveredAt });
+  switch (display) {
     case "verified":
       return "Verified";
+    case "on_delivery":
+      return t("statusDeliverySubmit");
+    case "delivered":
+      return t("statusDelivered");
     case "pending":
       return "Pending";
     case "rejected":
       return "Rejected";
-    case "in_transit":
-      return "In transit";
     case "cancelled":
       return "Cancelled";
     default:
@@ -416,9 +426,14 @@ function deliveryStatusLabel(status: LiveRecentDelivery["status"]): string {
   }
 }
 
-function deliveryStatusTone(status: LiveRecentDelivery["status"]): Tone {
-  switch (status) {
+function deliveryStatusTone(
+  status: LiveRecentDelivery["status"],
+  deliveredAt: string | null,
+): Tone {
+  const display = liveRecentOrderDisplayStatus({ status, deliveredAt });
+  switch (display) {
     case "verified":
+    case "delivered":
       return "success";
     case "pending":
     case "under_review":
@@ -427,7 +442,7 @@ function deliveryStatusTone(status: LiveRecentDelivery["status"]): Tone {
       return "danger";
     case "cancelled":
       return "neutral";
-    case "in_transit":
+    case "on_delivery":
       return "primary";
     default:
       return "warning";

@@ -227,6 +227,7 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-14` — **Live Tracking stays live after clock-out, and leftover On Delivery / Pending chips clear.** Clock-out no longer deletes `driver_locations` (Offline keeps the last pin). List uses `last_report_at` so coalesced heartbeats stay Moving/Idle; stale leftover `moving` pins are no longer green; leftover `delivery_submit` without an open pickup is Idle/Moving. Recent Orders maps `in_transit` → On Delivery and finished `pending` → Delivered. Realtime resubscribes and resyncs every 15s. Driver-app account switch now clears in-memory + disk avatar cache so 10088 cannot show 10085's photo. Migration `20260912100000`.
 - `[admin only] 2026-08-14` — **Live Tracking list colors match the pin, and On Delivery clears after finish.** Out-of-zone Moving/Idle chips use danger (same as the alert pin). `delivery_submit` without `active_delivery_id` shows Delivered instead of On Delivery.
 
 - `[admin+app] 2026-08-14` — **Clock-in after install no longer looks already In.** Fresh install / re-login with leftover server `is_on_duty` still opens “Before you clock in” when OS checks fail, but the header toggle stays Out and Clock In always collects shift times before `driver_set_duty_state`. Resume with permissions already granted is unchanged.

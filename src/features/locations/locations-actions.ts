@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveLocationSubmitAction } from "./location-event-display";
 import {
   enrichLiveLocation,
+  latestGpsAt,
   parseTrackingStatus,
   parseZoneStatus,
 } from "./location-status";
@@ -51,6 +52,7 @@ function mapLiveRow(row: {
   tracking_status: string;
   zone_status: string | null;
   last_seen_at: string;
+  last_report_at?: string | null;
   updated_at: string;
   drivers: {
     driver_code: string;
@@ -86,7 +88,7 @@ function mapLiveRow(row: {
     activeDeliveryId: row.active_delivery_id ?? null,
     trackingStatus: parseTrackingStatus(row.tracking_status),
     zoneStatus: parseZoneStatus(row.zone_status),
-    lastSeenAt: row.last_seen_at,
+    lastSeenAt: latestGpsAt(row.last_seen_at, row.last_report_at),
     updatedAt: row.updated_at,
   });
 }
@@ -111,6 +113,7 @@ export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> 
       tracking_status,
       zone_status,
       last_seen_at,
+      last_report_at,
       updated_at,
       drivers (
         driver_code,

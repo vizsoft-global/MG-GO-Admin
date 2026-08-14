@@ -259,6 +259,7 @@ export function LiveTrackingLiveView({
   const { data: selectedRecentOrders = [] } = useQuery({
     queryKey: ["live-tracking", "recent-deliveries", selectedId],
     enabled: Boolean(selectedId),
+    refetchInterval: 10_000,
     queryFn: async () => {
       if (!selectedId) return [];
       try {

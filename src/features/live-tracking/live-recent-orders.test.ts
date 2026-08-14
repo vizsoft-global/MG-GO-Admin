@@ -1,25 +1,36 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { liveOrderDisplayId, liveOrderTimestamp } from "./live-recent-orders";
+import { liveRecentOrderDisplayStatus } from "./live-recent-orders";
 
-describe("live recent orders", () => {
-  it("prefers the partner Order ID over a sliced uuid", () => {
+describe("liveRecentOrderDisplayStatus", () => {
+  it("shows On Delivery while the pickup is still in transit", () => {
     assert.equal(
-      liveOrderDisplayId({
-        id: "7493b738-02e3-49c8-9152-e07ac7ae3335",
-        external_order_id: "1234500",
-      }),
-      "1234500",
+      liveRecentOrderDisplayStatus({ status: "in_transit", deliveredAt: null }),
+      "on_delivery",
     );
   });
 
-  it("uses created_at when the latest order is still in transit", () => {
+  it("shows Delivered after the rider finishes, even if review is still pending", () => {
     assert.equal(
-      liveOrderTimestamp({
-        delivered_at: null,
-        created_at: "2026-08-13T07:08:07.861Z",
+      liveRecentOrderDisplayStatus({
+        status: "pending",
+        deliveredAt: "2026-08-14T10:00:00.000Z",
       }),
-      "2026-08-13T07:08:07.861Z",
+      "delivered",
+    );
+    assert.equal(
+      liveRecentOrderDisplayStatus({
+        status: "under_review",
+        deliveredAt: "2026-08-14T10:00:00.000Z",
+      }),
+      "delivered",
+    );
+  });
+
+  it("keeps Pending when the order has not been finished yet", () => {
+    assert.equal(
+      liveRecentOrderDisplayStatus({ status: "pending", deliveredAt: null }),
+      "pending",
     );
   });
 });

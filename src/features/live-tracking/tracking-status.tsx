@@ -44,8 +44,8 @@ export function liveListStatus(input: {
   if (input.isBlocked) return "blocked";
   if (!input.isOnDuty) return "offline";
   if (!input.lastSeenAt || !isGpsLive(input.lastSeenAt, input.now)) return "offline";
-  if (input.trackingStatus === "delivery_submit") {
-    return input.activeDeliveryId ? "delivery_submit" : "delivered";
+  if (input.trackingStatus === "delivery_submit" && input.activeDeliveryId) {
+    return "delivery_submit";
   }
   if (input.trackingStatus === "moving") return "moving";
   if (isMovingSpeed(input.speedMps)) return "moving";

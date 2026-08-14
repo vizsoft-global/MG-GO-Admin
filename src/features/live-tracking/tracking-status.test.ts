@@ -76,7 +76,7 @@ describe("liveListStatus", () => {
     );
   });
 
-  it("shows Delivered after finish when there is no active pickup", () => {
+  it("shows Idle after finish when leftover delivery_submit has no active pickup", () => {
     assert.equal(
       liveListStatus({
         isOnDuty: true,
@@ -86,7 +86,7 @@ describe("liveListStatus", () => {
         now: NOW,
         activeDeliveryId: null,
       }),
-      "delivered",
+      "idle",
     );
   });
 

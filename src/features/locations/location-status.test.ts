@@ -4,6 +4,7 @@ import {
   LIVE_GPS_MAX_AGE_MS,
   derivePinStatus,
   isGpsLive,
+  latestGpsAt,
   liveLocationPayloadChanged,
   shouldShowOnLiveMap,
 } from "./location-status";
@@ -75,6 +76,19 @@ describe("derivePinStatus", () => {
     );
   });
 
+  it("does not keep a leftover Moving stamp green after GPS goes stale", () => {
+    assert.equal(
+      derivePinStatus({
+        zoneStatus: "in_zone",
+        trackingStatus: "moving",
+        lastSeenAt: isoMinutesAgo(9),
+        isOnDuty: true,
+        speedMps: 8,
+      }),
+      "idle",
+    );
+  });
+
   it("uses Alert only for a live out-of-zone pin", () => {
     assert.equal(
       derivePinStatus({
@@ -86,6 +100,16 @@ describe("derivePinStatus", () => {
       }),
       "alert",
     );
+  });
+});
+
+describe("latestGpsAt / isGpsLive", () => {
+  it("treats a fresh last_report_at heartbeat as live even if last_seen_at froze", () => {
+    const frozen = isoMinutesAgo(9);
+    const heartbeat = isoMinutesAgo(0.5);
+    assert.equal(latestGpsAt(frozen, heartbeat), heartbeat);
+    assert.equal(isGpsLive(frozen, NOW, heartbeat), true);
+    assert.equal(isGpsLive(frozen, NOW), false);
   });
 });
 
