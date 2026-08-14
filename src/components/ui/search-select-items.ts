@@ -31,7 +31,7 @@ export function buildSearchSelectVisibleItems<T extends SearchSelectListItem>({
   const byId = new Map(items.map((item) => [item.value, item]));
   const recentItems = recents
     .map((id) => byId.get(id))
-    .filter((item): item is T => Boolean(item) && !pinnedIds.has(item.value))
+    .filter((item): item is T => item != null && !pinnedIds.has(item.value))
     .slice(0, recentsCount);
   const recentIds = new Set(recentItems.map((item) => item.value));
   const remaining = items
