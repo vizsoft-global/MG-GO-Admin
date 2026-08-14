@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    // node types are for the test files only; the deployed bundle uses neither
+    // `node:test` nor any Node builtin.
+    "types": ["@cloudflare/workers-types", "node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": false
+  },
+  // The status machine is imported from the app tree rather than copied: the Worker
+  // and the browser must never disagree about what "moving" means. That file has no
+  // imports of its own, so pulling it in costs nothing.
+  "include": [
+    "src/**/*.ts",
+    "../../../src/features/live-tracking-v2/fleet-status.ts",
+    "../../../src/features/live-tracking-v2/fleet-token.ts",
+    "../../../src/features/live-tracking-v2/fleet-wire.ts"
+  ]
+}

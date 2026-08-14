@@ -394,6 +394,14 @@ export type Database = {
           driver_telemetry_retention_days: number
           esign_screenshot_default: boolean
           feature_two_stage_delivery: boolean
+          fleet_events_retention_days: number
+          fleet_gps_offline_seconds: number
+          fleet_idle_minutes: number
+          fleet_low_battery_pct: number
+          fleet_overspeed_kmh: number
+          fleet_shift_late_grace_minutes: number
+          fleet_stale_gps_seconds: number
+          fleet_zone_buffer_meters: number
           font_family: string
           id: number
           logo_type: string
@@ -433,6 +441,14 @@ export type Database = {
           driver_telemetry_retention_days?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
+          fleet_events_retention_days?: number
+          fleet_gps_offline_seconds?: number
+          fleet_idle_minutes?: number
+          fleet_low_battery_pct?: number
+          fleet_overspeed_kmh?: number
+          fleet_shift_late_grace_minutes?: number
+          fleet_stale_gps_seconds?: number
+          fleet_zone_buffer_meters?: number
           font_family?: string
           id?: number
           logo_type?: string
@@ -472,6 +488,14 @@ export type Database = {
           driver_telemetry_retention_days?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
+          fleet_events_retention_days?: number
+          fleet_gps_offline_seconds?: number
+          fleet_idle_minutes?: number
+          fleet_low_battery_pct?: number
+          fleet_overspeed_kmh?: number
+          fleet_shift_late_grace_minutes?: number
+          fleet_stale_gps_seconds?: number
+          fleet_zone_buffer_meters?: number
           font_family?: string
           id?: number
           logo_type?: string
@@ -3013,6 +3037,72 @@ export type Database = {
             columns: ["sent_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fleet_events: {
+        Row: {
+          context: Json
+          created_at: string
+          detected_at: string
+          driver_id: string
+          event_key: string
+          id: number
+          latitude: number | null
+          longitude: number | null
+          severity: string
+          source: string
+          status_after: string | null
+          status_before: string | null
+          value: number | null
+          zone_id: string | null
+        }
+        Insert: {
+          context?: Json
+          created_at?: string
+          detected_at?: string
+          driver_id: string
+          event_key: string
+          id?: number
+          latitude?: number | null
+          longitude?: number | null
+          severity?: string
+          source?: string
+          status_after?: string | null
+          status_before?: string | null
+          value?: number | null
+          zone_id?: string | null
+        }
+        Update: {
+          context?: Json
+          created_at?: string
+          detected_at?: string
+          driver_id?: string
+          event_key?: string
+          id?: number
+          latitude?: number | null
+          longitude?: number | null
+          severity?: string
+          source?: string
+          status_after?: string | null
+          status_before?: string | null
+          value?: number | null
+          zone_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fleet_events_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fleet_events_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "zones"
             referencedColumns: ["id"]
           },
         ]
@@ -6387,6 +6477,8 @@ export type Database = {
         Args: { p_driver_id: string; p_reason?: string }
         Returns: undefined
       }
+      _fleet_caller_is_service_role: { Args: never; Returns: boolean }
+      _fleet_settings: { Args: never; Returns: Json }
       _haversine_meters: {
         Args: { p_lat1: number; p_lat2: number; p_lng1: number; p_lng2: number }
         Returns: number
@@ -6548,11 +6640,16 @@ export type Database = {
         Args: { p_driver_id: string }
         Returns: undefined
       }
+      admin_get_driver_day_route: {
+        Args: { p_date?: string; p_driver_id: string; p_tolerance_m?: number }
+        Returns: Json
+      }
       admin_get_request: { Args: { p_request_id: string }; Returns: Json }
       admin_get_shift_adherence: {
         Args: { p_date: string; p_driver_id: string }
         Returns: Json
       }
+      admin_ingest_driver_positions: { Args: { p_events: Json }; Returns: Json }
       admin_list_attendance_daily: {
         Args: {
           p_from: string
@@ -6599,6 +6696,19 @@ export type Database = {
         Args: { p_limit?: number; p_offset?: number; p_status?: string }
         Returns: Json
       }
+      admin_list_fleet_events: {
+        Args: {
+          p_cursor_detected_at?: string
+          p_cursor_id?: number
+          p_driver_id?: string
+          p_event_keys?: string[]
+          p_from?: string
+          p_limit?: number
+          p_severities?: string[]
+          p_to?: string
+        }
+        Returns: Json
+      }
       admin_list_requests: {
         Args: {
           p_date_from?: string
@@ -6631,6 +6741,10 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_live_fleet_snapshot: {
+        Args: { p_seen_within_minutes?: number }
+        Returns: Json
+      }
       admin_preview_purge: {
         Args: { p_entity_type: string; p_ids: string[] }
         Returns: Json
@@ -6643,6 +6757,7 @@ export type Database = {
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
+      admin_record_fleet_events: { Args: { p_events: Json }; Returns: Json }
       admin_request_department_report: {
         Args: { p_date_from?: string; p_date_to?: string }
         Returns: Json
@@ -6716,6 +6831,10 @@ export type Database = {
         Returns: number
       }
       cleanup_driver_telemetry_events: {
+        Args: { p_batch?: number; p_keep?: string }
+        Returns: number
+      }
+      cleanup_fleet_events: {
         Args: { p_batch?: number; p_keep?: string }
         Returns: number
       }

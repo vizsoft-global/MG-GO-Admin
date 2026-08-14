@@ -75,6 +75,9 @@ Order allocation is **external** (partner apps). We own: monitoring, compliance,
 | `src/components/app/` | AppPage, AppListCard, AppSettingsLayout, etc. |
 | `docs/DRIVER_APP_HANDOFF.md` | **Mobile app single-file handoff** |
 | `supabase/migrations/` | Schema |
+| `src/features/live-tracking-v2/` | Live Tracking V2 engine: `fleet-status` (status + flags, shared with the Worker), `fleet-wire`, `fleet-store`, `fleet-transport`, `fleet-interpolator`, `fleet-map` |
+| `infra/workers/dpd-live/` | Cloudflare Worker + `FleetRoom` Durable Object (driver ingest, admin WebSocket, Class B rules) |
+| `scripts/fleet-sim.mjs` | Synthetic fleet simulator (500+ drivers, scripted event scenarios, hysteresis verdict) |
 
 ---
 
@@ -148,7 +151,7 @@ Migrations: `20260518000000_dpd_core_schema.sql`, `20260518120000_app_settings.s
 |-------|--------|
 | Workforce | `partners`, `zones`, `drivers`, `driver_documents`, `driver_assets` |
 | Fleet | `vehicles` |
-| Ops | `deliveries`, `attendance_logs`, `driver_sessions` |
+| Ops | `deliveries`, `attendance_logs`, `driver_sessions`, `fleet_events` (Live Tracking V2 edge-derived events) |
 | Compliance | `wrong_actions`, `hygiene_tasks`, `hygiene_submissions` |
 | HR | `requests`, `loan_terms` |
 | Payroll | `offers` (legacy), `incentive_rules`, `driver_earnings_daily`, `driver_wallet_entries`, `delivery_rules`, `restaurants` |
@@ -179,6 +182,7 @@ Migrations: `20260518000000_dpd_core_schema.sql`, `20260518120000_app_settings.s
 | `driver_sessions` | On/off duty status |
 | `support:thread:{id}` | Chat |
 | `notifications:driver:{id}` | In-app notification feed |
+| `fleet:{room}` | **Live Tracking V2 only** — Supabase Broadcast mirror of the Durable Object, used when the edge WebSocket is unreachable. Deliberately not shared with any V1 channel |
 
 ---
 
@@ -226,6 +230,16 @@ Change-log format:
 ---
 
 ## Change log
+
+- `[admin+app] 2026-08-14` — **Live Tracking V2: the map is a game loop, not a list that repaints.** New sibling route `/live-tracking-v2` (`drivers.view`), built as a full-bleed WebGL canvas with floating panels; V2 shares no channel, no store and no component with `/live-tracking`. The one file V1 owns that this touched is `driver-locations-map.tsx`, and only because `deck.gl` drags in `@types/google.maps`: the clusterer's types started resolving where they had been falling back to `any`, and `google.maps.Marker` does not unify with the repo's hand-written `GoogleMarkerInstance`. The fix is casts at that boundary plus one behaviour-preserving line — the cluster renderer now passes `{ lat: position.lat(), lng: position.lng() }` where it passed the `LatLng` straight through, which `Marker` accepts either way. Preferred over casting a class as a literal, which would have type-checked by asserting something untrue. `@types/google.maps` is pinned so a transitive bump cannot reopen this. The reason for a second page rather than a rewrite is that V1's contract *is* the durable record — pins from `driver_locations`, one status pill per driver, repaint on `postgres_changes` — and every change that makes tracking feel live breaks one of those assumptions.
+
+  **Transport is three rails, in preference order:** a Cloudflare Durable Object (`infra/workers/dpd-live`, one `FleetRoom` per room) over a WebSocket at 4Hz, a 1Hz Supabase Broadcast mirror of the same room, then snapshot polling of `admin_live_fleet_snapshot`. A rail that fails degrades to the next one without the UI going blank, and the connection pill always names the rail actually in use rather than claiming "live" — an admin who cannot tell a 4Hz feed from a 10s poll will read a stale map as a stopped driver. The DO holds zones, roster, shifts and thresholds in memory, does viewport and filter culling before it serialises (interest management is what makes 500+ drivers affordable), and batch-flushes to `driver_locations` every 10s through the new service-role `admin_ingest_driver_positions`, so Postgres remains the record while never being in the render path.
+
+  **Movement is interpolated on the client, which is why the app's jitter had to go.** A fix every 5s drawn as a jump every 5s looks broken at any zoom; `fleet-interpolator` renders behind a fixed delay and dead-reckons forward, capped, so a marker glides and a silent phone coasts to a stop instead of freezing mid-street. That only works against predictable spacing, so the Flutter scheduler moved from `10 + random(0–5)`s to a fixed 5s (idle 45–60s → 30s) and sampling moved to a continuous position stream; the 15s foreground tick is now a watchdog for what a stream cannot report (GPS off, permission revoked, dead edge), not the sampling clock. Two app-side guards exist because a fast rail can lie: queued fixes replayed after reconnect carry `replay: true` and are history-only (otherwise a marker walks back through the last hour), and every batch carries a `duty_state_version` so a flush in flight at clock-out cannot re-animate a driver the map has just shown Offline (`409 stale_duty_state`). Unsetting `LIVE_INGEST_URL` disables the whole rail with no deploy.
+
+  **Status and flags are separated.** V1 packs everything into one pill, so "Moving" and "out of zone" compete for the same slot and one of them loses; V2 keeps a single status and independent booleans (`out_of_zone`, `overspeed`, `low_battery`, `stale_gps`, `mocked_gps`, `shift_late`, `shift_overrun`). Events are likewise split by authorship: Class A stays server-authored in `driver_operation_events`, Class B (overspeed, sustained idle, battery, zone, range, shift) is derived at the edge into the new `fleet_events` — with hysteresis and grouped cooldowns, because a rider parked on a zone boundary would otherwise generate an event per sample. `fleet-status.ts` is imported by both the browser and the Worker so a threshold cannot drift between where it is enforced and where it is displayed. Also filled five gaps where duty state changed with no event at all: attendance auto-checkout, `set_driver_blocked`, the inactive-status trigger, stale pickup auto-cancel and `driver_clear_live_location`.
+
+  Click a driver for the day's route (`admin_get_driver_day_route`, PostGIS `ST_Simplify`) with a playback scrubber and the day's events pinned on the timeline. `scripts/fleet-sim.mjs` drives 500+ synthetic drivers through any of the three targets and prints a per-scenario `OK`/`SUSPECT` hysteresis verdict — the flap scenarios are the point, and it runs the Worker's real geo buffer rather than a bare radius check, or it would be testing the cooldown instead of the buffer. The full-bleed canvas is a **sanctioned** divergence from the `TrackingGlassCard` shell, scoped to this route in `.cursor/rules/ui-system.mdc`. Migrations `20260914100000` (ingest + snapshot + day route), `20260914100100` (`fleet_events`), `20260914100200` (the five silent duty paths); contract in [`docs/LIVE_TRACKING_USER_APP_RULES.md`](../docs/LIVE_TRACKING_USER_APP_RULES.md) §11.
 
 - `[admin+app] 2026-08-14` — **Delivery rejection reason wraps in the app, and Admin Edit photo reaches the rider.** Detail row value is width-constrained so a long `rejection_reason` no longer stacks the label vertically. Profile disk cache now versions by `avatar_updated_at` and Profile/resume refetch so an Admin overwrite of the same R2 key is not stuck on the previous bytes.
 - `[admin+app] 2026-08-14` — **Live Tracking: Moving vs leftover Idle, In Progress = On Delivery only, Location-off removes the pin.** Leftover `delivery_submit` without an open pickup is no longer a green pin (list already used speed → Idle/Moving). In Progress counts `liveListStatus === delivery_submit`, so Offline leftover rows cannot make the KPI 1. OS Location off calls `driver_clear_live_location` (on-duty only) so the rider leaves the list instead of staying Idle; clock-out still keeps the Offline pin. Thank You device back goes Home. Migration `20260913100000`.

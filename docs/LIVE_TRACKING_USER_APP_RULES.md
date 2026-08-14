@@ -1,8 +1,10 @@
 # Live Tracking — User App Rules
 
-Audit of the Flutter duty tracker and the Admin / server contract. No behavior change — reference only.
+The contract between the Flutter duty tracker and the Admin / server side.
 
-Related: [`DRIVER_APP_HANDOFF.md`](DRIVER_APP_HANDOFF.md) (Live Tracking paragraph).
+§1–§10 describe the shared pipeline, which **V1 `/live-tracking` and V2 `/live-tracking-v2` both depend on**. §11 covers what V2 added on top. Cadence in §1 and §8 changed when V2 shipped; everything else is a straight audit of current behaviour.
+
+Related: [`DRIVER_APP_HANDOFF.md`](DRIVER_APP_HANDOFF.md) (Live Tracking map + Live Tracking V2 edge rail paragraphs).
 
 ---
 
@@ -10,12 +12,21 @@ Related: [`DRIVER_APP_HANDOFF.md`](DRIVER_APP_HANDOFF.md) (Live Tracking paragra
 
 | Rule | Value | Source |
 |---|---|---|
-| FGS tick | **15s** | [`duty_background_service.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/duty_background_service.dart) `ForegroundTaskEventAction.repeat(15000)` |
-| Moving report | **10–15s** (`10 + random(0–5)`) | [`adaptive_location_scheduler.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/adaptive_location_scheduler.dart) `_intervalForStatus(moving)` |
-| Idle heartbeat | **45–60s** (`45 + random(0–15)`) | same file, `_intervalForStatus(idle)` |
+| FGS tick | **15s** — a **watchdog**, not the sampling clock | [`duty_background_service.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/duty_background_service.dart) `ForegroundTaskEventAction.repeat(15000)` |
+| Moving report | **5s fixed** (was 10–15s jittered) | [`adaptive_location_scheduler.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/adaptive_location_scheduler.dart) `movingReportInterval` |
+| Idle heartbeat | **30s fixed** (was 45–60s jittered) | same file, `idleReportInterval` |
 | Immediate | first on-duty sample, idle→moving, pickup/finish (`delivery_submit`) | `shouldReportToServer` (`force`, `needsInitialReport`, `movementJustStarted`, `deliverySubmit`) |
 
-Android-only foreground service. Scheduler `tickInterval` is also 15s; the FGS repeat is what actually drives `_tick()`.
+Android-only foreground service.
+
+**The jitter was removed on purpose.** Randomised spacing is the right call when the server only needs a fresh row, and the wrong one the moment a client interpolates between fixes: a 10–15s window means the renderer cannot know when the next fix is due, so it either lags by the worst case or overshoots and snaps back. §11 depends on the fixed 5s.
+
+Two clocks now exist, and only one of them writes to Postgres:
+
+- **Sampling** is continuous (`positionStream`, 10m `distanceFilter`) and feeds the edge rail at the cadence above.
+- **Durable writes** still happen on the 15s watchdog tick via `driver_report_location`, and are *skipped* while a recent edge publish already guarantees the row (`_edgeDurableGrace` = **25s**). State changes, the first sample and `delivery_submit` always write directly.
+
+On a build with no `LIVE_INGEST_URL` the stream is never started, so behaviour collapses to the pre-V2 path: watchdog-driven writes, now due on nearly every tick while moving and every other tick while idle. Server coalescing (§9) is what keeps that from becoming a write storm — a stationary rider still writes at most once per **60s**.
 
 ---
 
@@ -88,7 +99,7 @@ Clock-out / profile sign-out: [`on_duty_gate.dart`](C:/Users/Admin/Desktop/Vizso
 - Android-only FGS; extras: heading, battery, network, `active_delivery_id`.
 - Admin UI rechecks Offline age every **10s** ([`live-tracking-live-view.tsx`](../src/features/live-tracking/live-tracking-live-view.tsx) `nowTick`).
 - Battery restriction: warn only, **never** clocks out (cooldown **3 min**) ([`duty_battery_exemption.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/core/permissions/duty_battery_exemption.dart)).
-- Offline queue: FGS HTTP fail → `pending_location_reports` → replay the same status ([`sync_controller.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/core/offline/sync_controller.dart)).
+- Offline queue: FGS HTTP fail → `pending_location_reports` → replay the same status ([`sync_controller.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/core/offline/sync_controller.dart)). Replay goes through the edge first when configured, always with `replay: true` (§11) so a drained queue writes history without moving the live pin.
 - Local zone stream: **5 m** filter (UI only) ([`local_zone_monitor.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/local_zone_monitor.dart)).
 - Out-of-zone client checkout: **45 min** idle; **20 min** grace after finish outside zone ([`zone_monitor_provider.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/home/zone_monitor_provider.dart)).
 - GPS sample per tick: last-known max age **10s**, timeLimit **12s**, last-known reject accuracy **> 80 m**.
@@ -99,8 +110,9 @@ Clock-out / profile sign-out: [`on_duty_gate.dart`](C:/Users/Admin/Desktop/Vizso
 
 | What | Delay |
 |---|---|
-| Moving pin lag | **~10–15s** |
-| Idle heartbeat | **~45–60s** |
+| Moving pin lag — V1 map | **~15s** (watchdog tick) |
+| Moving pin lag — V2 map | **~5s** minus interpolation, so the pin is continuously in motion |
+| Idle heartbeat | **~30s** |
 | Clock-out Offline | **~1s** (realtime) |
 | Silent → Offline chip | **~8 min** (`LIVE_GPS_MAX_AGE_MS`) |
 | GPS Offline insight | **~90s** (`GPS_HEARTBEAT_STALE_MS`) |
@@ -152,6 +164,50 @@ Also:
 
 ---
 
+## 11. Live Tracking **V2** — the edge rail
+
+V2 (`/live-tracking-v2`) does not replace anything above. `driver_report_location` remains the durable record; the edge rail is a **second, faster copy** of the same fixes, and V1 keeps reading Postgres exactly as it did.
+
+### App → edge
+
+`POST {LIVE_INGEST_URL}/ingest`, driver Supabase JWT as `Authorization: Bearer`, batched up to **3** fixes ([`live_position_publisher.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_position_publisher.dart)).
+
+| Field | Meaning |
+|---|---|
+| `points[]` | `lat`, `lng`, `accuracy_m`, `speed_mps`, `heading_deg`, `battery_pct`, `network`, `tracking_status`, `active_delivery_id`, `is_mocked`, `captured_at` |
+| `points[].replay` | **History only.** A fix drained from `pending_location_reports` must never move the live pin — a reconnecting phone would otherwise teleport its marker back through the last hour |
+| `duty_state_version` | Monotonic counter bumped on every clock-in / clock-out ([`duty_session_storage.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/duty_session_storage.dart)) |
+
+`duty_state_version` exists because the batch and the duty state race: a flush in flight when the rider clocks out would re-animate a driver who is already Offline. The Durable Object answers `409 stale_duty_state` to anything older than the version it has seen, and the app treats that as final, not as a retry.
+
+**Unset `LIVE_INGEST_URL` disables the whole rail** (`Env.isLiveIngestEnabled`) — no stream, no publisher, no behaviour change. That is the kill switch, and it needs no server deploy.
+
+### Failure order
+
+1. Edge publish succeeds → the Durable Object flushes to `driver_locations` every **10s**, so the durable row still lands and the watchdog stands down for **25s**.
+2. Edge publish fails → the fix goes straight to `driver_report_location` on the same pass, not on the next tick.
+3. No network at all → the existing `pending_location_reports` queue, replayed with `replay: true` first via the edge and falling back to the RPC per row ([`sync_controller.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/core/offline/sync_controller.dart)).
+
+### Admin thresholds (V2 only)
+
+Shared by the Worker and the browser from one file, [`src/features/live-tracking-v2/fleet-status.ts`](../src/features/live-tracking-v2/fleet-status.ts), overridable per environment from `app_settings`:
+
+| Threshold | Default |
+|---|---|
+| Moving | **1.5 m/s** (same as V1) |
+| Overspeed | **60 km/h** |
+| Low battery | **20%** |
+| Stale GPS / GPS offline | **30s** / **90s** |
+| Sustained idle | **5 min** |
+| Zone hysteresis buffer | **25 m** |
+| Shift late grace | **10 min** |
+
+Status is one value; **flags are independent booleans** (`out_of_zone`, `overspeed`, `low_battery`, `mocked_gps`, `shift_late`, …), so "Moving" and "out of zone" no longer have to fight over one pill the way V1's single status does.
+
+Class B events (overspeed, idle, battery, zone, range, shift) are derived at the edge with hysteresis and cooldowns and stored in `fleet_events`; Class A events stay server-authored in `driver_operation_events`. Anything that oscillates on a boundary must produce **one** event, not one per sample — [`scripts/fleet-sim.mjs`](../scripts/fleet-sim.mjs) exists to check exactly that, and prints an explicit `OK` / `SUSPECT` verdict per flap scenario.
+
+---
+
 ## RPCs (location / duty)
 
 | RPC | When |
@@ -160,3 +216,4 @@ Also:
 | `driver_clear_live_location` | OS Location / permission off, still In |
 | `driver_set_duty_state` | Clock in/out, profile sign-out |
 | `driver_heartbeat` | Device session (not GPS) |
+| `admin_ingest_driver_positions` | **Service role only** — the Durable Object's 10s durable flush (V2) |
