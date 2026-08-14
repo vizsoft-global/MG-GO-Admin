@@ -6,13 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useRecentSelections } from "@/lib/use-recent-selections";
+import {
+  buildSearchSelectVisibleItems,
+  type SearchSelectListItem,
+} from "@/components/ui/search-select-items";
 
-export type SearchSelectItem = {
-  value: string;
-  label: string;
-  hint?: string;
-  keywords?: string[];
-};
+export type SearchSelectItem = SearchSelectListItem;
 
 export function SearchSelect({
   items,
@@ -62,19 +61,18 @@ export function SearchSelect({
     });
   }, [items, query]);
 
-  const visibleItems = useMemo(() => {
-    if (query.trim()) return filteredItems;
-    const byId = new Map(items.map((item) => [item.value, item]));
-    const recentItems = recents
-      .map((id) => byId.get(id))
-      .filter((item): item is SearchSelectItem => Boolean(item))
-      .slice(0, recentsCount);
-    const recentIds = new Set(recentItems.map((item) => item.value));
-    const remaining = items
-      .filter((item) => !recentIds.has(item.value))
-      .slice(0, Math.max(defaultLimit - recentItems.length, 0));
-    return [...recentItems, ...remaining];
-  }, [query, filteredItems, items, recents, recentsCount, defaultLimit]);
+  const visibleItems = useMemo(
+    () =>
+      buildSearchSelectVisibleItems({
+        items,
+        query,
+        filteredItems,
+        recents,
+        recentsCount,
+        defaultLimit,
+      }),
+    [query, filteredItems, items, recents, recentsCount, defaultLimit],
+  );
 
   const showRecentsLabel = !query.trim() && recentsKey && recents.length > 0;
   const hasMore = !query.trim() && visibleItems.length < items.length;
@@ -146,7 +144,7 @@ export function SearchSelect({
                   checked && "bg-muted",
                 )}
                 onClick={() => {
-                  push(item.value);
+                  if (item.value !== "all") push(item.value);
                   onChange(item.value);
                   setOpen(false);
                 }}
