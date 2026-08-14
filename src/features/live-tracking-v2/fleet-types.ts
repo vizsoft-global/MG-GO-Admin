@@ -12,7 +12,7 @@ import type {
   FleetFlagSet,
   FleetStatus,
 } from "./fleet-status";
-import type { DriverMeta } from "./fleet-wire";
+import type { DriverMeta, HeadingSource } from "./fleet-wire";
 
 /**
  * Which transport the page is currently fed by. Surfaced to the operator, because
@@ -55,7 +55,17 @@ export type FleetDriver = {
   lat: number | null;
   lng: number | null;
   speedMps: number;
+  /**
+   * Last known bearing, held across fixes that carry none — see `headingSource` for
+   * whether the *current* fix contributed it.
+   */
   headingDeg: number;
+  /**
+   * Where the bearing came from. A GPS course at speed and a compass reading at a
+   * standstill are different claims, and the driver card says which one it is showing
+   * rather than presenting both as the same fact.
+   */
+  headingSource: HeadingSource;
   /** Server-clock ms of the fix behind this record. */
   fixAtMs: number;
   /** How stale the GPS was when the server built the frame. */

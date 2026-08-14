@@ -20,7 +20,46 @@ import {
   type FleetStatus,
 } from "./fleet-status";
 
-export const WIRE_VERSION = 1;
+/**
+ * 2 added the heading-source element and the `trail` frame.
+ *
+ * Both directions of a version mismatch degrade rather than fail, which is why there
+ * is no version gate on `hello`: a v1 room sends 8-element tuples, so a v2 client
+ * reads the missing source as `none` and holds each marker's last bearing instead of
+ * rotating it, and never receives a `trail` frame, so it draws no tails. A v1 client
+ * against a v2 room ignores the extra element and the unknown frame type. Refusing the
+ * connection instead would blank the map for the length of a rolling deploy, which is
+ * a worse outcome than a map with no trails on it.
+ */
+export const WIRE_VERSION = 2;
+
+/**
+ * How much history a trail carries. Owned here rather than in the client, because the
+ * Durable Object prunes to the same window it advertises; two constants would drift
+ * into a client drawing a tail the room had already dropped.
+ */
+export const TRAIL_WINDOW_MS = 10 * 60_000;
+
+/** Trail downsample gates, applied identically in the room and in the client. */
+export const TRAIL_MIN_MOVE_M = 5;
+export const TRAIL_MIN_GAP_MS = 3_000;
+
+/**
+ * Where a bearing came from. A GPS course at 40km/h and a compass reading at a
+ * standstill are not the same claim, so the source travels with the value instead of
+ * being inferred from speed on the client.
+ */
+export const HEADING_SOURCES = ["none", "gps", "compass"] as const;
+export type HeadingSource = (typeof HEADING_SOURCES)[number];
+
+export function headingSourceCode(source: HeadingSource | null | undefined): number {
+  const index = source ? HEADING_SOURCES.indexOf(source) : 0;
+  return index >= 0 ? index : 0;
+}
+
+export function headingSourceFromCode(code: number | undefined): HeadingSource {
+  return HEADING_SOURCES[code ?? 0] ?? "none";
+}
 
 export function statusCode(status: FleetStatus): number {
   const index = FLEET_STATUSES.indexOf(status);
@@ -63,12 +102,14 @@ export function flagsFromNames(names: readonly string[]): FleetFlagSet {
 }
 
 /**
- * [idIdx, lat*1e5, lng*1e5, speed in dm/s, heading deg, statusCode, flagBits, ageDeciseconds]
+ * [idIdx, lat*1e5, lng*1e5, speed in dm/s, heading deg, statusCode, flagBits,
+ *  ageDeciseconds, headingSourceCode]
  *
  * 1e5 of a degree is ~1.1m, well inside GPS accuracy, and keeps every value a
  * small integer so JSON stays compact without a binary codec.
  */
 export type PositionTuple = [
+  number,
   number,
   number,
   number,
@@ -85,10 +126,15 @@ export function encodePosition(input: {
   lng: number;
   speedMps: number | null;
   headingDeg: number | null;
+  headingSource?: HeadingSource | null;
   status: FleetStatus;
   flags: FleetFlagSet;
   ageMs: number;
 }): PositionTuple {
+  // A bearing with no source is not a bearing. Encoding the source explicitly is what
+  // lets the client hold the last known heading instead of rotating a marker north.
+  const source: HeadingSource =
+    input.headingSource ?? (input.headingDeg == null ? "none" : "gps");
   return [
     input.idIdx,
     Math.round(input.lat * 1e5),
@@ -98,20 +144,48 @@ export function encodePosition(input: {
     statusCode(input.status),
     flagBits(input.flags),
     Math.max(0, Math.min(65535, Math.round(input.ageMs / 100))),
+    headingSourceCode(source),
   ];
 }
 
 export function decodePosition(tuple: PositionTuple) {
+  const headingSource = headingSourceFromCode(tuple[8]);
   return {
     idIdx: tuple[0],
     lat: tuple[1] / 1e5,
     lng: tuple[2] / 1e5,
     speedMps: tuple[3] / 10,
     headingDeg: tuple[4],
+    headingSource,
+    headingKnown: headingSource !== "none",
     status: statusFromCode(tuple[5]),
     flags: flagsFromBits(tuple[6]),
     ageMs: tuple[7] * 100,
   };
+}
+
+/**
+ * Flat `lat*1e5, lng*1e5, unix seconds` triplets rather than an array of objects: a
+ * 10-minute tail for 500 riders is the largest single payload this socket sends, and
+ * the flat form is roughly a third of the bytes of `{lat,lng,ts}` objects.
+ */
+export type TrailTrack = { idIdx: number; pts: number[] };
+
+export function encodeTrailPoint(lat: number, lng: number, tsMs: number): [number, number, number] {
+  return [Math.round(lat * 1e5), Math.round(lng * 1e5), Math.round(tsMs / 1000)];
+}
+
+/** Metres between two coordinates — equirectangular, which is exact enough at city scale. */
+export function trailDistanceMeters(
+  aLat: number,
+  aLng: number,
+  bLat: number,
+  bLng: number,
+): number {
+  const latRad = ((aLat + bLat) / 2) * (Math.PI / 180);
+  const dLat = (bLat - aLat) * 111_320;
+  const dLng = (bLng - aLng) * 111_320 * Math.cos(latRad);
+  return Math.sqrt(dLat * dLat + dLng * dLng);
 }
 
 /** Roster metadata, sent once per driver and on change — never in a position frame. */
@@ -189,6 +263,12 @@ export type ServerFrame =
     }
   | { t: "meta"; drivers: DriverMeta[] }
   | { t: "delta"; seq: number; ts: number; e: PositionTuple[]; gone: number[] }
+  /**
+   * History for drivers this socket has just started seeing. Sent once each; the
+   * client extends the tail from the `delta` frames it already receives, so panning
+   * back and forth does not re-send the same 10 minutes.
+   */
+  | { t: "trail"; windowMs: number; tracks: TrailTrack[] }
   | { t: "events"; events: FleetEventFrame[] }
   | { t: "ops"; events: OpsEventFrame[] }
   | { t: "pong"; ts: number }

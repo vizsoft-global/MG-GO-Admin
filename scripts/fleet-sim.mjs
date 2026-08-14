@@ -18,6 +18,10 @@
  *                   FLEET_WS_URL=ws://localhost:8787 and any
  *                   FLEET_WS_TOKEN_SECRET. No Cloudflare, no database, no writes.
  *                   This is the render-performance rig.
+ *   --target room   Runs the real FleetRoom in this process with Supabase stubbed
+ *                   at the fetch boundary, and reports whether one single-threaded
+ *                   room absorbs the fleet at the requested cadence. This is the
+ *                   1Hz capacity rig; it needs no tokens and no infrastructure.
  *   --target edge   POST /ingest against a real Worker as real drivers. Needs a
  *                   --tokens file of driver JWTs. Exercises the DO, the rules and
  *                   the durable flush end to end.
@@ -48,10 +52,14 @@ const HELP = `fleet-sim — synthetic driver simulator for Live Tracking V2
 
 Usage: node --import tsx scripts/fleet-sim.mjs [options]
 
-  --target ws|edge|db   Where positions go (default ws)
+  --target ws|room|edge|db
+                        Where positions go (default ws)
   --drivers N           Synthetic drivers (default 500, ws target only)
   --hz N                Delta frames per second (default 4)
-  --cadence MS          Simulated GPS fix interval (default 5000)
+  --cadence MS          Simulated GPS fix interval (default 1000 — the app's
+                        moving cadence; pass 5000 for the pre-1Hz behaviour)
+  --batch N             Fixes per ingest request for --target room (default 2,
+                        matching LiveCadence.batchSize in the app)
   --port N              WS listen port (default 8787)
   --room NAME           Room name announced in hello (default fleet-kw)
   --duration S          Stop after S seconds (default: run until Ctrl-C)
@@ -96,7 +104,10 @@ function parseArgs(argv) {
     target: "ws",
     drivers: 500,
     hz: 4,
-    cadence: 5000,
+    // The app's moving interval. Was 5000 before the 1Hz change, and a simulator
+    // whose default disagrees with the app measures a fleet nobody ships.
+    cadence: 1000,
+    batch: 2,
     port: 8787,
     room: "fleet-kw",
     duration: 0,
@@ -128,6 +139,10 @@ function parseArgs(argv) {
         break;
       case "--hz":
         args.hz = Number(value);
+        i += 1;
+        break;
+      case "--batch":
+        args.batch = Number(value);
         i += 1;
         break;
       case "--cadence":
@@ -184,9 +199,10 @@ function parseArgs(argv) {
     }
   }
 
-  if (!["ws", "edge", "db"].includes(args.target)) {
-    fail(`--target must be ws, edge or db`);
+  if (!["ws", "edge", "db", "room"].includes(args.target)) {
+    fail(`--target must be ws, edge, room or db`);
   }
+  if (args.batch < 1) fail("--batch must be at least 1");
   if (args.target === "db" && !args.confirm) {
     fail("--target db writes to the production database. Re-run with --confirm.");
   }
@@ -741,6 +757,9 @@ function pointPayload(driver) {
     speed_mps: driver.speedMps,
     accuracy_m: 8,
     heading_deg: driver.headingDeg,
+    // A moving simulated driver always has a real course; the field exists so the
+    // room's normalisation is exercised rather than inferred.
+    heading_source: driver.speedMps >= 1 ? "gps" : "compass",
     battery_pct: driver.batteryPct,
     altitude_m: 12,
     network_type: "cellular",
@@ -787,6 +806,254 @@ function runEdgeTarget(args, fleet, stats) {
       }
     },
   };
+}
+
+/**
+ * Runs the real `FleetRoom` in this process and measures what one room costs.
+ *
+ * The risk 1Hz introduces is not bandwidth, it is that a Durable Object is
+ * **single-threaded**: 500 riders at 1Hz is ~250 batched ingest requests a second
+ * through one object that evaluates rules on each. `--target edge` cannot answer
+ * that — it needs 500 real driver JWTs, and it would be measuring Cloudflare's
+ * network as much as the room. So the room is instantiated directly and Supabase
+ * is replaced at the `fetch` boundary, which is the only thing between it and the
+ * outside world. What is measured is therefore the same code path production runs,
+ * minus workerd's I/O; what is *not* measured is the platform's own request
+ * overhead, and the report says so rather than implying otherwise.
+ */
+async function runRoomTarget(args, fleet, zones, stats) {
+  const { FleetRoom } = await import("../infra/workers/dpd-live/src/fleet-room.ts");
+
+  const supabaseUrl = "https://sim.invalid";
+  const snapshotDrivers = fleet.map((driver) => ({
+    driver_id: driver.driverId,
+    driver_name: driver.driverName,
+    driver_code: driver.driverCode,
+    employee_id: driver.employeeId,
+    zone_id: driver.zoneId,
+    zone_name: driver.zoneName,
+    partner_id: null,
+    partner_name: null,
+    vehicle_type: "bike",
+    is_on_duty: true,
+    is_online: true,
+    is_blocked: false,
+    account_status: "active",
+    latitude: driver.homeLat,
+    longitude: driver.homeLng,
+    speed_mps: 0,
+    heading_deg: null,
+    accuracy_meters: 10,
+    battery_pct: driver.batteryPct,
+    is_mocked: false,
+    tracking_status: "idle",
+    active_delivery_id: null,
+    zone_status: "in_zone",
+    last_report_at: new Date().toISOString(),
+    deliveries_today: driver.deliveriesToday,
+    distance_today_meters: driver.distanceTodayMeters,
+    shift_start_at: null,
+    shift_end_at: null,
+    shift_check_in_at: null,
+  }));
+
+  const zoneRows = zones.map((zone) => ({
+    id: zone.id,
+    name: zone.name,
+    color: zone.color ?? "#2563eb",
+    zone_type: "circle",
+    geometry: { type: "circle", center: zone.center, radius: ZONE_RADIUS_M },
+  }));
+
+  const io = { flushCalls: 0, flushRows: 0, eventRows: 0, broadcasts: 0, unhandled: [] };
+
+  // Token → driver id, so `resolveUserFromToken` behaves like the real thing
+  // (including the room's token cache) without a Supabase project.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (!url.startsWith(supabaseUrl)) return realFetch(input, init);
+    const path = url.slice(supabaseUrl.length);
+
+    if (path.startsWith("/auth/v1/user")) {
+      const header =
+        (init?.headers && (init.headers.Authorization ?? init.headers.authorization)) ?? "";
+      const id = String(header).replace(/^Bearer\s+sim\./, "");
+      return jsonResponse(id ? { id } : {}, id ? 200 : 401);
+    }
+    if (path.startsWith("/rest/v1/rpc/admin_live_fleet_snapshot")) {
+      return jsonResponse({ settings: null, drivers: snapshotDrivers });
+    }
+    if (path.startsWith("/rest/v1/rpc/admin_ingest_driver_positions")) {
+      io.flushCalls += 1;
+      const body = JSON.parse(init?.body ?? "{}");
+      io.flushRows += Array.isArray(body.p_events) ? body.p_events.length : 0;
+      return jsonResponse({});
+    }
+    if (path.startsWith("/rest/v1/zones")) return jsonResponse(zoneRows);
+    if (path.startsWith("/rest/v1/rpc/admin_record_fleet_events")) {
+      const body = JSON.parse(init?.body ?? "{}");
+      io.eventRows += Array.isArray(body.p_events) ? body.p_events.length : 1;
+      return jsonResponse({});
+    }
+    if (path.startsWith("/rest/v1/driver_operation_events")) return jsonResponse([]);
+    if (path.startsWith("/realtime/v1/api/broadcast")) {
+      io.broadcasts += 1;
+      return jsonResponse({});
+    }
+    // Anything unstubbed is reported rather than silently returning [], which
+    // would make a missing dependency look like an empty table.
+    if (io.unhandled.length < 5) io.unhandled.push(path.split("?")[0]);
+    return jsonResponse([]);
+  };
+
+  const storage = new Map();
+  const state = {
+    storage: {
+      get: async (key) => storage.get(key),
+      put: async (key, value) => void storage.set(key, value),
+      delete: async (key) => storage.delete(key),
+      setAlarm: async () => {},
+      deleteAlarm: async () => {},
+    },
+    getWebSockets: () => [],
+    acceptWebSocket: () => {},
+    blockConcurrencyWhile: async (fn) => fn(),
+    waitUntil: () => {},
+  };
+
+  const room = new FleetRoom(state, {
+    SUPABASE_URL: supabaseUrl,
+    SUPABASE_SERVICE_ROLE_KEY: "sim-service-role",
+    SUPABASE_ANON_KEY: "sim-anon",
+    ADMIN_WS_TOKEN_SECRET: "sim-secret",
+    POSITION_FRAME_HZ: String(args.hz),
+    TICK_MS: "2000",
+    FLEET_ROOM: null,
+  });
+
+  console.log(
+    `fleet-sim: in-process FleetRoom, ${fleet.length} riders, batch ${args.batch}, cadence ${args.cadence}ms`,
+  );
+
+  /** Per-driver buffer, mirroring the app's publisher. */
+  const pending = new Map();
+
+  return {
+    io,
+    /**
+     * Latency of one ingest request, in ms, as the room experiences it.
+     *
+     * Returns the **summed** room time for the batch, which is the number that
+     * decides capacity: the wall time of this loop also contains the harness
+     * building 500 payloads, work production does on 500 separate phones.
+     */
+    async publishBatch(drivers) {
+      let roomMs = 0;
+      for (const driver of drivers) {
+        // Buffer the way `LivePositionPublisher` does. Sending `batch` copies of
+        // every fix instead would double the request rate the room sees — 500/s
+        // rather than the 250/s the app actually produces — and that difference is
+        // the whole question of whether one room is enough.
+        let points = pending.get(driver.driverId);
+        if (!points) {
+          points = [];
+          pending.set(driver.driverId, points);
+        }
+        points.push(pointPayload(driver));
+        if (points.length < args.batch) continue;
+        pending.set(driver.driverId, []);
+
+        const startedNs = process.hrtime.bigint();
+        const response = await room.fetch(
+          new Request("https://sim.invalid/ingest", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer sim.${driver.driverId}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ points, duty_state_version: 1 }),
+          }),
+        );
+        const elapsedMs = Number(process.hrtime.bigint() - startedNs) / 1e6;
+        roomMs += elapsedMs;
+        stats.ingestMs.push(elapsedMs);
+        if (stats.ingestMs.length > 5000) stats.ingestMs.shift();
+        if (response.ok) stats.published += points.length;
+        else {
+          stats.errors += 1;
+          if (stats.errors <= 3) {
+            console.error("fleet-sim: ingest rejected", response.status, await response.text());
+          }
+        }
+      }
+      return roomMs;
+    },
+    async close() {
+      globalThis.fetch = realFetch;
+    },
+  };
+}
+
+/**
+ * The verdict the plan asked for: does **one** room absorb this fleet at this
+ * cadence, with the headroom to spare?
+ *
+ * The number that decides it is not the mean ingest latency, it is total CPU time
+ * per fix tick against the tick interval. A room that needs 1.2s to absorb one
+ * second of fleet falls behind forever, however good its p50 looks.
+ */
+function reportRoom(room, stats, args, elapsedSec) {
+  const percentile = (values, p) => {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+  };
+
+  const tickBudgetMs = Math.max(250, args.cadence / args.speed);
+  const tickP95 = percentile(stats.tickMs, 0.95);
+  const load = tickBudgetMs > 0 ? tickP95 / tickBudgetMs : 0;
+  const requestsPerSec = elapsedSec > 0 ? stats.published / args.batch / elapsedSec : 0;
+
+  console.log(
+    [
+      `  room: ingest p50=${percentile(stats.ingestMs, 0.5).toFixed(3)}ms`,
+      `p95=${percentile(stats.ingestMs, 0.95).toFixed(3)}ms`,
+      `max=${percentile(stats.ingestMs, 1).toFixed(2)}ms`,
+      `req/s=${requestsPerSec.toFixed(0)}`,
+      `room_cpu p50=${percentile(stats.tickMs, 0.5).toFixed(0)}ms`,
+      `p95=${tickP95.toFixed(0)}ms/${tickBudgetMs.toFixed(0)}ms`,
+      `load=${(load * 100).toFixed(0)}%`,
+    ].join(" "),
+  );
+  console.log(
+    [
+      `  durable: flushes=${room.io.flushCalls}`,
+      `rows=${room.io.flushRows}`,
+      `rows/driver/min=${
+        elapsedSec > 0 ? ((room.io.flushRows / args.drivers / elapsedSec) * 60).toFixed(1) : "0"
+      }`,
+      `events=${room.io.eventRows}`,
+      `mirrors=${room.io.broadcasts}`,
+    ].join(" "),
+  );
+
+  const verdict =
+    load < 0.5 ? "HOLDS" : load < 0.85 ? "TIGHT" : "SHARD FLEET_ROOM";
+  console.log(
+    `  verdict: ${verdict} — one room, ${args.drivers} riders on a ${args.cadence}ms cadence.` +
+      " Excludes workerd request overhead and real network.",
+  );
+  if (room.io.unhandled.length > 0) {
+    console.log(`  unstubbed Supabase paths (measurement is incomplete): ${room.io.unhandled.join(", ")}`);
+  }
+}
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 function runDbTarget(args, stats) {
@@ -848,6 +1115,9 @@ async function main() {
     events: new Map(),
     byScenario: new Map(),
     encodeMs: [],
+    ingestMs: [],
+    tickMs: [],
+    startedAt: Date.now(),
   };
 
   const scenarioCounts = new Map();
@@ -863,6 +1133,8 @@ async function main() {
   const ws = args.target === "ws" ? await runWsTarget(args, fleet, zones, stats) : null;
   const edge = args.target === "edge" ? runEdgeTarget(args, fleet, stats) : null;
   const db = args.target === "db" ? runDbTarget(args, stats) : null;
+  const room =
+    args.target === "room" ? await runRoomTarget(args, fleet, zones, stats) : null;
   const active = edge ? edge.drivers : fleet;
 
   const startedAt = Date.now();
@@ -923,6 +1195,14 @@ async function main() {
       // simulator's network stack, not the database.
       await db.publishBatch(active.filter((driver) => driver.reporting));
     }
+    if (room) {
+      // Sequential on purpose. A Durable Object handles one request at a time, so
+      // firing 500 in parallel would measure Promise scheduling and hide the very
+      // serialisation this target exists to measure.
+      const roomMs = await room.publishBatch(active.filter((driver) => driver.reporting));
+      stats.tickMs.push(roomMs);
+      if (stats.tickMs.length > 600) stats.tickMs.shift();
+    }
     if (ws && drafts.length > 0) ws.sendEvents(drafts);
   };
 
@@ -969,6 +1249,7 @@ async function main() {
           : `published=${stats.published} errors=${stats.errors}`,
       ].join(" "),
     );
+    if (room) reportRoom(room, stats, args, elapsed);
     if (stats.events.size > 0) {
       console.log(
         `  events: ${[...stats.events]
@@ -994,6 +1275,7 @@ async function main() {
     report();
     printExpectations(stats, scenarioCounts, args);
     if (ws) await ws.close();
+    if (room) await room.close();
     process.exit(0);
   };
 
@@ -1020,17 +1302,25 @@ function printExpectations(stats, scenarioCounts, args) {
 
   console.log("\nfleet-sim: hysteresis check (flap scenarios must not scale with oscillations)");
   const rows = [
-    ["speed-flap", FLEET_EVENT_KEYS.overspeedStart, scenarioCounts.get("speed-flap") ?? 0],
-    ["boundary-flap", FLEET_EVENT_KEYS.zoneExit, scenarioCounts.get("boundary-flap") ?? 0],
-    ["battery-flap", FLEET_EVENT_KEYS.batteryLow, scenarioCounts.get("battery-flap") ?? 0],
+    ["speed-flap", FLEET_EVENT_KEYS.overspeedStart, scenarioCounts.get("speed-flap") ?? 0, 60_000],
+    ["boundary-flap", FLEET_EVENT_KEYS.zoneExit, scenarioCounts.get("boundary-flap") ?? 0, 120_000],
+    ["battery-flap", FLEET_EVENT_KEYS.batteryLow, scenarioCounts.get("battery-flap") ?? 0, 30 * 60_000],
   ];
-  for (const [scenario, key, drivers] of rows) {
+  const elapsedMs = Date.now() - stats.startedAt;
+  for (const [scenario, key, drivers, cooldownMs] of rows) {
     if (drivers === 0) continue;
     const emitted = stats.byScenario.get(`${scenario}|${key}`) ?? 0;
-    const verdict = emitted <= drivers ? "OK" : "SUSPECT";
+    // The budget is per cooldown window, not per run. Asserting "at most one per
+    // driver" made every run longer than a cooldown cry wolf — which is the same
+    // false alarm the per-scenario tally was introduced to remove.
+    const windows = Math.max(1, Math.ceil(elapsedMs / cooldownMs));
+    const allowed = drivers * windows;
+    const verdict = emitted <= allowed ? "OK" : "SUSPECT";
     console.log(
-      `  ${scenario}: ${key} emitted ${emitted} for ${drivers} driver(s) — ${verdict}` +
-        (verdict === "SUSPECT" ? " (expected at most one per driver per cooldown)" : ""),
+      `  ${scenario}: ${key} emitted ${emitted} for ${drivers} driver(s) over ${windows} × ${
+        cooldownMs / 1000
+      }s cooldown — ${verdict}` +
+        (verdict === "SUSPECT" ? ` (expected at most ${allowed})` : ""),
     );
   }
   if (args.speed > 1) {

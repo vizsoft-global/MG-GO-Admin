@@ -220,6 +220,10 @@
         "deliveries": "Deliveries",
         "timeOnDuty": "Time on duty",
         "speed": "Speed",
+        "headingSource": {
+          "gps": "Heading from GPS course",
+          "compass": "Heading from phone compass — the mount may not match the bike"
+        },
         "battery": "Battery",
         "lastFix": "Last fix",
         "zone": "Zone",
