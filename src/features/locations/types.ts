@@ -24,6 +24,7 @@ export type DriverLiveLocation = {
   heading: number | null;
   trackingStatus: TrackingStatus;
   zoneStatus: ZoneStatus | null;
+  activeDeliveryId: string | null;
   lastSeenAt: string;
   updatedAt: string;
   pinStatus: PinStatus;

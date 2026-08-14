@@ -250,6 +250,7 @@
       "statusIdle": "Idle",
       "statusMoving": "Moving",
       "statusDeliverySubmit": "On delivery",
+      "statusDelivered": "Delivered",
       "onDuty": "On duty",
       "offDuty": "Off duty",
       "gpsLost": "GPS lost",

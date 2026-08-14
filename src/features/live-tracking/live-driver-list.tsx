@@ -11,17 +11,8 @@ import {
   formatSpeedMps,
 } from "@/features/locations/location-status";
 import type { DriverLiveLocation } from "@/features/locations/types";
-import { liveListStatus, type LiveListStatus } from "./tracking-status";
+import { liveListStatus, liveListStatusTone, type LiveListStatus } from "./tracking-status";
 import { liveZoneStatus } from "./tracking-metrics";
-
-function listStatusVariant(
-  status: LiveListStatus,
-): "success" | "warning" | "danger" | "neutral" {
-  if (status === "moving" || status === "delivery_submit") return "success";
-  if (status === "idle") return "warning";
-  if (status === "blocked") return "danger";
-  return "neutral";
-}
 
 function trackingLabel(
   t: ReturnType<typeof useTranslations<"pages.liveTracking">>,
@@ -31,6 +22,7 @@ function trackingLabel(
   if (status === "blocked") return t("chipBlocked");
   if (status === "moving") return t("statusMoving");
   if (status === "delivery_submit") return t("statusDeliverySubmit");
+  if (status === "delivered") return t("statusDelivered");
   return t("statusIdle");
 }
 
@@ -92,7 +84,7 @@ export function LiveDriverList({
                   ) : null}
                 </div>
               </div>
-              <StatusPill variant={listStatusVariant(status)} dot>
+              <StatusPill variant={liveListStatusTone(status, zone)} dot>
                 {trackingLabel(t, status)}
               </StatusPill>
             </div>

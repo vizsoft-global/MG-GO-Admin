@@ -4,6 +4,7 @@ import {
   LIVE_GPS_MAX_AGE_MS,
   derivePinStatus,
   isGpsLive,
+  latestGpsAt,
   liveLocationPayloadChanged,
   shouldShowOnLiveMap,
 } from "./location-status";
@@ -75,6 +76,49 @@ describe("derivePinStatus", () => {
     );
   });
 
+  it("does not keep a leftover Moving stamp green after GPS goes stale", () => {
+    assert.equal(
+      derivePinStatus({
+        zoneStatus: "in_zone",
+        trackingStatus: "moving",
+        lastSeenAt: isoMinutesAgo(9),
+        isOnDuty: true,
+        speedMps: 8,
+      }),
+      "idle",
+    );
+  });
+
+  it("does not keep leftover delivery_submit green after the pickup ends", () => {
+    const fresh = new Date(Date.now() - 10_000).toISOString();
+    assert.equal(
+      derivePinStatus({
+        zoneStatus: "in_zone",
+        trackingStatus: "delivery_submit",
+        lastSeenAt: fresh,
+        isOnDuty: true,
+        speedMps: 0,
+        activeDeliveryId: null,
+      }),
+      "idle",
+    );
+  });
+
+  it("keeps an open pickup pin active", () => {
+    const fresh = new Date(Date.now() - 10_000).toISOString();
+    assert.equal(
+      derivePinStatus({
+        zoneStatus: "in_zone",
+        trackingStatus: "delivery_submit",
+        lastSeenAt: fresh,
+        isOnDuty: true,
+        speedMps: 0,
+        activeDeliveryId: "del-1",
+      }),
+      "active",
+    );
+  });
+
   it("uses Alert only for a live out-of-zone pin", () => {
     assert.equal(
       derivePinStatus({
@@ -89,6 +133,16 @@ describe("derivePinStatus", () => {
   });
 });
 
+describe("latestGpsAt / isGpsLive", () => {
+  it("treats a fresh last_report_at heartbeat as live even if last_seen_at froze", () => {
+    const frozen = isoMinutesAgo(9);
+    const heartbeat = isoMinutesAgo(0.5);
+    assert.equal(latestGpsAt(frozen, heartbeat), heartbeat);
+    assert.equal(isGpsLive(frozen, NOW, heartbeat), true);
+    assert.equal(isGpsLive(frozen, NOW), false);
+  });
+});
+
 describe("liveLocationPayloadChanged", () => {
   const base = {
     latitude: 29.3759,
@@ -100,6 +154,7 @@ describe("liveLocationPayloadChanged", () => {
     isBlocked: false,
     speedMps: 0,
     batteryPct: 80,
+    activeDeliveryId: null,
     lastSeenAt: "2026-08-13T09:00:00.000Z",
   };
 

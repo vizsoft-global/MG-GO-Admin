@@ -250,6 +250,7 @@
       "statusIdle": "خامل",
       "statusMoving": "متحرك",
       "statusDeliverySubmit": "تسليم طلب",
+      "statusDelivered": "تم التسليم",
       "onDuty": "في الخدمة",
       "offDuty": "خارج الخدمة",
       "gpsLost": "فقدان GPS",

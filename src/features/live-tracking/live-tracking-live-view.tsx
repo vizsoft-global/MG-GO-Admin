@@ -39,6 +39,7 @@ import {
 import {
   LEGEND_FILTERABLE_STATUSES,
   fleetStatusFromLocation,
+  liveListStatus,
   type FleetStatusKey,
 } from "./tracking-status";
 import { liveOrderDisplayId, liveOrderTimestamp } from "./live-recent-orders";
@@ -210,6 +211,7 @@ export function LiveTrackingLiveView({
         speedMps: loc.speedMps,
         lastSeenAt: loc.lastSeenAt,
         now: nowTick,
+        activeDeliveryId: loc.activeDeliveryId,
       });
       return visibleStatuses.includes(status);
     });
@@ -258,6 +260,7 @@ export function LiveTrackingLiveView({
   const { data: selectedRecentOrders = [] } = useQuery({
     queryKey: ["live-tracking", "recent-deliveries", selectedId],
     enabled: Boolean(selectedId),
+    refetchInterval: 10_000,
     queryFn: async () => {
       if (!selectedId) return [];
       try {
@@ -302,8 +305,11 @@ export function LiveTrackingLiveView({
   );
 
   const inProgressCount = useMemo(
-    () => liveDrivers.filter((loc) => loc.trackingStatus === "delivery_submit").length,
-    [liveDrivers],
+    () =>
+      liveDrivers.filter(
+        (loc) => liveListStatus({ ...loc, now: nowTick }) === "delivery_submit",
+      ).length,
+    [liveDrivers, nowTick],
   );
 
   const zoneDriverCounts = useMemo(() => {

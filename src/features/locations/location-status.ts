@@ -17,9 +17,26 @@ export function parseZoneStatus(value: string | null): ZoneStatus | null {
   return null;
 }
 
-export function isGpsLive(lastSeenAt: string, now = Date.now()): boolean {
-  const age = now - new Date(lastSeenAt).getTime();
-  return age <= LIVE_GPS_MAX_AGE_MS;
+/** Prefer a coalesced heartbeat (`last_report_at`) over a frozen `last_seen_at`. */
+export function latestGpsAt(
+  lastSeenAt: string,
+  lastReportAt?: string | null,
+): string {
+  if (!lastReportAt) return lastSeenAt;
+  const seen = new Date(lastSeenAt).getTime();
+  const reported = new Date(lastReportAt).getTime();
+  if (!Number.isFinite(reported)) return lastSeenAt;
+  if (!Number.isFinite(seen) || reported > seen) return lastReportAt;
+  return lastSeenAt;
+}
+
+export function isGpsLive(
+  lastSeenAt: string,
+  now = Date.now(),
+  lastReportAt?: string | null,
+): boolean {
+  const age = now - new Date(latestGpsAt(lastSeenAt, lastReportAt)).getTime();
+  return Number.isFinite(age) && age <= LIVE_GPS_MAX_AGE_MS;
 }
 
 export function isMovingSpeed(speedMps: number | null | undefined): boolean {
@@ -51,14 +68,18 @@ export function derivePinStatus(input: {
   isOnDuty?: boolean;
   speedMps?: number | null;
   isBlocked?: boolean;
+  activeDeliveryId?: string | null;
 }): PinStatus {
   if (input.isBlocked) return "idle";
   if (input.isOnDuty === false) return "idle";
-  if (input.zoneStatus === "out_of_zone" && isGpsLive(input.lastSeenAt)) return "alert";
+  if (!isGpsLive(input.lastSeenAt)) return "idle";
+  if (input.zoneStatus === "out_of_zone") return "alert";
+  const onDelivery =
+    input.trackingStatus === "delivery_submit" && Boolean(input.activeDeliveryId);
   const moving =
     input.trackingStatus === "moving" ||
-    input.trackingStatus === "delivery_submit" ||
-    (isMovingSpeed(input.speedMps) && isGpsLive(input.lastSeenAt));
+    onDelivery ||
+    isMovingSpeed(input.speedMps);
   if (moving) return "active";
   return "idle";
 }
@@ -120,6 +141,7 @@ export function liveLocationPayloadChanged(
         | "isBlocked"
         | "speedMps"
         | "batteryPct"
+        | "activeDeliveryId"
         | "lastSeenAt"
       >
     | undefined,
@@ -134,6 +156,7 @@ export function liveLocationPayloadChanged(
     | "isBlocked"
     | "speedMps"
     | "batteryPct"
+    | "activeDeliveryId"
     | "lastSeenAt"
   >,
 ): boolean {
@@ -141,6 +164,7 @@ export function liveLocationPayloadChanged(
   if (prev.latitude !== next.latitude || prev.longitude !== next.longitude) return true;
   if (prev.trackingStatus !== next.trackingStatus) return true;
   if (prev.zoneStatus !== next.zoneStatus) return true;
+  if (prev.activeDeliveryId !== next.activeDeliveryId) return true;
   if (prev.pinStatus !== next.pinStatus) return true;
   if (prev.isOnDuty !== next.isOnDuty) return true;
   if (prev.isBlocked !== next.isBlocked) return true;
@@ -162,6 +186,7 @@ export function enrichLiveLocation(
       isOnDuty: row.isOnDuty,
       speedMps: row.speedMps,
       isBlocked: row.isBlocked,
+      activeDeliveryId: row.activeDeliveryId,
     }),
   };
 }
