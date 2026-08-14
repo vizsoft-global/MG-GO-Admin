@@ -154,8 +154,11 @@ export function LiveDriverDetailsPanel({
                 <p className="text-[11px] font-semibold text-slate-900 dark:text-slate-100">
                   #{latestOrder.shortId}
                 </p>
-                <Pill tone={deliveryStatusTone(latestOrder.status)} className="text-[9px]">
-                  {deliveryStatusLabel(latestOrder.status)}
+                <Pill
+                  tone={deliveryStatusTone(latestOrder.status, latestOrder.deliveredAt)}
+                  className="text-[9px]"
+                >
+                  {deliveryStatusLabel(t, latestOrder.status, latestOrder.deliveredAt)}
                 </Pill>
               </div>
               <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-slate-300">
