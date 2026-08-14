@@ -144,15 +144,17 @@ export function FleetOverviewPanel({
         className,
       )}
     >
-      <div className="border-b border-slate-200 px-3 py-2.5 dark:border-slate-700/80">
+      <div className="shrink-0 border-b border-slate-200 px-3 py-2.5 dark:border-slate-700/80">
         <TrackingTabSwitcher
           value={activeTab}
           onChange={onTabChange}
           showActivity={showActivityTab}
           showDiagnostics={showDiagnosticsTab}
-          className="mb-2"
         />
-        <div className="grid grid-cols-2 gap-2">
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain max-xl:h-auto max-xl:overflow-visible">
+        <div className="grid grid-cols-2 gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-700/80">
           {stats.map((tile) => (
             <MetricTile
               key={tile.id}
@@ -165,10 +167,7 @@ export function FleetOverviewPanel({
             />
           ))}
         </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden max-xl:h-auto max-xl:overflow-visible">
-        <div className="shrink-0 space-y-3 px-3 py-3">
+        <div className="space-y-3 px-3 py-3">
             <div className="relative">
           <Search className="pointer-events-none absolute start-2.5 top-2.5 h-4 w-4 text-slate-400" />
           <Input
@@ -357,11 +356,11 @@ export function FleetOverviewPanel({
 
         <div
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto",
+            "border-t border-slate-200 dark:border-slate-700/80",
             DRIVER_LIST_STACKED_MAX,
+            "max-xl:overflow-y-auto",
           )}
         >
-          <div className="border-t border-slate-200 dark:border-slate-700/80">
             <div className="border-b border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-500 dark:border-slate-700/70 dark:bg-slate-900/40 dark:text-slate-400">
               {t("trackedCount", { count: drivers.length })}
             </div>
@@ -371,7 +370,6 @@ export function FleetOverviewPanel({
               onSelect={onSelectDriver}
               avatarByDriverId={avatarByDriverId}
             />
-          </div>
         </div>
       </div>
     </TrackingGlassCard>
