@@ -68,14 +68,17 @@ export function derivePinStatus(input: {
   isOnDuty?: boolean;
   speedMps?: number | null;
   isBlocked?: boolean;
+  activeDeliveryId?: string | null;
 }): PinStatus {
   if (input.isBlocked) return "idle";
   if (input.isOnDuty === false) return "idle";
   if (!isGpsLive(input.lastSeenAt)) return "idle";
   if (input.zoneStatus === "out_of_zone") return "alert";
+  const onDelivery =
+    input.trackingStatus === "delivery_submit" && Boolean(input.activeDeliveryId);
   const moving =
     input.trackingStatus === "moving" ||
-    input.trackingStatus === "delivery_submit" ||
+    onDelivery ||
     isMovingSpeed(input.speedMps);
   if (moving) return "active";
   return "idle";
@@ -183,6 +186,7 @@ export function enrichLiveLocation(
       isOnDuty: row.isOnDuty,
       speedMps: row.speedMps,
       isBlocked: row.isBlocked,
+      activeDeliveryId: row.activeDeliveryId,
     }),
   };
 }

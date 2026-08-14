@@ -39,6 +39,7 @@ import {
 import {
   LEGEND_FILTERABLE_STATUSES,
   fleetStatusFromLocation,
+  liveListStatus,
   type FleetStatusKey,
 } from "./tracking-status";
 import { liveOrderDisplayId, liveOrderTimestamp } from "./live-recent-orders";
@@ -306,9 +307,9 @@ export function LiveTrackingLiveView({
   const inProgressCount = useMemo(
     () =>
       liveDrivers.filter(
-        (loc) => loc.trackingStatus === "delivery_submit" && loc.activeDeliveryId,
+        (loc) => liveListStatus({ ...loc, now: nowTick }) === "delivery_submit",
       ).length,
-    [liveDrivers],
+    [liveDrivers, nowTick],
   );
 
   const zoneDriverCounts = useMemo(() => {

@@ -90,6 +90,46 @@ describe("liveListStatus", () => {
     );
   });
 
+  it("shows Moving after finish when leftover delivery_submit has travel speed", () => {
+    assert.equal(
+      liveListStatus({
+        isOnDuty: true,
+        trackingStatus: "delivery_submit",
+        speedMps: 5,
+        lastSeenAt: fresh,
+        now: NOW,
+        activeDeliveryId: null,
+      }),
+      "moving",
+    );
+  });
+
+  it("does not count Offline leftover On Delivery as In Progress", () => {
+    const stale = new Date(NOW - 9 * 60_000).toISOString();
+    assert.equal(
+      liveListStatus({
+        isOnDuty: false,
+        trackingStatus: "delivery_submit",
+        speedMps: 0,
+        lastSeenAt: fresh,
+        now: NOW,
+        activeDeliveryId: "del-1",
+      }),
+      "offline",
+    );
+    assert.equal(
+      liveListStatus({
+        isOnDuty: true,
+        trackingStatus: "delivery_submit",
+        speedMps: 0,
+        lastSeenAt: stale,
+        now: NOW,
+        activeDeliveryId: "del-1",
+      }),
+      "offline",
+    );
+  });
+
   it("keeps On Delivery while an active pickup is still open", () => {
     assert.equal(
       liveListStatus({

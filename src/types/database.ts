@@ -6822,6 +6822,7 @@ export type Database = {
         Args: { p_external_order_id: string }
         Returns: boolean
       }
+      driver_clear_live_location: { Args: never; Returns: Json }
       driver_complete_delivery: {
         Args: {
           p_delivered_lat?: number

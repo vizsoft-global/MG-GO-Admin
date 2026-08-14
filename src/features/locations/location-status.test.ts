@@ -89,6 +89,36 @@ describe("derivePinStatus", () => {
     );
   });
 
+  it("does not keep leftover delivery_submit green after the pickup ends", () => {
+    const fresh = new Date(Date.now() - 10_000).toISOString();
+    assert.equal(
+      derivePinStatus({
+        zoneStatus: "in_zone",
+        trackingStatus: "delivery_submit",
+        lastSeenAt: fresh,
+        isOnDuty: true,
+        speedMps: 0,
+        activeDeliveryId: null,
+      }),
+      "idle",
+    );
+  });
+
+  it("keeps an open pickup pin active", () => {
+    const fresh = new Date(Date.now() - 10_000).toISOString();
+    assert.equal(
+      derivePinStatus({
+        zoneStatus: "in_zone",
+        trackingStatus: "delivery_submit",
+        lastSeenAt: fresh,
+        isOnDuty: true,
+        speedMps: 0,
+        activeDeliveryId: "del-1",
+      }),
+      "active",
+    );
+  });
+
   it("uses Alert only for a live out-of-zone pin", () => {
     assert.equal(
       derivePinStatus({
