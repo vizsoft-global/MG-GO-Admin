@@ -140,7 +140,7 @@ export function FleetOverviewPanel({
   return (
     <TrackingGlassCard
       className={cn(
-        "flex h-full min-h-0 flex-1 flex-col overflow-hidden border-slate-200 bg-white dark:border-slate-700/80 dark:bg-slate-900 max-xl:h-auto max-xl:flex-none",
+        "flex h-full min-h-0 flex-1 flex-col overflow-hidden border-slate-200 bg-white dark:border-slate-700/80 dark:bg-slate-900",
         className,
       )}
     >
@@ -153,7 +153,7 @@ export function FleetOverviewPanel({
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain max-xl:h-auto max-xl:overflow-visible">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
         <div className="grid grid-cols-2 gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-700/80">
           {stats.map((tile) => (
             <MetricTile

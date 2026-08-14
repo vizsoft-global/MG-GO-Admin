@@ -10,6 +10,7 @@ const statusPillVariants = cva(
       warning: "bg-warning-bg text-warning",
       danger: "bg-danger-bg text-danger",
       info: "bg-info-bg text-info",
+      pending: "bg-pending-bg text-pending",
       neutral: "bg-muted text-muted-foreground",
       },
     },
@@ -39,6 +40,7 @@ export function StatusPill({
             variant === "warning" && "bg-warning",
             variant === "danger" && "bg-danger",
             variant === "info" && "bg-info",
+            variant === "pending" && "bg-pending",
             variant === "neutral" && "bg-muted-foreground",
           )}
         />

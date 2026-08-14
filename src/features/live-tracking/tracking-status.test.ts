@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { fleetStatusFromLocation, LEGEND_STATUSES, liveListStatus } from "./tracking-status";
+import {
+  fleetStatusFromLocation,
+  LEGEND_FILTERABLE_STATUSES,
+  LEGEND_STATUSES,
+  liveListStatus,
+} from "./tracking-status";
 
 const NOW = Date.parse("2026-08-13T12:00:00.000Z");
 const fresh = new Date(NOW - 10_000).toISOString();
@@ -131,6 +136,7 @@ describe("fleetStatusFromLocation", () => {
 describe("LEGEND_STATUSES", () => {
   it("does not list Cluster as a status chip — the count row already does", () => {
     assert.equal(LEGEND_STATUSES.includes("cluster"), false);
+    assert.equal(LEGEND_FILTERABLE_STATUSES.includes("cluster"), false);
   });
 
   it("does not list Break — the app has no Break duty state", () => {

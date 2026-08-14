@@ -51,7 +51,7 @@ export function TrackingCommandLayout({
     <div className={trackingCommandShellClass({ fullscreen: Boolean(fullscreen), hasFooter })}>
       <div
         className={cn(
-          trackingCommandGridClass({ fullscreen: Boolean(fullscreen) }),
+          trackingCommandGridClass({ fullscreen: Boolean(fullscreen), hasFooter }),
           className,
         )}
       >

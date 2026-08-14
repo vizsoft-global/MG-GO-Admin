@@ -278,6 +278,7 @@
       "recenter": "إعادة التمركز",
       "layers": "الطبقات",
       "mapLegend": "المفتاح",
+      "legendClusterHint": "النقاط المجمّعة على الخريطة — ليست عامل تصفية",
       "fleetStatus": {
         "available": "متاح",
         "delivering": "يوصل",

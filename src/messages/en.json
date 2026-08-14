@@ -280,6 +280,7 @@
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "mapLegend": "Legend",
+      "legendClusterHint": "Grouped pins on the map — not a filter",
       "fleetStatus": {
         "available": "Available",
         "delivering": "Delivering",
