@@ -1,0 +1,53 @@
+{
+  "name": "dpd-live",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  // No nodejs_compat: token HMAC and hashing use Web Crypto, which is native here.
+  "account_id": "04c485faa34d67d1758b61465202e9ce",
+  "observability": {
+    "enabled": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "FLEET",
+        "class_name": "FleetRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FleetRoom"]
+    }
+  ],
+  "vars": {
+    // Sharding key. One room holds the whole Kuwait fleet today; the key is a
+    // parameter from day one so 500 -> 5000 drivers is a config change.
+    "FLEET_ROOM": "fleet-kw",
+    "POSITION_FRAME_HZ": "4",
+    "POSTGRES_FLUSH_MS": "10000",
+    "BROADCAST_MIRROR_MS": "1000",
+    "TICK_MS": "2000"
+  },
+  "env": {
+    "testing": {
+      "name": "dpd-live-testing",
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "FLEET",
+            "class_name": "FleetRoom"
+          }
+        ]
+      },
+      "vars": {
+        "FLEET_ROOM": "fleet-kw-testing",
+        "POSITION_FRAME_HZ": "4",
+        "POSTGRES_FLUSH_MS": "10000",
+        "BROADCAST_MIRROR_MS": "1000",
+        "TICK_MS": "2000"
+      }
+    }
+  }
+}

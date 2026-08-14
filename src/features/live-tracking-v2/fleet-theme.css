@@ -1,0 +1,111 @@
+/**
+ * Live Tracking V2 — scoped coral data-layer theme.
+ *
+ * Coral is this page's accent for the *data and route layer*: route polylines, the
+ * playback head, chart bars, the density ramp and sparklines. It is applied by scope,
+ * never globally.
+ *
+ * `--primary` is deliberately NOT redefined here. The navy sidebar, the existing Live
+ * Tracking page and every other admin surface read `--primary`, so overriding it would
+ * repaint the whole product from one page's stylesheet. Anything that wants coral asks
+ * for `--fleet-accent` (or a `--chart-*` slot) explicitly.
+ */
+
+.fleet-canvas {
+  /* Coral ramp. Kept in oklch to match the token vocabulary in themes.css. */
+  --fleet-accent: oklch(0.68 0.17 32);
+  --fleet-accent-strong: oklch(0.6 0.19 30);
+  --fleet-accent-soft: oklch(0.95 0.04 32);
+  --fleet-accent-foreground: oklch(0.99 0.01 32);
+
+  /* Chart slots are scoped, so bars and sparklines inside the canvas read coral
+     while charts elsewhere keep the green ramp. */
+  --chart-1: var(--fleet-accent);
+  --chart-2: oklch(0.72 0.13 45);
+  --chart-3: oklch(0.78 0.1 60);
+  --chart-4: oklch(0.62 0.14 20);
+  --chart-5: oklch(0.55 0.12 12);
+
+  /* Density ramp for the heat/zone shading, light → hot. */
+  --fleet-density-1: oklch(0.96 0.03 45);
+  --fleet-density-2: oklch(0.9 0.07 40);
+  --fleet-density-3: oklch(0.82 0.12 36);
+  --fleet-density-4: oklch(0.72 0.16 32);
+  --fleet-density-5: oklch(0.6 0.19 28);
+
+  /* Floating overlay surfaces sit on top of map tiles, so they need a touch more
+     opacity and blur than a normal card to stay readable over satellite imagery. */
+  --fleet-overlay-bg: color-mix(in oklab, var(--card) 88%, transparent);
+  --fleet-overlay-border: color-mix(in oklab, var(--border) 70%, transparent);
+}
+
+.fleet-accent-text {
+  color: var(--fleet-accent-strong);
+}
+
+.fleet-accent-bg {
+  background-color: var(--fleet-accent);
+  color: var(--fleet-accent-foreground);
+}
+
+.fleet-accent-soft {
+  background-color: var(--fleet-accent-soft);
+  color: var(--fleet-accent-strong);
+}
+
+/** Floating panel over the map: the overlay pattern this page is allowed to use. */
+.fleet-overlay {
+  background-color: var(--fleet-overlay-bg);
+  border-color: var(--fleet-overlay-border);
+  backdrop-filter: blur(10px) saturate(1.1);
+}
+
+/**
+ * The map canvas itself. Google's own container sets a white background that flashes
+ * on load; matching it to the app surface removes the flash without touching tiles.
+ */
+.fleet-canvas .fleet-map-surface {
+  background-color: color-mix(in oklab, var(--muted) 60%, var(--background));
+}
+
+/** Route progress line in the driver card — coral, since it is route data. */
+.fleet-progress-track {
+  background-color: color-mix(in oklab, var(--fleet-accent) 18%, transparent);
+}
+
+.fleet-progress-fill {
+  background-color: var(--fleet-accent);
+}
+
+/**
+ * Feed rows tint by severity, not by accent: on an ops timeline colour has to mean
+ * urgency. Coral is reserved for route/data, so it never appears here.
+ */
+.fleet-feed-row[data-severity="warning"] {
+  background-color: color-mix(in oklab, var(--chart-4) 10%, transparent);
+}
+
+.fleet-feed-row[data-severity="critical"] {
+  background-color: color-mix(in oklab, var(--destructive) 10%, transparent);
+}
+
+/** Live pulse on the connection dot. Opacity only, so reduced motion keeps it calm. */
+@keyframes fleet-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.fleet-pulse {
+  animation: fleet-pulse 2s var(--ease-in-out) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fleet-pulse {
+    animation: none;
+  }
+}

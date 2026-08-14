@@ -32,6 +32,38 @@ import {
 } from "@/features/live-tracking/tracking-map-layer-controller";
 import { createZoneLabelOverlay } from "./zone-label-overlay";
 
+/**
+ * Type-only bridge to `@googlemaps/markerclusterer`.
+ *
+ * This page drives Google Maps through the hand-written interfaces in
+ * `@/lib/google-maps/load`, which describe only the surface it uses. The clusterer's
+ * own types are written against `@types/google.maps`, which entered the tree as a
+ * transitive dependency of `@deck.gl/google-maps` (Live Tracking V2) and so began
+ * resolving where it previously fell back to `any`. Two structurally different
+ * descriptions of the same runtime objects need a cast at the boundary; nothing about
+ * what is handed to the clusterer has changed.
+ */
+type ClustererMap = google.maps.Map;
+type ClustererMarker = google.maps.Marker;
+
+function asClustererMarker(
+  marker: import("@/lib/google-maps/load").GoogleMarkerInstance,
+): ClustererMarker {
+  return marker as unknown as ClustererMarker;
+}
+
+function asClustererMarkers(
+  markers: import("@/lib/google-maps/load").GoogleMarkerInstance[],
+): ClustererMarker[] {
+  return markers as unknown as ClustererMarker[];
+}
+
+function asClustererMap(
+  map: import("@/lib/google-maps/load").GoogleMapInstance | null,
+): ClustererMap | undefined {
+  return (map ?? undefined) as unknown as ClustererMap | undefined;
+}
+
 /** Cap animated pulses — thousands of moving overlays kill the main thread. */
 const MAX_PULSE_MARKERS = 16;
 /** Coalesce MarkerClusterer re-layout under GPS storms. */
@@ -294,7 +326,7 @@ export function DriverLocationsMap({
         entry.pulse?.setMap(null);
         entry.marker.setMap(null);
         try {
-          clustererRef.current?.removeMarker(entry.marker);
+          clustererRef.current?.removeMarker(asClustererMarker(entry.marker));
         } catch {
           /* ignore */
         }
@@ -457,29 +489,31 @@ export function DriverLocationsMap({
 
         if (!clustererRef.current) {
           clustererRef.current = new MarkerClusterer({
-            map: mapRef.current,
-            markers: allDriverMarkers,
+            map: asClustererMap(mapRef.current),
+            markers: asClustererMarkers(allDriverMarkers),
             renderer: {
               render: ({ count, position }) =>
-                new google.maps.Marker({
-                  position,
-                  map: null,
-                  icon: {
-                    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-                      `<svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg"><circle cx="21" cy="21" r="20" fill="#2563EB"/><circle cx="21" cy="21" r="15" fill="#1D4ED8"/><text x="21" y="26" text-anchor="middle" fill="white" font-size="12" font-family="Inter,Arial,sans-serif" font-weight="700">${count}</text></svg>`,
-                    )}`,
-                    scaledSize: { width: 42, height: 42 },
-                    anchor: { x: 21, y: 21 },
-                  },
-                  zIndex: 1000,
-                }),
+                asClustererMarker(
+                  new google.maps.Marker({
+                    position: { lat: position.lat(), lng: position.lng() },
+                    map: null,
+                    icon: {
+                      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+                        `<svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg"><circle cx="21" cy="21" r="20" fill="#2563EB"/><circle cx="21" cy="21" r="15" fill="#1D4ED8"/><text x="21" y="26" text-anchor="middle" fill="white" font-size="12" font-family="Inter,Arial,sans-serif" font-weight="700">${count}</text></svg>`,
+                      )}`,
+                      scaledSize: { width: 42, height: 42 },
+                      anchor: { x: 21, y: 21 },
+                    },
+                    zIndex: 1000,
+                  }),
+                ),
             },
           });
           anyMoved = true;
         } else if (created.length > 0 || anyMoved || anyRemoved) {
           clustererRef.current.clearMarkers();
           if (allDriverMarkers.length > 0) {
-            clustererRef.current.addMarkers(allDriverMarkers);
+            clustererRef.current.addMarkers(asClustererMarkers(allDriverMarkers));
           }
           anyMoved = true;
         }

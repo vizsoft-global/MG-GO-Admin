@@ -54,6 +54,14 @@ Footer ≈ 72px + 14" usable ≈ 720px ⇒ body must fit in **≈ 648px**. **Inn
 
 **Never** use arbitrary gaps like `gap-4`, `gap-6`, or `space-y-6` on command-center split layouts. Live and History must share the same **`TrackingGlassCard`** sidebar shell.
 
+### Sanctioned exception — Live Tracking **V2** command canvas (`/live-tracking-v2` only)
+
+`src/features/live-tracking-v2/*` uses a **full-bleed map canvas with floating overlay panels** instead of the `TrackingGlassCard` side-by-side shell: a ~300px driver rail floating over the start edge, a ~340px dockable insights panel over the end edge, and map chrome (filters top-start, view controls top-end, zoom bottom-end, legend bottom-start) floating on the map.
+
+This is deliberate, not drift. On a 14" laptop a side-by-side grid leaves the map roughly 55% of the width, which is the wrong trade on a surface where the map is the primary instrument and 500 drivers must be legible at once. Both overlay panels collapse to a 48px icon strip so the map can take the full width.
+
+**Do not "fix" this back into a card grid.** The exception is scoped to `/live-tracking-v2`: `/live-tracking` (v1) stays governed by the `TrackingGlassCard` rule above, and no other page may adopt overlays on this basis. Everything else in this rulebook still applies to V2 — `h-9` controls, emerald `ToggleChip` selection, `SearchSelect` for zone/partner, Lucide icon per chip, no `transition-all`, motion ≤300ms, `prefers-reduced-motion` honoured (the interpolator snaps instead of animating).
+
 ---
 
 ## 4. Iconography
@@ -186,6 +194,19 @@ If **anything** renders below the map — insights panels, quick actions, event 
 | **Side-by-side exempt** | Zone editor / list+map split views where the map shares a row with a sidebar — not a footer stack |
 
 **Anti-patterns:** `min-h-[560px] flex-1` on a map frame with footer widgets; Fleet insights / Quick actions floating over the map bottom; history map taller than viewport while events table is below.
+
+### Sanctioned exception — Live Tracking **V2** overlays (`/live-tracking-v2` only)
+
+The V2 canvas is the one place overlays on the map are correct, because **nothing renders below the map**: there is no footer stack to overlap. The map fills a single-viewport canvas (`h-[calc(100dvh-1.5rem)]`, `min-h-[520px]`) and the driver rail, insights panel, filters, legend, zoom controls and the day-route scrubber float above it.
+
+Conditions this exception depends on — if any stops being true, the page is back under the `TrackingMapStage` rule:
+
+- The canvas is exactly one viewport and the page itself never scrolls; overlay panels scroll internally.
+- Every overlay is collapsible, so the operator can always get the full map.
+- Overlays use logical insets (`start-*` / `end-*` / `inset-x-*`), so the whole canvas mirrors under RTL without a second layout.
+- Fullscreen uses the Fullscreen API on the canvas element, not a CSS class swap — re-parenting the WebGL canvas would drop its context.
+
+V2 also renders drivers through `deck.gl` (`GoogleMapsOverlay`) rather than DOM markers + `MarkerClusterer`. Marker *language* is unchanged (vehicle glyph inside a colour-coded teardrop, status colour from the status machine, zone fill at 0.22, all three deselect paths); only the draw path differs, because DOM markers cannot hold 60fps at 500 animated pins.
 
 ### Map behavior
 

@@ -48,6 +48,25 @@ export const queryKeys = {
     telemetrySummary: (filters: Record<string, unknown> = {}) =>
       ["live-tracking", "telemetry-summary", filters] as const,
   },
+  /**
+   * Live Tracking V2. A separate namespace rather than more keys under
+   * `liveTracking`, so invalidating one page can never invalidate the other — the two
+   * pages are meant to be independently verifiable.
+   *
+   * The live position stream is deliberately absent: it is owned by `FleetStore` and
+   * never enters the Query cache. Only request/response reads live here.
+   */
+  liveTrackingV2: {
+    all: () => ["live-tracking-v2"] as const,
+    snapshot: () => ["live-tracking-v2", "snapshot"] as const,
+    zones: () => ["live-tracking-v2", "zones"] as const,
+    dayRoute: (driverId: string, date: string) =>
+      ["live-tracking-v2", "day-route", driverId, date] as const,
+    events: (filters: Record<string, unknown> = {}) =>
+      ["live-tracking-v2", "events", filters] as const,
+    driverEvents: (driverId: string, date: string) =>
+      ["live-tracking-v2", "driver-events", driverId, date] as const,
+  },
   partners: {
     all: () => ["partners"] as const,
     list: () => ["partners", "list"] as const,
