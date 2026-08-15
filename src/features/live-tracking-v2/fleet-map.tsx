@@ -49,6 +49,8 @@ import type { FleetZone } from "./fleet-types";
 /** Kuwait City — the same default centre as the existing page, so the two compare. */
 const DEFAULT_CENTER = { lat: 29.3759, lng: 47.9774 };
 const DEFAULT_ZOOM = 11;
+/** Street-level zoom when an operator clicks a driver. Matches v1's focus zoom. */
+const DRIVER_FOCUS_ZOOM = 16;
 const MIN_ZOOM = 6;
 const MAX_ZOOM = 20;
 
@@ -81,7 +83,8 @@ export type FleetMapHandle = {
   zoomOut: () => void;
   /** Frames every drawable driver. */
   fitFleet: () => void;
-  focusDriver: (driverId: string) => void;
+  /** Pan + street-zoom to a driver. Returns false when the pin is not yet located. */
+  focusDriver: (driverId: string) => boolean;
   resize: () => void;
 };
 
@@ -167,6 +170,11 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
   const revisionRef = useRef(0);
   const reducedMotionRef = useRef(false);
   const lastTrailPruneRef = useRef(0);
+  /**
+   * Pin picks fire both deck.gl `onClick` and the Google Maps `click` we use to
+   * deselect on background. The Google event must not undo the pick.
+   */
+  const pickHandledRef = useRef(false);
 
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
 
@@ -311,7 +319,13 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
 
       idleListener = map.addListener("idle", publishViewport);
       // Map background click is one of the three required deselect paths (§12).
-      clickListener = map.addListener("click", () => store.clearSelection());
+      clickListener = map.addListener("click", () => {
+        if (pickHandledRef.current) {
+          pickHandledRef.current = false;
+          return;
+        }
+        store.clearSelection();
+      });
 
       setStatus("ready");
       publishViewport();
@@ -528,7 +542,12 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           },
           pickable: true,
           onClick: (info) => {
-            if (info.object) store.selectDriver(info.object.driverId);
+            if (!info.object) return false;
+            pickHandledRef.current = true;
+            window.setTimeout(() => {
+              pickHandledRef.current = false;
+            }, 0);
+            store.selectDriver(info.object.driverId);
             return true;
           },
         }),
@@ -622,17 +641,22 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       },
       focusDriver: (driverId: string) => {
         const map = mapRef.current;
+        if (!map) return false;
         const entity = entityIndexRef.current.get(driverId);
-        if (!map || !entity?.located) return;
-        map.panTo({ lat: entity.position[1], lng: entity.position[0] });
-        if ((map.getZoom() ?? 0) < 14) map.setZoom(14);
+        const driver = store.getDriver(driverId);
+        const lat = entity?.located ? entity.position[1] : driver?.lat;
+        const lng = entity?.located ? entity.position[0] : driver?.lng;
+        if (lat == null || lng == null) return false;
+        map.panTo({ lat, lng });
+        map.setZoom(DRIVER_FOCUS_ZOOM);
+        return true;
       },
       resize: () => {
         const map = mapRef.current;
         if (map) google.maps.event.trigger(map, "resize");
       },
     }),
-    [],
+    [store],
   );
 
   return (

@@ -65,6 +65,26 @@ export function FleetCanvas() {
 
   const { filters, selectedDriverId } = snapshot;
 
+  // Clicking a driver (rail, pin, or same-card re-click) must bring the camera to
+  // them. Selection only used to open the day-route strip, so operators reported
+  // "nothing happens".
+  useEffect(() => {
+    if (!selectedDriverId) return;
+    const id = selectedDriverId;
+    let attempts = 0;
+    let timer: number | undefined;
+    const tryFocus = () => {
+      if (mapRef.current?.focusDriver(id)) return;
+      if (attempts >= 12) return;
+      attempts += 1;
+      timer = window.setTimeout(tryFocus, 50);
+    };
+    tryFocus();
+    return () => {
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [selectedDriverId]);
+
   // Fullscreen is the browser's, not a CSS class: a WebGL canvas re-parented by a
   // class change loses its context, and the Fullscreen API keeps the same element.
   useEffect(() => {

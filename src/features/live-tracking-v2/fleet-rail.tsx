@@ -135,7 +135,14 @@ export function FleetRail({
                   <FleetDriverCard
                     driverId={driverId}
                     selected={driverId === snapshot.selectedDriverId}
-                    onSelect={(id) => store.selectDriver(id)}
+                    onSelect={(id) => {
+                      // Same-marker click deselects (§12); same-row click re-zooms.
+                      if (snapshot.selectedDriverId === id) {
+                        onFocusDriver(id);
+                        return;
+                      }
+                      store.selectDriver(id);
+                    }}
                     onFocus={onFocusDriver}
                   />
                 </div>
