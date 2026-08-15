@@ -194,8 +194,8 @@ const ATLAS_PIXEL_WIDTH = ATLAS_CELL_COUNT * CELL * SCALE;
 const ATLAS_PIXEL_HEIGHT = CELL * SCALE;
 
 let atlasUrl: string | null = null;
-let atlasImage: HTMLImageElement | null = null;
-let atlasImagePromise: Promise<HTMLImageElement> | null = null;
+let atlasPngUrl: string | null = null;
+let atlasPngPromise: Promise<string> | null = null;
 
 /**
  * SVG data URL for HTML preview only. Do not pass this to deck.gl — loaders.gl's
@@ -210,41 +210,41 @@ export function fleetIconAtlasUrl(): string {
 }
 
 /**
- * Raster PNG `Image` for `IconLayer`. The SVG is drawn through the browser's image
- * decoder (which does understand SVG) and then copied to a canvas so the texture
- * deck.gl uploads is a real bitmap.
+ * PNG data URL for `IconLayer`. deck.gl 9 / luma.gl 9 accept `string | Texture`,
+ * not `HTMLImageElement`. A PNG data URL is a real bitmap the GPU can sample;
+ * the SVG data URL is not.
  */
-export function loadFleetIconAtlas(): Promise<HTMLImageElement> {
-  if (atlasImage) return Promise.resolve(atlasImage);
-  if (atlasImagePromise) return atlasImagePromise;
+export function loadFleetIconAtlas(): Promise<string> {
+  if (atlasPngUrl) return Promise.resolve(atlasPngUrl);
+  if (atlasPngPromise) return atlasPngPromise;
 
-  atlasImagePromise = new Promise((resolve, reject) => {
+  atlasPngPromise = new Promise((resolve, reject) => {
     const svgImage = new Image();
     svgImage.width = ATLAS_PIXEL_WIDTH;
     svgImage.height = ATLAS_PIXEL_HEIGHT;
     svgImage.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = ATLAS_PIXEL_WIDTH;
-      canvas.height = ATLAS_PIXEL_HEIGHT;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("fleet marker atlas: 2d context unavailable"));
-        return;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = ATLAS_PIXEL_WIDTH;
+        canvas.height = ATLAS_PIXEL_HEIGHT;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("fleet marker atlas: 2d context unavailable"));
+          return;
+        }
+        ctx.drawImage(svgImage, 0, 0, ATLAS_PIXEL_WIDTH, ATLAS_PIXEL_HEIGHT);
+        const pngUrl = canvas.toDataURL("image/png");
+        atlasPngUrl = pngUrl;
+        resolve(pngUrl);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error("fleet marker atlas: png encode failed"));
       }
-      ctx.drawImage(svgImage, 0, 0, ATLAS_PIXEL_WIDTH, ATLAS_PIXEL_HEIGHT);
-      const png = new Image();
-      png.onload = () => {
-        atlasImage = png;
-        resolve(png);
-      };
-      png.onerror = () => reject(new Error("fleet marker atlas: png decode failed"));
-      png.src = canvas.toDataURL("image/png");
     };
     svgImage.onerror = () => reject(new Error("fleet marker atlas: svg decode failed"));
     svgImage.src = fleetIconAtlasUrl();
   });
 
-  return atlasImagePromise;
+  return atlasPngPromise;
 }
 
 export function fleetPinIcon(tone: FleetTone, stale: boolean): FleetIconName {

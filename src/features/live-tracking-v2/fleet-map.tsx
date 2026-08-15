@@ -58,6 +58,14 @@ const ZONE_FALLBACK_RGB: [number, number, number] = [99, 102, 241];
 /** Coral, the scoped data-layer accent: routes, stops and the playhead — never status. */
 const ROUTE_RGB: [number, number, number] = [255, 106, 77];
 
+const TONE_RGB: Record<FleetTone, [number, number, number]> = {
+  success: [16, 185, 129],
+  primary: [59, 130, 246],
+  warning: [245, 158, 11],
+  danger: [244, 63, 94],
+  neutral: [100, 116, 139],
+};
+
 /**
  * Trails drawn at once, besides the selected rider who is always drawn.
  *
@@ -176,20 +184,21 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
    */
   const pickHandledRef = useRef(false);
 
+  const didFitRef = useRef(false);
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
 
   const iconMapping = useMemo(() => fleetIconMapping(), []);
-  const [iconAtlas, setIconAtlas] = useState<HTMLImageElement | null>(null);
+  const [iconAtlas, setIconAtlas] = useState<string | null>(null);
   const selectedDriverId = snapshot.selectedDriverId;
 
   useEffect(() => {
     let cancelled = false;
     void loadFleetIconAtlas()
-      .then((image) => {
-        if (!cancelled) setIconAtlas(image);
+      .then((pngUrl) => {
+        if (!cancelled) setIconAtlas(pngUrl);
       })
       .catch(() => {
-        // Map still renders zones/trails; pins stay off until a reload succeeds.
+        // Status pucks still draw; bike sprites wait until the PNG atlas loads.
       });
     return () => {
       cancelled = true;
@@ -304,7 +313,12 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
 
       mapRef.current = map;
 
-      const overlay = new overlayModule.GoogleMapsOverlay({ layers: [] });
+      const overlay = new overlayModule.GoogleMapsOverlay({
+        layers: [],
+        // Vector maps (mapId) draw into the map's GL context. Without this the
+        // overlay can land *under* the basemap and every pin is invisible.
+        interleaved: Boolean(mapId),
+      });
       overlay.setMap(map);
       overlayRef.current = overlay;
 
@@ -449,6 +463,38 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     }
 
     const drawable = entitiesRef.current.filter((entity) => entity.located);
+
+    if (drawable.length > 0) {
+      layers.push(
+        new Scatter<FleetEntity>({
+          id: "fleet-driver-pucks",
+          data: drawable,
+          getPosition: (d) => d.position,
+          getRadius: (d) => (d.selected ? 11 : 8),
+          radiusUnits: "pixels",
+          stroked: true,
+          getLineWidth: 2,
+          lineWidthUnits: "pixels",
+          getLineColor: [255, 255, 255, 230],
+          getFillColor: (d) => [...TONE_RGB[d.tone], d.alert ? 250 : 220],
+          updateTriggers: {
+            getPosition: revision,
+            getFillColor: revision,
+            getRadius: revision,
+          },
+          pickable: !iconAtlas,
+          onClick: (info) => {
+            if (!info.object) return false;
+            pickHandledRef.current = true;
+            window.setTimeout(() => {
+              pickHandledRef.current = false;
+            }, 0);
+            store.selectDriver(info.object.driverId);
+            return true;
+          },
+        }),
+      );
+    }
 
     // Trails first, so a tail passes under every marker rather than over the rider it
     // belongs to. The entity list is already what the room decided this socket can
@@ -604,6 +650,22 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           if (!entity.located) {
             entity.located = true;
             moved = true;
+          }
+        }
+
+        if (!didFitRef.current && entitiesRef.current.some((entity) => entity.located)) {
+          didFitRef.current = true;
+          const map = mapRef.current;
+          const located = entitiesRef.current.filter((entity) => entity.located);
+          if (map && located.length === 1) {
+            map.panTo({ lat: located[0]!.position[1], lng: located[0]!.position[0] });
+            map.setZoom(DRIVER_FOCUS_ZOOM);
+          } else if (map && located.length > 1) {
+            const bounds = new google.maps.LatLngBounds();
+            for (const entity of located) {
+              bounds.extend({ lat: entity.position[1], lng: entity.position[0] });
+            }
+            map.fitBounds(bounds, 64);
           }
         }
 
