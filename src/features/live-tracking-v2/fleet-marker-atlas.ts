@@ -189,18 +189,62 @@ export function fleetIconMapping(): FleetIconMapping {
   return mapping;
 }
 
+const ATLAS_CELL_COUNT = TONE_ORDER.length * 2 + 1;
+const ATLAS_PIXEL_WIDTH = ATLAS_CELL_COUNT * CELL * SCALE;
+const ATLAS_PIXEL_HEIGHT = CELL * SCALE;
+
 let atlasUrl: string | null = null;
+let atlasImage: HTMLImageElement | null = null;
+let atlasImagePromise: Promise<HTMLImageElement> | null = null;
 
 /**
- * A data URL rather than a decoded `Image`: `IconLayer` accepts a URL and does its own
- * loading and texture upload, and the string is stable, so deck.gl uploads the atlas
- * exactly once no matter how often the layers are rebuilt.
+ * SVG data URL for HTML preview only. Do not pass this to deck.gl — loaders.gl's
+ * image loader does not decode SVG, so IconLayer would upload an empty texture and
+ * every rider pin would be invisible.
  */
 export function fleetIconAtlasUrl(): string {
   if (!atlasUrl) {
     atlasUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(atlasSvg())}`;
   }
   return atlasUrl;
+}
+
+/**
+ * Raster PNG `Image` for `IconLayer`. The SVG is drawn through the browser's image
+ * decoder (which does understand SVG) and then copied to a canvas so the texture
+ * deck.gl uploads is a real bitmap.
+ */
+export function loadFleetIconAtlas(): Promise<HTMLImageElement> {
+  if (atlasImage) return Promise.resolve(atlasImage);
+  if (atlasImagePromise) return atlasImagePromise;
+
+  atlasImagePromise = new Promise((resolve, reject) => {
+    const svgImage = new Image();
+    svgImage.width = ATLAS_PIXEL_WIDTH;
+    svgImage.height = ATLAS_PIXEL_HEIGHT;
+    svgImage.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = ATLAS_PIXEL_WIDTH;
+      canvas.height = ATLAS_PIXEL_HEIGHT;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("fleet marker atlas: 2d context unavailable"));
+        return;
+      }
+      ctx.drawImage(svgImage, 0, 0, ATLAS_PIXEL_WIDTH, ATLAS_PIXEL_HEIGHT);
+      const png = new Image();
+      png.onload = () => {
+        atlasImage = png;
+        resolve(png);
+      };
+      png.onerror = () => reject(new Error("fleet marker atlas: png decode failed"));
+      png.src = canvas.toDataURL("image/png");
+    };
+    svgImage.onerror = () => reject(new Error("fleet marker atlas: svg decode failed"));
+    svgImage.src = fleetIconAtlasUrl();
+  });
+
+  return atlasImagePromise;
 }
 
 export function fleetPinIcon(tone: FleetTone, stale: boolean): FleetIconName {

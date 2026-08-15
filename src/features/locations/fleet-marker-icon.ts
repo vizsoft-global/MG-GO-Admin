@@ -32,7 +32,9 @@ function markerSvg({
       <circle cx="20" cy="20" r="${selected ? "18" : "16.5"}" fill="${ring}" fill-opacity="${ringOpacity}" />
       <circle cx="20" cy="20" r="${circleSize}" fill="${fill}" />
       <circle cx="20" cy="20" r="${circleSize}" stroke="white" stroke-width="2" />
-      <path d="${glyph}" fill="white"/>
+      <g transform="translate(8 8)" fill="white">
+        <path d="${glyph}"/>
+      </g>
     </svg>
   `;
 }

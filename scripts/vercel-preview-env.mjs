@@ -51,7 +51,7 @@ const KEYS = [
   { key: "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", type: "plain" },
   { key: "NEXT_PUBLIC_SUPABASE_ANON_KEY", type: "plain" },
   { key: "SUPABASE_SERVICE_ROLE_KEY", type: "sensitive" },
-  { key: "R2_BUCKET_NAME", type: "plain", fallback: "dpd-private" },
+  { key: "R2_BUCKET_NAME", type: "plain", fallback: "dpd-private-prod" },
   { key: "R2_ACCOUNT_ID", type: "plain" },
   { key: "R2_S3_ENDPOINT", type: "plain" },
   { key: "R2_ACCESS_KEY_ID", type: "sensitive" },

@@ -1,6 +1,6 @@
 # Driver tracking — admin panel reference
 
-**Production Supabase:** `ytfmsgckjatiserpgdbz` (DPD)  
+**Production Supabase:** `eoksxkdssptgyqyywdju` (`dpd-production`)  
 **Timezone:** Asia/Kuwait (UTC+3, no DST)
 
 ## Admin routes
@@ -51,7 +51,7 @@ App rule: online sets both true; offline sets both false.
 | `20260625100000` | `driver_attendance`, geo validation, cron finalize |
 | `20260628200000` | Realtime `deliveries`, `driver_intakes` |
 
-Verify applied versions: `npx supabase migration list` (linked to `ytfmsgckjatiserpgdbz`).
+Verify applied versions: `npx supabase migration list` (linked to `eoksxkdssptgyqyywdju`).
 
 ## Cron
 

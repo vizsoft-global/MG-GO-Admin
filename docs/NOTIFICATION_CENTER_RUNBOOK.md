@@ -4,8 +4,8 @@
 
 - [ ] Supabase migrations applied (`20260625180000`, `20260626910000`, `20260626920000`)
 - [ ] Firebase env vars set on Vercel: `FIREBASE_SERVICE_ACCOUNT_JSON` (or `FIREBASE_PROJECT_ID` + `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY`)
-- [ ] Firebase apps registered in project `musallam-delivery-kw` (Android/iOS `kw.musallam.delivery`)
-- [ ] Driver app loads Firebase via `docs/firebase/*` or `GET /api/driver-app/firebase-config?platform=...`
+- [ ] Firebase apps registered in project `musallam-delivery-prod` (Android/iOS `kw.musallam.delivery`)
+- [ ] Driver app loads Firebase via `docs/firebase-prod/*` or `GET /api/driver-app/firebase-config?platform=...`
 - [ ] Optional tuning: `NOTIFICATION_APPROVAL_REQUIRED_CATEGORIES`, `NOTIFICATION_SEND_RATE_PER_MINUTE`, `NOTIFICATION_BATCH_SIZE`
 - [ ] Cron secret set: `CRON_SECRET` (Vercel cron hits `/api/cron/notifications-dispatch` every 5 minutes)
 - [ ] RBAC: `notifications.approve`, `notifications.send`, `notifications.export` assigned to appropriate roles

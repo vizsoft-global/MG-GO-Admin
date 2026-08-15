@@ -2,34 +2,34 @@
 
 ## Backend (production only)
 
-- **Supabase:** [DPD](https://supabase.com/dashboard/project/ytfmsgckjatiserpgdbz) — `ytfmsgckjatiserpgdbz`
-- **R2:** `dpd-private` (not `dpd-private-dev`)
-- Local dev uses the **same** prod keys as Vercel production. You are on live deliveries/drivers data.
+- **Supabase:** [dpd-production](https://supabase.com/dashboard/project/eoksxkdssptgyqyywdju) — `eoksxkdssptgyqyywdju`
+- **R2:** `dpd-private-prod`
+- **Admin:** https://dpdadmin-prod.vercel.app
+- Local dev uses the **same** prod keys as Vercel `dpdadmin-prod`. You are on live deliveries/drivers data.
 
 ## Step 1 — Local environment (`.env.local`)
 
-1. Open [Supabase API settings (DPD)](https://supabase.com/dashboard/project/ytfmsgckjatiserpgdbz/settings/api)
-2. Set in `dpdadmin/.env.local`:
-   - `NEXT_PUBLIC_SUPABASE_URL=https://ytfmsgckjatiserpgdbz.supabase.co`
+1. Open [Supabase API settings (dpd-production)](https://supabase.com/dashboard/project/eoksxkdssptgyqyywdju/settings/api)
+2. Set in `.env.local`:
+   - `NEXT_PUBLIC_SUPABASE_URL=https://eoksxkdssptgyqyywdju.supabase.co`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and/or `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the dashboard
    - `SUPABASE_SERVICE_ROLE_KEY` (secret)
-   - `R2_BUCKET_NAME=dpd-private`
+   - `R2_BUCKET_NAME=dpd-private-prod`
    - `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` from Cloudflare R2 API token
 3. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` (min 8 chars) for `npm run bootstrap:admin` if needed
 
-Or run: `npx supabase projects api-keys --project-ref ytfmsgckjatiserpgdbz` for anon/service_role keys.
+Or run: `npx supabase projects api-keys --project-ref eoksxkdssptgyqyywdju` for anon/service_role keys.
 
 ## Step 2 — Apply database migrations
 
 Link Supabase CLI (one time) to **production** only:
 
 ```bash
-cd dpdadmin
-npx supabase link --project-ref ytfmsgckjatiserpgdbz
+npx supabase link --project-ref eoksxkdssptgyqyywdju
 npx supabase db push
 ```
 
-If CLI is unavailable, run SQL from `supabase/migrations/` in the [DPD SQL editor](https://supabase.com/dashboard/project/ytfmsgckjatiserpgdbz/sql). Required migrations:
+If CLI is unavailable, run SQL from `supabase/migrations/` in the [dpd-production SQL editor](https://supabase.com/dashboard/project/eoksxkdssptgyqyywdju/sql). Required migrations:
 
 - `20260518120000_app_settings.sql` — branding
 - `20260519000000_rbac_approval_setup.sql` — roles, permissions, sign-up approval, super-admin claim, maintenance mode
@@ -79,10 +79,10 @@ Env vars must be set on Vercel (already partially done). Required:
 
 | Variable | Value |
 |----------|--------|
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://ytfmsgckjatiserpgdbz.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://eoksxkdssptgyqyywdju.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | from Supabase API settings |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key (backup) |
-| `NEXT_PUBLIC_APP_URL` | `https://dpdadmin.vercel.app` |
+| `NEXT_PUBLIC_APP_URL` | `https://dpdadmin-prod.vercel.app` |
 
 Then redeploy:
 
@@ -90,7 +90,7 @@ Then redeploy:
 vercel deploy --prod
 ```
 
-Sign in at https://dpdadmin.vercel.app/en/login (same email/password as bootstrap).
+Sign in at https://dpdadmin-prod.vercel.app/en/login (same email/password as bootstrap).
 
 ## Troubleshooting
 

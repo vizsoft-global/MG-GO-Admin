@@ -39,13 +39,17 @@ Open [http://localhost:3000](http://localhost:3000) (redirects to `/en`).
 
 ### Backend (production only)
 
-- **Supabase:** `ytfmsgckjatiserpgdbz` (project name **DPD**) — all admin and driver traffic
-- **R2:** `dpd-private` bucket (same Cloudflare account credentials)
-- **Local `npm run dev`:** point `.env.local` at the same prod Supabase + R2 keys (see [docs/RUN_NOW.md](docs/RUN_NOW.md)). You are working against live data — avoid destructive tests on localhost.
-- **Vercel Production:** must use prod Supabase URL (`https://ytfmsgckjatiserpgdbz.supabase.co`). **Preview** should use the same keys (copy from Production in the Vercel dashboard if preview builds fail).
+| Thing | Production |
+|-------|------------|
+| Admin | https://dpdadmin-prod.vercel.app (`dpdadmin-prod`) |
+| Supabase | `eoksxkdssptgyqyywdju` (`dpd-production`) |
+| R2 | `dpd-private-prod` |
+| Firebase | `musallam-delivery-prod` |
+
+- **Local `npm run dev`:** point `.env.local` at these same prod keys (see [docs/RUN_NOW.md](docs/RUN_NOW.md)). You are on live data — avoid destructive tests on localhost.
+- **Vercel Production + Preview:** same prod Supabase URL (`https://eoksxkdssptgyqyywdju.supabase.co`). Copy Production env to Preview if preview builds fail.
 - **Do not run** `npm run env:push-vercel` — it pushes one file to all Vercel environments.
-- **Firebase:** `FIREBASE_*` for Notification Center (see `.env.example`)
-- The former test project `dpd-test` (`cgpioijpvriiqqnauwlx`) was removed; do not recreate unless you need a separate sandbox again.
+- Retired (do not use): `dpdadmin` / `ytfmsgckjatiserpgdbz` / `dpd-private` / `musallam-delivery-kw`
 
 ## Auth
 
@@ -60,7 +64,7 @@ INSERT INTO admin_allowlist (email, role) VALUES ('you@company.com', 'staff');
 Enable Google provider in Supabase Dashboard and set redirect URL:
 
 - `http://localhost:3000/auth/callback` (dev)
-- `https://your-domain.com/auth/callback` (prod)
+- `https://dpdadmin-prod.vercel.app/auth/callback` (prod)
 
 ## Adding pages
 
@@ -82,11 +86,11 @@ npm run new:page -- analytics reports.view
 
 ## Deploy (Vercel)
 
-Production: **https://dpdadmin.vercel.app**
+Production: **https://dpdadmin-prod.vercel.app**
 
-1. Link project: `vercel link` → name **dpdadmin**
+1. Link project: `vercel link` → name **dpdadmin-prod**
 2. Add environment variables from `.env.example`
-3. Apply migrations: `npx supabase link --project-ref ytfmsgckjatiserpgdbz` then `npx supabase db push`
+3. Apply migrations: `npx supabase link --project-ref eoksxkdssptgyqyywdju` then `npx supabase db push`
 4. Deploy: `vercel deploy --prod` or push to Git
 
 Add production URL to Supabase Auth redirect allowlist.

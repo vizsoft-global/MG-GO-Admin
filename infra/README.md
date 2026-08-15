@@ -1,11 +1,6 @@
 # DPD infrastructure (Pulumi)
 
-Two stacks for **DPD Control Tower**:
-
-| Stack | Purpose | Creates resources? |
-|-------|---------|------------------|
-| `testing` | Existing live data (Supabase `ytfmsgckjatiserpgdbz`, Firebase `musallam-delivery-kw`, R2 `dpd-private`, Vercel `dpdadmin`) | No — reference only |
-| `production` | Clean prod (schema, no rows) | Yes — new Supabase, GCP/Firebase, R2 bucket, Vercel project |
+**Production only.** Use the `production` stack. The old `testing` stack (`ytfmsgckjatiserpgdbz` / `dpdadmin` / `dpd-private` / `musallam-delivery-kw`) is retired — do not select, preview, or update it.
 
 ## Prerequisites
 
@@ -19,10 +14,6 @@ Two stacks for **DPD Control Tower**:
 ```bash
 cd dpdadmin/infra
 npm install
-
-# Testing — no cloud changes
-pulumi stack select testing
-pulumi preview
 
 # Production — set secrets first
 bash scripts/setup-secrets.sh production

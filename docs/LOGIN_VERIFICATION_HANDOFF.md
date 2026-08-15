@@ -34,7 +34,7 @@ After successful passcode login (`driver-passcode-login` → Supabase session), 
 ### File
 
 `src/lib/storage/driver-upload-keys.ts`  
-(apply on the admin codebase deployed to **`dpdadmin-prod`**; ops testing deploy is optional and not a driver-app target)
+(apply on the admin codebase deployed to **`dpdadmin-prod`**)
 
 ### Add entity type
 
@@ -62,10 +62,9 @@ Completed uploads should continue to appear in `storage_uploads` (Settings → C
 
 | Role | Admin deploy | R2 bucket | Supabase |
 |------|--------------|-----------|----------|
-| **Driver-facing (required)** | `dpdadmin-prod` / `dpdadmin-prod.vercel.app` | `dpd-private-prod` | `eoksxkdssptgyqyywdju` |
-| Ops testing (optional, not driver target) | `dpdadmin` / `dpdadmin.vercel.app` | `dpd-private` | `ytfmsgckjatiserpgdbz` |
+| **Production (only stack)** | `dpdadmin-prod` / `dpdadmin-prod.vercel.app` | `dpd-private-prod` | `eoksxkdssptgyqyywdju` |
 
-Ship allowlist + migration to **production** so the driver app works. Ops may mirror to testing if they still run that admin stack.
+Ship allowlist + migration to **production** so the driver app works.
 
 ---
 
@@ -110,7 +109,7 @@ Mirror style of `driver_update_avatar`:
 - Return `jsonb` including `liveness_passed` / `liveness_method`
 - `GRANT EXECUTE ... TO authenticated`
 
-Apply Phase-1 migration to **production** Supabase (`eoksxkdssptgyqyywdju` / `20260730120000_login_verification_liveness.sql`). Mirror to ops testing only if that stack is still used.
+Apply Phase-1 migration to **production** Supabase (`eoksxkdssptgyqyywdju` / `20260730120000_login_verification_liveness.sql`).
 
 ---
 

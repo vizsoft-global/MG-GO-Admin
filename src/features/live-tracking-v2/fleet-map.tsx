@@ -32,9 +32,9 @@ import { cn } from "@/lib/utils";
 import { fleetStatusTone, isFleetAlert, type FleetTone } from "./fleet-status";
 import {
   FLEET_ICON_SIZE,
-  fleetIconAtlasUrl,
   fleetIconMapping,
   fleetPinIcon,
+  loadFleetIconAtlas,
 } from "./fleet-marker-atlas";
 import { fleetZoneRing } from "./fleet-zones";
 import type { FleetTrail } from "./fleet-trail";
@@ -171,8 +171,22 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
 
   const iconMapping = useMemo(() => fleetIconMapping(), []);
-  const iconAtlas = useMemo(() => fleetIconAtlasUrl(), []);
+  const [iconAtlas, setIconAtlas] = useState<HTMLImageElement | null>(null);
   const selectedDriverId = snapshot.selectedDriverId;
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadFleetIconAtlas()
+      .then((image) => {
+        if (!cancelled) setIconAtlas(image);
+      })
+      .catch(() => {
+        // Map still renders zones/trails; pins stay off until a reload succeeds.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Roster → drawable entities. Structural changes only, never positions.
@@ -470,7 +484,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       );
     }
 
-    if (drawable.length > 0) {
+    if (drawable.length > 0 && iconAtlas) {
       const selected = drawable.filter((entity) => entity.selected);
       if (selected.length > 0) {
         layers.push(

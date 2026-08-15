@@ -2,8 +2,8 @@
 
 > **Paste this entire file** into a new AI session when building the driver mobile app.  
 > It stays in sync with the admin panel (`MGgo-Admin` / `dpdadmin`).  
-> **Driver-facing stack (required):** Supabase `eoksxkdssptgyqyywdju` · Admin https://dpdadmin-prod.vercel.app · Firebase `musallam-delivery-prod`  
-> See **§1a**. Ops may still run a separate testing admin; it is **not** a driver-app target.
+> **Driver-facing stack:** Supabase `eoksxkdssptgyqyywdju` · Admin https://dpdadmin-prod.vercel.app · Firebase `musallam-delivery-prod`  
+> See **§1a**. Production is the only stack.
 
 ---
 
@@ -27,9 +27,7 @@
 | iOS | `1:579224507592:ios:53130e94d3c1f1364981fd` |
 | Web | `1:579224507592:web:566afbce6fb96ae84981fd` |
 
-### Ops / testing (not a driver-app target)
-
-A testing admin stack may still exist for internal ops (`ytfmsgckjatiserpgdbz`, `dpdadmin.vercel.app`, `dpd-private`, `musallam-delivery-kw`). Do **not** point the shipped driver app at it. Infrastructure code: `infra/` · Runbook: `infra/README.md`.
+**Production is the only stack.** Retired testing (`ytfmsgckjatiserpgdbz` / `dpdadmin` / `dpd-private` / `musallam-delivery-kw`) is not a target.
 
 ---
 
