@@ -237,8 +237,11 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       .then((atlas) => {
         if (!cancelled) setIconAtlas(atlas);
       })
-      .catch(() => {
-        // Status pucks still draw; bike sprites wait until the PNG atlas loads.
+      .catch((error: unknown) => {
+        // The map stays usable on status pucks alone, so this must not throw — but a
+        // silent failure here is indistinguishable from a working map with plain discs,
+        // which is exactly the confusion that cost two release cycles.
+        console.error("live-tracking-v2: marker atlas failed to load", error);
       });
     return () => {
       cancelled = true;
