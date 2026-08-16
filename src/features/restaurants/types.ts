@@ -61,6 +61,7 @@ export type RestaurantAssignedDriver = {
   phone: string | null;
   link_status: RestaurantDriverLinkStatus;
   is_on_duty: boolean;
+  is_blocked: boolean;
 };
 
 export type RestaurantActivityKind =

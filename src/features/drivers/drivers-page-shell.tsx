@@ -933,15 +933,16 @@ function DriversPageContent() {
                         </VisibleTableCell>
                         <VisibleTableCell columnId="status" isVisible={isColumnVisible}>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <AccountStatusPill
-                              status={driver.account_status}
-                              label={accountStatusLabel(driver.account_status)}
-                            />
                             {driver.is_blocked ? (
                               <StatusPill variant="danger" dot={false}>
                                 {t("blockedBadge")}
                               </StatusPill>
-                            ) : null}
+                            ) : (
+                              <AccountStatusPill
+                                status={driver.account_status}
+                                label={accountStatusLabel(driver.account_status)}
+                              />
+                            )}
                           </div>
                         </VisibleTableCell>
                         <VisibleTableCell columnId="attendance" isVisible={isColumnVisible}>

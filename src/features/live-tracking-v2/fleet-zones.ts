@@ -5,6 +5,9 @@
  * mirror rails — but it must produce the identical `FleetZone` shape, or the map
  * would draw different polygons depending on which rail happens to be live.
  *
+ * `zones` has no `is_active` column (V1 `fetchZones` never filtered on one). A
+ * `.eq("is_active", true)` here returned an error and an empty dropdown.
+ *
  * Coordinates stay [lng, lat] throughout: that is GeoJSON order, what the database
  * stores, and what deck.gl expects. The existing Leaflet helpers in
  * `@/lib/geo/zone-geometry` flip to [lat, lng] for Leaflet's benefit, which is
@@ -69,8 +72,7 @@ export async function loadFleetZones(
 ): Promise<FleetZone[]> {
   const { data, error } = await supabase
     .from("zones")
-    .select("id,name,color,zone_type,geometry")
-    .eq("is_active", true);
+    .select("id,name,color,zone_type,geometry");
 
   if (error || !data) return [];
   return (data as ZoneRow[])

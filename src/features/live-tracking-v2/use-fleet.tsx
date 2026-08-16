@@ -172,6 +172,7 @@ export function useFleetFrame(callback: (serverNowMs: number) => void): void {
 export function useFleetRailLabel(): {
   rail: FleetSnapshot["connection"]["rail"];
   status: FleetSnapshot["connection"]["status"];
+  error: FleetSnapshot["connection"]["error"];
   staleSeconds: number;
 } {
   const connection = useFleetSelector((snapshot) => snapshot.connection);
@@ -186,6 +187,7 @@ export function useFleetRailLabel(): {
     () => ({
       rail: connection.rail,
       status: connection.status,
+      error: connection.error,
       staleSeconds:
         connection.lastFrameAt === 0
           ? 0

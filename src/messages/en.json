@@ -183,7 +183,9 @@
         "degraded": "Degraded",
         "error": "Error",
         "updated": "Updated {seconds}s ago",
-        "hint": "Edge stream unavailable — falling back to the mirror rail"
+        "hint": "Edge stream unavailable — falling back to the mirror rail",
+        "noLiveData": "no driver data",
+        "noLiveDataHint": "Connected, but no driver has reported a position recently — showing database snapshots instead"
       },
       "controls": {
         "zoomIn": "Zoom in",
@@ -288,39 +290,67 @@
         "shift_overrun": "Shift overrun"
       },
       "events": {
-        "movement.started": "Started moving",
-        "movement.stopped": "Stopped",
-        "idle.sustained": "Idle for {value} min",
-        "overspeed.start": "Overspeeding at {value} km/h",
-        "overspeed.end": "Back under the speed limit",
-        "battery.low": "Battery at {value}%",
-        "battery.recovered": "Battery recovered",
-        "gps.offline": "GPS offline",
-        "gps.restored": "GPS restored",
-        "zone.exit": "Left assigned zone",
-        "zone.entry": "Entered assigned zone",
-        "range.exit": "Left delivery range",
-        "range.entry": "Back in delivery range",
-        "shift.late": "Late for shift",
-        "shift.overrun": "Shift overrun",
-        "gps.mocked": "Mock location detected",
-        "duty.on": "Clocked in",
-        "duty.off": "Clocked out",
-        "duty.online": "Went online",
-        "duty.offline": "Went offline",
-        "duty.auto_checkout": "Auto checked out",
-        "duty.location_cleared": "Location sharing off",
-        "shift.submit": "Shift submitted",
-        "delivery.pickup_create": "Order picked up",
-        "delivery.complete": "Delivery submitted",
-        "delivery.cancel": "Delivery cancelled",
-        "delivery.auto_cancel": "Stale pickup auto-cancelled",
-        "location.zone_entry": "Entered zone",
-        "location.zone_exit": "Exited zone",
-        "auth.login": "Signed in",
-        "device.signout": "Signed out",
-        "security.blocked": "Blocked by admin",
-        "security.inactive": "Set inactive",
+        "movement": {
+          "started": "Started moving",
+          "stopped": "Stopped"
+        },
+        "idle": {
+          "sustained": "Idle for {value} min"
+        },
+        "overspeed": {
+          "start": "Overspeeding at {value} km/h",
+          "end": "Back under the speed limit"
+        },
+        "battery": {
+          "low": "Battery at {value}%",
+          "recovered": "Battery recovered"
+        },
+        "gps": {
+          "offline": "GPS offline",
+          "restored": "GPS restored",
+          "mocked": "Mock location detected"
+        },
+        "zone": {
+          "exit": "Left assigned zone",
+          "entry": "Entered assigned zone"
+        },
+        "range": {
+          "exit": "Left delivery range",
+          "entry": "Back in delivery range"
+        },
+        "shift": {
+          "late": "Late for shift",
+          "overrun": "Shift overrun",
+          "submit": "Shift submitted"
+        },
+        "duty": {
+          "on": "Clocked in",
+          "off": "Clocked out",
+          "online": "Went online",
+          "offline": "Went offline",
+          "auto_checkout": "Auto checked out",
+          "location_cleared": "Location sharing off"
+        },
+        "delivery": {
+          "pickup_create": "Order picked up",
+          "complete": "Delivery submitted",
+          "cancel": "Delivery cancelled",
+          "auto_cancel": "Stale pickup auto-cancelled"
+        },
+        "location": {
+          "zone_entry": "Entered zone",
+          "zone_exit": "Exited zone"
+        },
+        "auth": {
+          "login": "Signed in"
+        },
+        "device": {
+          "signout": "Signed out"
+        },
+        "security": {
+          "blocked": "Blocked by admin",
+          "inactive": "Set inactive"
+        },
         "unknown": "{key}"
       },
       "route": {
@@ -1270,6 +1300,7 @@
       "title": "Driver Details",
       "subtitle": "Profile and operational history",
       "backToList": "Back to drivers",
+      "backToLiveTracking": "Back to live tracking",
       "editDriver": "Edit driver",
       "approveAction": "Verify & approve",
       "approveConfirmBody": "Create the driver account, activate them, and generate a 6-digit app passcode?",
@@ -1848,6 +1879,7 @@
       "driverLinkIntake": "Intake",
       "driverOnDuty": "On duty",
       "driverOffDuty": "Off duty",
+      "driverBlocked": "Blocked",
       "driversEmptyTitle": "No assigned drivers",
       "driversEmptyDescription": "Link drivers to this restaurant from the driver profile or intake.",
       "deliveriesNoAccessTitle": "Delivery access required",

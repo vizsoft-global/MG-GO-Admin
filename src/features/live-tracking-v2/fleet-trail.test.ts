@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { FleetTrailStore, fleetTrailColor } from "./fleet-trail";
+import { FleetTrailStore, fleetTrailColor, trailSpanMeters } from "./fleet-trail";
 import { TRAIL_MIN_GAP_MS, TRAIL_WINDOW_MS, encodeTrailPoint } from "./fleet-wire";
 
 const T0 = 1_700_000_000_000;
@@ -138,5 +138,54 @@ describe("FleetTrailStore", () => {
     store.remove("d1");
     assert.equal(store.get("d1"), null);
     assert.equal(store.size, 0);
+  });
+});
+
+describe("trailSpanMeters", () => {
+  it("measures a parked rider's jitter as a few metres, not a path", () => {
+    const store = new FleetTrailStore();
+    // Ten minutes of a stationary phone: the time gate keeps letting points through,
+    // so the trail fills up without going anywhere. Drawn, this is a coloured blob on
+    // the marker that reads as extra drivers of other statuses.
+    for (let i = 0; i < 40; i += 1) {
+      store.append(
+        "d1",
+        LAT + (i % 2 === 0 ? 0.00003 : -0.00003),
+        LNG,
+        T0 + i * TRAIL_MIN_GAP_MS,
+      );
+    }
+    assert.ok(
+      trailSpanMeters(store.get("d1")!) < 25,
+      "jitter must fall under the map's draw threshold",
+    );
+  });
+
+  it("measures a real ride in hundreds of metres", () => {
+    const store = new FleetTrailStore();
+    for (let i = 0; i < 20; i += 1) {
+      store.append("d1", LAT + i * STEP, LNG, T0 + i * 1_000);
+    }
+    assert.ok(trailSpanMeters(store.get("d1")!) > 200);
+  });
+
+  it("re-measures only when the trail changed", () => {
+    const store = new FleetTrailStore();
+    store.append("d1", LAT, LNG, T0);
+    store.append("d1", LAT + STEP, LNG, T0 + 1_000);
+    const trail = store.get("d1")!;
+
+    const first = trailSpanMeters(trail);
+    assert.equal(trail.spanRev, trail.revision);
+    assert.equal(trailSpanMeters(trail), first);
+
+    store.append("d1", LAT + STEP * 20, LNG, T0 + 2_000);
+    assert.ok(trailSpanMeters(trail) > first, "an appended point re-measures the span");
+  });
+
+  it("is zero for a single point, which has no extent", () => {
+    const store = new FleetTrailStore();
+    store.append("d1", LAT, LNG, T0);
+    assert.equal(trailSpanMeters(store.get("d1")!), 0);
   });
 });

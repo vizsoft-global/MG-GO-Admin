@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   activeFleetFlags,
+  decayedFleetStatus,
   FLEET_DEFAULT_THRESHOLDS,
   FLEET_STATUSES,
   fleetDistributionBucket,
+  hasLiveTelemetry,
   fleetEventSeverity,
   fleetFlags,
   fleetStatus,
@@ -83,10 +85,26 @@ describe("fleetStatus", () => {
     assert.equal(fleetStatus(signals({ lastFixAtMs: null }), NOW), "gps_offline");
   });
 
-  it("reads on_delivery only when an active delivery backs the submit stamp", () => {
+  it("reads on_delivery from the open delivery alone, whatever the stamp says", () => {
     assert.equal(
       fleetStatus(
         signals({ trackingStatus: "delivery_submit", activeDeliveryId: "d1" }),
+        NOW,
+      ),
+      "on_delivery",
+    );
+    // The stamp is `delivery_submit` for one sample at most — the next position
+    // overwrites it — so requiring it made the status practically unreachable.
+    assert.equal(
+      fleetStatus(
+        signals({ trackingStatus: "moving", activeDeliveryId: "d1", speedMps: 9 }),
+        NOW,
+      ),
+      "on_delivery",
+    );
+    assert.equal(
+      fleetStatus(
+        signals({ trackingStatus: "idle", activeDeliveryId: "d1", speedMps: 0 }),
         NOW,
       ),
       "on_delivery",
@@ -136,6 +154,12 @@ describe("fleetStatus", () => {
     for (const status of FLEET_STATUSES) {
       assert.ok(fleetStatusTone(status));
     }
+  });
+
+  it("paints Offline and GPS Offline as danger so they read as down, not idle", () => {
+    assert.equal(fleetStatusTone("offline"), "danger");
+    assert.equal(fleetStatusTone("gps_offline"), "danger");
+    assert.equal(fleetStatusTone("blocked"), "danger");
   });
 });
 
@@ -274,6 +298,44 @@ describe("distribution and alerting", () => {
     const input = signals({ lastFixAtMs: NOW - 10 * 60_000 });
     const flags = fleetFlags(input, NOW);
     assert.equal(fleetDistributionBucket(fleetStatus(input, NOW), flags), "offline");
+  });
+});
+
+describe("staleness rules", () => {
+  const offlineMs = FLEET_DEFAULT_THRESHOLDS.gpsOfflineSeconds * 1_000;
+
+  it("refuses to vouch for a reading behind an offline status", () => {
+    assert.equal(hasLiveTelemetry("moving"), true);
+    assert.equal(hasLiveTelemetry("on_delivery"), true);
+    assert.equal(hasLiveTelemetry("idle"), true);
+    assert.equal(hasLiveTelemetry("gps_offline"), false);
+    assert.equal(hasLiveTelemetry("offline"), false);
+    assert.equal(hasLiveTelemetry("location_off"), false);
+    assert.equal(hasLiveTelemetry("blocked"), false);
+  });
+
+  it("decays a live status once the fix passes the offline threshold", () => {
+    assert.equal(decayedFleetStatus("moving", NOW - offlineMs + 5_000, NOW), null);
+    assert.equal(decayedFleetStatus("moving", NOW - offlineMs - 1_000, NOW), "gps_offline");
+    assert.equal(
+      decayedFleetStatus("on_delivery", NOW - offlineMs - 1_000, NOW),
+      "gps_offline",
+    );
+    assert.equal(decayedFleetStatus("idle", null, NOW), "gps_offline");
+  });
+
+  it("does not decay statuses that are duty or account facts", () => {
+    assert.equal(decayedFleetStatus("offline", NOW - offlineMs - 1_000, NOW), null);
+    assert.equal(decayedFleetStatus("blocked", null, NOW), null);
+    assert.equal(decayedFleetStatus("gps_offline", null, NOW), null);
+  });
+
+  it("honours a custom offline threshold", () => {
+    const overrides = { gpsOfflineSeconds: 300 };
+    assert.equal(
+      decayedFleetStatus("moving", NOW - offlineMs - 1_000, NOW, overrides),
+      null,
+    );
   });
 });
 

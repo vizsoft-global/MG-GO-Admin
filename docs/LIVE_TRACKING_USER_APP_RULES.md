@@ -29,7 +29,7 @@ Two clocks now exist, and only one of them writes to Postgres:
 - **Sampling** is continuous (`positionStream`, `distanceFilter: 0` with `AndroidSettings.intervalDuration` = 1s) and feeds the edge rail at the cadence above. A distance filter and a fixed rate are mutually exclusive, and the rate is what the renderer needs; a stationary rider is handled by the 30s idle interval rather than by starving the stream.
 - **Durable writes** still happen on the 15s watchdog tick via `driver_report_location`, and are *skipped* while a recent edge publish already guarantees the row (`_edgeDurableGrace` = **25s**). State changes, the first sample and `delivery_submit` always write directly.
 
-On a build with no `LIVE_INGEST_URL` the stream is never started, so behaviour collapses to the pre-V2 path: watchdog-driven writes, now due on nearly every tick while moving and every other tick while idle. Server coalescing (§9) is what keeps that from becoming a write storm — a stationary rider still writes at most once per **60s**.
+On a build that passes `LIVE_INGEST_URL=""` the stream is never started, so behaviour collapses to the pre-V2 path: watchdog-driven writes, now due on nearly every tick while moving and every other tick while idle. Server coalescing (§9) is what keeps that from becoming a write storm — a stationary rider still writes at most once per **60s**.
 
 ---
 
@@ -49,12 +49,14 @@ Admin mirrors `MOVING_SPEED_THRESHOLD_MPS = 1.5` in [`src/features/locations/loc
 
 ## 3. Which coords are sent
 
-[`live_map_heartbeat.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_map_heartbeat.dart) `heartbeatPosition` (`coarseGpsAccuracyMeters = 100`):
+[`live_map_heartbeat.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_map_heartbeat.dart) `heartbeatPosition` (`coarseGpsAccuracyMeters = 50`):
 
-- Accuracy **≤ 100 m**: send the live fix.
-- Coarse indoor **> 100 m**: resend the last-good pin if stationary; if live speed **≥ 1.5 m/s** send the live fix so the Admin pin travels.
+- Accuracy **≤ 50 m**: send the live fix.
+- Coarse **> 50 m**: resend the last-good pin if stationary; if live speed **≥ 1.5 m/s** send the live fix so the Admin pin travels. A **forced** tick does not override this — forcing decides *when* to report, not which fix to trust.
+- The threshold was 100, which is exactly what Android's **network** provider reports from a cell tower that can be 600m away. Those fixes passed the gate, ping-ponged the admin pin and inflated `distance_today_meters` (65 km logged for a rider who stayed in one block). A real GPS fix degrades to ~20-40 m in an urban canyon, so 50 keeps every usable fix and rejects the tower. Mirrored by `COARSE_FIX_ACCURACY_M` in the fleet room and by the `accuracy_meters <= 50` exclusions in `admin_get_driver_day_route` / the odometer gate.
+- The last-good pin only outranks a coarse fix for **2 minutes** (`coarseGpsHeartbeatMaxAge`); past that an honestly approximate pin beats a confidently old one.
 - Never skip the report when a last-good pin exists (skipping used to drop the rider after ~8 min).
-- Last-good cache updates only when reported accuracy **≤ 100 m** ([`duty_task_handler.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/duty_task_handler.dart)).
+- Last-good cache updates only when reported accuracy **≤ 50 m** ([`duty_task_handler.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/duty_task_handler.dart)).
 - Sampler last-known reject: accuracy **> 80 m** or older than **10s** on the duty tick ([`location_sampler.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/core/geo/location_sampler.dart)).
 
 Motion is always classified from the **live** sample; coords sent may still be last-good.
@@ -203,7 +205,11 @@ A GPS course is published **unfiltered** — a bike genuinely turns 90° in a se
 
 `duty_state_version` exists because the batch and the duty state race: a flush in flight when the rider clocks out would re-animate a driver who is already Offline. The Durable Object answers `409 stale_duty_state` to anything older than the version it has seen, and the app treats that as final, not as a retry.
 
-**Unset `LIVE_INGEST_URL` disables the whole rail** (`Env.isLiveIngestEnabled`) — no stream, no publisher, no behaviour change. That is the kill switch, and it needs no server deploy.
+**`LIVE_INGEST_URL` defaults to the production Worker**, and the kill switch is passing it as an **empty string** — then `Env.isLiveIngestEnabled` is false and there is no stream, no publisher and no behaviour change. It needs no server deploy.
+
+It defaults on because absent-means-off was silently catastrophic: Supabase, the admin API and Firebase all default to the production stack, so a release built without `--dart-define-from-file=env/prod.json` worked in every visible way while publishing not one fix to the edge — two `/ingest` requests in two days against 492 admin socket connections. On the admin side that looked like a healthy page: frozen pins, a speed left over from the last durable write, and statuses that changed when the room next re-read the roster.
+
+**What a silent rail now looks like in the admin.** A socket that answers `ping` is not a socket delivering a fleet, so the page measures the rail in *positions*: 45s with drivers on duty and no position frame marks the connection `degraded` / `no_live_positions`, starts the 10s snapshot poll *underneath* the still-open socket, and says so on the pill. Separately, the admin re-ages statuses every second on its own clock, so `gps_offline` lands at its threshold whether or not anything is still arriving — a rider whose phone dies at speed stops reading Moving on time rather than at the next roster read.
 
 ### Failure order
 
@@ -237,7 +243,29 @@ Class B events (overspeed, idle, battery, zone, range, shift) are derived at the
 | Trail point gate | ≥ **5 m** or ≥ **3s** from the last kept point, both edge and client side |
 | Trail delivery | one `trail` frame the first time a rider enters a socket's view; extended from the delta frames that socket already receives |
 | Trail colour | deterministic per rider, so two riders on one street stay tellable apart |
+| Trail draw floor | a trail whose bounding box spans **< 25 m** is not drawn at all. The point gate keeps a parked phone's jitter (the "≥3s" half fires whether or not the rider moved), and drawn, ~200 of those points are a coloured blob sitting on the marker — which is what an operator reads as several drivers of several statuses. Suppressed for the selected rider too: their history is the route polyline, drawn from the durable record |
 | Marker | top-down vehicle sprite on a status-coloured puck, rotated by `heading_deg`; holds the last bearing when a fix carries none |
+| Route furniture | stops and the playback playhead are **hollow** rings — white centre, colour in the stroke. A filled coloured disc means "a rider is here, and this is their status" on this map, so anything that is not a rider gets the inverse treatment |
+
+### On Delivery, and where the open delivery comes from (V2)
+
+`fleetStatus` returns `on_delivery` whenever `activeDeliveryId` is set, and **not** only when `tracking_status = 'delivery_submit'`. Requiring both made the status practically unreachable: the app stamps `delivery_submit` when a pickup is logged and the very next position sample overwrites it with `moving` or `idle`, so the admin saw On Delivery for one frame at best.
+
+That works because the id is no longer the phone's claim. `admin_live_fleet_snapshot` reads it from `deliveries` (`status = 'in_transit'`, newest first) rather than from `driver_locations.active_delivery_id`, which is only as fresh as whatever the last fix carried — usually nothing, because the foreground service reads it from a `SharedPreferences` cache belonging to a different isolate than the one that stored it.
+
+Consequences worth knowing when reading the room's code:
+
+- An ingest may **announce** a delivery the roster has not read yet, but it may never **clear** one. Honouring a `null` from the phone is what kept the status off the map; the clear comes from the roster.
+- `delivery.*` operations join `duty.*` in the ops relay's roster-refresh trigger, so a pickup shows up in seconds rather than waiting out the 60s roster TTL.
+- A roster read can change a driver's status with no new position at all (an opened delivery, a clock-in, a block), so `posVersion` is bumped when it does — status rides the position frame.
+
+### Coarse fixes and "distance today"
+
+One threshold, **50 m**, applied in four places: the app's heartbeat, the room's ingest (a coarse fix does not move a pin that has an accurate fix newer than 2 minutes — deferred, not dropped, so the durable history keeps what the device said), the odometer gate in both writers, and the day route's point selection.
+
+`distance_today_meters` is now the single "distance today" everywhere: the driver card reads it from the snapshot, and `admin_get_driver_day_route` returns it as `distance_m` **for today** (a past day falls back to the sampled sum, which is also always available as `sampled_distance_m`, with `distance_source` naming which one you got). Before this the card showed the odometer and the panel showed the sampled sum — 4.6 km against 3.5 km on the same rider, and 65.7 km against 7.1 km on another, because the odometer was adding a few hundred metres every time the phone swapped to a network fix. Both writers now refuse a segment that touches a coarse fix or implies more than 40 m/s.
+
+Deriving the card's figure from the sampled history instead was the other option, and was rejected on cost: history is written at 75 m spacing, so a 500-rider day is ~350k rows, and the snapshot is called every 60s by the room and every 10s per client by the polling rail. The odometer is maintained in O(1) per fix by code that already holds both endpoints of the segment.
 
 ### Durable write rate under 1Hz
 

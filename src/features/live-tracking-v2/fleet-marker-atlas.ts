@@ -2,8 +2,8 @@
  * Sprite atlas for the WebGL driver layer.
  *
  * `IconLayer` wants one texture and a mapping, not 500 DOM nodes. The atlas is built
- * once from an SVG string and handed to deck.gl as a data URL, so the texture uploads
- * exactly once no matter how often layers rebuild.
+ * once from an SVG string, rasterised to a bitmap (see `loadFleetIconAtlas`) and cached,
+ * so the texture uploads exactly once no matter how often layers rebuild.
  *
  * The marker is a **top-down bike on a status ring**, which is a deliberate,
  * V2-scoped divergence from the teardrop-plus-glyph language on `/live-tracking`
@@ -193,9 +193,12 @@ const ATLAS_CELL_COUNT = TONE_ORDER.length * 2 + 1;
 const ATLAS_PIXEL_WIDTH = ATLAS_CELL_COUNT * CELL * SCALE;
 const ATLAS_PIXEL_HEIGHT = CELL * SCALE;
 
+/** What `IconLayer` is handed. See [loadFleetIconAtlas]. */
+export type FleetIconAtlas = ImageBitmap | HTMLCanvasElement;
+
 let atlasUrl: string | null = null;
-let atlasPngUrl: string | null = null;
-let atlasPngPromise: Promise<string> | null = null;
+let atlasImage: FleetIconAtlas | null = null;
+let atlasPromise: Promise<FleetIconAtlas> | null = null;
 
 /**
  * SVG data URL for HTML preview only. Do not pass this to deck.gl — loaders.gl's
@@ -210,15 +213,27 @@ export function fleetIconAtlasUrl(): string {
 }
 
 /**
- * PNG data URL for `IconLayer`. deck.gl 9 / luma.gl 9 accept `string | Texture`,
- * not `HTMLImageElement`. A PNG data URL is a real bitmap the GPU can sample;
- * the SVG data URL is not.
+ * Decoded bitmap for `IconLayer`.
+ *
+ * Deliberately **not** a URL, even though a PNG data URL is the documented form.
+ * `iconAtlas` is an async prop of type `image`: a string is handed to loaders.gl to fetch
+ * and decode, and `IconLayer.updateState` returns early for as long as the prop is still
+ * a string, so nothing at all draws from the atlas until that resolves. On Vercel it
+ * never did — the markers were plain coloured discs, which is the `fleet-driver-pucks`
+ * scatterplot that draws underneath, not a sprite that lost its bike. Which link of
+ * fetch → decode → texture broke there was never isolated, and this removes the whole
+ * chain rather than guessing.
+ *
+ * A decoded `ImageBitmap` (or the canvas itself, where `createImageBitmap` is missing) is
+ * a resolved value: deck's image prop transform wraps it as `{data}` and calls
+ * `device.createTexture`, which takes any `ExternalImage`. No fetch, no base64
+ * round-trip, no loader registry, and `updateState` sees a usable atlas on first pass.
  */
-export function loadFleetIconAtlas(): Promise<string> {
-  if (atlasPngUrl) return Promise.resolve(atlasPngUrl);
-  if (atlasPngPromise) return atlasPngPromise;
+export function loadFleetIconAtlas(): Promise<FleetIconAtlas> {
+  if (atlasImage) return Promise.resolve(atlasImage);
+  if (atlasPromise) return atlasPromise;
 
-  atlasPngPromise = new Promise((resolve, reject) => {
+  atlasPromise = new Promise<FleetIconAtlas>((resolve, reject) => {
     const svgImage = new Image();
     svgImage.width = ATLAS_PIXEL_WIDTH;
     svgImage.height = ATLAS_PIXEL_HEIGHT;
@@ -233,18 +248,25 @@ export function loadFleetIconAtlas(): Promise<string> {
           return;
         }
         ctx.drawImage(svgImage, 0, 0, ATLAS_PIXEL_WIDTH, ATLAS_PIXEL_HEIGHT);
-        const pngUrl = canvas.toDataURL("image/png");
-        atlasPngUrl = pngUrl;
-        resolve(pngUrl);
+        if (typeof createImageBitmap !== "function") {
+          resolve(canvas);
+          return;
+        }
+        createImageBitmap(canvas).then(resolve, () => resolve(canvas));
       } catch (error) {
-        reject(error instanceof Error ? error : new Error("fleet marker atlas: png encode failed"));
+        reject(
+          error instanceof Error ? error : new Error("fleet marker atlas: rasterise failed"),
+        );
       }
     };
     svgImage.onerror = () => reject(new Error("fleet marker atlas: svg decode failed"));
     svgImage.src = fleetIconAtlasUrl();
+  }).then((image) => {
+    atlasImage = image;
+    return image;
   });
 
-  return atlasPngPromise;
+  return atlasPromise;
 }
 
 export function fleetPinIcon(tone: FleetTone, stale: boolean): FleetIconName {

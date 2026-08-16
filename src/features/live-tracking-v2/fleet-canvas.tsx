@@ -41,6 +41,7 @@ import { FleetLegend } from "./fleet-legend";
 import { FleetConnectionPill } from "./fleet-connection-pill";
 import { DriverDayRoute } from "./driver-day-route";
 import { FLEET_FILTER_STATUSES, type FleetStatus } from "./fleet-status";
+import { toggleFleetAlertsOnly, toggleFleetStatusChip } from "./fleet-types";
 import { useFleetSnapshot, useFleetStore } from "./use-fleet";
 
 import "./fleet-theme.css";
@@ -59,6 +60,8 @@ export function FleetCanvas() {
   const [showFilters, setShowFilters] = useState(true);
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [insightsCollapsed, setInsightsCollapsed] = useState(false);
+  const railUserOverride = useRef<boolean | null>(null);
+  const insightsUserOverride = useRef<boolean | null>(null);
   const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
   const [routeStops, setRouteStops] = useState<FleetRouteStop[] | null>(null);
   const [playhead, setPlayhead] = useState<[number, number] | null>(null);
@@ -84,6 +87,31 @@ export function FleetCanvas() {
       if (timer != null) window.clearTimeout(timer);
     };
   }, [selectedDriverId]);
+
+  // Below ~1100px of canvas the 300px rail and 340px insights sit on top of each
+  // other. Collapse to the 48px strips (the sanctioned V2 pattern) instead of
+  // letting them paint over the driver cards. A manual expand is remembered until
+  // the canvas grows past the threshold again.
+  useEffect(() => {
+    const node = shellRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (width <= 0) return;
+      if (insightsUserOverride.current == null) {
+        setInsightsCollapsed(width < 1100);
+      } else if (width >= 1100) {
+        insightsUserOverride.current = null;
+      }
+      if (railUserOverride.current == null) {
+        setRailCollapsed(width < 760);
+      } else if (width >= 760) {
+        railUserOverride.current = null;
+      }
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   // Fullscreen is the browser's, not a CSS class: a WebGL canvas re-parented by a
   // class change loses its context, and the Fullscreen API keeps the same element.
@@ -132,18 +160,18 @@ export function FleetCanvas() {
 
   const toggleStatus = useCallback(
     (status: FleetStatus) => {
-      const current = filters.statuses ?? [...FLEET_FILTER_STATUSES];
-      const next = current.includes(status)
-        ? current.filter((entry) => entry !== status)
-        : [...current, status];
-      // An empty selection means "show nothing", which is a legitimate state — it is
-      // how an operator blanks the map before picking one status.
-      store.setFilters({ statuses: next });
+      store.setFilters(toggleFleetStatusChip(filters, status));
     },
-    [filters.statuses, store],
+    [filters, store],
   );
 
-  const activeStatuses = filters.statuses ?? [...FLEET_FILTER_STATUSES];
+  const toggleAlertsOnly = useCallback(() => {
+    store.setFilters(toggleFleetAlertsOnly(filters));
+  }, [filters, store]);
+
+  const activeStatuses = filters.alertsOnly
+    ? []
+    : (filters.statuses ?? [...FLEET_FILTER_STATUSES]);
   const filtersDirty =
     filters.search !== "" ||
     filters.statuses !== null ||
@@ -189,7 +217,7 @@ export function FleetCanvas() {
         second layout.
       */}
       <div className="pointer-events-none absolute inset-3 z-20 flex flex-col gap-2">
-        <div className="flex shrink-0 items-start justify-between gap-2">
+        <div className="relative z-30 flex shrink-0 items-start justify-between gap-2">
           <div className="pointer-events-auto flex min-w-0 max-w-[min(680px,72%)] flex-col gap-2">
             <div className="fleet-overlay flex h-9 items-center gap-2 rounded-lg border px-2.5 shadow-sm">
               <Satellite className="size-4 text-muted-foreground" aria-hidden />
@@ -261,7 +289,7 @@ export function FleetCanvas() {
                   ))}
                   <ToggleChip
                     selected={filters.alertsOnly}
-                    onClick={() => store.setFilters({ alertsOnly: !filters.alertsOnly })}
+                    onClick={toggleAlertsOnly}
                   >
                     {t("filters.alertsOnly")}
                   </ToggleChip>
@@ -315,12 +343,15 @@ export function FleetCanvas() {
         {/* Driver rail above the legend (start side); insights above the zoom stack
             (end side). Stacking each panel with its own chrome keeps the clearance exact
             per side instead of one padding sized for the taller of the two. */}
-        <div className="flex min-h-0 flex-1 items-stretch justify-between gap-2">
+        <div className="relative z-10 flex min-h-0 min-w-0 flex-1 items-stretch justify-between gap-2">
           <div className="flex min-h-0 flex-col gap-2">
             <div className="flex min-h-0 flex-1 items-stretch">
               <FleetRail
                 collapsed={railCollapsed}
-                onCollapsedChange={setRailCollapsed}
+                onCollapsedChange={(collapsed) => {
+                  railUserOverride.current = collapsed;
+                  setRailCollapsed(collapsed);
+                }}
                 onFocusDriver={(driverId) => mapRef.current?.focusDriver(driverId)}
               />
             </div>
@@ -333,7 +364,10 @@ export function FleetCanvas() {
             <div className="flex min-h-0 flex-1 items-stretch">
               <FleetInsightsPanel
                 collapsed={insightsCollapsed}
-                onCollapsedChange={setInsightsCollapsed}
+                onCollapsedChange={(collapsed) => {
+                  insightsUserOverride.current = collapsed;
+                  setInsightsCollapsed(collapsed);
+                }}
               />
             </div>
             <div className="fleet-overlay pointer-events-auto flex shrink-0 flex-col rounded-lg border p-1 shadow-sm">
