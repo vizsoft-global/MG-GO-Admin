@@ -32,6 +32,30 @@ const STALL_TIMEOUT_MS = 15_000;
 const MAX_EDGE_ATTEMPTS = 3;
 
 /**
+ * How long the socket may carry no *positions* before the page stops treating it as a
+ * live rail.
+ *
+ * A socket that answers `ping` with `pong` is not a socket that is delivering a fleet,
+ * and the room sends nothing at all when it has nothing new — so a page whose drivers
+ * are never published to the edge sat on a green "live" pill, with polling switched off
+ * beneath it, and moved its pins only when the room next re-read the database. That is
+ * how a rider whose app was never publishing to the edge looked like a rider standing
+ * still. Positions are what makes this rail worth having, so positions are what its
+ * health is measured in.
+ *
+ * 45s clears the app's 30s idle heartbeat plus slack, so a parked fleet is not mistaken
+ * for a broken one.
+ */
+const POSITION_SILENCE_MS = 45_000;
+const FLOW_WATCHDOG_MS = 5_000;
+
+/**
+ * How often statuses are re-aged locally. 1s so `gpsOfflineSeconds` lands within a second of
+ * where it is documented to; anything coarser and the threshold becomes advisory.
+ */
+const STATUS_CLOCK_MS = 1_000;
+
+/**
  * Channel name deliberately unlike v1's `admin-driver-locations`. Two pages on the
  * same Supabase project must not share a channel: a v1 tab and a v2 tab open side by
  * side would otherwise deliver each other's payloads.
@@ -59,11 +83,17 @@ export class FleetTransport {
   private pollHandle: ReturnType<typeof setInterval> | null = null;
   private rosterHandle: ReturnType<typeof setInterval> | null = null;
   private pingHandle: ReturnType<typeof setInterval> | null = null;
+  private flowHandle: ReturnType<typeof setInterval> | null = null;
+  private statusClockHandle: ReturnType<typeof setInterval> | null = null;
   private reconnectHandle: ReturnType<typeof setTimeout> | null = null;
 
   private edgeAttempts = 0;
   private stopped = false;
   private lastFrameAt = 0;
+  /** Last frame that actually carried a position, which is not the same as the last frame. */
+  private lastLivePositionAt = 0;
+  /** True while a live rail is connected but silent, and polling is covering for it. */
+  private starved = false;
   private room = "fleet-kw";
   /** Set by the map; narrows what the room sends us. */
   private bbox: [number, number, number, number] | null = null;
@@ -82,6 +112,7 @@ export class FleetTransport {
     // Re-armed here, not only in the constructor: `stop()` clears it, and Strict Mode
     // runs mount effects twice, so a restarted transport must still follow filters.
     this.store.onFiltersChanged = () => this.sendView();
+    this.startStatusClock();
     // Warm start first: an operator should see the fleet while the socket connects,
     // not an empty map with a spinner.
     await this.loadSnapshot();
@@ -93,6 +124,8 @@ export class FleetTransport {
     this.teardownEdge();
     this.teardownMirror();
     this.stopPolling();
+    this.stopFlowWatchdog();
+    this.stopStatusClock();
     if (this.rosterHandle) clearInterval(this.rosterHandle);
     this.rosterHandle = null;
     if (this.reconnectHandle) clearTimeout(this.reconnectHandle);
@@ -153,9 +186,14 @@ export class FleetTransport {
     socket.onopen = () => {
       this.edgeAttempts = 0;
       this.lastFrameAt = Date.now();
+      // Given, not assumed: the grace period starts now, so a fleet that is publishing
+      // normally is never flagged during the handshake.
+      this.lastLivePositionAt = Date.now();
+      this.starved = false;
       this.store.setConnection({ rail: "edge", status: "live", error: null, attempts: 0 });
       this.sendView();
       this.startPing();
+      this.startFlowWatchdog();
       // The socket replaces both fallbacks, but polling keeps running at a slow
       // cadence for roster facts the delta stream never carries (delivery counts,
       // distance today, shift changes).
@@ -206,6 +244,9 @@ export class FleetTransport {
         this.store.applyTrail({ tracks: frame.tracks });
         break;
       case "delta":
+        // Only a frame with entries counts as flow. An empty delta is bookkeeping
+        // (`gone` culls), and `pong` is proof of a socket, not of a fleet.
+        if (frame.e.length > 0) this.noteLivePositions();
         this.store.applyDelta({ ts: frame.ts, e: frame.e, gone: frame.gone });
         break;
       case "events":
@@ -258,8 +299,71 @@ export class FleetTransport {
     this.pingHandle = null;
   }
 
+  /**
+   * Watches the live rail for *position* flow and puts snapshot polling underneath it
+   * when there is none, without giving up the socket: the room may start delivering at
+   * any moment, and until it does the database is a better floor than a frozen map.
+   */
+  private startFlowWatchdog(): void {
+    this.stopFlowWatchdog();
+    this.flowHandle = setInterval(() => this.checkLiveFlow(), FLOW_WATCHDOG_MS);
+  }
+
+  private stopFlowWatchdog(): void {
+    if (this.flowHandle) clearInterval(this.flowHandle);
+    this.flowHandle = null;
+  }
+
+  /**
+   * Ages statuses on the page's own clock, on every rail and on none.
+   *
+   * Status normally arrives attached to a position, so a driver who stops reporting keeps the
+   * status of their last frame — a rider whose phone died at speed stayed "Moving" until the
+   * room next re-read the roster (up to 60s) or the next snapshot landed (10s). It runs here
+   * rather than in the store so every timer on this page has one owner, and it runs
+   * independently of the socket because a dead rail is exactly when it matters.
+   */
+  private startStatusClock(): void {
+    this.stopStatusClock();
+    this.statusClockHandle = setInterval(() => {
+      if (this.stopped) return;
+      this.store.tickStatusDecay();
+    }, STATUS_CLOCK_MS);
+  }
+
+  private stopStatusClock(): void {
+    if (this.statusClockHandle) clearInterval(this.statusClockHandle);
+    this.statusClockHandle = null;
+  }
+
+  private noteLivePositions(): void {
+    this.lastLivePositionAt = Date.now();
+    if (!this.starved) return;
+    this.starved = false;
+    // Only the edge socket owns its own cadence. The mirror polls underneath by design,
+    // because it carries no roster and no eviction.
+    if (this.socket?.readyState === WebSocket.OPEN) this.stopPolling();
+    this.store.setConnection({ status: "live", error: null });
+  }
+
+  private checkLiveFlow(): void {
+    if (this.stopped || this.starved) return;
+    const live =
+      (this.socket && this.socket.readyState === WebSocket.OPEN) || this.channel != null;
+    if (!live) return;
+    // Nobody on duty means nobody should be publishing. Silence is the correct state of
+    // an empty fleet, and calling it degraded would train operators to ignore the pill.
+    if (this.store.getSnapshot().kpis.onDuty === 0) return;
+    if (Date.now() - this.lastLivePositionAt < POSITION_SILENCE_MS) return;
+
+    this.starved = true;
+    this.store.setConnection({ status: "degraded", error: "no_live_positions" });
+    this.startPolling();
+  }
+
   private teardownEdge(): void {
     this.stopPing();
+    this.stopFlowWatchdog();
     const socket = this.socket;
     this.socket = null;
     if (socket) {
@@ -310,11 +414,17 @@ export class FleetTransport {
           | undefined;
         if (!payload?.drivers) return;
         this.lastFrameAt = Date.now();
+        if (payload.drivers.length > 0) this.noteLivePositions();
         this.store.applyMirror(payload);
         this.store.setRail("mirror", "live");
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
+          // Subscribed proves the channel, not the fleet — the mirror is produced by the
+          // same room, so it is silent whenever the room is.
+          this.lastLivePositionAt = Date.now();
+          this.starved = false;
+          this.startFlowWatchdog();
           this.store.setRail("mirror", "live");
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           this.teardownMirror();
@@ -374,8 +484,58 @@ export class FleetTransport {
         drivers: data.drivers ?? [],
         zones: zones ?? undefined,
       });
+
+      // Poll and warm-start have no socket, so the feed would stay empty without this.
+      // On the edge rail it fills the gap until the first `ops` / `events` frame.
+      void this.seedFeed();
     } catch (error) {
       this.store.setConnection({ status: "error", error: String(error) });
+    }
+  }
+
+  private async seedFeed(): Promise<void> {
+    try {
+      const [fleet, ops] = await Promise.all([
+        this.supabase.rpc("admin_list_fleet_events", { p_limit: 50 }),
+        this.supabase
+          .from("driver_operation_events")
+          .select(
+            "id, driver_id, category, operation_key, success, error_code, context, occurred_at",
+          )
+          .order("id", { ascending: false })
+          .limit(50),
+      ]);
+
+      const fleetRows = (
+        (fleet.data as { events?: Array<Record<string, unknown>> } | null)?.events ?? []
+      ).map((event) => ({
+        driverId: String(event.driver_id ?? ""),
+        eventKey: String(event.event_key ?? ""),
+        severity: (event.severity as "info" | "warning" | "critical") ?? "info",
+        value: typeof event.value === "number" ? event.value : null,
+        statusBefore: (event.status_before as string | null) ?? null,
+        statusAfter: (event.status_after as string | null) ?? null,
+        zoneId: (event.zone_id as string | null) ?? null,
+        latitude: typeof event.latitude === "number" ? event.latitude : null,
+        longitude: typeof event.longitude === "number" ? event.longitude : null,
+        context: (event.context as Record<string, unknown>) ?? {},
+        detectedAt: String(event.detected_at ?? new Date().toISOString()),
+      }));
+      if (fleetRows.length > 0) this.store.applyFleetEvents(fleetRows);
+
+      const opsRows = (ops.data ?? []).map((event) => ({
+        id: String(event.id),
+        driverId: String(event.driver_id),
+        category: String(event.category ?? ""),
+        operationKey: String(event.operation_key ?? ""),
+        success: event.success !== false,
+        errorCode: (event.error_code as string | null) ?? null,
+        context: (event.context as Record<string, unknown>) ?? {},
+        occurredAt: String(event.occurred_at ?? new Date().toISOString()),
+      }));
+      if (opsRows.length > 0) this.store.applyOpsEvents(opsRows);
+    } catch {
+      // Feed seed is best-effort: a missing permission must not blank the map.
     }
   }
 }

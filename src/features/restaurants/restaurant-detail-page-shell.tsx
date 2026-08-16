@@ -515,7 +515,11 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
                       </Badge>
                     </td>
                     <td className="p-3">
-                      {driver.link_status === "linked" ? (
+                      {driver.is_blocked ? (
+                        <StatusPill variant="danger" dot={false}>
+                          {t("driverBlocked")}
+                        </StatusPill>
+                      ) : driver.link_status === "linked" ? (
                         <AttendancePill
                           onDuty={driver.is_on_duty}
                           onDutyLabel={t("driverOnDuty")}

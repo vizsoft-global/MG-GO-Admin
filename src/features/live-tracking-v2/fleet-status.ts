@@ -237,14 +237,83 @@ export function fleetStatus(
 
   if (signals.onBreak === true) return "on_break";
 
-  // A leftover delivery_submit without an open pickup is not On Delivery — it falls through to
-  // moving or idle by speed. That mismatch was a live defect on the v1 page.
-  if (signals.trackingStatus === "delivery_submit" && signals.activeDeliveryId) {
-    return "on_delivery";
-  }
+  /*
+   * An open delivery *is* the status, whether or not the rider happens to be moving.
+   *
+   * This used to also require `trackingStatus === "delivery_submit"`, which made the status
+   * practically unreachable: the app sets `delivery_submit` when a pickup is logged and then
+   * the very next position sample overwrites it with `moving` or `idle`, so the admin saw
+   * On Delivery for one frame at best. The `activeDeliveryId` half is the durable fact — it
+   * now comes from `deliveries.status = 'in_transit'` rather than from whatever the phone
+   * happened to attach to a fix — so it can carry the status alone.
+   *
+   * A leftover `delivery_submit` with no open delivery still falls through to moving/idle by
+   * speed, which was the v1 defect this ordering was written to avoid.
+   */
+  if (signals.activeDeliveryId) return "on_delivery";
   if (signals.trackingStatus === "moving") return "moving";
   if (isMovingSpeed(signals.speedMps, thresholds)) return "moving";
   return "idle";
+}
+
+/**
+ * Statuses whose position, speed and heading are a *record* of where the driver was, not a
+ * claim about where they are.
+ *
+ * The reason this is keyed on status rather than re-derived from a fix age at each call site
+ * is that the status machine has already made exactly this decision: `gps_offline` means the
+ * newest fix is older than `gpsOfflineSeconds`, and `offline` / `location_off` mean the pin is
+ * deliberately the last known one. A second, independently computed age test beside the status
+ * pill is how a card ends up reading "GPS offline · 10 km/h" — which is what it did.
+ *
+ * `blocked` and `inactive` are included because both paths clock the driver out
+ * (`set_driver_blocked`, `drivers_end_duty_on_inactive_status`), so their last reading is by
+ * construction from a session that has ended.
+ */
+const STALE_TELEMETRY_STATUSES: readonly FleetStatus[] = [
+  "blocked",
+  "inactive",
+  "offline",
+  "location_off",
+  "gps_offline",
+];
+
+/** True when speed / heading / zone readings are recent enough to state as fact. */
+export function hasLiveTelemetry(status: FleetStatus): boolean {
+  return !STALE_TELEMETRY_STATUSES.includes(status);
+}
+
+/**
+ * The status a driver decays to once their GPS goes quiet, or `null` if this status does not
+ * decay.
+ *
+ * Status normally arrives with a position frame, which means a driver who simply stops
+ * reporting keeps whichever status their last frame carried — and the frames stop for exactly
+ * the reasons an operator most needs to see. A rider whose phone died at 40 km/h stayed
+ * "Moving" on the map until the room next re-read the roster, which is up to a minute later,
+ * and on the polling rail until the next 10s snapshot. Ageing on the client's own clock is
+ * what makes `gpsOfflineSeconds` mean what it says.
+ */
+export function decayedFleetStatus(
+  status: FleetStatus,
+  lastFixAtMs: number | null,
+  nowMs: number,
+  thresholdOverrides?: Partial<FleetThresholds> | null,
+): FleetStatus | null {
+  // Only the statuses that assert something live can go stale. `offline` is a duty fact and
+  // `blocked` an account fact; neither is a function of how old the last fix is.
+  if (
+    status !== "moving" &&
+    status !== "idle" &&
+    status !== "on_delivery" &&
+    status !== "on_break"
+  ) {
+    return null;
+  }
+  const thresholds = resolveFleetThresholds(thresholdOverrides);
+  const age = gpsAgeSeconds(lastFixAtMs, nowMs);
+  if (age != null && age <= thresholds.gpsOfflineSeconds) return null;
+  return "gps_offline";
 }
 
 const EMPTY_FLAGS: FleetFlagSet = {
@@ -350,9 +419,9 @@ export type FleetTone = "success" | "primary" | "warning" | "danger" | "neutral"
 const STATUS_TONES: Record<FleetStatus, FleetTone> = {
   blocked: "danger",
   inactive: "danger",
-  offline: "neutral",
+  offline: "danger",
   location_off: "warning",
-  gps_offline: "neutral",
+  gps_offline: "danger",
   on_break: "primary",
   on_delivery: "primary",
   moving: "success",

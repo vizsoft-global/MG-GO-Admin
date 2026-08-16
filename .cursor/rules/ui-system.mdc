@@ -203,7 +203,9 @@ Conditions this exception depends on — if any stops being true, the page is ba
 
 - The canvas is exactly one viewport and the page itself never scrolls; overlay panels scroll internally.
 - Every overlay is collapsible, so the operator can always get the full map.
-- Overlays use logical insets (`start-*` / `end-*` / `inset-x-*`), so the whole canvas mirrors under RTL without a second layout.
+- Overlays live in **one `inset-3` layer that lays them out in normal flow** — top chrome row, then each side panel stacked above its own bottom chrome — not as independently positioned boxes with hand-tuned insets. Per-overlay insets are what let the driver rail paint over the filter row, since the rail's top inset had to guess the height of a filter card that wraps. Flow means a taller filter card pushes the rail down instead.
+- The layer is `pointer-events-none` and each card opts back in with `pointer-events-auto`, so the map still drags in the gaps between panels.
+- Alignment is logical (`items-end`, `justify-between`, `start-*` / `end-*` where positioning is still absolute), so the whole canvas mirrors under RTL without a second layout.
 - Fullscreen uses the Fullscreen API on the canvas element, not a CSS class swap — re-parenting the WebGL canvas would drop its context.
 
 V2 also renders drivers through `deck.gl` (`GoogleMapsOverlay`) rather than DOM markers + `MarkerClusterer`, because DOM markers cannot hold 60fps at 500 animated pins. Status colour still comes from the status machine, zone fill is still 0.22, and all three deselect paths still work.

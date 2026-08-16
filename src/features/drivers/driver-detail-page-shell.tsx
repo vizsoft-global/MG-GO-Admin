@@ -91,6 +91,20 @@ type DetailTabId =
   | "complaint"
   | "wrong-actions";
 
+/**
+ * Allowlist of pages that may claim the back arrow, keyed by the `from` search param.
+ *
+ * An allowlist rather than a returned path: `from` arrives from the URL, so treating it as a
+ * href would let any link off this page point the arrow anywhere.
+ */
+const DRIVER_BACK_TARGETS: Record<
+  string,
+  { href: string; labelKey: "backToList" | "backToLiveTracking" }
+> = {
+  "live-tracking-v2": { href: "/live-tracking-v2", labelKey: "backToLiveTracking" },
+  "live-tracking": { href: "/live-tracking", labelKey: "backToLiveTracking" },
+};
+
 function DetailSkeleton() {
   return (
     <AppPage className="space-y-4 animate-pulse">
@@ -328,6 +342,22 @@ function DriverDetailContent({ id }: { id: string }) {
       setActiveTab("activity");
     }
   }, [searchParams, driver?.linked_profile_id, canViewOps]);
+
+  /*
+   * Where "back" goes, when the caller says so.
+   *
+   * The arrow was a fixed link to `/drivers`, so opening a driver from Live Tracking and
+   * pressing back dropped the operator on the driver list — losing the map, the filters and
+   * the selection they had built up. A `from` parameter is preferred over `router.back()`
+   * because this page is routinely deep-linked (`?tab=`, `?edit=1`) and reloaded, and after a
+   * reload there is no history entry to go back to. An unrecognised value falls through to the
+   * list rather than being trusted as a path, so the parameter cannot be used to point the
+   * button at an arbitrary URL.
+   */
+  const backTarget = DRIVER_BACK_TARGETS[searchParams.get("from") ?? ""] ?? {
+    href: "/drivers",
+    labelKey: "backToList" as const,
+  };
 
   const handleEditOpenChange = (open: boolean) => {
     setEditOpen(open);
@@ -617,11 +647,11 @@ function DriverDetailContent({ id }: { id: string }) {
           size="icon-sm"
           className="cursor-pointer shrink-0"
           nativeButton={false}
-          render={<Link href="/drivers" />}
+          render={<Link href={backTarget.href} />}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <span className="text-sm text-muted-foreground">{t("backToList")}</span>
+        <span className="text-sm text-muted-foreground">{t(backTarget.labelKey)}</span>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -674,15 +704,16 @@ function DriverDetailContent({ id }: { id: string }) {
                 </p>
                 <DriverDetailGroups driverId={driver.linked_profile_id} />
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <AccountStatusPill
-                    status={driver.account_status}
-                    label={accountStatusLabel(driver.account_status)}
-                  />
                   {driver.is_blocked ? (
                     <span className="inline-flex items-center rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-medium text-destructive">
                       {tBlock("statusBlocked")}
                     </span>
-                  ) : null}
+                  ) : (
+                    <AccountStatusPill
+                      status={driver.account_status}
+                      label={accountStatusLabel(driver.account_status)}
+                    />
+                  )}
                 </div>
               </div>
             </div>

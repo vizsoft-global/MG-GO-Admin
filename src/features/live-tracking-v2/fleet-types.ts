@@ -5,12 +5,13 @@
  * (what a status means) so the transport can change rails without the UI noticing.
  */
 
-import type {
-  FleetDistributionBucket,
-  FleetEventSeverity,
-  FleetFlag,
-  FleetFlagSet,
-  FleetStatus,
+import {
+  FLEET_FILTER_STATUSES,
+  type FleetDistributionBucket,
+  type FleetEventSeverity,
+  type FleetFlag,
+  type FleetFlagSet,
+  type FleetStatus,
 } from "./fleet-status";
 import type { DriverMeta, HeadingSource } from "./fleet-wire";
 
@@ -89,6 +90,31 @@ export function emptyFleetFilters(): FleetFilters {
     partnerId: null,
     alertsOnly: false,
   };
+}
+
+/**
+ * Alert Only is a standalone filter. Turning it on clears status chips; picking a
+ * status chip while it is on turns it off and shows that status.
+ */
+export function toggleFleetStatusChip(
+  filters: FleetFilters,
+  status: FleetStatus,
+): Partial<FleetFilters> {
+  if (filters.alertsOnly) {
+    return { alertsOnly: false, statuses: [status] };
+  }
+  const current = filters.statuses ?? [...FLEET_FILTER_STATUSES];
+  const next = current.includes(status)
+    ? current.filter((entry) => entry !== status)
+    : [...current, status];
+  return { statuses: next };
+}
+
+export function toggleFleetAlertsOnly(filters: FleetFilters): Partial<FleetFilters> {
+  if (filters.alertsOnly) {
+    return { alertsOnly: false, statuses: null };
+  }
+  return { alertsOnly: true, statuses: null };
 }
 
 /**

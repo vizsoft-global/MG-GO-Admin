@@ -98,6 +98,23 @@ const FLUSH_MIN_MOVE_M = 5;
  */
 const MAX_TRAIL_POINTS = 240;
 
+/**
+ * Above this the fix describes a cell tower rather than a rider.
+ *
+ * Chosen from production data: Android's network provider reports exactly 100, while a
+ * real GPS fix in an urban canyon degrades to about 20-40m. Kept in step with the
+ * driver app's `coarseGpsAccuracyMeters` and the SQL exclusion in
+ * `admin_get_driver_day_route`.
+ */
+const COARSE_FIX_ACCURACY_M = 50;
+
+/** How long an accurate pin outranks an incoming coarse one. */
+const COARSE_FIX_GRACE_MS = 2 * 60_000;
+
+function isCoarseFix(accuracyM: number | null): boolean {
+  return accuracyM != null && accuracyM > COARSE_FIX_ACCURACY_M;
+}
+
 /** Trails per frame. A first frame carrying 500 tails would block the room's thread. */
 const MAX_TRAIL_TRACKS_PER_FRAME = 120;
 
@@ -303,7 +320,7 @@ export class FleetRoom implements DurableObject {
         color: string | null;
         zone_type: string | null;
         geometry: unknown;
-      }>(this.supabase, "zones?select=id,name,color,zone_type,geometry&is_active=eq.true"),
+      }>(this.supabase, "zones?select=id,name,color,zone_type,geometry"),
     ]);
 
     this.zones = zoneRows
@@ -447,8 +464,26 @@ export class FleetRoom implements DurableObject {
       entity.isBlocked = row.is_blocked === true;
       entity.accountStatus = row.account_status ?? entity.accountStatus;
       entity.shiftStartMs = shiftStartMs;
+
+      /*
+       * A new duty session retires the version comparison.
+       *
+       * `dutyStateVersion` exists to tell a zombie foreground service apart from a live
+       * one *within one session*, and it only ever moves up. Across a clock-out and
+       * clock-in it became a trap: the restarted service reads the counter from a
+       * `SharedPreferences` cache that belongs to another isolate, so it can publish a
+       * value below the one the room already holds and be refused with 409 for the rest
+       * of the shift — a driver online and moving, drawn Offline. A different check-in
+       * time is proof of a different session, so the comparison starts over.
+       */
+      const nextCheckInMs = toMs(row.on_duty_since);
+      if (nextCheckInMs !== entity.shiftCheckInMs) entity.dutyStateVersion = null;
       entity.shiftEndMs = shiftEndMs;
-      entity.shiftCheckInMs = toMs(row.on_duty_since);
+      entity.shiftCheckInMs = nextCheckInMs;
+
+      // Roster fact, not a position fact: it comes from `deliveries.status`, so it must
+      // apply even when the room's pin is fresher than the database's.
+      entity.activeDeliveryId = row.active_delivery_id ?? null;
 
       if ((entity.lastFixAtMs ?? 0) < snapshotFixMs) {
         entity.lat = numberOrNull(row.latitude) ?? entity.lat;
@@ -459,7 +494,6 @@ export class FleetRoom implements DurableObject {
         entity.batteryPct = numberOrNull(row.battery_pct);
         entity.accuracyM = numberOrNull(row.accuracy_meters);
         entity.trackingStatus = normalizeTracking(row.tracking_status);
-        entity.activeDeliveryId = row.active_delivery_id ?? null;
         entity.rangeStatus = normalizeRange(row.zone_status);
         entity.lastFixAtMs = snapshotFixMs;
         entity.posVersion += 1;
@@ -472,7 +506,11 @@ export class FleetRoom implements DurableObject {
     // with no coordinates is location-off rather than merely silent.
     entity.locationOff = entity.isOnDuty && entity.lat == null && entity.lng == null;
 
+    const previousStatus = entity.status;
     this.refreshDerived(entity, Date.now(), false);
+    // Status rides on the position frame, and a roster read can change it without any
+    // new position at all — an opened delivery, a clock-in, a block.
+    if (existing && entity.status !== previousStatus) entity.posVersion += 1;
     return entity;
   }
 
@@ -558,6 +596,30 @@ export class FleetRoom implements DurableObject {
       // An out-of-order point must not teleport the pin backwards.
       if (entity.lastFixAtMs != null && clientMs < entity.lastFixAtMs) continue;
 
+      /*
+       * A coarse fix does not get to move the pin while an accurate one is still warm.
+       *
+       * Android's network provider reports `accuracy_meters` of exactly 100 from a cell
+       * tower that can be 600m from the rider, and a phone alternating providers then
+       * ping-pongs across the map every couple of seconds — which is what produced the
+       * "multiple pointers for an idle driver" reading, since the trail drew the hop too.
+       * The driver app applies the same rule before reporting; this is the half that
+       * protects the map from builds that predate it.
+       *
+       * It is a *deferral*, not a drop: the point still goes to `pending`, so the durable
+       * history keeps what the device actually said, and a driver whose GPS never
+       * recovers still gets their pin once the warm window lapses.
+       */
+      if (
+        isCoarseFix(point.accuracyM) &&
+        entity.lat != null &&
+        !isCoarseFix(entity.accuracyM) &&
+        entity.lastFixAtMs != null &&
+        nowMs - entity.lastFixAtMs < COARSE_FIX_GRACE_MS
+      ) {
+        continue;
+      }
+
       this.appendTrail(entity, point.lat, point.lng, clientMs);
 
       entity.lat = point.lat;
@@ -569,7 +631,14 @@ export class FleetRoom implements DurableObject {
       entity.batteryPct = point.batteryPct ?? entity.batteryPct;
       entity.isMocked = point.isMocked === true;
       entity.trackingStatus = point.trackingStatus;
-      entity.activeDeliveryId = point.activeDeliveryId;
+      // Deliberately one-way: a payload may *announce* a delivery the roster has not
+      // read yet, but it may not clear one. The phone's foreground service reads the
+      // delivery id from a `SharedPreferences` cache belonging to another isolate and
+      // usually sends null, so honouring null here is what kept On Delivery off the map.
+      // The clear comes from the roster, where `deliveries.status` is authoritative.
+      if (point.activeDeliveryId != null) {
+        entity.activeDeliveryId = point.activeDeliveryId;
+      }
       entity.lastFixAtMs = Math.min(clientMs, nowMs);
       entity.locationOff = false;
       entity.isOnDuty = true;
@@ -869,7 +938,16 @@ export class FleetRoom implements DurableObject {
       return false;
     }
     if (view.partnerId && entity.meta.partnerId !== view.partnerId) return false;
-    if (entity.lat == null || entity.lng == null) return false;
+    if (entity.lat == null || entity.lng == null) {
+      // Blocked / clocked-out drivers keep a roster row even with no pin, so the
+      // Blocked filter is not an empty list of people the admin just blocked.
+      return (
+        entity.status === "blocked" ||
+        entity.status === "inactive" ||
+        entity.status === "offline" ||
+        entity.status === "location_off"
+      );
+    }
     return inBbox(entity.lat, entity.lng, view.bbox);
   }
 
@@ -1128,11 +1206,34 @@ export class FleetRoom implements DurableObject {
     if (this.sockets.size === 0) return;
     try {
       if (this.opsCursor == null) {
-        const seed = await selectRows<{ id: number }>(
+        const seed = await selectRows<{
+          id: number;
+          driver_id: string;
+          category: string;
+          operation_key: string;
+          success: boolean;
+          error_code: string | null;
+          context: Record<string, unknown> | null;
+          occurred_at: string;
+        }>(
           this.supabase,
-          "driver_operation_events?select=id&order=id.desc&limit=1",
+          `driver_operation_events?select=id,driver_id,category,operation_key,success,error_code,context,occurred_at&order=id.desc&limit=${OPS_POLL_LIMIT}`,
         );
         this.opsCursor = seed[0]?.id ?? 0;
+        if (seed.length > 0) {
+          this.fanoutOps(
+            [...seed].reverse().map((row) => ({
+              id: String(row.id),
+              driverId: row.driver_id,
+              category: row.category,
+              operationKey: row.operation_key,
+              success: row.success,
+              errorCode: row.error_code,
+              context: row.context ?? {},
+              occurredAt: row.occurred_at,
+            })),
+          );
+        }
         return;
       }
 
@@ -1166,10 +1267,25 @@ export class FleetRoom implements DurableObject {
         })),
       );
 
-      // Duty transitions authored elsewhere (clock in/out, admin block, auto
-      // checkout) are the reason this relay exists at all: without them a clocked-out
-      // driver would keep their live pin until the next roster refresh.
-      if (rows.some((row) => row.category === "duty" || row.operation_key.startsWith("duty."))) {
+      /*
+       * Duty transitions authored elsewhere (clock in/out, admin block, auto checkout)
+       * are the reason this relay exists at all: without them a clocked-out driver would
+       * keep their live pin until the next roster refresh.
+       *
+       * Delivery operations join them because the open delivery is now a roster fact read
+       * from `deliveries.status`. Waiting up to a minute for the next scheduled refresh
+       * would mean logging a pickup and watching the rider stay Idle — which is the
+       * symptom the phone-supplied id was supposed to avoid and never did.
+       */
+      if (
+        rows.some(
+          (row) =>
+            row.category === "duty" ||
+            row.category === "delivery" ||
+            row.operation_key.startsWith("duty.") ||
+            row.operation_key.startsWith("delivery."),
+        )
+      ) {
         this.rosterLoadedAt = 0;
         await this.loadRoster(true);
       }

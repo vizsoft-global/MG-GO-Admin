@@ -30,7 +30,51 @@ export type FleetTrail = {
   color: [number, number, number];
   /** Bumped on every mutation, so the map can invalidate deck's tesselation. */
   revision: number;
+  /** Memo for [trailSpanMeters]: the revision `spanM` was measured at. */
+  spanRev: number;
+  spanM: number;
 };
+
+/**
+ * Diagonal of the trail's bounding box, in metres.
+ *
+ * The map uses this to decide whether a trail is a path or a smudge. A parked phone
+ * still emits a point every [TRAIL_MIN_GAP_MS] — the gate is "moved 5m *or* 3s elapsed",
+ * because a trail that stopped extending would otherwise look like a rider who
+ * teleported — so ten minutes of standing still is ~200 points of GPS noise piled on the
+ * marker. Drawn, that is a coloured blob around the pin, and with several riders parked
+ * together it is the "multiple pointers in orange, green and blue" an operator cannot
+ * read a status out of.
+ *
+ * Memoised against `revision` rather than maintained incrementally: pruning removes
+ * points from the front, which can only be answered by rescanning, and a rescan of 200
+ * numbers on the rare frame a trail changes is cheaper than the bookkeeping.
+ */
+export function trailSpanMeters(trail: FleetTrail): number {
+  if (trail.spanRev === trail.revision) return trail.spanM;
+
+  const n = trail.ts.length;
+  let span = 0;
+  if (n > 1) {
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    for (let i = 0; i < n; i += 1) {
+      const lng = trail.coords[i * 2]!;
+      const lat = trail.coords[i * 2 + 1]!;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+    span = trailDistanceMeters(minLat, minLng, maxLat, maxLng);
+  }
+
+  trail.spanM = span;
+  trail.spanRev = trail.revision;
+  return span;
+}
 
 /**
  * Golden-angle hue stepping over a string hash.
@@ -109,6 +153,8 @@ export class FleetTrailStore {
         ts: [],
         color: fleetTrailColor(driverId),
         revision: 0,
+        spanRev: -1,
+        spanM: 0,
       };
       this.trails.set(driverId, trail);
     }

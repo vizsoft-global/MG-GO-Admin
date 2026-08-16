@@ -27,8 +27,15 @@ const RAIL_ICON = {
 
 export function FleetConnectionPill({ className }: { className?: string }) {
   const t = useTranslations("pages.liveTrackingV2.connection");
-  const { rail, status, staleSeconds } = useFleetRailLabel();
+  const { rail, status, error, staleSeconds } = useFleetRailLabel();
 
+  /*
+   * A connected rail that is carrying no positions is its own incident, and the one the
+   * pill was least able to show: the socket is open, `pong` keeps answering, and the tone
+   * stayed green while the map ran on database reads a minute or two apart. Naming it is
+   * the difference between "drivers are parked" and "no driver is reaching this page".
+   */
+  const noLiveData = error === "no_live_positions";
   const Icon = RAIL_ICON[rail];
   const tone =
     status === "error"
@@ -47,7 +54,7 @@ export function FleetConnectionPill({ className }: { className?: string }) {
         "inline-flex h-6 items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 text-[10px] font-semibold text-muted-foreground",
         className,
       )}
-      title={rail === "edge" ? undefined : t("hint")}
+      title={noLiveData ? t("noLiveDataHint") : rail === "edge" ? undefined : t("hint")}
     >
       <span
         className={cn(
@@ -59,6 +66,7 @@ export function FleetConnectionPill({ className }: { className?: string }) {
       />
       <Icon className="size-3" aria-hidden />
       <span>{t(rail)}</span>
+      {noLiveData ? <span className="text-amber-700">{t("noLiveData")}</span> : null}
       {staleSeconds > 2 ? (
         <span className="tabular-nums text-muted-foreground/80">
           {t("updated", { seconds: staleSeconds })}

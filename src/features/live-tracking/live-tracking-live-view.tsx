@@ -148,7 +148,7 @@ export function LiveTrackingLiveView({
         partnerName: row.partner_name ?? null,
         intakeId: row.id,
         phone: row.phone ?? null,
-        detailHref: `/drivers/${row.id}?tab=location`,
+        detailHref: `/drivers/${row.id}?tab=location&from=live-tracking`,
         avatarUrl: row.avatar_display_url ?? null,
         isBlocked: row.is_blocked,
       });

@@ -727,7 +727,7 @@ export async function fetchRestaurantAssignedDrivers(
       supabase
         .from("driver_restaurants")
         .select(
-          "driver_id, drivers(id, driver_code, is_on_duty, profiles(full_name, phone))",
+          "driver_id, drivers(id, driver_code, is_on_duty, is_blocked, profiles(full_name, phone))",
         )
         .eq("restaurant_id", restaurantId),
       supabase
@@ -777,6 +777,7 @@ export async function fetchRestaurantAssignedDrivers(
       phone: profile?.phone ?? null,
       link_status: "linked",
       is_on_duty: driverRel.is_on_duty ?? false,
+      is_blocked: driverRel.is_blocked ?? false,
     });
   }
 
@@ -794,6 +795,7 @@ export async function fetchRestaurantAssignedDrivers(
       phone: intake.phone ?? null,
       link_status: "intake",
       is_on_duty: false,
+      is_blocked: false,
     });
   }
 

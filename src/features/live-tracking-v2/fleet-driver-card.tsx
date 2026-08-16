@@ -24,7 +24,12 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitives";
 
-import { activeFleetFlags, fleetFlagTone, fleetStatusTone } from "./fleet-status";
+import {
+  activeFleetFlags,
+  fleetFlagTone,
+  fleetStatusTone,
+  hasLiveTelemetry,
+} from "./fleet-status";
 import { FLEET_TONE_BADGE, FLEET_TONE_DOT } from "./fleet-tone";
 import { useFleetDriver } from "./use-fleet";
 
@@ -68,7 +73,15 @@ export const FleetDriverCard = memo(function FleetDriverCard({
   // every on-duty card would bury the two or three that actually need attention.
   const badgeFlags = flags.filter((flag) => flag !== "on_duty" && flag !== "online");
 
-  const speedKmh = Math.round(driver.speedMps * 3.6);
+  /*
+   * A speed is a claim about right now, so it is only shown while the status agrees the
+   * reading is live. An Offline card that still read "10 km/h" was quoting the last frame
+   * before the phone went quiet, which is the one number on this card an operator is most
+   * likely to act on.
+   */
+  const speedLabel = hasLiveTelemetry(driver.status)
+    ? `${Math.round(driver.speedMps * 3.6)} km/h`
+    : "—";
   const distanceKm = meta.distanceTodayMeters / 1000;
   const onDutyFor = formatDuration(meta.onDutySince);
   const deliveryProgress =
@@ -163,7 +176,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
         <Stat
           icon={<Navigation className="size-3" aria-hidden />}
           label={t("rail.speed")}
-          value={`${speedKmh} km/h`}
+          value={speedLabel}
         />
         <Stat
           icon={<MapIcon className="size-3" aria-hidden />}
@@ -240,7 +253,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             <MapIcon className="size-3.5" aria-hidden />
           </button>
           <Link
-            href={`/drivers/${driverId}`}
+            href={`/drivers/${driverId}?from=live-tracking-v2`}
             onClick={(event) => event.stopPropagation()}
             className="rounded px-1 text-[10px] font-medium text-primary transition-colors duration-150 hover:bg-primary/10"
           >

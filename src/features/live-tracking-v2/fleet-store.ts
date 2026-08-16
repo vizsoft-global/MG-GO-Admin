@@ -22,12 +22,15 @@
 import {
   FLEET_DISTRIBUTION_BUCKETS,
   activeFleetFlags,
+  decayedFleetStatus,
   emptyFleetFlags,
   fleetDistributionBucket,
   fleetEventSeverity,
   fleetFlags,
   fleetStatus,
   fleetStatusSortWeight,
+  gpsAgeSeconds,
+  hasLiveTelemetry,
   isFleetAlert,
   normalizeBatteryPct,
   resolveFleetThresholds,
@@ -97,6 +100,7 @@ export type FleetSnapshotRow = {
   is_mocked: boolean | null;
   tracking_status: string | null;
   zone_status: string | null;
+  out_of_zone_since: string | null;
   distance_today_meters: number | string | null;
   active_delivery_id: string | null;
   last_seen_at: string | null;
@@ -138,6 +142,7 @@ export class FleetStore {
   private thresholds: FleetThresholds = resolveFleetThresholds(null);
   private feed: FleetFeedItem[] = [];
   private heldFeed: FleetFeedItem[] = [];
+  private readonly feedIds = new Set<string>();
   private feedPaused = false;
   private filters: FleetFilters = emptyFleetFilters();
   private selectedDriverId: string | null = null;
@@ -274,7 +279,7 @@ export class FleetStore {
     settings: Record<string, number>;
     zones: FleetZone[];
   }): void {
-    this.zones = input.zones;
+    if (input.zones.length > 0) this.zones = input.zones;
     this.thresholds = resolveFleetThresholds({
       overspeedKmh: input.settings.overspeed_kmh,
       lowBatteryPct: input.settings.low_battery_pct,
@@ -395,12 +400,11 @@ export class FleetStore {
     }
 
     for (const idIdx of input.gone) {
+      // Viewport / filter cull from the room. Keep the roster row so the rail and
+      // search still list the driver — dropping them is why an out-of-zone or
+      // blocked rider vanished from the sidebar the moment they left the map frame.
       const driverId = this.byIdIdx.get(idIdx);
       if (!driverId) continue;
-      this.byIdIdx.delete(idIdx);
-      this.drivers.delete(driverId);
-      this.interpolator.remove(driverId);
-      this.trails.remove(driverId);
       this.dirtyDrivers.add(driverId);
       structural = true;
     }
@@ -472,7 +476,7 @@ export class FleetStore {
     drivers: FleetSnapshotRow[];
     zones?: FleetZone[];
   }): void {
-    if (input.zones) this.zones = input.zones;
+    if (input.zones && input.zones.length > 0) this.zones = input.zones;
     if (input.settings) {
       this.thresholds = resolveFleetThresholds({
         overspeedKmh: input.settings.overspeed_kmh,
@@ -509,9 +513,10 @@ export class FleetStore {
         activeDeliveryId: row.active_delivery_id,
         batteryPct: row.battery_pct,
         isMocked: row.is_mocked === true,
-        // Assigned-zone geometry is the Worker's job; the polling rail reports only
-        // the delivery-range verdict it can actually read from the row.
-        inAssignedZone: null,
+        // Assigned-zone geometry is the Worker's job on the edge rail. The polling
+        // rail can still flag Out of Zone from `out_of_zone_since`, which is what
+        // the database already records on the pin.
+        inAssignedZone: row.out_of_zone_since ? false : null,
         rangeStatus: normalizeRange(row.zone_status),
         shiftScheduledStartMs: shiftStart,
         shiftScheduledEndMs: shiftEnd,
@@ -599,6 +604,52 @@ export class FleetStore {
   }
 
   // -------------------------------------------------------------------------
+  // Local clock
+  // -------------------------------------------------------------------------
+
+  /**
+   * Age statuses and the age-derived flags without waiting for a frame.
+   *
+   * Called on a plain interval rather than folded into the render loop: the map's frame loop
+   * only runs while the canvas is mounted and drivers are visible, and a status that goes
+   * stale while the insights panel is open still has to change. Kept a pure-ish method taking
+   * `nowMs` so the rule is testable without fake timers.
+   */
+  tickStatusDecay(nowMs: number = Date.now()): void {
+    let structural = false;
+
+    for (const [driverId, driver] of this.drivers) {
+      const fixAtMs = driver.fixAtMs || null;
+      const decayed = decayedFleetStatus(driver.status, fixAtMs, nowMs, this.thresholds);
+      const age = gpsAgeSeconds(fixAtMs, nowMs);
+      const staleGps =
+        decayed == null &&
+        age != null &&
+        age > this.thresholds.staleGpsSeconds &&
+        hasLiveTelemetry(driver.status);
+
+      const statusChanged = decayed != null && decayed !== driver.status;
+      const flagChanged = staleGps !== driver.flags.stale_gps;
+      if (!statusChanged && !flagChanged) continue;
+
+      const flags = { ...driver.flags, stale_gps: staleGps };
+      const next: FleetDriver = {
+        ...driver,
+        status: statusChanged ? decayed! : driver.status,
+        flags,
+        activeFlags: activeFleetFlags(flags),
+        gpsAgeMs: age == null ? driver.gpsAgeMs : Math.round(age * 1000),
+      };
+      this.drivers.set(driverId, next);
+      this.dirtyDrivers.add(driverId);
+      if (statusChanged) structural = true;
+    }
+
+    if (structural) this.publish();
+    this.scheduleDriverFlush();
+  }
+
+  // -------------------------------------------------------------------------
   // Feed
   // -------------------------------------------------------------------------
 
@@ -646,7 +697,14 @@ export class FleetStore {
 
   private pushFeed(items: FleetFeedItem[]): void {
     if (items.length === 0) return;
-    const ordered = [...items].sort((a, b) => b.atMs - a.atMs);
+    const ordered = items
+      .filter((item) => {
+        if (this.feedIds.has(item.id)) return false;
+        this.feedIds.add(item.id);
+        return true;
+      })
+      .sort((a, b) => b.atMs - a.atMs);
+    if (ordered.length === 0) return;
     if (this.feedPaused) {
       // Held rather than dropped: an operator who paused to read a row still wants
       // the backlog when they resume, and the "N new" pill needs a real count.
@@ -664,13 +722,17 @@ export class FleetStore {
   private matchesFilters(driver: FleetDriver): boolean {
     const { search, statuses, zoneId, partnerId, alertsOnly } = this.filters;
 
-    if (statuses && statuses.length > 0 && !statuses.includes(driver.status)) return false;
-    if (statuses && statuses.length === 0) return false;
+    if (alertsOnly) {
+      if (!isFleetAlert(driver.status, driver.flags)) return false;
+    } else if (statuses && statuses.length > 0 && !statuses.includes(driver.status)) {
+      return false;
+    } else if (statuses && statuses.length === 0) {
+      return false;
+    }
     if (zoneId && driver.meta.zoneId !== zoneId && driver.meta.currentZoneId !== zoneId) {
       return false;
     }
     if (partnerId && driver.meta.partnerId !== partnerId) return false;
-    if (alertsOnly && !isFleetAlert(driver.status, driver.flags)) return false;
 
     if (search.trim()) {
       const needle = search.trim().toLowerCase();
@@ -679,8 +741,12 @@ export class FleetStore {
         driver.meta.driverCode,
         driver.meta.employeeId,
         driver.meta.zoneName,
+        driver.meta.currentZoneName,
         driver.meta.partnerName,
+        driver.meta.restaurantName,
         driver.meta.vehicleLabel,
+        driver.status,
+        ...driver.activeFlags,
       ]
         .filter(Boolean)
         .join(" ")
@@ -841,6 +907,7 @@ export class FleetStore {
     this.dirtyDrivers.clear();
     this.drivers.clear();
     this.byIdIdx.clear();
+    this.feedIds.clear();
     this.interpolator.clear();
     this.trails.clear();
   }

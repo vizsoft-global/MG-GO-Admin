@@ -23,7 +23,14 @@ import {
 import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import type { GoogleMapsOverlay } from "@deck.gl/google-maps";
-import type { IconLayer, Layer, PathLayer, PolygonLayer, ScatterplotLayer } from "deck.gl";
+import type {
+  IconLayer,
+  IconLayerProps,
+  Layer,
+  PathLayer,
+  PolygonLayer,
+  ScatterplotLayer,
+} from "deck.gl";
 
 import { loadGoogleMaps } from "@/lib/google-maps/load";
 import { GoogleMapsStatusBanner } from "@/features/restaurants/google-maps-status-banner";
@@ -35,9 +42,10 @@ import {
   fleetIconMapping,
   fleetPinIcon,
   loadFleetIconAtlas,
+  type FleetIconAtlas,
 } from "./fleet-marker-atlas";
 import { fleetZoneRing } from "./fleet-zones";
-import type { FleetTrail } from "./fleet-trail";
+import { trailSpanMeters, type FleetTrail } from "./fleet-trail";
 import {
   useFleetFrame,
   useFleetSnapshot,
@@ -51,7 +59,16 @@ const DEFAULT_CENTER = { lat: 29.3759, lng: 47.9774 };
 const DEFAULT_ZOOM = 11;
 /** Street-level zoom when an operator clicks a driver. Matches v1's focus zoom. */
 const DRIVER_FOCUS_ZOOM = 16;
-const MIN_ZOOM = 6;
+/**
+ * Zoom floor: a whole-world view.
+ *
+ * This was 6 — roughly the Gulf — on the reasoning that a fleet in Kuwait is never
+ * legible from further out. But an operator zooms out to *orient*, not to read pins, and
+ * a map that stops responding to the gesture reads as broken rather than as a limit. V1
+ * sets no floor at all, and interest management already keeps a wide viewport cheap: the
+ * room culls to what a socket can see and the trail cap holds tesselation flat.
+ */
+const MIN_ZOOM = 3;
 const MAX_ZOOM = 20;
 
 const ZONE_FALLBACK_RGB: [number, number, number] = [99, 102, 241];
@@ -77,6 +94,29 @@ const MAX_TRAILS_DRAWN = 150;
 
 /** How often expired trail points are swept. See `FleetTrailStore.prune`. */
 const TRAIL_PRUNE_INTERVAL_MS = 5_000;
+
+/**
+ * Below this bounding-box diagonal a trail is not drawn at all.
+ *
+ * 25m is roughly the width of a marker at street zoom and about twice the drift a
+ * stationary phone produces, so it separates "parked" from "moved a little" without
+ * hiding a rider who crept up a queue. See `trailSpanMeters` for why the points exist.
+ */
+const MIN_TRAIL_SPAN_M = 25;
+
+/**
+ * `IconLayer.iconAtlas` is typed `string | Texture`, but its runtime contract is wider
+ * than that type: it is declared `{type: 'image'}`, and deck's image prop transform
+ * (`createTexture` in `@deck.gl/core`) wraps any browser image source as `{data}` before
+ * calling `device.createTexture`. A decoded bitmap is therefore a supported value, and
+ * the one we want — see `loadFleetIconAtlas` for why the URL form is not.
+ *
+ * The cast is confined to this one function so the gap is stated once rather than
+ * asserted at each call site.
+ */
+function asIconAtlasProp(image: FleetIconAtlas): IconLayerProps["iconAtlas"] {
+  return image as unknown as IconLayerProps["iconAtlas"];
+}
 
 export type FleetRouteStop = {
   id: string;
@@ -188,14 +228,14 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
 
   const iconMapping = useMemo(() => fleetIconMapping(), []);
-  const [iconAtlas, setIconAtlas] = useState<string | null>(null);
+  const [iconAtlas, setIconAtlas] = useState<FleetIconAtlas | null>(null);
   const selectedDriverId = snapshot.selectedDriverId;
 
   useEffect(() => {
     let cancelled = false;
     void loadFleetIconAtlas()
-      .then((pngUrl) => {
-        if (!cancelled) setIconAtlas(pngUrl);
+      .then((atlas) => {
+        if (!cancelled) setIconAtlas(atlas);
       })
       .catch(() => {
         // Status pucks still draw; bike sprites wait until the PNG atlas loads.
@@ -428,18 +468,28 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           id: "fleet-route-stops",
           data: routeStops,
           getPosition: (d) => d.position,
-          getRadius: (d) => (d.kind === "stop" ? 4 : 6),
+          getRadius: (d) => (d.kind === "stop" ? 4.5 : 6),
           radiusUnits: "pixels",
           stroked: true,
-          getLineWidth: 2,
+          getLineWidth: 2.5,
           lineWidthUnits: "pixels",
-          getLineColor: [255, 255, 255, 240],
-          getFillColor: (d) =>
+          /*
+           * Hollow rings, not filled discs.
+           *
+           * These were solid green / blue / coral circles a few pixels smaller than a
+           * driver puck, which reads as three more drivers of three more statuses standing
+           * next to the one you selected. A filled coloured circle means "a rider is here
+           * and this is their status" on this map, so route furniture gets the inverse
+           * treatment: white centre, colour in the stroke. The colour still says which
+           * kind of stop it was.
+           */
+          getLineColor: (d) =>
             d.kind === "delivery"
-              ? [16, 185, 129, 240]
+              ? [16, 185, 129, 255]
               : d.kind === "pickup"
-                ? [59, 130, 246, 240]
-                : [ROUTE_RGB[0], ROUTE_RGB[1], ROUTE_RGB[2], 220],
+                ? [59, 130, 246, 255]
+                : [ROUTE_RGB[0], ROUTE_RGB[1], ROUTE_RGB[2], 255],
+          getFillColor: [255, 255, 255, 235],
           pickable: false,
         }),
       );
@@ -454,10 +504,11 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           getRadius: 9,
           radiusUnits: "pixels",
           stroked: true,
-          getLineWidth: 3,
+          getLineWidth: 3.5,
           lineWidthUnits: "pixels",
-          getLineColor: [255, 255, 255, 255],
-          getFillColor: [...ROUTE_RGB, 255],
+          // Same inversion as the stops: the playhead marks a time, not a rider.
+          getLineColor: [...ROUTE_RGB, 255],
+          getFillColor: [255, 255, 255, 245],
         }),
       );
     }
@@ -505,6 +556,11 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       const trail = store.trails.get(entity.driverId);
       // deck.gl needs two points to make a segment.
       if (!trail || trail.coords.length < 4) continue;
+      // A trail that never left the marker is GPS noise, and drawn it is a coloured
+      // smudge over the status it is sitting on. Suppressed for everyone including the
+      // selected rider: their movement history is the route polyline, which is drawn
+      // from the durable record and does not carry this noise.
+      if (trailSpanMeters(trail) < MIN_TRAIL_SPAN_M) continue;
       if (entity.selected) {
         selectedTrail = trail;
       } else if (trailData.length < MAX_TRAILS_DRAWN) {
@@ -551,7 +607,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           new Icon<FleetEntity>({
             id: "fleet-selection-ring",
             data: selected,
-            iconAtlas,
+            iconAtlas: asIconAtlasProp(iconAtlas),
             iconMapping,
             getIcon: () => "ring",
             getPosition: (d) => d.position,
@@ -567,7 +623,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         new Icon<FleetEntity>({
           id: "fleet-drivers",
           data: drawable,
-          iconAtlas,
+          iconAtlas: asIconAtlasProp(iconAtlas),
           iconMapping,
           getIcon: (d) => d.icon,
           getPosition: (d) => d.position,

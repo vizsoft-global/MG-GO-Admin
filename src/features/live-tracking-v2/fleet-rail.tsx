@@ -24,7 +24,15 @@ import { FLEET_TONE_DOT } from "./fleet-tone";
 import { fleetStatusTone } from "./fleet-status";
 import { useFleetSnapshot, useFleetStore } from "./use-fleet";
 
-const CARD_HEIGHT = 132;
+/**
+ * Starting guess only — rows are measured after mount.
+ *
+ * A card is not a fixed height: the flag badges run zero to two lines, and the route
+ * progress bar exists only for a driver with deliveries today. Pinning every row to one
+ * number made a card with progress overflow its slot, and the next card's opaque
+ * background then covered its footer, taking "View details" with it.
+ */
+const CARD_ESTIMATE = 132;
 const CARD_GAP = 6;
 
 export function FleetRail({
@@ -47,7 +55,7 @@ export function FleetRail({
   const virtualizer = useVirtualizer({
     count: driverIds.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => CARD_HEIGHT + CARD_GAP,
+    estimateSize: () => CARD_ESTIMATE + CARD_GAP,
     overscan: 4,
   });
 
@@ -124,13 +132,17 @@ export function FleetRail({
               const driverId = driverIds[item.index];
               if (!driverId) return null;
               return (
+                // Keyed by slot, not by driver: `measureElement` caches against
+                // `data-index`, so a node whose driver changes while its index stays put
+                // keeps a measurement that still describes it.
                 <div
-                  key={driverId}
-                  className="absolute inset-x-0 top-0"
-                  style={{
-                    height: CARD_HEIGHT,
-                    transform: `translateY(${item.start}px)`,
-                  }}
+                  key={item.key}
+                  data-index={item.index}
+                  ref={virtualizer.measureElement}
+                  // The gap sits *inside* the measured box, so the measurement and
+                  // `estimateSize` describe the same thing.
+                  className="absolute inset-x-0 top-0 pb-1.5"
+                  style={{ transform: `translateY(${item.start}px)` }}
                 >
                   <FleetDriverCard
                     driverId={driverId}

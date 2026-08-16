@@ -183,7 +183,9 @@
         "degraded": "أداء منخفض",
         "error": "خطأ",
         "updated": "آخر تحديث قبل {seconds} ثانية",
-        "hint": "تعذر البث المباشر — يتم الاعتماد على قناة النسخ"
+        "hint": "تعذر البث المباشر — يتم الاعتماد على قناة النسخ",
+        "noLiveData": "لا توجد بيانات سائقين",
+        "noLiveDataHint": "الاتصال قائم، لكن لم يُبلّغ أي سائق عن موقعه حديثًا — يتم العرض من لقطات قاعدة البيانات"
       },
       "controls": {
         "zoomIn": "تكبير",
@@ -288,39 +290,67 @@
         "shift_overrun": "تجاوز الوردية"
       },
       "events": {
-        "movement.started": "بدأ الحركة",
-        "movement.stopped": "توقف",
-        "idle.sustained": "متوقف لمدة {value} دقيقة",
-        "overspeed.start": "سرعة زائدة {value} كم/س",
-        "overspeed.end": "عاد إلى السرعة المسموحة",
-        "battery.low": "البطارية {value}%",
-        "battery.recovered": "تم شحن البطارية",
-        "gps.offline": "GPS غير متصل",
-        "gps.restored": "عاد GPS",
-        "zone.exit": "خرج من المنطقة المخصصة",
-        "zone.entry": "دخل المنطقة المخصصة",
-        "range.exit": "خرج من نطاق التوصيل",
-        "range.entry": "عاد إلى نطاق التوصيل",
-        "shift.late": "تأخر عن الوردية",
-        "shift.overrun": "تجاوز مدة الوردية",
-        "gps.mocked": "تم رصد موقع مزيف",
-        "duty.on": "تسجيل حضور",
-        "duty.off": "تسجيل انصراف",
-        "duty.online": "أصبح متصلاً",
-        "duty.offline": "أصبح غير متصل",
-        "duty.auto_checkout": "انصراف تلقائي",
-        "duty.location_cleared": "تم إيقاف مشاركة الموقع",
-        "shift.submit": "تم إرسال الوردية",
-        "delivery.pickup_create": "تم استلام الطلب",
-        "delivery.complete": "تم إرسال التوصيل",
-        "delivery.cancel": "تم إلغاء التوصيل",
-        "delivery.auto_cancel": "إلغاء تلقائي لاستلام قديم",
-        "location.zone_entry": "دخل منطقة",
-        "location.zone_exit": "خرج من منطقة",
-        "auth.login": "تم تسجيل الدخول",
-        "device.signout": "تم تسجيل الخروج",
-        "security.blocked": "تم الحظر بواسطة الإدارة",
-        "security.inactive": "تم تعيينه غير نشط",
+        "movement": {
+          "started": "بدأ الحركة",
+          "stopped": "توقف"
+        },
+        "idle": {
+          "sustained": "متوقف لمدة {value} دقيقة"
+        },
+        "overspeed": {
+          "start": "سرعة زائدة {value} كم/س",
+          "end": "عاد إلى السرعة المسموحة"
+        },
+        "battery": {
+          "low": "البطارية {value}%",
+          "recovered": "تم شحن البطارية"
+        },
+        "gps": {
+          "offline": "GPS غير متصل",
+          "restored": "عاد GPS",
+          "mocked": "تم رصد موقع مزيف"
+        },
+        "zone": {
+          "exit": "خرج من المنطقة المخصصة",
+          "entry": "دخل المنطقة المخصصة"
+        },
+        "range": {
+          "exit": "خرج من نطاق التوصيل",
+          "entry": "عاد إلى نطاق التوصيل"
+        },
+        "shift": {
+          "late": "تأخر عن الوردية",
+          "overrun": "تجاوز مدة الوردية",
+          "submit": "تم إرسال الوردية"
+        },
+        "duty": {
+          "on": "تسجيل حضور",
+          "off": "تسجيل انصراف",
+          "online": "أصبح متصلاً",
+          "offline": "أصبح غير متصل",
+          "auto_checkout": "انصراف تلقائي",
+          "location_cleared": "تم إيقاف مشاركة الموقع"
+        },
+        "delivery": {
+          "pickup_create": "تم استلام الطلب",
+          "complete": "تم إرسال التوصيل",
+          "cancel": "تم إلغاء التوصيل",
+          "auto_cancel": "إلغاء تلقائي لاستلام قديم"
+        },
+        "location": {
+          "zone_entry": "دخل منطقة",
+          "zone_exit": "خرج من منطقة"
+        },
+        "auth": {
+          "login": "تم تسجيل الدخول"
+        },
+        "device": {
+          "signout": "تم تسجيل الخروج"
+        },
+        "security": {
+          "blocked": "تم الحظر بواسطة الإدارة",
+          "inactive": "تم تعيينه غير نشط"
+        },
         "unknown": "{key}"
       },
       "route": {
@@ -1259,6 +1289,7 @@
       "title": "تفاصيل السائق",
       "subtitle": "الملف والسجل التشغيلي",
       "backToList": "العودة إلى السائقين",
+      "backToLiveTracking": "العودة إلى التتبع المباشر",
       "editDriver": "تعديل السائق",
       "approveAction": "تحقق واعتماد",
       "approveConfirmBody": "إنشاء حساب السائق وتفعيله وإصدار رمز دخول من 6 أرقام؟",
@@ -1830,6 +1861,7 @@
       "driverLinkIntake": "طلب انضمام",
       "driverOnDuty": "في الخدمة",
       "driverOffDuty": "خارج الخدمة",
+      "driverBlocked": "محظور",
       "driversEmptyTitle": "لا يوجد سائقون معيّنون",
       "driversEmptyDescription": "اربط السائقين بهذا المطعم من ملف السائق أو طلب الانضمام.",
       "deliveriesNoAccessTitle": "مطلوب صلاحية التوصيلات",
