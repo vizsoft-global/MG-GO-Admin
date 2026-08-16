@@ -130,6 +130,24 @@ function bikeSprite(opacity: number): string {
   ].join("");
 }
 
+/**
+ * Selection ring, drawn under the marker. Sized outside the status ring so both stay
+ * readable at once.
+ *
+ * Built with `join` rather than `+` for a reason that is not style. Next's SWC minifier
+ * mis-folds `` `…${C}…` + `…${C}…` `` — it drops the static tail of the first literal and
+ * splices the second in, so this cell shipped to production as
+ * `<circle cx="24" cy="24<circle cx="24" …`. That is malformed XML, the *whole* atlas SVG
+ * then fails to decode, and every rider renders as the bare status puck. Concatenating
+ * with `+` is only safe here between function calls, which the minifier cannot fold.
+ */
+function selectionRing(): string {
+  return [
+    `<circle cx="${C}" cy="${C}" r="23" fill="none" stroke="#ffffff" stroke-width="5" stroke-opacity="0.9"/>`,
+    `<circle cx="${C}" cy="${C}" r="23" fill="none" stroke="#0f172a" stroke-width="2.5"/>`,
+  ].join("");
+}
+
 function atlasSvg(): string {
   const cells: string[] = [];
   let x = 0;
@@ -149,12 +167,7 @@ function atlasSvg(): string {
       statusPuck(TONE_FILL[tone], TONE_STROKE[tone], 0.45) + bikeSprite(0.5),
     );
   }
-  // Selection ring, drawn under the marker. Sized outside the status ring so both
-  // stay readable at once.
-  push(
-    `<circle cx="${C}" cy="${C}" r="23" fill="none" stroke="#ffffff" stroke-width="5" stroke-opacity="0.9"/>` +
-      `<circle cx="${C}" cy="${C}" r="23" fill="none" stroke="#0f172a" stroke-width="2.5"/>`,
-  );
+  push(selectionRing());
 
   const width = x;
   return [
@@ -195,6 +208,35 @@ const ATLAS_PIXEL_HEIGHT = CELL * SCALE;
 
 /** What `IconLayer` is handed. See [loadFleetIconAtlas]. */
 export type FleetIconAtlas = ImageBitmap | HTMLCanvasElement;
+
+/**
+ * Every cell the mapping claims must actually carry ink.
+ *
+ * `IconLayer` has no complaint for an empty cell — it draws nothing and the scatterplot
+ * puck underneath keeps the marker looking plausible, which is how a mangled atlas reached
+ * production twice. One pass over the rasterised sheet turns that into a named error.
+ * 200px is well under the ~1.6k the thinnest cell (the ring) covers and well over
+ * anti-aliasing noise.
+ */
+const MIN_CELL_INK_PX = 200;
+
+function assertAtlasCells(ctx: CanvasRenderingContext2D): void {
+  const mapping = fleetIconMapping();
+  const blank: string[] = [];
+
+  for (const [name, cell] of Object.entries(mapping)) {
+    const { data } = ctx.getImageData(cell.x, cell.y, cell.width, cell.height);
+    let ink = 0;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i]! > 8) ink += 1;
+    }
+    if (ink < MIN_CELL_INK_PX) blank.push(`${name}(${ink}px)`);
+  }
+
+  if (blank.length > 0) {
+    throw new Error(`fleet marker atlas: blank sprite cells — ${blank.join(", ")}`);
+  }
+}
 
 let atlasUrl: string | null = null;
 let atlasImage: FleetIconAtlas | null = null;
@@ -242,12 +284,15 @@ export function loadFleetIconAtlas(): Promise<FleetIconAtlas> {
         const canvas = document.createElement("canvas");
         canvas.width = ATLAS_PIXEL_WIDTH;
         canvas.height = ATLAS_PIXEL_HEIGHT;
-        const ctx = canvas.getContext("2d");
+        // `willReadFrequently` because `assertAtlasCells` reads the sheet straight back;
+        // without it Chrome warns in the console this feature asks operators to read.
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
         if (!ctx) {
           reject(new Error("fleet marker atlas: 2d context unavailable"));
           return;
         }
         ctx.drawImage(svgImage, 0, 0, ATLAS_PIXEL_WIDTH, ATLAS_PIXEL_HEIGHT);
+        assertAtlasCells(ctx);
         if (typeof createImageBitmap !== "function") {
           resolve(canvas);
           return;
