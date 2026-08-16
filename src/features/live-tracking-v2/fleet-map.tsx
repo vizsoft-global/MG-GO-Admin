@@ -51,7 +51,16 @@ const DEFAULT_CENTER = { lat: 29.3759, lng: 47.9774 };
 const DEFAULT_ZOOM = 11;
 /** Street-level zoom when an operator clicks a driver. Matches v1's focus zoom. */
 const DRIVER_FOCUS_ZOOM = 16;
-const MIN_ZOOM = 6;
+/**
+ * Zoom floor: a whole-world view.
+ *
+ * This was 6 — roughly the Gulf — on the reasoning that a fleet in Kuwait is never
+ * legible from further out. But an operator zooms out to *orient*, not to read pins, and
+ * a map that stops responding to the gesture reads as broken rather than as a limit. V1
+ * sets no floor at all, and interest management already keeps a wide viewport cheap: the
+ * room culls to what a socket can see and the trail cap holds tesselation flat.
+ */
+const MIN_ZOOM = 3;
 const MAX_ZOOM = 20;
 
 const ZONE_FALLBACK_RGB: [number, number, number] = [99, 102, 241];

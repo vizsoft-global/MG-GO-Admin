@@ -176,174 +176,188 @@ export function FleetCanvas() {
         />
       </div>
 
-      {/* Top-start: identity + connection + filters. Logical properties throughout, so
-          the whole canvas mirrors under RTL without a second layout. */}
-      <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2">
-        <div className="pointer-events-auto flex max-w-[min(680px,72%)] flex-col gap-2">
-          <div className="fleet-overlay flex h-9 items-center gap-2 rounded-lg border px-2.5 shadow-sm">
-            <Satellite className="size-4 text-muted-foreground" aria-hidden />
-            <span className="text-sm font-semibold">{t("title")}</span>
-            <span className="hidden text-[11px] text-muted-foreground sm:inline">
-              {t("subtitle")}
-            </span>
-            <FleetConnectionPill />
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-7"
-              aria-pressed={showFilters}
-              aria-label={t("filters.statuses")}
-              onClick={() => setShowFilters((open) => !open)}
-            >
-              <SlidersHorizontal className="size-3.5" aria-hidden />
-            </Button>
+      {/*
+        One overlay layer, laid out in normal flow inside it: top chrome, then the two
+        side panels each above their own bottom chrome. The panels used to be positioned
+        independently with hand-tuned top insets, which is how the driver rail came to
+        paint over the filter row — the rail's inset assumed a one-line title bar, while
+        the filter card sits directly beneath that bar and wraps to two rows on a narrow
+        viewport. In flow a taller filter card pushes the rail down instead of being
+        covered by it, and there are no magic numbers left to keep in sync.
+
+        Logical properties throughout, so the whole canvas mirrors under RTL without a
+        second layout.
+      */}
+      <div className="pointer-events-none absolute inset-3 z-20 flex flex-col gap-2">
+        <div className="flex shrink-0 items-start justify-between gap-2">
+          <div className="pointer-events-auto flex min-w-0 max-w-[min(680px,72%)] flex-col gap-2">
+            <div className="fleet-overlay flex h-9 items-center gap-2 rounded-lg border px-2.5 shadow-sm">
+              <Satellite className="size-4 text-muted-foreground" aria-hidden />
+              <span className="text-sm font-semibold">{t("title")}</span>
+              <span className="hidden text-[11px] text-muted-foreground sm:inline">
+                {t("subtitle")}
+              </span>
+              <FleetConnectionPill />
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-7"
+                aria-pressed={showFilters}
+                aria-label={t("filters.statuses")}
+                onClick={() => setShowFilters((open) => !open)}
+              >
+                <SlidersHorizontal className="size-3.5" aria-hidden />
+              </Button>
+            </div>
+
+            {showFilters ? (
+              <div className="fleet-overlay flex flex-wrap items-center gap-2 rounded-lg border p-2 shadow-sm">
+                <Input
+                  value={filters.search}
+                  onChange={(event) => store.setFilters({ search: event.target.value })}
+                  placeholder={t("filters.search")}
+                  className="h-9 w-[200px]"
+                  aria-label={t("filters.search")}
+                />
+
+                <SearchSelect
+                  items={zoneOptions}
+                  value={filters.zoneId ?? "all"}
+                  onChange={(value) =>
+                    store.setFilters({ zoneId: !value || value === "all" ? null : value })
+                  }
+                  className="h-9 w-[160px]"
+                  placeholder={t("filters.allZones")}
+                  searchPlaceholder={t("filters.searchZone")}
+                  recentsKey="fleet-v2-zone"
+                  clearable={false}
+                />
+
+                <SearchSelect
+                  items={partnerOptions}
+                  value={filters.partnerId ?? "all"}
+                  onChange={(value) =>
+                    store.setFilters({
+                      partnerId: !value || value === "all" ? null : value,
+                    })
+                  }
+                  className="h-9 w-[170px]"
+                  placeholder={t("filters.allPartners")}
+                  searchPlaceholder={t("filters.searchPartner")}
+                  recentsKey="fleet-v2-partner"
+                  clearable={false}
+                />
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {FLEET_FILTER_STATUSES.map((status) => (
+                    <ToggleChip
+                      key={status}
+                      selected={activeStatuses.includes(status)}
+                      onClick={() => toggleStatus(status)}
+                    >
+                      {t(`status.${status}`)}
+                    </ToggleChip>
+                  ))}
+                  <ToggleChip
+                    selected={filters.alertsOnly}
+                    onClick={() => store.setFilters({ alertsOnly: !filters.alertsOnly })}
+                  >
+                    {t("filters.alertsOnly")}
+                  </ToggleChip>
+                </div>
+
+                {filtersDirty ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-9 gap-1.5 text-xs"
+                    onClick={() => store.resetFilters()}
+                  >
+                    <RotateCcw className="size-3.5" aria-hidden />
+                    {t("controls.reset")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
-          {showFilters ? (
-            <div className="fleet-overlay flex flex-wrap items-center gap-2 rounded-lg border p-2 shadow-sm">
-              <Input
-                value={filters.search}
-                onChange={(event) => store.setFilters({ search: event.target.value })}
-                placeholder={t("filters.search")}
-                className="h-9 w-[200px]"
-                aria-label={t("filters.search")}
+          {/* Top-end: view controls. Fullscreen lives here per §11. */}
+          <div className="pointer-events-auto fleet-overlay flex h-9 shrink-0 items-center gap-0.5 rounded-lg border px-1 shadow-sm">
+            <CanvasIconButton
+              label={t("controls.zones")}
+              pressed={showZones}
+              onClick={() => setShowZones((value) => !value)}
+            >
+              <Layers className="size-3.5" aria-hidden />
+            </CanvasIconButton>
+            <CanvasIconButton
+              label={t("controls.satellite")}
+              pressed={satellite}
+              onClick={() => setSatellite((value) => !value)}
+            >
+              <Satellite className="size-3.5" aria-hidden />
+            </CanvasIconButton>
+            <CanvasIconButton
+              label={fullscreen ? t("controls.exitFullscreen") : t("controls.fullscreen")}
+              onClick={toggleFullscreen}
+            >
+              {fullscreen ? (
+                <Minimize2 className="size-3.5" aria-hidden />
+              ) : (
+                <Maximize2 className="size-3.5" aria-hidden />
+              )}
+            </CanvasIconButton>
+          </div>
+        </div>
+
+        {/* Driver rail above the legend (start side); insights above the zoom stack
+            (end side). Stacking each panel with its own chrome keeps the clearance exact
+            per side instead of one padding sized for the taller of the two. */}
+        <div className="flex min-h-0 flex-1 items-stretch justify-between gap-2">
+          <div className="flex min-h-0 flex-col gap-2">
+            <div className="flex min-h-0 flex-1 items-stretch">
+              <FleetRail
+                collapsed={railCollapsed}
+                onCollapsedChange={setRailCollapsed}
+                onFocusDriver={(driverId) => mapRef.current?.focusDriver(driverId)}
               />
-
-              <SearchSelect
-                items={zoneOptions}
-                value={filters.zoneId ?? "all"}
-                onChange={(value) =>
-                  store.setFilters({ zoneId: !value || value === "all" ? null : value })
-                }
-                className="h-9 w-[160px]"
-                placeholder={t("filters.allZones")}
-                searchPlaceholder={t("filters.searchZone")}
-                recentsKey="fleet-v2-zone"
-                clearable={false}
-              />
-
-              <SearchSelect
-                items={partnerOptions}
-                value={filters.partnerId ?? "all"}
-                onChange={(value) =>
-                  store.setFilters({
-                    partnerId: !value || value === "all" ? null : value,
-                  })
-                }
-                className="h-9 w-[170px]"
-                placeholder={t("filters.allPartners")}
-                searchPlaceholder={t("filters.searchPartner")}
-                recentsKey="fleet-v2-partner"
-                clearable={false}
-              />
-
-              <div className="flex flex-wrap items-center gap-1.5">
-                {FLEET_FILTER_STATUSES.map((status) => (
-                  <ToggleChip
-                    key={status}
-                    selected={activeStatuses.includes(status)}
-                    onClick={() => toggleStatus(status)}
-                  >
-                    {t(`status.${status}`)}
-                  </ToggleChip>
-                ))}
-                <ToggleChip
-                  selected={filters.alertsOnly}
-                  onClick={() => store.setFilters({ alertsOnly: !filters.alertsOnly })}
-                >
-                  {t("filters.alertsOnly")}
-                </ToggleChip>
-              </div>
-
-              {filtersDirty ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-9 gap-1.5 text-xs"
-                  onClick={() => store.resetFilters()}
-                >
-                  <RotateCcw className="size-3.5" aria-hidden />
-                  {t("controls.reset")}
-                </Button>
-              ) : null}
             </div>
-          ) : null}
+            <div className="pointer-events-auto shrink-0">
+              <FleetLegend />
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-col items-end gap-2">
+            <div className="flex min-h-0 flex-1 items-stretch">
+              <FleetInsightsPanel
+                collapsed={insightsCollapsed}
+                onCollapsedChange={setInsightsCollapsed}
+              />
+            </div>
+            <div className="fleet-overlay pointer-events-auto flex shrink-0 flex-col rounded-lg border p-1 shadow-sm">
+              <CanvasIconButton
+                label={t("controls.zoomIn")}
+                onClick={() => mapRef.current?.zoomIn()}
+              >
+                <Plus className="size-3.5" aria-hidden />
+              </CanvasIconButton>
+              <CanvasIconButton
+                label={t("controls.zoomOut")}
+                onClick={() => mapRef.current?.zoomOut()}
+              >
+                <Minus className="size-3.5" aria-hidden />
+              </CanvasIconButton>
+              <CanvasIconButton
+                label={t("controls.fitFleet")}
+                onClick={() => mapRef.current?.fitFleet()}
+              >
+                <Crosshair className="size-3.5" aria-hidden />
+              </CanvasIconButton>
+            </div>
+          </div>
         </div>
-
-        {/* Top-end: view controls. Fullscreen lives here per §11. */}
-        <div className="pointer-events-auto fleet-overlay flex h-9 items-center gap-0.5 rounded-lg border px-1 shadow-sm">
-          <CanvasIconButton
-            label={t("controls.zones")}
-            pressed={showZones}
-            onClick={() => setShowZones((value) => !value)}
-          >
-            <Layers className="size-3.5" aria-hidden />
-          </CanvasIconButton>
-          <CanvasIconButton
-            label={t("controls.satellite")}
-            pressed={satellite}
-            onClick={() => setSatellite((value) => !value)}
-          >
-            <Satellite className="size-3.5" aria-hidden />
-          </CanvasIconButton>
-          <CanvasIconButton
-            label={fullscreen ? t("controls.exitFullscreen") : t("controls.fullscreen")}
-            onClick={toggleFullscreen}
-          >
-            {fullscreen ? (
-              <Minimize2 className="size-3.5" aria-hidden />
-            ) : (
-              <Maximize2 className="size-3.5" aria-hidden />
-            )}
-          </CanvasIconButton>
-        </div>
-      </div>
-
-      {/* Floating driver rail (start side). Bottom inset clears the legend. */}
-      <div className="pointer-events-none absolute inset-y-3 start-3 z-20 flex items-stretch pb-16 pt-[3.25rem]">
-        <FleetRail
-          collapsed={railCollapsed}
-          onCollapsedChange={setRailCollapsed}
-          onFocusDriver={(driverId) => mapRef.current?.focusDriver(driverId)}
-        />
-      </div>
-
-      {/* Dockable insights panel (end side). Bottom inset clears the zoom controls. */}
-      <div className="pointer-events-none absolute inset-y-3 end-3 z-20 flex items-stretch pb-28 pt-[3.25rem]">
-        <FleetInsightsPanel
-          collapsed={insightsCollapsed}
-          onCollapsedChange={setInsightsCollapsed}
-        />
-      </div>
-
-      {/* Bottom-end: zoom + fit. Bottom-start: legend. */}
-      <div className="pointer-events-auto absolute bottom-3 end-3 z-20 flex flex-col gap-1">
-        <div className="fleet-overlay flex flex-col rounded-lg border p-1 shadow-sm">
-          <CanvasIconButton
-            label={t("controls.zoomIn")}
-            onClick={() => mapRef.current?.zoomIn()}
-          >
-            <Plus className="size-3.5" aria-hidden />
-          </CanvasIconButton>
-          <CanvasIconButton
-            label={t("controls.zoomOut")}
-            onClick={() => mapRef.current?.zoomOut()}
-          >
-            <Minus className="size-3.5" aria-hidden />
-          </CanvasIconButton>
-          <CanvasIconButton
-            label={t("controls.fitFleet")}
-            onClick={() => mapRef.current?.fitFleet()}
-          >
-            <Crosshair className="size-3.5" aria-hidden />
-          </CanvasIconButton>
-        </div>
-      </div>
-
-      <div className="pointer-events-auto absolute bottom-3 start-3 z-20">
-        <FleetLegend />
       </div>
 
       {selectedDriverId ? (
