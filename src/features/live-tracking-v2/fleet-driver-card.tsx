@@ -26,6 +26,7 @@ import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitiv
 
 import {
   activeFleetFlags,
+  displaySpeedKmh,
   fleetFlagTone,
   fleetStatusTone,
   hasLiveTelemetry,
@@ -80,7 +81,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
    * likely to act on.
    */
   const speedLabel = hasLiveTelemetry(driver.status)
-    ? `${Math.round(driver.speedMps * 3.6)} km/h`
+    ? `${displaySpeedKmh(driver.speedMps)} km/h`
     : "—";
   const distanceKm = meta.distanceTodayMeters / 1000;
   const onDutyFor = formatDuration(meta.onDutySince);

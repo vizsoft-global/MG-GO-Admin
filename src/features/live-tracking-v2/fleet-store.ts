@@ -44,6 +44,8 @@ import { FleetInterpolator } from "./fleet-interpolator";
 import { FleetTrailStore } from "./fleet-trail";
 import {
   emptyFleetFilters,
+  persistFleetFilters,
+  readPersistedFleetFilters,
   type FleetConnectionState,
   type FleetDriver,
   type FleetFeedItem,
@@ -169,6 +171,11 @@ export class FleetStore {
   /** Called when filters change, so the transport can narrow the socket's interest. */
   onFiltersChanged: ((filters: FleetFilters) => void) | null = null;
 
+  constructor() {
+    this.filters = readPersistedFleetFilters();
+    this.snapshot = this.buildSnapshot();
+  }
+
   // -------------------------------------------------------------------------
   // React bindings
   // -------------------------------------------------------------------------
@@ -220,12 +227,14 @@ export class FleetStore {
 
   setFilters(patch: Partial<FleetFilters>): void {
     this.filters = { ...this.filters, ...patch };
+    persistFleetFilters(this.filters);
     this.publish();
     this.onFiltersChanged?.(this.filters);
   }
 
   resetFilters(): void {
     this.filters = emptyFleetFilters();
+    persistFleetFilters(this.filters);
     this.publish();
     this.onFiltersChanged?.(this.filters);
   }

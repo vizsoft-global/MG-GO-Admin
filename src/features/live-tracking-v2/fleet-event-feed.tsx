@@ -103,7 +103,10 @@ export function FleetEventFeed() {
           <p className="mt-1 text-[10px] text-muted-foreground">{t("feed.emptyHint")}</p>
         </div>
       ) : (
-        <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1.5">
+        <ul
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1.5"
+          onWheel={(event) => event.stopPropagation()}
+        >
           {items.map((item) => (
             <FeedRow key={item.id} item={item} showDriver={!selectedId} />
           ))}

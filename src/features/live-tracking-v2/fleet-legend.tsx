@@ -6,6 +6,8 @@
  * Statuses only. Flags are deliberately absent from the colour key because they do not
  * have colours on the map — an out-of-zone Moving driver stays an emerald pin and gains
  * a badge in the rail, which is the whole point of separating status from flags.
+ * Location off is listed here even though it is rarer than Moving, because the rail
+ * already shows it and a colour key that omits a live status fails the squint test.
  */
 
 import { useState } from "react";
