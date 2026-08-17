@@ -10,7 +10,7 @@
  * reference lacks and ops actually needs.
  */
 
-import { useMemo } from "react";
+import { useMemo, type WheelEvent } from "react";
 import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
@@ -53,6 +53,15 @@ const BUCKET_LABEL_KEY: Record<FleetDistributionBucket, string> = {
   alert: "kpis.alerts",
 };
 
+/** The stacked bar is status only. Alert is a KPI overlay, not an exclusive slice. */
+const STATUS_BAR_BUCKETS = FLEET_DISTRIBUTION_BUCKETS.filter(
+  (bucket): bucket is Exclude<FleetDistributionBucket, "alert"> => bucket !== "alert",
+);
+
+function stopWheelFromReachingMap(event: WheelEvent) {
+  event.stopPropagation();
+}
+
 export function FleetInsightsPanel({
   collapsed,
   onCollapsedChange,
@@ -65,7 +74,7 @@ export function FleetInsightsPanel({
 
   const total = useMemo(
     () =>
-      FLEET_DISTRIBUTION_BUCKETS.reduce((sum, bucket) => sum + snapshot.counts[bucket], 0),
+      STATUS_BAR_BUCKETS.reduce((sum, bucket) => sum + snapshot.counts[bucket], 0),
     [snapshot.counts],
   );
 
@@ -95,7 +104,10 @@ export function FleetInsightsPanel({
   }
 
   return (
-    <div className="fleet-overlay pointer-events-auto flex w-[340px] flex-col rounded-xl border shadow-sm">
+    <div
+      className="fleet-overlay pointer-events-auto flex h-full min-h-0 w-[340px] flex-col rounded-xl border shadow-sm"
+      onWheel={stopWheelFromReachingMap}
+    >
       <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/60 px-2">
         <TrendingUp className="size-3.5 text-muted-foreground" aria-hidden />
         <span className="text-xs font-semibold">{t("insights.heading")}</span>
@@ -111,13 +123,13 @@ export function FleetInsightsPanel({
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <section className="border-b border-border/60 px-2 py-2">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <section className="shrink-0 border-b border-border/60 px-2 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             {t("insights.statusDistribution")}
           </p>
           <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-muted">
-            {FLEET_DISTRIBUTION_BUCKETS.map((bucket) => {
+            {STATUS_BAR_BUCKETS.map((bucket) => {
               const count = snapshot.counts[bucket];
               if (count === 0) return null;
               return (
@@ -131,8 +143,10 @@ export function FleetInsightsPanel({
           </div>
           <ul className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5">
             {FLEET_DISTRIBUTION_BUCKETS.map((bucket) => {
-              const count = snapshot.counts[bucket];
-              const share = total > 0 ? Math.round((count / total) * 100) : 0;
+              const count =
+                bucket === "alert" ? snapshot.kpis.alerts : snapshot.counts[bucket];
+              const share =
+                bucket === "alert" || total === 0 ? null : Math.round((count / total) * 100);
               return (
                 <li
                   key={bucket}
@@ -146,14 +160,18 @@ export function FleetInsightsPanel({
                   <span className="ms-auto font-semibold tabular-nums text-foreground">
                     {count}
                   </span>
-                  <span className="w-8 text-end tabular-nums">{share}%</span>
+                  {share != null ? (
+                    <span className="w-8 text-end tabular-nums">{share}%</span>
+                  ) : (
+                    <span className="w-8" />
+                  )}
                 </li>
               );
             })}
           </ul>
         </section>
 
-        <section className="border-b border-border/60 px-2 py-2">
+        <section className="shrink-0 border-b border-border/60 px-2 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             {t("insights.kpis")}
           </p>
@@ -186,7 +204,7 @@ export function FleetInsightsPanel({
           </div>
         </section>
 
-        <section className="border-b border-border/60 px-2 py-2">
+        <section className="max-h-[28%] shrink-0 overflow-y-auto overscroll-contain border-b border-border/60 px-2 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             {t("insights.zoneDistribution")}
           </p>

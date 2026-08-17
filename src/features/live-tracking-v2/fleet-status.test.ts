@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import {
   activeFleetFlags,
   decayedFleetStatus,
+  displaySpeedKmh,
   FLEET_DEFAULT_THRESHOLDS,
+  FLEET_FILTER_STATUSES,
   FLEET_STATUSES,
   fleetDistributionBucket,
   hasLiveTelemetry,
@@ -156,10 +158,14 @@ describe("fleetStatus", () => {
     }
   });
 
-  it("paints Offline and GPS Offline as danger so they read as down, not idle", () => {
-    assert.equal(fleetStatusTone("offline"), "danger");
-    assert.equal(fleetStatusTone("gps_offline"), "danger");
+  it("paints Offline as slate so Alerts can keep rose to themselves", () => {
+    assert.equal(fleetStatusTone("offline"), "neutral");
+    assert.equal(fleetStatusTone("gps_offline"), "neutral");
     assert.equal(fleetStatusTone("blocked"), "danger");
+  });
+
+  it("lists Location off with the other filterable / legend statuses", () => {
+    assert.ok(FLEET_FILTER_STATUSES.includes("location_off"));
   });
 });
 
@@ -281,11 +287,11 @@ describe("fleetFlags", () => {
 });
 
 describe("distribution and alerting", () => {
-  it("routes an out-of-zone moving driver into the alert bucket", () => {
+  it("keeps an out-of-zone moving driver in Moving, not the Alert slice", () => {
     const input = signals({ speedMps: 9, inAssignedZone: false });
     const flags = fleetFlags(input, NOW);
     assert.equal(isFleetAlert(fleetStatus(input, NOW), flags), true);
-    assert.equal(fleetDistributionBucket(fleetStatus(input, NOW), flags), "alert");
+    assert.equal(fleetDistributionBucket(fleetStatus(input, NOW), flags), "moving");
   });
 
   it("does not treat a merely low battery as an alert bucket", () => {
@@ -367,5 +373,14 @@ describe("threshold plumbing", () => {
     assert.equal(fleetEventSeverity("overspeed.start"), "critical");
     assert.equal(fleetEventSeverity("battery.low"), "warning");
     assert.equal(fleetEventSeverity("movement.started"), "info");
+  });
+});
+
+describe("displaySpeedKmh", () => {
+  it("floors GPS rest jitter below the moving threshold to 0 km/h", () => {
+    assert.equal(displaySpeedKmh(1 / 3.6), 0);
+    assert.equal(displaySpeedKmh(1.2), 0);
+    assert.equal(displaySpeedKmh(1.5), 5);
+    assert.equal(displaySpeedKmh(20 / 3.6), 20);
   });
 });

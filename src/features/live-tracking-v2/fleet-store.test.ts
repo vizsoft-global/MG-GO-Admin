@@ -5,6 +5,7 @@ import { emptyFleetFlags } from "./fleet-status";
 import { FleetStore, type FleetSnapshotRow } from "./fleet-store";
 import {
   emptyFleetFilters,
+  parsePersistedFleetFilters,
   toggleFleetAlertsOnly,
   toggleFleetStatusChip,
   type FleetZone,
@@ -63,6 +64,30 @@ const ZONE: FleetZone = {
   center: [47.98, 29.37],
   radiusMeters: 500,
 };
+
+describe("persisted status filters", () => {
+  it("restores a status subset from storage", () => {
+    const next = parsePersistedFleetFilters(
+      JSON.stringify({ statuses: ["idle", "location_off"], alertsOnly: false }),
+    );
+    assert.deepEqual(next.statuses, ["idle", "location_off"]);
+    assert.equal(next.alertsOnly, false);
+  });
+
+  it("drops unknown statuses so a stale payload cannot hide the fleet", () => {
+    const next = parsePersistedFleetFilters(
+      JSON.stringify({ statuses: ["idle", "flying"], alertsOnly: true }),
+    );
+    assert.deepEqual(next.statuses, ["idle"]);
+    assert.equal(next.alertsOnly, true);
+  });
+
+  it("treats missing storage as the default all-statuses view", () => {
+    const next = parsePersistedFleetFilters(null);
+    assert.equal(next.statuses, null);
+    assert.equal(next.alertsOnly, false);
+  });
+});
 
 describe("toggleFleetStatusChip / toggleFleetAlertsOnly", () => {
   it("makes Alert Only exclusive by clearing status chips", () => {

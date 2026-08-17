@@ -84,11 +84,12 @@ export function isReservedFleetStatus(status: FleetStatus): boolean {
   return FLEET_RESERVED_STATUSES.includes(status);
 }
 
-/** Statuses offered as filter chips, in display order. */
+/** Statuses offered as filter chips and the map legend, in display order. */
 export const FLEET_FILTER_STATUSES: readonly FleetStatus[] = [
   "moving",
   "on_delivery",
   "idle",
+  "location_off",
   "gps_offline",
   "offline",
   "blocked",
@@ -185,6 +186,19 @@ export function isMovingSpeed(
     Number.isFinite(speedMps) &&
     speedMps >= thresholds.movingSpeedMps
   );
+}
+
+/**
+ * Speed shown on a card or KPI. GPS rest jitter below the moving threshold is 0 km/h,
+ * matching the driver app — otherwise an Idle rider reads "1 km/h" from a 0.3 m/s wobble.
+ */
+export function displaySpeedKmh(
+  speedMps: number | null | undefined,
+  thresholds: FleetThresholds = FLEET_DEFAULT_THRESHOLDS,
+): number {
+  if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0) return 0;
+  if (speedMps < thresholds.movingSpeedMps) return 0;
+  return Math.round(speedMps * 3.6);
 }
 
 export function isOverspeeding(
@@ -400,7 +414,8 @@ export function activeFleetFlags(flags: FleetFlagSet): FleetFlag[] {
 
 /**
  * Flags that mean "needs attention now", as opposed to `on_duty` / `online` which are merely
- * descriptive. Drives the Alert bucket in the status distribution bar.
+ * descriptive. Drives the Alerts KPI — not the status-distribution bar, which counts by
+ * status so an out-of-zone Moving rider still reads as Moving.
  */
 export const FLEET_ALERT_FLAGS: readonly FleetFlag[] = [
   "out_of_zone",
@@ -419,9 +434,11 @@ export type FleetTone = "success" | "primary" | "warning" | "danger" | "neutral"
 const STATUS_TONES: Record<FleetStatus, FleetTone> = {
   blocked: "danger",
   inactive: "danger",
-  offline: "danger",
+  // Clocked-out / GPS-quiet must not share Alert rose — the distribution bar and
+  // legend have to squint-separate "needs attention" from "not transmitting".
+  offline: "neutral",
   location_off: "warning",
-  gps_offline: "danger",
+  gps_offline: "neutral",
   on_break: "primary",
   on_delivery: "primary",
   moving: "success",
@@ -474,10 +491,13 @@ export function fleetDistributionBucket(
   status: FleetStatus,
   flags: FleetFlagSet,
 ): FleetDistributionBucket {
-  if (isFleetAlert(status, flags)) return "alert";
+  // Status wins. An out-of-zone Moving rider is still Moving — putting them in Alert
+  // first is why Fleet Insights reported Moving = 0 while the rail still said Moving.
+  // Alert stays a KPI (`isFleetAlert`), not a competing slice of this bar.
   if (status === "moving") return "moving";
   if (status === "on_delivery") return "on_delivery";
   if (status === "idle" || status === "on_break") return "idle";
+  if (isFleetAlert(status, flags)) return "alert";
   return "offline";
 }
 

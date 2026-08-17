@@ -92,6 +92,57 @@ export function emptyFleetFilters(): FleetFilters {
   };
 }
 
+const FILTER_STORAGE_KEY = "dpd.live-tracking-v2.status-filters";
+
+function sanitizeStatuses(value: unknown): FleetStatus[] | null {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return null;
+  const allowed = new Set<string>(FLEET_FILTER_STATUSES);
+  return value.filter(
+    (entry): entry is FleetStatus => typeof entry === "string" && allowed.has(entry),
+  );
+}
+
+/** Hydrate the status chips from localStorage (or a test fixture). Search/zone/partner stay session-only. */
+export function parsePersistedFleetFilters(raw: string | null): FleetFilters {
+  const empty = emptyFleetFilters();
+  if (!raw) return empty;
+  try {
+    const parsed = JSON.parse(raw) as { statuses?: unknown; alertsOnly?: unknown };
+    return {
+      ...empty,
+      statuses: sanitizeStatuses(parsed.statuses),
+      alertsOnly: parsed.alertsOnly === true,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+export function readPersistedFleetFilters(): FleetFilters {
+  if (typeof window === "undefined") return emptyFleetFilters();
+  try {
+    return parsePersistedFleetFilters(window.localStorage.getItem(FILTER_STORAGE_KEY));
+  } catch {
+    return emptyFleetFilters();
+  }
+}
+
+export function persistFleetFilters(filters: FleetFilters): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      FILTER_STORAGE_KEY,
+      JSON.stringify({
+        statuses: filters.statuses,
+        alertsOnly: filters.alertsOnly,
+      }),
+    );
+  } catch {
+    // Private mode / quota — the page still works, just without memory.
+  }
+}
+
 /**
  * Alert Only is a standalone filter. Turning it on clears status chips; picking a
  * status chip while it is on turns it off and shows that status.

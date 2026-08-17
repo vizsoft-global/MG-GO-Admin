@@ -361,7 +361,7 @@ export function FleetCanvas() {
           </div>
 
           <div className="flex min-h-0 flex-col items-end gap-2">
-            <div className="flex min-h-0 flex-1 items-stretch">
+            <div className="flex h-full min-h-0 flex-1 items-stretch">
               <FleetInsightsPanel
                 collapsed={insightsCollapsed}
                 onCollapsedChange={(collapsed) => {
