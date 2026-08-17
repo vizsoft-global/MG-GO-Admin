@@ -94,11 +94,22 @@ function formatCoords(lat: number | null, lng: number | null): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
+/*
+ * The value track is the flexible one, not the label track.
+ *
+ * It used to be `[minmax(0,1fr)_auto]`, where `auto` grows to the value's max-content and
+ * the label's `1fr` is what gives way — so a long rejection reason took the whole row,
+ * crushed the label track to zero and the label text painted over the value. Sizing the
+ * value with `1fr` instead lets it wrap inside its own column while the label keeps its
+ * width, and `break-words` handles a value with no spaces to break on.
+ */
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border py-2.5 last:border-b-0">
+    <div className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-3 border-b border-border py-2.5 last:border-b-0">
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="text-end text-sm font-medium text-foreground">{value}</dd>
+      <dd className="min-w-0 break-words text-end text-sm font-medium text-foreground">
+        {value}
+      </dd>
     </div>
   );
 }
@@ -570,7 +581,7 @@ export function DeliveryDetailSheet({
                     <DetailRow
                       label={t("colOrderId")}
                       value={
-                        <span className="max-w-[12rem] truncate font-mono tabular-nums">
+                        <span className="inline-block max-w-[12rem] truncate align-bottom font-mono tabular-nums">
                           {displayExternalOrderId(delivery.external_order_id)}
                         </span>
                       }
@@ -590,7 +601,7 @@ export function DeliveryDetailSheet({
                     <DetailRow
                       label={t("rejectionReason")}
                       value={
-                        <span className="max-w-[200px] text-end text-destructive">
+                        <span className="text-destructive">
                           {delivery.rejection_reason}
                         </span>
                       }
@@ -674,11 +685,7 @@ export function DeliveryDetailSheet({
                         {parsedCancel.note ? (
                           <DetailRow
                             label={t("cancelReasonNote")}
-                            value={
-                              <span className="max-w-[200px] text-end text-sm">
-                                {parsedCancel.note}
-                              </span>
-                            }
+                            value={parsedCancel.note}
                           />
                         ) : null}
                       </>

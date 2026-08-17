@@ -15,15 +15,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
-import { Pause, Play, Route as RouteIcon, X } from "lucide-react";
+import { Pause, Play, Route as RouteIcon, Unlink, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { createClient } from "@/lib/supabase/client";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 
 import { fleetEventTone } from "./fleet-status";
 import { FLEET_TONE_DOT } from "./fleet-tone";
+import { splitRouteGeometry, type FleetRouteGeometry } from "./fleet-route";
 import { useFleetSnapshot } from "./use-fleet";
 import type { FleetRouteStop } from "./fleet-map";
 
@@ -45,6 +47,12 @@ type RoutePoint = {
   zone_status: string | null;
   active_delivery_id: string | null;
   recorded_at: string;
+  /**
+   * The path from the previous point to this one was never observed — see
+   * `fleet-route.ts`. Optional so a cached response from before the RPC carried it
+   * still renders, as one unbroken route rather than as nothing.
+   */
+  gap_before?: boolean | null;
 };
 
 type RouteStopRow = {
@@ -75,6 +83,10 @@ type DayRoute = {
   duration_s: number;
   point_count: number;
   kept_count: number;
+  /** Distance the day cannot account for, excluded from `distance_m`. */
+  gap_distance_m?: number;
+  gap_seconds?: number;
+  gap_count?: number;
 };
 
 function kuwaitToday(): string {
@@ -103,7 +115,10 @@ export function DriverDayRoute({
   onClose,
 }: {
   driverId: string;
-  onGeometry: (path: [number, number][] | null, stops: FleetRouteStop[] | null) => void;
+  onGeometry: (
+    geometry: FleetRouteGeometry | null,
+    stops: FleetRouteStop[] | null,
+  ) => void;
   onPlayhead: (position: [number, number] | null) => void;
   /** Fired when the operator starts playback, so the canvas can frame the day. */
   onPlaybackStart?: () => void;
@@ -136,10 +151,10 @@ export function DriverDayRoute({
 
   const points = useMemo(() => data?.points ?? EMPTY_POINTS, [data]);
 
-  const path = useMemo<[number, number][] | null>(() => {
-    if (points.length < 2) return null;
-    return points.map((point) => [point.longitude, point.latitude]);
-  }, [points]);
+  const geometry = useMemo(
+    () => (points.length < 2 ? null : splitRouteGeometry(points)),
+    [points],
+  );
 
   const stops = useMemo<FleetRouteStop[] | null>(() => {
     if (!data) return null;
@@ -165,9 +180,9 @@ export function DriverDayRoute({
 
   // Hand geometry to the map, and take it back on unmount or deselect.
   useEffect(() => {
-    onGeometry(path, stops);
+    onGeometry(geometry, stops);
     return () => onGeometry(null, null);
-  }, [onGeometry, path, stops]);
+  }, [geometry, onGeometry, stops]);
 
   /*
    * Play / pause.
@@ -225,6 +240,8 @@ export function DriverDayRoute({
     onClose();
   }, [onClose, onGeometry, onPlayhead]);
 
+  const gapCount = data?.gap_count ?? 0;
+
   // The day's events, positioned on the timeline by their share of the window.
   const timelineEvents = useMemo(() => {
     if (points.length < 2) return [];
@@ -263,6 +280,30 @@ export function DriverDayRoute({
               <span>
                 {t("route.stops")} {data.stops.length}
               </span>
+              {/*
+                A distance that silently excludes untracked stretches is as misleading as
+                one that silently includes them, so the day says what it could not
+                account for. Not shown at all when there is nothing to disclose — a "0
+                gaps" chip on every clean route would train the operator to ignore it.
+              */}
+              {gapCount > 0 ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span className="flex cursor-default items-center gap-1 rounded border border-border bg-muted/60 px-1.5 py-px font-medium text-muted-foreground">
+                        <Unlink className="size-3" aria-hidden />
+                        {t("route.gaps", { count: gapCount })}
+                      </span>
+                    }
+                  />
+                  <TooltipContent side="top" className="max-w-[280px]">
+                    {t("route.gapsHint", {
+                      km: ((data.gap_distance_m ?? 0) / 1000).toFixed(1),
+                      duration: formatDuration(data.gap_seconds ?? 0),
+                    })}
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
             </span>
           ) : (
             <span className="text-[10px] text-muted-foreground">{t("route.empty")}</span>

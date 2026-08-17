@@ -76,6 +76,13 @@ const DRIVER_NOTIFY_MS = 500;
 
 type Listener = () => void;
 
+function sameStatusSet(a: FleetStatus[] | null, b: FleetStatus[] | null): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (a.length !== b.length) return false;
+  return a.every((status, index) => status === b[index]);
+}
+
 export type FleetSnapshotRow = {
   driver_id: string;
   driver_name: string | null;
@@ -172,9 +179,34 @@ export class FleetStore {
   /** Called when filters change, so the transport can narrow the socket's interest. */
   onFiltersChanged: ((filters: FleetFilters) => void) | null = null;
 
-  constructor() {
-    this.filters = readPersistedFleetFilters();
-    this.snapshot = this.buildSnapshot();
+  /**
+   * Apply the status chips remembered from the operator's last visit.
+   *
+   * Deliberately not done in the constructor. The store is built during the first
+   * client render, so a chip set read from `localStorage` there is a chip set the
+   * server could not have rendered — and `useSyncExternalStore` hands that same
+   * snapshot to React as the *server* snapshot during hydration, so the mismatch
+   * discards the SSR tree and re-renders the whole canvas on the client. The
+   * provider calls this from an effect instead, where the DOM is already hydrated
+   * and a differing snapshot is just a state change.
+   *
+   * Call it before starting the transport: the first snapshot fetch and the room's
+   * interest should be for the restored chips, not for the full fleet.
+   */
+  hydratePersistedFilters(): void {
+    const persisted = readPersistedFleetFilters();
+    if (
+      persisted.alertsOnly === this.filters.alertsOnly &&
+      sameStatusSet(persisted.statuses, this.filters.statuses)
+    ) {
+      return;
+    }
+    this.filters = {
+      ...this.filters,
+      statuses: persisted.statuses,
+      alertsOnly: persisted.alertsOnly,
+    };
+    this.publish();
   }
 
   // -------------------------------------------------------------------------

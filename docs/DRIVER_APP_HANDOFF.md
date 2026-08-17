@@ -585,6 +585,8 @@ Parse `action_params` and `media` as JSON on the client. Parse `screenshot_restr
 
 **Profile Notifications toggle (required):** SharedPreferences `profile.notifications.enabled` (default `true`). When `false`, Home Important Notifications, the Notifications inbox, and the unread badge must show empty; do not show foreground/local banners; deactivate the FCM token so OS tray campaigns also stop. Re-register the token when the rider turns the toggle back on. Dispatch rows stay on the server — this is a client mute, not a dismiss.
 
+**Turning it back on must not hand over a backlog.** The off period is recorded as a window (`profile.notifications.muted_from_ms` / `muted_until_ms`, closed when the toggle goes back on) and the next inbox fetch marks everything whose `received_at` falls inside it as seen, keeping the ids in `profile.notifications.muted_ids`. Those items stay in the list as history; they just do not count as unread or head the Home card, because the rider was never shown them. Mark them seen **locally only** — do not call `driver_mark_notifications_read`, since `opened_at` is what the admin's engagement report reads as Seen. Apply the window against a *fetch* rather than at the moment of the flip: nothing refreshes the inbox while notifications are off, so the campaign in question is usually not loaded yet.
+
 #### Screenshot restriction (sensitive notifications)
 
 Admin stamps `notification_campaigns.screenshot_restricted` at save/dispatch (template default + optional campaign override).

@@ -23,6 +23,7 @@ import {
 import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import type { GoogleMapsOverlay } from "@deck.gl/google-maps";
+import type { PathStyleExtension, PathStyleExtensionProps } from "@deck.gl/extensions";
 import type {
   IconLayer,
   IconLayerProps,
@@ -51,6 +52,7 @@ import {
   type FleetBounds,
 } from "./fleet-camera";
 import { FleetPulseTracker, pulseEligible, pulseRing, selectPulseDrivers } from "./fleet-pulse";
+import type { FleetRouteGeometry } from "./fleet-route";
 import { fleetZoneRing } from "./fleet-zones";
 import { trailSpanMeters, type FleetTrail } from "./fleet-trail";
 import {
@@ -81,6 +83,15 @@ const MAX_ZOOM = 20;
 const ZONE_FALLBACK_RGB: [number, number, number] = [99, 102, 241];
 /** Coral, the scoped data-layer accent: routes, stops and the playhead — never status. */
 const ROUTE_RGB: [number, number, number] = [255, 106, 77];
+/**
+ * Slate, for the connectors across an unobserved gap.
+ *
+ * Deliberately the one piece of route furniture with no accent: the coral line is a claim
+ * that the rider went that way, and these are the places where nothing is being claimed.
+ * Dashed as well as grey because at a city zoom a thin grey line and a thin coral one are
+ * the same line, and this distinction has to survive the squint test.
+ */
+const ROUTE_GAP_RGB: [number, number, number] = [100, 116, 139];
 
 const TONE_RGB: Record<FleetTone, [number, number, number]> = {
   success: [16, 185, 129],
@@ -160,7 +171,7 @@ export type FleetMapHandle = {
 
 type FleetMapProps = {
   className?: string;
-  routePath?: [number, number][] | null;
+  routeGeometry?: FleetRouteGeometry | null;
   routeStops?: FleetRouteStop[] | null;
   playheadPosition?: [number, number] | null;
   showZones?: boolean;
@@ -187,6 +198,8 @@ type LayerClasses = {
   PathLayer: typeof PathLayer;
   PolygonLayer: typeof PolygonLayer;
   ScatterplotLayer: typeof ScatterplotLayer;
+  /** Screen-space dashes for the gap connectors. See `ROUTE_GAP_RGB`. */
+  PathStyleExtension: typeof PathStyleExtension;
 };
 
 type DeckLayer = Layer;
@@ -227,7 +240,7 @@ function mapBounds(map: google.maps.Map): FleetBounds | null {
 export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function FleetMap(
   {
     className,
-    routePath = null,
+    routeGeometry = null,
     routeStops = null,
     playheadPosition = null,
     showZones = true,
@@ -396,10 +409,12 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     reducedMotionRef.current = prefersReducedMotion();
 
     async function boot() {
-      const [api, overlayModule, layerModule] = await Promise.all([
+      const [api, overlayModule, layerModule, extensionModule] = await Promise.all([
         loadGoogleMaps(),
         import("@deck.gl/google-maps"),
         import("deck.gl"),
+        // Not re-exported by the `deck.gl` umbrella, so it is its own chunk.
+        import("@deck.gl/extensions"),
       ]);
 
       if (cancelled) return;
@@ -413,6 +428,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         PathLayer: layerModule.PathLayer,
         PolygonLayer: layerModule.PolygonLayer,
         ScatterplotLayer: layerModule.ScatterplotLayer,
+        PathStyleExtension: extensionModule.PathStyleExtension,
       };
 
       /**
@@ -538,8 +554,13 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     const classes = layersRef.current;
     if (!classes) return [];
 
-    const { IconLayer: Icon, PathLayer: Path, PolygonLayer: Polygon, ScatterplotLayer: Scatter } =
-      classes;
+    const {
+      IconLayer: Icon,
+      PathLayer: Path,
+      PolygonLayer: Polygon,
+      ScatterplotLayer: Scatter,
+      PathStyleExtension: DashExtension,
+    } = classes;
     const layers: DeckLayer[] = [];
     const revision = revisionRef.current;
     const trailRevision = store.trails.revision;
@@ -562,17 +583,43 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       );
     }
 
-    if (routePath && routePath.length > 1) {
+    if (routeGeometry && routeGeometry.segments.length > 0) {
       layers.push(
         new Path<{ path: [number, number][] }>({
           id: "fleet-route",
-          data: [{ path: routePath }],
+          data: routeGeometry.segments.map((path) => ({ path })),
           getPath: (d) => d.path,
           getColor: [...ROUTE_RGB, 235],
           getWidth: 4,
           widthUnits: "pixels",
           capRounded: true,
           jointRounded: true,
+          pickable: false,
+        }),
+      );
+    }
+
+    if (routeGeometry && routeGeometry.gaps.length > 0) {
+      layers.push(
+        new Path<
+          { path: [number, number][] },
+          PathStyleExtensionProps<{ path: [number, number][] }>
+        >({
+          id: "fleet-route-gaps",
+          data: routeGeometry.gaps.map((path) => ({ path })),
+          getPath: (d) => d.path,
+          getColor: [...ROUTE_GAP_RGB, 210],
+          // Thinner than the route as well as greyer, so the eye reads the solid line
+          // as the record and this as the note that there isn't one.
+          getWidth: 2.5,
+          widthUnits: "pixels",
+          // The dash array is in multiples of the path width, so this dashes at 10px on
+          // / 7.5px off — in screen space, which is the only space where a dash stays a
+          // dash across ten zoom levels. Finer than this renders as a dotted hairline
+          // that a busy basemap swallows.
+          getDashArray: [4, 3],
+          dashJustified: true,
+          extensions: [new DashExtension({ dash: true })],
           pickable: false,
         }),
       );
@@ -825,7 +872,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     iconAtlas,
     iconMapping,
     playheadPosition,
-    routePath,
+    routeGeometry,
     routeStops,
     selectedDriverId,
     showZones,

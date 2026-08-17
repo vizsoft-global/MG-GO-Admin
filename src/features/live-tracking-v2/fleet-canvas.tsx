@@ -30,7 +30,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
-import { ToggleChip } from "@/components/app/toggle-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -40,7 +39,9 @@ import { FleetInsightsPanel } from "./fleet-insights-panel";
 import { FleetLegend } from "./fleet-legend";
 import { FleetConnectionPill } from "./fleet-connection-pill";
 import { DriverDayRoute } from "./driver-day-route";
-import { FLEET_FILTER_STATUSES, type FleetStatus } from "./fleet-status";
+import { FleetStatusFilter } from "./fleet-status-filter";
+import { routeGeometryPositions, type FleetRouteGeometry } from "./fleet-route";
+import { type FleetStatus } from "./fleet-status";
 import { toggleFleetAlertsOnly, toggleFleetStatusChip } from "./fleet-types";
 import { useFleetSnapshot, useFleetStore } from "./use-fleet";
 
@@ -62,7 +63,8 @@ export function FleetCanvas() {
   const [insightsCollapsed, setInsightsCollapsed] = useState(false);
   const railUserOverride = useRef<boolean | null>(null);
   const insightsUserOverride = useRef<boolean | null>(null);
-  const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
+  const filtersUserOverride = useRef<boolean | null>(null);
+  const [routeGeometry, setRouteGeometry] = useState<FleetRouteGeometry | null>(null);
   const [routeStops, setRouteStops] = useState<FleetRouteStop[] | null>(null);
   const [playhead, setPlayhead] = useState<[number, number] | null>(null);
 
@@ -101,6 +103,12 @@ export function FleetCanvas() {
   // other. Collapse to the 48px strips (the sanctioned V2 pattern) instead of
   // letting them paint over the driver cards. A manual expand is remembered until
   // the canvas grows past the threshold again.
+  //
+  // The filter controls share the title bar, and their floors plus the view-control
+  // cluster need ~1000px; below that they are hidden by the same rule rather than
+  // wrapping the bar over the map. Force them open on a narrower canvas and the bar
+  // wraps — a second row the operator asked for is not the defect a second row they
+  // did not ask for was.
   useEffect(() => {
     const node = shellRef.current;
     if (!node || typeof ResizeObserver === "undefined") return;
@@ -116,6 +124,11 @@ export function FleetCanvas() {
         setRailCollapsed(width < 760);
       } else if (width >= 760) {
         railUserOverride.current = null;
+      }
+      if (filtersUserOverride.current == null) {
+        setShowFilters(width >= 1000);
+      } else if (width >= 1000) {
+        filtersUserOverride.current = null;
       }
     });
     observer.observe(node);
@@ -178,9 +191,6 @@ export function FleetCanvas() {
     store.setFilters(toggleFleetAlertsOnly(filters));
   }, [filters, store]);
 
-  const activeStatuses = filters.alertsOnly
-    ? []
-    : (filters.statuses ?? [...FLEET_FILTER_STATUSES]);
   const filtersDirty =
     filters.search !== "" ||
     filters.statuses !== null ||
@@ -196,7 +206,7 @@ export function FleetCanvas() {
    * path the rulebook requires alongside the map background and a same-marker click.
    */
   const handleRouteClose = useCallback(() => {
-    setRoutePath(null);
+    setRouteGeometry(null);
     setRouteStops(null);
     setPlayhead(null);
     store.clearSelection();
@@ -211,8 +221,9 @@ export function FleetCanvas() {
    * which the operator has asked to watch the route rather than the rider.
    */
   const handlePlaybackStart = useCallback(() => {
-    if (routePath && routePath.length > 1) mapRef.current?.fitPath(routePath);
-  }, [routePath]);
+    const positions = routeGeometryPositions(routeGeometry);
+    if (positions.length > 1) mapRef.current?.fitPath(positions);
+  }, [routeGeometry]);
 
   return (
     <div
@@ -225,7 +236,7 @@ export function FleetCanvas() {
       <div className="fleet-map-surface absolute inset-0">
         <FleetMap
           ref={mapRef}
-          routePath={routePath}
+          routeGeometry={routeGeometry}
           routeStops={routeStops}
           playheadPosition={playhead}
           showZones={showZones}
@@ -238,44 +249,85 @@ export function FleetCanvas() {
         side panels each above their own bottom chrome. The panels used to be positioned
         independently with hand-tuned top insets, which is how the driver rail came to
         paint over the filter row — the rail's inset assumed a one-line title bar, while
-        the filter card sits directly beneath that bar and wraps to two rows on a narrow
-        viewport. In flow a taller filter card pushes the rail down instead of being
-        covered by it, and there are no magic numbers left to keep in sync.
+        the filter controls sat in a second card beneath it. In flow a taller top bar
+        pushes the rail down instead of being covered by it, and there are no magic
+        numbers left to keep in sync.
 
         Logical properties throughout, so the whole canvas mirrors under RTL without a
         second layout.
       */}
       <div className="pointer-events-none absolute inset-3 z-20 flex flex-col gap-2">
-        <div className="relative z-30 flex shrink-0 items-start justify-between gap-2">
-          <div className="pointer-events-auto flex min-w-0 max-w-[min(680px,72%)] flex-col gap-2">
-            <div className="fleet-overlay flex h-9 items-center gap-2 rounded-lg border px-2.5 shadow-sm">
-              <Satellite className="size-4 text-muted-foreground" aria-hidden />
-              <span className="text-sm font-semibold">{t("title")}</span>
-              <span className="hidden text-[11px] text-muted-foreground sm:inline">
+        <div className="relative z-30 flex shrink-0 items-center justify-between gap-2">
+          {/*
+            Identity and filters share one card. Two stacked cards cost ~100px of map at
+            the top edge for one row of controls, on a surface where the map is the
+            instrument — and the second card was the thing pushing the driver rail down.
+            The reserve on the end is the three view controls plus the row gap.
+
+            The controls share the width and truncate rather than the search box absorbing
+            whatever the fixed-width selects leave over: on a narrow canvas that remainder
+            is a few pixels, so the box collapses to its own border and the row reads as
+            broken. `min-h-9` keeps the collapsed bar exactly the height it was before the
+            filters moved into it. Identity and filters are two groups rather than ten
+            loose children so that the only place the bar can ever break is between them —
+            a wrapped title with its toggle marooned on the next line is worse than the
+            stacked cards this replaces.
+          */}
+          <div className="pointer-events-auto fleet-overlay flex min-h-9 min-w-0 max-w-[calc(100%-7rem)] flex-wrap items-center gap-2 rounded-lg border px-2 py-1 shadow-sm">
+            <div className="flex shrink-0 items-center gap-2">
+              <Satellite className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="whitespace-nowrap text-sm font-semibold">{t("title")}</span>
+              {/* Decoration, and it competes with the filters for the row now: at 1280 it
+                  is the 120px that pushes the partner select past the bar's edge. It
+                  appears only where there is width to spare for it. */}
+              <span className="hidden whitespace-nowrap text-[11px] text-muted-foreground 2xl:inline">
                 {t("subtitle")}
               </span>
-              <FleetConnectionPill />
+              {/* Which rail the map is actually on is never the thing that gives way to a
+                  filter control — a stale map read as a stopped fleet is the failure this
+                  pill exists to prevent. */}
+              <FleetConnectionPill className="shrink-0" />
               <Button
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="size-7"
+                className="size-7 shrink-0"
                 aria-pressed={showFilters}
                 aria-label={t("filters.statuses")}
-                onClick={() => setShowFilters((open) => !open)}
+                onClick={() =>
+                  setShowFilters((open) => {
+                    filtersUserOverride.current = !open;
+                    return !open;
+                  })
+                }
               >
                 <SlidersHorizontal className="size-3.5" aria-hidden />
               </Button>
             </div>
 
+            {/* The group's basis is wide enough that it moves to its own line rather than
+                overflowing the card: as a `flex-1` child it always "fits" by definition and
+                would spill its controls over the view cluster instead of wrapping. */}
             {showFilters ? (
-              <div className="fleet-overlay flex flex-wrap items-center gap-2 rounded-lg border p-2 shadow-sm">
+              <div className="flex min-w-[300px] flex-[1_1_420px] items-center gap-2">
+                <span className="h-6 w-px shrink-0 bg-border" aria-hidden />
+
                 <Input
                   value={filters.search}
                   onChange={(event) => store.setFilters({ search: event.target.value })}
                   placeholder={t("filters.search")}
-                  className="h-9 w-[200px]"
+                  className="h-9 min-w-[100px] flex-[1_1_170px]"
                   aria-label={t("filters.search")}
+                />
+
+                <FleetStatusFilter
+                  filters={filters}
+                  onToggleStatus={toggleStatus}
+                  onToggleAlertsOnly={toggleAlertsOnly}
+                  onSetStatuses={(statuses) =>
+                    store.setFilters({ statuses, alertsOnly: false })
+                  }
+                  className="min-w-[88px] flex-[0_1_140px]"
                 />
 
                 <SearchSelect
@@ -284,7 +336,7 @@ export function FleetCanvas() {
                   onChange={(value) =>
                     store.setFilters({ zoneId: !value || value === "all" ? null : value })
                   }
-                  className="h-9 w-[160px]"
+                  className="h-9 min-w-[84px] flex-[0_1_132px]"
                   placeholder={t("filters.allZones")}
                   searchPlaceholder={t("filters.searchZone")}
                   recentsKey="fleet-v2-zone"
@@ -299,41 +351,24 @@ export function FleetCanvas() {
                       partnerId: !value || value === "all" ? null : value,
                     })
                   }
-                  className="h-9 w-[170px]"
+                  className="h-9 min-w-[88px] flex-[0_1_140px]"
                   placeholder={t("filters.allPartners")}
                   searchPlaceholder={t("filters.searchPartner")}
                   recentsKey="fleet-v2-partner"
                   clearable={false}
                 />
 
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {FLEET_FILTER_STATUSES.map((status) => (
-                    <ToggleChip
-                      key={status}
-                      selected={activeStatuses.includes(status)}
-                      onClick={() => toggleStatus(status)}
-                    >
-                      {t(`status.${status}`)}
-                    </ToggleChip>
-                  ))}
-                  <ToggleChip
-                    selected={filters.alertsOnly}
-                    onClick={toggleAlertsOnly}
-                  >
-                    {t("filters.alertsOnly")}
-                  </ToggleChip>
-                </div>
-
                 {filtersDirty ? (
                   <Button
                     type="button"
-                    size="sm"
+                    size="icon"
                     variant="ghost"
-                    className="h-9 gap-1.5 text-xs"
+                    className="size-9 shrink-0"
+                    aria-label={t("controls.reset")}
+                    title={t("controls.reset")}
                     onClick={() => store.resetFilters()}
                   >
                     <RotateCcw className="size-3.5" aria-hidden />
-                    {t("controls.reset")}
                   </Button>
                 ) : null}
               </div>
@@ -429,8 +464,8 @@ export function FleetCanvas() {
         <DriverDayRoute
           key={selectedDriverId}
           driverId={selectedDriverId}
-          onGeometry={(path, stops) => {
-            setRoutePath(path);
+          onGeometry={(geometry, stops) => {
+            setRouteGeometry(geometry);
             setRouteStops(stops);
           }}
           onPlayhead={setPlayhead}

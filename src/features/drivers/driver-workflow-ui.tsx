@@ -25,6 +25,15 @@ export function resolveWorkflowPillStatus(driver: {
   return "pending";
 }
 
+/**
+ * Blocking revokes the device session (`set_driver_blocked`), so a blocked
+ * driver has no app access to report — "Mobile app linked: Yes" would state the
+ * opposite of what the block did.
+ */
+export function showsMobileAppLink(driver: { is_blocked?: boolean }): boolean {
+  return !driver.is_blocked;
+}
+
 export function WorkflowStatusPill({
   status,
   label,

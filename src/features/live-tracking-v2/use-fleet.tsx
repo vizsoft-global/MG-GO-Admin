@@ -56,6 +56,10 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const { store, transport } = value;
+    // After hydration, never during it: the remembered chips are browser state the
+    // server render could not know about. Applied before `start()` so the first
+    // fetch already asks for the restored view.
+    store.hydratePersistedFilters();
     void transport?.start();
     return () => {
       transport?.stop();
