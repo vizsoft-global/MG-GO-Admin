@@ -1086,7 +1086,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-17 — [admin+app] Admin Live Tracking V2 QA follow-up (Alerts bar slice, Offline red, Out of Zone search, archived passcode, Blocked-only pill). Driver app items still open in this repo (MG-GO is not in this workspace): Thank You device back → Home (re-reported; prior 2026-08-14 note did not stick on device); Clock In toggle must not flash In after sign-out then login (paint from disk/server duty, never a stale in-memory `true`); Profile must show the disk-cached photo on first frame, not initials then the image. No migration.*
+*Last synced: 2026-08-17 — [admin+app] Admin Live Tracking V2 QA follow-up (Alerts bar slice, Offline red, Out of Zone search, archived passcode, Blocked-only pill), plus the three driver-app items from the same round, now fixed in MG-GO `4d7f516` (`vikram-dev`): device back on **Active Delivery** goes Home instead of exiting — the 2026-08-14 note guarded the Thank You screen, but the flow lands on Active Delivery; the clock-in toggle no longer flashes In after sign-out then re-login; Profile paints the disk-cached photo instead of initials. No migration, no schema/RPC change — ship with the next Play build (`versionCode` still `64`, bump before building).*
 
 *Prior: 2026-08-16 — [admin+app] `LIVE_INGEST_URL` defaults to the production Worker; the kill switch is now an explicit empty string. Coarse-fix gate 50 m in all four places, `DutySessionStorage.reload()` on FGS start, `on_delivery` from `deliveries.status = 'in_transit'`. Migration `20260916100000`.*
 
