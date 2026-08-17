@@ -228,6 +228,8 @@
         },
         "battery": "Battery",
         "lastFix": "Last fix",
+        "lastFixAgo": "Last fix {age} ago",
+        "lastFixUnknown": "No fix recorded",
         "zone": "Zone",
         "noZone": "Unassigned",
         "progress": "Route progress",

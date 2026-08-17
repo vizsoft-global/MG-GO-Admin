@@ -814,8 +814,22 @@ export class FleetStore {
       if (driver.meta.partnerId && driver.meta.partnerName) {
         partners.set(driver.meta.partnerId, driver.meta.partnerName);
       }
-      if (!this.matchesFilters(driver)) continue;
+      /*
+       * The selected driver is pinned into the roster even when the filters exclude them.
+       *
+       * Selecting an Offline rider and then having their card disappear — because Offline
+       * is not a checked status chip, or because the search box still holds a term — takes
+       * away the one surface that explains *why* they are offline. The same reasoning as
+       * the wire's pinned driver, which the room keeps sending across a pan.
+       *
+       * Pinned but not counted: they are listed and drawn, and the KPI tiles keep
+       * describing the filter the operator set. A count that included them would disagree
+       * with the chips directly above it.
+       */
+      const matches = this.matchesFilters(driver);
+      if (!matches && driver.driverId !== this.selectedDriverId) continue;
       visible.push(driver);
+      if (!matches) continue;
 
       counts[fleetDistributionBucket(driver.status, driver.flags)] += 1;
 

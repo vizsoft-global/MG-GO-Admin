@@ -195,6 +195,37 @@ describe("FleetStore filters and roster", () => {
     assert.deepEqual(store.getSnapshot().driverIds, ["d1"]);
   });
 
+  it("keeps the selected driver in the rail when the filters exclude them", () => {
+    // Selecting an Offline rider and watching their card vanish — because Offline is not a
+    // checked chip — takes away the surface that explains why they are offline.
+    const store = new FleetStore();
+    store.applySnapshot({
+      generatedAt: NOW,
+      settings: null,
+      drivers: [
+        row({ is_on_duty: false, latitude: 29.37, longitude: 47.98 }),
+        row({
+          driver_id: "d2",
+          driver_name: "Moving Rider",
+          driver_code: "10002",
+          tracking_status: "moving",
+          speed_mps: 8,
+        }),
+      ],
+    });
+    store.setFilters({ statuses: ["moving"] });
+    assert.deepEqual(store.getSnapshot().driverIds, ["d2"]);
+
+    store.selectDriver("d1");
+    const pinned = store.getSnapshot();
+    assert.ok(pinned.driverIds.includes("d1"));
+    // Pinned, not counted: the KPI tiles keep describing the chips above them.
+    assert.equal(pinned.counts.offline, 0);
+
+    store.clearSelection();
+    assert.deepEqual(store.getSnapshot().driverIds, ["d2"]);
+  });
+
   it("finds an out-of-zone driver by name in search", () => {
     const store = new FleetStore();
     store.applySnapshot({
