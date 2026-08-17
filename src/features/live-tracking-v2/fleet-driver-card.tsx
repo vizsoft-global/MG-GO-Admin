@@ -15,6 +15,7 @@ import {
   BatteryLow,
   Clock,
   Compass,
+  History,
   Map as MapIcon,
   Navigation,
   Package,
@@ -41,22 +42,29 @@ function initials(name: string): string {
   return parts.map((part) => part.charAt(0).toUpperCase()).join("") || "?";
 }
 
-function formatDuration(sinceIso: string | null): string | null {
-  if (!sinceIso) return null;
-  const started = Date.parse(sinceIso);
-  if (Number.isNaN(started)) return null;
-  const minutes = Math.max(0, Math.floor((Date.now() - started) / MS_PER_MINUTE));
+function formatElapsed(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / MS_PER_MINUTE));
   const hours = Math.floor(minutes / 60);
   return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
 }
 
+function formatDuration(sinceIso: string | null, nowMs: number): string | null {
+  if (!sinceIso) return null;
+  const started = Date.parse(sinceIso);
+  if (Number.isNaN(started)) return null;
+  return formatElapsed(nowMs - started);
+}
+
 export const FleetDriverCard = memo(function FleetDriverCard({
   driverId,
+  nowMs,
   selected,
   onSelect,
   onFocus,
 }: {
   driverId: string;
+  /** Server clock, ticked by the rail. See `useRailClock`. */
+  nowMs: number;
   selected: boolean;
   onSelect: (driverId: string) => void;
   onFocus: (driverId: string) => void;
@@ -80,11 +88,23 @@ export const FleetDriverCard = memo(function FleetDriverCard({
    * before the phone went quiet, which is the one number on this card an operator is most
    * likely to act on.
    */
-  const speedLabel = hasLiveTelemetry(driver.status)
-    ? `${displaySpeedKmh(driver.speedMps)} km/h`
-    : "—";
+  const live = hasLiveTelemetry(driver.status);
+  const speedLabel = live ? `${displaySpeedKmh(driver.speedMps)} km/h` : "—";
+  /*
+   * What the card owes an operator once telemetry is dead: how long ago it died.
+   *
+   * "Offline" alone does not distinguish a rider who dropped out two minutes ago in a
+   * tunnel from one whose phone has been dark since this morning, and those call for
+   * different actions. The rest of the card — zone, battery, distance today, deliveries —
+   * stays, because those are recorded facts rather than claims about the present.
+   */
+  const lastFix = live
+    ? null
+    : driver.fixAtMs > 0
+      ? t("rail.lastFixAgo", { age: formatElapsed(nowMs - driver.fixAtMs) })
+      : t("rail.lastFixUnknown");
   const distanceKm = meta.distanceTodayMeters / 1000;
-  const onDutyFor = formatDuration(meta.onDutySince);
+  const onDutyFor = formatDuration(meta.onDutySince, nowMs);
   const deliveryProgress =
     meta.deliveriesToday > 0
       ? Math.min(100, Math.round((meta.deliveriesCompletedToday / meta.deliveriesToday) * 100))
@@ -199,12 +219,21 @@ export const FleetDriverCard = memo(function FleetDriverCard({
               {onDutyFor}
             </span>
           ) : null}
+          {lastFix ? (
+            <span className="inline-flex min-w-0 items-center gap-1">
+              <History className="size-3 shrink-0" aria-hidden />
+              <span className="truncate">{lastFix}</span>
+            </span>
+          ) : null}
           {/* Bearing, with the icon saying where it came from: a GPS course while
               moving is a stronger claim than a compass reading at a standstill, and an
               operator judging whether a rider is heading the wrong way needs to know
               which one they are looking at. Also: the compass reports *phone*
-              orientation, which a mount can rotate independently of the bike. */}
-          {driver.headingSource !== "none" ? (
+              orientation, which a mount can rotate independently of the bike.
+
+              Hidden once telemetry is dead, for the reason the speed is: a bearing on an
+              Offline card describes a direction the rider stopped travelling in. */}
+          {live && driver.headingSource !== "none" ? (
             <span
               className="inline-flex items-center gap-1"
               title={t(`rail.headingSource.${driver.headingSource}`)}

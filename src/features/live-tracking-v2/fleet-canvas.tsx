@@ -68,9 +68,18 @@ export function FleetCanvas() {
 
   const { filters, selectedDriverId } = snapshot;
 
-  // Clicking a driver (rail, pin, or same-card re-click) must bring the camera to
-  // them. Selection only used to open the day-route strip, so operators reported
-  // "nothing happens".
+  /*
+   * Clicking a driver (rail, pin, or same-card re-click) must bring the camera to them.
+   * Selection only used to open the day-route strip, so operators reported "nothing
+   * happens".
+   *
+   * The retry exists because a selection can land before the map does: the rail renders
+   * from the store's first snapshot, while the map is still waiting on the Google Maps
+   * script, the deck.gl chunk and the first interpolated fix. The window is generous
+   * (~4s) because the alternative failure is silent — the camera simply never moves, and
+   * that is the exact defect this loop was added to fix. Each attempt is cheap: a ref read
+   * and a Map lookup that returns false until the pin has a position.
+   */
   useEffect(() => {
     if (!selectedDriverId) return;
     const id = selectedDriverId;
@@ -78,9 +87,9 @@ export function FleetCanvas() {
     let timer: number | undefined;
     const tryFocus = () => {
       if (mapRef.current?.focusDriver(id)) return;
-      if (attempts >= 12) return;
+      if (attempts >= 40) return;
       attempts += 1;
-      timer = window.setTimeout(tryFocus, 50);
+      timer = window.setTimeout(tryFocus, 100);
     };
     tryFocus();
     return () => {
@@ -179,11 +188,31 @@ export function FleetCanvas() {
     filters.partnerId !== null ||
     filters.alertsOnly;
 
+  /*
+   * The strip's X is a deselect, not just a "hide the route".
+   *
+   * Clearing the geometry alone left `selectedDriverId` set, so the strip remounted on the
+   * next render and the close button appeared to do nothing. It is also the third deselect
+   * path the rulebook requires alongside the map background and a same-marker click.
+   */
   const handleRouteClose = useCallback(() => {
     setRoutePath(null);
     setRouteStops(null);
     setPlayhead(null);
-  }, []);
+    store.clearSelection();
+  }, [store]);
+
+  /*
+   * Playback frames the day once, then the map follows the playhead.
+   *
+   * Deliberately on play rather than on route load: selecting a rider street-zooms to
+   * them, and framing the whole day the moment the route resolved would move the camera
+   * twice for one click, the second move undoing the first. Pressing play is the point at
+   * which the operator has asked to watch the route rather than the rider.
+   */
+  const handlePlaybackStart = useCallback(() => {
+    if (routePath && routePath.length > 1) mapRef.current?.fitPath(routePath);
+  }, [routePath]);
 
   return (
     <div
@@ -405,6 +434,7 @@ export function FleetCanvas() {
             setRouteStops(stops);
           }}
           onPlayhead={setPlayhead}
+          onPlaybackStart={handlePlaybackStart}
           onClose={handleRouteClose}
         />
       ) : null}

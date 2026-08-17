@@ -11,7 +11,7 @@
  * full width to the map without losing the fleet count.
  */
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronLeft, ChevronRight, Users } from "lucide-react";
@@ -35,6 +35,29 @@ import { useFleetSnapshot, useFleetStore } from "./use-fleet";
 const CARD_ESTIMATE = 132;
 const CARD_GAP = 6;
 
+/**
+ * How often the cards' relative times are re-read.
+ *
+ * A card only re-renders when its own driver record changes, which is what keeps a moving
+ * fleet from re-rendering the rail. The cost is that an *unchanging* driver's card also
+ * freezes its clock — and the drivers whose clock matters most, the ones who stopped
+ * reporting, are exactly the records that stop changing. One interval for the whole rail
+ * keeps "Last fix 12m ago" honest without giving every card a timer of its own.
+ */
+const RAIL_CLOCK_INTERVAL_MS = 30_000;
+
+function useRailClock(): number {
+  const store = useFleetStore();
+  const [nowMs, setNowMs] = useState(() => store.serverNow());
+  useEffect(() => {
+    const handle = window.setInterval(() => {
+      setNowMs(store.serverNow());
+    }, RAIL_CLOCK_INTERVAL_MS);
+    return () => window.clearInterval(handle);
+  }, [store]);
+  return nowMs;
+}
+
 export function FleetRail({
   onFocusDriver,
   collapsed,
@@ -47,6 +70,7 @@ export function FleetRail({
   const t = useTranslations("pages.liveTrackingV2");
   const store = useFleetStore();
   const snapshot = useFleetSnapshot();
+  const nowMs = useRailClock();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const isCollapsed = collapsed ?? false;
@@ -146,6 +170,7 @@ export function FleetRail({
                 >
                   <FleetDriverCard
                     driverId={driverId}
+                    nowMs={nowMs}
                     selected={driverId === snapshot.selectedDriverId}
                     onSelect={(id) => {
                       // Same-marker click deselects (§12); same-row click re-zooms.

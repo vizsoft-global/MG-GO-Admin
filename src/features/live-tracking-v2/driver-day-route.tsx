@@ -99,11 +99,14 @@ export function DriverDayRoute({
   driverId,
   onGeometry,
   onPlayhead,
+  onPlaybackStart,
   onClose,
 }: {
   driverId: string;
   onGeometry: (path: [number, number][] | null, stops: FleetRouteStop[] | null) => void;
   onPlayhead: (position: [number, number] | null) => void;
+  /** Fired when the operator starts playback, so the canvas can frame the day. */
+  onPlaybackStart?: () => void;
   onClose: () => void;
 }) {
   const t = useTranslations("pages.liveTrackingV2");
@@ -165,6 +168,23 @@ export function DriverDayRoute({
     onGeometry(path, stops);
     return () => onGeometry(null, null);
   }, [onGeometry, path, stops]);
+
+  /*
+   * Play / pause.
+   *
+   * Starting playback frames the day on the map, once — the camera then follows the
+   * playhead we publish below. A restart from the end rewinds first, so the button never
+   * looks inert at the end of a route.
+   */
+  const togglePlay = useCallback(() => {
+    if (playing) {
+      setPlaying(false);
+      return;
+    }
+    if (points.length > 1 && cursor >= points.length - 1) setCursor(0);
+    setPlaying(true);
+    onPlaybackStart?.();
+  }, [cursor, onPlaybackStart, playing, points.length]);
 
   // Playback advances the cursor, not the map: the map reads one position from us.
   useEffect(() => {
@@ -268,7 +288,7 @@ export function DriverDayRoute({
               variant="ghost"
               className="size-7"
               aria-label={playing ? t("route.pause") : t("route.play")}
-              onClick={() => setPlaying((value) => !value)}
+              onClick={togglePlay}
             >
               {playing ? (
                 <Pause className="size-3.5" aria-hidden />

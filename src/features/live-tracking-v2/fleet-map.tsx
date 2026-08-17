@@ -44,6 +44,13 @@ import {
   loadFleetIconAtlas,
   type FleetIconAtlas,
 } from "./fleet-marker-atlas";
+import {
+  FLEET_FIT_PADDING_PX,
+  needsRecentre,
+  pathBounds,
+  type FleetBounds,
+} from "./fleet-camera";
+import { FleetPulseTracker, pulseEligible, pulseRing, selectPulseDrivers } from "./fleet-pulse";
 import { fleetZoneRing } from "./fleet-zones";
 import { trailSpanMeters, type FleetTrail } from "./fleet-trail";
 import {
@@ -105,6 +112,13 @@ const TRAIL_PRUNE_INTERVAL_MS = 5_000;
 const MIN_TRAIL_SPAN_M = 25;
 
 /**
+ * How often the camera is allowed to check whether the followed rider has drifted out of
+ * view. `map.getBounds()` allocates, and a rider crossing the edge of the screen is not a
+ * per-frame event — half a second is well inside the time it takes to notice.
+ */
+const FOLLOW_CHECK_INTERVAL_MS = 500;
+
+/**
  * `IconLayer.iconAtlas` is typed `string | Texture`, but its runtime contract is wider
  * than that type: it is declared `{type: 'image'}`, and deck's image prop transform
  * (`createTexture` in `@deck.gl/core`) wraps any browser image source as `{data}` before
@@ -133,6 +147,14 @@ export type FleetMapHandle = {
   fitFleet: () => void;
   /** Pan + street-zoom to a driver. Returns false when the pin is not yet located. */
   focusDriver: (driverId: string) => boolean;
+  /**
+   * Frames a day route and hands the camera back to the follower.
+   *
+   * Called when playback starts rather than when the route loads: selecting a rider
+   * street-zooms to them, and framing the whole day on top of that would move the camera
+   * twice for one click — the second move undoing the first.
+   */
+  fitPath: (path: readonly [number, number][]) => boolean;
   resize: () => void;
 };
 
@@ -156,6 +178,8 @@ type FleetEntity = {
   alert: boolean;
   selected: boolean;
   located: boolean;
+  /** Whether this driver's status permits a pulse ring. See `pulseEligible`. */
+  pulses: boolean;
 };
 
 type LayerClasses = {
@@ -191,6 +215,15 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/** The map's viewport in this feature's plain-object form, or null before first layout. */
+function mapBounds(map: google.maps.Map): FleetBounds | null {
+  const bounds = map.getBounds();
+  if (!bounds) return null;
+  const ne = bounds.getNorthEast();
+  const sw = bounds.getSouthWest();
+  return { west: sw.lng(), south: sw.lat(), east: ne.lng(), north: ne.lat() };
+}
+
 export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function FleetMap(
   {
     className,
@@ -218,6 +251,25 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
   const revisionRef = useRef(0);
   const reducedMotionRef = useRef(false);
   const lastTrailPruneRef = useRef(0);
+
+  /** Ring starts, keyed on fix timestamps rather than arrival. See `FleetPulseTracker`. */
+  const pulseTrackerRef = useRef(new FleetPulseTracker());
+  /** The capped ring roster, recomputed when statuses or the selection change. */
+  const pulseIdsRef = useRef<string[]>([]);
+  /** Server clock of the frame being drawn, so `buildLayers` can age the rings. */
+  const frameNowRef = useRef(0);
+
+  /**
+   * Whether the camera may still move itself.
+   *
+   * Cleared by a user drag, restored by selecting a driver or pressing focus. An operator
+   * who has dragged the map is looking at something, and a camera that pulls back to the
+   * selected rider a second later is unusable.
+   */
+  const cameraFollowRef = useRef(false);
+  const lastFollowCheckRef = useRef(0);
+  /** Route playback owns the camera while it is running — the playhead, not the live pin. */
+  const playbackFollowRef = useRef(false);
   /**
    * Pin picks fire both deck.gl `onClick` and the Google Maps `click` we use to
    * deselect on background. The Google event must not undo the pick.
@@ -230,6 +282,24 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
   const iconMapping = useMemo(() => fleetIconMapping(), []);
   const [iconAtlas, setIconAtlas] = useState<FleetIconAtlas | null>(null);
   const selectedDriverId = snapshot.selectedDriverId;
+
+  /**
+   * The selection as the frame loop sees it. The loop is a stable callback that must not
+   * be rebuilt every time the operator clicks a driver, so it reads the id from a ref
+   * rather than closing over it.
+   */
+  const selectedDriverIdRef = useRef<string | null>(selectedDriverId);
+
+  /*
+   * Selecting a driver hands the camera back to the follower, and deselecting takes it
+   * away again — otherwise the map would keep chasing whoever was last selected.
+   */
+  useEffect(() => {
+    selectedDriverIdRef.current = selectedDriverId;
+    cameraFollowRef.current = selectedDriverId != null;
+    lastFollowCheckRef.current = 0;
+    if (!selectedDriverId) playbackFollowRef.current = false;
+  }, [selectedDriverId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -255,6 +325,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     const index = entityIndexRef.current;
     const next: FleetEntity[] = [];
     const seen = new Set<string>();
+    const pulseCandidates: string[] = [];
 
     for (const driverId of snapshot.driverIds) {
       const driver = store.getDriver(driverId);
@@ -263,6 +334,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
 
       const tone = fleetStatusTone(driver.status);
       const stale = driver.status === "gps_offline" || driver.status === "offline";
+      const selected = driverId === selectedDriverId;
       let entity = index.get(driverId);
 
       if (!entity) {
@@ -276,6 +348,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           alert: false,
           selected: false,
           located: driver.lat != null && driver.lng != null,
+          pulses: false,
         };
         index.set(driverId, entity);
       }
@@ -284,17 +357,27 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       entity.tone = tone;
       entity.icon = fleetPinIcon(tone, stale);
       entity.alert = isFleetAlert(driver.status, driver.flags);
-      entity.selected = driverId === selectedDriverId;
+      entity.selected = selected;
+      entity.pulses = pulseEligible(driver.status, selected);
       if (driver.lat != null && driver.lng != null && !entity.located) {
         entity.position = [driver.lng, driver.lat];
         entity.located = true;
       }
+      if (entity.pulses) pulseCandidates.push(driverId);
       next.push(entity);
     }
 
     for (const key of [...index.keys()]) {
-      if (!seen.has(key)) index.delete(key);
+      if (!seen.has(key)) {
+        index.delete(key);
+        pulseTrackerRef.current.forget(key);
+      }
     }
+
+    // Capped here rather than per frame: eligibility only changes when a status or the
+    // selection does, and both of those arrive through this snapshot. The roster is
+    // already sorted by status severity, so the cap keeps the drivers worth watching.
+    pulseIdsRef.current = selectPulseDrivers(pulseCandidates, selectedDriverId);
 
     entitiesRef.current = next;
     revisionRef.current += 1;
@@ -308,6 +391,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     let cancelled = false;
     let idleListener: google.maps.MapsEventListener | null = null;
     let clickListener: google.maps.MapsEventListener | null = null;
+    let dragListener: google.maps.MapsEventListener | null = null;
 
     reducedMotionRef.current = prefersReducedMotion();
 
@@ -383,6 +467,16 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         }
         store.clearSelection();
       });
+      /*
+       * A drag hands the camera to the operator.
+       *
+       * `dragstart` rather than `center_changed`, because the latter also fires for the
+       * camera's own moves — a follower that reads its own pan as a user gesture would
+       * switch itself off the first time it worked.
+       */
+      dragListener = map.addListener("dragstart", () => {
+        cameraFollowRef.current = false;
+      });
 
       setStatus("ready");
       publishViewport();
@@ -394,6 +488,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       cancelled = true;
       idleListener?.remove();
       clickListener?.remove();
+      dragListener?.remove();
       overlayRef.current?.finalize();
       overlayRef.current = null;
       mapRef.current = null;
@@ -405,6 +500,24 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
   useEffect(() => {
     mapRef.current?.setMapTypeId(mapTypeId);
   }, [mapTypeId]);
+
+  /*
+   * Playback follow: the camera tracks the playhead, not the live pin.
+   *
+   * `setCenter`, not `panTo`. At 64x the scrubber advances every 100ms, and stacked pan
+   * animations rubber-band — each one is still easing towards a target the next one has
+   * already replaced. A scrubber is a direct manipulation, so the camera should land where
+   * the playhead is rather than chase it. Zoom is left alone: the operator chose it.
+   */
+  useEffect(() => {
+    if (!playheadPosition) {
+      playbackFollowRef.current = false;
+      return;
+    }
+    playbackFollowRef.current = true;
+    if (!cameraFollowRef.current) return;
+    mapRef.current?.setCenter({ lat: playheadPosition[1], lng: playheadPosition[0] });
+  }, [playheadPosition]);
 
   // ---------------------------------------------------------------------------
   // Layers
@@ -517,6 +630,54 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     }
 
     const drawable = entitiesRef.current.filter((entity) => entity.located);
+
+    /*
+     * Pulse rings, under every marker.
+     *
+     * One ring per arriving fix, which is what separates "this rider is being tracked" from
+     * "this marker has stopped being told anything" — the interpolated sprite glides to a
+     * halt either way, so the sprite alone cannot answer that. `data` is rebuilt per frame
+     * rather than mutated in place: the set is at most `FLEET_PULSE_MAX` and its members
+     * change constantly as rings expire, so a fresh array is cheaper than the bookkeeping
+     * that would let deck reuse one.
+     */
+    const pulseNow = frameNowRef.current;
+    const pulseTracker = pulseTrackerRef.current;
+    const pulseData: Array<{
+      position: [number, number];
+      radius: number;
+      color: [number, number, number, number];
+    }> = [];
+
+    for (const driverId of pulseIdsRef.current) {
+      const entity = entityIndexRef.current.get(driverId);
+      if (!entity?.located || !entity.pulses) continue;
+      const phase = pulseTracker.phase(driverId, pulseNow);
+      if (phase == null) continue;
+      const ring = pulseRing(phase, reducedMotionRef.current);
+      const rgb = TONE_RGB[entity.tone];
+      pulseData.push({
+        position: entity.position,
+        radius: ring.radiusPx,
+        color: [rgb[0], rgb[1], rgb[2], ring.alpha],
+      });
+    }
+
+    if (pulseData.length > 0) {
+      layers.push(
+        new Scatter<(typeof pulseData)[number]>({
+          id: "fleet-driver-pulses",
+          data: pulseData,
+          getPosition: (d) => d.position,
+          getRadius: (d) => d.radius,
+          radiusUnits: "pixels",
+          stroked: false,
+          filled: true,
+          getFillColor: (d) => d.color,
+          pickable: false,
+        }),
+      );
+    }
 
     if (drawable.length > 0) {
       layers.push(
@@ -683,6 +844,8 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
 
         const interpolator = store.interpolator;
         const reduced = reducedMotionRef.current;
+        const pulseTracker = pulseTrackerRef.current;
+        frameNowRef.current = serverNowMs;
         let moved = false;
 
         // Sweeping here rather than on a timer keeps the trail store free of its own
@@ -693,8 +856,15 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         }
 
         for (const entity of entitiesRef.current) {
+          // The newest authoritative fix, which is both the reduced-motion position and
+          // the pulse's trigger. Read for every driver, not only the pulsing ones, so a
+          // driver who becomes eligible mid-shift already has a previous fix on record
+          // and their first ring marks a real arrival.
+          const fix = interpolator.latest(entity.driverId);
+          if (fix) pulseTracker.observe(entity.driverId, fix.tMs, serverNowMs);
+
           const sample = reduced
-            ? interpolator.latest(entity.driverId)
+            ? fix
             : interpolator.sample(entity.driverId, serverNowMs);
           if (!sample) continue;
 
@@ -712,7 +882,19 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           }
         }
 
-        if (!didFitRef.current && entitiesRef.current.some((entity) => entity.located)) {
+        /*
+         * The opening camera move.
+         *
+         * Skipped entirely when a driver is already selected: the selection's own focus
+         * has either run or is retrying, and framing the whole fleet on top of it is what
+         * made clicking a rider look like nothing happened — the pan landed, then this
+         * fit pulled straight back out.
+         */
+        if (
+          !didFitRef.current &&
+          !selectedDriverIdRef.current &&
+          entitiesRef.current.some((entity) => entity.located)
+        ) {
           didFitRef.current = true;
           const map = mapRef.current;
           const located = entitiesRef.current.filter((entity) => entity.located);
@@ -724,7 +906,32 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
             for (const entity of located) {
               bounds.extend({ lat: entity.position[1], lng: entity.position[0] });
             }
-            map.fitBounds(bounds, 64);
+            map.fitBounds(bounds, FLEET_FIT_PADDING_PX);
+          }
+        }
+
+        /*
+         * Keep the followed rider on screen.
+         *
+         * Deliberately not a lock-on: recentring every frame would make the map crawl and
+         * take panning away from the operator. The camera only intervenes once the rider
+         * reaches the edge band, and playback owns the camera while it is running — the
+         * playhead is a past position, and following both would fight over the centre.
+         */
+        if (
+          cameraFollowRef.current &&
+          !playbackFollowRef.current &&
+          selectedDriverIdRef.current &&
+          serverNowMs - lastFollowCheckRef.current >= FOLLOW_CHECK_INTERVAL_MS
+        ) {
+          lastFollowCheckRef.current = serverNowMs;
+          const map = mapRef.current;
+          const entity = entityIndexRef.current.get(selectedDriverIdRef.current);
+          if (map && entity?.located) {
+            const bounds = mapBounds(map);
+            if (bounds && needsRecentre(entity.position, bounds)) {
+              map.panTo({ lat: entity.position[1], lng: entity.position[0] });
+            }
           }
         }
 
@@ -758,7 +965,9 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         for (const entity of located) {
           bounds.extend({ lat: entity.position[1], lng: entity.position[0] });
         }
-        map.fitBounds(bounds, 64);
+        // Framing the whole fleet is an explicit request to stop watching one rider.
+        cameraFollowRef.current = false;
+        map.fitBounds(bounds, FLEET_FIT_PADDING_PX);
       },
       focusDriver: (driverId: string) => {
         const map = mapRef.current;
@@ -768,8 +977,33 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         const lat = entity?.located ? entity.position[1] : driver?.lat;
         const lng = entity?.located ? entity.position[0] : driver?.lng;
         if (lat == null || lng == null) return false;
+        // An explicit focus is also how an operator takes back a follow they cancelled by
+        // dragging, so this restores it rather than only moving the camera once.
+        cameraFollowRef.current = true;
+        lastFollowCheckRef.current = 0;
+        didFitRef.current = true;
         map.panTo({ lat, lng });
         map.setZoom(DRIVER_FOCUS_ZOOM);
+        return true;
+      },
+      fitPath: (path: readonly [number, number][]) => {
+        const map = mapRef.current;
+        if (!map) return false;
+        cameraFollowRef.current = true;
+        const box = pathBounds(path);
+        if (!box) {
+          // A route that never left one spot: centre on it, because fitting a zero-area
+          // bounds snaps Google Maps to maximum zoom.
+          const point = path[0];
+          if (!point) return false;
+          map.setCenter({ lat: point[1], lng: point[0] });
+          return true;
+        }
+        const bounds = new google.maps.LatLngBounds(
+          { lat: box.south, lng: box.west },
+          { lat: box.north, lng: box.east },
+        );
+        map.fitBounds(bounds, FLEET_FIT_PADDING_PX);
         return true;
       },
       resize: () => {
