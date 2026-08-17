@@ -89,6 +89,68 @@ describe("persisted status filters", () => {
   });
 });
 
+describe("hydratePersistedFilters", () => {
+  /**
+   * A fresh store must look identical on the server and in the browser. The store is
+   * built during the first client render, and `useSyncExternalStore` reuses that
+   * snapshot as the server snapshot while hydrating — so reading storage any earlier
+   * than an effect is a hydration mismatch that throws away the whole canvas.
+   */
+  function withStoredFilters<T>(raw: string | null, run: () => T): T {
+    const globalWithWindow = globalThis as { window?: unknown };
+    const had = "window" in globalWithWindow;
+    const previous = globalWithWindow.window;
+    globalWithWindow.window = {
+      localStorage: {
+        getItem: (key: string) =>
+          key === "dpd.live-tracking-v2.status-filters" ? raw : null,
+        setItem: () => {},
+      },
+    };
+    try {
+      return run();
+    } finally {
+      if (had) globalWithWindow.window = previous;
+      else delete globalWithWindow.window;
+    }
+  }
+
+  it("leaves a new store on the defaults the server rendered", () => {
+    withStoredFilters(JSON.stringify({ statuses: ["moving"], alertsOnly: false }), () => {
+      const store = new FleetStore();
+      assert.equal(store.getSnapshot().filters.statuses, null);
+      assert.equal(store.getSnapshot().filters.alertsOnly, false);
+    });
+  });
+
+  it("applies the stored chips and notifies once the page is hydrated", () => {
+    withStoredFilters(JSON.stringify({ statuses: ["moving"], alertsOnly: false }), () => {
+      const store = new FleetStore();
+      let notified = 0;
+      store.subscribe(() => {
+        notified += 1;
+      });
+      store.hydratePersistedFilters();
+      assert.deepEqual(store.getSnapshot().filters.statuses, ["moving"]);
+      assert.equal(notified, 1);
+    });
+  });
+
+  it("does not re-render when storage already matches the defaults", () => {
+    withStoredFilters(JSON.stringify({ statuses: null, alertsOnly: false }), () => {
+      const store = new FleetStore();
+      const before = store.getSnapshot();
+      let notified = 0;
+      store.subscribe(() => {
+        notified += 1;
+      });
+      store.hydratePersistedFilters();
+      assert.equal(store.getSnapshot(), before);
+      assert.equal(notified, 0);
+    });
+  });
+});
+
 describe("toggleFleetStatusChip / toggleFleetAlertsOnly", () => {
   it("makes Alert Only exclusive by clearing status chips", () => {
     const next = toggleFleetAlertsOnly({
