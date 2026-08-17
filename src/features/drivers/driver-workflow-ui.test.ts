@@ -26,14 +26,15 @@ describe("resolveWorkflowPillStatus", () => {
     );
   });
 
-  it("shows Pending for an unlinked intake that is not a draft", () => {
+  it("shows Blocked instead of Active when the linked driver is blocked", () => {
     assert.equal(
       resolveWorkflowPillStatus({
-        linked: false,
-        account_status: "pending",
-        workflow_status: "pending",
+        linked: true,
+        account_status: "active",
+        workflow_status: "approved",
+        is_blocked: true,
       }),
-      "pending",
+      "blocked",
     );
   });
 });

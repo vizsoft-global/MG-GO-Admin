@@ -678,7 +678,11 @@ function DriverDetailContent({ id }: { id: string }) {
                   </h1>
                   <WorkflowStatusPill
                     status={resolveWorkflowPillStatus(driver)}
-                    label={workflowLabel(driver.workflow_status)}
+                    label={
+                      driver.is_blocked
+                        ? tBlock("statusBlocked")
+                        : workflowLabel(driver.workflow_status)
+                    }
                   />
                   <LinkedBadge
                     linked={driver.linked}
@@ -703,18 +707,14 @@ function DriverDetailContent({ id }: { id: string }) {
                   <span>{driver.partner_name}</span>
                 </p>
                 <DriverDetailGroups driverId={driver.linked_profile_id} />
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {driver.is_blocked ? (
-                    <span className="inline-flex items-center rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-medium text-destructive">
-                      {tBlock("statusBlocked")}
-                    </span>
-                  ) : (
+                {driver.is_blocked ? null : (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <AccountStatusPill
                       status={driver.account_status}
                       label={accountStatusLabel(driver.account_status)}
                     />
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
             {canManage && driver.intake_id && !isArchived ? (

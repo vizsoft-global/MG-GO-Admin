@@ -59,6 +59,7 @@ import {
 import {
   activeFlagsFromBits,
   decodePosition,
+  flagsFromBits,
   flagsFromNames,
   type DriverMeta,
   type FleetEventFrame,
@@ -316,16 +317,28 @@ export class FleetStore {
     for (const meta of metas) {
       this.byIdIdx.set(meta.idIdx, meta.driverId);
       const existing = this.drivers.get(meta.driverId);
+      const flags =
+        meta.flagBits != null
+          ? flagsFromBits(meta.flagBits)
+          : (existing?.flags ?? emptyFleetFlags());
+      const status = meta.status ?? existing?.status ?? "offline";
       if (existing) {
-        this.drivers.set(meta.driverId, { ...existing, meta, idIdx: meta.idIdx });
+        this.drivers.set(meta.driverId, {
+          ...existing,
+          meta,
+          idIdx: meta.idIdx,
+          status,
+          flags,
+          activeFlags: activeFleetFlags(flags),
+        });
       } else {
         this.drivers.set(meta.driverId, {
           driverId: meta.driverId,
           idIdx: meta.idIdx,
           meta,
-          status: "offline",
-          flags: emptyFleetFlags(),
-          activeFlags: [],
+          status,
+          flags,
+          activeFlags: activeFleetFlags(flags),
           lat: null,
           lng: null,
           speedMps: 0,
@@ -755,6 +768,7 @@ export class FleetStore {
         driver.meta.restaurantName,
         driver.meta.vehicleLabel,
         driver.status,
+        driver.flags.out_of_zone ? "out of zone" : "",
         ...driver.activeFlags,
       ]
         .filter(Boolean)

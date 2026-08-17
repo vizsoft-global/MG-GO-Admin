@@ -17,7 +17,9 @@ export function resolveWorkflowPillStatus(driver: {
   linked_profile_id?: string | null;
   account_status: string;
   workflow_status: DriverWorkflowStatus;
+  is_blocked?: boolean;
 }): string {
+  if (driver.is_blocked) return "blocked";
   if (isLinkedDriver(driver)) return driver.account_status;
   if (driver.workflow_status === "draft") return "draft";
   return "pending";

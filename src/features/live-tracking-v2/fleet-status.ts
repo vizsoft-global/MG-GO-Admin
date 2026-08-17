@@ -434,11 +434,9 @@ export type FleetTone = "success" | "primary" | "warning" | "danger" | "neutral"
 const STATUS_TONES: Record<FleetStatus, FleetTone> = {
   blocked: "danger",
   inactive: "danger",
-  // Clocked-out / GPS-quiet must not share Alert rose — the distribution bar and
-  // legend have to squint-separate "needs attention" from "not transmitting".
-  offline: "neutral",
+  offline: "danger",
   location_off: "warning",
-  gps_offline: "neutral",
+  gps_offline: "danger",
   on_break: "primary",
   on_delivery: "primary",
   moving: "success",
@@ -486,6 +484,21 @@ export const FLEET_DISTRIBUTION_BUCKETS: readonly FleetDistributionBucket[] = [
   "offline",
   "alert",
 ];
+
+/**
+ * What the Insights stacked bar actually paints. Status slices stay exclusive
+ * (`fleetDistributionBucket`); Alert is the KPI overlay (`kpis.alerts`) so an
+ * out-of-zone Moving rider still widens the emerald segment *and* the rose one.
+ */
+export function fleetDistributionBarSegments(
+  counts: Record<FleetDistributionBucket, number>,
+  alerts: number,
+): { bucket: FleetDistributionBucket; count: number }[] {
+  return FLEET_DISTRIBUTION_BUCKETS.map((bucket) => ({
+    bucket,
+    count: bucket === "alert" ? alerts : counts[bucket],
+  }));
+}
 
 export function fleetDistributionBucket(
   status: FleetStatus,

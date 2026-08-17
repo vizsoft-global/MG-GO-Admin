@@ -185,12 +185,12 @@ function exportDriversCsv(
         r.phone,
         r.partner_name,
         r.zone_name,
-        r.account_status,
+        r.is_blocked ? "blocked" : r.account_status,
         r.is_on_duty ? "yes" : "no",
         r.today_deliveries,
         r.workflow_status,
         r.linked ? "yes" : "no",
-        r.app_passcode ?? "",
+        r.archived_at ? "" : (r.app_passcode ?? ""),
         ...customKeys.map((c) => {
           const v = r.custom_fields?.[c.key];
           return v == null ? "" : String(v);
@@ -959,7 +959,9 @@ function DriversPageContent() {
                           onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => e.stopPropagation()}
                         >
-                          <PasscodeCell passcode={driver.app_passcode} />
+                          <PasscodeCell
+                            passcode={driver.archived_at ? null : driver.app_passcode}
+                          />
                         </VisibleTableCell>
                         {activeCustomDefs.map((def) => {
                           const colId = customFieldColumnId(def.key);

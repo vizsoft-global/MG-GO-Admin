@@ -16,11 +16,15 @@
 import type { Env } from "./env";
 import {
   debouncedMembership,
-  inBbox,
   parseZone,
   resolveZoneAt,
   type WorkerZone,
 } from "./geo";
+import {
+  matchesLiveViewport,
+  matchesRosterFilters,
+  type InterestSubject,
+} from "./fleet-interest";
 import {
   evaluateRules,
   initialRuleState,
@@ -39,6 +43,7 @@ import {
   emptyView,
   encodePosition,
   encodeTrailPoint,
+  flagBits,
   trailDistanceMeters,
   TRAIL_MIN_GAP_MS,
   TRAIL_MIN_MOVE_M,
@@ -235,7 +240,10 @@ export class FleetRoom implements DurableObject {
     // view here (rather than lazily) keeps `webSocketMessage` free of setup.
     for (const ws of state.getWebSockets()) {
       this.sockets.set(ws, {
-        view: (ws.deserializeAttachment() as SocketView | null) ?? emptyView(),
+        view: {
+          ...emptyView(),
+          ...((ws.deserializeAttachment() as SocketView | null) ?? {}),
+        },
         posSeen: new Map(),
         metaSeen: new Map(),
         trailSeen: new Set(),
@@ -880,7 +888,7 @@ export class FleetRoom implements DurableObject {
     }
 
     const runtime = this.sockets.get(ws) ?? {
-      view: (ws.deserializeAttachment() as SocketView | null) ?? emptyView(),
+      view: { ...emptyView(), ...((ws.deserializeAttachment() as SocketView | null) ?? {}) },
       posSeen: new Map<number, number>(),
       metaSeen: new Map<number, number>(),
       trailSeen: new Set<number>(),
@@ -899,6 +907,7 @@ export class FleetRoom implements DurableObject {
         zoneId: frame.zoneId ?? null,
         partnerId: frame.partnerId ?? null,
         driverId: frame.driverId ?? null,
+        search: frame.search ?? null,
         knownIds: [],
       };
       ws.serializeAttachment(runtime.view);
@@ -929,26 +938,31 @@ export class FleetRoom implements DurableObject {
     }
   }
 
-  private matchesView(entity: Entity, view: SocketView): boolean {
-    // A pinned driver is always in view. Following a driver who rides off the edge
-    // of the viewport must not make them vanish from the rail.
-    if (view.driverId && entity.driverId === view.driverId) return true;
-    if (view.statuses && !view.statuses.includes(entity.status)) return false;
-    if (view.zoneId && entity.meta.zoneId !== view.zoneId && entity.meta.currentZoneId !== view.zoneId) {
-      return false;
-    }
-    if (view.partnerId && entity.meta.partnerId !== view.partnerId) return false;
-    if (entity.lat == null || entity.lng == null) {
-      // Blocked / clocked-out drivers keep a roster row even with no pin, so the
-      // Blocked filter is not an empty list of people the admin just blocked.
-      return (
-        entity.status === "blocked" ||
-        entity.status === "inactive" ||
-        entity.status === "offline" ||
-        entity.status === "location_off"
-      );
-    }
-    return inBbox(entity.lat, entity.lng, view.bbox);
+  private interestOf(entity: Entity): InterestSubject {
+    const flagHay = entity.flags.out_of_zone ? "out of zone out_of_zone" : "";
+    return {
+      driverId: entity.driverId,
+      status: entity.status,
+      lat: entity.lat,
+      lng: entity.lng,
+      zoneId: entity.meta.zoneId,
+      currentZoneId: entity.meta.currentZoneId,
+      partnerId: entity.meta.partnerId,
+      searchHaystack: [
+        entity.meta.driverName,
+        entity.meta.driverCode,
+        entity.meta.employeeId,
+        entity.meta.zoneName,
+        entity.meta.currentZoneName,
+        entity.meta.partnerName,
+        entity.meta.vehicleLabel,
+        entity.status,
+        flagHay,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase(),
+    };
   }
 
   private pushToSocket(
@@ -963,15 +977,25 @@ export class FleetRoom implements DurableObject {
     const stillVisible = new Set<number>();
 
     for (const entity of this.entities.values()) {
-      if (!this.matchesView(entity, runtime.view)) continue;
+      const interest = this.interestOf(entity);
+      if (!matchesRosterFilters(interest, runtime.view)) continue;
       stillVisible.add(entity.idIdx);
 
       if (runtime.metaSeen.get(entity.idIdx) !== entity.metaVersion) {
-        meta.push(entity.meta);
+        meta.push({
+          ...entity.meta,
+          status: entity.status,
+          flagBits: flagBits(entity.flags),
+        });
         runtime.metaSeen.set(entity.idIdx, entity.metaVersion);
       }
 
+      const live = matchesLiveViewport(interest, runtime.view);
+      const seed = !runtime.posSeen.has(entity.idIdx);
+      if (!live && !seed) continue;
+
       if (
+        live &&
         !runtime.trailSeen.has(entity.idIdx) &&
         entity.trail.length >= 6 &&
         tracks.length < MAX_TRAIL_TRACKS_PER_FRAME
@@ -982,14 +1006,15 @@ export class FleetRoom implements DurableObject {
         runtime.trailSeen.add(entity.idIdx);
       }
 
+      if (entity.lat == null || entity.lng == null) continue;
       if (!force && runtime.posSeen.get(entity.idIdx) === entity.posVersion) continue;
       runtime.posSeen.set(entity.idIdx, entity.posVersion);
 
       tuples.push(
         encodePosition({
           idIdx: entity.idIdx,
-          lat: entity.lat!,
-          lng: entity.lng!,
+          lat: entity.lat,
+          lng: entity.lng,
           speedMps: entity.speedMps,
           headingDeg: entity.headingDeg,
           headingSource: entity.headingSource,
@@ -1000,16 +1025,19 @@ export class FleetRoom implements DurableObject {
       );
     }
 
-    const gone: number[] = [];
+    const goneIds = new Set<number>();
     for (const idIdx of runtime.posSeen.keys()) {
-      if (stillVisible.has(idIdx)) continue;
-      gone.push(idIdx);
+      if (!stillVisible.has(idIdx)) goneIds.add(idIdx);
+    }
+    for (const idIdx of runtime.metaSeen.keys()) {
+      if (!stillVisible.has(idIdx)) goneIds.add(idIdx);
+    }
+    for (const idIdx of goneIds) {
       runtime.posSeen.delete(idIdx);
       runtime.metaSeen.delete(idIdx);
-      // Dropped too, so a driver who is panned back into view gets their history
-      // again — the client prunes trails it is no longer told about.
       runtime.trailSeen.delete(idIdx);
     }
+    const gone = [...goneIds];
 
     if (meta.length > 0) this.send(ws, { t: "meta", drivers: meta });
     // Trails before the delta: the client hydrates history, then extends it with the

@@ -770,7 +770,9 @@ export async function fetchDriversForAdmin(options?: {
           ? (deliveryCountByDriverId.get(row.linked_profile_id) ?? 0)
           : 0,
         app_passcode:
-          account_status === "active" ? (linkedDriver?.app_passcode ?? null) : null,
+          account_status === "active" && !row.archived_at
+            ? (linkedDriver?.app_passcode ?? null)
+            : null,
         archived_at: row.archived_at,
         avatar_url: row.avatar_url,
         avatar_display_url,
@@ -1294,7 +1296,9 @@ export async function fetchDriverDetail(
       restaurant_names,
       has_published_restaurant,
       app_passcode:
-        linkedDriver && linkedDriver.status === "active"
+        linkedDriver &&
+        linkedDriver.status === "active" &&
+        !intake.archived_at
           ? linkedDriver.app_passcode
           : null,
       account_status: deriveAccountStatus(
@@ -1418,7 +1422,8 @@ export async function fetchDriverDetail(
     restaurant_names,
     has_published_restaurant,
     app_passcode:
-      driverRow.status === ("active" as DriverAccountStatus)
+      driverRow.status === ("active" as DriverAccountStatus) &&
+      !(intakeForDriver?.archived_at ?? driverRow.archived_at)
         ? (driverRow.app_passcode ?? null)
         : null,
     account_status: deriveAccountStatus(
