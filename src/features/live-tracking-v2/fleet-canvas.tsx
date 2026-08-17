@@ -30,7 +30,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
-import { ToggleChip } from "@/components/app/toggle-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -40,7 +39,9 @@ import { FleetInsightsPanel } from "./fleet-insights-panel";
 import { FleetLegend } from "./fleet-legend";
 import { FleetConnectionPill } from "./fleet-connection-pill";
 import { DriverDayRoute } from "./driver-day-route";
-import { FLEET_FILTER_STATUSES, type FleetStatus } from "./fleet-status";
+import { FleetStatusFilter } from "./fleet-status-filter";
+import { routeGeometryPositions, type FleetRouteGeometry } from "./fleet-route";
+import { type FleetStatus } from "./fleet-status";
 import { toggleFleetAlertsOnly, toggleFleetStatusChip } from "./fleet-types";
 import { useFleetSnapshot, useFleetStore } from "./use-fleet";
 
@@ -62,7 +63,7 @@ export function FleetCanvas() {
   const [insightsCollapsed, setInsightsCollapsed] = useState(false);
   const railUserOverride = useRef<boolean | null>(null);
   const insightsUserOverride = useRef<boolean | null>(null);
-  const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
+  const [routeGeometry, setRouteGeometry] = useState<FleetRouteGeometry | null>(null);
   const [routeStops, setRouteStops] = useState<FleetRouteStop[] | null>(null);
   const [playhead, setPlayhead] = useState<[number, number] | null>(null);
 
@@ -178,9 +179,6 @@ export function FleetCanvas() {
     store.setFilters(toggleFleetAlertsOnly(filters));
   }, [filters, store]);
 
-  const activeStatuses = filters.alertsOnly
-    ? []
-    : (filters.statuses ?? [...FLEET_FILTER_STATUSES]);
   const filtersDirty =
     filters.search !== "" ||
     filters.statuses !== null ||
@@ -196,7 +194,7 @@ export function FleetCanvas() {
    * path the rulebook requires alongside the map background and a same-marker click.
    */
   const handleRouteClose = useCallback(() => {
-    setRoutePath(null);
+    setRouteGeometry(null);
     setRouteStops(null);
     setPlayhead(null);
     store.clearSelection();
@@ -211,8 +209,9 @@ export function FleetCanvas() {
    * which the operator has asked to watch the route rather than the rider.
    */
   const handlePlaybackStart = useCallback(() => {
-    if (routePath && routePath.length > 1) mapRef.current?.fitPath(routePath);
-  }, [routePath]);
+    const positions = routeGeometryPositions(routeGeometry);
+    if (positions.length > 1) mapRef.current?.fitPath(positions);
+  }, [routeGeometry]);
 
   return (
     <div
@@ -225,7 +224,7 @@ export function FleetCanvas() {
       <div className="fleet-map-surface absolute inset-0">
         <FleetMap
           ref={mapRef}
-          routePath={routePath}
+          routeGeometry={routeGeometry}
           routeStops={routeStops}
           playheadPosition={playhead}
           showZones={showZones}
@@ -247,7 +246,7 @@ export function FleetCanvas() {
       */}
       <div className="pointer-events-none absolute inset-3 z-20 flex flex-col gap-2">
         <div className="relative z-30 flex shrink-0 items-start justify-between gap-2">
-          <div className="pointer-events-auto flex min-w-0 max-w-[min(680px,72%)] flex-col gap-2">
+          <div className="pointer-events-auto flex min-w-0 max-w-[min(720px,74%)] flex-col gap-2">
             <div className="fleet-overlay flex h-9 items-center gap-2 rounded-lg border px-2.5 shadow-sm">
               <Satellite className="size-4 text-muted-foreground" aria-hidden />
               <span className="text-sm font-semibold">{t("title")}</span>
@@ -268,14 +267,33 @@ export function FleetCanvas() {
               </Button>
             </div>
 
+            {/*
+              One row, always. The chips used to wrap to a second and third row on any
+              viewport narrower than about 1200px, which pushed the driver rail down and
+              covered the top of the map — see `FleetStatusFilter` for why the seven
+              statuses became one dropdown. All four controls share the width and truncate
+              rather than the search box absorbing whatever three fixed-width selects leave
+              over: on a narrow canvas that remainder is a few pixels, so the box collapses
+              to its own border and the row still reads as broken.
+            */}
             {showFilters ? (
-              <div className="fleet-overlay flex flex-wrap items-center gap-2 rounded-lg border p-2 shadow-sm">
+              <div className="fleet-overlay flex items-center gap-2 rounded-lg border p-2 shadow-sm">
                 <Input
                   value={filters.search}
                   onChange={(event) => store.setFilters({ search: event.target.value })}
                   placeholder={t("filters.search")}
-                  className="h-9 w-[200px]"
+                  className="h-9 min-w-[128px] flex-[1_1_180px]"
                   aria-label={t("filters.search")}
+                />
+
+                <FleetStatusFilter
+                  filters={filters}
+                  onToggleStatus={toggleStatus}
+                  onToggleAlertsOnly={toggleAlertsOnly}
+                  onSetStatuses={(statuses) =>
+                    store.setFilters({ statuses, alertsOnly: false })
+                  }
+                  className="min-w-[104px] flex-[0_1_144px]"
                 />
 
                 <SearchSelect
@@ -284,7 +302,7 @@ export function FleetCanvas() {
                   onChange={(value) =>
                     store.setFilters({ zoneId: !value || value === "all" ? null : value })
                   }
-                  className="h-9 w-[160px]"
+                  className="h-9 min-w-[100px] flex-[0_1_136px]"
                   placeholder={t("filters.allZones")}
                   searchPlaceholder={t("filters.searchZone")}
                   recentsKey="fleet-v2-zone"
@@ -299,41 +317,24 @@ export function FleetCanvas() {
                       partnerId: !value || value === "all" ? null : value,
                     })
                   }
-                  className="h-9 w-[170px]"
+                  className="h-9 min-w-[104px] flex-[0_1_144px]"
                   placeholder={t("filters.allPartners")}
                   searchPlaceholder={t("filters.searchPartner")}
                   recentsKey="fleet-v2-partner"
                   clearable={false}
                 />
 
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {FLEET_FILTER_STATUSES.map((status) => (
-                    <ToggleChip
-                      key={status}
-                      selected={activeStatuses.includes(status)}
-                      onClick={() => toggleStatus(status)}
-                    >
-                      {t(`status.${status}`)}
-                    </ToggleChip>
-                  ))}
-                  <ToggleChip
-                    selected={filters.alertsOnly}
-                    onClick={toggleAlertsOnly}
-                  >
-                    {t("filters.alertsOnly")}
-                  </ToggleChip>
-                </div>
-
                 {filtersDirty ? (
                   <Button
                     type="button"
-                    size="sm"
+                    size="icon"
                     variant="ghost"
-                    className="h-9 gap-1.5 text-xs"
+                    className="size-9 shrink-0"
+                    aria-label={t("controls.reset")}
+                    title={t("controls.reset")}
                     onClick={() => store.resetFilters()}
                   >
                     <RotateCcw className="size-3.5" aria-hidden />
-                    {t("controls.reset")}
                   </Button>
                 ) : null}
               </div>
@@ -429,8 +430,8 @@ export function FleetCanvas() {
         <DriverDayRoute
           key={selectedDriverId}
           driverId={selectedDriverId}
-          onGeometry={(path, stops) => {
-            setRoutePath(path);
+          onGeometry={(geometry, stops) => {
+            setRouteGeometry(geometry);
             setRouteStops(stops);
           }}
           onPlayhead={setPlayhead}
