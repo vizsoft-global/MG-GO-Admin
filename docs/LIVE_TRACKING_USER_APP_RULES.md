@@ -68,6 +68,7 @@ Motion is always classified from the **live** sample; coords sent may still be l
 Allowed: `idle` | `moving` | `delivery_submit`.
 
 - While `duty_active_delivery_id` is set: `holdDeliveryStatus()` → always `delivery_submit` (Admin **On Delivery**). `p_delivery_id` is required; `p_active_delivery_id` is the open pickup UUID. `p_force_history = true` on submit.
+- **Every** report claiming `delivery_submit` must carry `p_delivery_id`, not just the one at submission — the hold reuses the status for the whole delivery, and the RPC raises `delivery_id_required` either way. A heartbeat that cannot name the delivery reports the rider's motion status instead (`reportableStatus`), because a fix with a weaker label still keeps the pin alive, while a rejected one takes the rider off the map: the fix goes to the offline queue and replays the same rejection until it ages out.
 - After finish/cancel: clear the session id; next tick is idle/moving. Leftover `delivery_submit` without an open pickup is **not** On Delivery.
 - Pickup/finish also call `DutyBackgroundService.notifyDeliverySubmitted()` so the FGS forces a sample.
 
