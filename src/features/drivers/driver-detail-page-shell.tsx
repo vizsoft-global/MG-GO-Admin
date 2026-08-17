@@ -54,7 +54,13 @@ import { DriverEditSheet } from "./driver-edit-sheet";
 import { getCountryLabel } from "@/lib/geo/countries";
 import { riderCategoryMessageKey } from "./driver-rider-category";
 import { avatarTintFromName } from "./form/driver-form-primitives";
-import { LinkedBadge, WorkflowStatusPill, isLinkedDriver, resolveWorkflowPillStatus } from "./driver-workflow-ui";
+import {
+  LinkedBadge,
+  WorkflowStatusPill,
+  isLinkedDriver,
+  resolveWorkflowPillStatus,
+  showsMobileAppLink,
+} from "./driver-workflow-ui";
 import { formatPhoneDisplay } from "./driver-phone";
 import { AssetCatalogIcon } from "@/features/assets/asset-catalog-icon";
 import type { DriverWorkflowStatus } from "./types";
@@ -444,12 +450,18 @@ function DriverDetailContent({ id }: { id: string }) {
     .slice(0, 2)
     .toUpperCase();
 
+  const showLinked = showsMobileAppLink(driver);
+
   const metaFields: { label: string; value: string }[] = [
     { label: t("fieldPhone"), value: formatPhoneDisplay(driver.phone) },
-    {
-      label: t("fieldLinked"),
-      value: driver.linked ? tList("linkedYes") : tList("linkedNo"),
-    },
+    ...(showLinked
+      ? [
+          {
+            label: t("fieldLinked"),
+            value: driver.linked ? tList("linkedYes") : tList("linkedNo"),
+          },
+        ]
+      : []),
     { label: t("fieldEmail"), value: driver.email ?? "—" },
     { label: t("fieldCivilId"), value: driver.civil_id },
     {
@@ -684,11 +696,13 @@ function DriverDetailContent({ id }: { id: string }) {
                         : workflowLabel(driver.workflow_status)
                     }
                   />
-                  <LinkedBadge
-                    linked={driver.linked}
-                    yesLabel={tList("linkedYes")}
-                    noLabel={tList("linkedNo")}
-                  />
+                  {showLinked ? (
+                    <LinkedBadge
+                      linked={driver.linked}
+                      yesLabel={tList("linkedYes")}
+                      noLabel={tList("linkedNo")}
+                    />
+                  ) : null}
                   {isArchived ? (
                     <span className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
                       {t("archivedBadge")}

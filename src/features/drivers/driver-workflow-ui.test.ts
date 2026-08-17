@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveWorkflowPillStatus } from "./driver-workflow-ui";
+import {
+  resolveWorkflowPillStatus,
+  showsMobileAppLink,
+} from "./driver-workflow-ui";
 
 describe("resolveWorkflowPillStatus", () => {
   it("uses Login Status for a linked driver so Details matches the account", () => {
@@ -36,5 +39,16 @@ describe("resolveWorkflowPillStatus", () => {
       }),
       "blocked",
     );
+  });
+});
+
+describe("showsMobileAppLink", () => {
+  it("hides app linkage for a blocked driver, whose session was revoked", () => {
+    assert.equal(showsMobileAppLink({ is_blocked: true }), false);
+  });
+
+  it("keeps it for everyone else, including a driver who never linked", () => {
+    assert.equal(showsMobileAppLink({ is_blocked: false }), true);
+    assert.equal(showsMobileAppLink({}), true);
   });
 });
