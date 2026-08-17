@@ -216,6 +216,13 @@ export type DriverMeta = {
   shiftStartAt: string | null;
   shiftEndAt: string | null;
   lastFixAt: string | null;
+  /**
+   * Optional on the wire so a roster row can carry status before (or without) a
+   * position tuple. Off-viewport drivers are seeded this way; a missing field is
+   * the old room, and the client keeps whatever it already had.
+   */
+  status?: FleetStatus;
+  flagBits?: number;
 };
 
 export type FleetEventFrame = {
@@ -282,6 +289,7 @@ export type ClientFrame =
       zoneId?: string | null;
       partnerId?: string | null;
       driverId?: string | null;
+      search?: string | null;
     }
   | { t: "ping" };
 
@@ -293,6 +301,9 @@ export type SocketView = {
   /** Pinned driver: always sent even when outside the viewport, so a followed
    *  driver does not vanish from the rail when the operator pans away. */
   driverId: string | null;
+  /** Live-position exception: a typed search keeps matching drivers streaming
+   *  even when they sit outside the current map frame. */
+  search: string | null;
   knownIds: number[];
 };
 
@@ -303,6 +314,7 @@ export function emptyView(): SocketView {
     zoneId: null,
     partnerId: null,
     driverId: null,
+    search: null,
     knownIds: [],
   };
 }

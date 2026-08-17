@@ -1086,7 +1086,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-16 — [admin+app] `LIVE_INGEST_URL` defaults to the production Worker; the kill switch is now an explicit empty string. Coarse-fix gate 50 m in all four places, `DutySessionStorage.reload()` on FGS start, `on_delivery` from `deliveries.status = 'in_transit'`. Migration `20260916100000`.*
+*Last synced: 2026-08-17 — [admin+app] Admin Live Tracking V2 QA follow-up (Alerts bar slice, Offline red, Out of Zone search, archived passcode, Blocked-only pill). Driver app items still open in this repo (MG-GO is not in this workspace): Thank You device back → Home (re-reported; prior 2026-08-14 note did not stick on device); Clock In toggle must not flash In after sign-out then login (paint from disk/server duty, never a stale in-memory `true`); Profile must show the disk-cached photo on first frame, not initials then the image. No migration.*
+
+*Prior: 2026-08-16 — [admin+app] `LIVE_INGEST_URL` defaults to the production Worker; the kill switch is now an explicit empty string. Coarse-fix gate 50 m in all four places, `DutySessionStorage.reload()` on FGS start, `on_delivery` from `deliveries.status = 'in_transit'`. Migration `20260916100000`.*
 
 *Prior: 2026-08-14 — [admin+app] Live Tracking V2 cadence and heading: moving stream to **1Hz** (idle unchanged at 30s), edge batches of 2 fixes or ≤2s, and fused `heading_deg` with additive edge-only `heading_source` / `compass_deg`. Room flush thinned so 1Hz keeps the `driver_locations` write rate flat. No migration.*
 

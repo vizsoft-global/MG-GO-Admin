@@ -10,7 +10,7 @@ import {
   toggleFleetStatusChip,
   type FleetZone,
 } from "./fleet-types";
-import { encodePosition } from "./fleet-wire";
+import { encodePosition, flagBits } from "./fleet-wire";
 
 const NOW = "2026-08-16T12:00:00.000Z";
 
@@ -211,6 +211,50 @@ describe("FleetStore filters and roster", () => {
     store.setFilters({ search: "Out Rider" });
     assert.deepEqual(store.getSnapshot().driverIds, ["d1"]);
     assert.equal(store.getDriver("d1")?.flags.out_of_zone, true);
+
+    store.setFilters({ search: "out of zone" });
+    assert.deepEqual(store.getSnapshot().driverIds, ["d1"]);
+  });
+
+  it("lists a driver who arrived as meta only, the way an off-map Out of Zone rider does", () => {
+    const store = new FleetStore();
+    const flags = { ...emptyFleetFlags(), on_duty: true, online: true, out_of_zone: true };
+    store.applyMeta([
+      {
+        idIdx: 7,
+        driverId: "d-out",
+        driverName: "Out Rider",
+        driverCode: "10009",
+        employeeId: "9",
+        avatarObjectKey: null,
+        avatarUpdatedAt: null,
+        zoneId: "z1",
+        zoneName: "Kuwait City",
+        partnerId: "p1",
+        partnerName: "Talabat",
+        restaurantName: null,
+        vehicleLabel: null,
+        accountStatus: "active",
+        onDutySince: NOW,
+        deliveriesToday: 0,
+        deliveriesCompletedToday: 0,
+        distanceTodayMeters: 0,
+        batteryPct: 80,
+        accuracyMeters: 8,
+        activeDeliveryId: null,
+        currentZoneId: null,
+        currentZoneName: null,
+        shiftStartAt: null,
+        shiftEndAt: null,
+        lastFixAt: NOW,
+        status: "idle",
+        flagBits: flagBits(flags),
+      },
+    ]);
+    store.setFilters({ search: "Out Rider" });
+    assert.deepEqual(store.getSnapshot().driverIds, ["d-out"]);
+    assert.equal(store.getDriver("d-out")?.status, "idle");
+    assert.equal(store.getDriver("d-out")?.flags.out_of_zone, true);
   });
 
   it("does not let an empty hello wipe zones the snapshot already loaded", () => {

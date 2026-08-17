@@ -7,7 +7,7 @@
  *
  * These are literal Tailwind classes rather than semantic tokens because status colour
  * is fixed by §5 of the rulebook (Moving emerald, On delivery blue, Idle amber, Alert
- * rose, Offline slate) and must not drift with the theme accent.
+ * / Offline / GPS Offline rose) and must not drift with the theme accent.
  */
 
 import type { FleetTone } from "./fleet-status";

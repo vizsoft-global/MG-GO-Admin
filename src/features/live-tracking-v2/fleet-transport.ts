@@ -275,6 +275,7 @@ export class FleetTransport {
       // The selected driver is pinned server-side so following them across a pan
       // cannot drop them out of the frame.
       driverId: snapshot.selectedDriverId,
+      search: snapshot.filters.search || null,
     };
     this.socket.send(JSON.stringify(frame));
   }

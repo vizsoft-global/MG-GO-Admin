@@ -7,6 +7,7 @@ import {
   FLEET_DEFAULT_THRESHOLDS,
   FLEET_FILTER_STATUSES,
   FLEET_STATUSES,
+  fleetDistributionBarSegments,
   fleetDistributionBucket,
   hasLiveTelemetry,
   fleetEventSeverity,
@@ -158,9 +159,9 @@ describe("fleetStatus", () => {
     }
   });
 
-  it("paints Offline as slate so Alerts can keep rose to themselves", () => {
-    assert.equal(fleetStatusTone("offline"), "neutral");
-    assert.equal(fleetStatusTone("gps_offline"), "neutral");
+  it("paints Offline and GPS Offline red", () => {
+    assert.equal(fleetStatusTone("offline"), "danger");
+    assert.equal(fleetStatusTone("gps_offline"), "danger");
     assert.equal(fleetStatusTone("blocked"), "danger");
   });
 
@@ -304,6 +305,26 @@ describe("distribution and alerting", () => {
     const input = signals({ lastFixAtMs: NOW - 10 * 60_000 });
     const flags = fleetFlags(input, NOW);
     assert.equal(fleetDistributionBucket(fleetStatus(input, NOW), flags), "offline");
+  });
+
+  it("paints an Alert graph slice from the KPI without stealing Moving", () => {
+    const input = signals({ speedMps: 9, inAssignedZone: false });
+    const flags = fleetFlags(input, NOW);
+    assert.equal(fleetDistributionBucket(fleetStatus(input, NOW), flags), "moving");
+    const segments = fleetDistributionBarSegments(
+      { moving: 1, on_delivery: 0, idle: 1, offline: 0, alert: 0 },
+      1,
+    );
+    assert.deepEqual(
+      segments.map((segment) => [segment.bucket, segment.count]),
+      [
+        ["moving", 1],
+        ["on_delivery", 0],
+        ["idle", 1],
+        ["offline", 0],
+        ["alert", 1],
+      ],
+    );
   });
 });
 

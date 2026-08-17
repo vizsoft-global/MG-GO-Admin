@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 
 import { FleetEventFeed } from "./fleet-event-feed";
 import {
-  FLEET_DISTRIBUTION_BUCKETS,
+  fleetDistributionBarSegments,
   fleetStatusTone,
   type FleetDistributionBucket,
   type FleetTone,
@@ -53,10 +53,9 @@ const BUCKET_LABEL_KEY: Record<FleetDistributionBucket, string> = {
   alert: "kpis.alerts",
 };
 
-/** The stacked bar is status only. Alert is a KPI overlay, not an exclusive slice. */
-const STATUS_BAR_BUCKETS = FLEET_DISTRIBUTION_BUCKETS.filter(
-  (bucket): bucket is Exclude<FleetDistributionBucket, "alert"> => bucket !== "alert",
-);
+/** Alert is a KPI overlay, not an exclusive status, so it shares rose with Offline
+ *  but paints a darker bar segment so the two slices stay tellable apart. */
+const ALERT_BAR_CLASS = "bg-rose-700";
 
 function stopWheelFromReachingMap(event: WheelEvent) {
   event.stopPropagation();
@@ -72,10 +71,13 @@ export function FleetInsightsPanel({
   const t = useTranslations("pages.liveTrackingV2");
   const snapshot = useFleetSnapshot();
 
+  const segments = useMemo(
+    () => fleetDistributionBarSegments(snapshot.counts, snapshot.kpis.alerts),
+    [snapshot.counts, snapshot.kpis.alerts],
+  );
   const total = useMemo(
-    () =>
-      STATUS_BAR_BUCKETS.reduce((sum, bucket) => sum + snapshot.counts[bucket], 0),
-    [snapshot.counts],
+    () => segments.reduce((sum, segment) => sum + segment.count, 0),
+    [segments],
   );
 
   if (collapsed) {
@@ -129,36 +131,44 @@ export function FleetInsightsPanel({
             {t("insights.statusDistribution")}
           </p>
           <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-muted">
-            {STATUS_BAR_BUCKETS.map((bucket) => {
-              const count = snapshot.counts[bucket];
-              if (count === 0) return null;
+            {segments.map((segment) => {
+              if (segment.count === 0) return null;
               return (
                 <span
-                  key={bucket}
-                  className={cn("h-full transition-[width] duration-200 ease-out", FLEET_TONE_BAR[BUCKET_TONE[bucket]])}
-                  style={{ width: `${total > 0 ? (count / total) * 100 : 0}%` }}
+                  key={segment.bucket}
+                  className={cn(
+                    "h-full transition-[width] duration-200 ease-out",
+                    segment.bucket === "alert"
+                      ? ALERT_BAR_CLASS
+                      : FLEET_TONE_BAR[BUCKET_TONE[segment.bucket]],
+                  )}
+                  style={{ width: `${total > 0 ? (segment.count / total) * 100 : 0}%` }}
                 />
               );
             })}
           </div>
           <ul className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5">
-            {FLEET_DISTRIBUTION_BUCKETS.map((bucket) => {
-              const count =
-                bucket === "alert" ? snapshot.kpis.alerts : snapshot.counts[bucket];
-              const share =
-                bucket === "alert" || total === 0 ? null : Math.round((count / total) * 100);
+            {segments.map((segment) => {
+              const share = total === 0 ? null : Math.round((segment.count / total) * 100);
               return (
                 <li
-                  key={bucket}
+                  key={segment.bucket}
                   className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
                 >
                   <span
-                    className={cn("size-2 shrink-0 rounded-full", FLEET_TONE_DOT[BUCKET_TONE[bucket]])}
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      segment.bucket === "alert"
+                        ? ALERT_BAR_CLASS
+                        : FLEET_TONE_DOT[BUCKET_TONE[segment.bucket]],
+                    )}
                     aria-hidden
                   />
-                  <span className="truncate">{t(BUCKET_LABEL_KEY[bucket] as never)}</span>
+                  <span className="truncate">
+                    {t(BUCKET_LABEL_KEY[segment.bucket] as never)}
+                  </span>
                   <span className="ms-auto font-semibold tabular-nums text-foreground">
-                    {count}
+                    {segment.count}
                   </span>
                   {share != null ? (
                     <span className="w-8 text-end tabular-nums">{share}%</span>
