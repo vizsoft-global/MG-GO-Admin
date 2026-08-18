@@ -88,3 +88,4 @@ export async function sendPushBatch(messages: PushMessageInput[]): Promise<PushB
       messageIds: [],
     };
   }
+}
