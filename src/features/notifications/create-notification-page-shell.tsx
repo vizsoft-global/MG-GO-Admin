@@ -320,7 +320,9 @@ export function CreateNotificationPageShell() {
         }
         await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
         const copy = dispatchToastCopy(sent);
-        toast[copy.kind](t(copy.key, sent));
+        toast[copy.kind](
+          t(copy.key, { sent: sent.sent, failed: sent.failed, skipped: sent.skipped }),
+        );
       } else {
         const scheduled = await scheduleNotificationCampaign(saved.id);
         if ("error" in scheduled) {

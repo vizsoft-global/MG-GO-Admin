@@ -177,7 +177,13 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
                     if ("error" in result) toast.error(t(`errors.${result.error}`));
                     else {
                       const copy = dispatchToastCopy(result);
-                      toast[copy.kind](t(copy.key, result));
+                      toast[copy.kind](
+                        t(copy.key, {
+                          sent: result.sent,
+                          failed: result.failed,
+                          skipped: result.skipped,
+                        }),
+                      );
                       await invalidateNotificationCaches(queryClient, { campaignId: campaign.id });
                       void refetch();
                       void refetchDispatch();
