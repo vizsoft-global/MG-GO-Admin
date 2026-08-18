@@ -457,6 +457,7 @@ export function DriverFormSheet({
         toast.success(tDetail("updated"));
         const resolvedIntakeId = intakeId ?? activeDriver.intake_id ?? activeDriver.id;
         const resolvedDetailId = detailRouteId ?? activeDriver.id;
+        onOpenChange(false);
         await invalidateDriverCaches(queryClient, {
           intakeId: resolvedIntakeId,
           profileId: activeDriver.linked_profile_id,
@@ -465,6 +466,7 @@ export function DriverFormSheet({
         await queryClient.refetchQueries({
           queryKey: queryKeys.drivers.detail(resolvedDetailId),
         });
+        return;
       } else {
         for (const docType of DOCUMENT_TYPES) {
           const file = documents[docType];

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  initialZoneMapTool,
   shouldKeepPolygonDrawMode,
   shouldSwitchDrawToolToEdit,
   zoneDraftEnablesSave,
@@ -38,6 +39,11 @@ describe("zone-draft-geometry", () => {
     assert.equal(shouldSwitchDrawToolToEdit({}), true);
     assert.equal(shouldSwitchDrawToolToEdit({ provisional: false }), true);
     assert.equal(shouldSwitchDrawToolToEdit({ provisional: true }), false);
+  });
+
+  it("starts Draw when the zone has no geometry yet", () => {
+    assert.equal(initialZoneMapTool(false), "draw");
+    assert.equal(initialZoneMapTool(true), "edit");
   });
 
   it("keeps draw mode while provisional geometry exists", () => {

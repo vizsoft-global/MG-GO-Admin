@@ -18,6 +18,8 @@ import {
   restaurantSyncPlan,
 } from "./restaurant-sync-plan";
 import { accountStatusToSyncFromOperations } from "./driver-operations-status";
+import { countDeliveriesInWindow } from "./driver-delivery-counts";
+import { defaultStartDate, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { civilIdExists, employeeIdExists } from "./driver-uniqueness";
 import {
   allDriverAvatarKeys,
@@ -492,12 +494,38 @@ type IntakeListRow = {
 };
 
 function kuwaitDayBounds(): { start: string; end: string } {
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kuwait",
-  }).format(new Date());
+  const today = kuwaitTodayYmd();
   return {
     start: `${today}T00:00:00+03:00`,
     end: `${today}T23:59:59.999+03:00`,
+  };
+}
+
+function kuwaitRollingWeekBounds(): { start: string; end: string } {
+  const today = kuwaitTodayYmd();
+  return {
+    start: `${defaultStartDate(6)}T00:00:00+03:00`,
+    end: `${today}T23:59:59.999+03:00`,
+  };
+}
+
+async function fetchDriverDeliveryCounts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  driverId: string | null,
+): Promise<{ today: number; week: number }> {
+  if (!driverId) return { today: 0, week: 0 };
+  const week = kuwaitRollingWeekBounds();
+  const today = kuwaitDayBounds();
+  const { data } = await supabase
+    .from("deliveries")
+    .select("status, created_at, pickup_at, delivered_at")
+    .eq("driver_id", driverId)
+    .neq("status", "cancelled")
+    .gte("created_at", week.start);
+  const rows = data ?? [];
+  return {
+    today: countDeliveriesInWindow(rows, today.start, today.end),
+    week: countDeliveriesInWindow(rows, week.start, week.end),
   };
 }
 
@@ -1055,8 +1083,13 @@ export async function updateDriverIntake(
     }
 
     const linkedProfileId = existing.linked_profile_id;
+    // Restaurant mapping first, then the driver row. Running them in parallel
+    // let driver_restaurants_sync_status see an empty set and write Pending
+    // after we had already restored Active.
+    await syncDriverRestaurants(supabase, linkedProfileId, restaurantIds);
+    await syncIntakeRestaurants(supabase, intakeId, restaurantIds);
+
     const results = await Promise.all([
-      syncIntakeRestaurants(supabase, intakeId, restaurantIds),
       supabase
         .from("profiles")
         .update({
@@ -1080,10 +1113,9 @@ export async function updateDriverIntake(
           updated_at: new Date().toISOString(),
         })
         .eq("id", linkedProfileId),
-      syncDriverRestaurants(supabase, linkedProfileId, restaurantIds),
     ]);
 
-    const driverUpdateResp = results[2];
+    const driverUpdateResp = results[1];
     if (driverUpdateResp.error) {
       return { error: mapDriverDbError(driverUpdateResp.error, "employee_id") };
     }
@@ -1250,7 +1282,7 @@ export async function fetchDriverDetail(
       linkedId != null
         ? await fetchDriverRestaurantIds(supabase, linkedId)
         : await fetchIntakeRestaurantIds(supabase, intake.id);
-    const [restaurant_names, has_published_restaurant, avatar_url, assigned_assets] =
+    const [restaurant_names, has_published_restaurant, avatar_url, assigned_assets, deliveryCounts] =
       await Promise.all([
       loadRestaurantNames(supabase, restaurant_ids),
       hasPublishedActiveRestaurants(supabase, restaurant_ids),
@@ -1262,6 +1294,7 @@ export async function fetchDriverDetail(
         }),
       ),
       fetchDriverAssetAssignments(intake.id, linkedId),
+      fetchDriverDeliveryCounts(supabase, linkedId),
     ]);
 
     return {
@@ -1313,6 +1346,8 @@ export async function fetchDriverDetail(
       archived_at: intake.archived_at,
       documents: {},
       custom_fields: parseCustomFieldsJson(intake.custom_fields),
+      deliveries_today: deliveryCounts.today,
+      deliveries_week: deliveryCounts.week,
     };
   }
 
@@ -1375,7 +1410,7 @@ export async function fetchDriverDetail(
     .maybeSingle();
 
   const restaurant_ids = await fetchDriverRestaurantIds(supabase, id);
-  const [restaurant_names, has_published_restaurant, avatar_url, assigned_assets] =
+  const [restaurant_names, has_published_restaurant, avatar_url, assigned_assets, deliveryCounts] =
     await Promise.all([
     loadRestaurantNames(supabase, restaurant_ids),
     hasPublishedActiveRestaurants(supabase, restaurant_ids),
@@ -1387,6 +1422,7 @@ export async function fetchDriverDetail(
       }),
     ),
     fetchDriverAssetAssignments(intakeForDriver?.id ?? null, id),
+    fetchDriverDeliveryCounts(supabase, id),
   ]);
 
   return {
@@ -1437,6 +1473,8 @@ export async function fetchDriverDetail(
     archived_at: intakeForDriver?.archived_at ?? driverRow.archived_at,
     documents: {},
     custom_fields: parseCustomFieldsJson(driverRow.custom_fields),
+    deliveries_today: deliveryCounts.today,
+    deliveries_week: deliveryCounts.week,
   };
 }
 

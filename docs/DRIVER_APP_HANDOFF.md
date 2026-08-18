@@ -863,7 +863,7 @@ select driver_app_title,
 - `driver_app_logo_url` / `driver_app_splash_url` / `driver_app_icon_url` are public Supabase Storage URLs under bucket `branding`, paths `driver-app/logo.*`, `driver-app/splash.*`, and `driver-app/icon.*`. Uploads append a `?v=` cache-bust query param.
 - **App icon refresh:** subscribe to `app_settings` realtime (row `id = 1`) or poll `updated_at` / compare `driver_app_icon_url` on app resume. When the URL changes, download the new image and update the launcher icon (Expo: `expo-dynamic-app-icon` or platform-specific APIs).
 - `driver_app_title` is the mobile app display name (defaults to `Musallam Delivery`). Admin subtitle/login hint remain on `app_subtitle` / `driver_app_login_hint` (configured under Settings → Branding).
-- `driver_app_delivery_proximity_meters` (default 500): max meters outside zone boundary or from assigned restaurant to allow Add Delivery. `0` disables the gate. Loaded via `driver_get_delivery_proximity_context()` when opening Add Delivery (includes zone geometry + assigned restaurants).
+- `driver_app_delivery_proximity_meters` (default 500): max meters outside zone boundary or from assigned restaurant to allow Add Delivery. `0` disables the gate. Admin cap is **5,000,000 m** (was 10,000 m / 10 km). Loaded via `driver_get_delivery_proximity_context()` when opening Add Delivery (includes zone geometry + assigned restaurants).
 - `driver_app_sideload_updates_enabled` is **deprecated and forced `false`** — sideload OTA was removed.
 
 ### 9a. Distribution: Google Play only (required)
@@ -1093,7 +1093,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-17 — [admin+app] Admin Live Tracking V2 QA follow-up (Alerts bar slice, Offline red, Out of Zone search, archived passcode, Blocked-only pill), plus the three driver-app items from the same round, now fixed in MG-GO `4d7f516` (`vikram-dev`): device back on **Active Delivery** goes Home instead of exiting — the 2026-08-14 note guarded the Thank You screen, but the flow lands on Active Delivery; the clock-in toggle no longer flashes In after sign-out then re-login; Profile paints the disk-cached photo instead of initials. No migration, no schema/RPC change — ship with the next Play build (`versionCode` still `64`, bump before building).*
+*Last synced: 2026-08-18 — [admin+app] Admin Allowed Distance cap is 5,000,000 m (was 10,000). Zone geometry and the setting still come from `driver_get_delivery_proximity_context()`; `0` still disables the gate. No app payload change.*
+
+*Prior: 2026-08-17 — [admin+app] Admin Live Tracking V2 QA follow-up (Alerts bar slice, Offline red, Out of Zone search, archived passcode, Blocked-only pill), plus the three driver-app items from the same round, now fixed in MG-GO `4d7f516` (`vikram-dev`): device back on **Active Delivery** goes Home instead of exiting — the 2026-08-14 note guarded the Thank You screen, but the flow lands on Active Delivery; the clock-in toggle no longer flashes In after sign-out then re-login; Profile paints the disk-cached photo instead of initials. No migration, no schema/RPC change — ship with the next Play build (`versionCode` still `64`, bump before building).*
 
 *Prior: 2026-08-16 — [admin+app] `LIVE_INGEST_URL` defaults to the production Worker; the kill switch is now an explicit empty string. Coarse-fix gate 50 m in all four places, `DutySessionStorage.reload()` on FGS start, `on_delivery` from `deliveries.status = 'in_transit'`. Migration `20260916100000`.*
 

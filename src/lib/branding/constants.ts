@@ -33,7 +33,8 @@ export const DEFAULT_DRIVER_APP_SETTINGS = {
 } as const;
 
 export const MIN_DELIVERY_PROXIMITY_METERS = 0;
-export const MAX_DELIVERY_PROXIMITY_METERS = 10_000;
+/** 5,000 km — testers outside Kuwait still need a number the gate will accept. 0 disables. */
+export const MAX_DELIVERY_PROXIMITY_METERS = 5_000_000;
 
 export const DRIVER_APP_LOGO_PREFIX = "driver-app/logo";
 export const DRIVER_APP_SPLASH_PREFIX = "driver-app/splash";

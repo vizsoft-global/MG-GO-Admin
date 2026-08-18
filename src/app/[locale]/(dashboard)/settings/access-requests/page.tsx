@@ -1,8 +1,8 @@
 import { setRequestLocale } from "next-intl/server";
 import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
 import { getAllAdminRoles } from "@/lib/auth/get-role-permissions";
-import { createClient } from "@/lib/supabase/server";
 import { AccessRequestsPanel } from "@/features/settings/access-requests-panel";
+import { listPendingStaffAccessRequests } from "@/features/settings/access-requests-actions";
 
 export default async function AccessRequestsPage({
   params,
@@ -12,15 +12,9 @@ export default async function AccessRequestsPage({
   const { locale } = await params;
   setRequestLocale(locale);
   await requireSuperAdmin(locale);
-  const supabase = await createClient();
   const allRoles = await getAllAdminRoles();
 
-  const { data: pendingUsers } = await supabase
-    .from("profiles")
-    .select("id, email, full_name, created_at")
-    .eq("role", "staff")
-    .eq("approval_status", "pending")
-    .order("created_at", { ascending: false });
+  const pendingUsers = await listPendingStaffAccessRequests();
 
   const assignableRoles = allRoles.filter((r) => !r.isSuperAdmin);
 

@@ -3,6 +3,14 @@
 import { updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { isAdminAccessRequestProfile } from "./access-request-eligibility";
+
+export type PendingStaffAccessRequest = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  created_at: string;
+};
 
 async function requireSuperAdmin() {
   const session = await getSessionUser();
@@ -37,10 +45,19 @@ export async function approveUser(
     .eq("id", userId)
     .maybeSingle();
 
+  const { data: driverRow } = await supabase
+    .from("drivers")
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle();
+
   if (
     !profile?.email ||
-    profile.role !== "staff" ||
-    profile.approval_status !== "pending"
+    !isAdminAccessRequestProfile({
+      role: profile.role,
+      approval_status: profile.approval_status,
+      isDriver: Boolean(driverRow),
+    })
   ) {
     return { error: "user_not_found" };
   }
@@ -83,10 +100,19 @@ export async function rejectUser(userId: string): Promise<{ error?: string; succ
     .eq("id", userId)
     .maybeSingle();
 
+  const { data: driverRow } = await supabase
+    .from("drivers")
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle();
+
   if (
     !profile ||
-    profile.role !== "staff" ||
-    profile.approval_status !== "pending"
+    !isAdminAccessRequestProfile({
+      role: profile.role,
+      approval_status: profile.approval_status,
+      isDriver: Boolean(driverRow),
+    })
   ) {
     return { error: "user_not_found" };
   }
@@ -105,6 +131,42 @@ export async function rejectUser(userId: string): Promise<{ error?: string; succ
   }
 
   return { success: true };
+}
+
+export async function listPendingStaffAccessRequests(limit?: number): Promise<
+  PendingStaffAccessRequest[]
+> {
+  const supabase = await createClient();
+  let query = supabase
+    .from("profiles")
+    .select("id, email, full_name, created_at, role, approval_status")
+    .eq("role", "staff")
+    .eq("approval_status", "pending")
+    .order("created_at", { ascending: false });
+  if (limit != null) query = query.limit(limit);
+
+  const { data: pendingUsers } = await query;
+  const rows = pendingUsers ?? [];
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((row) => row.id);
+  const { data: driverRows } = await supabase.from("drivers").select("id").in("id", ids);
+  const driverIds = new Set((driverRows ?? []).map((row) => row.id));
+
+  return rows
+    .filter((row) =>
+      isAdminAccessRequestProfile({
+        role: row.role,
+        approval_status: row.approval_status,
+        isDriver: driverIds.has(row.id),
+      }),
+    )
+    .map((row) => ({
+      id: row.id,
+      email: row.email,
+      full_name: row.full_name,
+      created_at: row.created_at,
+    }));
 }
 
 export async function setMaintenanceMode(

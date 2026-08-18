@@ -750,7 +750,7 @@
       "actionQueueClearTitle": "All clear",
       "actionQueueClearHint": "No admin actions need attention right now.",
       "accessRequestsEmptyTitle": "No pending requests",
-      "accessRequestsEmptyHint": "New sign-ups will appear here for approval.",
+      "accessRequestsEmptyHint": "Staff sign-ups that need an admin role appear here. Driver accounts do not.",
       "accessAge": {
         "fresh": "< 1 hour",
         "waiting": "1–24 hours",
@@ -5180,8 +5180,8 @@
       },
       "accessRequests": {
         "title": "Access requests",
-        "subtitle": "Approve or reject new sign-ups",
-        "empty": "No pending access requests",
+        "subtitle": "Approve staff who need admin-panel access. Driver accounts are not listed here.",
+        "empty": "No pending admin access requests",
         "name": "Name",
         "email": "Email",
         "role": "Role",
@@ -5623,7 +5623,7 @@
           "missingFile": "Choose a file to upload.",
           "fileTooLarge": "File exceeds the size limit.",
           "invalidType": "Unsupported file type.",
-          "invalidProximity": "Enter a whole number from 0 to 10,000 meters.",
+          "invalidProximity": "Enter a whole number from 0 to 5,000,000 meters (0 disables the check).",
           "saveFailed": "Could not save. Try again.",
           "notAuthorized": "You do not have permission to change driver app settings."
         }

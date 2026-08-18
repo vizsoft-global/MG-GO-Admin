@@ -44,6 +44,7 @@ import {
 } from "./use-restaurants";
 import { resolveDeliveryStatusVariant } from "@/features/deliveries/delivery-status-variant";
 import type { RestaurantActivityKind } from "./types";
+import { restaurantActivityDeliveryId } from "./restaurant-delivery-scope";
 
 type DetailTabId = "overview" | "drivers" | "deliveries" | "activity";
 
@@ -637,7 +638,7 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {event.driver_name} · {event.driver_code} ·{" "}
-                          {event.external_order_id ?? event.short_id}
+                          {restaurantActivityDeliveryId(event)}
                         </p>
                         {event.cancel_reason ? (
                           <p className="mt-1 text-xs text-muted-foreground">

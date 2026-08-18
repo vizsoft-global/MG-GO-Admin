@@ -67,7 +67,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { fetchDriverDetail } from "./drivers-actions";
 import { useAuth } from "@/contexts/auth-context";
-import { useApproveDriverIntake, useDriversList, useDriversMultiDeviceRecent, useRestoreDriverIntake, type DriversTabFilter } from "./use-drivers";
+import { useApproveDriverIntake, useDriverDetail, useDriversList, useDriversMultiDeviceRecent, useRestoreDriverIntake, type DriversTabFilter } from "./use-drivers";
 import { DriverBulkImportDialog } from "./import/bulk-import-dialog";
 import { isDriverErrorKey } from "./driver-errors";
 import {
@@ -86,6 +86,7 @@ import {
   RestaurantsCell,
 } from "./driver-list-ui";
 import { DriverFormSheet } from "./driver-form-sheet";
+import { DriverEditSheet } from "./driver-edit-sheet";
 import { DriversKpiStrip } from "./drivers-kpi-strip";
 import {
   countActiveDriversFilters,
@@ -264,7 +265,10 @@ function DriversPageContent() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [quickEditId, setQuickEditId] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLTableRowElement | null>(null);
+  const quickEditQuery = useDriverDetail(quickEditId ?? "");
+  const quickEditDriver = quickEditQuery.data ?? null;
 
   const prefetchDriverDetail = (driverId: string) => {
     void queryClient.prefetchQuery({
@@ -280,6 +284,26 @@ function DriversPageContent() {
       router.replace("/drivers");
     }
   }, [searchParams, router]);
+
+  useEffect(() => {
+    if (!quickEditId) return;
+    if (quickEditQuery.isError) {
+      toast.error(t("notFoundTitle"));
+      setQuickEditId(null);
+      return;
+    }
+    if (!quickEditQuery.isSuccess || !quickEditDriver) return;
+    if (!quickEditDriver.intake_id || quickEditDriver.archived_at) {
+      toast.error(t("notFoundTitle"));
+      setQuickEditId(null);
+    }
+  }, [
+    quickEditId,
+    quickEditQuery.isError,
+    quickEditQuery.isSuccess,
+    quickEditDriver,
+    t,
+  ]);
 
   useEffect(() => {
     setVisibleCount(DRIVERS_PAGE_SIZE);
@@ -1099,9 +1123,7 @@ function DriversPageContent() {
                                     variant="ghost"
                                     size="icon-sm"
                                     className="h-8 w-8 cursor-pointer rounded-md text-primary hover:bg-primary/10 hover:text-primary"
-                                    onClick={() =>
-                                      router.push(`/drivers/${driver.id}?edit=1`)
-                                    }
+                                    onClick={() => setQuickEditId(driver.id)}
                                     aria-label={t("quickEdit")}
                                   >
                                     <Pencil className="h-4 w-4" />
@@ -1141,6 +1163,17 @@ function DriversPageContent() {
         baselineTotal={tabFiltered.length}
       />
       <DriverFormSheet mode="create" open={addOpen} onOpenChange={setAddOpen} />
+      {quickEditDriver?.intake_id ? (
+        <DriverEditSheet
+          driver={quickEditDriver}
+          intakeId={quickEditDriver.intake_id}
+          detailRouteId={quickEditId ?? quickEditDriver.id}
+          open={quickEditId !== null}
+          onOpenChange={(open) => {
+            if (!open) setQuickEditId(null);
+          }}
+        />
+      ) : null}
       {canManage ? (
         <DriverBulkImportDialog open={bulkOpen} onOpenChange={setBulkOpen} />
       ) : null}
