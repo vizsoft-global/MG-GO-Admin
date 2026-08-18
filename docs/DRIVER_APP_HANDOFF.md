@@ -422,7 +422,7 @@ select id, log_date, check_in_at, check_out_at, check_out_reason, status, zone_c
 select public.driver_set_duty_state(p_is_on_duty := true, p_is_online := true);  -- check in
 select public.driver_set_duty_state(p_is_on_duty := false, p_is_online := false); -- check out (manual)
 ```
-Returns full home dashboard payload (`driver_get_home_dashboard()` shape). `shift_adherence.minutes_early_out` is minutes before **shift end**, clamped to the scheduled window — clocking out before shift start is the remaining shift length, not start-to-end plus the pre-shift gap.
+Returns full home dashboard payload (`driver_get_home_dashboard()` shape). `shift_adherence.minutes_early_out` is minutes before **shift end**, clamped to the scheduled window **and** `LEAST`'d against `scheduled_seconds / 60` — clocking out before shift start is the remaining shift length, not start-to-end plus the pre-shift gap (11:30–16:30 / 09:35 out is 300, never 415). The app and admin parsers apply the same cap so a stale payload cannot paint more early-out than the shift itself. Do not recompute early-out from ISO strings on the device clock.
 
 **Working hours:** wall-clock `check_out_at - check_in_at` (admin list uses reporting `duty_seconds`). Midnight-spanning shifts are one continuous interval on the check-in `log_date`.
 

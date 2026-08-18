@@ -231,6 +231,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-18` — **Shift adherence still showed 415 min early after clock-out on an 11:30–16:30 shift.** The 2026-08-13 window clamp is live in Postgres (`GREATEST(out, start)` → 300 remaining minutes), but the Home card could still paint 415: `ShiftAdherence.fromJson` recomputed `end − out` from ISO strings on the device clock (naive 09:35 vs UTC 08:30Z skips the clamp), and a stale offline cache stored the unclamped 415 with no instants. Early-out is now `LEAST` against `scheduled_seconds / 60` in `_driver_shift_adherence`, and both the app and admin `parseShiftAdherence` cap the JSON minutes the same way instead of re-deriving them. During-shift early-out and overnight remaining windows are unchanged. Migration `20260918100000`. Tests: `shift_adherence_minutes_test.dart`, `shift-adherence.test.ts`.
+
 - `[admin+app] 2026-08-18` — **Blocked looked like success, inactive clock-in looked like a network error, and reinstall asked for a shift the server had already locked.** Five reports; two are holes in work that was already live.
 
   **Driver blocked toast.** Confirming a block used `toast.success("Driver blocked")`, which is Sonner's green tick. Blocking is an adverse resulting state, so the toast is now warning + `Ban`. Unblock stays success. V2 rail status was already `danger`; this was the confirmation chrome, not the pin.
