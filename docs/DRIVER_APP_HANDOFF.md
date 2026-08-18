@@ -703,11 +703,11 @@ Upsert into `driver_push_tokens` on login/token refresh:
 | `platform` | `ios` \| `android` |
 | `is_active` | `true` |
 
-Deactivate stale tokens when FCM returns invalid-registration.
+Deactivate stale tokens when FCM returns invalid-registration. On each upsert, deactivate every other active token for the same `driver_id` — `onConflict: token` does not retire previous devices/builds.
 
 ### Firebase client bootstrap
 
-**Driver app uses production only** — project `musallam-delivery-prod`. Native config: `docs/firebase-prod/` (or driver `android/app/src/main/google-services.json`). Runtime fetch:
+**Driver app uses production only** — project `musallam-delivery-prod`, SenderId `579224507592`. The Google Services Gradle plugin reads **`android/app/google-services.json`**, not `src/main/`. A file at only `android/app/src/main/google-services.json` is ignored; native auto-init then uses whatever sits at `android/app/google-services.json`. If that file is the retired `musallam-delivery-kw` project, Dart `DefaultFirebaseOptions` never apply (`Firebase.apps` is already non-empty) and Admin FCM (`musallam-delivery-prod`) returns `messaging/mismatched-credential` / SenderId mismatch while the in-app inbox still delivers. `ensureFirebaseApp()` deletes a default app whose project/sender does not match prod and re-inits from Dart options. Runtime fetch:
 
 ```
 GET https://dpdadmin-prod.vercel.app/api/driver-app/firebase-config?platform=android

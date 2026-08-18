@@ -23,6 +23,7 @@ export function isHardPushFailure(
   if (code) {
     if (
       code.startsWith("messaging/") ||
+      code.startsWith("app/") ||
       code === "firebase_not_configured" ||
       code === "unknown"
     ) {

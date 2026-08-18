@@ -6,7 +6,6 @@ import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PROJECT = "dpdadmin-prod";
 
 function loadEnv(path) {
   const out = {};
@@ -25,15 +24,16 @@ function loadEnv(path) {
 }
 
 function add(key, value, sensitive = true) {
-  const args = ["env", "add", key, "production", "--yes", "--force"];
+  const args = ["env", "add", key, "production", "--yes", "--force", "--value", value];
   if (sensitive) args.push("--sensitive");
-  const r = spawnSync("vercel", args, {
+  const bin = process.platform === "win32" ? "vercel.cmd" : "vercel";
+  const r = spawnSync(bin, args, {
     cwd: root,
     encoding: "utf8",
-    input: value,
+    shell: process.platform === "win32",
   });
   if (r.status !== 0) {
-    console.error(`failed ${key}:`, r.stderr || r.stdout);
+    console.error(`failed ${key}:`, r.stderr || r.stdout || r.error);
     process.exit(1);
   }
   console.log(`set ${key}`);
@@ -51,8 +51,12 @@ const cfToken = testingVercel.CLOUDFLARE_API_TOKEN;
 add("FIREBASE_SERVICE_ACCOUNT_JSON", JSON.stringify(sa));
 add("FIREBASE_PROJECT_ID", sa.project_id, false);
 add("FIREBASE_CLIENT_EMAIL", sa.client_email, false);
-if (sa.private_key) {
-  add("FIREBASE_PRIVATE_KEY", sa.private_key);
+// Split PEM is a fallback. Admin prefers FIREBASE_SERVICE_ACCOUNT_JSON.
+// `vercel env add --value` cannot take a multi-line PEM on Windows.
+if (!sa.private_key) {
+  console.warn("service account JSON has no private_key");
+} else {
+  console.warn("skip FIREBASE_PRIVATE_KEY (JSON credential is the source of truth)");
 }
 
 if (cfToken) {

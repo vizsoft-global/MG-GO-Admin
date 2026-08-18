@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { dispatchToastCopy } from "./dispatch-toast";
 import { useAuth } from "@/contexts/auth-context";
 import {
   NOTIFICATION_CATEGORIES,
@@ -318,7 +319,8 @@ export function CreateNotificationPageShell() {
           return;
         }
         await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
-        toast.success(t("sentSuccess", { sent: sent.sent, failed: sent.failed }));
+        const copy = dispatchToastCopy(sent);
+        toast[copy.kind](t(copy.key, sent));
       } else {
         const scheduled = await scheduleNotificationCampaign(saved.id);
         if ("error" in scheduled) {

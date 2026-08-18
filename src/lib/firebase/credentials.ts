@@ -10,21 +10,33 @@ function normalizePrivateKey(raw: string): string {
   return raw.replace(/\\n/g, "\n").trim();
 }
 
-export function parseFirebaseServiceAccountJson(raw: string): FirebaseAdminConfig | null {
+function parseServiceAccountObject(raw: string): ServiceAccountJson | null {
   try {
-    const parsed = JSON.parse(raw) as ServiceAccountJson;
-    const projectId = parsed.project_id?.trim();
-    const clientEmail = parsed.client_email?.trim();
-    const privateKeyRaw = parsed.private_key?.trim();
-    if (!projectId || !clientEmail || !privateKeyRaw) return null;
-    return {
-      projectId,
-      clientEmail,
-      privateKey: normalizePrivateKey(privateKeyRaw),
-    };
+    return JSON.parse(raw) as ServiceAccountJson;
   } catch {
-    return null;
+    // Vercel / .env sometimes stores the JSON with quotes already escaped:
+    // {\"project_id\":\"...\", ...}
+    try {
+      const unescaped = raw.replace(/\\"/g, '"').replace(/\\\\n/g, "\\n");
+      return JSON.parse(unescaped) as ServiceAccountJson;
+    } catch {
+      return null;
+    }
   }
+}
+
+export function parseFirebaseServiceAccountJson(raw: string): FirebaseAdminConfig | null {
+  const parsed = parseServiceAccountObject(raw);
+  if (!parsed) return null;
+  const projectId = parsed.project_id?.trim();
+  const clientEmail = parsed.client_email?.trim();
+  const privateKeyRaw = parsed.private_key?.trim();
+  if (!projectId || !clientEmail || !privateKeyRaw) return null;
+  return {
+    projectId,
+    clientEmail,
+    privateKey: normalizePrivateKey(privateKeyRaw),
+  };
 }
 
 export function resolveFirebaseAdminCredentials(): FirebaseAdminConfig | null {

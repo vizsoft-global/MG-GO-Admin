@@ -38,4 +38,14 @@ describe("dispatch-outcome", () => {
     assert.equal(isHardPushFailure(item), true);
     assert.equal(resolveCampaignDisplayStatus("failed", [item]), "failed");
   });
+
+  it("keeps a broken Admin SDK JWT as hard failure after in-app opened", () => {
+    const item = {
+      status: "opened",
+      error_code: "app/invalid-credential",
+      provider_message_id: null,
+    };
+    assert.equal(isHardPushFailure(item), true);
+    assert.equal(resolveCampaignDisplayStatus("failed", [item]), "failed");
+  });
 });
