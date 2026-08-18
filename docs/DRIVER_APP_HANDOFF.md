@@ -403,7 +403,8 @@ Admin RPCs (staff): `get_driver_earnings_detail`, `list_driver_earnings_daily`, 
 - Written by `driver_set_duty_state` (same RPC as sessions) — no separate attendance button in v1.
 - **Auto-checkout (server cron):** if the driver stays **on duty** and is continuously **offline** (`driver_sessions.went_offline_at`) **or** continuously **outside assigned zone** (`driver_locations.out_of_zone_since`, maintained from `drivers.zone_id` geometry on location upserts) for `app_settings.attendance_auto_checkout_minutes` (default **45**), RPC `admin_run_attendance_auto_checkout` checks them out with reason `auto_offline` / `auto_out_of_zone`. Returning online or in-zone before the threshold **resets** that timer (no checkout). Cron: `/api/cron/attendance-auto-checkout` every 5 minutes (`CRON_SECRET`).
 - **Driver app (MG-GO):** `remoteDutyMonitorProvider` listens to `drivers` realtime/poll via `liveDbRefreshCoordinator`, patches home duty UI off, refreshes dashboard, and shows snackbar for `auto_offline` / `auto_out_of_zone`. Local duty-off / client zone timeout suppress that toast. Client idle outside-zone countdown is **45 minutes** (aligned with server default).
-- **Duty OS permissions:** the readiness sheet is not only for Clock In. After re-login (or resume) while `is_on_duty` is still true, Home audits location / background / notifications / battery / overlay / camera and shows the same sheet if any required permission was revoked. Add Delivery / Go In while already on duty must not skip that audit.
+- **Duty OS permissions:** the readiness sheet is not only for Clock In. After re-login (or resume) while `is_on_duty` is still true, Home audits location / background / notifications / battery / overlay / camera and shows the same sheet if any required permission was revoked. Add Delivery / Go In while already on duty must not skip that audit. **`inactive` is rider-facing copy, not a generic clock-in failure:** `driver_set_duty_state` raises `inactive` when `drivers.status` is not `active` (Operations Inactive → `suspended`). The app must show that refusal on the toggle snackbar and on the readiness sheet, even if Riverpod still holds a leftover on-duty dashboard under the error. A green "all checks passed" sheet that reloads with no reason is the defect.
+- **Today's shift is one row until it ends.** `driver_submit_daily_shift` raises `shift_locked` while `now() < shift_end`. Re-login after revoked permissions, or reinstall, must **not** re-open the shift sheet when `driver_get_today_shift` still returns an unexpired row — submitting again is what surfaces `shift_locked`. If the sheet is shown anyway and the server answers `shift_locked`, fetch today's row and continue clock-in with it. Do not treat the lock as a rider error for a window they already submitted.
 - `zone_compliance`: `inside` | `outside` (geofence reporting — future writer).
 - `admin_note`: set when staff corrects a record via admin panel RPC `admin_correct_attendance` (sets `check_out_reason = admin` when checkout is written).
 - Driver **SELECT** own rows (`driver_id = auth.uid()`). Admin module: `/attendance` (today / history / problems / analytics).
@@ -703,11 +704,11 @@ Upsert into `driver_push_tokens` on login/token refresh:
 | `platform` | `ios` \| `android` |
 | `is_active` | `true` |
 
-Deactivate stale tokens when FCM returns invalid-registration.
+Deactivate stale tokens when FCM returns invalid-registration. On each upsert, deactivate every other active token for the same `driver_id` — `onConflict: token` does not retire previous devices/builds.
 
 ### Firebase client bootstrap
 
-**Driver app uses production only** — project `musallam-delivery-prod`. Native config: `docs/firebase-prod/` (or driver `android/app/src/main/google-services.json`). Runtime fetch:
+**Driver app uses production only** — project `musallam-delivery-prod`, SenderId `579224507592`. The Google Services Gradle plugin reads **`android/app/google-services.json`**, not `src/main/`. A file at only `android/app/src/main/google-services.json` is ignored; native auto-init then uses whatever sits at `android/app/google-services.json`. If that file is the retired `musallam-delivery-kw` project, Dart `DefaultFirebaseOptions` never apply (`Firebase.apps` is already non-empty) and Admin FCM (`musallam-delivery-prod`) returns `messaging/mismatched-credential` / SenderId mismatch while the in-app inbox still delivers. `ensureFirebaseApp()` deletes a default app whose project/sender does not match prod and re-inits from Dart options. Runtime fetch:
 
 ```
 GET https://dpdadmin-prod.vercel.app/api/driver-app/firebase-config?platform=android

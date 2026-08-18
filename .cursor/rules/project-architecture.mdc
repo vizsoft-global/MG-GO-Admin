@@ -231,6 +231,30 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-18` — **Blocked looked like success, inactive clock-in looked like a network error, and reinstall asked for a shift the server had already locked.** Five reports; two are holes in work that was already live.
+
+  **Driver blocked toast.** Confirming a block used `toast.success("Driver blocked")`, which is Sonner's green tick. Blocking is an adverse resulting state, so the toast is now warning + `Ban`. Unblock stays success. V2 rail status was already `danger`; this was the confirmation chrome, not the pin.
+
+  **Inactive / suspended clock-in.** The RPC still raises `inactive`, and the sheet can paint a refusal banner, but `dutyStartResultFrom` treated a leftover `isOnlineOnDuty` as started before it read the rejection (Riverpod keeps the previous dashboard under an AsyncError). A refused write then looked like a successful In, or like `DutyStartResult.blocked()` with no copy, so the overlay re-ran its green checklist. Refusal now wins. Copy remains `Your account is inactive or suspended. Please contact your administrator.`
+
+  **Mobile app linked.** Still hidden when `is_blocked` via `showsMobileAppLink` (badge and Details field). Blocking revokes the device session; "Yes" states the opposite.
+
+  **V2 Search driver.** Placeholder `Search driver, code or phone` needed ~220px and the input was `min-w-[100px] flex-[1_1_170px]`, so it clipped on a 14" filter row. Copy is now `Search driver or code` and the field floor is 180px / 220px basis.
+
+  **Shift locked after re-login / reinstall.** `shouldPromptShiftOnClockIn` forced a new window whenever `needsFreshClockIn`, even if today's row was unexpired. That submit is `shift_locked`. The sheet is skipped when an active row exists; if a submit still hits the lock, `driver_get_today_shift` is reused and clock-in continues.
+
+  No schema or payload change. Admin tests: block toast kind. App: duty-start decision, shift-lock reuse, inverted fresh-clock-in shift prompt. `shift_locked` / `inactive` wire codes unchanged.
+
+- `[admin+app] 2026-08-18` — **Push was never leaving Firebase, and the panel called that a missing token.** Inbox is written before FCM, so the driver app showed the campaign while Sent stayed 0. Three stacked causes, not a display bug.
+
+  **Admin JWT.** Production `FIREBASE_*` initialized the Admin SDK, then Google rejected the signed JWT (`app/invalid-credential` / `invalid_grant: Invalid JWT Signature`). 17 Aug campaigns all carry that code. A new `dpd-admin-firebase` key is minted onto `dpdadmin-prod`; `parseFirebaseServiceAccountJson` also recovers the extra-backslash-escaped JSON `.env` form so a parse miss cannot silently fall through to the same broken split key. `app/*` credential errors are hard push failures even after the rider opens the inbox row.
+
+  **Wrong native Firebase.** Gradle reads `android/app/google-services.json`. That file was still `musallam-delivery-kw` (SenderId `942102607123`) after `src/main/google-services.json` was pointed at prod. Native auto-init won; Dart skipped `DefaultFirebaseOptions`; every token belonged to KW; Admin send as prod returned SenderId mismatch. The plugin file is now prod, and `ensureFirebaseApp()` deletes a default app whose project/sender is not `musallam-delivery-prod` before registering FCM. Installed APKs keep the KW token until a Play build is installed — a KW token cannot receive a prod message.
+
+  **Stale token wins.** Several active Android tokens per driver were folded through `new Map(rows)`, so query order could keep a KW token over the phone's current one. Dispatch now picks `max(last_seen_at)`, and the app deactivates every other active token for that driver after upsert. Create-flow no longer toasts success for Sent 0 / Failed 1.
+
+  No schema or payload change. Admin tests: dispatch-outcome, push-token-select, credentials unescape, dispatch-toast. App: `firebase_app_guard_test.dart`.
+
 - `[admin+app] 2026-08-17` — **A suspended rider was told the clock-in "could not update", and a blocked driver's Details still claimed app access.** Three reports; one is a re-report of work already live, and the other two share nothing but the driver they were found on.
 
  **The refusal was being filed as a network failure.** `driver_set_duty_state` raises `inactive` for a driver whose status is not active, but `HomeService.setDutyState` caught every `PostgrestException` alike: it recorded an RPC failure, queued the write for replay, and answered with the **cached** dashboard. So the server's answer — the one thing that could have named the problem — was thrown away, the tap resolved to the same off-duty dashboard it started from, and the rider got `Could not update In/Out status`. The queue then re-sent it on every sync, which is visible in production as dozens of `inactive` `duty.on` rows for one suspended driver rather than the one refusal that actually happened. `dutyRejectionFrom` now classifies the message, and a rejection is rethrown with the reason attached instead of being queued or masked. Deliberately narrow: only what the server can *only* refuse again is classified, since a rejection skips the queue and calling a timeout one would throw away a clock-out the server would have taken. The queue's own drop rule (`isPermanentDutyQueueRejection`) is narrower still — an auth failure clears when the session refreshes and a missing function comes back with a deploy, so neither may delete a rider's queued row.

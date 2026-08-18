@@ -15,6 +15,7 @@ import {
 import { uploadNotificationMediaFile } from "./notification-media-storage";
 import { sendPushBatch } from "@/lib/firebase/fcm-provider";
 import { interpolateTemplate } from "./interpolate-template";
+import { pickLatestPushTokenByDriver } from "./push-token-select";
 import { resolveScreenshotRestricted } from "./screenshot-restriction";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
 import type {
@@ -756,14 +757,12 @@ async function executeNotificationDispatch(
 
   const { data: tokens } = await service
     .from("driver_push_tokens")
-    .select("id, driver_id, token")
+    .select("id, driver_id, token, last_seen_at")
     .in("driver_id", recipientIds)
     .eq("is_active", true);
 
-  type TokenRow = { driver_id: string; id: string; token: string };
-  const tokenByDriver = new Map<string, TokenRow>(
-    (tokens ?? []).map((t: TokenRow) => [t.driver_id, t]),
-  );
+  type TokenRow = { driver_id: string; id: string; token: string; last_seen_at: string | null };
+  const tokenByDriver = pickLatestPushTokenByDriver((tokens ?? []) as TokenRow[]);
   const action = buildActionPayload({
     actionType: campaign.action_type,
     actionParams: (campaign.action_params ?? {}) as Record<string, unknown>,

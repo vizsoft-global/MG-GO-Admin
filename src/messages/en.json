@@ -199,7 +199,7 @@
         "legend": "Legend"
       },
       "filters": {
-        "search": "Search driver, code or phone",
+        "search": "Search driver or code",
         "zone": "Zone",
         "allZones": "All zones",
         "partner": "Partner",

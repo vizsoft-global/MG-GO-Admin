@@ -34,6 +34,11 @@ export function showsMobileAppLink(driver: { is_blocked?: boolean }): boolean {
   return !driver.is_blocked;
 }
 
+/** Block is an adverse resulting state, even when the write succeeded. */
+export function blockActionToastKind(blocked: boolean): "warning" | "success" {
+  return blocked ? "warning" : "success";
+}
+
 export function WorkflowStatusPill({
   status,
   label,

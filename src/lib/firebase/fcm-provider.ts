@@ -53,27 +53,39 @@ export async function sendPushBatch(messages: PushMessageInput[]): Promise<PushB
     },
   }));
 
-  const response = await messaging.sendEach(payload);
-  const errors: PushBatchResult["errors"] = [];
-  const messageIds: PushBatchResult["messageIds"] = [];
+  try {
+    const response = await messaging.sendEach(payload);
+    const errors: PushBatchResult["errors"] = [];
+    const messageIds: PushBatchResult["messageIds"] = [];
 
-  response.responses.forEach((item, index) => {
-    const token = messages[index]?.token ?? "";
-    if (item.success && item.messageId) {
-      messageIds.push({ token, messageId: item.messageId });
-      return;
-    }
-    errors.push({
-      token,
-      code: item.error?.code ?? "unknown",
-      message: item.error?.message ?? "send_failed",
+    response.responses.forEach((item, index) => {
+      const token = messages[index]?.token ?? "";
+      if (item.success && item.messageId) {
+        messageIds.push({ token, messageId: item.messageId });
+        return;
+      }
+      errors.push({
+        token,
+        code: item.error?.code ?? "unknown",
+        message: item.error?.message ?? "send_failed",
+      });
     });
-  });
 
-  return {
-    successCount: response.successCount,
-    failureCount: response.failureCount,
-    errors,
-    messageIds,
-  };
+    return {
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      errors,
+      messageIds,
+    };
+  } catch (error) {
+    const err = error as { code?: string; message?: string };
+    const code = err.code ?? "unknown";
+    const message = err.message ?? "send_failed";
+    return {
+      successCount: 0,
+      failureCount: messages.length,
+      errors: messages.map((m) => ({ token: m.token, code, message })),
+      messageIds: [],
+    };
+  }
 }
