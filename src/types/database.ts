@@ -6878,6 +6878,15 @@ export type Database = {
         Args: { p_driver_id: string; p_rule_id: string }
         Returns: boolean
       }
+      delivery_scope_restaurant_id: {
+        Args: {
+          p_driver_id: string
+          p_lat: number
+          p_lng: number
+          p_restaurant_id: string
+        }
+        Returns: string
+      }
       driver_acknowledge_request: {
         Args: { p_note?: string; p_request_id: string }
         Returns: Json
@@ -7236,6 +7245,10 @@ export type Database = {
           p_tracking_status?: string
         }
         Returns: Json
+      }
+      driver_resolve_pickup_restaurant: {
+        Args: { p_driver_id: string; p_lat: number; p_lng: number }
+        Returns: string
       }
       driver_respond_appointment: {
         Args: {

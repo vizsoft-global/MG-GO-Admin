@@ -189,7 +189,7 @@ Two fields the app must send, both of which exist to stop the fast rail from lyi
 | driver_id | uuid | = auth.uid() |
 | partner_id | uuid | Selected partner |
 | zone_id | uuid | Zone at time of delivery |
-| restaurant_id | uuid | Optional FK → `restaurants` (merchant) |
+| restaurant_id | uuid | FK → `restaurants` (merchant). Snapshotted at pickup: unique assigned restaurant, else the geofence/pin the pickup is in, else the nearest assigned pin. **Must not stay null** when the rider has two restaurants — Extra Earnings restaurant plans count `deliveries.restaurant_id`, and all live `delivery_rules` are restaurant-scoped, so a null id leaves both progress bars at 0. |
 | external_order_id | text | Order # from partner app. **Format:** ASCII digits `0-9` only, length **1–32** (hint e.g. `12345`). `driver_create_pickup` / insert trigger raise **`invalid_order_id`** otherwise — show “Order ID must be 1–32 digits.” Unique index `deliveries_external_order_id_unique_idx`. Pickup RPC raises **`duplicate_order_id`** (including when the unique index fires). App must show a friendly string such as “This Order ID already exists.” — never the raw Postgres constraint message. |
 | order_proof_url | text | R2 object key (`drivers/{id}/order_proof/...`) |
 | status | enum | pending → admin sets verified/rejected |
@@ -372,6 +372,8 @@ Sum `amount_kwd` where `entry_type = 'earning_credit'` for “approved earnings 
 **Earnings → Performance Summary (required):** `driver_earnings_daily.deliveries` / `week.deliveries_count` are **verified-only** (payroll). Do **not** use them for “Total Delivery Count”.
 
 **Home → This Week’s Progress Time in:** `week.online_seconds` is `SUM(driver_attendance.online_seconds)` for `kuwait_week_start`..today, plus live elapsed only if the open `driver_sessions` row started today. Do **not** sum `driver_sessions` across the week — leftover `is_online` rows from prior days inflate the total with wall-clock hours.
+
+**Earnings → Extra Earnings:** `driver_get_extra_earnings()` lists every active incentive rule that `incentive_rule_matches_driver` (assignments). Progress is `count_eligible_deliveries` for that rule — restaurant-scoped plans need a restaurant on the delivery. One verified order updates the plan for the snapshotted restaurant, not every restaurant the rider is assigned to.
 
 ```sql
 select public.driver_get_earnings_summary();
