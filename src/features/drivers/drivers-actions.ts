@@ -924,6 +924,17 @@ export async function updateDriverIntake(
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 
+  try {
+    return await updateDriverIntakeInner(formData, auth.session.id);
+  } catch {
+    return { error: "save_failed" };
+  }
+}
+
+async function updateDriverIntakeInner(
+  formData: FormData,
+  actorId: string,
+): Promise<DriverMutationResult> {
   const intakeId = String(formData.get("intakeId") ?? "").trim();
   const fullName = String(formData.get("fullName") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
@@ -1028,7 +1039,7 @@ export async function updateDriverIntake(
       /* best-effort */
     }
   } else if (hasAvatarUpload && avatarFile instanceof File) {
-    const upload = await uploadIntakeAvatarFile(intakeId, avatarFile, auth.session.id);
+    const upload = await uploadIntakeAvatarFile(intakeId, avatarFile, actorId);
     if (upload.error) return { error: upload.error };
     intakeAvatarPath = upload.path ?? null;
   }
@@ -1061,7 +1072,7 @@ export async function updateDriverIntake(
     supabase,
     intakeId,
     catalogItemIds,
-    auth.session.id,
+    actorId,
     existing.linked_profile_id,
   );
   if (assetSync.error) {
@@ -1076,7 +1087,7 @@ export async function updateDriverIntake(
       const upload = await uploadDriverAvatarFile(
         existing.linked_profile_id,
         avatarFile,
-        auth.session.id,
+        actorId,
       );
       if (upload.error) return { error: upload.error };
       profileAvatarPath = upload.path ?? null;
@@ -1186,6 +1197,16 @@ export async function fetchDriverDetail(
 ): Promise<DriverDetailModel | null> {
   await requireDriversView();
   void logAdminRead("driver_intake", "fetchDriverDetail", { id });
+  try {
+    return await fetchDriverDetailInner(id);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchDriverDetailInner(
+  id: string,
+): Promise<DriverDetailModel | null> {
   const supabase = await createClient();
 
   const { data: intake } = await supabase

@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { queryKeys } from "@/lib/query/query-keys";
+import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import {
   ArrowLeft,
   ExternalLink,
@@ -112,6 +114,12 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
 
   const detailQuery = useRestaurantDetail(id);
   const driversQuery = useRestaurantAssignedDrivers(id);
+
+  useRealtimeInvalidator({
+    channel: `admin-restaurant-assigned-drivers-${id}`,
+    tables: [{ table: "drivers" }, { table: "driver_sessions" }],
+    invalidateKeys: [queryKeys.restaurants.assignedDrivers(id)],
+  });
   const deliveriesQuery = useRestaurantDeliveries(
     id,
     deliveryFilter === "all"

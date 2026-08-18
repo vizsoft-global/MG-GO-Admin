@@ -20,6 +20,7 @@ import {
 import {
   parseRestaurantFormData,
   validateRestaurantCoordinates,
+  validateRestaurantExternalMerchantId,
 } from "./parse-restaurant-form";
 import {
   fromDbRestaurantStatus,
@@ -1036,6 +1037,9 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
 
   const coordError = validateRestaurantCoordinates(latitude, longitude);
   if (coordError) return { error: coordError };
+
+  const merchantError = validateRestaurantExternalMerchantId(externalMerchantId);
+  if (merchantError) return { error: merchantError };
 
   const supabase = await createClient();
 

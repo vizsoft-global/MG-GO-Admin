@@ -1933,7 +1933,7 @@
         "searchPlace": "ابحث عن مكان…"
       },
       "hints": {
-        "externalMerchantId": "رمز اختياري من منصة الشريك (معرّف طلبات، معرّف متجر DoorDash، إلخ).",
+        "externalMerchantId": "اختياري. أرقام فقط (معرّف طلبات / متجر DoorDash)، حتى 32 خانة.",
         "mapLink": "اختياري — الصق رابط مشاركة من Google Maps أو Apple Maps.",
         "pickLocation": "ابحث عن مكان أو انقر على الخريطة لتثبيت المطعم. يتم حفظ الإحداثيات تلقائياً.",
         "mapAutoFilled": "يُملأ تلقائياً من التثبيت — يمكنك التعديل.",
@@ -2003,6 +2003,7 @@
         "delete_failed": "تعذر حذف المطعم",
         "restaurant_exists": "يوجد مطعم بهذا الاسم لنفس الشريك",
         "invalid_coordinates": "يجب تعيين خط العرض وخط الطول معاً ضمن النطاق الصحيح.",
+        "invalid_external_merchant_id": "يجب أن يكون معرّف التاجر الخارجي أرقاماً فقط (حتى 32 خانة).",
         "file_too_large": "يجب أن يكون الشعار 2 ميجابايت أو أقل",
         "invalid_type": "استخدم PNG أو JPG أو WebP أو SVG للشعار",
         "upload_failed": "تعذر رفع الشعار"

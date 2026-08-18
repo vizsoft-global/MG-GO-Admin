@@ -569,7 +569,7 @@ export function ZoneMapGoogleInner({
         center: tupleToLatLng(KUWAIT_MAP_CENTER),
         zoom: DEFAULT_MAP_ZOOM,
         disableDefaultUI: true,
-        zoomControl: true,
+        zoomControl: false,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,

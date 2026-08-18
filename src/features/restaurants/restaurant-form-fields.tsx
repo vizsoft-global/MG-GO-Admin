@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { partnerSearchOptions, zoneSearchOptions } from "@/lib/search-options";
+import { normalizeExternalMerchantId } from "./external-merchant-id";
 import { RestaurantCoordinateInputs } from "./restaurant-coordinate-inputs";
 import type { RestaurantLocation } from "./restaurant-location-utils";
 import { RESTAURANT_STATUSES, type RestaurantStatus } from "./restaurant-status";
@@ -162,8 +163,13 @@ export function RestaurantFormFields({
         <Label htmlFor="external-id">{labels.externalMerchantId}</Label>
         <Input
           id="external-id"
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={32}
           value={externalMerchantId}
-          onChange={(e) => onExternalMerchantIdChange(e.target.value)}
+          onChange={(e) =>
+            onExternalMerchantIdChange(normalizeExternalMerchantId(e.target.value))
+          }
           className="rounded-lg bg-background font-mono text-sm"
         />
         <p className="text-[11px] text-muted-foreground">

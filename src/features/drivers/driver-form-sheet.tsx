@@ -398,7 +398,10 @@ export function DriverFormSheet({
     setCustomFieldErrors(cfErrMap);
     if (hasValidationErrors(validation)) {
       const firstKey = Object.values(validation)[0];
-      toast.error(driverErrorToast(tNew, firstKey));
+      // Field-level copy already says "This field is required" — don't repeat it as a toast.
+      if (firstKey && firstKey !== "missing_fields") {
+        toast.error(driverErrorToast(tNew, firstKey));
+      }
       return;
     }
     if (cfResult.errors.length > 0) {

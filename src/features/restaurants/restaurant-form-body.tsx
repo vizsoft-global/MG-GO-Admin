@@ -33,6 +33,7 @@ import {
   saveRestaurantGeofences,
 } from "./restaurants-actions";
 import { isRestaurantErrorKey } from "./restaurant-errors";
+import { validateExternalMerchantId } from "./external-merchant-id";
 import { draftGeofencesToInput } from "./restaurant-geofence-utils";
 import { RestaurantFormFields } from "./restaurant-form-fields";
 import { RestaurantGeofenceList } from "./restaurant-geofence-list";
@@ -268,6 +269,11 @@ export function RestaurantFormBody({
   const handleSave = () => {
     if (!name.trim()) {
       toast.error(t("errors.missing_fields"));
+      return;
+    }
+    const merchantError = validateExternalMerchantId(externalMerchantId);
+    if (merchantError) {
+      toast.error(t("errors.invalid_external_merchant_id"));
       return;
     }
 

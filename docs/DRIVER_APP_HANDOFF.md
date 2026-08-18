@@ -399,7 +399,7 @@ Admin RPCs (staff): `get_driver_earnings_detail`, `list_driver_earnings_daily`, 
 
 ### `attendance_logs`
 - One row per `(driver_id, log_date)` where `log_date` uses **Asia/Kuwait** calendar date of **check-in**.
-- **Check-in / check-out:** the Home **duty toggle ON** upserts today's row (`check_in_at`, `status = present` unless `on_leave`); **toggle OFF** sets `check_out_at` with `check_out_reason = manual`. **Sign out of the active device** also clocks out (`driver_release_device_session` → `_attendance_apply_checkout`, reason `manual`) so work-time stops and the next login is not still Clocked In. Checkout keeps last-known `driver_locations` so Live Tracking can show **Offline** instead of removing the rider. A kicked/old device must **not** clock out — only when `p_device_id` matches `drivers.active_device_id`.
+- **Check-in / check-out:** the Home **duty toggle ON** upserts today's row (`check_in_at`, `status = present` unless `on_leave`); **toggle OFF** sets `check_out_at` with `check_out_reason = manual`. **Sign out of the active device** also clocks out (`driver_release_device_session` → `_attendance_apply_checkout`, reason `manual`) so work-time stops and the next login is not still Clocked In. Checkout keeps last-known `driver_locations` so Live Tracking can show **Offline** instead of removing the rider. A kicked/old device must **not** clock out while another session is still live — only when `p_device_id` matches `drivers.active_device_id`, **or** no unrevoked `driver_device_sessions` remain for that driver (a device-id mismatch on Profile Sign out used to leave `is_on_duty` true). Admin **Suspended / Pending** login status also ends duty (`set_driver_account_status` → `_end_driver_duty_keep_gps`).
 - Checkout finds the latest **open** log (`check_in_at` set, `check_out_at` null) — not only “today” — so overnight shifts that span midnight keep hours on the check-in day.
 - `check_out_reason`: `manual` | `auto_offline` | `auto_out_of_zone` | `admin` (null until checked out).
 - Written by `driver_set_duty_state` (same RPC as sessions) — no separate attendance button in v1.
@@ -1083,7 +1083,7 @@ No new RPC was added; the existing function's restaurant objects gained the `geo
 | `driver_log_security_event(p_event_type, p_severity, p_context)` | Log security events. Accepts `p_event_type = 'zone_timeout_checkout'` with `p_severity = 'warning'`. Context JSON may include `mode` (`idle` \| `return_grace`), `window_seconds`, coordinates, `zone_status`, `outside_since`. Stored in `driver_security_events`. |
 | `driver_complete_delivery` / `driver_cancel_delivery` | **Idempotent retry**: if delivery already completed (`pending`/`verified`) or cancelled, returns the existing row instead of raising `invalid_delivery_status`. |
 | `driver_create_pickup` / complete / cancel | **Only** the overloads with `p_device_id` remain (pre-device overloads dropped). Always pass `p_device_id`. |
-| `driver_release_device_session` | Clears this device row. **When it is the active device**, clocks the driver out (`is_on_duty = false`, close open session + attendance log) so work-time stops. Kicked devices (id ≠ `active_device_id`) only revoke their own session. Profile Sign out must call this **and** `driver_set_duty_state(false, false)` first (`clockOut: true`); device-kick sign-out must not pass `clockOut`. |
+| `driver_release_device_session` | Clears this device row. Clocks the driver out (`is_on_duty = false`, close open session + attendance log) when this **is** the active device, **or** when no unrevoked device sessions remain. Kicked devices (id ≠ `active_device_id`) with another live session only revoke their own row. Profile Sign out must call this **and** `driver_set_duty_state(false, false)` first (`clockOut: true`); device-kick sign-out must not pass `clockOut`. |
 | `driver_heartbeat` | Unchanged — `flush_grace_active: true` for ~5 min after device override (via `flush_deadline_at`). |
 | `driver_finalize_reconciliation` | Unchanged — accepts flushed rows during override grace. |
 | Weekly/monthly incentives | Accrue **once** on period end day (Kuwait week/month end) in `driver_earnings_daily.incentive_kwd`. |
@@ -1093,7 +1093,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-18 — [admin+app] Out-of-zone 45-minute Home banner now runs during an in-progress delivery (it used to cancel the countdown whenever Mark as Delivered was showing). 20-minute return grace after finish still outside is unchanged. No schema or payload change — ship with the next Play build.*
+*Last synced: 2026-08-18 — [admin+app] Sign out clocks out when this was the last live device (not only when `p_device_id` = `active_device_id`). Admin Suspended/Pending login status also ends duty. Migration `20260921100000`. No app payload change — already-installed builds pick this up from the RPC.*
+
+*Prior: 2026-08-18 — [admin+app] Out-of-zone 45-minute Home banner now runs during an in-progress delivery (it used to cancel the countdown whenever Mark as Delivered was showing). 20-minute return grace after finish still outside is unchanged. No schema or payload change — ship with the next Play build.*
 
 *Prior: 2026-08-18 — [admin+app] Admin Allowed Distance cap is 5,000,000 m (was 10,000). Zone geometry and the setting still come from `driver_get_delivery_proximity_context()`; `0` still disables the gate. No app payload change.*
 

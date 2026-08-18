@@ -73,7 +73,7 @@ function DialogContent({
                 variant="outline"
                 className={cn(
                   "absolute z-[1102] size-9 cursor-pointer rounded-full border border-border bg-background shadow-md",
-                  closeOutside ? "-end-3 -top-5" : "end-3 top-3",
+                  closeOutside ? "-end-3 -top-3" : "end-3 top-3",
                   closeButtonClassName,
                 )}
                 size="icon-sm"

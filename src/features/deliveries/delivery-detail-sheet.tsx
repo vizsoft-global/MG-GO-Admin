@@ -529,8 +529,7 @@ export function DeliveryDetailSheet({
       <DialogContent
         showCloseButton
         closeOutside
-        closeButtonClassName="-top-6"
-        className="flex h-[min(90vh,820px)] flex-col gap-0 p-0 sm:max-w-5xl"
+        className="mt-4 flex h-[min(86vh,800px)] flex-col gap-0 overflow-visible p-0 sm:max-w-5xl"
       >
         {navigation ? (
           <>

@@ -275,7 +275,9 @@ export function IncentiveRuleFormSheet({
     setFieldErrors(validation);
     if (hasIncentiveRuleValidationErrors(validation)) {
       const firstKey = Object.values(validation)[0];
-      toast.error(errorMessage(firstKey) ?? t("errors.missing_fields"));
+      if (firstKey && firstKey !== "missing_fields") {
+        toast.error(errorMessage(firstKey) ?? t("errors.save_failed"));
+      }
       return;
     }
 

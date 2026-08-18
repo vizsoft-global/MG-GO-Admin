@@ -1951,7 +1951,7 @@
         "searchPlace": "Search place name…"
       },
       "hints": {
-        "externalMerchantId": "Optional code from the partner platform (Talabat ID, DoorDash store ID, etc.).",
+        "externalMerchantId": "Optional. Digits only (Talabat / DoorDash store ID), up to 32 characters.",
         "mapLink": "Optional — paste a Google Maps or Apple Maps share link.",
         "pickLocation": "Search for a place or click the map to pin the restaurant. Coordinates are saved automatically.",
         "mapAutoFilled": "Auto-filled from pin — you can edit.",
@@ -2021,6 +2021,7 @@
         "delete_failed": "Could not delete the restaurant",
         "restaurant_exists": "A restaurant with this name already exists for this partner",
         "invalid_coordinates": "Latitude and longitude must both be set and within valid ranges.",
+        "invalid_external_merchant_id": "External merchant ID must be digits only (up to 32).",
         "file_too_large": "Logo must be 2 MB or smaller",
         "invalid_type": "Use PNG, JPG, WebP, or SVG for the logo",
         "upload_failed": "Logo upload failed"
