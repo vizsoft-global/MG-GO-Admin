@@ -218,6 +218,8 @@ export type DriverDetailModel = {
   archived_at: string | null;
   documents: Partial<Record<DriverDocumentType, DriverRemoteDocument>>;
   custom_fields: Record<string, string | number | boolean | string[] | null>;
+  deliveries_today: number;
+  deliveries_week: number;
 };
 
 export const DRIVER_IMPORT_FIELDS = [

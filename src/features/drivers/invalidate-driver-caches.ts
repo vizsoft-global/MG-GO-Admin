@@ -36,4 +36,5 @@ export async function invalidateDriverCaches(
   }
 
   await queryClient.invalidateQueries({ queryKey: queryKeys.documentExpiry.all() });
+  await queryClient.invalidateQueries({ queryKey: queryKeys.restaurants.all() });
 }

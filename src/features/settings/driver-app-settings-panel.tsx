@@ -365,7 +365,7 @@ export function DriverAppSettingsPanel({
                       value={proximityMeters}
                       onChange={(e) => setProximityMeters(e.target.value)}
                       disabled={isPending}
-                      className="w-28 tabular-nums"
+                      className="w-40 tabular-nums"
                       required
                     />
                     <span className="text-sm text-muted-foreground">

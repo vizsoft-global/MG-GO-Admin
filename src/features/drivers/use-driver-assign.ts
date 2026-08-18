@@ -18,6 +18,7 @@ export function useRestaurantAssignDrivers(restaurantId: string | null, enabled:
     queryKey: queryKeys.drivers.assignRestaurant(restaurantId ?? ""),
     queryFn: () => fetchRestaurantAssignedDriversForAssign(restaurantId!),
     enabled: Boolean(restaurantId) && enabled,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 

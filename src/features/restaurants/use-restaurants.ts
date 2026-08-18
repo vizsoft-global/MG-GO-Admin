@@ -33,6 +33,7 @@ export function useRestaurantAssignedDrivers(id: string) {
     queryKey: queryKeys.restaurants.assignedDrivers(id),
     queryFn: () => fetchRestaurantAssignedDrivers(id),
     enabled: Boolean(id),
+    refetchInterval: 10_000,
   });
 }
 

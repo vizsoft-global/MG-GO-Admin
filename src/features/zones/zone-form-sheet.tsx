@@ -45,6 +45,7 @@ import type {
   ZoneMapViewport,
 } from "./zone-map-adapter";
 import {
+  initialZoneMapTool,
   shouldKeepPolygonDrawMode,
   shouldSwitchDrawToolToEdit,
   type ZoneDraftGeometryMeta,
@@ -180,7 +181,7 @@ export function ZoneFormBody({
   const mapAdapterRef = useRef<ZoneMapAdapter | null>(null);
   const [mapAdapter, setMapAdapter] = useState<ZoneMapAdapter | null>(null);
   const [activeTool, setActiveTool] = useState<ZoneMapTool>(
-    isEdit ? "edit" : "draw",
+    initialZoneMapTool(Boolean(zone?.geometry)),
   );
   const [detailsOpen, setDetailsOpen] = useState(true);
 

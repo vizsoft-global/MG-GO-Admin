@@ -9,5 +9,9 @@ export async function resolveDriverAvatarUrl(
   const trimmed = avatarUrl.trim();
   if (!trimmed) return null;
   if (!isR2ObjectKey(trimmed)) return trimmed;
-  return getPresignedGetUrl(trimmed);
+  try {
+    return await getPresignedGetUrl(trimmed);
+  } catch {
+    return null;
+  }
 }

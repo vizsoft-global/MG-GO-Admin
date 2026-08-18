@@ -750,7 +750,7 @@
       "actionQueueClearTitle": "All clear",
       "actionQueueClearHint": "No admin actions need attention right now.",
       "accessRequestsEmptyTitle": "No pending requests",
-      "accessRequestsEmptyHint": "New sign-ups will appear here for approval.",
+      "accessRequestsEmptyHint": "Staff sign-ups that need an admin role appear here. Driver accounts do not.",
       "accessAge": {
         "fresh": "< 1 hour",
         "waiting": "1–24 hours",
@@ -1951,7 +1951,7 @@
         "searchPlace": "Search place name…"
       },
       "hints": {
-        "externalMerchantId": "Optional code from the partner platform (Talabat ID, DoorDash store ID, etc.).",
+        "externalMerchantId": "Optional. Digits only (Talabat / DoorDash store ID), up to 32 characters.",
         "mapLink": "Optional — paste a Google Maps or Apple Maps share link.",
         "pickLocation": "Search for a place or click the map to pin the restaurant. Coordinates are saved automatically.",
         "mapAutoFilled": "Auto-filled from pin — you can edit.",
@@ -2021,6 +2021,7 @@
         "delete_failed": "Could not delete the restaurant",
         "restaurant_exists": "A restaurant with this name already exists for this partner",
         "invalid_coordinates": "Latitude and longitude must both be set and within valid ranges.",
+        "invalid_external_merchant_id": "External merchant ID must be digits only (up to 32).",
         "file_too_large": "Logo must be 2 MB or smaller",
         "invalid_type": "Use PNG, JPG, WebP, or SVG for the logo",
         "upload_failed": "Logo upload failed"
@@ -5180,8 +5181,8 @@
       },
       "accessRequests": {
         "title": "Access requests",
-        "subtitle": "Approve or reject new sign-ups",
-        "empty": "No pending access requests",
+        "subtitle": "Approve staff who need admin-panel access. Driver accounts are not listed here.",
+        "empty": "No pending admin access requests",
         "name": "Name",
         "email": "Email",
         "role": "Role",
@@ -5623,7 +5624,7 @@
           "missingFile": "Choose a file to upload.",
           "fileTooLarge": "File exceeds the size limit.",
           "invalidType": "Unsupported file type.",
-          "invalidProximity": "Enter a whole number from 0 to 10,000 meters.",
+          "invalidProximity": "Enter a whole number from 0 to 5,000,000 meters (0 disables the check).",
           "saveFailed": "Could not save. Try again.",
           "notAuthorized": "You do not have permission to change driver app settings."
         }

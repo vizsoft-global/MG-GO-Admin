@@ -25,6 +25,14 @@ export function shortDeliveryId(uuid: string): string {
   return uuid.slice(0, 8).toUpperCase();
 }
 
+/** Activity "Delivery ID" matches Verified / Deliveries / Order Details (`B5DA044C`), not the partner order id. */
+export function restaurantActivityDeliveryId(event: {
+  short_id: string;
+  external_order_id: string | null;
+}): string {
+  return event.short_id;
+}
+
 export function isDeliveryForRestaurant(
   delivery: Pick<
     ScopedDeliveryRow,

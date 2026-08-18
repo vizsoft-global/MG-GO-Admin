@@ -191,7 +191,9 @@ function DeliveriesPageContent() {
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryListRow | null>(null);
   const [isNavigatingNext, setIsNavigatingNext] = useState(false);
   const selectedDeliveryIdRef = useRef<string | null>(null);
-  selectedDeliveryIdRef.current = selectedDelivery?.id ?? null;
+  // Do not mirror selectedDelivery onto this ref during render. Close sets the
+  // ref to null first; a render-time copy would restore the id before refetch
+  // and reopen the sheet.
 
   const openDeliveryDetail = useCallback((delivery: DeliveryListRow) => {
     selectedDeliveryIdRef.current = delivery.id;

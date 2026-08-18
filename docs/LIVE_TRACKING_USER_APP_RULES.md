@@ -107,7 +107,7 @@ Clock-out / profile sign-out: [`on_duty_gate.dart`](C:/Users/Admin/Desktop/Vizso
 - Battery restriction: warn only, **never** clocks out (cooldown **3 min**) ([`duty_battery_exemption.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/core/permissions/duty_battery_exemption.dart)).
 - Offline queue: FGS HTTP fail → `pending_location_reports` → replay the same status ([`sync_controller.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/core/offline/sync_controller.dart)). Replay goes through the edge first when configured, always with `replay: true` (§11) so a drained queue writes history without moving the live pin.
 - Local zone stream: **5 m** filter (UI only) ([`local_zone_monitor.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/local_zone_monitor.dart)).
-- Out-of-zone client checkout: **45 min** idle; **20 min** grace after finish outside zone ([`zone_monitor_provider.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/home/zone_monitor_provider.dart)).
+- Out-of-zone client checkout: **45 min** while on duty (including during an active delivery); **20 min** grace after finish outside zone ([`zone_monitor_provider.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/home/zone_monitor_provider.dart)).
 - GPS sample per tick: last-known max age **10s**, timeLimit **12s**, last-known reject accuracy **> 80 m**.
 
 ---

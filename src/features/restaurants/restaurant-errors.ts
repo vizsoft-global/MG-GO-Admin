@@ -5,6 +5,7 @@ export const RESTAURANT_ERROR_KEYS = [
   "delete_failed",
   "restaurant_exists",
   "invalid_coordinates",
+  "invalid_external_merchant_id",
   "file_too_large",
   "invalid_type",
   "upload_failed",

@@ -65,7 +65,7 @@ export function RestaurantLocationPickerInner({
         center,
         zoom,
         disableDefaultUI: true,
-        zoomControl: true,
+        zoomControl: false,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,

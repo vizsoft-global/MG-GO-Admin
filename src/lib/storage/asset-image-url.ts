@@ -9,7 +9,11 @@ export async function resolveAssetImageUrl(
   const trimmed = imageUrl.trim();
   if (!trimmed) return null;
   if (!isR2ObjectKey(trimmed)) return trimmed;
-  return getPresignedGetUrl(trimmed);
+  try {
+    return await getPresignedGetUrl(trimmed);
+  } catch {
+    return null;
+  }
 }
 
 export async function resolveAssetImageUrls<

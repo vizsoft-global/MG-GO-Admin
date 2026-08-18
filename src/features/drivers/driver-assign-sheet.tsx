@@ -34,6 +34,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { fetchZones } from "@/features/zones/use-zones";
 import { queryKeys } from "@/lib/query/query-keys";
+import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 
 export type DriverAssignSheetMode = "restaurant" | "zone";
 
@@ -162,6 +163,16 @@ export function DriverAssignSheet({
     mode === "zone" ? entityId : null,
     open && mode === "zone",
   );
+
+  useRealtimeInvalidator({
+    channel: `admin-assign-drivers-duty-${mode}-${entityId}`,
+    tables: [{ table: "drivers" }, { table: "driver_sessions" }],
+    invalidateKeys:
+      mode === "restaurant"
+        ? [queryKeys.drivers.assignRestaurant(entityId)]
+        : [queryKeys.drivers.assignZone(entityId)],
+    enabled: open,
+  });
 
   const assignedDrivers =
     mode === "restaurant" ? (restaurantQuery.data ?? []) : (zoneQuery.data ?? []);

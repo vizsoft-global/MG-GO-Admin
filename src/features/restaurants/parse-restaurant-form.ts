@@ -1,3 +1,4 @@
+import { normalizeExternalMerchantId, validateExternalMerchantId } from "./external-merchant-id";
 import {
   RESTAURANT_STATUSES,
   type RestaurantStatus,
@@ -16,7 +17,9 @@ export function parseRestaurantFormData(formData: FormData) {
   const partnerId = String(formData.get("partnerId") ?? "").trim();
   const zoneId = String(formData.get("zoneId") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
-  const externalMerchantId = String(formData.get("externalMerchantId") ?? "").trim();
+  const externalMerchantId = normalizeExternalMerchantId(
+    String(formData.get("externalMerchantId") ?? ""),
+  );
   const mapLink = String(formData.get("mapLink") ?? "").trim();
   const statusRaw = String(formData.get("status") ?? "draft").trim();
   const latitude = parseOptionalCoord(String(formData.get("latitude") ?? ""));
@@ -59,4 +62,10 @@ export function validateRestaurantCoordinates(
   if (longitude < -180 || longitude > 180) return "invalid_coordinates";
 
   return null;
+}
+
+export function validateRestaurantExternalMerchantId(
+  value: string,
+): "invalid_external_merchant_id" | null {
+  return validateExternalMerchantId(value);
 }

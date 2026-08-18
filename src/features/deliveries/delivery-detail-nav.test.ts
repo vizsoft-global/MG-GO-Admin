@@ -29,6 +29,11 @@ describe("nextSelectedDeliveryAfterRefresh", () => {
     assert.equal(nextSelectedDeliveryAfterRefresh(null, rows), null);
   });
 
+  it("stays closed when a refetch lands after close cleared the id", () => {
+    const stillOpenId: string | null = null;
+    assert.equal(nextSelectedDeliveryAfterRefresh(stillOpenId, rows), null);
+  });
+
   it("keeps the same open row when the list refreshes", () => {
     assert.deepEqual(nextSelectedDeliveryAfterRefresh("b", rows), { id: "b" });
   });

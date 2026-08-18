@@ -288,7 +288,6 @@ function DriverDetailContent({ id }: { id: string }) {
   const [activeTab, setActiveTab] = useState<DetailTabId>("assets");
   const [editOpen, setEditOpen] = useState(false);
   const [holdApproveSlot, setHoldApproveSlot] = useState(false);
-  const editIntentFromUrlRef = useRef<boolean | null>(null);
   const editRouteConsumedRef = useRef(false);
   const suppressEditOpenUntilRef = useRef(0);
 
@@ -312,23 +311,17 @@ function DriverDetailContent({ id }: { id: string }) {
   const isArchived = Boolean(driver?.archived_at);
 
   useEffect(() => {
-    editIntentFromUrlRef.current = searchParams.get("edit") === "1";
-    editRouteConsumedRef.current = false;
-    setEditOpen(false);
-    setHoldApproveSlot(false);
-    // Only reset sheet state when navigating to a different driver — not when ?edit=1 is stripped.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchParams intentionally read once per id
-  }, [id]);
-
-  useEffect(() => {
-    if (editIntentFromUrlRef.current !== true) return;
-    if (editRouteConsumedRef.current) return;
+    if (searchParams.get("edit") !== "1") {
+      editRouteConsumedRef.current = false;
+      return;
+    }
     if (!driver || !canManage || !driver.intake_id || driver.archived_at) return;
-    editRouteConsumedRef.current = true;
-    editIntentFromUrlRef.current = false;
-    setEditOpen(true);
     router.replace(`/drivers/${id}`);
-  }, [driver, canManage, id, router]);
+    if (Date.now() < suppressEditOpenUntilRef.current) return;
+    if (editRouteConsumedRef.current) return;
+    editRouteConsumedRef.current = true;
+    setEditOpen(true);
+  }, [driver, canManage, id, router, searchParams]);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -366,6 +359,9 @@ function DriverDetailContent({ id }: { id: string }) {
   };
 
   const handleEditOpenChange = (open: boolean) => {
+    if (!open) {
+      suppressEditOpenUntilRef.current = Date.now() + 1500;
+    }
     setEditOpen(open);
     if (!open && searchParams.get("edit") === "1") {
       router.replace(`/drivers/${id}`);
@@ -963,8 +959,18 @@ function DriverDetailContent({ id }: { id: string }) {
               {(
                 [
                   { label: t("statAttendance"), value: "—", tone: "success", icon: CalendarClock },
-                  { label: t("statDeliveriesToday"), value: "—", tone: "primary", icon: Package },
-                  { label: t("statDeliveriesWeek"), value: "—", tone: "primary", icon: Bike },
+                  {
+                    label: t("statDeliveriesToday"),
+                    value: String(driver.deliveries_today),
+                    tone: "primary",
+                    icon: Package,
+                  },
+                  {
+                    label: t("statDeliveriesWeek"),
+                    value: String(driver.deliveries_week),
+                    tone: "primary",
+                    icon: Bike,
+                  },
                   { label: t("statEarnings"), value: "—", tone: "warning", icon: Wallet },
                 ] satisfies Array<{
                   label: string;

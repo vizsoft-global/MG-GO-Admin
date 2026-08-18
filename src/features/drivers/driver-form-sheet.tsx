@@ -398,7 +398,10 @@ export function DriverFormSheet({
     setCustomFieldErrors(cfErrMap);
     if (hasValidationErrors(validation)) {
       const firstKey = Object.values(validation)[0];
-      toast.error(driverErrorToast(tNew, firstKey));
+      // Field-level copy already says "This field is required" — don't repeat it as a toast.
+      if (firstKey && firstKey !== "missing_fields") {
+        toast.error(driverErrorToast(tNew, firstKey));
+      }
       return;
     }
     if (cfResult.errors.length > 0) {
@@ -457,6 +460,7 @@ export function DriverFormSheet({
         toast.success(tDetail("updated"));
         const resolvedIntakeId = intakeId ?? activeDriver.intake_id ?? activeDriver.id;
         const resolvedDetailId = detailRouteId ?? activeDriver.id;
+        onOpenChange(false);
         await invalidateDriverCaches(queryClient, {
           intakeId: resolvedIntakeId,
           profileId: activeDriver.linked_profile_id,
@@ -465,6 +469,7 @@ export function DriverFormSheet({
         await queryClient.refetchQueries({
           queryKey: queryKeys.drivers.detail(resolvedDetailId),
         });
+        return;
       } else {
         for (const docType of DOCUMENT_TYPES) {
           const file = documents[docType];

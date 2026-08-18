@@ -750,7 +750,11 @@ export async function fetchDriverAssetAssignments(
     assigned_at: string;
   }>
 > {
-  await requireDriverOrAssetsView();
+  try {
+    await requireDriverOrAssetsView();
+  } catch {
+    return [];
+  }
   if (!intakeId && !driverId) return [];
 
   const supabase = await createClient();
@@ -768,7 +772,7 @@ export async function fetchDriverAssetAssignments(
   }
 
   const { data, error } = await query.order("assigned_at", { ascending: false });
-  if (error) throw error;
+  if (error) return [];
 
   return Promise.all(
     (data ?? []).map(async (row) => {

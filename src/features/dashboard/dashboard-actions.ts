@@ -12,6 +12,7 @@ import { fetchLiveDriverLocations } from "@/features/locations/locations-actions
 import type { DeliveryListRow } from "@/features/deliveries/types";
 import type { DriverListRow } from "@/features/drivers/types";
 import { listDriverEarningsDaily } from "@/features/dpd/incentive-calculator";
+import { listPendingStaffAccessRequests } from "@/features/settings/access-requests-actions";
 import type {
   AccessRequestRow,
   AdminActionItem,
@@ -646,14 +647,8 @@ export async function fetchDashboardSnapshot(locale = "en"): Promise<DashboardSn
 
   let accessRequests: AccessRequestRow[] = [];
   if (perms.superAdmin) {
-    const { data: pendingProfiles } = await supabase
-      .from("profiles")
-      .select("id, email, full_name, created_at")
-      .eq("role", "staff")
-      .eq("approval_status", "pending")
-      .order("created_at", { ascending: false })
-      .limit(10);
-    accessRequests = buildAccessRequests(pendingProfiles ?? []);
+    const pendingProfiles = await listPendingStaffAccessRequests(10);
+    accessRequests = buildAccessRequests(pendingProfiles);
   }
 
   let systemStatus: SystemStatusSummary = { maintenanceMode: false };

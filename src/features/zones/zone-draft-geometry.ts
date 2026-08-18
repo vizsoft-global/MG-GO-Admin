@@ -10,6 +10,15 @@ export function zoneDraftEnablesSave(geometry: ZoneGeoFeature | null): boolean {
   return geometry != null;
 }
 
+/**
+ * Editing a zone that has no polygon yet must start in Draw.
+ * `"edit"` turns drawing off, so a saved zone without geometry could never
+ * receive one.
+ */
+export function initialZoneMapTool(hasGeometry: boolean): "draw" | "edit" {
+  return hasGeometry ? "edit" : "draw";
+}
+
 /** Final (or omitted) meta may leave draw; provisional must not. */
 export function shouldSwitchDrawToolToEdit(
   meta?: ZoneDraftGeometryMeta,

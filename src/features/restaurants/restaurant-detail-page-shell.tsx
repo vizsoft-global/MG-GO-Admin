@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { queryKeys } from "@/lib/query/query-keys";
+import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import {
   ArrowLeft,
   ExternalLink,
@@ -44,6 +46,7 @@ import {
 } from "./use-restaurants";
 import { resolveDeliveryStatusVariant } from "@/features/deliveries/delivery-status-variant";
 import type { RestaurantActivityKind } from "./types";
+import { restaurantActivityDeliveryId } from "./restaurant-delivery-scope";
 
 type DetailTabId = "overview" | "drivers" | "deliveries" | "activity";
 
@@ -111,6 +114,12 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
 
   const detailQuery = useRestaurantDetail(id);
   const driversQuery = useRestaurantAssignedDrivers(id);
+
+  useRealtimeInvalidator({
+    channel: `admin-restaurant-assigned-drivers-${id}`,
+    tables: [{ table: "drivers" }, { table: "driver_sessions" }],
+    invalidateKeys: [queryKeys.restaurants.assignedDrivers(id)],
+  });
   const deliveriesQuery = useRestaurantDeliveries(
     id,
     deliveryFilter === "all"
@@ -637,7 +646,7 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {event.driver_name} · {event.driver_code} ·{" "}
-                          {event.external_order_id ?? event.short_id}
+                          {restaurantActivityDeliveryId(event)}
                         </p>
                         {event.cancel_reason ? (
                           <p className="mt-1 text-xs text-muted-foreground">
