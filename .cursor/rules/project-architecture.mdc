@@ -231,6 +231,20 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-18` — **Blocked looked like success, inactive clock-in looked like a network error, and reinstall asked for a shift the server had already locked.** Five reports; two are holes in work that was already live.
+
+  **Driver blocked toast.** Confirming a block used `toast.success("Driver blocked")`, which is Sonner's green tick. Blocking is an adverse resulting state, so the toast is now warning + `Ban`. Unblock stays success. V2 rail status was already `danger`; this was the confirmation chrome, not the pin.
+
+  **Inactive / suspended clock-in.** The RPC still raises `inactive`, and the sheet can paint a refusal banner, but `dutyStartResultFrom` treated a leftover `isOnlineOnDuty` as started before it read the rejection (Riverpod keeps the previous dashboard under an AsyncError). A refused write then looked like a successful In, or like `DutyStartResult.blocked()` with no copy, so the overlay re-ran its green checklist. Refusal now wins. Copy remains `Your account is inactive or suspended. Please contact your administrator.`
+
+  **Mobile app linked.** Still hidden when `is_blocked` via `showsMobileAppLink` (badge and Details field). Blocking revokes the device session; "Yes" states the opposite.
+
+  **V2 Search driver.** Placeholder `Search driver, code or phone` needed ~220px and the input was `min-w-[100px] flex-[1_1_170px]`, so it clipped on a 14" filter row. Copy is now `Search driver or code` and the field floor is 180px / 220px basis.
+
+  **Shift locked after re-login / reinstall.** `shouldPromptShiftOnClockIn` forced a new window whenever `needsFreshClockIn`, even if today's row was unexpired. That submit is `shift_locked`. The sheet is skipped when an active row exists; if a submit still hits the lock, `driver_get_today_shift` is reused and clock-in continues.
+
+  No schema or payload change. Admin tests: block toast kind. App: duty-start decision, shift-lock reuse, inverted fresh-clock-in shift prompt. `shift_locked` / `inactive` wire codes unchanged.
+
 - `[admin+app] 2026-08-18` — **Push was never leaving Firebase, and the panel called that a missing token.** Inbox is written before FCM, so the driver app showed the campaign while Sent stayed 0. Three stacked causes, not a display bug.
 
   **Admin JWT.** Production `FIREBASE_*` initialized the Admin SDK, then Google rejected the signed JWT (`app/invalid-credential` / `invalid_grant: Invalid JWT Signature`). 17 Aug campaigns all carry that code. A new `dpd-admin-firebase` key is minted onto `dpdadmin-prod`; `parseFirebaseServiceAccountJson` also recovers the extra-backslash-escaped JSON `.env` form so a parse miss cannot silently fall through to the same broken split key. `app/*` credential errors are hard push failures even after the rider opens the inbox row.

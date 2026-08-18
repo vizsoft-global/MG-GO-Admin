@@ -316,7 +316,8 @@ export function FleetCanvas() {
                   value={filters.search}
                   onChange={(event) => store.setFilters({ search: event.target.value })}
                   placeholder={t("filters.search")}
-                  className="h-9 min-w-[100px] flex-[1_1_170px]"
+                  title={t("filters.search")}
+                  className="h-9 min-w-[180px] flex-[1.4_1_220px]"
                   aria-label={t("filters.search")}
                 />
 

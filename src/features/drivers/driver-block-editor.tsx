@@ -21,6 +21,7 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { invalidateDriverCaches } from "./invalidate-driver-caches";
 import { setDriverBlocked } from "./drivers-actions";
 import { isDriverErrorKey } from "./driver-errors";
+import { blockActionToastKind } from "./driver-workflow-ui";
 
 export function DriverBlockEditor({
   driverId,
@@ -61,7 +62,11 @@ export function DriverBlockEditor({
         toast.error(errorMessage(result.error));
         return;
       }
-      toast.success(t("blocked"));
+      if (blockActionToastKind(true) === "warning") {
+        toast.warning(t("blocked"), { icon: <Ban className="size-4" /> });
+      } else {
+        toast.success(t("blocked"));
+      }
       setDialogOpen(false);
       await invalidateDriverCaches(queryClient, { intakeId, profileId: driverId });
     });
@@ -76,7 +81,11 @@ export function DriverBlockEditor({
         toast.error(errorMessage(result.error));
         return;
       }
-      toast.success(t("unblocked"));
+      if (blockActionToastKind(false) === "success") {
+        toast.success(t("unblocked"));
+      } else {
+        toast.warning(t("unblocked"));
+      }
       setReason("");
       await invalidateDriverCaches(queryClient, { intakeId, profileId: driverId });
     });

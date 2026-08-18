@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  blockActionToastKind,
   resolveWorkflowPillStatus,
   showsMobileAppLink,
 } from "./driver-workflow-ui";
@@ -50,5 +51,15 @@ describe("showsMobileAppLink", () => {
   it("keeps it for everyone else, including a driver who never linked", () => {
     assert.equal(showsMobileAppLink({ is_blocked: false }), true);
     assert.equal(showsMobileAppLink({}), true);
+  });
+});
+
+describe("blockActionToastKind", () => {
+  it("treats a successful block as a warning, not a green success tick", () => {
+    assert.equal(blockActionToastKind(true), "warning");
+  });
+
+  it("treats unblock as a success", () => {
+    assert.equal(blockActionToastKind(false), "success");
   });
 });
