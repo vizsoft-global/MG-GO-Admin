@@ -429,4 +429,367 @@ describe("FleetStore filters and roster", () => {
     ]);
     assert.equal(store.getSnapshot().feed.length, 1);
   });
+
+  it("counts GPS-live riders as Online even when the session flag is still off", () => {
+    const store = new FleetStore();
+    store.applySnapshot({
+      generatedAt: NOW,
+      settings: null,
+      drivers: [
+        row({
+          tracking_status: "moving",
+          speed_mps: 8,
+          is_online: false,
+        }),
+      ],
+    });
+    assert.equal(store.getDriver("d1")?.status, "moving");
+    assert.equal(store.getSnapshot().kpis.online, 1);
+    assert.equal(store.getSnapshot().kpis.onDuty, 1);
+  });
+
+  it("zeros On Duty and Online when the rider is clocked-out Offline", () => {
+    const store = new FleetStore();
+    store.applySnapshot({
+      generatedAt: NOW,
+      settings: null,
+      drivers: [row({ is_on_duty: false, is_online: true, tracking_status: "moving", speed_mps: 8 })],
+    });
+    assert.equal(store.getDriver("d1")?.status, "offline");
+    assert.equal(store.getSnapshot().kpis.onDuty, 0);
+    assert.equal(store.getSnapshot().kpis.online, 0);
+  });
+
+  it("counts Out of Range in Out of zone and lists them under Alerts Only", () => {
+    const store = new FleetStore();
+    store.applySnapshot({
+      generatedAt: NOW,
+      settings: null,
+      drivers: [
+        row({
+          tracking_status: "moving",
+          speed_mps: 8,
+          zone_status: "out_of_zone",
+          out_of_zone_since: null,
+        }),
+      ],
+    });
+    const driver = store.getDriver("d1");
+    assert.equal(driver?.flags.out_of_range, true);
+    assert.equal(driver?.flags.out_of_zone, false);
+    assert.equal(store.getSnapshot().kpis.outOfZone, 1);
+    assert.equal(store.getSnapshot().kpis.alerts, 1);
+
+    store.setFilters({ alertsOnly: true });
+    assert.deepEqual(store.getSnapshot().driverIds, ["d1"]);
+  });
+
+  it("republishes KPIs when a delta only changes flags", () => {
+    const store = new FleetStore();
+    const idle = { ...emptyFleetFlags(), on_duty: true, online: true };
+    store.applyMeta([sampleMeta({ status: "idle", flagBits: flagBits(idle) })]);
+    store.applyDelta({
+      ts: Date.parse(NOW),
+      e: [
+        encodePosition({
+          idIdx: 1,
+          lat: 29.37,
+          lng: 47.98,
+          speedMps: 0,
+          headingDeg: 0,
+          status: "idle",
+          flags: idle,
+          ageMs: 0,
+        }),
+      ],
+      gone: [],
+    });
+    assert.equal(store.getSnapshot().kpis.outOfZone, 0);
+
+    const version = store.getSnapshot().version;
+    store.applyDelta({
+      ts: Date.parse(NOW) + 1_000,
+      e: [
+        encodePosition({
+          idIdx: 1,
+          lat: 29.37,
+          lng: 47.98,
+          speedMps: 0,
+          headingDeg: 0,
+          status: "idle",
+          flags: { ...idle, out_of_range: true },
+          ageMs: 0,
+        }),
+      ],
+      gone: [],
+    });
+    assert.ok(store.getSnapshot().version > version);
+    assert.equal(store.getDriver("d1")?.flags.out_of_range, true);
+    assert.equal(store.getSnapshot().kpis.outOfZone, 1);
+  });
+
+  it("does not let a stale roster snapshot roll back a live moving pin", () => {
+    const store = new FleetStore();
+    store.applySnapshot({
+      generatedAt: NOW,
+      settings: null,
+      drivers: [row({ tracking_status: "idle", speed_mps: 0 })],
+    });
+    const moving = { ...emptyFleetFlags(), on_duty: true, online: true };
+    store.applyMeta([sampleMeta({ status: "moving", flagBits: flagBits(moving) })]);
+    store.applyDelta({
+      ts: Date.parse(NOW) + 30_000,
+      e: [
+        encodePosition({
+          idIdx: 1,
+          lat: 29.38,
+          lng: 47.99,
+          speedMps: 8,
+          headingDeg: 90,
+          status: "moving",
+          flags: moving,
+          ageMs: 0,
+        }),
+      ],
+      gone: [],
+    });
+    assert.equal(store.getDriver("d1")?.status, "moving");
+
+    store.applySnapshot({
+      generatedAt: new Date(Date.parse(NOW) + 120_000).toISOString(),
+      settings: null,
+      drivers: [
+        row({
+          tracking_status: "idle",
+          speed_mps: 0,
+          latitude: 29.37,
+          longitude: 47.98,
+          last_report_at: NOW,
+          last_seen_at: NOW,
+        }),
+      ],
+    });
+    const driver = store.getDriver("d1");
+    assert.equal(driver?.status, "moving");
+    assert.equal(driver?.speedMps, 8);
+    assert.equal(store.getSnapshot().kpis.moving, 1);
+    assert.equal(store.getSnapshot().kpis.online, 1);
+  });
+
+  it("still honours a clock-out that arrives on a stale snapshot", () => {
+    const store = new FleetStore();
+    const moving = { ...emptyFleetFlags(), on_duty: true, online: true };
+    store.applyMeta([sampleMeta({ status: "moving", flagBits: flagBits(moving) })]);
+    store.applyDelta({
+      ts: Date.parse(NOW) + 30_000,
+      e: [
+        encodePosition({
+          idIdx: 1,
+          lat: 29.38,
+          lng: 47.99,
+          speedMps: 8,
+          headingDeg: 90,
+          status: "moving",
+          flags: moving,
+          ageMs: 0,
+        }),
+      ],
+      gone: [],
+    });
+    store.applySnapshot({
+      generatedAt: new Date(Date.parse(NOW) + 120_000).toISOString(),
+      settings: null,
+      drivers: [
+        row({
+          is_on_duty: false,
+          is_online: false,
+          tracking_status: "idle",
+          speed_mps: 0,
+          last_report_at: NOW,
+        }),
+      ],
+    });
+    assert.equal(store.getDriver("d1")?.status, "offline");
+    assert.equal(store.getSnapshot().kpis.onDuty, 0);
+    assert.equal(store.getSnapshot().kpis.online, 0);
+  });
+
+  it("keeps a Class B event when a later seed batch puts it at a different index", () => {
+    const store = new FleetStore();
+    const pickup = {
+      driverId: "d1",
+      eventKey: "delivery.pickup_create",
+      severity: "info" as const,
+      value: null,
+      statusBefore: null,
+      statusAfter: "on_delivery",
+      zoneId: null,
+      latitude: 29.37,
+      longitude: 47.98,
+      context: {},
+      detectedAt: NOW,
+    };
+    store.applyFleetEvents([pickup]);
+    store.applyFleetEvents([
+      { ...pickup, eventKey: "movement.started", detectedAt: new Date(Date.parse(NOW) + 1_000).toISOString() },
+      pickup,
+    ]);
+    assert.equal(
+      store.getSnapshot().feed.filter((item) => item.eventKey === "delivery.pickup_create").length,
+      1,
+    );
+  });
+
+  it("pins an open pickup at the top until the delivery closes", () => {
+    const store = new FleetStore();
+    store.applySnapshot({
+      generatedAt: NOW,
+      settings: null,
+      drivers: [row({ active_delivery_id: "del-1", tracking_status: "moving", speed_mps: 8 })],
+    });
+    store.applyOpsEvents([
+      {
+        id: "pickup-1",
+        driverId: "d1",
+        category: "delivery",
+        operationKey: "delivery.pickup_create",
+        success: true,
+        errorCode: null,
+        context: {},
+        occurredAt: NOW,
+      },
+    ]);
+    store.applyFleetEvents([
+      {
+        driverId: "d1",
+        eventKey: "movement.started",
+        severity: "info",
+        value: null,
+        statusBefore: "idle",
+        statusAfter: "moving",
+        zoneId: null,
+        latitude: 29.37,
+        longitude: 47.98,
+        context: {},
+        detectedAt: new Date(Date.parse(NOW) + 2_000).toISOString(),
+      },
+    ]);
+    assert.equal(store.getSnapshot().feed[0]?.eventKey, "delivery.pickup_create");
+  });
+
+  it("pins GPS offline above a leftover pickup so the top row matches the list", () => {
+    const store = new FleetStore();
+    store.applySnapshot({
+      generatedAt: new Date(Date.parse(NOW) + 120_000).toISOString(),
+      settings: null,
+      drivers: [
+        row({
+          tracking_status: "moving",
+          speed_mps: 8,
+          last_report_at: NOW,
+          last_seen_at: NOW,
+        }),
+      ],
+    });
+    assert.equal(store.getDriver("d1")?.status, "gps_offline");
+    store.applyOpsEvents([
+      {
+        id: "pickup-1",
+        driverId: "d1",
+        category: "delivery",
+        operationKey: "delivery.pickup_create",
+        success: true,
+        errorCode: null,
+        context: {},
+        occurredAt: NOW,
+      },
+    ]);
+    store.applyFleetEvents([
+      {
+        driverId: "d1",
+        eventKey: "gps.offline",
+        severity: "warning",
+        value: null,
+        statusBefore: "moving",
+        statusAfter: "gps_offline",
+        zoneId: null,
+        latitude: 29.37,
+        longitude: 47.98,
+        context: {},
+        detectedAt: new Date(Date.parse(NOW) + 91_000).toISOString(),
+      },
+      {
+        driverId: "d1",
+        eventKey: "movement.started",
+        severity: "info",
+        value: null,
+        statusBefore: "idle",
+        statusAfter: "moving",
+        zoneId: null,
+        latitude: 29.37,
+        longitude: 47.98,
+        context: {},
+        detectedAt: new Date(Date.parse(NOW) + 110_000).toISOString(),
+      },
+    ]);
+    assert.equal(store.getSnapshot().feed[0]?.eventKey, "gps.offline");
+    assert.ok(store.getSnapshot().feed.some((item) => item.eventKey === "delivery.pickup_create"));
+  });
+
+  it("does not re-seed a feed that already has rows", () => {
+    const store = new FleetStore();
+    assert.equal(store.feedNeedsSeed(), true);
+    store.applyOpsEvents([
+      {
+        id: "1",
+        driverId: "d1",
+        category: "duty",
+        operationKey: "duty.on",
+        success: true,
+        errorCode: null,
+        context: {},
+        occurredAt: NOW,
+      },
+    ]);
+    assert.equal(store.feedNeedsSeed(), false);
+  });
 });
+
+function sampleMeta(
+  overrides: Partial<{
+    status: "idle" | "moving" | "gps_offline" | "offline" | "on_delivery";
+    flagBits: number;
+  }> = {},
+) {
+  return {
+    idIdx: 1,
+    driverId: "d1",
+    driverName: "Jhon Doe",
+    driverCode: "10001",
+    employeeId: "1001",
+    avatarObjectKey: null,
+    avatarUpdatedAt: null,
+    zoneId: "z1",
+    zoneName: "Kuwait City",
+    partnerId: "p1",
+    partnerName: "Talabat",
+    restaurantName: "Burger Place",
+    vehicleLabel: "B1",
+    accountStatus: "active",
+    onDutySince: NOW,
+    deliveriesToday: 0,
+    deliveriesCompletedToday: 0,
+    distanceTodayMeters: 0,
+    batteryPct: 80,
+    accuracyMeters: 8,
+    activeDeliveryId: null,
+    currentZoneId: null,
+    currentZoneName: null,
+    shiftStartAt: null,
+    shiftEndAt: null,
+    lastFixAt: NOW,
+    status: "idle" as const,
+    flagBits: flagBits(emptyFleetFlags()),
+    ...overrides,
+  };
+}

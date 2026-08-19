@@ -32,6 +32,7 @@ import {
   gpsAgeSeconds,
   hasLiveTelemetry,
   isFleetAlert,
+  isMovingSpeed,
   normalizeBatteryPct,
   resolveFleetThresholds,
   type FleetDistributionBucket,
@@ -59,6 +60,7 @@ import {
 import {
   activeFlagsFromBits,
   decodePosition,
+  flagBits,
   flagsFromBits,
   flagsFromNames,
   type DriverMeta,
@@ -68,6 +70,7 @@ import {
   type PositionTuple,
   type TrailTrack,
 } from "./fleet-wire";
+import { composeFleetFeed } from "./fleet-feed";
 
 /** Feed depth. Anything older belongs in the Activity tab, which is paginated. */
 const FEED_LIMIT = 250;
@@ -414,7 +417,12 @@ export class FleetStore {
       if (!existing) continue;
 
       const fixAtMs = input.ts - decoded.ageMs;
-      if (existing.status !== decoded.status) structural = true;
+      if (
+        existing.status !== decoded.status ||
+        tuple[6] !== flagBits(existing.flags)
+      ) {
+        structural = true;
+      }
 
       // A fix with no bearing keeps the last one. This is the single place that
       // decision is made, so the marker, the interpolator and the driver card cannot
@@ -610,6 +618,51 @@ export class FleetStore {
         lastFixAt: row.last_report_at ?? row.last_seen_at,
       };
 
+      /*
+       * The poll / 120s roster snapshot is minutes behind a live ingest. Replacing a
+       * rider who just moved with the database's last flush is what made Moving flap
+       * to Offline and took Online / On Duty back to 0 while the rail still said Moving.
+       * Clock-out, block and inactive still win: those are roster facts, not poses.
+       */
+      const liveIsFresher =
+        existing != null &&
+        existing.fixAtMs > (fixAtMs || 0) &&
+        row.is_on_duty === true &&
+        row.is_blocked !== true &&
+        (row.account_status == null || row.account_status === "active");
+
+      if (liveIsFresher && existing) {
+        const live = hasLiveTelemetry(existing.status);
+        let nextStatus = existing.status;
+        if (row.active_delivery_id) {
+          if (live && nextStatus !== "location_off") nextStatus = "on_delivery";
+        } else if (nextStatus === "on_delivery") {
+          nextStatus = isMovingSpeed(existing.speedMps, this.thresholds) ? "moving" : "idle";
+        }
+        const nextFlags = {
+          ...existing.flags,
+          on_duty: true,
+          online: live,
+          out_of_range: live && normalizeRange(row.zone_status) === "out_of_zone",
+          out_of_zone: row.out_of_zone_since ? live : existing.flags.out_of_zone,
+        };
+        this.drivers.set(row.driver_id, {
+          ...existing,
+          meta: {
+            ...meta,
+            idIdx: existing.idIdx,
+            currentZoneId: existing.meta.currentZoneId,
+            currentZoneName: existing.meta.currentZoneName,
+            lastFixAt: existing.meta.lastFixAt,
+          },
+          status: nextStatus,
+          flags: nextFlags,
+          activeFlags: activeFleetFlags(nextFlags),
+        });
+        this.dirtyDrivers.add(row.driver_id);
+        continue;
+      }
+
       this.drivers.set(row.driver_id, {
         driverId: row.driver_id,
         idIdx: meta.idIdx,
@@ -687,6 +740,13 @@ export class FleetStore {
       if (!statusChanged && !flagChanged) continue;
 
       const flags = { ...driver.flags, stale_gps: staleGps };
+      if (statusChanged && decayed === "gps_offline") {
+        flags.online = false;
+        flags.out_of_zone = false;
+        flags.out_of_range = false;
+        flags.overspeed = false;
+        flags.stale_gps = false;
+      }
       const next: FleetDriver = {
         ...driver,
         status: statusChanged ? decayed! : driver.status,
@@ -709,8 +769,8 @@ export class FleetStore {
 
   applyFleetEvents(events: FleetEventFrame[]): void {
     this.pushFeed(
-      events.map((event, index) => ({
-        id: `fleet:${event.driverId}:${event.eventKey}:${event.detectedAt}:${index}`,
+      events.map((event) => ({
+        id: `fleet:${event.driverId}:${event.eventKey}:${event.detectedAt}`,
         kind: "fleet" as const,
         driverId: event.driverId,
         driverName: this.drivers.get(event.driverId)?.meta.driverName ?? null,
@@ -747,6 +807,11 @@ export class FleetStore {
         atMs: Date.parse(event.occurredAt) || Date.now(),
       })),
     );
+  }
+
+  /** Poll seed is a warm-start. Re-running it on every roster refresh is what made rows flicker. */
+  feedNeedsSeed(): boolean {
+    return this.feed.length === 0 && this.heldFeed.length === 0;
   }
 
   private pushFeed(items: FleetFeedItem[]): void {
@@ -801,6 +866,7 @@ export class FleetStore {
         driver.meta.vehicleLabel,
         driver.status,
         driver.flags.out_of_zone ? "out of zone" : "",
+        driver.flags.out_of_range ? "out of range" : "",
         ...driver.activeFlags,
       ]
         .filter(Boolean)
@@ -865,8 +931,8 @@ export class FleetStore {
 
       counts[fleetDistributionBucket(driver.status, driver.flags)] += 1;
 
-      if (driver.flags.on_duty) kpis.onDuty += 1;
-      if (driver.flags.online) kpis.online += 1;
+      if (driver.flags.on_duty && driver.status !== "offline") kpis.onDuty += 1;
+      if (hasLiveTelemetry(driver.status)) kpis.online += 1;
       if (driver.status === "moving") kpis.moving += 1;
       if (driver.status === "on_delivery") kpis.onDelivery += 1;
       if (driver.status === "idle") kpis.idle += 1;
@@ -875,7 +941,7 @@ export class FleetStore {
         kpis.gpsOffline += 1;
       }
       if (isFleetAlert(driver.status, driver.flags)) kpis.alerts += 1;
-      if (driver.flags.out_of_zone) kpis.outOfZone += 1;
+      if (driver.flags.out_of_zone || driver.flags.out_of_range) kpis.outOfZone += 1;
       if (driver.flags.overspeed) kpis.overspeed += 1;
       if (driver.flags.low_battery) kpis.lowBattery += 1;
 
@@ -930,7 +996,7 @@ export class FleetStore {
       partners: [...partners.entries()]
         .map(([id, name]) => ({ id, name }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      feed: this.feed,
+      feed: composeFleetFeed(this.feed, this.drivers.values()),
       pendingFeedCount: this.heldFeed.length,
       feedPaused: this.feedPaused,
       selectedDriverId: this.selectedDriverId,

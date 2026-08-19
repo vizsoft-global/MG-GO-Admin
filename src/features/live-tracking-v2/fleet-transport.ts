@@ -488,7 +488,8 @@ export class FleetTransport {
 
       // Poll and warm-start have no socket, so the feed would stay empty without this.
       // On the edge rail it fills the gap until the first `ops` / `events` frame.
-      void this.seedFeed();
+      // Re-seeding on every 120s roster snapshot is what made rows appear and vanish.
+      if (this.store.feedNeedsSeed()) void this.seedFeed();
     } catch (error) {
       this.store.setConnection({ status: "error", error: String(error) });
     }

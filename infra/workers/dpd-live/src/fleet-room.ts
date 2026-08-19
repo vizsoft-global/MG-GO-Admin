@@ -489,9 +489,13 @@ export class FleetRoom implements DurableObject {
       entity.shiftEndMs = shiftEndMs;
       entity.shiftCheckInMs = nextCheckInMs;
 
-      // Roster fact, not a position fact: it comes from `deliveries.status`, so it must
-      // apply even when the room's pin is fresher than the database's.
+      // Roster facts, not position facts: they must apply even when the room's pin
+      // is fresher than the database's. Delivery id comes from `deliveries.status`;
+      // range comes from the last durable `zone_status` write. Skipping them while
+      // GPS is live is why Entered zone landed in the feed and Out of Range stuck
+      // on the list until a client refresh happened to catch a newer snapshot.
       entity.activeDeliveryId = row.active_delivery_id ?? null;
+      entity.rangeStatus = normalizeRange(row.zone_status);
 
       if ((entity.lastFixAtMs ?? 0) < snapshotFixMs) {
         entity.lat = numberOrNull(row.latitude) ?? entity.lat;
@@ -502,7 +506,6 @@ export class FleetRoom implements DurableObject {
         entity.batteryPct = numberOrNull(row.battery_pct);
         entity.accuracyM = numberOrNull(row.accuracy_meters);
         entity.trackingStatus = normalizeTracking(row.tracking_status);
-        entity.rangeStatus = normalizeRange(row.zone_status);
         entity.lastFixAtMs = snapshotFixMs;
         entity.posVersion += 1;
       }
@@ -586,6 +589,7 @@ export class FleetRoom implements DurableObject {
 
     const nowMs = Date.now();
     let applied = 0;
+    let heartbeated = false;
 
     for (const raw of points) {
       const point = normalizePoint(raw);
@@ -617,6 +621,9 @@ export class FleetRoom implements DurableObject {
        * It is a *deferral*, not a drop: the point still goes to `pending`, so the durable
        * history keeps what the device actually said, and a driver whose GPS never
        * recovers still gets their pin once the warm window lapses.
+       *
+       * lastFixAtMs still advances. Leaving it frozen is what aged an otherwise-live
+       * rider to GPS Offline every 90s, then back to Moving on the next accurate fix.
        */
       if (
         isCoarseFix(point.accuracyM) &&
@@ -625,6 +632,11 @@ export class FleetRoom implements DurableObject {
         entity.lastFixAtMs != null &&
         nowMs - entity.lastFixAtMs < COARSE_FIX_GRACE_MS
       ) {
+        entity.lastFixAtMs = Math.min(clientMs, nowMs);
+        entity.locationOff = false;
+        entity.isOnDuty = true;
+        entity.isOnline = true;
+        heartbeated = true;
         continue;
       }
 
@@ -650,10 +662,11 @@ export class FleetRoom implements DurableObject {
       entity.lastFixAtMs = Math.min(clientMs, nowMs);
       entity.locationOff = false;
       entity.isOnDuty = true;
+      entity.isOnline = true;
       applied += 1;
     }
 
-    if (applied > 0) {
+    if (applied > 0 || heartbeated) {
       entity.posVersion += 1;
       this.refreshDerived(entity, nowMs, true);
     }
@@ -778,6 +791,7 @@ export class FleetRoom implements DurableObject {
 
     const signals = this.signalsFor(entity);
     const previousStatus = entity.status;
+    const previousFlagBits = flagBits(entity.flags);
 
     if (emitEvents) {
       const outcome = evaluateRules(entity.rules, {
@@ -800,11 +814,11 @@ export class FleetRoom implements DurableObject {
       entity.rules.status = entity.status;
     }
 
-    if (entity.status !== previousStatus) {
+    if (entity.status !== previousStatus || flagBits(entity.flags) !== previousFlagBits) {
       entity.posVersion += 1;
       // A status transition is the one thing worth breaking the 10s flush cadence
       // for: it is what any other reader of driver_locations will act on.
-      this.flushSoon = true;
+      if (entity.status !== previousStatus) this.flushSoon = true;
     }
   }
 
