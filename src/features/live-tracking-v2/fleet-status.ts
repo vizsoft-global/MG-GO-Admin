@@ -194,10 +194,16 @@ export function isMovingSpeed(
  */
 export function displaySpeedKmh(
   speedMps: number | null | undefined,
-  thresholds: FleetThresholds = FLEET_DEFAULT_THRESHOLDS,
+  thresholds?: FleetThresholds,
+  status?: FleetStatus,
 ): number {
   if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0) return 0;
-  if (speedMps < thresholds.movingSpeedMps) return 0;
+  const resolved = resolveFleetThresholds(thresholds);
+  // A Moving / On Delivery stamp is already the motion claim; flooring it to 0 km/h
+  // because GPS is briefly under 1.5 m/s is what made a moving rider read as parked.
+  if (status !== "moving" && status !== "on_delivery" && speedMps < resolved.movingSpeedMps) {
+    return 0;
+  }
   return Math.round(speedMps * 3.6);
 }
 
@@ -419,6 +425,7 @@ export function activeFleetFlags(flags: FleetFlagSet): FleetFlag[] {
  */
 export const FLEET_ALERT_FLAGS: readonly FleetFlag[] = [
   "out_of_zone",
+  "out_of_range",
   "overspeed",
   "mocked_gps",
   "shift_overrun",
@@ -452,11 +459,20 @@ export function fleetStatusTone(status: FleetStatus): FleetTone {
   return STATUS_TONES[status];
 }
 
+/**
+ * Map puck colour. Status keeps its chip colour on the rail (a Moving rider who left
+ * range is still Moving); the marker itself goes red so the map matches the alert.
+ */
+export function fleetMarkerTone(status: FleetStatus, flags: FleetFlagSet): FleetTone {
+  if (flags.out_of_zone || flags.out_of_range) return "danger";
+  return fleetStatusTone(status);
+}
+
 const FLAG_TONES: Record<FleetFlag, FleetTone> = {
   on_duty: "neutral",
   online: "success",
   out_of_zone: "danger",
-  out_of_range: "warning",
+  out_of_range: "danger",
   overspeed: "danger",
   low_battery: "warning",
   stale_gps: "warning",

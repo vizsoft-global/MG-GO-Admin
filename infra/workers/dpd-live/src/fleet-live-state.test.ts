@@ -29,6 +29,10 @@ type ObservedEntity = {
   posVersion: number;
   lat: number | null;
   lng: number | null;
+  lastFixAtMs: number | null;
+  rangeStatus: "in_zone" | "out_of_zone" | "unknown" | null;
+  isOnline: boolean;
+  flags: { out_of_range: boolean; online: boolean; on_duty: boolean };
 };
 
 type Harness = {
@@ -303,5 +307,64 @@ describe("coarse fixes", () => {
     });
     assert.equal(result.json.accepted, 1);
     assert.equal(h.entity().lat, LAT + 0.05);
+  });
+
+  it("still heartbeats lastFixAtMs for a deferred coarse fix so GPS Offline does not flap", async () => {
+    await h.ingest({ points: [fix({ accuracy_m: 8, speed_mps: 0, tracking_status: "idle" })] });
+    const before = h.entity();
+    const lastFix = before.lastFixAtMs;
+    const posVersion = before.posVersion;
+    assert.ok(lastFix != null);
+
+    const result = await h.ingest({
+      points: [
+        fix({
+          lat: LAT + 0.05,
+          lng: LNG + 0.05,
+          accuracy_m: 100,
+          speed_mps: 0,
+          tracking_status: "idle",
+          client_ts: new Date(Date.now() + 2_000).toISOString(),
+        }),
+      ],
+    });
+
+    assert.equal(result.json.accepted, 0);
+    assert.equal(h.entity().lat, before.lat);
+    assert.ok((h.entity().lastFixAtMs ?? 0) > lastFix);
+    assert.ok(h.entity().posVersion > posVersion);
+  });
+});
+
+describe("roster range and online flags", () => {
+  let h: Harness;
+  beforeEach(() => {
+    h = makeHarness();
+  });
+
+  it("applies roster zone_status even when the live pin is newer than the snapshot", async () => {
+    await h.ingest({ points: [fix()] });
+    assert.equal(h.entity().rangeStatus, "in_zone");
+    const before = h.entity().posVersion;
+
+    h.row = snapshotRow({
+      zone_status: "out_of_zone",
+      last_report_at: new Date(Date.now() - 60_000).toISOString(),
+    });
+    await h.refresh();
+
+    assert.equal(h.entity().rangeStatus, "out_of_zone");
+    assert.equal(h.entity().flags.out_of_range, true);
+    assert.ok(h.entity().posVersion > before, "flag-only roster changes must ride a position frame");
+  });
+
+  it("marks a rider online when a live ingest is accepted", async () => {
+    h.row = snapshotRow({ is_online: false });
+    await h.refresh();
+    assert.equal(h.entity().isOnline, false);
+
+    await h.ingest({ points: [fix()] });
+    assert.equal(h.entity().isOnline, true);
+    assert.equal(h.entity().flags.online, true);
   });
 });

@@ -14,6 +14,7 @@ import {
   fleetFlags,
   fleetStatus,
   fleetStatusTone,
+  fleetMarkerTone,
   isFleetAlert,
   isLowBattery,
   isOverspeeding,
@@ -165,6 +166,18 @@ describe("fleetStatus", () => {
     assert.equal(fleetStatusTone("blocked"), "danger");
   });
 
+  it("paints the map marker red when the rider is out of range or out of zone", () => {
+    const moving = fleetFlags(signals({ speedMps: 9, inAssignedZone: true }), NOW);
+    assert.equal(fleetMarkerTone("moving", moving), "success");
+    const outOfRange = fleetFlags(
+      signals({ speedMps: 9, inAssignedZone: true, rangeStatus: "out_of_zone" }),
+      NOW,
+    );
+    assert.equal(fleetMarkerTone("moving", outOfRange), "danger");
+    const outOfZone = fleetFlags(signals({ speedMps: 9, inAssignedZone: false }), NOW);
+    assert.equal(fleetMarkerTone("moving", outOfZone), "danger");
+  });
+
   it("lists Location off with the other filterable / legend statuses", () => {
     assert.ok(FLEET_FILTER_STATUSES.includes("location_off"));
   });
@@ -301,6 +314,14 @@ describe("distribution and alerting", () => {
     assert.equal(fleetDistributionBucket(fleetStatus(input, NOW), flags), "moving");
   });
 
+  it("treats Out of Range as an alert so Alerts Only can list those riders", () => {
+    const input = signals({ speedMps: 9, inAssignedZone: true, rangeStatus: "out_of_zone" });
+    const flags = fleetFlags(input, NOW);
+    assert.equal(flags.out_of_range, true);
+    assert.equal(flags.out_of_zone, false);
+    assert.equal(isFleetAlert(fleetStatus(input, NOW), flags), true);
+  });
+
   it("buckets gps_offline drivers as offline", () => {
     const input = signals({ lastFixAtMs: NOW - 10 * 60_000 });
     const flags = fleetFlags(input, NOW);
@@ -403,5 +424,11 @@ describe("displaySpeedKmh", () => {
     assert.equal(displaySpeedKmh(1.2), 0);
     assert.equal(displaySpeedKmh(1.5), 5);
     assert.equal(displaySpeedKmh(20 / 3.6), 20);
+  });
+
+  it("still shows speed for a Moving rider below the idle floor", () => {
+    // tracking_status can be `moving` at 1.2 m/s (~4 km/h); zeroing that reads as a stuck pin.
+    assert.equal(displaySpeedKmh(1.2, undefined, "moving"), 4);
+    assert.equal(displaySpeedKmh(1.2, undefined, "idle"), 0);
   });
 });

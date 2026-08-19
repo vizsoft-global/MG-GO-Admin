@@ -37,7 +37,7 @@ import { loadGoogleMaps } from "@/lib/google-maps/load";
 import { GoogleMapsStatusBanner } from "@/features/restaurants/google-maps-status-banner";
 import { cn } from "@/lib/utils";
 
-import { fleetStatusTone, isFleetAlert, type FleetTone } from "./fleet-status";
+import { fleetMarkerTone, isFleetAlert, type FleetTone } from "./fleet-status";
 import {
   FLEET_ICON_SIZE,
   fleetIconMapping,
@@ -345,7 +345,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       if (!driver) continue;
       seen.add(driverId);
 
-      const tone = fleetStatusTone(driver.status);
+      const tone = fleetMarkerTone(driver.status, driver.flags);
       const stale = driver.status === "gps_offline" || driver.status === "offline";
       const selected = driverId === selectedDriverId;
       let entity = index.get(driverId);

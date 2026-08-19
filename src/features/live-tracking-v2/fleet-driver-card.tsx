@@ -89,7 +89,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
    * likely to act on.
    */
   const live = hasLiveTelemetry(driver.status);
-  const speedLabel = live ? `${displaySpeedKmh(driver.speedMps)} km/h` : "—";
+  const speedLabel = live ? `${displaySpeedKmh(driver.speedMps, undefined, driver.status)} km/h` : "—";
   /*
    * What the card owes an operator once telemetry is dead: how long ago it died.
    *
