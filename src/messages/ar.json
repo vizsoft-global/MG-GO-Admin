@@ -1539,6 +1539,10 @@
         "blocking": "جاري الحظر…",
         "blocked": "تم حظر السائق",
         "unblockConfirm": "إلغاء حظر هذا السائق؟ سيتمكن من تسجيل الدخول مجدداً.",
+        "unblockDialogTitle": "إلغاء حظر السائق",
+        "unblockDialogDescription": "سيتمكن من تسجيل الدخول إلى التطبيق مجدداً.",
+        "confirmUnblock": "إلغاء الحظر",
+        "unblocking": "جاري إلغاء الحظر…",
         "unblocked": "تم إلغاء حظر السائق",
         "cancel": "إلغاء",
         "errors": {
