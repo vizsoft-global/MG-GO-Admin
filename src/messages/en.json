@@ -1556,6 +1556,10 @@
         "blocking": "Blocking…",
         "blocked": "Driver blocked",
         "unblockConfirm": "Unblock this driver? They will be able to sign in to the app again.",
+        "unblockDialogTitle": "Unblock driver",
+        "unblockDialogDescription": "They will be able to sign in to the app again.",
+        "confirmUnblock": "Unblock driver",
+        "unblocking": "Unblocking…",
         "unblocked": "Driver unblocked",
         "cancel": "Cancel",
         "errors": {

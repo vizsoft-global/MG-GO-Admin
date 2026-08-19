@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ban, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -41,6 +42,7 @@ export function DriverBlockEditor({
   const t = useTranslations("pages.driverDetail.block");
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [unblockOpen, setUnblockOpen] = useState(false);
   const [reason, setReason] = useState(blockedReason ?? "");
   const [isPending, startTransition] = useTransition();
 
@@ -73,8 +75,6 @@ export function DriverBlockEditor({
   };
 
   const submitUnblock = () => {
-    if (!window.confirm(t("unblockConfirm"))) return;
-
     startTransition(async () => {
       const result = await setDriverBlocked(driverId, false);
       if ("error" in result) {
@@ -87,6 +87,7 @@ export function DriverBlockEditor({
         toast.warning(t("unblocked"));
       }
       setReason("");
+      setUnblockOpen(false);
       await invalidateDriverCaches(queryClient, { intakeId, profileId: driverId });
     });
   };
@@ -98,7 +99,7 @@ export function DriverBlockEditor({
       setDialogOpen(true);
       return;
     }
-    submitUnblock();
+    setUnblockOpen(true);
   };
 
   return (
@@ -186,6 +187,39 @@ export function DriverBlockEditor({
               {isPending ? t("blocking") : t("confirmBlock")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={unblockOpen} onOpenChange={setUnblockOpen}>
+        <DialogContent
+          showCloseButton
+          closeOutside
+          className="w-[min(480px,96vw)] overflow-visible p-0 pt-4"
+        >
+          <div className="px-2 pb-2">
+            <AppModalFooter
+              title={t("unblockDialogTitle")}
+              subtitle={t("unblockDialogDescription")}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 cursor-pointer"
+                disabled={isPending}
+                onClick={() => setUnblockOpen(false)}
+              >
+                {t("cancel")}
+              </Button>
+              <Button
+                type="button"
+                className="h-9 cursor-pointer"
+                disabled={isPending}
+                onClick={submitUnblock}
+              >
+                {isPending ? t("unblocking") : t("confirmUnblock")}
+              </Button>
+            </AppModalFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </>
