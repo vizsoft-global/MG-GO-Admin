@@ -191,7 +191,7 @@ Two fields the app must send, both of which exist to stop the fast rail from lyi
 | zone_id | uuid | Zone at time of delivery |
 | restaurant_id | uuid | FK → `restaurants` (merchant). Snapshotted at pickup: unique assigned restaurant, else the geofence/pin the pickup is in, else the nearest assigned pin. **Must not stay null** when the rider has two restaurants — Extra Earnings restaurant plans count `deliveries.restaurant_id`, and all live `delivery_rules` are restaurant-scoped, so a null id leaves both progress bars at 0. |
 | external_order_id | text | Order # from partner app. **Format:** ASCII digits `0-9` only, length **1–32** (hint e.g. `12345`). `driver_create_pickup` / insert trigger raise **`invalid_order_id`** otherwise — show “Order ID must be 1–32 digits.” Unique index `deliveries_external_order_id_unique_idx`. Pickup RPC raises **`duplicate_order_id`** (including when the unique index fires). App must show a friendly string such as “This Order ID already exists.” — never the raw Postgres constraint message. |
-| order_proof_url | text | R2 object key (`drivers/{id}/order_proof/...`). Pickup capture is a **live rear-camera still** in-app — no gallery, no front camera / lens flip (the system camera app still exposes both, so pickup must not use `ImagePicker`). Finish-delivery proof may still offer gallery. |
+| order_proof_url | text | R2 object key (`drivers/{id}/order_proof/...`). Pickup, Mark as Delivered, and Cancel Order capture a **live rear-camera still** in-app — no gallery, no front camera / lens flip (the system camera app still exposes both, so these screens must not use `ImagePicker`). Delivered proof stays optional; Cancel proof stays required. |
 | status | enum | pending → admin sets verified/rejected |
 | rejection_reason | text | Admin-authored when `status = rejected`. **Required on Delivery Details overlay** — select the column and show it under Status. Do not reuse `cancel_reason` (that is the rider cancel code). |
 | delivered_at | timestamptz | Set on driver submit |
@@ -1093,7 +1093,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-19 — [admin+app] Pickup Order proof is a live rear-camera still only (no gallery, no front camera). No schema or payload change — ship with the next Play build.*
+*Last synced: 2026-08-19 — [admin+app] Pickup, Mark as Delivered, and Cancel Order proofs are live rear-camera stills only (no gallery, no front camera). Delivered proof stays optional; Cancel proof stays required. No schema or payload change — ship with the next Play build.*
 
 *Prior: 2026-08-19 — [admin+app] The 45-minute out-of-zone Home timer uses the assigned zone (0 m buffer), not restaurant `zone_status` from pickup heartbeats. Live Tracking V2 Live Events synthesises `gps.offline` when status is GPS Offline so the top row cannot stay on leftover "Entered zone". No schema or payload change — ship with the next Play build.*
 
