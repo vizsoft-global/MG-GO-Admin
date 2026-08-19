@@ -3,10 +3,15 @@
  *
  * The feed is a log, but operators read the top row as "what is true now". A pickup
  * that scrolls under a movement ping, or a GPS-offline rider still headed by
- * "Order picked up", is the mismatch QA files as a status bug.
+ * "Entered zone", is the mismatch QA files as a status bug.
+ *
+ * GPS Offline is often decided on the local clock (`tickStatusDecay`) with no
+ * Worker `gps.offline` row yet. Pinning only works if the key exists in the list,
+ * so a missing current-status fact is synthesised here rather than left under a
+ * leftover zone-entry.
  */
 
-import { hasLiveTelemetry, type FleetFlagSet, type FleetStatus } from "./fleet-status";
+import { hasLiveTelemetry, type FleetEventSeverity, type FleetFlagSet, type FleetStatus } from "./fleet-status";
 import type { FleetFeedItem } from "./fleet-types";
 
 const EPISODE_CLOSERS: Record<string, readonly string[]> = {
@@ -18,11 +23,43 @@ const EPISODE_CLOSERS: Record<string, readonly string[]> = {
   "gps.offline": ["gps.restored"],
 };
 
+/** Status facts the local clock can know without a Worker event. */
+const SYNTHETIC_STATUS_PIN: Partial<
+  Record<FleetStatus, { key: string; severity: FleetEventSeverity }>
+> = {
+  gps_offline: { key: "gps.offline", severity: "warning" },
+  location_off: { key: "duty.location_cleared", severity: "warning" },
+};
+
 export type FeedDriverView = {
   driverId: string;
   status: FleetStatus;
   flags: FleetFlagSet;
 };
+
+function syntheticCurrentItem(
+  driver: FeedDriverView,
+  eventKey: string,
+  severity: FleetEventSeverity,
+  nowMs: number,
+): FleetFeedItem {
+  return {
+    id: `synthetic:${driver.driverId}:${eventKey}`,
+    kind: "fleet",
+    driverId: driver.driverId,
+    driverName: null,
+    eventKey,
+    severity,
+    value: null,
+    statusAfter: driver.status,
+    success: true,
+    errorCode: null,
+    latitude: null,
+    longitude: null,
+    context: { synthetic: true },
+    atMs: nowMs,
+  };
+}
 
 function currentPinKeys(driver: FeedDriverView): Set<string> {
   const keys = new Set<string>();
@@ -72,12 +109,23 @@ function pinScore(
 export function composeFleetFeed(
   items: readonly FleetFeedItem[],
   drivers: Iterable<FeedDriverView>,
+  nowMs: number = Date.now(),
 ): FleetFeedItem[] {
   const byId = new Map<string, FeedDriverView>();
   for (const driver of drivers) byId.set(driver.driverId, driver);
 
+  const ranked: FleetFeedItem[] = [...items];
+  for (const driver of byId.values()) {
+    const pin = SYNTHETIC_STATUS_PIN[driver.status];
+    if (!pin) continue;
+    if (ranked.some((item) => item.driverId === driver.driverId && item.eventKey === pin.key)) {
+      continue;
+    }
+    ranked.push(syntheticCurrentItem(driver, pin.key, pin.severity, nowMs));
+  }
+
   const latestCloserAt = new Map<string, number>();
-  for (const item of items) {
+  for (const item of ranked) {
     for (const [opener, closers] of Object.entries(EPISODE_CLOSERS)) {
       if (!closers.includes(item.eventKey)) continue;
       const key = `${item.driverId}:${opener}`;
@@ -86,7 +134,7 @@ export function composeFleetFeed(
     }
   }
 
-  return [...items].sort((a, b) => {
+  return ranked.sort((a, b) => {
     const aScore = pinScore(a, byId.get(a.driverId), latestCloserAt);
     const bScore = pinScore(b, byId.get(b.driverId), latestCloserAt);
     if (aScore !== bScore) return bScore - aScore;

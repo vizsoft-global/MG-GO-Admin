@@ -387,6 +387,7 @@ describe("FleetStore filters and roster", () => {
     assert.equal(store.getDriver("d1")?.status, "gps_offline");
     assert.equal(store.getSnapshot().kpis.gpsOffline, 1);
     assert.equal(store.getSnapshot().kpis.moving, 0);
+    assert.equal(store.getSnapshot().feed[0]?.eventKey, "gps.offline");
   });
 
   it("leaves an off-duty driver Offline rather than decaying it to GPS offline", () => {
