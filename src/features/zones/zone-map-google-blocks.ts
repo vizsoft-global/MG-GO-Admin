@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   cellBoundaryLatLng,
-  hexCellsForMapView,
+  landHexCellsForMapView,
 } from "@/lib/geo/h3-blocks";
 import type {
   GoogleMapInstance,
@@ -120,13 +120,11 @@ export function useGoogleZoneBlocks({
       const bounds = map.getBounds?.();
       const sw = bounds ? latLngToTuple(bounds.getSouthWest()) : [lat - 0.02, lng - 0.02];
       const ne = bounds ? latLngToTuple(bounds.getNorthEast()) : [lat + 0.02, lng + 0.02];
-      const view = hexCellsForMapView({
+      const view = landHexCellsForMapView({
         west: sw[1],
         south: sw[0],
         east: ne[1],
         north: ne[0],
-        lat,
-        lng,
         resolution: resolutionRef.current,
         extraCells: [...selectedRef.current],
       });

@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useRef } from "react";
 import {
   Circle,
   MapContainer,
@@ -678,8 +677,6 @@ export function ZoneMapInner({
   onBlockHit?: (lat: number, lng: number, gesture: "click" | "drag") => void;
   onBlocksZoomCapped?: (capped: boolean) => void;
 }) {
-  const t = useTranslations("pages.zones");
-  const [blocksZoomCapped, setBlocksZoomCapped] = useState(false);
   const referenceZones = useMemo(() => {
     if (!drawMode) return [];
     return zones.filter(
@@ -737,20 +734,12 @@ export function ZoneMapInner({
         selectedCells={selectedBlockCells}
         onHit={onBlockHit}
         onZoomCapped={(capped) => {
-          setBlocksZoomCapped(capped);
           onBlocksZoomCapped?.(capped);
         }}
       />
       {!drawMode && <ZoneLiveDriversLeaflet />}
       {!drawMode && <FitBounds zones={zones} selectedId={selectedId} />}
     </MapContainer>
-      {blocksMode && blocksZoomCapped ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex justify-center px-3">
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
-            {t("geofence.blocksZoomIn")}
-          </p>
-        </div>
-      ) : null}
     </div>
   );
 }

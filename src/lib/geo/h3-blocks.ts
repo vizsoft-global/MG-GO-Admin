@@ -1,15 +1,17 @@
-import { featureCollection, union } from "@turf/turf";
+import { area, featureCollection, intersect, polygon, union } from "@turf/turf";
 import kinks from "@turf/kinks";
 import {
   areNeighborCells,
   cellsToMultiPolygon,
   cellToBoundary,
+  cellToLatLng,
   getHexagonAreaAvg,
   gridDisk,
   latLngToCell,
   polygonToCells,
 } from "h3-js";
-import type { Feature, Polygon, Position } from "geojson";
+import type { Feature, MultiPolygon, Polygon, Position } from "geojson";
+import { KUWAIT_LAND, isKuwaitLand } from "./kuwait-land";
 import { buildPolygonFeature, type ZoneGeoFeature } from "./zone-geometry";
 
 export const H3_BLOCK_RESOLUTIONS = {
@@ -22,8 +24,8 @@ export type H3BlockSize = keyof typeof H3_BLOCK_RESOLUTIONS;
 
 export const DEFAULT_H3_BLOCK_SIZE: H3BlockSize = "M";
 
-/** Skip `polygonToCells` when the viewport would flood the map. */
-export const H3_VIEWPORT_CELL_CAP = 1500;
+/** Skip `polygonToCells` when the land viewport would flood the map. */
+export const H3_VIEWPORT_CELL_CAP = 3000;
 
 export type H3UnionResult =
   | { ok: true; feature: ZoneGeoFeature }
@@ -117,9 +119,55 @@ export function centerDiskCells(
 
 export type HexViewCells = {
   cells: string[];
-  /** False when the viewport is too large, so we only fill a disk at the center. */
+  /** False when land in view has too many hexes; overlay shows selected cells only. */
   fullViewport: boolean;
 };
+
+function viewportPolygon(
+  west: number,
+  south: number,
+  east: number,
+  north: number,
+): Feature<Polygon> {
+  return polygon([
+    [
+      [west, south],
+      [east, south],
+      [east, north],
+      [west, north],
+      [west, south],
+    ],
+  ]);
+}
+
+function landOnlyCells(cells: readonly string[]): string[] {
+  return uniqueCells(cells).filter((cell) => {
+    const [lat, lng] = cellToLatLng(cell);
+    return isKuwaitLand(lat, lng);
+  });
+}
+
+function cellsFromLandGeometry(
+  geometry: Polygon | MultiPolygon,
+  resolution: number,
+  cap: number,
+): string[] | null {
+  const parts = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  const cells: string[] = [];
+  for (const coords of parts) {
+    let next: string[];
+    try {
+      next = polygonToCells(coords, resolution, true);
+    } catch {
+      return null;
+    }
+    if (cells.length + next.length > cap) return null;
+    cells.push(...next);
+  }
+  const land = landOnlyCells(cells);
+  if (land.length > cap) return null;
+  return land;
+}
 
 /**
  * Viewport hexes when they fit under the cap; otherwise a center disk so the
@@ -150,6 +198,53 @@ export function hexCellsForMapView(args: {
   return {
     cells: uniqueCells([...base, ...(args.extraCells ?? [])]),
     fullViewport: viewport != null,
+  };
+}
+
+export function isKuwaitLandCell(h3Index: string): boolean {
+  const [lat, lng] = cellToLatLng(h3Index);
+  return isKuwaitLand(lat, lng);
+}
+
+/**
+ * Faint honeycomb on Kuwait land inside the viewport. No sea cells and no
+ * circular disk. When the land patch is too large, only selected land cells.
+ */
+export function landHexCellsForMapView(args: {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  resolution: number;
+  extraCells?: readonly string[];
+  cap?: number;
+}): HexViewCells {
+  const cap = args.cap ?? H3_VIEWPORT_CELL_CAP;
+  const extra = landOnlyCells(args.extraCells ?? []);
+  const view = viewportPolygon(args.west, args.south, args.east, args.north);
+  let landPatch: Feature<Polygon | MultiPolygon> | null = null;
+  try {
+    landPatch = intersect(featureCollection([KUWAIT_LAND, view]));
+  } catch {
+    landPatch = null;
+  }
+  if (!landPatch) {
+    return { cells: extra, fullViewport: true };
+  }
+
+  const avgKm2 = getHexagonAreaAvg(args.resolution, "km2");
+  const patchKm2 = area(landPatch) / 1e6;
+  if (Number.isFinite(avgKm2) && avgKm2 > 0 && patchKm2 / avgKm2 > cap) {
+    return { cells: extra, fullViewport: false };
+  }
+
+  const base = cellsFromLandGeometry(landPatch.geometry, args.resolution, cap);
+  if (base == null) {
+    return { cells: extra, fullViewport: false };
+  }
+  return {
+    cells: uniqueCells([...base, ...extra]),
+    fullViewport: true,
   };
 }
 

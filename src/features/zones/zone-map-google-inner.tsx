@@ -192,7 +192,7 @@ export function ZoneMapGoogleInner({
   draftCircleRadiusRef.current = clampCircleRadiusMeters(draftCircleRadiusMeters);
   draftColorRef.current = normalizeZoneColor(draftColor);
 
-  const { zoomCapped: blocksZoomCapped } = useGoogleZoneBlocks({
+  useGoogleZoneBlocks({
     map: mapState === "ready" ? mapRef.current : null,
     google: mapState === "ready" ? googleRef.current : null,
     enabled: mapState === "ready" && blocksMode,
@@ -812,13 +812,6 @@ export function ZoneMapGoogleInner({
       ) : null}
       {mapState === "ready" ? (
         <>
-          {blocksMode && blocksZoomCapped ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex justify-center px-3">
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
-                {t("geofence.blocksZoomIn")}
-              </p>
-            </div>
-          ) : null}
           {drawMode === "polygon" && !blocksMode && draftVertexCount > 0 ? (
             <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
               <div className="flex max-w-lg flex-wrap items-center justify-center gap-2">

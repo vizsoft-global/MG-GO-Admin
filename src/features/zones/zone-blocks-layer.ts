@@ -4,6 +4,7 @@ import {
   H3_BLOCK_RESOLUTIONS,
   type H3BlockSize,
   indexForLatLng,
+  isKuwaitLandCell,
   unionCellsToPolygon,
   wouldKeepSelectionConnected,
 } from "@/lib/geo/h3-blocks";
@@ -32,11 +33,11 @@ export const ZONE_BLOCK_HEX_STYLE = {
     strokeWeight: 2,
   },
   unselected: {
-    fillColor: "#14b8a6",
-    fillOpacity: 0.12,
-    strokeColor: "#0f766e",
-    strokeOpacity: 0.95,
-    strokeWeight: 1.5,
+    fillColor: "#94a3b8",
+    fillOpacity: 0.02,
+    strokeColor: "#94a3b8",
+    strokeOpacity: 0.7,
+    strokeWeight: 1,
   },
 } as const;
 
@@ -60,6 +61,7 @@ export function applyBlockHit(
 ): ApplyBlockHitResult {
   const cell = indexForLatLng(lat, lng, resolution);
   const already = selectedCells.includes(cell);
+  if (!already && !isKuwaitLandCell(cell)) return { kind: "noop" };
 
   if (gesture === "click") {
     if (already) {

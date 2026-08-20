@@ -6,9 +6,9 @@ import type { Feature, Polygon } from "geojson";
 import {
   H3_BLOCK_RESOLUTIONS,
   H3_VIEWPORT_CELL_CAP,
-  centerDiskCells,
-  hexCellsForMapView,
   indexForLatLng,
+  isKuwaitLandCell,
+  landHexCellsForMapView,
   unionCellsToPolygon,
 } from "./h3-blocks";
 
@@ -49,50 +49,50 @@ describe("h3-blocks", () => {
     assert.deepEqual(result, { ok: false, reason: "disconnected" });
   });
 
-  it("always returns honeycomb cells for a city-scale view", () => {
-    const disk = centerDiskCells(KUWAIT_LAT, KUWAIT_LNG, RES_M);
-    assert.ok(disk.length > 1);
-    assert.ok(disk.length <= H3_VIEWPORT_CELL_CAP);
-
-    const wide = hexCellsForMapView({
-      west: 47.5,
-      south: 28.9,
-      east: 48.4,
-      north: 29.6,
-      lat: KUWAIT_LAT,
-      lng: KUWAIT_LNG,
-      resolution: RES_M,
-    });
-    assert.equal(wide.fullViewport, false);
-    assert.ok(wide.cells.length > 1);
-    assert.ok(wide.cells.length <= H3_VIEWPORT_CELL_CAP);
-
-    const tight = hexCellsForMapView({
-      west: KUWAIT_LNG - 0.005,
-      south: KUWAIT_LAT - 0.005,
-      east: KUWAIT_LNG + 0.005,
-      north: KUWAIT_LAT + 0.005,
-      lat: KUWAIT_LAT,
-      lng: KUWAIT_LNG,
+  it("draws land hexes in a tight city view and omits the Gulf", () => {
+    const tight = landHexCellsForMapView({
+      west: KUWAIT_LNG - 0.02,
+      south: KUWAIT_LAT - 0.02,
+      east: KUWAIT_LNG + 0.02,
+      north: KUWAIT_LAT + 0.02,
       resolution: RES_M,
     });
     assert.equal(tight.fullViewport, true);
     assert.ok(tight.cells.length >= 1);
+    const gulf = latLngToCell(29.42, 48.0, RES_M);
+    assert.equal(isKuwaitLandCell(gulf), false);
+    assert.equal(tight.cells.includes(gulf), false);
+    const city = latLngToCell(KUWAIT_LAT, KUWAIT_LNG, RES_M);
+    assert.equal(isKuwaitLandCell(city), true);
+    assert.ok(tight.cells.includes(city));
   });
 
-  it("keeps selected cells when the city-scale view is capped", () => {
-    const selected = latLngToCell(KUWAIT_LAT + 0.12, KUWAIT_LNG + 0.12, RES_M);
-    const wide = hexCellsForMapView({
+  it("does not paint a sea disk on a city-scale view", () => {
+    const gulf = latLngToCell(29.42, 48.0, RES_M);
+    const wide = landHexCellsForMapView({
       west: 47.5,
       south: 28.9,
       east: 48.4,
       north: 29.6,
-      lat: KUWAIT_LAT,
-      lng: KUWAIT_LNG,
+      resolution: RES_M,
+      extraCells: [gulf],
+    });
+    assert.equal(wide.cells.includes(gulf), false);
+    assert.ok(wide.cells.length <= H3_VIEWPORT_CELL_CAP);
+  });
+
+  it("keeps selected land cells when the city-scale view is capped", () => {
+    const selected = latLngToCell(KUWAIT_LAT, KUWAIT_LNG, RES_M);
+    const wide = landHexCellsForMapView({
+      west: 46.4,
+      south: 28.4,
+      east: 48.6,
+      north: 30.2,
       resolution: RES_M,
       extraCells: [selected],
     });
     assert.equal(wide.fullViewport, false);
     assert.ok(wide.cells.includes(selected));
+    assert.equal(wide.cells.length, 1);
   });
 });

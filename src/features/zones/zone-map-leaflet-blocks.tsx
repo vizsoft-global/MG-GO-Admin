@@ -5,7 +5,7 @@ import { useMap } from "react-leaflet";
 import L from "leaflet";
 import {
   cellBoundaryLatLng,
-  hexCellsForMapView,
+  landHexCellsForMapView,
 } from "@/lib/geo/h3-blocks";
 import { ZONE_BLOCK_HEX_STYLE } from "./zone-blocks-layer";
 
@@ -95,15 +95,12 @@ export function ZoneBlocksLeafletLayer({
     };
 
     const syncViewport = () => {
-      const center = map.getCenter();
       const bounds = map.getBounds();
-      const view = hexCellsForMapView({
+      const view = landHexCellsForMapView({
         west: bounds.getWest(),
         south: bounds.getSouth(),
         east: bounds.getEast(),
         north: bounds.getNorth(),
-        lat: center.lat,
-        lng: center.lng,
         resolution: resolutionRef.current,
         extraCells: [...selectedRef.current],
       });
