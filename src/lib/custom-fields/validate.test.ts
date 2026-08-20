@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   coerceCustomFieldValue,
   formatCustomFieldDisplay,
+  optionValueFromLabel,
+  parseOptions,
   validateCustomFieldValues,
 } from "./validate";
 
@@ -47,6 +49,33 @@ describe("custom field number non-negative", () => {
       { age: -9 },
     );
     assert.equal(result.errors.some((e) => e.code === "negative_number"), true);
+  });
+});
+
+describe("parseOptions", () => {
+  it("keeps a label-only checkbox choice instead of dropping it", () => {
+    assert.deepEqual(parseOptions([{ label: "Helmet" }]), [
+      { value: "helmet", label: "Helmet" },
+    ]);
+  });
+
+  it("keeps a value-only choice and uses it as the display text", () => {
+    assert.deepEqual(parseOptions([{ value: "jacket" }]), [
+      { value: "jacket", label: "jacket" },
+    ]);
+  });
+
+  it("does not copy value into a blank label when both were typed", () => {
+    assert.deepEqual(parseOptions([{ value: "h1", label: "Helmet" }]), [
+      { value: "h1", label: "Helmet" },
+    ]);
+  });
+
+  it("keeps unicode letters in the stored value", () => {
+    assert.equal(optionValueFromLabel("خوذة"), "خوذة");
+    assert.deepEqual(parseOptions([{ label: "خوذة" }]), [
+      { value: "خوذة", label: "خوذة" },
+    ]);
   });
 });
 

@@ -101,7 +101,7 @@ async function requireDeliveriesView() {
 }
 
 const DELIVERY_LIST_SELECT =
-  "id, driver_id, partner_id, restaurant_id, zone_id, external_order_id, order_proof_url, status, rejection_reason, delivered_at, delivered_lat, delivered_lng, pickup_at, pickup_lat, pickup_lng, pickup_proof_url, cancelled_at, cancel_lat, cancel_lng, cancel_reason, cancel_proof_url, created_at, drivers(driver_code, profiles(full_name, phone)), partners(name, logo_url), restaurants(id, name), zones(name)";
+  "id, driver_id, partner_id, restaurant_id, zone_id, external_order_id, order_proof_url, order_proof_urls, status, rejection_reason, delivered_at, delivered_lat, delivered_lng, pickup_at, pickup_lat, pickup_lng, pickup_proof_url, pickup_proof_urls, cancelled_at, cancel_lat, cancel_lng, cancel_reason, cancel_proof_url, cancel_proof_urls, created_at, drivers(driver_code, profiles(full_name, phone)), partners(name, logo_url), restaurants(id, name), zones(name)";
 
 async function fetchAssignedDriverIdsForRestaurant(
   supabase: Awaited<ReturnType<typeof createClient>>,

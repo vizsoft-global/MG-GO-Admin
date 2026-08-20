@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { fetchLocationEventByDeliveryId, fetchLocationEventsForDelivery } from "@/features/locations/locations-actions";
 import { trailPathFromEvents } from "./delivery-gps-audit";
+import { mergeProofKeys } from "./delivery-proof-keys";
 import type { DriverLocationEvent } from "@/features/locations/types";
 import { resolveOrderProofUrl } from "@/lib/storage/order-proof-url";
 import { earningsRecalcDateFromDeliveredAt } from "./delivery-earn-date";
@@ -294,6 +295,7 @@ const DELIVERY_LIST_SELECT = `
   zone_id,
   external_order_id,
   order_proof_url,
+  order_proof_urls,
   status,
   rejection_reason,
   delivered_at,
@@ -303,11 +305,13 @@ const DELIVERY_LIST_SELECT = `
   pickup_lat,
   pickup_lng,
   pickup_proof_url,
+  pickup_proof_urls,
   cancelled_at,
   cancel_lat,
   cancel_lng,
   cancel_reason,
   cancel_proof_url,
+  cancel_proof_urls,
   created_at,
   drivers (driver_code, employee_id, profiles (full_name, phone)),
   partners (name, logo_url),
@@ -1016,7 +1020,7 @@ export async function deleteDelivery(
   const supabase = await createClient();
   const { data: row, error: fetchError } = await supabase
     .from("deliveries")
-    .select("id, driver_id, delivered_at, order_proof_url, status")
+    .select("id, driver_id, delivered_at, order_proof_url, order_proof_urls, pickup_proof_url, pickup_proof_urls, cancel_proof_url, cancel_proof_urls, status")
     .eq("id", deliveryId)
     .maybeSingle();
 
@@ -1027,9 +1031,14 @@ export async function deleteDelivery(
     };
   }
 
-  const proofKey = row.order_proof_url?.trim() ?? "";
+  const proofKeys = [
+    ...mergeProofKeys(row.order_proof_url, row.order_proof_urls),
+    ...mergeProofKeys(row.pickup_proof_url, row.pickup_proof_urls),
+    ...mergeProofKeys(row.cancel_proof_url, row.cancel_proof_urls),
+  ];
 
-  if (proofKey && isR2ObjectKey(proofKey)) {
+  for (const proofKey of proofKeys) {
+    if (!isR2ObjectKey(proofKey)) continue;
     try {
       await deleteObject(proofKey);
     } catch {

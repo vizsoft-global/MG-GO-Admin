@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -56,7 +57,7 @@ import {
 } from "./parse-cancel-reason";
 import { useDeleteDelivery, useUpdateDeliveryStatus } from "./use-deliveries";
 import { resolveDeliveryStatusVariant } from "./delivery-status-variant";
-import type { DeliveryListRow, DeliveryMapPoint, DeliveryStatus } from "./types";
+import type { DeliveryListRow, DeliveryMapPoint, DeliveryProofShot, DeliveryStatus } from "./types";
 import { REVIEWABLE_DELIVERY_STATUSES, type ReviewableDeliveryStatus } from "./types";
 
 function statusMessageKey(status: DeliveryStatus) {
@@ -133,33 +134,35 @@ const PROOF_ICON_BTN_CLASS =
   "shrink-0 cursor-pointer rounded-lg text-primary hover:bg-primary/10 hover:text-primary";
 
 function DeliveryProofColumn({
-  objectKey,
-  contentTypeHint,
+  shots,
   sectionLabel,
-  thumbUrl,
-  fullUrl,
   showBorderRight = false,
 }: {
-  objectKey: string | null;
-  contentTypeHint: string | null;
+  shots: DeliveryProofShot[];
   sectionLabel: string;
-  thumbUrl: string | null | undefined;
-  fullUrl: string | null | undefined;
   showBorderRight?: boolean;
 }) {
   const t = useTranslations("pages.deliveries");
   const [imgError, setImgError] = useState(false);
+  const [selected, setSelected] = useState(0);
+  const shotKeys = shots.map((s) => s.objectKey).join("|");
 
-  const trimmedKey = objectKey?.trim() ?? "";
-  const displayUrl = thumbUrl ?? fullUrl ?? null;
-  const openUrl = fullUrl ?? thumbUrl ?? null;
-  const contentType = contentTypeHint;
+  const shot = shots[selected] ?? null;
+  const trimmedKey = shot?.objectKey?.trim() ?? "";
+  const displayUrl = shot?.thumbUrl ?? shot?.fullUrl ?? null;
+  const openUrl = shot?.fullUrl ?? shot?.thumbUrl ?? null;
+  const contentType = shot?.contentType ?? null;
+
+  useEffect(() => {
+    setSelected(0);
+    setImgError(false);
+  }, [shotKeys]);
 
   useEffect(() => {
     setImgError(false);
   }, [trimmedKey, displayUrl]);
 
-  const filename = proofFilenameFromKey(objectKey) ?? t("proofImage");
+  const filename = proofFilenameFromKey(shot?.objectKey) ?? t("proofImage");
   const downloadHref = proofDownloadHref(trimmedKey);
   const isImage = contentType?.startsWith("image/") || (!contentType && displayUrl);
   const isPdf = contentType === "application/pdf";
@@ -211,11 +214,16 @@ function DeliveryProofColumn({
       <div className="flex min-h-[3.25rem] shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/20 px-3 py-2">
         <p className="truncate text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {sectionLabel}
+          {shots.length > 1 ? (
+            <span className="ms-1 font-medium normal-case text-muted-foreground/80">
+              ({selected + 1}/{shots.length})
+            </span>
+          ) : null}
         </p>
         {actionButtons}
       </div>
 
-      <div className="relative flex min-h-0 flex-1 items-center justify-center bg-zinc-950 p-3">
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center bg-zinc-950 p-3">
         {!trimmedKey ? (
           <div className="flex flex-col items-center gap-1 text-center">
             <FileImage className="h-7 w-7 text-muted-foreground/50" />
@@ -242,7 +250,7 @@ function DeliveryProofColumn({
             href={openUrl ?? displayUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="relative flex h-full w-full max-h-48 cursor-pointer items-center justify-center"
+            className="relative flex h-full w-full max-h-40 cursor-pointer items-center justify-center"
             aria-label={t("proofOpenNew")}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -251,7 +259,7 @@ function DeliveryProofColumn({
               alt={sectionLabel}
               loading="eager"
               decoding="async"
-              className="max-h-48 max-w-full rounded-md object-contain shadow-sm"
+              className="max-h-40 max-w-full rounded-md object-contain shadow-sm"
               onError={() => setImgError(true)}
             />
           </a>
@@ -274,6 +282,48 @@ function DeliveryProofColumn({
             ) : null}
           </div>
         )}
+        {shots.length > 1 ? (
+          <div className="mt-2 flex max-w-full gap-1 overflow-x-auto">
+            {shots.map((item, index) => {
+              const selectedShot = index === selected;
+              const thumb = item.thumbUrl ?? item.fullUrl;
+              return (
+                <button
+                  key={item.objectKey}
+                  type="button"
+                  onClick={() => {
+                    setSelected(index);
+                    setImgError(false);
+                  }}
+                  className={cn(
+                    "relative h-9 w-9 shrink-0 overflow-hidden rounded-md border",
+                    selectedShot
+                      ? "border-emerald-500 ring-1 ring-emerald-400/50"
+                      : "border-border",
+                  )}
+                  aria-label={`${sectionLabel} ${index + 1}`}
+                  aria-pressed={selectedShot}
+                >
+                  {thumb ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={thumb}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <FileImage className="m-auto h-4 w-4 text-muted-foreground" />
+                  )}
+                  {selectedShot ? (
+                    <span className="absolute end-0 top-0 rounded-bl-sm bg-emerald-500 p-px text-white">
+                      <Check className="h-2.5 w-2.5" />
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -282,38 +332,23 @@ function DeliveryProofColumn({
 function DeliveryProofSplitView({ delivery }: { delivery: DeliveryListRow }) {
   const t = useTranslations("pages.deliveries");
 
-  const rightProof = delivery.cancel_proof_url
-    ? {
-        type: delivery.cancel_proof_content_type,
-        key: delivery.cancel_proof_url,
-        thumb: delivery.cancel_proof_display_url,
-        full: delivery.cancel_proof_full_url,
-        label: t("cancelProof"),
-      }
-    : {
-        type: delivery.proof_content_type,
-        key: delivery.order_proof_url,
-        thumb: delivery.proof_display_url,
-        full: delivery.proof_full_url,
-        label: t("sectionProof"),
-      };
+  const rightShots =
+    delivery.cancel_proofs.length > 0
+      ? delivery.cancel_proofs
+      : delivery.order_proofs;
+  const rightLabel =
+    delivery.cancel_proofs.length > 0 ? t("cancelProof") : t("sectionProof");
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-2 border-b border-border">
       <DeliveryProofColumn
-        objectKey={delivery.pickup_proof_url}
-        contentTypeHint={delivery.pickup_proof_content_type}
+        shots={delivery.pickup_proofs}
         sectionLabel={t("pickupProof")}
-        thumbUrl={delivery.pickup_proof_display_url}
-        fullUrl={delivery.pickup_proof_full_url}
         showBorderRight
       />
       <DeliveryProofColumn
-        objectKey={rightProof.key}
-        contentTypeHint={rightProof.type}
-        sectionLabel={rightProof.label}
-        thumbUrl={rightProof.thumb}
-        fullUrl={rightProof.full}
+        shots={rightShots}
+        sectionLabel={rightLabel}
       />
     </div>
   );

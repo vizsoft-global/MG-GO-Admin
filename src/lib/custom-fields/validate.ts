@@ -50,15 +50,36 @@ export function normalizeFieldKey(raw: string): string | null {
   return key;
 }
 
+/** Stable stored value when an admin types only a display label. */
+export function optionValueFromLabel(label: string): string {
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+  return slug || "option";
+}
+
 export function parseOptions(raw: unknown): CustomFieldOption[] {
   if (!Array.isArray(raw)) return [];
   const out: CustomFieldOption[] = [];
+  const seen = new Set<string>();
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
-    const value = String((item as { value?: unknown }).value ?? "").trim();
-    const label = String((item as { label?: unknown }).label ?? value).trim();
-    if (!value) continue;
-    out.push({ value, label: label || value });
+    const rawValue = String((item as { value?: unknown }).value ?? "").trim();
+    const rawLabel = String((item as { label?: unknown }).label ?? "").trim();
+    if (!rawValue && !rawLabel) continue;
+    let value = rawValue || optionValueFromLabel(rawLabel);
+    const label = rawLabel || rawValue;
+    if (seen.has(value)) {
+      let n = 2;
+      while (seen.has(`${value}_${n}`)) n += 1;
+      value = `${value}_${n}`;
+    }
+    seen.add(value);
+    out.push({ value, label });
   }
   return out;
 }

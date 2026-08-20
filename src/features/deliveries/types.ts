@@ -17,6 +17,13 @@ export const REVIEWABLE_DELIVERY_STATUSES = [
 ] as const;
 export type ReviewableDeliveryStatus = (typeof REVIEWABLE_DELIVERY_STATUSES)[number];
 
+export type DeliveryProofShot = {
+  objectKey: string;
+  thumbUrl: string | null;
+  fullUrl: string | null;
+  contentType: string | null;
+};
+
 export type DeliveryProofFields = {
   proof_display_url: string | null;
   proof_full_url: string | null;
@@ -41,6 +48,8 @@ export type DeliveryListRow = {
   status: DeliveryStatus;
   external_order_id: string | null;
   order_proof_url: string | null;
+  order_proof_urls?: string[];
+  order_proofs: DeliveryProofShot[];
   proof_display_url: string | null;
   proof_full_url: string | null;
   proof_content_type: string | null;
@@ -48,6 +57,8 @@ export type DeliveryListRow = {
   pickup_lat: number | null;
   pickup_lng: number | null;
   pickup_proof_url: string | null;
+  pickup_proof_urls?: string[];
+  pickup_proofs: DeliveryProofShot[];
   pickup_proof_display_url: string | null;
   pickup_proof_full_url: string | null;
   pickup_proof_content_type: string | null;
@@ -56,6 +67,8 @@ export type DeliveryListRow = {
   cancel_lng: number | null;
   cancel_reason: string | null;
   cancel_proof_url: string | null;
+  cancel_proof_urls?: string[];
+  cancel_proofs: DeliveryProofShot[];
   cancel_proof_display_url: string | null;
   cancel_proof_full_url: string | null;
   cancel_proof_content_type: string | null;
