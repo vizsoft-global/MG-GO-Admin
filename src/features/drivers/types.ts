@@ -227,13 +227,23 @@ export const DRIVER_IMPORT_FIELDS = [
   "phone",
   "civil_id",
   "employee_id",
+  "restaurant_ids",
   "partner_id",
   "zone_id",
   "vehicle_label",
-  "restaurant_ids",
   "nationality",
   "rider_category",
 ] as const;
+
+export const DRIVER_IMPORT_REQUIRED_FIELDS = [
+  "full_name",
+  "phone",
+  "civil_id",
+  "employee_id",
+  "restaurant_ids",
+] as const;
+
+export type DriverImportRequiredField = (typeof DRIVER_IMPORT_REQUIRED_FIELDS)[number];
 
 export type DriverImportStandardField = (typeof DRIVER_IMPORT_FIELDS)[number];
 /** Standard field or `cf:<key>` for custom fields */

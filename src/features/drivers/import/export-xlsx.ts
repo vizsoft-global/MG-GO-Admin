@@ -1,13 +1,14 @@
 import * as XLSX from "xlsx";
 
-export function downloadAoaXlsx(
+export function downloadWorkbookXlsx(
   filename: string,
-  sheetName: string,
-  aoa: Array<Array<string | number>>,
+  sheets: Array<{ name: string; aoa: Array<Array<string | number>> }>,
 ) {
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  for (const sheet of sheets) {
+    const ws = XLSX.utils.aoa_to_sheet(sheet.aoa);
+    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+  }
   const buffer = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -18,6 +19,14 @@ export function downloadAoaXlsx(
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+export function downloadAoaXlsx(
+  filename: string,
+  sheetName: string,
+  aoa: Array<Array<string | number>>,
+) {
+  downloadWorkbookXlsx(filename, [{ name: sheetName, aoa }]);
 }
 
 export function buildImportErrorAoa(

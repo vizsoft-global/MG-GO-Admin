@@ -29,6 +29,21 @@ describe("guessColumnMapping", () => {
     assert.equal(mapping.nationality, "Nationality");
     assert.equal(mapping.rider_category, "Rider Category");
   });
+
+  it("maps required identity columns from the sample template", () => {
+    const mapping = guessColumnMapping([
+      "Full Name",
+      "Phone (+965)",
+      "Civil ID",
+      "Employee ID",
+      "Restaurant IDs (name, RST code, or UUID)",
+    ]);
+    assert.equal(mapping.full_name, "Full Name");
+    assert.equal(mapping.phone, "Phone (+965)");
+    assert.equal(mapping.civil_id, "Civil ID");
+    assert.equal(mapping.employee_id, "Employee ID");
+    assert.equal(mapping.restaurant_ids, "Restaurant IDs (name, RST code, or UUID)");
+  });
 });
 
 describe("mapRowsFromSheet", () => {

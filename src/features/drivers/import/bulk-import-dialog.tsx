@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Download, Loader2, Upload } from "lucide-react";
+import { Building2, Download, Loader2, MapPin, Store, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,14 @@ import {
 } from "@/components/ui/select";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
+import { fetchDriverImportLookups } from "../drivers-import-actions";
 import {
   useApplyDriverImportBatch,
   useResolveDriverImportPreview,
   type DriverImportPreviewRow,
 } from "../use-drivers";
 import type { DriverImportCredential, DriverImportTargetField } from "../types";
+import { DRIVER_IMPORT_REQUIRED_FIELDS } from "../types";
 import { DriverMappingBoard } from "./mapping-board";
 import {
   guessColumnMapping,
@@ -36,7 +38,13 @@ import {
   buildCredentialsAoa,
   buildImportErrorAoa,
   downloadAoaXlsx,
+  downloadWorkbookXlsx,
 } from "./export-xlsx";
+import {
+  partnersLookupAoa,
+  restaurantsLookupAoa,
+  zonesLookupAoa,
+} from "./lookups";
 import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
 
 type Step = "upload" | "map" | "preview" | "result";
@@ -140,6 +148,11 @@ export function DriverBulkImportDialog({
 
   const goPreview = () => {
     if (!headers.length) return;
+    const missingRequired = DRIVER_IMPORT_REQUIRED_FIELDS.filter((field) => !mapping[field]);
+    if (missingRequired.length > 0) {
+      toast.error(t("mappingRequired"));
+      return;
+    }
     saveStoredMapping(headerSignature, mapping);
     const mapped = mapRowsFromSheet(headers, rows, mapping, customFieldKeys);
     startTransition(async () => {
@@ -217,6 +230,43 @@ export function DriverBulkImportDialog({
     );
   };
 
+  const downloadLookups = (kind: "all" | "restaurants" | "zones" | "partners") => {
+    startTransition(async () => {
+      const data = await fetchDriverImportLookups();
+      if ("error" in data) {
+        toast.error(t("lookupFailed"));
+        return;
+      }
+      if (kind === "restaurants") {
+        downloadAoaXlsx(
+          "driver-import-restaurants.xlsx",
+          "Restaurants",
+          restaurantsLookupAoa(data.restaurants),
+        );
+        return;
+      }
+      if (kind === "zones") {
+        downloadAoaXlsx("driver-import-zones.xlsx", "Zones", zonesLookupAoa(data.zones));
+        return;
+      }
+      if (kind === "partners") {
+        downloadAoaXlsx(
+          "driver-import-partners.xlsx",
+          "Partners",
+          partnersLookupAoa(data.partners),
+        );
+        return;
+      }
+      downloadWorkbookXlsx("driver-import-assignment-ids.xlsx", [
+        { name: "Restaurants", aoa: restaurantsLookupAoa(data.restaurants) },
+        { name: "Zones", aoa: zonesLookupAoa(data.zones) },
+        { name: "Partners", aoa: partnersLookupAoa(data.partners) },
+      ]);
+    });
+  };
+
+  const requiredMapped = DRIVER_IMPORT_REQUIRED_FIELDS.every((field) => mapping[field]);
+
   return (
     <Dialog
       open={open}
@@ -233,10 +283,16 @@ export function DriverBulkImportDialog({
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pt-4 pb-3">
           {step === "upload" ? (
             <>
-              <div className="flex justify-end">
+              <div className="space-y-1.5 rounded-lg border border-border px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t("requiredTitle")} <span className="text-destructive">*</span>
+                </p>
+                <p className="text-xs text-foreground">{t("requiredList")}</p>
+                <p className="text-[10px] text-muted-foreground">{t("optionalList")}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
                   className="h-9 cursor-pointer rounded-lg"
                   nativeButton={false}
@@ -250,9 +306,63 @@ export function DriverBulkImportDialog({
                   <Download className="me-2 h-4 w-4" />
                   {t("downloadSample")}
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  disabled={isPending}
+                  onClick={() => downloadLookups("all")}
+                >
+                  {isPending ? (
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="me-2 h-4 w-4" />
+                  )}
+                  {t("downloadLookups")}
+                </Button>
+              </div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("lookupLists")}
+              </p>
+              <p className="text-[10px] text-muted-foreground">{t("lookupHint")}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  disabled={isPending}
+                  onClick={() => downloadLookups("restaurants")}
+                >
+                  <Store className="me-2 h-4 w-4" />
+                  {t("downloadRestaurants")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  disabled={isPending}
+                  onClick={() => downloadLookups("zones")}
+                >
+                  <MapPin className="me-2 h-4 w-4" />
+                  {t("downloadZones")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  disabled={isPending}
+                  onClick={() => downloadLookups("partners")}
+                >
+                  <Building2 className="me-2 h-4 w-4" />
+                  {t("downloadPartners")}
+                </Button>
               </div>
               <label
-                className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-6 py-12 ${
+                className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-6 py-5 ${
                   dragActive
                     ? "border-primary bg-primary/5"
                     : "border-border bg-muted/20 hover:bg-muted/40"
@@ -293,13 +403,18 @@ export function DriverBulkImportDialog({
           ) : null}
 
           {step === "map" && headers.length > 0 ? (
-            <DriverMappingBoard
-              headers={headers}
-              sampleRow={rows[0] ?? []}
-              mapping={mapping}
-              onMappingChange={setMapping}
-              customFields={customFields}
-            />
+            <>
+              {!requiredMapped ? (
+                <p className="text-xs text-destructive">{t("mappingRequired")}</p>
+              ) : null}
+              <DriverMappingBoard
+                headers={headers}
+                sampleRow={rows[0] ?? []}
+                mapping={mapping}
+                onMappingChange={setMapping}
+                customFields={customFields}
+              />
+            </>
           ) : null}
 
           {step === "preview" ? (
@@ -422,7 +537,9 @@ export function DriverBulkImportDialog({
             title={t("title")}
             subtitle={
               step === "map"
-                ? t("dropHint")
+                ? requiredMapped
+                  ? t("dropHint")
+                  : t("mappingRequired")
                 : step === "result" && result
                   ? t("importSuccess", {
                       applied: result.applied,
@@ -451,7 +568,7 @@ export function DriverBulkImportDialog({
                   type="button"
                   size="sm"
                   className="h-9 cursor-pointer rounded-md px-4"
-                  disabled={isPending}
+                  disabled={isPending || !requiredMapped}
                   onClick={goPreview}
                 >
                   {isPending ? (

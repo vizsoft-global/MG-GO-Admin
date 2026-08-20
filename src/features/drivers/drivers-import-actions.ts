@@ -28,6 +28,7 @@ import {
   resolveRestaurantTokens,
   resolveZoneToken,
 } from "./import/resolve-lookups";
+import type { DriverImportLookups } from "./import/lookups";
 
 const IMPORT_CHUNK = 200;
 
@@ -40,6 +41,49 @@ async function requireDriversManager() {
     return { error: "not_authorized" as const };
   }
   return { session };
+}
+
+export async function fetchDriverImportLookups(): Promise<
+  DriverImportLookups | { error: "not_authorized" }
+> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+  const supabase = await createClient();
+
+  const [{ data: restaurants }, { data: partners }, { data: zones }] = await Promise.all([
+    supabase
+      .from("restaurants")
+      .select("id, name, restaurant_code, partner_id, zone_id, status, is_active")
+      .order("name"),
+    supabase.from("partners").select("id, name").order("name"),
+    supabase.from("zones").select("id, name, code").order("name"),
+  ]);
+
+  const partnerNameById = new Map((partners ?? []).map((p) => [p.id, p.name]));
+  const zoneById = new Map((zones ?? []).map((z) => [z.id, z]));
+
+  return {
+    restaurants: (restaurants ?? []).map((r) => {
+      const zone = r.zone_id ? zoneById.get(r.zone_id) : undefined;
+      return {
+        name: r.name,
+        restaurant_code: r.restaurant_code,
+        id: r.id,
+        partner_name: r.partner_id ? (partnerNameById.get(r.partner_id) ?? null) : null,
+        partner_id: r.partner_id,
+        zone_name: zone?.name ?? null,
+        zone_code: zone?.code ?? null,
+        zone_id: r.zone_id,
+        importable: r.status === "published" && r.is_active,
+      };
+    }),
+    zones: (zones ?? []).map((z) => ({
+      name: z.name,
+      code: z.code,
+      id: z.id,
+    })),
+    partners: (partners ?? []).map((p) => ({ name: p.name, id: p.id })),
+  };
 }
 
 export type ApproveDriverResult =
@@ -318,6 +362,8 @@ export async function resolveDriverImportPreview(
       if (restaurantsHit.status === "ok") {
         restaurant_ids = restaurantsHit.ids;
         restaurant_names = restaurantsHit.names;
+      } else if (restaurantsHit.status === "empty") {
+        status = "missing_fields";
       } else if (restaurantsHit.status === "ambiguous") {
         status = "ambiguous_restaurant";
       } else {

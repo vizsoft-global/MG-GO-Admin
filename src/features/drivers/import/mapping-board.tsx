@@ -10,9 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DRIVER_IMPORT_FIELDS, type DriverImportTargetField } from "../types";
+import {
+  DRIVER_IMPORT_FIELDS,
+  DRIVER_IMPORT_REQUIRED_FIELDS,
+  type DriverImportTargetField,
+} from "../types";
 
 const NONE = "__none__";
+const REQUIRED = new Set<string>(DRIVER_IMPORT_REQUIRED_FIELDS);
 
 export function DriverMappingBoard({
   headers,
@@ -68,14 +73,19 @@ export function DriverMappingBoard({
           ...DRIVER_IMPORT_FIELDS.map((field) => ({
             field: field as DriverImportTargetField,
             label: t(`fields.${field}`),
+            required: REQUIRED.has(field),
           })),
           ...customFields.map((cf) => ({
             field: `cf:${cf.key}` as DriverImportTargetField,
             label: cf.label,
+            required: false,
           })),
-        ].map(({ field, label }) => (
+        ].map(({ field, label, required }) => (
           <div key={field} className="space-y-1">
-            <Label className="text-xs">{label}</Label>
+            <Label className="text-xs">
+              {label}
+              {required ? <span className="ms-0.5 text-destructive">*</span> : null}
+            </Label>
             <Select
               items={headerItems}
               value={mapping[field] ?? NONE}
@@ -86,7 +96,7 @@ export function DriverMappingBoard({
                 onMappingChange(next);
               }}
             >
-              <SelectTrigger className="h-8 w-full cursor-pointer rounded-lg text-sm">
+              <SelectTrigger className="h-9 w-full cursor-pointer rounded-lg text-sm">
                 <SelectValue placeholder={t("selectColumn")} />
               </SelectTrigger>
               <SelectContent>
