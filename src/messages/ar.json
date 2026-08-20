@@ -1043,10 +1043,12 @@
           "phone": "الهاتف (+965)",
           "civil_id": "الرقم المدني",
           "employee_id": "رقم الموظف",
-          "partner_id": "معرّف الشريك (UUID اختياري)",
-          "zone_id": "معرّف المنطقة (UUID اختياري)",
+          "partner_id": "الشريك (الاسم أو UUID، اختياري)",
+          "zone_id": "المنطقة (الاسم أو الرمز أو UUID، اختياري)",
           "vehicle_label": "المركبة / رقم الدراجة",
-          "restaurant_ids": "معرّفات المطاعم (رمز RST أو UUID، مفصولة بفاصلة)"
+          "restaurant_ids": "المطاعم (الاسم أو رمز RST أو UUID، مفصولة بفاصلة)",
+          "nationality": "الجنسية (رمز ISO أو اسم الدولة)",
+          "rider_category": "فئة السائق (داخلي / خارجي)"
         },
         "preview": "معاينة",
         "back": "رجوع",
@@ -1065,6 +1067,9 @@
         "import": "استيراد {count} صف",
         "importFailed": "فشل الاستيراد.",
         "importSuccess": "تم استيراد {applied} ({skipped} متخطى). اعتمد {approved}.",
+        "downloadErrors": "تنزيل الأخطاء ({count})",
+        "downloadCredentials": "تنزيل بيانات الدخول ({count})",
+        "done": "تم",
         "status": {
           "ok": "جاهز",
           "duplicate_phone": "هاتف مكرر",
@@ -1073,11 +1078,16 @@
           "invalid_phone": "هاتف غير صالح",
           "invalid_civil_id": "رقم مدني غير صالح",
           "invalid_employee_id": "يجب أن يكون رقم الموظف من 4 إلى 8 أرقام",
+          "invalid_nationality": "جنسية غير معروفة",
+          "invalid_rider_category": "استخدم داخلي أو خارجي",
           "missing_fields": "حقول ناقصة",
           "unmatched_partner": "شريك غير معروف",
           "unmatched_zone": "منطقة غير معروفة",
           "unmatched_vehicle": "مركبة غير معروفة",
-          "unmatched_restaurant": "مطعم غير معروف"
+          "unmatched_restaurant": "مطعم غير معروف",
+          "ambiguous_partner": "اسم الشريك يطابق أكثر من سجل",
+          "ambiguous_zone": "اسم المنطقة يطابق أكثر من سجل",
+          "ambiguous_restaurant": "اسم المطعم يطابق أكثر من سجل"
         }
       },
       "assignSheet": {

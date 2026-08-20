@@ -23,6 +23,7 @@ import {
   useResolveDriverImportPreview,
   type DriverImportPreviewRow,
 } from "../use-drivers";
+import type { DriverImportCredential, DriverImportTargetField } from "../types";
 import { DriverMappingBoard } from "./mapping-board";
 import {
   guessColumnMapping,
@@ -31,10 +32,14 @@ import {
   saveStoredMapping,
 } from "./parse";
 import { DRIVER_IMPORT_TEMPLATE_PATH } from "./template";
-import type { DriverImportTargetField } from "../types";
+import {
+  buildCredentialsAoa,
+  buildImportErrorAoa,
+  downloadAoaXlsx,
+} from "./export-xlsx";
 import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
 
-type Step = "upload" | "map" | "preview";
+type Step = "upload" | "map" | "preview" | "result";
 
 function previewVariant(
   status: DriverImportPreviewRow["status"],
@@ -50,6 +55,8 @@ function previewVariant(
       return "danger";
   }
 }
+
+const SPREADSHEET_ACCEPT = ".csv,.xlsx,.xls";
 
 export function DriverBulkImportDialog({
   open,
@@ -69,6 +76,14 @@ export function DriverBulkImportDialog({
   const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "update">("skip");
   const [approveImmediately, setApproveImmediately] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [dragActive, setDragActive] = useState(false);
+  const [result, setResult] = useState<{
+    applied: number;
+    skipped: number;
+    approved: number;
+    failures: Array<{ rowIndex: number; reason: string }>;
+    credentials: DriverImportCredential[];
+  } | null>(null);
 
   const resolvePreview = useResolveDriverImportPreview();
   const applyBatch = useApplyDriverImportBatch();
@@ -91,6 +106,12 @@ export function DriverBulkImportDialog({
     return { ready, duplicate, invalid, total: preview.length };
   }, [preview]);
 
+  const errorRowCount = useMemo(() => {
+    if (!result) return preview.filter((r) => r.status !== "ok").length;
+    const failedIndexes = new Set(result.failures.map((f) => f.rowIndex));
+    return preview.filter((r) => r.status !== "ok" || failedIndexes.has(r.rowIndex)).length;
+  }, [preview, result]);
+
   const reset = useCallback(() => {
     setStep("upload");
     setFileName("");
@@ -100,6 +121,8 @@ export function DriverBulkImportDialog({
     setMapping({});
     setPreview([]);
     setApproveImmediately(false);
+    setResult(null);
+    setDragActive(false);
   }, []);
 
   const handleFile = async (file: File) => {
@@ -111,6 +134,7 @@ export function DriverBulkImportDialog({
     const stored = loadStoredMapping(parsed.headerSignature);
     const guessed = guessColumnMapping(parsed.headers, customFieldKeys);
     setMapping({ ...guessed, ...stored });
+    setResult(null);
     setStep("map");
   };
 
@@ -120,12 +144,12 @@ export function DriverBulkImportDialog({
     const mapped = mapRowsFromSheet(headers, rows, mapping, customFieldKeys);
     startTransition(async () => {
       try {
-        const result = await resolvePreview.mutateAsync(mapped);
-        if (result && typeof result === "object" && "error" in result) {
+        const previewResult = await resolvePreview.mutateAsync(mapped);
+        if (previewResult && typeof previewResult === "object" && "error" in previewResult) {
           toast.error(t("previewFailed"));
           return;
         }
-        setPreview(result);
+        setPreview(previewResult);
         setStep("preview");
       } catch {
         toast.error(t("previewFailed"));
@@ -135,22 +159,30 @@ export function DriverBulkImportDialog({
 
   const handleImport = () => {
     startTransition(async () => {
-      const result = await applyBatch.mutateAsync({
+      const applyResult = await applyBatch.mutateAsync({
         fileName,
         mapping: mapping as Record<string, string>,
         rows: preview,
         duplicateStrategy,
         approveImmediately,
       });
-      if ("error" in result) {
+      if ("error" in applyResult) {
         toast.error(t("importFailed"));
         return;
       }
-      const failureSample = result.failures
+      setResult({
+        applied: applyResult.applied,
+        skipped: applyResult.skipped,
+        approved: applyResult.approved,
+        failures: applyResult.failures,
+        credentials: applyResult.credentials,
+      });
+      setStep("result");
+      const failureSample = applyResult.failures
         .slice(0, 3)
         .map((f) => `Row ${f.rowIndex + 1}: ${f.reason}`)
         .join("\n");
-      if (result.applied === 0 && result.failures.length > 0) {
+      if (applyResult.applied === 0 && applyResult.failures.length > 0) {
         toast.error(t("importFailed"), {
           description: failureSample,
           duration: 12_000,
@@ -159,17 +191,30 @@ export function DriverBulkImportDialog({
       }
       toast.success(
         t("importSuccess", {
-          applied: result.applied,
-          skipped: result.skipped,
-          approved: result.approved,
+          applied: applyResult.applied,
+          skipped: applyResult.skipped,
+          approved: applyResult.approved,
         }),
         failureSample
           ? { description: failureSample, duration: 10_000 }
           : undefined,
       );
-      reset();
-      onOpenChange(false);
     });
+  };
+
+  const downloadErrors = () => {
+    const aoa = buildImportErrorAoa(headers, rows, preview, result?.failures ?? []);
+    if (aoa.length <= 1) return;
+    downloadAoaXlsx("driver-import-errors.xlsx", "Errors", aoa);
+  };
+
+  const downloadCredentials = () => {
+    if (!result?.credentials.length) return;
+    downloadAoaXlsx(
+      "driver-import-credentials.xlsx",
+      "Credentials",
+      buildCredentialsAoa(result.credentials),
+    );
   };
 
   return (
@@ -193,7 +238,7 @@ export function DriverBulkImportDialog({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="cursor-pointer rounded-lg"
+                  className="h-9 cursor-pointer rounded-lg"
                   nativeButton={false}
                   render={
                     <a
@@ -206,13 +251,37 @@ export function DriverBulkImportDialog({
                   {t("downloadSample")}
                 </Button>
               </div>
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 px-6 py-12 hover:bg-muted/40">
+              <label
+                className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-6 py-12 ${
+                  dragActive
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-muted/20 hover:bg-muted/40"
+                }`}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setDragActive(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragActive(false);
+                  const f = e.dataTransfer.files?.[0];
+                  if (f) void handleFile(f);
+                }}
+              >
                 <Upload className="h-8 w-8 text-muted-foreground" />
                 <span className="text-sm font-medium">{t("dropHint")}</span>
                 <span className="text-xs text-muted-foreground">{t("formats")}</span>
                 <input
                   type="file"
-                  accept=".csv,.xlsx,.xls"
+                  accept={SPREADSHEET_ACCEPT}
                   className="sr-only"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -254,7 +323,7 @@ export function DriverBulkImportDialog({
                     if (v === "skip" || v === "update") setDuplicateStrategy(v);
                   }}
                 >
-                  <SelectTrigger className="h-8 w-48 cursor-pointer rounded-lg">
+                  <SelectTrigger className="h-9 w-48 cursor-pointer rounded-lg">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -311,6 +380,42 @@ export function DriverBulkImportDialog({
               </div>
             </>
           ) : null}
+
+          {step === "result" && result ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {t("importSuccess", {
+                  applied: result.applied,
+                  skipped: result.skipped,
+                  approved: result.approved,
+                })}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-md"
+                  disabled={errorRowCount === 0}
+                  onClick={downloadErrors}
+                >
+                  <Download className="me-2 h-4 w-4" />
+                  {t("downloadErrors", { count: errorRowCount })}
+                </Button>
+                {result.credentials.length > 0 ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-9 cursor-pointer rounded-md"
+                    onClick={downloadCredentials}
+                  >
+                    <Download className="me-2 h-4 w-4" />
+                    {t("downloadCredentials", { count: result.credentials.length })}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
         {step !== "upload" ? (
           <AppModalFooter
@@ -318,11 +423,17 @@ export function DriverBulkImportDialog({
             subtitle={
               step === "map"
                 ? t("dropHint")
-                : t("previewSummary", {
-                    ready: summary.ready,
-                    duplicate: summary.duplicate,
-                    invalid: summary.invalid,
-                  })
+                : step === "result" && result
+                  ? t("importSuccess", {
+                      applied: result.applied,
+                      skipped: result.skipped,
+                      approved: result.approved,
+                    })
+                  : t("previewSummary", {
+                      ready: summary.ready,
+                      duplicate: summary.duplicate,
+                      invalid: summary.invalid,
+                    })
             }
           >
             {step === "map" ? (
@@ -376,6 +487,19 @@ export function DriverBulkImportDialog({
                   )}
                 </Button>
               </>
+            ) : null}
+            {step === "result" ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 cursor-pointer rounded-md px-4"
+                onClick={() => {
+                  reset();
+                  onOpenChange(false);
+                }}
+              >
+                {t("done")}
+              </Button>
             ) : null}
           </AppModalFooter>
         ) : (

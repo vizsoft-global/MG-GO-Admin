@@ -1054,10 +1054,12 @@
           "phone": "Phone (+965)",
           "civil_id": "Civil ID",
           "employee_id": "Employee ID",
-          "partner_id": "Partner ID (optional UUID)",
-          "zone_id": "Zone ID (optional UUID)",
+          "partner_id": "Partner (name or UUID, optional)",
+          "zone_id": "Zone (name, code, or UUID, optional)",
           "vehicle_label": "Vehicle / bike ID",
-          "restaurant_ids": "Restaurant IDs (RST code or UUID, comma-separated)"
+          "restaurant_ids": "Restaurants (name, RST code, or UUID, comma-separated)",
+          "nationality": "Nationality (ISO or country name)",
+          "rider_category": "Rider category (in_house / outsourced)"
         },
         "preview": "Preview",
         "back": "Back",
@@ -1076,6 +1078,9 @@
         "import": "Import {count} rows",
         "importFailed": "Import failed.",
         "importSuccess": "Imported {applied} ({skipped} skipped). Approved {approved}.",
+        "downloadErrors": "Download errors ({count})",
+        "downloadCredentials": "Download credentials ({count})",
+        "done": "Done",
         "status": {
           "ok": "Ready",
           "duplicate_phone": "Duplicate phone",
@@ -1084,11 +1089,16 @@
           "invalid_phone": "Invalid phone",
           "invalid_civil_id": "Invalid civil ID",
           "invalid_employee_id": "Employee ID must be 4–8 digits",
+          "invalid_nationality": "Unknown nationality",
+          "invalid_rider_category": "Use in_house or outsourced",
           "missing_fields": "Missing fields",
           "unmatched_partner": "Unknown partner",
           "unmatched_zone": "Unknown zone",
           "unmatched_vehicle": "Unknown vehicle",
-          "unmatched_restaurant": "Unknown restaurant"
+          "unmatched_restaurant": "Unknown restaurant",
+          "ambiguous_partner": "Partner name matches more than one",
+          "ambiguous_zone": "Zone name matches more than one",
+          "ambiguous_restaurant": "Restaurant name matches more than one"
         }
       },
       "assignSheet": {

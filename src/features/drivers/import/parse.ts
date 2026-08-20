@@ -5,8 +5,19 @@ import {
 } from "@/lib/import/spreadsheet";
 import { normalizeCivilId, normalizeKuwaitPhone } from "../driver-phone";
 import { normalizeEmployeeId } from "../driver-errors";
-import type { DriverImportMappedRow, DriverImportTargetField } from "../types";
+import type { DriverImportMappedRow, DriverImportTargetField, DriverRiderCategory } from "../types";
 import { customFieldColumnId } from "@/lib/custom-fields/types";
+
+export function parseRiderCategory(
+  raw: string | null | undefined,
+): DriverRiderCategory | "invalid" | null {
+  const value = String(raw ?? "").trim();
+  if (!value) return null;
+  const key = value.toLowerCase().replace(/[\s-]+/g, "_");
+  if (key === "in_house" || key === "inhouse") return "in_house";
+  if (key === "outsourced" || key === "outsource") return "outsourced";
+  return "invalid";
+}
 
 export function mapRowsFromSheet(
   headers: string[],
@@ -47,6 +58,8 @@ export function mapRowsFromSheet(
         zone_id: get("zone_id"),
         vehicle_label: get("vehicle_label"),
         restaurant_ids: get("restaurant_ids"),
+        nationality: get("nationality"),
+        rider_category: get("rider_category"),
         custom_fields,
       };
     })
@@ -59,6 +72,8 @@ export function mapRowsFromSheet(
         r.restaurant_ids ||
         r.partner_id ||
         r.zone_id ||
+        r.nationality ||
+        r.rider_category ||
         Object.values(r.custom_fields).some(Boolean),
     );
 }
@@ -78,17 +93,21 @@ export function guessColumnMapping(
     phone: find("phone", "mobile", "tel"),
     civil_id: find("civil", "national id", "nid"),
     employee_id: find("emp id", "emp_id", "employee"),
-    partner_id: find("partner id", "partner_id", "partner uuid"),
-    zone_id: find("zone id", "zone_id", "zone uuid"),
+    partner_id: find("partner id", "partner_id", "partner uuid", "partner"),
+    zone_id: find("zone id", "zone_id", "zone uuid", "zone"),
     vehicle_label: find("vehicle", "bike", "plate"),
     restaurant_ids: find(
       "restaurant id",
       "restaurant_ids",
       "restaurant code",
+      "restaurants",
+      "restaurant",
       "rst-",
       "store id",
       "merchant id",
     ),
+    nationality: find("nationality", "country"),
+    rider_category: find("rider category", "category", "outsourced", "in house"),
   };
 
   for (const key of customFieldKeys) {
