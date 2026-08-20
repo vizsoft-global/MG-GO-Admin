@@ -13,6 +13,7 @@ export type LiveTrackingFilterState = {
   statusChips: Array<"online" | "on_duty" | "idle" | "alert" | "offline">;
   batteryLevel: "all" | "low" | "medium" | "high";
   gpsSignal: "all" | GpsQuality;
+  vehicleType: "all" | "bike" | "car";
 };
 
 export type LiveTrackingZoneShape = ZoneShape & { id: string };
@@ -26,6 +27,7 @@ export const DEFAULT_LIVE_TRACKING_FILTERS: LiveTrackingFilterState = {
   statusChips: ["online", "on_duty", "idle", "alert", "offline"],
   batteryLevel: "all",
   gpsSignal: "all",
+  vehicleType: "all",
 };
 
 export function resetLiveTrackingFilters(): LiveTrackingFilterState {
@@ -51,6 +53,7 @@ export function matchesLiveTrackingFilters(
     latitude?: number;
     longitude?: number;
     activeDeliveryId?: string | null;
+    vehicleType?: "bike" | "car";
   },
   filters: LiveTrackingFilterState,
   meta?: { zoneId: string | null; partnerId: string | null; zoneName: string | null },
@@ -74,6 +77,9 @@ export function matchesLiveTrackingFilters(
     }
   }
   if (filters.partnerId !== "all" && meta?.partnerId !== filters.partnerId) return false;
+  if (filters.vehicleType !== "all" && (loc.vehicleType ?? "bike") !== filters.vehicleType) {
+    return false;
+  }
 
   if (filters.batteryLevel !== "all") {
     const bucket = batteryLevelBucket(loc.batteryPct);

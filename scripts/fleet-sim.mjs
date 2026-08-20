@@ -37,6 +37,7 @@ import process from "node:process";
 
 import {
   FLEET_EVENT_KEYS,
+  fleetThresholdsAsSettings,
   resolveFleetThresholds,
 } from "../src/features/live-tracking-v2/fleet-status.ts";
 import { encodePosition } from "../src/features/live-tracking-v2/fleet-wire.ts";
@@ -619,16 +620,7 @@ async function runWsTarget(args, fleet, zones, stats) {
       room: args.room,
       serverTime: Date.now(),
       frameHz: args.hz,
-      settings: {
-        moving_speed_mps: thresholds.movingSpeedMps,
-        overspeed_kmh: thresholds.overspeedKmh,
-        low_battery_pct: thresholds.lowBatteryPct,
-        gps_offline_seconds: thresholds.gpsOfflineSeconds,
-        stale_gps_seconds: thresholds.staleGpsSeconds,
-        idle_minutes: thresholds.idleMinutes,
-        zone_buffer_meters: thresholds.zoneBufferMeters,
-        shift_late_grace_minutes: thresholds.shiftLateGraceMinutes,
-      },
+      settings: fleetThresholdsAsSettings(thresholds),
       zones,
     });
 
@@ -650,6 +642,7 @@ async function runWsTarget(args, fleet, zones, stats) {
         partnerName: "Sim Partner",
         restaurantName: null,
         vehicleLabel: "Scooter",
+        vehicleTypeKey: "bike",
         accountStatus: "active",
         onDutySince: new Date(Date.now() - 3 * 3600_000).toISOString(),
         deliveriesToday: driver.deliveriesToday,

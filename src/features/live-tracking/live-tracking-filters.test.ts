@@ -248,6 +248,36 @@ describe("matchesLiveTrackingFilters offline chip", () => {
   });
 });
 
+describe("matchesLiveTrackingFilters vehicle type", () => {
+  const meta = { zoneId: null, partnerId: null, zoneName: null };
+  it("narrows to car and treats a missing type as bike", () => {
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ vehicleType: "car" }),
+        filters({ vehicleType: "car" }),
+        meta,
+        zoneShapes,
+        NOW,
+      ),
+      true,
+    );
+    assert.equal(
+      matchesLiveTrackingFilters(
+        loc({ vehicleType: "bike" }),
+        filters({ vehicleType: "car" }),
+        meta,
+        zoneShapes,
+        NOW,
+      ),
+      false,
+    );
+    assert.equal(
+      matchesLiveTrackingFilters(loc(), filters({ vehicleType: "bike" }), meta, zoneShapes, NOW),
+      true,
+    );
+  });
+});
+
 describe("resetLiveTrackingFilters", () => {
   it("clears search, zone, partner, battery, gps, and restores every status chip", () => {
     const dirty: LiveTrackingFilterState = {
@@ -259,6 +289,7 @@ describe("resetLiveTrackingFilters", () => {
       statusChips: ["idle"],
       batteryLevel: "low",
       gpsSignal: "weak",
+      vehicleType: "car",
     };
     const reset = resetLiveTrackingFilters();
     assert.deepEqual(reset, DEFAULT_LIVE_TRACKING_FILTERS);

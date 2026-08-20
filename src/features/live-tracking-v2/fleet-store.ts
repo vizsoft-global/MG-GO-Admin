@@ -29,7 +29,9 @@ import {
   fleetFlags,
   fleetStatus,
   fleetStatusSortWeight,
+  fleetThresholdsFromSettings,
   gpsAgeSeconds,
+  gpsGraceForStatus,
   hasLiveTelemetry,
   isFleetAlert,
   isMovingSpeed,
@@ -104,6 +106,7 @@ export type FleetSnapshotRow = {
   restaurant_name: string | null;
   vehicle_reg_number: string | null;
   vehicle_bike_id: string | null;
+  vehicle_type_key?: string | null;
   latitude: number | string | null;
   longitude: number | string | null;
   speed_mps: number | string | null;
@@ -325,16 +328,7 @@ export class FleetStore {
     zones: FleetZone[];
   }): void {
     if (input.zones.length > 0) this.zones = input.zones;
-    this.thresholds = resolveFleetThresholds({
-      overspeedKmh: input.settings.overspeed_kmh,
-      lowBatteryPct: input.settings.low_battery_pct,
-      idleMinutes: input.settings.idle_minutes,
-      gpsOfflineSeconds: input.settings.gps_offline_seconds,
-      staleGpsSeconds: input.settings.stale_gps_seconds,
-      zoneBufferMeters: input.settings.zone_buffer_meters,
-      shiftLateGraceMinutes: input.settings.shift_late_grace_minutes,
-      movingSpeedMps: input.settings.moving_speed_mps,
-    });
+    this.thresholds = fleetThresholdsFromSettings(input.settings);
     this.connection = {
       ...this.connection,
       // One-shot skew estimate. Good enough: the error is half a round trip, and
@@ -540,15 +534,7 @@ export class FleetStore {
   }): void {
     if (input.zones && input.zones.length > 0) this.zones = input.zones;
     if (input.settings) {
-      this.thresholds = resolveFleetThresholds({
-        overspeedKmh: input.settings.overspeed_kmh,
-        lowBatteryPct: input.settings.low_battery_pct,
-        idleMinutes: input.settings.idle_minutes,
-        gpsOfflineSeconds: input.settings.gps_offline_seconds,
-        staleGpsSeconds: input.settings.stale_gps_seconds,
-        zoneBufferMeters: input.settings.zone_buffer_meters,
-        shiftLateGraceMinutes: input.settings.shift_late_grace_minutes,
-      });
+      this.thresholds = fleetThresholdsFromSettings(input.settings);
     }
 
     const nowMs = Date.parse(input.generatedAt) || Date.now();
@@ -603,6 +589,7 @@ export class FleetStore {
         partnerName: row.partner_name,
         restaurantName: row.restaurant_name,
         vehicleLabel: row.vehicle_reg_number ?? row.vehicle_bike_id,
+        vehicleTypeKey: row.vehicle_type_key ?? "bike",
         accountStatus: row.account_status ?? "pending",
         onDutySince: row.on_duty_since,
         deliveriesToday: row.deliveries_today ?? 0,
@@ -732,7 +719,7 @@ export class FleetStore {
       const staleGps =
         decayed == null &&
         age != null &&
-        age > this.thresholds.staleGpsSeconds &&
+        age > gpsGraceForStatus(driver.status, this.thresholds).stale &&
         hasLiveTelemetry(driver.status);
 
       const statusChanged = decayed != null && decayed !== driver.status;

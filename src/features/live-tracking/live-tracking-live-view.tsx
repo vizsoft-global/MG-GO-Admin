@@ -182,7 +182,14 @@ export function LiveTrackingLiveView({
   const staleOnDutyCount = useMemo(
     () =>
       enrichedLocations.filter(
-        (loc) => loc.isOnDuty && isGpsHeartbeatStale(loc.lastSeenAt, nowTick),
+        (loc) =>
+          loc.isOnDuty &&
+          isGpsHeartbeatStale(
+            loc.lastSeenAt,
+            nowTick,
+            loc.trackingStatus,
+            loc.speedMps,
+          ),
       ).length,
     [enrichedLocations, nowTick],
   );
@@ -297,7 +304,7 @@ export function LiveTrackingLiveView({
         title: loc.driverName,
         pinStatus: loc.pinStatus,
         trackingStatus: loc.trackingStatus,
-        vehicleType: undefined as "bike" | "car" | undefined,
+        vehicleType: loc.vehicleType,
         heading: loc.heading,
         highlight: loc.driverId === selectedId,
       })),

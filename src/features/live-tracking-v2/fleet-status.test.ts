@@ -15,6 +15,9 @@ import {
   fleetStatus,
   fleetStatusTone,
   fleetMarkerTone,
+  fleetThresholdsAsSettings,
+  fleetThresholdsFromSettings,
+  gpsGraceForStatus,
   isFleetAlert,
   isLowBattery,
   isOverspeeding,
@@ -75,13 +78,23 @@ describe("fleetStatus", () => {
     assert.equal(fleetStatus(signals({ locationOff: true }), NOW), "location_off");
   });
 
-  it("goes gps_offline once the fix is older than the threshold", () => {
+  it("goes gps_offline once a moving fix is older than the moving threshold", () => {
     const stale = NOW - (FLEET_DEFAULT_THRESHOLDS.gpsOfflineSeconds + 1) * 1000;
-    assert.equal(fleetStatus(signals({ lastFixAtMs: stale }), NOW), "gps_offline");
+    assert.equal(
+      fleetStatus(
+        signals({ trackingStatus: "moving", speedMps: 9, lastFixAtMs: stale }),
+        NOW,
+      ),
+      "gps_offline",
+    );
   });
 
   it("stays live at exactly the gps offline boundary", () => {
     const edge = NOW - FLEET_DEFAULT_THRESHOLDS.gpsOfflineSeconds * 1000;
+    assert.equal(
+      fleetStatus(signals({ trackingStatus: "moving", speedMps: 9, lastFixAtMs: edge }), NOW),
+      "moving",
+    );
     assert.equal(fleetStatus(signals({ lastFixAtMs: edge }), NOW), "idle");
   });
 
@@ -227,8 +240,8 @@ describe("fleetFlags", () => {
 
   it("raises stale_gps as a warning tier before gps_offline", () => {
     const late = NOW - (FLEET_DEFAULT_THRESHOLDS.staleGpsSeconds + 5) * 1000;
-    const input = signals({ lastFixAtMs: late });
-    assert.equal(fleetStatus(input, NOW), "idle");
+    const input = signals({ trackingStatus: "moving", speedMps: 9, lastFixAtMs: late });
+    assert.equal(fleetStatus(input, NOW), "moving");
     assert.equal(fleetFlags(input, NOW).stale_gps, true);
   });
 
@@ -351,6 +364,7 @@ describe("distribution and alerting", () => {
 
 describe("staleness rules", () => {
   const offlineMs = FLEET_DEFAULT_THRESHOLDS.gpsOfflineSeconds * 1_000;
+  const idleOfflineMs = FLEET_DEFAULT_THRESHOLDS.gpsOfflineIdleSeconds * 1_000;
 
   it("refuses to vouch for a reading behind an offline status", () => {
     assert.equal(hasLiveTelemetry("moving"), true);
@@ -366,10 +380,20 @@ describe("staleness rules", () => {
     assert.equal(decayedFleetStatus("moving", NOW - offlineMs + 5_000, NOW), null);
     assert.equal(decayedFleetStatus("moving", NOW - offlineMs - 1_000, NOW), "gps_offline");
     assert.equal(
-      decayedFleetStatus("on_delivery", NOW - offlineMs - 1_000, NOW),
+      decayedFleetStatus("on_delivery", NOW - idleOfflineMs - 1_000, NOW),
       "gps_offline",
     );
     assert.equal(decayedFleetStatus("idle", null, NOW), "gps_offline");
+  });
+
+  it("gives a status that may be standing still the idle grace", () => {
+    // A rider waiting at a pickup is on the app's 30s beat however their delivery is
+    // labelled, so 91s of silence is three missed beats and not a verdict.
+    const between = NOW - offlineMs - 1_000;
+    assert.equal(decayedFleetStatus("idle", between, NOW), null);
+    assert.equal(decayedFleetStatus("on_delivery", between, NOW), null);
+    assert.equal(decayedFleetStatus("on_break", between, NOW), null);
+    assert.equal(decayedFleetStatus("moving", between, NOW), "gps_offline");
   });
 
   it("does not decay statuses that are duty or account facts", () => {
@@ -387,6 +411,87 @@ describe("staleness rules", () => {
   });
 });
 
+/*
+ * The driver app reports every second while moving and every 30s otherwise
+ * (`AdaptiveLocationScheduler`), so one grace period cannot serve both: 90s of silence is 90
+ * missed reports for a moving rider and three for a parked one. Three is inside the noise of a
+ * single doze window, which is why an alive, on-duty, stationary rider read GPS Offline.
+ */
+describe("idle cadence grace", () => {
+  const pastMoving = NOW - (FLEET_DEFAULT_THRESHOLDS.gpsOfflineSeconds + 10) * 1_000;
+  const pastIdle = NOW - (FLEET_DEFAULT_THRESHOLDS.gpsOfflineIdleSeconds + 1) * 1_000;
+
+  it("keeps a parked rider live past the moving threshold", () => {
+    assert.equal(fleetStatus(signals({ lastFixAtMs: pastMoving }), NOW), "idle");
+  });
+
+  it("still calls a parked rider offline once the idle grace runs out", () => {
+    assert.equal(fleetStatus(signals({ lastFixAtMs: pastIdle }), NOW), "gps_offline");
+  });
+
+  it("keeps the decisive threshold for a rider who was moving", () => {
+    assert.equal(
+      fleetStatus(
+        signals({ trackingStatus: "moving", speedMps: 9, lastFixAtMs: pastMoving }),
+        NOW,
+      ),
+      "gps_offline",
+    );
+  });
+
+  it("reads real speed as the moving cadence even under an idle stamp", () => {
+    // The scheduler can still be in idle on the fix that first carries motion.
+    assert.equal(
+      fleetStatus(signals({ speedMps: 9, lastFixAtMs: pastMoving }), NOW),
+      "gps_offline",
+    );
+  });
+
+  it("gives a delivery_submit stamp the idle grace", () => {
+    // `markSampled` resets the scheduler to idle straight after a delivery_submit report,
+    // so a rider waiting at a restaurant is on the 30s beat.
+    assert.equal(
+      fleetStatus(
+        signals({ trackingStatus: "delivery_submit", lastFixAtMs: pastMoving }),
+        NOW,
+      ),
+      "idle",
+    );
+  });
+
+  it("stops flagging every idle driver stale_gps", () => {
+    // At a 30s cadence fix age oscillates 0–30s, so a 30s warning was permanently true for
+    // the whole idle fleet — the same as having no warning at all.
+    const oneBeat = NOW - 35_000;
+    assert.equal(fleetFlags(signals({ lastFixAtMs: oneBeat }), NOW).stale_gps, false);
+    const threeBeats = NOW - 80_000;
+    assert.equal(fleetFlags(signals({ lastFixAtMs: threeBeats }), NOW).stale_gps, true);
+  });
+
+  it("keeps zone claims live for a parked rider inside the idle grace", () => {
+    // `hasLiveFix` gates the zone flags, so a shared threshold would also have silently
+    // dropped Out of Zone for every stationary rider past 90s.
+    const flags = fleetFlags(
+      signals({ lastFixAtMs: pastMoving, inAssignedZone: false }),
+      NOW,
+    );
+    assert.equal(flags.out_of_zone, true);
+  });
+
+  it("maps a status to the grace the decay clock should use", () => {
+    assert.deepEqual(gpsGraceForStatus("moving", FLEET_DEFAULT_THRESHOLDS), {
+      offline: FLEET_DEFAULT_THRESHOLDS.gpsOfflineSeconds,
+      stale: FLEET_DEFAULT_THRESHOLDS.staleGpsSeconds,
+    });
+    for (const status of ["idle", "on_delivery", "on_break"] as const) {
+      assert.deepEqual(gpsGraceForStatus(status, FLEET_DEFAULT_THRESHOLDS), {
+        offline: FLEET_DEFAULT_THRESHOLDS.gpsOfflineIdleSeconds,
+        stale: FLEET_DEFAULT_THRESHOLDS.staleGpsIdleSeconds,
+      });
+    }
+  });
+});
+
 describe("threshold plumbing", () => {
   it("merges only finite non-negative overrides", () => {
     const merged = resolveFleetThresholds({
@@ -397,6 +502,51 @@ describe("threshold plumbing", () => {
     assert.equal(merged.overspeedKmh, 80);
     assert.equal(merged.lowBatteryPct, FLEET_DEFAULT_THRESHOLDS.lowBatteryPct);
     assert.equal(merged.idleMinutes, FLEET_DEFAULT_THRESHOLDS.idleMinutes);
+  });
+
+  it("carries every threshold across the wire, not just remembered ones", () => {
+    /*
+     * The guard against the bug the shared mapping replaced. The snake_case wire mapping used
+     * to be hand-written in four places — the Worker's serialiser, the Worker's `app_settings`
+     * read, and both of the store's — so adding a key to `FleetThresholds` did not make it
+     * travel, and a list that missed one failed *silently* because `resolveFleetThresholds`
+     * substitutes the default. The Worker would enforce a new value while the browser kept the
+     * old one. `Record<keyof FleetThresholds, string>` now makes an omission a type error;
+     * this asserts the two directions actually agree.
+     */
+    const custom = resolveFleetThresholds({
+      movingSpeedMps: 2,
+      overspeedKmh: 80,
+      lowBatteryPct: 15,
+      gpsOfflineSeconds: 100,
+      gpsOfflineIdleSeconds: 200,
+      staleGpsSeconds: 40,
+      staleGpsIdleSeconds: 90,
+      idleMinutes: 7,
+      zoneBufferMeters: 30,
+      shiftLateGraceMinutes: 12,
+    });
+    const settings = fleetThresholdsAsSettings(custom);
+    assert.equal(
+      Object.keys(settings).length,
+      Object.keys(FLEET_DEFAULT_THRESHOLDS).length,
+    );
+    assert.deepEqual(fleetThresholdsFromSettings(settings), custom);
+  });
+
+  it("defaults the idle thresholds when the server does not send them", () => {
+    // `app_settings` has columns for the moving pair only, so production sends a bag without
+    // the idle keys until a migration adds them. That must be a default, not a zero.
+    const thresholds = fleetThresholdsFromSettings({ gps_offline_seconds: 100 });
+    assert.equal(thresholds.gpsOfflineSeconds, 100);
+    assert.equal(
+      thresholds.gpsOfflineIdleSeconds,
+      FLEET_DEFAULT_THRESHOLDS.gpsOfflineIdleSeconds,
+    );
+    assert.equal(
+      thresholds.staleGpsIdleSeconds,
+      FLEET_DEFAULT_THRESHOLDS.staleGpsIdleSeconds,
+    );
   });
 
   it("normalizes fractional battery readings", () => {
