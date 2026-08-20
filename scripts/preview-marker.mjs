@@ -58,34 +58,40 @@ const html = `<!doctype html>
 
 <h2>Ships at these sizes (48 / 36 / 28 px)</h2>
 <div class="row">
-  ${[48, 36, 28].map((px) => tones.map((t) => sprite(`pin-${t}`, px)).join("")).join('<span style="width:14px"></span>')}
+  ${[48, 36, 28].map((px) => tones.map((t) => sprite(`pin-bike-${t}`, px)).join("")).join('<span style="width:14px"></span>')}
+</div>
+
+<h2>Car sprites (48 / 36 / 28 px)</h2>
+<div class="row">
+  ${[48, 36, 28].map((px) => tones.map((t) => sprite(`pin-car-${t}`, px)).join("")).join('<span style="width:14px"></span>')}
 </div>
 
 <h2>Rotation — 0 / 45 / 90 / 135 / 180 / 225 / 270 / 315</h2>
 <div class="row">
-  ${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => sprite("pin-primary", 40, a)).join("")}
+  ${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => sprite("pin-bike-primary", 40, a)).join("")}
 </div>
 
 <h2>Stale variants (36px)</h2>
-<div class="row">${tones.map((t) => sprite(`pin-${t}-stale`, 36)).join("")}</div>
+<div class="row">${tones.map((t) => sprite(`pin-bike-${t}-stale`, 36)).join("")}</div>
+<div class="row" style="margin-top:8px">${tones.map((t) => sprite(`pin-car-${t}-stale`, 36)).join("")}</div>
 
 <h2>Over a dark basemap / satellite</h2>
 <div class="row">
-  <div class="dark">${tones.map((t) => sprite(`pin-${t}`, 36)).join("")}</div>
-  <div class="sat">${tones.map((t) => sprite(`pin-${t}`, 36)).join("")}</div>
+  <div class="dark">${tones.map((t) => sprite(`pin-bike-${t}`, 36)).join("")}${tones.map((t) => sprite(`pin-car-${t}`, 36)).join("")}</div>
+  <div class="sat">${tones.map((t) => sprite(`pin-bike-${t}`, 36)).join("")}${tones.map((t) => sprite(`pin-car-${t}`, 36)).join("")}</div>
 </div>
 
 <h2>Selection ring behind the marker (40px)</h2>
 <div class="row">
   <span style="position:relative;display:inline-block;width:48px;height:48px">
     <span style="position:absolute;inset:0">${sprite("ring", 48)}</span>
-    <span style="position:absolute;inset:4px">${sprite("pin-success", 40)}</span>
+    <span style="position:absolute;inset:4px">${sprite("pin-bike-success", 40)}</span>
   </span>
 </div>
 
 <h2>Density check — 60 markers at 30px</h2>
 <div class="row" style="gap:2px;max-width:520px">
-  ${Array.from({ length: 60 }, (_, i) => sprite(`pin-${tones[i % tones.length]}`, 30, (i * 37) % 360)).join("")}
+  ${Array.from({ length: 60 }, (_, i) => sprite(`pin-${i % 2 === 0 ? "bike" : "car"}-${tones[i % tones.length]}`, 30, (i * 37) % 360)).join("")}
 </div>
 
 <h2>Raw atlas sheet</h2>

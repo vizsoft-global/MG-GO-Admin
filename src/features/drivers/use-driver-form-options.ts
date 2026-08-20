@@ -12,8 +12,7 @@ export async function fetchAvailableVehicles(): Promise<VehicleOption[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("vehicles")
-    .select("id, bike_id, reg_number")
-    .is("current_driver_id", null)
+    .select("id, bike_id, reg_number, vehicle_type_key")
     .eq("status", "active")
     .order("bike_id");
 
@@ -22,6 +21,7 @@ export async function fetchAvailableVehicles(): Promise<VehicleOption[]> {
     id: v.id,
     bike_id: v.bike_id,
     reg_number: v.reg_number,
+    vehicle_type_key: (v as { vehicle_type_key?: string | null }).vehicle_type_key ?? "bike",
   }));
 }
 

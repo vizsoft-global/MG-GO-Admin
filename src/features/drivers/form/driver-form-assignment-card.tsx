@@ -1,7 +1,9 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Briefcase, Car, MapPinned, Users } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DriverRestaurantPicker } from "../driver-restaurant-picker";
 import type { PartnerOption, RestaurantOption, ZoneOption, VehicleOption } from "../types";
 import { FieldBlock, FieldError, SectionHeading } from "./driver-form-primitives";
@@ -14,6 +16,8 @@ export function DriverFormAssignmentCard({
   onZoneChange,
   vehicleId,
   onVehicleChange,
+  vehicleTypeKey,
+  onVehicleTypeChange,
   restaurants,
   selectedRestaurantIds,
   onRestaurantsChange,
@@ -34,6 +38,8 @@ export function DriverFormAssignmentCard({
   onZoneChange: (value: string) => void;
   vehicleId: string;
   onVehicleChange: (value: string) => void;
+  vehicleTypeKey: string;
+  onVehicleTypeChange: (value: string) => void;
   restaurants: RestaurantOption[];
   selectedRestaurantIds: string[];
   onRestaurantsChange: (ids: string[]) => void;
@@ -51,9 +57,11 @@ export function DriverFormAssignmentCard({
     partner: string;
     zone: string;
     vehicle: string;
+    vehicleType: string;
     restaurants: string;
   };
 }) {
+  const tLive = useTranslations("pages.liveTracking");
   return (
     <section className="flex h-full flex-col space-y-3 rounded-lg border border-border bg-card p-4">
       <SectionHeading icon={Briefcase} accent="primary">
@@ -112,6 +120,34 @@ export function DriverFormAssignmentCard({
           placeholder={placeholderVehicle}
           disabled={disabled}
         />
+      </FieldBlock>
+      <FieldBlock>
+        <Label className="inline-flex items-center gap-1.5">
+          <Car className="h-3.5 w-3.5 text-muted-foreground" />
+          {labels.vehicleType}
+        </Label>
+        <Select
+          items={[
+            { value: "bike", label: tLive("filterVehicleBike") },
+            { value: "car", label: tLive("filterVehicleCar") },
+          ]}
+          value={vehicleTypeKey}
+          onValueChange={(value) => {
+            if (value) onVehicleTypeChange(value);
+          }}
+        >
+          <SelectTrigger className="h-9" disabled={disabled}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="bike" label={tLive("filterVehicleBike")}>
+              {tLive("filterVehicleBike")}
+            </SelectItem>
+            <SelectItem value="car" label={tLive("filterVehicleCar")}>
+              {tLive("filterVehicleCar")}
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </FieldBlock>
       <FieldBlock>
         <Label>{labels.restaurants}</Label>

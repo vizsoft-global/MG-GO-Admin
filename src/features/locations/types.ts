@@ -15,6 +15,7 @@ export type DriverLiveLocation = {
   isOnDuty: boolean;
   isBlocked: boolean;
   restaurantName: string | null;
+  vehicleType: "bike" | "car";
   latitude: number;
   longitude: number;
   speedMps: number | null;

@@ -92,7 +92,7 @@ Canonical SQL: [`supabase/migrations/20260908170000_gps_liveness_and_geofence_ev
 |---|---|---|
 | Clock-out / sign-out | `driver_set_duty_state(false)` — **do not** clear GPS | **Offline immediately**, last pin stays |
 | OS Location / permission off | `driver_clear_live_location()` once (on-duty only) | **Removed** in ~15s (not Idle) |
-| App/GPS dies, still In | reports stop | **Offline after ~8 min** (`LIVE_GPS_MAX_AGE_MS`); GPS Offline insight **~90s** |
+| App/GPS dies, still In | reports stop | **GPS Offline after 90s if the last fix was moving, 150s if it was not** (`gpsOfflineSeconds` / `gpsOfflineIdleSeconds`, shared by V1, V2 and the Worker); the last pin is kept in the realtime cache for **8 min** (`LIVE_PIN_RETENTION_MS`) |
 
 Clock-out / profile sign-out: [`on_duty_gate.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/shift/on_duty_gate.dart), [`sign_out_cleanup.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/auth/sign_out_cleanup.dart). Location-off: [`duty_task_handler.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/duty_task_handler.dart) `_maybeClearLiveLocation`. Keep-pin migration: [`20260912100000_keep_gps_on_clock_out.sql`](../supabase/migrations/20260912100000_keep_gps_on_clock_out.sql). Clear-pin RPC: [`20260913100000_driver_clear_live_location.sql`](../supabase/migrations/20260913100000_driver_clear_live_location.sql).
 
@@ -122,8 +122,8 @@ Clock-out / profile sign-out: [`on_duty_gate.dart`](C:/Users/Admin/Desktop/Vizso
 | Trail window — V2 map | **10 min** per rider, held in the Durable Object (nothing to query, nothing persisted) |
 | `driver_locations` rows while moving | **~17/min/rider** — the flush gate keeps 1Hz from becoming ~60/min, and the rate does not scale with speed |
 | Clock-out Offline | **~1s** (realtime) |
-| Silent → Offline chip | **~8 min** (`LIVE_GPS_MAX_AGE_MS`) |
-| GPS Offline insight | **~90s** (`GPS_HEARTBEAT_STALE_MS`) |
+| Silent → GPS Offline | **90s** if the last fix was moving, **150s** if it was not (`gpsOfflineSeconds` / `gpsOfflineIdleSeconds`) |
+| Last-known pin retained | **8 min** (`LIVE_PIN_RETENTION_MS`) — the pin stays; the reading does not |
 | Location-off removed from list | **~15s** (next FGS tick + `driver_clear_live_location`) |
 
 ---
@@ -227,7 +227,8 @@ Shared by the Worker and the browser from one file, [`src/features/live-tracking
 | Moving | **1.5 m/s** (same as V1) |
 | Overspeed | **60 km/h** |
 | Low battery | **20%** |
-| Stale GPS / GPS offline | **30s** / **90s** |
+| Stale GPS / GPS offline (moving) | **30s** / **90s** |
+| Stale GPS / GPS offline (idle) | **75s** / **150s** |
 | Sustained idle | **5 min** |
 | Zone hysteresis buffer | **25 m** |
 | Shift late grace | **10 min** |

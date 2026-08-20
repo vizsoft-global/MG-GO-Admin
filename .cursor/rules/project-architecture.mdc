@@ -150,7 +150,7 @@ Migrations: `20260518000000_dpd_core_schema.sql`, `20260518120000_app_settings.s
 | Group | Tables |
 |-------|--------|
 | Workforce | `partners`, `zones`, `drivers`, `driver_documents`, `driver_assets` |
-| Fleet | `vehicles` |
+| Fleet | `vehicles`, `vehicle_types` |
 | Ops | `deliveries`, `attendance_logs`, `driver_sessions`, `fleet_events` (Live Tracking V2 edge-derived events) |
 | Compliance | `wrong_actions`, `hygiene_tasks`, `hygiene_submissions` |
 | HR | `requests`, `loan_terms` |
@@ -230,6 +230,8 @@ Change-log format:
 ---
 
 ## Change log
+
+- `[admin+app] 2026-08-20` — **Idle GPS Offline, Home banner, vehicle types.** Idle riders were decaying at the 90s moving cadence (three missed 30s beats). Shared thresholds add `gpsOfflineIdleSeconds` 150 / `staleGpsIdleSeconds` 75; the app heartbeats a coarse fix once the idle interval elapses so the room still advances `lastFixAtMs`. Home: `driver_get_home_dashboard` returns a targeted `banner`; admin CRUD on `/settings/app`; “Confirmed once verified” under weekly counts. Vehicles: `vehicle_types` seeded bike/car, `vehicles.vehicle_type_key` is the map source of truth (`COALESCE` in `admin_live_fleet_snapshot`), real `/vehicles` CRUD, V2 atlas + V1 filter. Migrations `20260924100000`, `20260924100100`.
 
 - `[admin+app] 2026-08-20` — **Multiple proof stills.** Pickup, Mark as Delivered, and Cancel Order accept up to 5 rear-camera photos. New `text[]` columns plus JSON-or-scalar RPC params; the original scalar key remains the first photo. Admin Delivery Details shows a thumb strip. Migration `20260923100000`.
 

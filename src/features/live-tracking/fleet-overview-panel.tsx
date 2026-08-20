@@ -241,26 +241,31 @@ export function FleetOverviewPanel({
             clearable={false}
           />
           <Select
-            disabled
             items={[
               { value: "all", label: t("filterVehicleAll") },
               { value: "bike", label: t("filterVehicleBike") },
               { value: "car", label: t("filterVehicleCar") },
             ]}
-            value="all"
-            onValueChange={() => {}}
+            value={filters.vehicleType}
+            onValueChange={(value) =>
+              onChange({
+                ...filters,
+                vehicleType: (value as LiveTrackingFilterState["vehicleType"]) ?? "all",
+              })
+            }
           >
-            <SelectTrigger className="h-8 cursor-not-allowed rounded-lg text-xs opacity-80">
-              <div className="flex w-full items-center justify-between gap-2">
-                <span className="truncate">{t("filterVehicleType")}</span>
-                <Badge variant="secondary" className="h-5 rounded-full px-2 text-[10px]">
-                  {t("comingSoon")}
-                </Badge>
-              </div>
+            <SelectTrigger className="h-8 rounded-lg text-xs">
+              <SelectValue placeholder={t("filterVehicleType")} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all" label={t("filterVehicleAll")}>
                 {t("filterVehicleAll")}
+              </SelectItem>
+              <SelectItem value="bike" label={t("filterVehicleBike")}>
+                {t("filterVehicleBike")}
+              </SelectItem>
+              <SelectItem value="car" label={t("filterVehicleCar")}>
+                {t("filterVehicleCar")}
               </SelectItem>
             </SelectContent>
           </Select>

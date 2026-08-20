@@ -1,30 +1,23 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { notFound } from "next/navigation";
+import { setRequestLocale } from "next-intl/server";
 import { requirePermission } from "@/lib/auth/require-permission";
-import { AppPage } from "@/components/app/app-page";
-import { AppPageHeader } from "@/components/app/app-page-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { VehicleDetailPageShell } from "@/features/vehicles/vehicle-detail-page-shell";
+import { getVehicle, listVehicleTypes } from "@/features/vehicles/vehicles-actions";
 
 export default async function VehicleDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
+  searchParams: Promise<{ edit?: string }>;
 }) {
   const { locale, id } = await params;
+  const query = await searchParams;
   setRequestLocale(locale);
   await requirePermission(locale, "vehicles.view");
-  const t = await getTranslations("pages.vehicleDetail");
 
-  return (
-    <AppPage>
-      <AppPageHeader
-        title={t("title")}
-        description={`${t("subtitle")} · ${id.slice(0, 8)}…`}
-      />
-      <Card className="rounded-xl border-border shadow-sm">
-        <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground">{t("emptyTitle")}</p>
-        </CardContent>
-      </Card>
-    </AppPage>
-  );
+  const [vehicle, types] = await Promise.all([getVehicle(id), listVehicleTypes()]);
+  if (!vehicle) notFound();
+
+  return <VehicleDetailPageShell vehicle={vehicle} types={types} editOpen={query.edit === "1"} />;
 }

@@ -18,10 +18,16 @@
  *   rotationally symmetric, so baking them into the same cell as the bike costs
  *   nothing and saves a second `IconLayer` over 500 entities.
  *
- * Sprites are laid out in a single row: one cell per tone, the faded stale variants,
- * then the shared selection ring.
+ * Sprites are laid out in a single row: one cell per (vehicle type × tone), the
+ * faded stale variants, then the shared selection ring. Unmapped types use the
+ * bike cells — the same fallback as the snapshot COALESCE.
  */
 
+import {
+  KNOWN_VEHICLE_TYPE_KEYS,
+  vehicleSpriteKey,
+  type KnownVehicleTypeKey,
+} from "../vehicles/vehicle-type";
 import type { FleetTone } from "./fleet-status";
 
 /** Device pixels per sprite. 2x so pins stay crisp on retina without a huge texture. */
@@ -58,7 +64,10 @@ const TONE_STROKE: Record<FleetTone, string> = {
   neutral: "#334155",
 };
 
-export type FleetIconName = `pin-${FleetTone}` | `pin-${FleetTone}-stale` | "ring";
+export type FleetIconName =
+  | `pin-${KnownVehicleTypeKey}-${FleetTone}`
+  | `pin-${KnownVehicleTypeKey}-${FleetTone}-stale`
+  | "ring";
 
 export type FleetIconMapping = Record<
   string,
@@ -131,6 +140,33 @@ function bikeSprite(opacity: number): string {
 }
 
 /**
+ * Top-down car, north-facing. Same cell contract as the bike: status lives on the
+ * puck, the body is its own colour so a danger ring cannot swallow it.
+ */
+function carSprite(opacity: number): string {
+  return [
+    `<g transform="translate(${C} ${C}) scale(1.08) translate(${-C} ${-C})"`,
+    ` fill-opacity="${opacity}" stroke-opacity="${opacity}">`,
+    `<rect x="16.6" y="11.2" width="14.8" height="25.6" rx="3.4" fill="#1d4ed8"/>`,
+    `<rect x="18.2" y="13.4" width="11.6" height="6.2" rx="1.6" fill="#93c5fd"/>`,
+    `<rect x="18.4" y="21.2" width="11.2" height="8.4" rx="1.4" fill="#1e3a8a"/>`,
+    `<rect x="18.6" y="30.6" width="10.8" height="3.4" rx="1" fill="#64748b"/>`,
+    `<rect x="15.2" y="16.8" width="2.2" height="5.4" rx="1" fill="#111827"/>`,
+    `<rect x="30.6" y="16.8" width="2.2" height="5.4" rx="1" fill="#111827"/>`,
+    `<rect x="15.2" y="26.4" width="2.2" height="5.4" rx="1" fill="#111827"/>`,
+    `<rect x="30.6" y="26.4" width="2.2" height="5.4" rx="1" fill="#111827"/>`,
+    `<rect x="18.6" y="12.2" width="3.2" height="1.3" rx="0.5" fill="#fde68a"/>`,
+    `<rect x="26.2" y="12.2" width="3.2" height="1.3" rx="0.5" fill="#fde68a"/>`,
+    `</g>`,
+  ].join("");
+}
+
+const VEHICLE_SPRITES: Record<KnownVehicleTypeKey, (opacity: number) => string> = {
+  bike: bikeSprite,
+  car: carSprite,
+};
+
+/**
  * Selection ring, drawn under the marker. Sized outside the status ring so both stay
  * readable at once.
  *
@@ -157,15 +193,19 @@ function atlasSvg(): string {
     x += CELL;
   };
 
-  for (const tone of TONE_ORDER) {
-    push(statusPuck(TONE_FILL[tone], TONE_STROKE[tone], 1) + bikeSprite(1));
+  for (const type of KNOWN_VEHICLE_TYPE_KEYS) {
+    const sprite = VEHICLE_SPRITES[type];
+    for (const tone of TONE_ORDER) {
+      push(statusPuck(TONE_FILL[tone], TONE_STROKE[tone], 1) + sprite(1));
+    }
   }
   // Stale variants: same marker, faded, so a frozen driver reads as "was here" rather
   // than disappearing off the map mid-shift.
-  for (const tone of TONE_ORDER) {
-    push(
-      statusPuck(TONE_FILL[tone], TONE_STROKE[tone], 0.45) + bikeSprite(0.5),
-    );
+  for (const type of KNOWN_VEHICLE_TYPE_KEYS) {
+    const sprite = VEHICLE_SPRITES[type];
+    for (const tone of TONE_ORDER) {
+      push(statusPuck(TONE_FILL[tone], TONE_STROKE[tone], 0.45) + sprite(0.5));
+    }
   }
   push(selectionRing());
 
@@ -195,14 +235,18 @@ export function fleetIconMapping(): FleetIconMapping {
     index += 1;
   };
 
-  for (const tone of TONE_ORDER) cell(`pin-${tone}`);
-  for (const tone of TONE_ORDER) cell(`pin-${tone}-stale`);
+  for (const type of KNOWN_VEHICLE_TYPE_KEYS) {
+    for (const tone of TONE_ORDER) cell(`pin-${type}-${tone}`);
+  }
+  for (const type of KNOWN_VEHICLE_TYPE_KEYS) {
+    for (const tone of TONE_ORDER) cell(`pin-${type}-${tone}-stale`);
+  }
   cell("ring");
 
   return mapping;
 }
 
-const ATLAS_CELL_COUNT = TONE_ORDER.length * 2 + 1;
+const ATLAS_CELL_COUNT = TONE_ORDER.length * KNOWN_VEHICLE_TYPE_KEYS.length * 2 + 1;
 const ATLAS_PIXEL_WIDTH = ATLAS_CELL_COUNT * CELL * SCALE;
 const ATLAS_PIXEL_HEIGHT = CELL * SCALE;
 
@@ -314,8 +358,13 @@ export function loadFleetIconAtlas(): Promise<FleetIconAtlas> {
   return atlasPromise;
 }
 
-export function fleetPinIcon(tone: FleetTone, stale: boolean): FleetIconName {
-  return stale ? `pin-${tone}-stale` : `pin-${tone}`;
+export function fleetPinIcon(
+  tone: FleetTone,
+  stale: boolean,
+  vehicleTypeKey?: string | null,
+): FleetIconName {
+  const type = vehicleSpriteKey(vehicleTypeKey);
+  return stale ? `pin-${type}-${tone}-stale` : `pin-${type}-${tone}`;
 }
 
 /** Exposed for the preview harness in `scripts/preview-marker.mjs`. */

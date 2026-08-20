@@ -5,13 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 import {
   enrichLiveLocation,
-  isGpsLive,
+  isPinBeyondRetention,
   latestGpsAt,
   liveLocationPayloadChanged,
   parseTrackingStatus,
   parseZoneStatus,
   shouldShowOnLiveMap,
 } from "./location-status";
+import { vehicleTypeFromDriverJoin } from "@/features/vehicles/vehicle-type";
 import type { DriverLiveLocation } from "./types";
 
 type LiveRow = Database["public"]["Tables"]["driver_locations"]["Row"] & {
@@ -20,6 +21,11 @@ type LiveRow = Database["public"]["Tables"]["driver_locations"]["Row"] & {
     employee_id: string | null;
     is_on_duty: boolean;
     is_blocked?: boolean;
+    vehicle_type_key?: string | null;
+    vehicles?:
+      | { vehicle_type_key?: string | null }
+      | { vehicle_type_key?: string | null }[]
+      | null;
     profiles?: { full_name: string | null } | { full_name: string | null }[] | null;
     driver_restaurants?: Array<{
       restaurants?: { name: string } | { name: string }[] | null;
@@ -49,6 +55,7 @@ let nameCache = new Map<
     isOnDuty: boolean;
     isBlocked: boolean;
     restaurantName: string | null;
+    vehicleType: DriverLiveLocation["vehicleType"];
   }
 >();
 
@@ -110,6 +117,7 @@ function rowToLocation(row: LiveRow): DriverLiveLocation {
       isOnDuty: driver.is_on_duty,
       isBlocked: driver.is_blocked ?? false,
       restaurantName: restaurantFromDriver(driver),
+      vehicleType: vehicleTypeFromDriverJoin(driver),
     });
   }
 
@@ -123,6 +131,7 @@ function rowToLocation(row: LiveRow): DriverLiveLocation {
     isOnDuty: names?.isOnDuty ?? false,
     isBlocked: names?.isBlocked ?? false,
     restaurantName: names?.restaurantName ?? restaurantFromDriver(driver),
+    vehicleType: names?.vehicleType ?? vehicleTypeFromDriverJoin(driver),
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
     speedMps: row.speed_mps != null ? Number(row.speed_mps) : null,
@@ -177,6 +186,8 @@ async function loadInitial() {
         employee_id,
         is_on_duty,
         is_blocked,
+        vehicle_type_key,
+        vehicles ( vehicle_type_key ),
         profiles ( full_name ),
         driver_restaurants ( restaurants ( name ) )
       )
@@ -223,7 +234,7 @@ function applyPayload(
   // unless we already have a last-known pin — keep it for Offline / on-duty.
   if (
     row.last_seen_at &&
-    !isGpsLive(row.last_seen_at, Date.now(), row.last_report_at)
+    isPinBeyondRetention(row.last_seen_at, Date.now(), row.last_report_at)
   ) {
     const prev = cacheById.get(row.driver_id);
     const onDuty =
@@ -247,6 +258,7 @@ function applyPayload(
         isOnDuty: nameCache.get(row.driver_id)?.isOnDuty ?? prev.isOnDuty,
         isBlocked: nameCache.get(row.driver_id)?.isBlocked ?? prev.isBlocked,
         restaurantName: next.restaurantName ?? prev.restaurantName,
+        vehicleType: next.vehicleType ?? prev.vehicleType,
       }
     : next;
 
@@ -366,6 +378,7 @@ export function seedDriverLocationNames(
       isOnDuty: e.isOnDuty ?? false,
       isBlocked: e.isBlocked ?? false,
       restaurantName: null,
+      vehicleType: "bike",
     });
   }
 }

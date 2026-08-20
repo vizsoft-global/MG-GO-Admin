@@ -162,7 +162,8 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | base_earnings_kwd | numeric | |
 | is_on_duty | boolean | Toggled on Home |
 | current_lat, current_lng | numeric | Updated while online |
-| vehicle_id | uuid | FK → vehicles |
+| vehicle_id | uuid | FK → vehicles. Assignment lives here, not on `vehicles.current_driver_id`. |
+| vehicle_type_key | text | Fallback type (`bike` / `car`) when no vehicle is assigned. Copied from intake on approve. Live map prefers `vehicles.vehicle_type_key`. |
 | custom_fields | jsonb | Admin-defined dynamic fields (`custom_field_definitions`). Values are scalars (`string` / `number` / `boolean`) or, for **checkbox** defs that have `options`, a `string[]` of selected option values. Checkbox with empty options remains a boolean. |
 | avatar_object_key | text | Profile photo R2 key (`driver-avatars/{id}/…` from the app, or `drivers/{id}/avatar.{ext}` from admin). Kept in lockstep with `profiles.avatar_url` and the linked intake. |
 | avatar_updated_at | timestamptz | Set whenever the photo changes. |
@@ -426,6 +427,8 @@ select public.driver_set_duty_state(p_is_on_duty := true, p_is_online := true); 
 select public.driver_set_duty_state(p_is_on_duty := false, p_is_online := false); -- check out (manual)
 ```
 Returns full home dashboard payload (`driver_get_home_dashboard()` shape). `shift_adherence.minutes_early_out` is minutes before **shift end**, clamped to the scheduled window **and** `LEAST`'d against `scheduled_seconds / 60` — clocking out before shift start is the remaining shift length, not start-to-end plus the pre-shift gap (11:30–16:30 / 09:35 out is 300, never 415). The app and admin parsers apply the same cap so a stale payload cannot paint more early-out than the shift itself. Do not recompute early-out from ISO strings on the device clock.
+
+Optional `banner` is the first matching `driver_home_banners` row (active, in date window, empty target arrays = everyone). Shape: `{ image_url, caption_en, caption_ar, deep_link }`. Render after the shift / zone banners and before the on-duty block. Ignore a missing or empty `image_url`. Images live in the public `branding` bucket at `home-banners/{id}.{ext}`.
 
 **Mark as Delivered while Out:** the Clock In overlay is required (never silent re-clock). Tapping Clock In is a real duty session. Back without submitting must **not** clock the driver out again.
 
@@ -1094,7 +1097,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-20 — [admin+app] Pickup / Delivered / Cancel proofs accept up to 5 rear-camera stills (`pickup_proof_urls` / `order_proof_urls` / `cancel_proof_urls`). RPC text params take a single key or a JSON array; the scalar column stays the first key. Migration `20260923100000`.*
+*Last synced: 2026-08-20 — [admin+app] Home dashboard may include `banner` from `driver_home_banners` (image + captions + optional deep link). Idle location heartbeats a coarse fix once the 30s idle interval elapses so Live Tracking does not mark a parked rider GPS Offline. Weekly counts show “Confirmed once verified”. Vehicles: catalog `vehicle_types` (bike/car); `vehicles.vehicle_type_key` is the map source of truth, `drivers.vehicle_type_key` is the unassigned fallback. Ship the idle heartbeat + banner + verified note with the next Play build. Migrations `20260924100000`, `20260924100100`.*
+
+*Prior: 2026-08-20 — [admin+app] Pickup / Delivered / Cancel proofs accept up to 5 rear-camera stills (`pickup_proof_urls` / `order_proof_urls` / `cancel_proof_urls`). RPC text params take a single key or a JSON array; the scalar column stays the first key. Migration `20260923100000`.*
 
 *Prior: 2026-08-20 — [admin+app] Archive ends the live driver-app session (clock-out + device revoke); pickup/duty raise `driver_archived`. App: camera permission prompt no longer waits for a restart; proof rows show Photo attached / preview; Active Delivery keeps Order ID offline; muted campaigns stay history; Clock In does not flash In from a stale cache; Profile does not flash initials over an existing photo. Checkbox options accept label-only. Migration `20260922100000`.*
 
