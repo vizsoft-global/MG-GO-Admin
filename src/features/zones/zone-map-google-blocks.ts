@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   cellBoundaryLatLng,
-  viewportHexCells,
+  hexCellsForMapView,
 } from "@/lib/geo/h3-blocks";
 import type {
   GoogleMapInstance,
@@ -28,7 +28,7 @@ function hexOptions(selected: boolean) {
     clickable: false,
     editable: false,
     draggable: false,
-    zIndex: selected ? 3 : 1,
+    zIndex: selected ? 24 : 22,
   };
 }
 
@@ -46,6 +46,7 @@ export function useGoogleZoneBlocks({
   resolution,
   selectedCells,
   onHit,
+  onZoomCapped,
 }: {
   map: GoogleMapInstance | null;
   google: GoogleMapsApi | null;
@@ -53,16 +54,21 @@ export function useGoogleZoneBlocks({
   resolution: number;
   selectedCells: readonly string[];
   onHit?: BlockHitHandler;
+  onZoomCapped?: (capped: boolean) => void;
 }): { zoomCapped: boolean } {
   const [zoomCapped, setZoomCapped] = useState(false);
   const polygonsRef = useRef<Map<string, GooglePolygonInstance>>(new Map());
   const selectedRef = useRef(new Set<string>());
   const onHitRef = useRef(onHit);
+  const onZoomCappedRef = useRef(onZoomCapped);
   const resolutionRef = useRef(resolution);
   const paintingRef = useRef(false);
   const movedRef = useRef(false);
+  const zoomCappedRef = useRef(false);
+  const syncViewportRef = useRef<() => void>(() => {});
 
   onHitRef.current = onHit;
+  onZoomCappedRef.current = onZoomCapped;
   resolutionRef.current = resolution;
   selectedRef.current = new Set(selectedCells);
 
@@ -73,6 +79,7 @@ export function useGoogleZoneBlocks({
       }
       polygonsRef.current.clear();
       setZoomCapped(false);
+      onZoomCappedRef.current?.(false);
       return;
     }
 
@@ -84,27 +91,7 @@ export function useGoogleZoneBlocks({
       }
     };
 
-    const syncViewport = () => {
-      const bounds = map.getBounds?.();
-      if (!bounds) return;
-      const sw = latLngToTuple(bounds.getSouthWest());
-      const ne = latLngToTuple(bounds.getNorthEast());
-      const cells = viewportHexCells(
-        sw[1],
-        sw[0],
-        ne[1],
-        ne[0],
-        resolutionRef.current,
-      );
-      if (!cells) {
-        for (const polygon of polygonsRef.current.values()) {
-          polygon.setMap(null);
-        }
-        polygonsRef.current.clear();
-        setZoomCapped(true);
-        return;
-      }
-      setZoomCapped(false);
+    const upsert = (cells: string[]) => {
       const next = new Set(cells);
       for (const [cell, polygon] of polygonsRef.current) {
         if (!next.has(cell)) {
@@ -126,6 +113,35 @@ export function useGoogleZoneBlocks({
       restyle();
     };
 
+    const syncViewport = () => {
+      const center = map.getCenter?.();
+      if (!center) return;
+      const [lat, lng] = latLngToTuple(center);
+      const bounds = map.getBounds?.();
+      const sw = bounds ? latLngToTuple(bounds.getSouthWest()) : [lat - 0.02, lng - 0.02];
+      const ne = bounds ? latLngToTuple(bounds.getNorthEast()) : [lat + 0.02, lng + 0.02];
+      const view = hexCellsForMapView({
+        west: sw[1],
+        south: sw[0],
+        east: ne[1],
+        north: ne[0],
+        lat,
+        lng,
+        resolution: resolutionRef.current,
+        extraCells: [...selectedRef.current],
+      });
+      setZoomCapped(!view.fullViewport);
+      zoomCappedRef.current = !view.fullViewport;
+      onZoomCappedRef.current?.(!view.fullViewport);
+      map.setOptions({
+        draggable: !view.fullViewport,
+        disableDoubleClickZoom: true,
+      });
+      upsert(view.cells);
+    };
+
+    syncViewportRef.current = syncViewport;
+
     const onDown = ((e: unknown) => {
       const point = eventLatLng(e);
       if (!point) return;
@@ -138,6 +154,7 @@ export function useGoogleZoneBlocks({
       const point = eventLatLng(e);
       if (!point) return;
       movedRef.current = true;
+      if (zoomCappedRef.current) return;
       onHitRef.current?.(point.lat, point.lng, "drag");
     }) as () => void;
 
@@ -186,9 +203,7 @@ export function useGoogleZoneBlocks({
 
   useEffect(() => {
     if (!enabled) return;
-    for (const [cell, polygon] of polygonsRef.current) {
-      polygon.setOptions(hexOptions(selectedRef.current.has(cell)));
-    }
+    syncViewportRef.current();
   }, [enabled, selectedCells]);
 
   return { zoomCapped };

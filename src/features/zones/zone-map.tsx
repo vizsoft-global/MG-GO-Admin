@@ -59,6 +59,7 @@ export type ZoneMapProps = {
   blockResolution?: number;
   selectedBlockCells?: readonly string[];
   onBlockHit?: (lat: number, lng: number, gesture: "click" | "drag") => void;
+  onBlocksZoomCapped?: (capped: boolean) => void;
 };
 
 export function ZoneMap(props: ZoneMapProps) {

@@ -5,7 +5,7 @@ import { useMap } from "react-leaflet";
 import L from "leaflet";
 import {
   cellBoundaryLatLng,
-  viewportHexCells,
+  hexCellsForMapView,
 } from "@/lib/geo/h3-blocks";
 import { ZONE_BLOCK_HEX_STYLE } from "./zone-blocks-layer";
 
@@ -47,6 +47,8 @@ export function ZoneBlocksLeafletLayer({
   const resolutionRef = useRef(resolution);
   const paintingRef = useRef(false);
   const movedRef = useRef(false);
+  const zoomCappedRef = useRef(false);
+  const syncViewportRef = useRef<() => void>(() => {});
 
   onHitRef.current = onHit;
   onZoomCappedRef.current = onZoomCapped;
@@ -73,22 +75,7 @@ export function ZoneBlocksLeafletLayer({
       }
     };
 
-    const syncViewport = () => {
-      const bounds = map.getBounds();
-      const cells = viewportHexCells(
-        bounds.getWest(),
-        bounds.getSouth(),
-        bounds.getEast(),
-        bounds.getNorth(),
-        resolutionRef.current,
-      );
-      if (!cells) {
-        group.clearLayers();
-        polygonsRef.current.clear();
-        onZoomCappedRef.current?.(true);
-        return;
-      }
-      onZoomCappedRef.current?.(false);
+    const upsert = (cells: string[]) => {
       const next = new Set(cells);
       for (const [cell, polygon] of polygonsRef.current) {
         if (!next.has(cell)) {
@@ -107,15 +94,43 @@ export function ZoneBlocksLeafletLayer({
       restyle();
     };
 
+    const syncViewport = () => {
+      const center = map.getCenter();
+      const bounds = map.getBounds();
+      const view = hexCellsForMapView({
+        west: bounds.getWest(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        north: bounds.getNorth(),
+        lat: center.lat,
+        lng: center.lng,
+        resolution: resolutionRef.current,
+        extraCells: [...selectedRef.current],
+      });
+      onZoomCappedRef.current?.(!view.fullViewport);
+      zoomCappedRef.current = !view.fullViewport;
+      if (view.fullViewport) {
+        map.dragging.disable();
+      } else {
+        map.dragging.enable();
+      }
+      upsert(view.cells);
+    };
+
+    syncViewportRef.current = syncViewport;
+
     const onDown = (e: L.LeafletMouseEvent) => {
       paintingRef.current = true;
       movedRef.current = false;
-      L.DomEvent.preventDefault(e.originalEvent);
+      if (!zoomCappedRef.current) {
+        L.DomEvent.preventDefault(e.originalEvent);
+      }
     };
 
     const onMove = (e: L.LeafletMouseEvent) => {
       if (!paintingRef.current) return;
       movedRef.current = true;
+      if (zoomCappedRef.current) return;
       onHitRef.current?.(e.latlng.lat, e.latlng.lng, "drag");
     };
 
@@ -161,9 +176,7 @@ export function ZoneBlocksLeafletLayer({
 
   useEffect(() => {
     if (!enabled) return;
-    for (const [cell, polygon] of polygonsRef.current) {
-      polygon.setStyle(hexPathOptions(selectedRef.current.has(cell)));
-    }
+    syncViewportRef.current();
   }, [enabled, selectedCells]);
 
   return null;

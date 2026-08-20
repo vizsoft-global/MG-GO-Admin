@@ -200,6 +200,7 @@ export function ZoneFormBody({
     DEFAULT_ZONE_BLOCKS_STATE.paintMode,
   );
   const [selectedBlockCells, setSelectedBlockCells] = useState<string[]>([]);
+  const [blocksZoomCapped, setBlocksZoomCapped] = useState(false);
   const selectedBlockCellsRef = useRef(selectedBlockCells);
   const activeToolRef = useRef(activeTool);
   const lastPersistentToolRef = useRef<ZoneMapTool>(
@@ -719,9 +720,18 @@ export function ZoneFormBody({
                   erase: t("geofence.blockErase"),
                 }}
               />
-              <span className="hidden rounded-lg border border-slate-200 bg-white/95 px-3 py-1.5 text-[11px] font-medium text-slate-600 shadow-sm md:inline-flex dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-300">
+              <span
+                className={cn(
+                  "hidden rounded-lg border px-3 py-1.5 text-[11px] font-medium shadow-sm md:inline-flex",
+                  activeTool === "blocks" && blocksZoomCapped
+                    ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+                    : "border-slate-200 bg-white/95 text-slate-600 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-300",
+                )}
+              >
                 {activeTool === "blocks"
-                  ? t("geofence.blocksHint")
+                  ? blocksZoomCapped
+                    ? t("geofence.blocksZoomIn")
+                    : t("geofence.blocksHint")
                   : t("geofence.drawHint")}
               </span>
             </div>
@@ -742,9 +752,18 @@ export function ZoneFormBody({
           </div>
 
           <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-3 md:hidden">
-            <span className="pointer-events-auto rounded-lg border border-slate-200 bg-white/95 px-3 py-1.5 text-[11px] font-medium text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-300">
+            <span
+              className={cn(
+                "pointer-events-auto rounded-lg border px-3 py-1.5 text-[11px] font-medium shadow-sm",
+                activeTool === "blocks" && blocksZoomCapped
+                  ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+                  : "border-slate-200 bg-white/95 text-slate-600 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-300",
+              )}
+            >
               {activeTool === "blocks"
-                ? t("geofence.blocksHint")
+                ? blocksZoomCapped
+                  ? t("geofence.blocksZoomIn")
+                  : t("geofence.blocksHint")
                 : t("geofence.drawHint")}
             </span>
           </div>
@@ -801,6 +820,7 @@ export function ZoneFormBody({
             blockResolution={resolutionForSize(blockSize)}
             selectedBlockCells={selectedBlockCells}
             onBlockHit={handleBlockHit}
+            onBlocksZoomCapped={setBlocksZoomCapped}
             className="zones-google-map h-full w-full"
           />
         </div>

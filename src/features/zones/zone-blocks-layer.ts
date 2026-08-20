@@ -32,11 +32,11 @@ export const ZONE_BLOCK_HEX_STYLE = {
     strokeWeight: 2,
   },
   unselected: {
-    fillColor: "#94a3b8",
-    fillOpacity: 0.05,
-    strokeColor: "#64748b",
-    strokeOpacity: 0.75,
-    strokeWeight: 1,
+    fillColor: "#14b8a6",
+    fillOpacity: 0.12,
+    strokeColor: "#0f766e",
+    strokeOpacity: 0.95,
+    strokeWeight: 1.5,
   },
 } as const;
 

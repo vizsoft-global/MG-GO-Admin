@@ -23,6 +23,7 @@ export type GoogleMapInstance = {
   setZoom: (zoom: number) => void;
   getZoom: () => number | undefined;
   getBounds: () => GoogleLatLngBounds | undefined;
+  getCenter: () => GoogleMapLatLng;
   panTo: (center: GoogleMapLatLng) => void;
   setMapTypeId: (id: string) => void;
   setOptions: (opts: {

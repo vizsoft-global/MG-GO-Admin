@@ -93,6 +93,66 @@ export function viewportHexCells(
   }
 }
 
+/** Honeycomb around a point, grown until the next ring would exceed `cap`. */
+export function centerDiskCells(
+  lat: number,
+  lng: number,
+  resolution: number,
+  cap: number = H3_VIEWPORT_CELL_CAP,
+): string[] {
+  const origin = latLngToCell(lat, lng, resolution);
+  let best: string[] = [origin];
+  for (let k = 1; k <= 40; k++) {
+    let disk: string[];
+    try {
+      disk = gridDisk(origin, k);
+    } catch {
+      break;
+    }
+    if (disk.length > cap) break;
+    best = disk;
+  }
+  return best;
+}
+
+export type HexViewCells = {
+  cells: string[];
+  /** False when the viewport is too large, so we only fill a disk at the center. */
+  fullViewport: boolean;
+};
+
+/**
+ * Viewport hexes when they fit under the cap; otherwise a center disk so the
+ * honeycomb is always visible. `extraCells` (the current selection) are always kept.
+ */
+export function hexCellsForMapView(args: {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  lat: number;
+  lng: number;
+  resolution: number;
+  extraCells?: readonly string[];
+  cap?: number;
+}): HexViewCells {
+  const cap = args.cap ?? H3_VIEWPORT_CELL_CAP;
+  const viewport = viewportHexCells(
+    args.west,
+    args.south,
+    args.east,
+    args.north,
+    args.resolution,
+    cap,
+  );
+  const base =
+    viewport ?? centerDiskCells(args.lat, args.lng, args.resolution, cap);
+  return {
+    cells: uniqueCells([...base, ...(args.extraCells ?? [])]),
+    fullViewport: viewport != null,
+  };
+}
+
 export function indexForLatLng(lat: number, lng: number, resolution: number): string {
   return latLngToCell(lat, lng, resolution);
 }

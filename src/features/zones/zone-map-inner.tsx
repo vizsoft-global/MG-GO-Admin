@@ -654,6 +654,7 @@ export function ZoneMapInner({
   blockResolution = 9,
   selectedBlockCells = [],
   onBlockHit,
+  onBlocksZoomCapped,
 }: {
   zones: ZoneRow[];
   selectedId: string | null;
@@ -675,6 +676,7 @@ export function ZoneMapInner({
   blockResolution?: number;
   selectedBlockCells?: readonly string[];
   onBlockHit?: (lat: number, lng: number, gesture: "click" | "drag") => void;
+  onBlocksZoomCapped?: (capped: boolean) => void;
 }) {
   const t = useTranslations("pages.zones");
   const [blocksZoomCapped, setBlocksZoomCapped] = useState(false);
@@ -734,13 +736,16 @@ export function ZoneMapInner({
         resolution={blockResolution}
         selectedCells={selectedBlockCells}
         onHit={onBlockHit}
-        onZoomCapped={setBlocksZoomCapped}
+        onZoomCapped={(capped) => {
+          setBlocksZoomCapped(capped);
+          onBlocksZoomCapped?.(capped);
+        }}
       />
       {!drawMode && <ZoneLiveDriversLeaflet />}
       {!drawMode && <FitBounds zones={zones} selectedId={selectedId} />}
     </MapContainer>
       {blocksMode && blocksZoomCapped ? (
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-3">
+        <div className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex justify-center px-3">
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
             {t("geofence.blocksZoomIn")}
           </p>
