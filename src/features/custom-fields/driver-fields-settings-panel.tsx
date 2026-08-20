@@ -507,32 +507,49 @@ export function DriverFieldsSettingsPanel() {
                   <p className="text-[10px] text-muted-foreground">{t("checkboxOptionsHint")}</p>
                 ) : null}
                 {draft.options.map((opt, i) => (
-                  <div key={i} className="grid grid-cols-2 gap-2">
+                  draft.field_type === "checkbox" ? (
                     <Input
+                      key={i}
                       className="h-9"
-                      placeholder={t("optionValue")}
-                      value={opt.value}
+                      placeholder={t("checkboxOptionPlaceholder")}
+                      value={opt.label || opt.value}
                       onChange={(e) =>
                         setDraft((d) => {
                           const options = [...d.options];
-                          options[i] = { ...options[i]!, value: e.target.value };
+                          const text = e.target.value;
+                          options[i] = { value: text, label: text };
                           return { ...d, options };
                         })
                       }
                     />
-                    <Input
-                      className="h-9"
-                      placeholder={t("optionLabel")}
-                      value={opt.label}
-                      onChange={(e) =>
-                        setDraft((d) => {
-                          const options = [...d.options];
-                          options[i] = { ...options[i]!, label: e.target.value };
-                          return { ...d, options };
-                        })
-                      }
-                    />
-                  </div>
+                  ) : (
+                    <div key={i} className="grid grid-cols-2 gap-2">
+                      <Input
+                        className="h-9"
+                        placeholder={t("optionValue")}
+                        value={opt.value}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            const options = [...d.options];
+                            options[i] = { ...options[i]!, value: e.target.value };
+                            return { ...d, options };
+                          })
+                        }
+                      />
+                      <Input
+                        className="h-9"
+                        placeholder={t("optionLabel")}
+                        value={opt.label}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            const options = [...d.options];
+                            options[i] = { ...options[i]!, label: e.target.value };
+                            return { ...d, options };
+                          })
+                        }
+                      />
+                    </div>
+                  )
                 ))}
                 <Button
                   type="button"

@@ -67,6 +67,7 @@ The admin panel auto-issues a **6-digit numeric passcode** (`drivers.app_passcod
 - `BEFORE INSERT OR UPDATE OF status` trigger mints a code the first time `status` becomes `active`
 - **`drivers.status = 'active'` is blocked** unless the driver has ≥1 **published + active** restaurant in `driver_restaurants` (helper `driver_has_active_restaurant`, trigger on `drivers` + auto-downgrade when restaurants are removed). Admins set status via RPC `set_driver_account_status(p_driver_id, p_status)` on `/drivers/[id]`. Leaving `active` (Operations **Inactive** → `suspended`, or `pending`) **clocks the driver out immediately**: `is_on_duty = false`, open `driver_sessions` row closed, open `attendance_logs` row stamped `check_out_reason = admin`, last-known GPS kept. `driver_set_duty_state` raises `inactive` if the rider tries to clock back in. The app already syncs duty off via `drivers` realtime (`remoteDutyMonitor`) so Time in today stops without a manual clock-out.
 - **Admin app block** (`drivers.is_blocked`, `drivers.blocked_reason`): separate from account status. Admins block/unblock on `/drivers/[id]` via RPC `set_driver_blocked(p_driver_id, p_blocked, p_reason)`. Blocking forces `is_on_duty = false` **and clocks out** the open `driver_sessions` row plus the open `attendance_logs` row (`check_out_reason = admin`) so a leftover `is_online = true` cannot keep the home Online toggle on after unblock + login. Last-known `driver_locations` are kept. On login, `driver_app_lookup_by_passcode` returns `{ ok: false, error: 'driver_blocked', message: '<reason>' }`. For signed-in sessions, subscribe to `drivers` realtime and read `is_blocked` + `blocked_reason`; show a full-screen block view when blocked.
+- **Admin archive** (`drivers.archived_at`): `archive_driver_intake` stamps the intake and driver. Trigger `drivers_end_session_on_archive` clocks out (`_end_driver_duty_keep_gps`) and revokes every open `driver_device_sessions` row (`revoked_reason = archived`) so an already-open app cannot keep adding or finishing deliveries. `_driver_assert_active_on_duty` and `driver_set_duty_state` raise `driver_archived`. The app must treat `archived_at` like a block on the `drivers` realtime channel (sign out + `/blocked` with the archived copy) and map pickup/complete `driver_archived` the same way. Restore (`restore_driver_intake`) only clears `archived_at` — it does not mint a new session.
 
 ### 2b. Admin-first provisioning (default)
 
@@ -154,7 +155,7 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 |--------|------|-------|
 | id | uuid PK | FK → profiles.id |
 | driver_code | text | Exactly 5 digits from global sequence (`10001`–`99999`), auto-assigned on admin create; never reused after archive |
-| archived_at | timestamptz | Set when admin archives driver; archived drivers cannot log in |
+| archived_at | timestamptz | Set when admin archives driver; stamps login closed. Live sessions are clocked out and device-revoked immediately (`drivers_end_session_on_archive`). RPCs raise `driver_archived`. |
 | partner_id | uuid | Talabat etc. |
 | zone_id | uuid | Assigned zone |
 | status | enum | active, suspended, pending |
@@ -191,7 +192,7 @@ Two fields the app must send, both of which exist to stop the fast rail from lyi
 | zone_id | uuid | Zone at time of delivery |
 | restaurant_id | uuid | FK → `restaurants` (merchant). Snapshotted at pickup: unique assigned restaurant, else the geofence/pin the pickup is in, else the nearest assigned pin. **Must not stay null** when the rider has two restaurants — Extra Earnings restaurant plans count `deliveries.restaurant_id`, and all live `delivery_rules` are restaurant-scoped, so a null id leaves both progress bars at 0. |
 | external_order_id | text | Order # from partner app. **Format:** ASCII digits `0-9` only, length **1–32** (hint e.g. `12345`). `driver_create_pickup` / insert trigger raise **`invalid_order_id`** otherwise — show “Order ID must be 1–32 digits.” Unique index `deliveries_external_order_id_unique_idx`. Pickup RPC raises **`duplicate_order_id`** (including when the unique index fires). App must show a friendly string such as “This Order ID already exists.” — never the raw Postgres constraint message. |
-| order_proof_url | text | R2 object key (`drivers/{id}/order_proof/...`). Pickup, Mark as Delivered, and Cancel Order capture a **live rear-camera still** in-app — no gallery, no front camera / lens flip (the system camera app still exposes both, so these screens must not use `ImagePicker`). Delivered proof stays optional; Cancel proof stays required. |
+| order_proof_url | text | R2 object key (`drivers/{id}/order_proof/...`). Pickup, Mark as Delivered, and Cancel Order capture a **live rear-camera still** in-app — no gallery, no front camera / lens flip (the system camera app still exposes both, so these screens must not use `ImagePicker`). Delivered proof stays optional; Cancel proof stays required. **One object key per column** — a second photo replaces the first; there is no proof array. |
 | status | enum | pending → admin sets verified/rejected |
 | rejection_reason | text | Admin-authored when `status = rejected`. **Required on Delivery Details overlay** — select the column and show it under Status. Do not reuse `cancel_reason` (that is the rider cancel code). |
 | delivered_at | timestamptz | Set on driver submit |
@@ -1093,7 +1094,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-19 — [admin+app] Pickup, Mark as Delivered, and Cancel Order proofs are live rear-camera stills only (no gallery, no front camera). Delivered proof stays optional; Cancel proof stays required. No schema or payload change — ship with the next Play build.*
+*Last synced: 2026-08-20 — [admin+app] Archive ends the live driver-app session (clock-out + device revoke); pickup/duty raise `driver_archived`. App: camera permission prompt no longer waits for a restart; proof rows show Photo attached / preview; Active Delivery keeps Order ID offline; muted campaigns stay history; Clock In does not flash In from a stale cache; Profile does not flash initials over an existing photo. Checkbox options accept label-only. Proof storage is still one image per pickup/cancel/delivered column. Migration `20260922100000`.*
+
+*Prior: 2026-08-19 — [admin+app] Pickup, Mark as Delivered, and Cancel Order proofs are live rear-camera stills only (no gallery, no front camera). Delivered proof stays optional; Cancel proof stays required. No schema or payload change — ship with the next Play build.*
 
 *Prior: 2026-08-19 — [admin+app] The 45-minute out-of-zone Home timer uses the assigned zone (0 m buffer), not restaurant `zone_status` from pickup heartbeats. Live Tracking V2 Live Events synthesises `gps.offline` when status is GPS Offline so the top row cannot stay on leftover "Entered zone". No schema or payload change — ship with the next Play build.*
 

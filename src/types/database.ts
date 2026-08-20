@@ -6473,6 +6473,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      _end_driver_app_session: {
+        Args: { p_driver_id: string }
+        Returns: undefined
+      }
       _end_driver_duty_keep_gps: {
         Args: { p_driver_id: string; p_reason?: string }
         Returns: undefined
