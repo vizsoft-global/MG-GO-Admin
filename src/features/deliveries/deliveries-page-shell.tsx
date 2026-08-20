@@ -705,7 +705,10 @@ function DeliveriesPageContent() {
                           #{delivery.short_id}
                           {delivery.order_proof_url ||
                           delivery.pickup_proof_url ||
-                          delivery.cancel_proof_url ? (
+                          delivery.cancel_proof_url ||
+                          (delivery.order_proofs?.length ?? 0) > 0 ||
+                          (delivery.pickup_proofs?.length ?? 0) > 0 ||
+                          (delivery.cancel_proofs?.length ?? 0) > 0 ? (
                             <Camera
                               className="h-3.5 w-3.5 shrink-0 text-primary/70"
                               aria-label={t("hasProof")}

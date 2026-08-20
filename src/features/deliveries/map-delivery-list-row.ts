@@ -1,5 +1,5 @@
+import { shotsForProofKeys } from "./delivery-proof-keys";
 import { resolvePartnerLogoUrl } from "@/lib/storage/partner-logo-url";
-import { signedProofUrlsForKey } from "@/lib/storage/proof-image-url";
 import type { DeliveryListRow, DeliveryStatus } from "./types";
 
 function shortId(uuid: string): string {
@@ -28,6 +28,7 @@ export type DeliveryDbRowForList = {
   zone_id: string | null;
   external_order_id: string | null;
   order_proof_url: string | null;
+  order_proof_urls?: string[] | null;
   status: DeliveryStatus;
   rejection_reason: string | null;
   delivered_at: string | null;
@@ -37,11 +38,13 @@ export type DeliveryDbRowForList = {
   pickup_lat: number | null;
   pickup_lng: number | null;
   pickup_proof_url: string | null;
+  pickup_proof_urls?: string[] | null;
   cancelled_at: string | null;
   cancel_lat: number | null;
   cancel_lng: number | null;
   cancel_reason: string | null;
   cancel_proof_url: string | null;
+  cancel_proof_urls?: string[] | null;
   created_at: string;
   drivers: {
     driver_code: string;
@@ -102,9 +105,12 @@ export async function mapDeliveryDbRowsToListRows(
         }
       }
 
-      const deliveryProof = signedProofUrlsForKey(row.order_proof_url);
-      const pickupProof = signedProofUrlsForKey(row.pickup_proof_url);
-      const cancelProof = signedProofUrlsForKey(row.cancel_proof_url);
+      const orderProofs = shotsForProofKeys(row.order_proof_url, row.order_proof_urls);
+      const pickupProofs = shotsForProofKeys(row.pickup_proof_url, row.pickup_proof_urls);
+      const cancelProofs = shotsForProofKeys(row.cancel_proof_url, row.cancel_proof_urls);
+      const deliveryProof = orderProofs[0];
+      const pickupProof = pickupProofs[0];
+      const cancelProof = cancelProofs[0];
 
       return {
         id: row.id,
@@ -127,24 +133,30 @@ export async function mapDeliveryDbRowsToListRows(
         status: row.status,
         external_order_id: row.external_order_id,
         order_proof_url: row.order_proof_url,
-        proof_display_url: deliveryProof.thumbUrl,
-        proof_full_url: deliveryProof.fullUrl,
-        proof_content_type: deliveryProof.contentType,
+        order_proof_urls: row.order_proof_urls ?? undefined,
+        order_proofs: orderProofs,
+        proof_display_url: deliveryProof?.thumbUrl ?? null,
+        proof_full_url: deliveryProof?.fullUrl ?? null,
+        proof_content_type: deliveryProof?.contentType ?? null,
         pickup_at: row.pickup_at,
         pickup_lat: parseCoord(row.pickup_lat),
         pickup_lng: parseCoord(row.pickup_lng),
         pickup_proof_url: row.pickup_proof_url,
-        pickup_proof_display_url: pickupProof.thumbUrl,
-        pickup_proof_full_url: pickupProof.fullUrl,
-        pickup_proof_content_type: pickupProof.contentType,
+        pickup_proof_urls: row.pickup_proof_urls ?? undefined,
+        pickup_proofs: pickupProofs,
+        pickup_proof_display_url: pickupProof?.thumbUrl ?? null,
+        pickup_proof_full_url: pickupProof?.fullUrl ?? null,
+        pickup_proof_content_type: pickupProof?.contentType ?? null,
         cancelled_at: row.cancelled_at,
         cancel_lat: parseCoord(row.cancel_lat),
         cancel_lng: parseCoord(row.cancel_lng),
         cancel_reason: row.cancel_reason,
         cancel_proof_url: row.cancel_proof_url,
-        cancel_proof_display_url: cancelProof.thumbUrl,
-        cancel_proof_full_url: cancelProof.fullUrl,
-        cancel_proof_content_type: cancelProof.contentType,
+        cancel_proof_urls: row.cancel_proof_urls ?? undefined,
+        cancel_proofs: cancelProofs,
+        cancel_proof_display_url: cancelProof?.thumbUrl ?? null,
+        cancel_proof_full_url: cancelProof?.fullUrl ?? null,
+        cancel_proof_content_type: cancelProof?.contentType ?? null,
         rejection_reason: row.rejection_reason,
         delivered_at: row.delivered_at,
         delivered_lat: parseCoord(row.delivered_lat),

@@ -231,6 +231,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-20` — **Multiple proof stills.** Pickup, Mark as Delivered, and Cancel Order accept up to 5 rear-camera photos. New `text[]` columns plus JSON-or-scalar RPC params; the original scalar key remains the first photo. Admin Delivery Details shows a thumb strip. Migration `20260923100000`.
+
 - `[admin+app] 2026-08-20` — **Ten QA reports.** Home camera permission no longer spins until kill/reopen (resume reload raced `Permission.request`). Pickup/Cancel/Delivered proof rows show Photo attached + in-screen preview (one proof per column — replacing is the schema). Active Delivery keeps Order ID offline. Clock In does not flash In from a stale on-duty cache after login. Profile waits on an existing photo instead of initials. Re-enabling notifications marks the muted inbox as history. **Archiving a driver ends the live app session** (`archive_driver_intake` + `drivers_end_session_on_archive`: clock-out, revoke devices, `_driver_assert_active_on_duty` / `driver_set_duty_state` raise `driver_archived`). Checkbox options: one “Option” field; label-only choices are kept. Migration `20260922100000`.
 
 - `[admin+app] 2026-08-19` — **Delivered and Cancel proofs match Pickup’s rear camera.** Mark as Delivered and Cancel Order still used ImagePicker’s camera/gallery sheet. They now open the same in-app back-camera preview as Pickup (no gallery, no lens flip). Delivered proof stays optional; Cancel proof stays required. No schema or payload change.

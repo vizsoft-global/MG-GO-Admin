@@ -990,6 +990,7 @@ export type Database = {
           cancel_lat: number | null
           cancel_lng: number | null
           cancel_proof_url: string | null
+          cancel_proof_urls: string[]
           cancel_reason: string | null
           cancelled_at: string | null
           created_at: string
@@ -1000,11 +1001,13 @@ export type Database = {
           external_order_id: string | null
           id: string
           order_proof_url: string | null
+          order_proof_urls: string[]
           partner_id: string | null
           pickup_at: string | null
           pickup_lat: number | null
           pickup_lng: number | null
           pickup_proof_url: string | null
+          pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
           status: Database["public"]["Enums"]["delivery_status"]
@@ -1015,6 +1018,7 @@ export type Database = {
           cancel_lat?: number | null
           cancel_lng?: number | null
           cancel_proof_url?: string | null
+          cancel_proof_urls?: string[]
           cancel_reason?: string | null
           cancelled_at?: string | null
           created_at?: string
@@ -1025,11 +1029,13 @@ export type Database = {
           external_order_id?: string | null
           id?: string
           order_proof_url?: string | null
+          order_proof_urls?: string[]
           partner_id?: string | null
           pickup_at?: string | null
           pickup_lat?: number | null
           pickup_lng?: number | null
           pickup_proof_url?: string | null
+          pickup_proof_urls?: string[]
           rejection_reason?: string | null
           restaurant_id?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
@@ -1040,6 +1046,7 @@ export type Database = {
           cancel_lat?: number | null
           cancel_lng?: number | null
           cancel_proof_url?: string | null
+          cancel_proof_urls?: string[]
           cancel_reason?: string | null
           cancelled_at?: string | null
           created_at?: string
@@ -1050,11 +1057,13 @@ export type Database = {
           external_order_id?: string | null
           id?: string
           order_proof_url?: string | null
+          order_proof_urls?: string[]
           partner_id?: string | null
           pickup_at?: string | null
           pickup_lat?: number | null
           pickup_lng?: number | null
           pickup_proof_url?: string | null
+          pickup_proof_urls?: string[]
           rejection_reason?: string | null
           restaurant_id?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
@@ -6353,6 +6362,7 @@ export type Database = {
         }
         Returns: string
       }
+      _delivery_parse_proof_keys: { Args: { p_raw: string }; Returns: string[] }
       _driver_assert_active_on_duty: {
         Args: { p_uid: string }
         Returns: {
@@ -6921,6 +6931,7 @@ export type Database = {
           cancel_lat: number | null
           cancel_lng: number | null
           cancel_proof_url: string | null
+          cancel_proof_urls: string[]
           cancel_reason: string | null
           cancelled_at: string | null
           created_at: string
@@ -6931,11 +6942,13 @@ export type Database = {
           external_order_id: string | null
           id: string
           order_proof_url: string | null
+          order_proof_urls: string[]
           partner_id: string | null
           pickup_at: string | null
           pickup_lat: number | null
           pickup_lng: number | null
           pickup_proof_url: string | null
+          pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
           status: Database["public"]["Enums"]["delivery_status"]
@@ -6967,6 +6980,7 @@ export type Database = {
           cancel_lat: number | null
           cancel_lng: number | null
           cancel_proof_url: string | null
+          cancel_proof_urls: string[]
           cancel_reason: string | null
           cancelled_at: string | null
           created_at: string
@@ -6977,11 +6991,13 @@ export type Database = {
           external_order_id: string | null
           id: string
           order_proof_url: string | null
+          order_proof_urls: string[]
           partner_id: string | null
           pickup_at: string | null
           pickup_lat: number | null
           pickup_lng: number | null
           pickup_proof_url: string | null
+          pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
           status: Database["public"]["Enums"]["delivery_status"]
@@ -7006,6 +7022,7 @@ export type Database = {
           cancel_lat: number | null
           cancel_lng: number | null
           cancel_proof_url: string | null
+          cancel_proof_urls: string[]
           cancel_reason: string | null
           cancelled_at: string | null
           created_at: string
@@ -7016,11 +7033,13 @@ export type Database = {
           external_order_id: string | null
           id: string
           order_proof_url: string | null
+          order_proof_urls: string[]
           partner_id: string | null
           pickup_at: string | null
           pickup_lat: number | null
           pickup_lng: number | null
           pickup_proof_url: string | null
+          pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
           status: Database["public"]["Enums"]["delivery_status"]
@@ -7046,6 +7065,7 @@ export type Database = {
           cancel_lat: number | null
           cancel_lng: number | null
           cancel_proof_url: string | null
+          cancel_proof_urls: string[]
           cancel_reason: string | null
           cancelled_at: string | null
           created_at: string
@@ -7056,11 +7076,13 @@ export type Database = {
           external_order_id: string | null
           id: string
           order_proof_url: string | null
+          order_proof_urls: string[]
           partner_id: string | null
           pickup_at: string | null
           pickup_lat: number | null
           pickup_lng: number | null
           pickup_proof_url: string | null
+          pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
           status: Database["public"]["Enums"]["delivery_status"]
@@ -7113,6 +7135,7 @@ export type Database = {
           cancel_lat: number | null
           cancel_lng: number | null
           cancel_proof_url: string | null
+          cancel_proof_urls: string[]
           cancel_reason: string | null
           cancelled_at: string | null
           created_at: string
@@ -7123,11 +7146,13 @@ export type Database = {
           external_order_id: string | null
           id: string
           order_proof_url: string | null
+          order_proof_urls: string[]
           partner_id: string | null
           pickup_at: string | null
           pickup_lat: number | null
           pickup_lng: number | null
           pickup_proof_url: string | null
+          pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
           status: Database["public"]["Enums"]["delivery_status"]

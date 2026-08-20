@@ -26,10 +26,33 @@ async function handler(request: Request): Promise<Response> {
     .from("deliveries")
     .select("id")
     .eq("driver_id", auth.driverId)
-    .eq("order_proof_url", objectKey)
+    .or(
+      [
+        `order_proof_url.eq.${objectKey}`,
+        `pickup_proof_url.eq.${objectKey}`,
+        `cancel_proof_url.eq.${objectKey}`,
+      ].join(","),
+    )
     .maybeSingle();
 
-  if (!delivery) {
+  let ownsDeliveryProof = Boolean(delivery);
+  if (!ownsDeliveryProof) {
+    const arrayChecks = await Promise.all(
+      (["order_proof_urls", "pickup_proof_urls", "cancel_proof_urls"] as const).map(
+        (column) =>
+          admin
+            .from("deliveries")
+            .select("id")
+            .eq("driver_id", auth.driverId)
+            .contains(column, [objectKey])
+            .limit(1)
+            .maybeSingle(),
+      ),
+    );
+    ownsDeliveryProof = arrayChecks.some((result) => Boolean(result.data));
+  }
+
+  if (!ownsDeliveryProof) {
     const { data: upload } = await admin
       .from("storage_uploads")
       .select("id")
