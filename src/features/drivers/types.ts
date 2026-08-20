@@ -227,11 +227,23 @@ export const DRIVER_IMPORT_FIELDS = [
   "phone",
   "civil_id",
   "employee_id",
+  "restaurant_ids",
   "partner_id",
   "zone_id",
   "vehicle_label",
+  "nationality",
+  "rider_category",
+] as const;
+
+export const DRIVER_IMPORT_REQUIRED_FIELDS = [
+  "full_name",
+  "phone",
+  "civil_id",
+  "employee_id",
   "restaurant_ids",
 ] as const;
+
+export type DriverImportRequiredField = (typeof DRIVER_IMPORT_REQUIRED_FIELDS)[number];
 
 export type DriverImportStandardField = (typeof DRIVER_IMPORT_FIELDS)[number];
 /** Standard field or `cf:<key>` for custom fields */
@@ -245,11 +257,16 @@ export type DriverImportPreviewStatus =
   | "invalid_phone"
   | "invalid_civil_id"
   | "invalid_employee_id"
+  | "invalid_nationality"
+  | "invalid_rider_category"
   | "missing_fields"
   | "unmatched_partner"
   | "unmatched_zone"
   | "unmatched_vehicle"
-  | "unmatched_restaurant";
+  | "unmatched_restaurant"
+  | "ambiguous_partner"
+  | "ambiguous_zone"
+  | "ambiguous_restaurant";
 
 export type DriverImportMappedRow = {
   rowIndex: number;
@@ -258,13 +275,15 @@ export type DriverImportMappedRow = {
   civil_id: string | null;
   employee_id: string | null;
   custom_fields: Record<string, string | null>;
-  /** Optional partner UUID from the spreadsheet. */
+  /** Optional partner UUID or unique name from the spreadsheet. */
   partner_id: string | null;
-  /** Optional zone UUID from the spreadsheet. */
+  /** Optional zone UUID, code, or unique name from the spreadsheet. */
   zone_id: string | null;
   vehicle_label: string | null;
-  /** Comma-separated restaurant_code (e.g. RST-0042) and/or restaurant UUIDs. */
+  /** Comma-separated restaurant name, restaurant_code, and/or UUID. */
   restaurant_ids: string | null;
+  nationality: string | null;
+  rider_category: string | null;
 };
 
 export type DriverImportPreviewRow = Omit<
@@ -277,6 +296,15 @@ export type DriverImportPreviewRow = Omit<
   vehicle_id: string | null;
   restaurant_ids: string[];
   restaurant_names: string[];
+  nationality: string | null;
+  rider_category: DriverRiderCategory;
   skip?: boolean;
   custom_fields: Record<string, string | null>;
+};
+
+export type DriverImportCredential = {
+  rowIndex: number;
+  employee_id: string;
+  driver_code: string;
+  passcode: string;
 };

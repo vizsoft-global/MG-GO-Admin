@@ -1,7 +1,11 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import { KUWAIT_PHONE_DIGIT_COUNT, restrictDigits } from "../driver-phone";
+import {
+  KUWAIT_PHONE_DIGIT_COUNT,
+  kuwaitLocalDigits,
+  restrictDigits,
+} from "../driver-phone";
 
 export function DriverPhoneField({
   id,
@@ -30,7 +34,10 @@ export function DriverPhoneField({
         value={value}
         disabled={disabled}
         aria-invalid={ariaInvalid}
-        onChange={(event) => onChange(restrictDigits(event.target.value, KUWAIT_PHONE_DIGIT_COUNT))}
+        onChange={(event) => {
+          const pasted = kuwaitLocalDigits(event.target.value);
+          onChange(pasted ?? restrictDigits(event.target.value, KUWAIT_PHONE_DIGIT_COUNT));
+        }}
         className="h-full border-0 bg-transparent text-sm font-mono tabular-nums shadow-none ring-0 focus-visible:ring-0"
       />
     </div>

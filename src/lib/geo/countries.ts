@@ -273,6 +273,17 @@ export function normalizeCountryCode(raw: string | null | undefined): string | n
   return trimmed;
 }
 
+/** ISO alpha-2, or a unique case-insensitive English country name. */
+export function resolveCountryInput(raw: string | null | undefined): string | null {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return null;
+  const iso = normalizeCountryCode(trimmed);
+  if (iso) return iso;
+  const needle = trimmed.toLowerCase();
+  const hits = COUNTRIES.filter((country) => country.name.toLowerCase() === needle);
+  return hits.length === 1 ? hits[0]!.code : null;
+}
+
 export function countrySearchSelectItems() {
   return COUNTRIES.map((country) => ({
     value: country.code,

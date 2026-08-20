@@ -10,12 +10,25 @@ import { isValidEmployeeId, normalizeEmployeeId } from "./driver-errors";
 import { civilIdExists } from "./driver-uniqueness";
 import { intakeMissingApprovalFields } from "./driver-approve-validation";
 import type {
+  DriverImportCredential,
   DriverImportMappedRow,
   DriverImportPreviewRow,
   DriverImportPreviewStatus,
+  DriverRiderCategory,
 } from "./types";
 import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
 import { validateCustomFieldValues } from "@/lib/custom-fields/validate";
+import { resolveCountryInput } from "@/lib/geo/countries";
+import { parseRiderCategory } from "./import/parse";
+import {
+  buildPartnerIndex,
+  buildRestaurantIndex,
+  buildZoneIndex,
+  resolvePartnerToken,
+  resolveRestaurantTokens,
+  resolveZoneToken,
+} from "./import/resolve-lookups";
+import type { DriverImportLookups } from "./import/lookups";
 
 const IMPORT_CHUNK = 200;
 
@@ -28,6 +41,49 @@ async function requireDriversManager() {
     return { error: "not_authorized" as const };
   }
   return { session };
+}
+
+export async function fetchDriverImportLookups(): Promise<
+  DriverImportLookups | { error: "not_authorized" }
+> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+  const supabase = await createClient();
+
+  const [{ data: restaurants }, { data: partners }, { data: zones }] = await Promise.all([
+    supabase
+      .from("restaurants")
+      .select("id, name, restaurant_code, partner_id, zone_id, status, is_active")
+      .order("name"),
+    supabase.from("partners").select("id, name").order("name"),
+    supabase.from("zones").select("id, name, code").order("name"),
+  ]);
+
+  const partnerNameById = new Map((partners ?? []).map((p) => [p.id, p.name]));
+  const zoneById = new Map((zones ?? []).map((z) => [z.id, z]));
+
+  return {
+    restaurants: (restaurants ?? []).map((r) => {
+      const zone = r.zone_id ? zoneById.get(r.zone_id) : undefined;
+      return {
+        name: r.name,
+        restaurant_code: r.restaurant_code,
+        id: r.id,
+        partner_name: r.partner_id ? (partnerNameById.get(r.partner_id) ?? null) : null,
+        partner_id: r.partner_id,
+        zone_name: zone?.name ?? null,
+        zone_code: zone?.code ?? null,
+        zone_id: r.zone_id,
+        importable: r.status === "published" && r.is_active,
+      };
+    }),
+    zones: (zones ?? []).map((z) => ({
+      name: z.name,
+      code: z.code,
+      id: z.id,
+    })),
+    partners: (partners ?? []).map((p) => ({ name: p.name, id: p.id })),
+  };
 }
 
 export type ApproveDriverResult =
@@ -163,25 +219,6 @@ export async function approveDriverIntake(
   };
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isUuid(value: string): boolean {
-  return UUID_RE.test(value.trim());
-}
-
-function parseCommaSeparatedIds(raw: string | null): string[] {
-  if (!raw) return [];
-  return [
-    ...new Set(
-      raw
-        .split(/[,;|]/)
-        .map((s) => s.trim())
-        .filter(Boolean),
-    ),
-  ];
-}
-
 export async function resolveDriverImportPreview(
   rows: DriverImportMappedRow[],
 ): Promise<DriverImportPreviewRow[] | { error: "not_authorized" }> {
@@ -189,31 +226,44 @@ export async function resolveDriverImportPreview(
   if (auth.error) return { error: auth.error };
   const supabase = await createClient();
 
-  const [{ data: partners }, { data: zones }, { data: vehicles }, { data: restaurants }, { data: intakes }] =
-    await Promise.all([
-      supabase.from("partners").select("id, name"),
-      supabase.from("zones").select("id, name, code"),
-      supabase.from("vehicles").select("id, bike_id, reg_number"),
-      supabase
-        .from("restaurants")
-        .select("id, name, restaurant_code, partner_id, status, is_active")
-        .eq("status", "published")
-        .eq("is_active", true),
-      supabase
-        .from("driver_intakes")
-        .select("id, phone, civil_id, employee_id")
-        .is("archived_at", null),
-    ]);
+  const [
+    { data: partners },
+    { data: zones },
+    { data: vehicles },
+    { data: restaurants },
+    { data: intakes },
+    { data: drivers },
+    { data: profiles },
+  ] = await Promise.all([
+    supabase.from("partners").select("id, name"),
+    supabase.from("zones").select("id, name, code"),
+    supabase.from("vehicles").select("id, bike_id, reg_number"),
+    supabase
+      .from("restaurants")
+      .select("id, name, restaurant_code, partner_id, status, is_active")
+      .eq("status", "published")
+      .eq("is_active", true),
+    supabase
+      .from("driver_intakes")
+      .select("id, phone, civil_id, employee_id")
+      .is("archived_at", null),
+    supabase.from("drivers").select("id, employee_id, civil_id").is("archived_at", null),
+    supabase.from("profiles").select("id, phone").eq("role", "rider"),
+  ]);
 
-  const partnerById = new Map<string, string>();
-  for (const p of partners ?? []) {
-    partnerById.set(p.id, p.id);
-  }
-
-  const zoneById = new Map<string, string>();
-  for (const z of zones ?? []) {
-    zoneById.set(z.id, z.id);
-  }
+  const partnerIndex = buildPartnerIndex(
+    (partners ?? []).map((p) => ({ id: p.id, name: p.name })),
+  );
+  const zoneIndex = buildZoneIndex(
+    (zones ?? []).map((z) => ({ id: z.id, name: z.name, code: z.code })),
+  );
+  const restaurantIndex = buildRestaurantIndex(
+    (restaurants ?? []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      restaurant_code: r.restaurant_code,
+    })),
+  );
 
   const vehicleByLabel = new Map<string, string>();
   for (const v of vehicles ?? []) {
@@ -224,19 +274,21 @@ export async function resolveDriverImportPreview(
     if (bike && reg) vehicleByLabel.set(`${bike} · ${reg}`, v.id);
   }
 
-  const restaurantById = new Map<string, { id: string; name: string }>();
-  const restaurantByCode = new Map<string, { id: string; name: string }>();
-  for (const r of restaurants ?? []) {
-    const entry = { id: r.id, name: r.name };
-    restaurantById.set(r.id, entry);
-    if (r.restaurant_code) {
-      restaurantByCode.set(r.restaurant_code.trim().toUpperCase(), entry);
-    }
+  const phoneSet = new Set<string>();
+  const civilSet = new Set<string>();
+  const empSet = new Set<string>();
+  for (const intake of intakes ?? []) {
+    if (intake.phone) phoneSet.add(intake.phone);
+    if (intake.civil_id) civilSet.add(intake.civil_id);
+    if (intake.employee_id) empSet.add(intake.employee_id);
   }
-
-  const phoneSet = new Set((intakes ?? []).map((i) => i.phone));
-  const civilSet = new Set((intakes ?? []).map((i) => i.civil_id));
-  const empSet = new Set((intakes ?? []).map((i) => i.employee_id));
+  for (const driver of drivers ?? []) {
+    if (driver.civil_id) civilSet.add(driver.civil_id);
+    if (driver.employee_id) empSet.add(driver.employee_id);
+  }
+  for (const profile of profiles ?? []) {
+    if (profile.phone) phoneSet.add(profile.phone);
+  }
 
   const seenPhone = new Set<string>();
   const seenCivil = new Set<string>();
@@ -247,22 +299,25 @@ export async function resolveDriverImportPreview(
     let partner_id: string | null = null;
     let zone_id: string | null = null;
     let vehicle_id: string | null = null;
-    const restaurant_ids: string[] = [];
-    const restaurant_names: string[] = [];
+    let restaurant_ids: string[] = [];
+    let restaurant_names: string[] = [];
+    let nationality: string | null = null;
+    let rider_category: DriverRiderCategory = "in_house";
 
     const name = row.full_name?.trim();
     const phoneNorm = row.phone ? normalizeKuwaitPhone(row.phone) : null;
     const civilNorm = row.civil_id ? normalizeCivilId(row.civil_id) : null;
     const empNorm = row.employee_id ? normalizeEmployeeId(row.employee_id) : null;
 
-    if (!name || !phoneNorm || !civilNorm || !empNorm) {
+    if (!name || !row.phone?.trim() || !row.civil_id?.trim() || !row.employee_id?.trim()) {
       status = "missing_fields";
-    } else if (!isValidEmployeeId(empNorm)) {
+    } else if (!phoneNorm) {
+      status = "invalid_phone";
+    } else if (!civilNorm) {
+      status = "invalid_civil_id";
+    } else if (!empNorm || !isValidEmployeeId(empNorm)) {
       status = "invalid_employee_id";
     }
-
-    if (status === "ok" && row.phone && !phoneNorm) status = "invalid_phone";
-    if (status === "ok" && row.civil_id && !civilNorm) status = "invalid_civil_id";
 
     if (status === "ok" && phoneNorm) {
       if (phoneSet.has(phoneNorm) || seenPhone.has(phoneNorm)) {
@@ -283,21 +338,17 @@ export async function resolveDriverImportPreview(
     }
 
     if (status === "ok" && row.partner_id?.trim()) {
-      const token = row.partner_id.trim();
-      if (!isUuid(token) || !partnerById.has(token)) {
-        status = "unmatched_partner";
-      } else {
-        partner_id = token;
-      }
+      const hit = resolvePartnerToken(row.partner_id, partnerIndex);
+      if (hit.status === "ok") partner_id = hit.id;
+      else if (hit.status === "ambiguous") status = "ambiguous_partner";
+      else status = "unmatched_partner";
     }
 
     if (status === "ok" && row.zone_id?.trim()) {
-      const token = row.zone_id.trim();
-      if (!isUuid(token) || !zoneById.has(token)) {
-        status = "unmatched_zone";
-      } else {
-        zone_id = token;
-      }
+      const hit = resolveZoneToken(row.zone_id, zoneIndex);
+      if (hit.status === "ok") zone_id = hit.id;
+      else if (hit.status === "ambiguous") status = "ambiguous_zone";
+      else status = "unmatched_zone";
     }
 
     if (status === "ok" && row.vehicle_label?.trim()) {
@@ -307,24 +358,28 @@ export async function resolveDriverImportPreview(
     }
 
     if (status === "ok") {
-      const tokens = parseCommaSeparatedIds(row.restaurant_ids);
-      if (tokens.length === 0) {
-        status = "unmatched_restaurant";
+      const restaurantsHit = resolveRestaurantTokens(row.restaurant_ids, restaurantIndex);
+      if (restaurantsHit.status === "ok") {
+        restaurant_ids = restaurantsHit.ids;
+        restaurant_names = restaurantsHit.names;
+      } else if (restaurantsHit.status === "empty") {
+        status = "missing_fields";
+      } else if (restaurantsHit.status === "ambiguous") {
+        status = "ambiguous_restaurant";
       } else {
-        for (const token of tokens) {
-          const hit = isUuid(token)
-            ? restaurantById.get(token)
-            : restaurantByCode.get(token.toUpperCase());
-          if (!hit) {
-            status = "unmatched_restaurant";
-            break;
-          }
-          if (!restaurant_ids.includes(hit.id)) {
-            restaurant_ids.push(hit.id);
-            restaurant_names.push(hit.name);
-          }
-        }
+        status = "unmatched_restaurant";
       }
+    }
+
+    if (status === "ok" && row.nationality?.trim()) {
+      nationality = resolveCountryInput(row.nationality);
+      if (!nationality) status = "invalid_nationality";
+    }
+
+    if (status === "ok") {
+      const parsedCategory = parseRiderCategory(row.rider_category);
+      if (parsedCategory === "invalid") status = "invalid_rider_category";
+      else rider_category = parsedCategory ?? "in_house";
     }
 
     return {
@@ -335,6 +390,8 @@ export async function resolveDriverImportPreview(
       vehicle_id,
       restaurant_ids,
       restaurant_names,
+      nationality,
+      rider_category,
     };
   });
 }
@@ -353,6 +410,7 @@ export async function applyDriverImportBatch(payload: {
       skipped: number;
       approved: number;
       failures: Array<{ rowIndex: number; reason: string }>;
+      credentials: DriverImportCredential[];
     }
   | { error: string }
 > {
@@ -383,6 +441,7 @@ export async function applyDriverImportBatch(payload: {
   let applied = 0;
   let approved = 0;
   const failures: Array<{ rowIndex: number; reason: string }> = [];
+  const credentials: DriverImportCredential[] = [];
   const customFieldDefs = await listCustomFieldDefinitions("driver");
 
   for (let i = 0; i < ready.length; i += IMPORT_CHUNK) {
@@ -401,11 +460,12 @@ export async function applyDriverImportBatch(payload: {
       }
 
       let intakeId: string | null = null;
+      let driverCode: string | null = null;
 
       if (payload.duplicateStrategy === "update") {
         const { data: existing } = await supabase
           .from("driver_intakes")
-          .select("id, linked")
+          .select("id, linked, driver_code")
           .eq("phone", phone)
           .is("archived_at", null)
           .maybeSingle();
@@ -427,6 +487,8 @@ export async function applyDriverImportBatch(payload: {
               partner_id: row.partner_id,
               zone_id: row.zone_id,
               vehicle_id: row.vehicle_id,
+              nationality: row.nationality,
+              rider_category: row.rider_category,
               workflow_status: "pending",
               updated_at: new Date().toISOString(),
             })
@@ -440,6 +502,7 @@ export async function applyDriverImportBatch(payload: {
             continue;
           }
           intakeId = existing.id;
+          driverCode = existing.driver_code;
           await supabase
             .from("driver_intake_restaurants")
             .delete()
@@ -494,6 +557,8 @@ export async function applyDriverImportBatch(payload: {
           partner_id: row.partner_id,
           zone_id: row.zone_id,
           vehicle_id: row.vehicle_id,
+          nationality: row.nationality,
+          rider_category: row.rider_category,
           status: "awaiting_app_link",
           workflow_status: "pending",
           linked: false,
@@ -506,6 +571,7 @@ export async function applyDriverImportBatch(payload: {
           continue;
         }
         intakeId = newId;
+        driverCode = String(code);
       }
 
       if (row.restaurant_ids.length > 0) {
@@ -525,13 +591,19 @@ export async function applyDriverImportBatch(payload: {
 
       if (payload.approveImmediately && intakeId) {
         const result = await approveDriverIntake(intakeId);
-        if ("error" in result && result.error) {
-          failures.push({
+        if ("success" in result && result.success) {
+          approved += 1;
+          credentials.push({
             rowIndex: row.rowIndex,
-            reason: `Approved intake failed: ${result.error}`,
+            employee_id: employeeId,
+            driver_code: driverCode ?? "",
+            passcode: result.passcode,
           });
         } else {
-          approved += 1;
+          failures.push({
+            rowIndex: row.rowIndex,
+            reason: `Approved intake failed: ${"error" in result ? result.error : "save_failed"}`,
+          });
         }
       }
     }
@@ -551,7 +623,7 @@ export async function applyDriverImportBatch(payload: {
     entityType: "driver_import_batch",
     entityId: batch.id,
     routeName: "applyDriverImportBatch",
-    after: { applied, approved, failures: failures.length },
+    after: { applied, approved, failures: failures.length, credentials: credentials.length },
   });
 
   return {
@@ -561,5 +633,6 @@ export async function applyDriverImportBatch(payload: {
     skipped: preSkipped + (ready.length - applied),
     approved,
     failures,
+    credentials,
   };
 }
