@@ -68,6 +68,16 @@ import {
   type ZoneMapTool,
 } from "./zone-form-map-toolbar";
 import {
+  applyBlockHit,
+  DEFAULT_ZONE_BLOCKS_STATE,
+  resolutionForSize,
+  type ZoneBlockPaintMode,
+} from "./zone-blocks-layer";
+import {
+  polygonToBlockCells,
+  type H3BlockSize,
+} from "@/lib/geo/h3-blocks";
+import {
   ZoneFormFindMyLocation,
   ZoneFormMapTypeToggle,
   ZoneFormZoomControls,
@@ -183,7 +193,26 @@ export function ZoneFormBody({
   const [activeTool, setActiveTool] = useState<ZoneMapTool>(
     initialZoneMapTool(Boolean(zone?.geometry)),
   );
+  const [blockSize, setBlockSize] = useState<H3BlockSize>(
+    DEFAULT_ZONE_BLOCKS_STATE.size,
+  );
+  const [blockPaintMode, setBlockPaintMode] = useState<ZoneBlockPaintMode>(
+    DEFAULT_ZONE_BLOCKS_STATE.paintMode,
+  );
+  const [selectedBlockCells, setSelectedBlockCells] = useState<string[]>([]);
+  const selectedBlockCellsRef = useRef(selectedBlockCells);
+  const activeToolRef = useRef(activeTool);
+  const lastPersistentToolRef = useRef<ZoneMapTool>(
+    initialZoneMapTool(Boolean(zone?.geometry)),
+  );
+  const disconnectedToastAtRef = useRef(0);
   const [detailsOpen, setDetailsOpen] = useState(true);
+
+  selectedBlockCellsRef.current = selectedBlockCells;
+  activeToolRef.current = activeTool;
+  if (activeTool !== "clear" && activeTool !== "delete") {
+    lastPersistentToolRef.current = activeTool;
+  }
 
   const driverGroupItems = useMemo(
     () =>
@@ -236,6 +265,94 @@ export function ZoneFormBody({
     [existingZones],
   );
 
+  const handleBlockHit = useCallback(
+    (lat: number, lng: number, gesture: "click" | "drag") => {
+      const result = applyBlockHit(
+        selectedBlockCellsRef.current,
+        lat,
+        lng,
+        resolutionForSize(blockSize),
+        blockPaintMode,
+        gesture,
+      );
+      if (result.kind === "noop") return;
+      if (result.kind === "disconnected") {
+        const now = Date.now();
+        if (now - disconnectedToastAtRef.current > 1200) {
+          toast.error(t("geofence.blocksDisconnected"));
+          disconnectedToastAtRef.current = now;
+        }
+        return;
+      }
+      setZoneType("polygon");
+      if (result.kind === "cleared") {
+        setSelectedBlockCells([]);
+        setGeometry(null);
+        setDraftIsProvisional(false);
+        return;
+      }
+      setSelectedBlockCells(result.cells);
+      setGeometry(result.feature);
+      setDraftIsProvisional(true);
+    },
+    [blockSize, blockPaintMode, t],
+  );
+
+  const handleToolChange = useCallback(
+    (tool: ZoneMapTool) => {
+      if (tool === "clear") {
+        mapAdapterRef.current?.clearDraft?.();
+        setGeometry(null);
+        setSelectedBlockCells([]);
+        setDraftIsProvisional(false);
+        if (activeToolRef.current !== "blocks") {
+          setActiveTool("draw");
+        }
+        return;
+      }
+      if (tool === "blocks" && zoneType === "circle") {
+        setZoneType("polygon");
+        setGeometry(null);
+        setSelectedBlockCells([]);
+        setDraftIsProvisional(false);
+        mapAdapterRef.current?.clearDraft?.();
+      } else if (tool === "blocks") {
+        setZoneType("polygon");
+      }
+      setActiveTool(tool);
+    },
+    [zoneType],
+  );
+
+  const handleBlockSizeChange = useCallback(
+    (size: H3BlockSize) => {
+      if (size === blockSize) return;
+      setBlockSize(size);
+      setSelectedBlockCells([]);
+      setGeometry(null);
+      setDraftIsProvisional(false);
+      mapAdapterRef.current?.clearDraft?.();
+    },
+    [blockSize],
+  );
+
+  const geometryRef = useRef(geometry);
+  geometryRef.current = geometry;
+
+  useEffect(() => {
+    if (activeTool !== "blocks") return;
+    const current = geometryRef.current;
+    if (current?.geometry.type === "Polygon") {
+      setSelectedBlockCells(
+        polygonToBlockCells(current.geometry, resolutionForSize(blockSize)),
+      );
+    } else {
+      setSelectedBlockCells([]);
+    }
+    // Seed from the polygon present when Blocks is entered.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- enter-only
+  }, [activeTool]);
+
   const handleGeometryChange = (
     geo: ZoneGeoFeature | null,
     type: ZoneGeometryType,
@@ -247,7 +364,10 @@ export function ZoneFormBody({
     // still reports the stale drawModeRef type synchronously).
     if (geo) {
       setZoneType(type);
-      if (shouldSwitchDrawToolToEdit(meta)) {
+      if (
+        activeToolRef.current !== "blocks" &&
+        shouldSwitchDrawToolToEdit(meta)
+      ) {
         setActiveTool("edit");
       }
       if (type === "circle" && geo.properties?.radiusMeters) {
@@ -283,13 +403,21 @@ export function ZoneFormBody({
       adapter.setDrawMode?.(null);
       adapter.setEditing?.(false);
       adapter.setDragging?.(true);
+    } else if (activeTool === "blocks") {
+      adapter.setDrawMode?.(null);
+      adapter.setEditing?.(false);
+      adapter.setDragging?.(false);
     } else if (activeTool === "delete") {
       adapter.deleteSelected?.();
       setActiveTool("edit");
     } else if (activeTool === "clear") {
       adapter.clearDraft?.();
       setDraftIsProvisional(false);
-      setActiveTool("draw");
+      setSelectedBlockCells([]);
+      setGeometry(null);
+      setActiveTool(
+        lastPersistentToolRef.current === "blocks" ? "blocks" : "draw",
+      );
     }
   }, [activeTool, zoneType, geometry, draftIsProvisional]);
 
@@ -458,6 +586,8 @@ export function ZoneFormBody({
             onChange={(next) => {
               setZoneType(next);
               setGeometry(null);
+              setSelectedBlockCells([]);
+              setDraftIsProvisional(false);
               setActiveTool("draw");
               mapAdapterRef.current?.clearDraft?.();
               mapAdapterRef.current?.setDrawMode?.(next);
@@ -566,16 +696,33 @@ export function ZoneFormBody({
             <div className="pointer-events-auto flex flex-wrap items-center gap-2">
               <ZoneFormMapToolbar
                 activeTool={activeTool}
-                onToolChange={setActiveTool}
+                onToolChange={handleToolChange}
+                tools={["draw", "blocks", "move", "delete", "clear"]}
                 labels={{
                   draw: t("geofence.mapToolDraw"),
+                  blocks: t("geofence.mapToolBlocks"),
                   move: t("geofence.mapToolMove"),
                   delete: t("geofence.mapToolDelete"),
                   clear: t("geofence.mapToolClear"),
                 }}
+                blockSize={blockSize}
+                onBlockSizeChange={handleBlockSizeChange}
+                blockPaintMode={blockPaintMode}
+                onBlockPaintModeChange={setBlockPaintMode}
+                blockSizeLabels={{
+                  S: t("geofence.blockSizeS"),
+                  M: t("geofence.blockSizeM"),
+                  L: t("geofence.blockSizeL"),
+                }}
+                blockPaintLabels={{
+                  paint: t("geofence.blockPaint"),
+                  erase: t("geofence.blockErase"),
+                }}
               />
               <span className="hidden rounded-lg border border-slate-200 bg-white/95 px-3 py-1.5 text-[11px] font-medium text-slate-600 shadow-sm md:inline-flex dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-300">
-                {t("geofence.drawHint")}
+                {activeTool === "blocks"
+                  ? t("geofence.blocksHint")
+                  : t("geofence.drawHint")}
               </span>
             </div>
             <div className="pointer-events-auto flex items-center gap-2">
@@ -596,7 +743,9 @@ export function ZoneFormBody({
 
           <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-3 md:hidden">
             <span className="pointer-events-auto rounded-lg border border-slate-200 bg-white/95 px-3 py-1.5 text-[11px] font-medium text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-300">
-              {t("geofence.drawHint")}
+              {activeTool === "blocks"
+                ? t("geofence.blocksHint")
+                : t("geofence.drawHint")}
             </span>
           </div>
 
@@ -648,6 +797,10 @@ export function ZoneFormBody({
             )}
             onDraftGeometryChange={handleGeometryChange}
             onMapReady={handleMapReady}
+            blocksMode={activeTool === "blocks"}
+            blockResolution={resolutionForSize(blockSize)}
+            selectedBlockCells={selectedBlockCells}
+            onBlockHit={handleBlockHit}
             className="zones-google-map h-full w-full"
           />
         </div>

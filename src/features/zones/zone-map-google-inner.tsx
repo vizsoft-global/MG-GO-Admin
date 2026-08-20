@@ -55,6 +55,7 @@ import {
   type PolygonDrawController,
 } from "./polygon-draw-controller";
 import type { ZoneDraftGeometryMeta } from "./zone-draft-geometry";
+import { useGoogleZoneBlocks } from "./zone-map-google-blocks";
 
 function tupleToLatLng(center: [number, number]) {
   return { lat: center[0], lng: center[1] };
@@ -123,6 +124,10 @@ export function ZoneMapGoogleInner({
   onDraftGeometryChange,
   onMapReady,
   onZoneSelect,
+  blocksMode = false,
+  blockResolution = 9,
+  selectedBlockCells = [],
+  onBlockHit,
 }: {
   zones: ZoneRow[];
   selectedId: string | null;
@@ -140,6 +145,10 @@ export function ZoneMapGoogleInner({
   ) => void;
   onMapReady?: (adapter: ZoneMapAdapter) => void;
   onZoneSelect?: (zoneId: string) => void;
+  blocksMode?: boolean;
+  blockResolution?: number;
+  selectedBlockCells?: readonly string[];
+  onBlockHit?: (lat: number, lng: number, gesture: "click" | "drag") => void;
 }) {
   const t = useTranslations("pages.zones");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -160,6 +169,7 @@ export function ZoneMapGoogleInner({
   const circleClickListenerRef = useRef<{ remove: () => void } | null>(null);
   const onDraftChangeRef = useRef(onDraftGeometryChange);
   const drawModeRef = useRef(drawMode);
+  const blocksModeRef = useRef(blocksMode);
   const draftCircleRadiusRef = useRef(
     clampCircleRadiusMeters(draftCircleRadiusMeters),
   );
@@ -176,8 +186,18 @@ export function ZoneMapGoogleInner({
 
   onDraftChangeRef.current = onDraftGeometryChange;
   drawModeRef.current = drawMode;
+  blocksModeRef.current = blocksMode;
   draftCircleRadiusRef.current = clampCircleRadiusMeters(draftCircleRadiusMeters);
   draftColorRef.current = normalizeZoneColor(draftColor);
+
+  const { zoomCapped: blocksZoomCapped } = useGoogleZoneBlocks({
+    map: mapState === "ready" ? mapRef.current : null,
+    google: mapState === "ready" ? googleRef.current : null,
+    enabled: mapState === "ready" && blocksMode,
+    resolution: blockResolution,
+    selectedCells: selectedBlockCells,
+    onHit: onBlockHit,
+  });
 
   const clearCircleClickListener = useCallback(() => {
     circleClickListenerRef.current?.remove();
@@ -429,6 +449,7 @@ export function ZoneMapGoogleInner({
     const shouldListen =
       Boolean(drawModeRef.current) &&
       drawModeRef.current === "circle" &&
+      !blocksMode &&
       !draftOverlayRef.current &&
       !draftGeometry;
 
@@ -443,7 +464,7 @@ export function ZoneMapGoogleInner({
         placeCircleAt(latLng.lat(), latLng.lng());
       }) as () => void,
     );
-  }, [mapState, draftGeometry, clearCircleClickListener, placeCircleAt]);
+  }, [mapState, draftGeometry, blocksMode, clearCircleClickListener, placeCircleAt]);
 
   const syncCircleClickPlacementRef = useRef(syncCircleClickPlacement);
   syncCircleClickPlacementRef.current = syncCircleClickPlacement;
@@ -458,7 +479,9 @@ export function ZoneMapGoogleInner({
     // in-progress vertices (that left Save disabled while a preview was visible).
     if (drawingManagerRef.current) {
       const usePolygonDraw =
-        activeDrawMode === "polygon" && !draftOverlayRef.current;
+        activeDrawMode === "polygon" &&
+        !draftOverlayRef.current &&
+        !blocksModeRef.current;
       drawingManagerRef.current.setDrawingMode(
         usePolygonDraw ? POLYGON_OVERLAY_TYPE : null,
       );
@@ -468,7 +491,8 @@ export function ZoneMapGoogleInner({
 
     const color = draftColorRef.current;
     const pathOpts = googlePathOptions(color, { fillOpacity: 0.35, weight: 3 });
-    const usePolygonDraw = activeDrawMode === "polygon" && !draftGeometry;
+    const usePolygonDraw =
+      activeDrawMode === "polygon" && !draftGeometry && !blocksModeRef.current;
 
     const dm = createPolygonDrawController(google, map, {
       polygonOptions: { ...pathOpts, editable: true, draggable: true },
@@ -523,7 +547,7 @@ export function ZoneMapGoogleInner({
     if (drawingManagerRef.current && googleRef.current) {
       const mode = drawModeRef.current;
       drawingManagerRef.current.setDrawingMode(
-        mode === "polygon" ? POLYGON_OVERLAY_TYPE : null,
+        mode === "polygon" && !blocksModeRef.current ? POLYGON_OVERLAY_TYPE : null,
       );
       syncCircleClickPlacementRef.current();
     }
@@ -648,6 +672,12 @@ export function ZoneMapGoogleInner({
     if (drawMode) {
       clearZoneLabels();
       syncReferenceOverlays();
+      if (blocksMode) {
+        drawingManagerRef.current?.setDrawingMode(null);
+        clearCircleClickListener();
+        clearDraftOverlay();
+        return;
+      }
       const sketching = Boolean(drawingManagerRef.current?.isDrawing());
 
       if (draftOverlayRef.current) {
@@ -692,6 +722,8 @@ export function ZoneMapGoogleInner({
     setupDrawingManager,
     clearDraftOverlay,
     clearZoneLabels,
+    blocksMode,
+    clearCircleClickListener,
   ]);
 
   useEffect(() => {
@@ -777,7 +809,14 @@ export function ZoneMapGoogleInner({
       ) : null}
       {mapState === "ready" ? (
         <>
-          {drawMode === "polygon" && draftVertexCount > 0 ? (
+          {blocksMode && blocksZoomCapped ? (
+            <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                {t("geofence.blocksZoomIn")}
+              </p>
+            </div>
+          ) : null}
+          {drawMode === "polygon" && !blocksMode && draftVertexCount > 0 ? (
             <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
               <div className="flex max-w-lg flex-wrap items-center justify-center gap-2">
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">

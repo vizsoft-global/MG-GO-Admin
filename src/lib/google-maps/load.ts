@@ -22,12 +22,14 @@ export type GoogleMapInstance = {
   setCenter: (center: GoogleMapLatLng) => void;
   setZoom: (zoom: number) => void;
   getZoom: () => number | undefined;
+  getBounds: () => GoogleLatLngBounds | undefined;
   panTo: (center: GoogleMapLatLng) => void;
   setMapTypeId: (id: string) => void;
   setOptions: (opts: {
     styles?: GoogleMapStyleRule[];
     mapTypeId?: string;
     disableDoubleClickZoom?: boolean;
+    draggable?: boolean;
   }) => void;
   addListener: (event: string, handler: () => void) => { remove: () => void };
   fitBounds: (

@@ -55,6 +55,10 @@ export type ZoneMapProps = {
   ) => void;
   onMapReady?: (adapter: ZoneMapAdapter) => void;
   onZoneSelect?: (zoneId: string) => void;
+  blocksMode?: boolean;
+  blockResolution?: number;
+  selectedBlockCells?: readonly string[];
+  onBlockHit?: (lat: number, lng: number, gesture: "click" | "drag") => void;
 };
 
 export function ZoneMap(props: ZoneMapProps) {

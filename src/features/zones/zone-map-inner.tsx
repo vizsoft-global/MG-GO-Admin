@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Circle,
   MapContainer,
@@ -42,6 +43,7 @@ import { normalizeZoneColor, zonePathStyle } from "./zone-colors";
 import type { ZoneRow } from "./types";
 import { ZoneLiveDriversLeaflet } from "./zone-live-drivers-leaflet";
 import type { ZoneMapAdapter } from "./zone-map-adapter";
+import { ZoneBlocksLeafletLayer } from "./zone-map-leaflet-blocks";
 
 function FitBounds({ zones, selectedId }: { zones: ZoneRow[]; selectedId: string | null }) {
   const map = useMap();
@@ -239,6 +241,7 @@ function GeomanDrawControl({
   onGeometryChange,
   onMapReady,
   onMapAdapterReady,
+  blocksMode = false,
 }: {
   drawMode: ZoneMapDrawMode;
   draftColor: string;
@@ -251,16 +254,22 @@ function GeomanDrawControl({
   ) => void;
   onMapReady?: (map: L.Map) => void;
   onMapAdapterReady?: (adapter: ZoneMapAdapter) => void;
+  blocksMode?: boolean;
 }) {
   const map = useMap();
   const onGeometryChangeRef = useRef(onGeometryChange);
   const activeLayerRef = useRef<L.Layer | null>(null);
   const drawModeRef = useRef(drawMode);
+  const blocksModeRef = useRef(blocksMode);
   const detachAttachedLayerHandlersRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     drawModeRef.current = drawMode;
   }, [drawMode]);
+
+  useEffect(() => {
+    blocksModeRef.current = blocksMode;
+  }, [blocksMode]);
 
   useEffect(() => {
     onGeometryChangeRef.current = onGeometryChange;
@@ -286,7 +295,7 @@ function GeomanDrawControl({
       },
       setDrawMode(mode) {
         drawModeRef.current = mode;
-        if (!mode) {
+        if (!mode || blocksModeRef.current) {
           try {
             map.pm?.disableDraw();
           } catch {
@@ -387,6 +396,23 @@ function GeomanDrawControl({
   useEffect(() => {
     if (!drawMode) return;
 
+    if (blocksMode) {
+      try {
+        map.pm?.disableDraw();
+        map.pm?.disableGlobalEditMode();
+        map.pm?.disableGlobalDragMode();
+      } catch {
+        /* ignore */
+      }
+      detachAttachedLayerHandlersRef.current?.();
+      detachAttachedLayerHandlersRef.current = null;
+      if (activeLayerRef.current) {
+        map.removeLayer(activeLayerRef.current);
+        activeLayerRef.current = null;
+      }
+      return;
+    }
+
     if (!draftGeometry) {
       detachAttachedLayerHandlersRef.current?.();
       detachAttachedLayerHandlersRef.current = null;
@@ -409,7 +435,7 @@ function GeomanDrawControl({
       detachAttachedLayerHandlersRef.current?.();
       detachAttachedLayerHandlersRef.current = null;
     };
-  }, [map, drawMode, draftColor, draftGeometry, draftZoneType]);
+  }, [map, drawMode, draftColor, draftGeometry, draftZoneType, blocksMode]);
 
   useEffect(() => {
     if (activeLayerRef.current) {
@@ -419,7 +445,14 @@ function GeomanDrawControl({
 
   const syncDrawingMode = () => {
     const mode = drawModeRef.current;
-    if (!mode || !map.pm) return;
+    if (!mode || !map.pm || blocksModeRef.current) {
+      try {
+        map.pm?.disableDraw();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     const hasShape = Boolean(activeLayerRef.current);
     const opts = geomanDrawOptions(mode);
     try {
@@ -617,6 +650,10 @@ export function ZoneMapInner({
   onDraftGeometryChange,
   onMapReady,
   onMapAdapterReady,
+  blocksMode = false,
+  blockResolution = 9,
+  selectedBlockCells = [],
+  onBlockHit,
 }: {
   zones: ZoneRow[];
   selectedId: string | null;
@@ -634,7 +671,13 @@ export function ZoneMapInner({
   ) => void;
   onMapReady?: (map: L.Map) => void;
   onMapAdapterReady?: (adapter: ZoneMapAdapter) => void;
+  blocksMode?: boolean;
+  blockResolution?: number;
+  selectedBlockCells?: readonly string[];
+  onBlockHit?: (lat: number, lng: number, gesture: "click" | "drag") => void;
 }) {
+  const t = useTranslations("pages.zones");
+  const [blocksZoomCapped, setBlocksZoomCapped] = useState(false);
   const referenceZones = useMemo(() => {
     if (!drawMode) return [];
     return zones.filter(
@@ -645,10 +688,11 @@ export function ZoneMapInner({
   const tile = useMemo(() => getZoneMapTileProps(), []);
 
   return (
+    <div className={className ?? "relative h-full w-full"}>
     <MapContainer
       center={KUWAIT_MAP_CENTER}
       zoom={DEFAULT_MAP_ZOOM}
-      className={className ?? "zones-leaflet-map h-full w-full rounded-xl"}
+      className="zones-leaflet-map h-full w-full rounded-xl"
       scrollWheelZoom
       zoomControl={false}
     >
@@ -682,10 +726,26 @@ export function ZoneMapInner({
           onGeometryChange={onDraftGeometryChange}
           onMapReady={onMapReady}
           onMapAdapterReady={onMapAdapterReady}
+          blocksMode={blocksMode}
         />
       )}
+      <ZoneBlocksLeafletLayer
+        enabled={Boolean(blocksMode)}
+        resolution={blockResolution}
+        selectedCells={selectedBlockCells}
+        onHit={onBlockHit}
+        onZoomCapped={setBlocksZoomCapped}
+      />
       {!drawMode && <ZoneLiveDriversLeaflet />}
       {!drawMode && <FitBounds zones={zones} selectedId={selectedId} />}
     </MapContainer>
+      {blocksMode && blocksZoomCapped ? (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-3">
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+            {t("geofence.blocksZoomIn")}
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
