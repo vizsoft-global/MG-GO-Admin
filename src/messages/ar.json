@@ -2201,7 +2201,29 @@
       "deleteDeliveryTitle": "حذف التوصيل",
       "deleteDeliveryWarning": "سيُحذف سجل التوصيل وملف الإثبات نهائياً من التخزين. لا يمكن التراجع عن هذا الإجراء.",
       "deleteSuccess": "تم حذف التوصيل.",
-      "deleteFailed": "تعذر حذف هذا التوصيل."
+      "deleteFailed": "تعذر حذف هذا التوصيل.",
+      "bulk": {
+        "selectAll": "تحديد كل التوصيلات القابلة للتوثيق",
+        "selectRow": "تحديد التوصيل {id}",
+        "selected": "تم تحديد {count}",
+        "skipped": "{count} لا يمكن توثيقها",
+        "verify": "توثيق ({count})",
+        "reject": "رفض ({count})",
+        "clear": "مسح",
+        "noneEligible": "لا يمكن توثيق أي من التوصيلات المحددة.",
+        "tooMany": "حدد 100 توصيل كحد أقصى في المرة الواحدة.",
+        "verifyDone": "تم توثيق {count} توصيلات.",
+        "verifyPartial": "تم توثيق {done}. تم تخطي {skipped}.",
+        "rejectDone": "تم رفض {count} توصيلات.",
+        "rejectPartial": "تم رفض {done}. تم تخطي {skipped}.",
+        "reasonLabel": "سبب الرفض",
+        "reasonPlaceholder": "سبب رفض هذه التوصيلات",
+        "reasonHint": "يُطبَّق على {count} توصيلات محددة.",
+        "rejectTitle": "رفض التوصيلات",
+        "rejectSubtitle": "يُحفظ هذا السبب على {count} توصيلات.",
+        "cancel": "إلغاء",
+        "confirmReject": "رفض"
+      }
     },
     "verifications": {
       "title": "تحقق DPD",

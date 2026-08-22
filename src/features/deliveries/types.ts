@@ -87,6 +87,7 @@ export type DeliveryActionError =
   | "not_authorized"
   | "invalid_status"
   | "reason_required"
+  | "too_many"
   | "update_failed"
   | "delete_failed";
 

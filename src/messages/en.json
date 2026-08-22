@@ -2219,7 +2219,29 @@
       "deleteDeliveryTitle": "Delete delivery",
       "deleteDeliveryWarning": "This permanently removes the delivery record and proof file from storage. This cannot be undone.",
       "deleteSuccess": "Delivery deleted.",
-      "deleteFailed": "Could not delete this delivery."
+      "deleteFailed": "Could not delete this delivery.",
+      "bulk": {
+        "selectAll": "Select all verifiable deliveries",
+        "selectRow": "Select delivery {id}",
+        "selected": "{count} selected",
+        "skipped": "{count} cannot be verified",
+        "verify": "Verify ({count})",
+        "reject": "Reject ({count})",
+        "clear": "Clear",
+        "noneEligible": "None of the selected deliveries can be verified.",
+        "tooMany": "Select at most 100 deliveries at a time.",
+        "verifyDone": "Verified {count} deliveries.",
+        "verifyPartial": "Verified {done}. Skipped {skipped}.",
+        "rejectDone": "Rejected {count} deliveries.",
+        "rejectPartial": "Rejected {done}. Skipped {skipped}.",
+        "reasonLabel": "Rejection reason",
+        "reasonPlaceholder": "Why these deliveries are rejected",
+        "reasonHint": "Applies to {count} selected deliveries.",
+        "rejectTitle": "Reject deliveries",
+        "rejectSubtitle": "This reason is stored on {count} deliveries.",
+        "cancel": "Cancel",
+        "confirmReject": "Reject"
+      }
     },
     "verifications": {
       "title": "DPD Verification",

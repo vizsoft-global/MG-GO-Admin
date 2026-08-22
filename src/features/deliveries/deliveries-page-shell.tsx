@@ -7,6 +7,7 @@ import {
   Activity,
   Ban,
   Camera,
+  Check,
   CheckCircle2,
   Clock,
   Download,
@@ -31,6 +32,12 @@ import {
 } from "@/components/app";
 import { AppPage } from "@/components/app/app-page";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { useAuth } from "@/contexts/auth-context";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DATE_RANGE_ALL,
   DateRangeFilter,
@@ -62,10 +69,12 @@ import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import {
+  useBulkUpdateDeliveries,
   useDeliveriesInfinite,
   useDeliveriesKpis,
   useDeliveryFilterOptions,
 } from "./use-deliveries";
+import { isBulkVerifiableDeliveryStatus } from "./bulk-verifiable-status";
 import {
   deliveryStatusFilterMessageKey,
   deliveryStatusFilterValues,
@@ -177,6 +186,12 @@ async function fetchDeliveryGpsFromApi(deliveryId: string) {
 function DeliveriesPageContent() {
   const t = useTranslations("pages.deliveries");
   const queryClient = useQueryClient();
+  const { can } = useAuth();
+  const canManage = can("deliveries.manage");
+  const bulkUpdate = useBulkUpdateDeliveries();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -242,6 +257,98 @@ function DeliveriesPageContent() {
   );
   const visible = deliveries;
   const totalForFilter = data?.pages[0]?.total ?? 0;
+  const verifiableVisible = useMemo(
+    () => visible.filter((row) => isBulkVerifiableDeliveryStatus(row.status)),
+    [visible],
+  );
+  const selectedRows = useMemo(
+    () => visible.filter((row) => selected.has(row.id)),
+    [visible, selected],
+  );
+  const verifiableSelected = useMemo(
+    () => selectedRows.filter((row) => isBulkVerifiableDeliveryStatus(row.status)),
+    [selectedRows],
+  );
+  const skippedSelectedCount = selected.size - verifiableSelected.length;
+
+  const toggleRow = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = (checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        for (const row of verifiableVisible) next.add(row.id);
+      } else {
+        for (const row of verifiableVisible) next.delete(row.id);
+      }
+      return next;
+    });
+  };
+
+  const runBulk = async (
+    status: "verified" | "rejected",
+    reason?: string,
+  ) => {
+    const ids = verifiableSelected.map((row) => row.id);
+    if (ids.length === 0) {
+      toast.error(t("bulk.noneEligible"));
+      return;
+    }
+    if (ids.length > 100) {
+      toast.error(t("bulk.tooMany"));
+      return;
+    }
+    const result = await bulkUpdate.mutateAsync({
+      deliveryIds: ids,
+      status,
+      rejectionReason: reason,
+    });
+    if (!("ok" in result)) {
+      const key =
+        result.error === "not_authorized"
+          ? "noPermission"
+          : result.error === "reason_required"
+            ? "rejectReasonRequired"
+            : result.error === "too_many"
+              ? "bulk.tooMany"
+              : "statusChangeFailed";
+      toast.error(t(key as "statusChangeFailed"));
+      return;
+    }
+    setSelected(new Set());
+    setRejectOpen(false);
+    setRejectReason("");
+    if (result.updated === 0) {
+      toast.error(t("bulk.noneEligible"));
+      return;
+    }
+    if (status === "verified") {
+      toast.success(
+        result.skipped > 0
+          ? t("bulk.verifyPartial", {
+              done: `${result.updated}`,
+              skipped: `${result.skipped}`,
+            })
+          : t("bulk.verifyDone", { count: `${result.updated}` }),
+      );
+    } else {
+      toast.success(
+        result.skipped > 0
+          ? t("bulk.rejectPartial", {
+              done: `${result.updated}`,
+              skipped: `${result.skipped}`,
+            })
+          : t("bulk.rejectDone", { count: `${result.updated}` }),
+      );
+    }
+  };
 
   const selectedDeliveryIndex = useMemo(() => {
     if (!selectedDelivery) return -1;
@@ -479,6 +586,26 @@ function DeliveriesPageContent() {
   const tableColumns = useMemo(
     () =>
       [
+        ...(canManage
+          ? [
+              {
+                id: "select",
+                className: "w-10",
+                label: (
+                  <Checkbox
+                    aria-label={t("bulk.selectAll")}
+                    checked={
+                      verifiableVisible.length > 0 &&
+                      verifiableVisible.every((row) => selected.has(row.id))
+                    }
+                    onCheckedChange={(checked) =>
+                      toggleAllVisible(checked === true)
+                    }
+                  />
+                ),
+              },
+            ]
+          : []),
         { id: "deliveryId", label: t("colDeliveryId") },
         { id: "driver", label: t("colDriver") },
         { id: "employeeId", label: t("colEmployeeId") },
@@ -488,8 +615,8 @@ function DeliveriesPageContent() {
         { id: "orderId", label: t("colOrderId") },
         { id: "when", label: t("colWhen") },
         { id: "actions", label: t("colActions"), className: "w-12 text-end" },
-      ].filter((col) => isColumnVisible(col.id)),
-    [isColumnVisible, t],
+      ].filter((col) => col.id === "select" || isColumnVisible(col.id)),
+    [canManage, isColumnVisible, selected, t, verifiableVisible],
   );
 
   const selectTab = (id: DeliveryStatusFilterValue) => {
@@ -660,6 +787,54 @@ function DeliveriesPageContent() {
                   : null}
               </p>
             )}
+            {canManage && selected.size > 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                <p className="text-xs font-medium text-foreground">
+                  {t("bulk.selected", { count: `${selected.size}` })}
+                  {skippedSelectedCount > 0 ? (
+                    <span className="ms-2 font-normal text-muted-foreground">
+                      {t("bulk.skipped", { count: `${skippedSelectedCount}` })}
+                    </span>
+                  ) : null}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8"
+                    disabled={verifiableSelected.length === 0 || bulkUpdate.isPending}
+                    onClick={() => void runBulk("verified")}
+                  >
+                    {bulkUpdate.isPending ? (
+                      <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="me-1 h-3.5 w-3.5" />
+                    )}
+                    {t("bulk.verify", { count: `${verifiableSelected.length}` })}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-destructive hover:bg-destructive/10"
+                    disabled={verifiableSelected.length === 0 || bulkUpdate.isPending}
+                    onClick={() => setRejectOpen(true)}
+                  >
+                    <X className="me-1 h-3.5 w-3.5" />
+                    {t("bulk.reject", { count: `${verifiableSelected.length}` })}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setSelected(new Set())}
+                  >
+                    {t("bulk.clear")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         }
       >
@@ -696,6 +871,18 @@ function DeliveriesPageContent() {
                       key={delivery.id}
                       onClick={() => openDeliveryDetail(delivery)}
                     >
+                      {canManage ? (
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            aria-label={t("bulk.selectRow", {
+                              id: delivery.short_id,
+                            })}
+                            checked={selected.has(delivery.id)}
+                            disabled={!isBulkVerifiableDeliveryStatus(delivery.status)}
+                            onCheckedChange={() => toggleRow(delivery.id)}
+                          />
+                        </TableCell>
+                      ) : null}
                       <VisibleTableCell
                         columnId="deliveryId"
                         isVisible={isColumnVisible}
@@ -858,6 +1045,60 @@ function DeliveriesPageContent() {
       />
 
       <OrdersReportDialog open={ordersReportOpen} onOpenChange={setOrdersReportOpen} />
+
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent
+          className="w-[min(520px,96vw)] overflow-visible pt-4"
+          showCloseButton
+          closeOutside
+        >
+          <div className="space-y-1 px-5">
+            <Label htmlFor="delivery-bulk-reject-reason">{t("bulk.reasonLabel")}</Label>
+            <Textarea
+              id="delivery-bulk-reject-reason"
+              rows={4}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder={t("bulk.reasonPlaceholder")}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              {t("bulk.reasonHint", { count: `${verifiableSelected.length}` })}
+            </p>
+          </div>
+          <div className="px-2 pb-2 pt-3">
+            <AppModalFooter
+              title={t("bulk.rejectTitle")}
+              subtitle={t("bulk.rejectSubtitle", {
+                count: `${verifiableSelected.length}`,
+              })}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setRejectOpen(false)}
+              >
+                {t("bulk.cancel")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={!rejectReason.trim() || bulkUpdate.isPending}
+                onClick={() => void runBulk("rejected", rejectReason.trim())}
+              >
+                {bulkUpdate.isPending ? (
+                  <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <X className="me-1.5 h-3.5 w-3.5" />
+                )}
+                {t("bulk.confirmReject")}
+              </Button>
+            </AppModalFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppPage>
   );
 }

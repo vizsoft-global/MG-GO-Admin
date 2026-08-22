@@ -371,11 +371,15 @@ const { data } = await supabase
 
 Sum `amount_kwd` where `entry_type = 'earning_credit'` for “approved earnings this week”. Future payout runs will insert `payout_debit` rows against the same ledger.
 
-**Earnings → Performance Summary (required):** `driver_earnings_daily.deliveries` / `week.deliveries_count` are **verified-only** (payroll). Do **not** use them for “Total Delivery Count”.
+**Earnings → Performance Summary (required):** `driver_earnings_daily.deliveries` is **verified-only** (payroll). Do **not** use it for “Total Delivery Count”. Home `week.deliveries_count` is **submitted** (`in_transit` + `pending` + `under_review` + `verified`) so This Week’s Progress moves on pickup. Lifetime `performance.total_deliveries` stays submitted minus cancelled.
 
 **Home → This Week’s Progress Time in:** `week.online_seconds` is `SUM(driver_attendance.online_seconds)` for `kuwait_week_start`..today, plus live elapsed only if the open `driver_sessions` row started today. Do **not** sum `driver_sessions` across the week — leftover `is_online` rows from prior days inflate the total with wall-clock hours.
 
-**Earnings → Extra Earnings:** `driver_get_extra_earnings()` lists every active incentive rule that `incentive_rule_matches_driver` (assignments). Progress is `count_eligible_deliveries` for that rule — restaurant-scoped plans need a restaurant on the delivery. One verified order updates the plan for the snapshotted restaurant, not every restaurant the rider is assigned to.
+**Earnings → Extra Earnings:** `driver_get_extra_earnings()` lists every active incentive rule that `incentive_rule_matches_driver` (assignments). Each offer has `current_count` / `current_payout_kwd` from verified `count_eligible_deliveries` (pay) **and** `progress_count` from `count_progress_deliveries` (Home quest bars / remaining). Restaurant-scoped plans need a restaurant on the delivery. One verified order updates the plan for the snapshotted restaurant, not every restaurant the rider is assigned to. `compute_incentive_amount` and the wallet stay verified-only.
+
+**Home bumper / weekly incentive:** `driver_get_home_dashboard().primary_weekly_incentive` adds `progress_count` (submitted statuses) and sets `remaining_deliveries` from that count. `eligible_count` stays verified. The app bike and “X away from bonus” use `progress_count` (fall back to `eligible_count` if the key is missing). Invalidate `homeDashboardProvider` and `extraEarningsProvider` after a successful pickup or finish.
+
+**Admin bulk verify (admin-only):** `admin_bulk_update_deliveries(p_ids, p_status, p_reason)` on `/deliveries` — staff + `deliveries.manage`, cap 100, `pending`/`under_review` only, one earnings recalc per distinct driver-day. The driver app does not call this.
 
 ```sql
 select public.driver_get_earnings_summary();
@@ -904,6 +908,8 @@ Bottom nav (driver app): **Home · Deliveries · Earnings · Vehicle · Profile*
 
 **Active Delivery footer (system nav).** On `/deliveries/active`, bottom actions (**Mark as Delivered**, **Cancel Order**) must sit above the phone system navigation / gesture inset. Prefer `padding: EdgeInsets.only(bottom: 16 + MediaQuery.viewPaddingOf(context).bottom)` (or `SafeArea` with `maintainBottomViewPadding: true`). Do not rely on `MediaQuery.padding.bottom` alone — on Android edge-to-edge it is often `0` while the system bar still overlaps the buttons. Keep tap targets ≥ 48dp.
 
+**Main shell Add Delivery FAB.** The five tabs stay Home · Deliveries · Earnings · Vehicle · Profile. A raised center `+` sits in a gap between Deliveries and Earnings (`MediaQuery.viewPadding.bottom` under the bar). It calls `openDeliveryAction` (same duty gate as Home). An in-progress pickup swaps the plus for a check and opens Mark as Delivered. Do not add a sixth `goBranch`. Keep the Home bonus-card button and the Deliveries header chip.
+
 **Stale pickup auto-cancel.** `driver_create_pickup` raises `active_pickup_exists` while the driver has an
 `in_transit` row, so a pickup that never completes blocks every later order. A cron
 (`admin_expire_stale_pickups`, every 15 min) cancels `in_transit` rows older than
@@ -1097,7 +1103,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-20 — [admin+app] Home dashboard may include `banner` from `driver_home_banners` (image + captions + optional deep link). Idle location heartbeats a coarse fix once the 30s idle interval elapses so Live Tracking does not mark a parked rider GPS Offline. Weekly counts show “Confirmed once verified”. Vehicles: catalog `vehicle_types` (bike/car); `vehicles.vehicle_type_key` is the map source of truth, `drivers.vehicle_type_key` is the unassigned fallback. Ship the idle heartbeat + banner + verified note with the next Play build. Migrations `20260924100000`, `20260924100100`.*
+*Last synced: 2026-08-22 — [admin+app] Home bumper/quest progress uses `progress_count` (submitted orders); `eligible_count` / payout stay verified. Home `week.deliveries_count` is submitted. Extra earnings adds `progress_count`. App: invalidate Home + Extra Earnings after pickup/finish; raised center Add Delivery FAB on the 5-tab bar (`openDeliveryAction`). [admin only] `admin_bulk_update_deliveries` on `/deliveries`. Migration `20260926100000`.*
 
 *Prior: 2026-08-20 — [admin+app] Pickup / Delivered / Cancel proofs accept up to 5 rear-camera stills (`pickup_proof_urls` / `order_proof_urls` / `cancel_proof_urls`). RPC text params take a single key or a JSON array; the scalar column stays the first key. Migration `20260923100000`.*
 
