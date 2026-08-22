@@ -1011,6 +1011,78 @@ export async function rejectDelivery(
   return updateDeliveryStatus(deliveryId, "rejected", reason);
 }
 
+const BULK_UPDATE_MAX = 100;
+
+export type BulkUpdateDeliveriesResult =
+  | { ok: true; updated: number; skipped: number; failed: number }
+  | { error: DeliveryActionError; errorDetail?: string };
+
+function bulkUpdateErrorFromMessage(message: string | undefined): DeliveryActionError {
+  const text = message ?? "";
+  if (text.includes("not_authorized")) return "not_authorized";
+  if (text.includes("invalid_status")) return "invalid_status";
+  if (text.includes("reason_required")) return "reason_required";
+  if (text.includes("too_many")) return "too_many";
+  return "update_failed";
+}
+
+export async function bulkUpdateDeliveries(
+  deliveryIds: string[],
+  status: Extract<ReviewableDeliveryStatus, "verified" | "rejected">,
+  rejectionReason?: string,
+): Promise<BulkUpdateDeliveriesResult> {
+  const session = await requireDeliveriesManage();
+  if (!session) return { error: "not_authorized" };
+
+  const ids = [...new Set(deliveryIds.filter(Boolean))];
+  if (ids.length === 0) {
+    return { ok: true, updated: 0, skipped: 0, failed: 0 };
+  }
+  if (ids.length > BULK_UPDATE_MAX) return { error: "too_many" };
+
+  if (status === "rejected" && !rejectionReason?.trim()) {
+    return { error: "reason_required" };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_bulk_update_deliveries", {
+    p_ids: ids,
+    p_status: status,
+    p_reason: rejectionReason?.trim() ?? "",
+  });
+
+  if (error) {
+    return {
+      error: bulkUpdateErrorFromMessage(error.message),
+      errorDetail: formatPgErrorDetail(error),
+    };
+  }
+
+  const payload = (data ?? {}) as {
+    updated?: number;
+    skipped?: number;
+    failed?: number;
+  };
+  const updated = Number(payload.updated ?? 0);
+  const skipped = Number(payload.skipped ?? 0);
+  const failed = Number(payload.failed ?? 0);
+
+  void logAdminMutation({
+    action: "update",
+    entityType: "delivery",
+    routeName: "bulkUpdateDeliveries",
+    context: {
+      status,
+      requested: ids.length,
+      updated,
+      skipped,
+      failed,
+    },
+  });
+
+  return { ok: true, updated, skipped, failed };
+}
+
 export async function deleteDelivery(
   deliveryId: string,
 ): Promise<DeliveryMutationResult> {

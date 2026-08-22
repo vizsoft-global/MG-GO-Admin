@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
+  bulkUpdateDeliveries,
   deleteDelivery,
   fetchDeliveriesKpis,
   fetchDeliveriesPage,
@@ -18,7 +19,10 @@ import {
 } from "./deliveries-actions";
 import type { ReviewableDeliveryStatus } from "./types";
 import type { DeliveryStatusFilterValue } from "./delivery-status-filter";
-import { patchDeliveryStatusInPages } from "./patch-delivery-status-pages";
+import {
+  patchDeliveryStatusInPages,
+  patchDeliveryStatusesInPages,
+} from "./patch-delivery-status-pages";
 
 /** @deprecated Use DeliveryStatusFilterValue */
 export type DeliveriesTabFilter = DeliveryStatusFilterValue;
@@ -72,6 +76,41 @@ export function useUpdateDeliveryStatus() {
             return {
               ...old,
               pages: patchDeliveryStatusInPages(old.pages, vars.deliveryId, vars.status),
+            };
+          },
+        );
+      }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.deliveries.all() });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.verifications.all() });
+    },
+  });
+}
+
+export function useBulkUpdateDeliveries() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      deliveryIds,
+      status,
+      rejectionReason,
+    }: {
+      deliveryIds: string[];
+      status: Extract<ReviewableDeliveryStatus, "verified" | "rejected">;
+      rejectionReason?: string;
+    }) => bulkUpdateDeliveries(deliveryIds, status, rejectionReason),
+    onSuccess: async (result, vars) => {
+      if (result && "ok" in result && result.updated > 0) {
+        queryClient.setQueriesData<{ pages: DeliveriesPage[]; pageParams: unknown[] }>(
+          { queryKey: ["deliveries", "list"] },
+          (old) => {
+            if (!old?.pages) return old;
+            return {
+              ...old,
+              pages: patchDeliveryStatusesInPages(
+                old.pages,
+                vars.deliveryIds,
+                vars.status,
+              ),
             };
           },
         );

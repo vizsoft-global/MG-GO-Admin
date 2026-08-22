@@ -6482,6 +6482,14 @@ export type Database = {
         Returns: string
       }
       _delivery_parse_proof_keys: { Args: { p_raw: string }; Returns: string[] }
+      _delivery_resolve_restaurant_id: {
+        Args: {
+          p_driver_id: string
+          p_partner_id: string
+          p_restaurant_id: string
+        }
+        Returns: string
+      }
       _driver_assert_active_on_duty: {
         Args: { p_uid: string }
         Returns: {
@@ -6688,6 +6696,10 @@ export type Database = {
         Returns: Json
       }
       admin_auto_close_requests: { Args: never; Returns: number }
+      admin_bulk_update_deliveries: {
+        Args: { p_ids: string[]; p_reason?: string; p_status: string }
+        Returns: Json
+      }
       admin_clear_request_attention: {
         Args: { p_request_id: string }
         Returns: Json
@@ -7005,7 +7017,19 @@ export type Database = {
         }
         Returns: number
       }
+      count_progress_deliveries: {
+        Args: {
+          p_driver_id: string
+          p_earn_date: string
+          p_incentive_rule_id: string
+        }
+        Returns: number
+      }
       delivery_matches_rules: {
+        Args: { p_delivery_id: string; p_on_date?: string }
+        Returns: boolean
+      }
+      delivery_progress_matches_rules: {
         Args: { p_delivery_id: string; p_on_date?: string }
         Returns: boolean
       }

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { resolveDeliveryStatusVariant } from "./delivery-status-variant";
-import { patchDeliveryStatusInPages } from "./patch-delivery-status-pages";
+import {
+  patchDeliveryStatusInPages,
+  patchDeliveryStatusesInPages,
+} from "./patch-delivery-status-pages";
 
 describe("resolveDeliveryStatusVariant", () => {
   it("matches the driver app: Under Review is amber, Cancelled is grey, Pending is tomato", () => {
@@ -31,5 +34,21 @@ describe("patchDeliveryStatusInPages", () => {
     const next = patchDeliveryStatusInPages(pages, "a", "verified");
     assert.equal(next[0]?.rows[0]?.status, "verified");
     assert.equal(next[0]?.rows[1]?.status, "pending");
+  });
+
+  it("patches many selected rows in one pass", () => {
+    const pages = [
+      {
+        rows: [
+          { id: "a", status: "pending" },
+          { id: "b", status: "under_review" },
+          { id: "c", status: "pending" },
+        ],
+      },
+    ];
+    const next = patchDeliveryStatusesInPages(pages, ["a", "b"], "verified");
+    assert.equal(next[0]?.rows[0]?.status, "verified");
+    assert.equal(next[0]?.rows[1]?.status, "verified");
+    assert.equal(next[0]?.rows[2]?.status, "pending");
   });
 });
