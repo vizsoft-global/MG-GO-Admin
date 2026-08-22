@@ -1,4 +1,7 @@
-export type AutoCheckoutReason = "auto_offline" | "auto_out_of_zone";
+export type AutoCheckoutReason =
+  | "auto_offline"
+  | "auto_out_of_zone"
+  | "auto_shift_end";
 
 export type AutoCheckoutDecisionInput = {
   isOnDuty: boolean;
@@ -7,6 +10,12 @@ export type AutoCheckoutDecisionInput = {
   wentOfflineAt: string | null;
   /** ISO or null — continuous out-of-zone start; null means in zone / reset */
   outOfZoneSince: string | null;
+  /** ISO — scheduled end of the open log's shift */
+  shiftEndAt?: string | null;
+  /** Open attendance log date (YYYY-MM-DD, Asia/Kuwait) */
+  logDate?: string | null;
+  /** Today in Asia/Kuwait (YYYY-MM-DD) */
+  todayDate?: string | null;
   thresholdMinutes: number;
   nowMs?: number;
 };
@@ -23,20 +32,36 @@ function minutesSince(iso: string | null, nowMs: number): number | null {
 }
 
 /**
- * Continuous 45-minute (configurable) offline OR out-of-zone → auto checkout.
- * Returning online / in-zone clears the respective timestamp (caller sets null) → no checkout.
- * Offline preferred when both thresholds met.
+ * Shift end / leftover duty wins, then 45-minute (configurable) offline
+ * OR out-of-zone. Returning online / in-zone clears that timer.
+ * Offline preferred when both duration thresholds are met.
  */
 export function decideAutoCheckout(
   input: AutoCheckoutDecisionInput,
 ): AutoCheckoutDecision {
-  if (!input.isOnDuty || !input.hasOpenAttendanceLog) {
+  if (!input.isOnDuty) {
     return { shouldCheckout: false };
   }
 
-  const threshold = Math.max(1, input.thresholdMinutes);
-  const nowMs = input.nowMs ?? Date.now();
+  if (!input.hasOpenAttendanceLog) {
+    return { shouldCheckout: true, reason: "auto_shift_end" };
+  }
 
+  const nowMs = input.nowMs ?? Date.now();
+  const shiftEndMs = input.shiftEndAt ? Date.parse(input.shiftEndAt) : NaN;
+  if (Number.isFinite(shiftEndMs) && nowMs >= shiftEndMs) {
+    return { shouldCheckout: true, reason: "auto_shift_end" };
+  }
+
+  if (
+    input.logDate &&
+    input.todayDate &&
+    input.logDate < input.todayDate
+  ) {
+    return { shouldCheckout: true, reason: "auto_shift_end" };
+  }
+
+  const threshold = Math.max(1, input.thresholdMinutes);
   const offlineMinutes = minutesSince(input.wentOfflineAt, nowMs);
   if (offlineMinutes != null && offlineMinutes >= threshold) {
     return { shouldCheckout: true, reason: "auto_offline" };
@@ -53,7 +78,11 @@ export function decideAutoCheckout(
 export function isAutoCheckoutReason(
   reason: string | null | undefined,
 ): reason is AutoCheckoutReason {
-  return reason === "auto_offline" || reason === "auto_out_of_zone";
+  return (
+    reason === "auto_offline" ||
+    reason === "auto_out_of_zone" ||
+    reason === "auto_shift_end"
+  );
 }
 
 /** Zone transition helper: set/clear out_of_zone_since. */

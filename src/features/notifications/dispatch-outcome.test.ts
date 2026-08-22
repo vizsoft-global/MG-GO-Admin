@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  classifyHardPushFailure,
   isHardPushFailure,
   isPushSkippedNoToken,
   resolveCampaignDisplayStatus,
@@ -37,6 +38,22 @@ describe("dispatch-outcome", () => {
     };
     assert.equal(isHardPushFailure(item), true);
     assert.equal(resolveCampaignDisplayStatus("failed", [item]), "failed");
+  });
+
+  it("classifies Admin JWT rejection separately from SenderId mismatch", () => {
+    assert.equal(
+      classifyHardPushFailure("app/invalid-credential"),
+      "invalid_credential",
+    );
+    assert.equal(
+      classifyHardPushFailure("messaging/mismatched-credential"),
+      "sender_mismatch",
+    );
+    assert.equal(
+      classifyHardPushFailure("messaging/sender-id-mismatch"),
+      "sender_mismatch",
+    );
+    assert.equal(classifyHardPushFailure("messaging/internal-error"), "other");
   });
 
   it("keeps a broken Admin SDK JWT as hard failure after in-app opened", () => {

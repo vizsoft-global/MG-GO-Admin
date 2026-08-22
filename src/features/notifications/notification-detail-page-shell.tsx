@@ -291,10 +291,18 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
             {dispatchSummary.hardFailed > 0 ? (
               <p className="sm:col-span-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive">
                 {dispatchSummary.inboxDelivered > 0
-                  ? t("dispatchPushFailedInAppOk", {
-                      failed: dispatchSummary.hardFailed,
-                      total: campaign.recipient_count || campaign.estimated_audience_count,
-                    })
+                  ? t(
+                      dispatchSummary.hardFailureKind === "invalid_credential"
+                        ? "dispatchPushFailedInvalidCredential"
+                        : dispatchSummary.hardFailureKind === "sender_mismatch"
+                          ? "dispatchPushFailedSenderMismatch"
+                          : "dispatchPushFailedInAppOk",
+                      {
+                        failed: dispatchSummary.hardFailed,
+                        total: campaign.recipient_count || campaign.estimated_audience_count,
+                        code: dispatchSummary.hardFailureCode ?? "unknown",
+                      },
+                    )
                   : t("dispatchFailedSummary", {
                       failed: dispatchSummary.hardFailed,
                       total: campaign.recipient_count || campaign.estimated_audience_count,

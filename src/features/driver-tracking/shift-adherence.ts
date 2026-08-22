@@ -22,13 +22,30 @@ export function capShiftEarlyOutMinutes(
   return value > cap ? cap : value;
 }
 
+export function scheduledSecondsFromWindow(
+  startAt: string | null | undefined,
+  endAt: string | null | undefined,
+): number {
+  if (!startAt || !endAt) return 0;
+  const start = Date.parse(startAt);
+  const end = Date.parse(endAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  const seconds = Math.floor((end - start) / 1000);
+  return seconds > 0 ? seconds : 0;
+}
+
 export function parseShiftAdherence(raw: unknown): ShiftAdherence | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (typeof o.scheduled_start_at !== "string" || typeof o.scheduled_end_at !== "string") {
     return null;
   }
-  const scheduledSeconds = Number(o.scheduled_seconds ?? 0);
+  const declared = Number(o.scheduled_seconds ?? 0);
+  const derived = scheduledSecondsFromWindow(
+    o.scheduled_start_at,
+    o.scheduled_end_at,
+  );
+  const scheduledSeconds = declared > 0 ? declared : derived;
   return {
     scheduled_start_at: o.scheduled_start_at,
     scheduled_end_at: o.scheduled_end_at,
