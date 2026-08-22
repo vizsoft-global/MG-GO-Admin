@@ -7,12 +7,12 @@ export default async function VehiclesPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ add?: string }>;
+  searchParams: Promise<{ add?: string; tab?: string }>;
 }) {
   const { locale } = await params;
   const query = await searchParams;
   setRequestLocale(locale);
   await requirePermission(locale, "vehicles.view");
 
-  return <VehiclesPageShell addOpen={query.add === "1"} />;
+  return <VehiclesPageShell addOpen={query.add === "1"} tab={query.tab} />;
 }

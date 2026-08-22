@@ -45,7 +45,7 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
     supabase.from("vehicle_types").select("key, label_en, label_ar"),
     supabase
       .from("drivers")
-      .select("id, driver_code, vehicle_id, profiles(full_name)")
+      .select("id, driver_code, vehicle_id, is_on_duty, profiles(full_name)")
       .not("vehicle_id", "is", null)
       .is("archived_at", null),
   ]);
@@ -59,12 +59,13 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
   );
   const assigned = new Map<
     string,
-    { id: string; driver_code: string; name: string | null }
+    { id: string; driver_code: string; name: string | null; onDuty: boolean }
   >();
   for (const row of (driversRes.data ?? []) as Array<{
     id: string;
     driver_code: string;
     vehicle_id: string | null;
+    is_on_duty: boolean | null;
     profiles: { full_name: string | null } | { full_name: string | null }[] | null;
   }>) {
     if (!row.vehicle_id) continue;
@@ -73,6 +74,7 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       id: row.id,
       driver_code: row.driver_code,
       name: profile?.full_name ?? null,
+      onDuty: row.is_on_duty === true,
     });
   }
 
@@ -97,6 +99,7 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       assigned_driver_id: driver?.id ?? null,
       assigned_driver_name: driver?.name ?? null,
       assigned_driver_code: driver?.driver_code ?? null,
+      assigned_on_duty: driver?.onDuty === true,
     };
   });
 }

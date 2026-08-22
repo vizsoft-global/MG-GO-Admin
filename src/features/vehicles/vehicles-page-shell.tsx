@@ -1,11 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "@/i18n/navigation";
-import { Loader2, Plus, Search, X } from "lucide-react";
+import {
+  Ban,
+  Bike,
+  CircleDot,
+  Loader2,
+  Plus,
+  Search,
+  Users,
+  Wallet,
+  Wrench,
+  X,
+} from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { useRouter } from "@/i18n/navigation";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -16,11 +27,20 @@ import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { KpiGrid } from "@/components/dashboard/kpi-grid";
+import { TabBar } from "@/components/dashboard/tab-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import { VehicleFormDialog } from "./vehicle-form-dialog";
 import { useVehicleTypes, useVehiclesList } from "./use-vehicles";
 import type { VehicleListRow, VehicleStatus } from "./types";
+import {
+  parseVehicleListTab,
+  vehicleListKpis,
+  vehicleMatchesSearch,
+  vehicleMatchesTab,
+  type VehicleListTab,
+} from "./vehicles-list-utils";
 
 function statusTone(status: VehicleStatus): "default" | "secondary" | "destructive" {
   if (status === "active") return "default";
@@ -28,8 +48,13 @@ function statusTone(status: VehicleStatus): "default" | "secondary" | "destructi
   return "destructive";
 }
 
-export function VehiclesPageShell({ addOpen }: { addOpen: boolean }) {
-  const locale = useLocale();
+export function VehiclesPageShell({
+  addOpen,
+  tab,
+}: {
+  addOpen: boolean;
+  tab?: string;
+}) {
   const t = useTranslations("pages.vehicles");
   const { can } = useAuth();
   const canManage = can("vehicles.manage");
@@ -38,26 +63,35 @@ export function VehiclesPageShell({ addOpen }: { addOpen: boolean }) {
   const { data: vehicles = [], isLoading } = useVehiclesList();
   const { data: types = [] } = useVehicleTypes();
   const [search, setSearch] = useState("");
+  const activeTab = parseVehicleListTab(tab);
 
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return vehicles;
-    return vehicles.filter((row) =>
-      [row.bike_id, row.reg_number, row.assigned_driver_name, row.assigned_driver_code, row.vehicle_type_label]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(q)),
-    );
-  }, [search, vehicles]);
+  const replaceQuery = (next: { add?: boolean; tab?: VehicleListTab }) => {
+    const params = new URLSearchParams();
+    const nextTab = next.tab ?? activeTab;
+    const nextAdd = next.add ?? addOpen;
+    if (nextTab !== "all") params.set("tab", nextTab);
+    if (nextAdd) params.set("add", "1");
+    const qs = params.toString();
+    router.replace(qs ? `/vehicles?${qs}` : "/vehicles");
+  };
 
-  const kpis = useMemo(() => {
-    const assigned = vehicles.filter((row) => row.assigned_driver_id).length;
-    return [
-      { label: t("kpiTotal"), value: String(vehicles.length) },
-      { label: t("kpiActive"), value: String(vehicles.filter((row) => row.status === "active").length) },
-      { label: t("kpiMaintenance"), value: String(vehicles.filter((row) => row.status === "maintenance").length) },
-      { label: t("kpiAssigned"), value: String(assigned) },
-    ];
-  }, [t, vehicles]);
+  const visible = useMemo(
+    () =>
+      vehicles.filter(
+        (row) => vehicleMatchesTab(row, activeTab) && vehicleMatchesSearch(row, search),
+      ),
+    [activeTab, search, vehicles],
+  );
+
+  const counts = useMemo(() => vehicleListKpis(vehicles), [vehicles]);
+  const kpis = [
+    { label: t("kpiTotal"), value: isLoading ? "—" : String(counts.total), icon: Bike, accent: "primary" as const },
+    { label: t("kpiOnDuty"), value: isLoading ? "—" : String(counts.onDuty), icon: CircleDot, accent: "success" as const },
+    { label: t("kpiSuspended"), value: isLoading ? "—" : String(counts.suspended), icon: Ban, accent: "danger" as const },
+    { label: t("kpiGroup"), value: isLoading ? "—" : String(counts.group), icon: Users },
+    { label: t("kpiRent"), value: isLoading ? "—" : String(counts.rent), icon: Wallet },
+    { label: t("kpiMaintenance"), value: isLoading ? "—" : String(counts.maintenance), icon: Wrench, accent: "warning" as const },
+  ];
 
   return (
     <AppPage>
@@ -65,25 +99,30 @@ export function VehiclesPageShell({ addOpen }: { addOpen: boolean }) {
         title={t("title")}
         description={t("subtitle")}
         actions={
-          canManage ? (
-            <Button
-              className="h-9 cursor-pointer rounded-lg"
-              onClick={() => router.push("/vehicles?add=1")}
-            >
-              <Plus className="me-2 h-3.5 w-3.5" />
-              {t("addVehicle")}
-            </Button>
-          ) : null
+          <Button
+            className="h-9 cursor-pointer rounded-lg"
+            disabled={!canManage}
+            onClick={() => {
+              if (canManage) replaceQuery({ add: true });
+            }}
+          >
+            <Plus className="me-2 h-3.5 w-3.5" />
+            {t("addVehicle")}
+          </Button>
+        }
+        tabs={
+          <TabBar
+            activeId={activeTab}
+            onSelect={(id) => replaceQuery({ tab: parseVehicleListTab(id) })}
+            items={[
+              { id: "all", label: t("tabAll"), icon: Bike },
+              { id: "suspended", label: t("tabSuspended"), icon: Ban },
+              { id: "on-duty", label: t("tabOnDuty"), icon: CircleDot },
+            ]}
+          />
         }
       />
-      <div className="mb-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-        {kpis.map((kpi) => (
-          <div key={kpi.label} className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <p className="text-[11px] text-muted-foreground">{kpi.label}</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">{kpi.value}</p>
-          </div>
-        ))}
-      </div>
+      <KpiGrid items={kpis} compact />
       <AppListCard
         toolbar={
           <div className="relative min-w-0 flex-1">
@@ -111,7 +150,7 @@ export function VehiclesPageShell({ addOpen }: { addOpen: boolean }) {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : vehicles.length === 0 ? (
-          <AppEmptyState title={t("emptyTitle")} />
+          <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
         ) : (
           <AppDataTable
             columns={[
@@ -127,7 +166,6 @@ export function VehiclesPageShell({ addOpen }: { addOpen: boolean }) {
               <VehicleRow
                 key={row.id}
                 row={row}
-                locale={locale}
                 onOpen={() => router.push(`/vehicles/${row.id}`)}
               />
             ))}
@@ -139,7 +177,7 @@ export function VehiclesPageShell({ addOpen }: { addOpen: boolean }) {
         vehicle={null}
         types={types}
         onOpenChange={(open) => {
-          if (!open) router.replace("/vehicles");
+          if (!open) replaceQuery({ add: false });
         }}
         onSaved={(id) => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all() });
@@ -152,11 +190,9 @@ export function VehiclesPageShell({ addOpen }: { addOpen: boolean }) {
 
 function VehicleRow({
   row,
-  locale,
   onOpen,
 }: {
   row: VehicleListRow;
-  locale: string;
   onOpen: () => void;
 }) {
   const t = useTranslations("pages.vehicles");
@@ -173,7 +209,7 @@ function VehicleRow({
         <p className="text-[11px] text-primary">{t("viewDetails")}</p>
       </TableCell>
       <TableCell>{row.reg_number ?? "—"}</TableCell>
-      <TableCell>{locale === "ar" ? row.vehicle_type_label : row.vehicle_type_label}</TableCell>
+      <TableCell>{row.vehicle_type_label}</TableCell>
       <TableCell>
         {row.assigned_driver_name
           ? `${row.assigned_driver_name}${row.assigned_driver_code ? ` · ${row.assigned_driver_code}` : ""}`
