@@ -22,5 +22,6 @@ export type VehicleListRow = {
   assigned_driver_id: string | null;
   assigned_driver_name: string | null;
   assigned_driver_code: string | null;
+  assigned_on_duty: boolean;
   created_at: string;
 };
