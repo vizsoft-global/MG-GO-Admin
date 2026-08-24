@@ -231,6 +231,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-24` — **Deliveries bulk select is a real square checkbox.** The Base UI control collapsed in the table to a vertical bar; the column now paints a 20px box with a check.
+
 - `[admin only] 2026-08-24` — **Deliveries bulk bar is visible as soon as Pending / Under review rows are listed.** Verify / Reject no longer wait for a first tick, so the queue no longer looks like a filter-only page. Select column is locked and high-contrast.
 
 - `[admin only] 2026-08-22` — **Deliveries bulk-verify checkboxes always show.** The column was gated on `deliveries.manage`, so Operator (view-only) saw Under review rows with no boxes. Selection is on the list; Verify / Reject still need manage. Operator is granted `deliveries.manage`. Migration `20260927100000`.

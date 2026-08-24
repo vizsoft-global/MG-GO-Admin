@@ -588,18 +588,15 @@ function DeliveriesPageContent() {
       [
         {
           id: "select",
-          className: "w-10 min-w-10",
+          className: "w-12",
           label: (
-            <Checkbox
-              aria-label={t("bulk.selectAll")}
-              className="cursor-pointer border-2 border-foreground"
+            <DeliverySelectBox
+              label={t("bulk.selectAll")}
               checked={
                 verifiableVisible.length > 0 &&
                 verifiableVisible.every((row) => selected.has(row.id))
               }
-              onCheckedChange={(checked) =>
-                toggleAllVisible(checked === true)
-              }
+              onCheckedChange={(checked) => toggleAllVisible(checked)}
             />
           ),
         },
@@ -875,14 +872,13 @@ function DeliveriesPageContent() {
                       <VisibleTableCell
                         columnId="select"
                         isVisible={isColumnVisible}
-                        className="w-10 min-w-10"
+                        className="w-12"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Checkbox
-                          aria-label={t("bulk.selectRow", {
+                        <DeliverySelectBox
+                          label={t("bulk.selectRow", {
                             id: delivery.short_id,
                           })}
-                          className="cursor-pointer border-2 border-foreground"
                           checked={selected.has(delivery.id)}
                           disabled={!isBulkVerifiableDeliveryStatus(delivery.status)}
                           onCheckedChange={() => toggleRow(delivery.id)}
@@ -1105,6 +1101,39 @@ function DeliveriesPageContent() {
         </DialogContent>
       </Dialog>
     </AppPage>
+  );
+}
+
+function DeliverySelectBox({
+  label,
+  checked,
+  disabled,
+  onCheckedChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <span className="flex h-8 w-8 items-center justify-center">
+      <span
+        className={cn(
+          "relative inline-flex size-5 shrink-0 items-center justify-center rounded-[4px] border-2 border-foreground bg-background",
+          checked && "border-primary bg-primary text-primary-foreground",
+          disabled && "opacity-50",
+        )}
+      >
+        {checked ? <Check className="size-3 stroke-[3]" /> : null}
+        <Checkbox
+          aria-label={label}
+          checked={checked}
+          disabled={disabled}
+          onCheckedChange={(value) => onCheckedChange(value === true)}
+          className="absolute inset-0 size-full cursor-pointer border-0 bg-transparent opacity-0 shadow-none"
+        />
+      </span>
+    </span>
   );
 }
 
