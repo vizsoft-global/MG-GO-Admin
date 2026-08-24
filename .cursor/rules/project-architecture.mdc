@@ -231,6 +231,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-24` — **Delivery Orders Report finishes year-to-date.** `report_delivery_orders` now joins each delivery to that driver's shift windows instead of scanning every window three times per row. Jan–Aug (~38k deliveries) was ~25s and hit the 8s API timeout. Cap remains 366 days. Migration `20260928100000`.
+
 - `[admin only] 2026-08-24` — **Deliveries bulk select is a real square checkbox.** The Base UI control collapsed in the table to a vertical bar; the column now paints a 20px box with a check.
 
 - `[admin only] 2026-08-24` — **Deliveries bulk bar is visible as soon as Pending / Under review rows are listed.** Verify / Reject no longer wait for a first tick, so the queue no longer looks like a filter-only page. Select column is locked and high-contrast.

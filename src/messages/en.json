@@ -2069,6 +2069,7 @@
         "generate": "Generate report",
         "cancel": "Cancel",
         "invalidRange": "Choose a valid date range",
+        "rangeTooLarge": "Choose a range of 366 days or less",
         "empty": "No deliveries found for this range",
         "failed": "Could not generate report",
         "success": "Report downloaded ({count, plural, one {# driver} other {# drivers}})"

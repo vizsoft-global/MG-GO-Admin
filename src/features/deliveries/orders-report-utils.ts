@@ -28,6 +28,64 @@ export type DeliveryOrdersReportData = {
 
 const POSITION_DEFAULT = "Bike";
 
+/** Inclusive day cap that still covers a leap year. */
+export const ORDERS_REPORT_MAX_DAYS = 366;
+
+export type OrdersReportShiftWindow = {
+  shiftDate: string;
+  windowStartMs: number;
+  windowEndMs: number;
+};
+
+export type OrdersReportErrorKey = "invalidRange" | "rangeTooLarge" | "failed";
+
+export function inclusiveDayCount(from: string, to: string): number {
+  return enumerateDays(from, to).length;
+}
+
+export function assertDeliveryOrdersReportRange(from: string, to: string): void {
+  const start = from?.slice(0, 10);
+  const end = to?.slice(0, 10);
+  if (!start || !end || start > end) {
+    throw new Error("invalid_date_range");
+  }
+  if (inclusiveDayCount(start, end) > ORDERS_REPORT_MAX_DAYS) {
+    throw new Error("range_too_large");
+  }
+}
+
+/** Same fallback order as report_delivery_orders: in-window, previous, nearest, calendar. */
+export function attributeDeliveryShiftDate(
+  deliveredAtMs: number,
+  kuwaitCalendarDate: string,
+  windows: OrdersReportShiftWindow[],
+): string {
+  const inWindow = windows
+    .filter((window) => deliveredAtMs >= window.windowStartMs && deliveredAtMs < window.windowEndMs)
+    .sort((a, b) => a.windowStartMs - b.windowStartMs);
+  if (inWindow[0]) return inWindow[0].shiftDate;
+
+  const previous = windows
+    .filter((window) => window.windowStartMs <= deliveredAtMs)
+    .sort((a, b) => b.windowStartMs - a.windowStartMs);
+  if (previous[0]) return previous[0].shiftDate;
+
+  const nearest = [...windows].sort(
+    (a, b) =>
+      Math.abs(deliveredAtMs - a.windowStartMs) - Math.abs(deliveredAtMs - b.windowStartMs),
+  );
+  if (nearest[0]) return nearest[0].shiftDate;
+
+  return kuwaitCalendarDate;
+}
+
+export function ordersReportErrorKey(error: unknown): OrdersReportErrorKey {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (message.includes("range_too_large")) return "rangeTooLarge";
+  if (message.includes("invalid_date_range")) return "invalidRange";
+  return "failed";
+}
+
 /** Inclusive YYYY-MM-DD range. */
 export function enumerateDays(from: string, to: string): string[] {
   const days: string[] = [];
