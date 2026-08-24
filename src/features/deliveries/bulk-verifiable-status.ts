@@ -5,8 +5,6 @@ export const BULK_VERIFIABLE_DELIVERY_STATUSES = [
 ] as const;
 
 export function isBulkVerifiableDeliveryStatus(status: string): boolean {
-  return (
-    status === "pending" ||
-    status === "under_review"
-  );
+  const normalized = status.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return normalized === "pending" || normalized === "under_review";
 }

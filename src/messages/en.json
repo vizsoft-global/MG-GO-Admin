@@ -2223,6 +2223,7 @@
       "bulk": {
         "selectAll": "Select all verifiable deliveries",
         "selectRow": "Select delivery {id}",
+        "hint": "Tick the boxes on Pending or Under review rows, then Verify or Reject.",
         "selected": "{count} selected",
         "skipped": "{count} cannot be verified",
         "verify": "Verify ({count})",

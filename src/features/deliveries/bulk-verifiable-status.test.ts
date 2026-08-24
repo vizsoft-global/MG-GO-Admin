@@ -6,6 +6,8 @@ describe("isBulkVerifiableDeliveryStatus", () => {
   it("allows pending and under_review", () => {
     assert.equal(isBulkVerifiableDeliveryStatus("pending"), true);
     assert.equal(isBulkVerifiableDeliveryStatus("under_review"), true);
+    assert.equal(isBulkVerifiableDeliveryStatus("Pending"), true);
+    assert.equal(isBulkVerifiableDeliveryStatus("Under Review"), true);
   });
 
   it("skips live, already-decided, and cancelled rows", () => {
