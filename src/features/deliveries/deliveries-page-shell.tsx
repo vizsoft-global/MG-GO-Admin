@@ -27,7 +27,6 @@ import {
   AppDataTableEmpty,
   AppDataTableRow,
   AppTableColumnPicker,
-  TableCell,
   VisibleTableCell,
 } from "@/components/app";
 import { AppPage } from "@/components/app/app-page";
@@ -562,6 +561,7 @@ function DeliveriesPageContent() {
 
   const columnVisibilityOptions = useMemo(
     () => [
+      { id: "select", label: t("bulk.selectAll"), locked: true as const },
       { id: "deliveryId", label: t("colDeliveryId") },
       { id: "driver", label: t("colDriver") },
       { id: "employeeId", label: t("colEmployeeId") },
@@ -588,10 +588,11 @@ function DeliveriesPageContent() {
       [
         {
           id: "select",
-          className: "w-10",
+          className: "w-10 min-w-10",
           label: (
             <Checkbox
               aria-label={t("bulk.selectAll")}
+              className="cursor-pointer border-2 border-foreground"
               checked={
                 verifiableVisible.length > 0 &&
                 verifiableVisible.every((row) => selected.has(row.id))
@@ -783,10 +784,12 @@ function DeliveriesPageContent() {
                   : null}
               </p>
             )}
-            {selected.size > 0 ? (
+            {verifiableVisible.length > 0 || selected.size > 0 ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
                 <p className="text-xs font-medium text-foreground">
-                  {t("bulk.selected", { count: `${selected.size}` })}
+                  {selected.size > 0
+                    ? t("bulk.selected", { count: `${selected.size}` })
+                    : t("bulk.hint")}
                   {skippedSelectedCount > 0 ? (
                     <span className="ms-2 font-normal text-muted-foreground">
                       {t("bulk.skipped", { count: `${skippedSelectedCount}` })}
@@ -869,16 +872,22 @@ function DeliveriesPageContent() {
                       key={delivery.id}
                       onClick={() => openDeliveryDetail(delivery)}
                     >
-                      <TableCell onClick={(e) => e.stopPropagation()}>
+                      <VisibleTableCell
+                        columnId="select"
+                        isVisible={isColumnVisible}
+                        className="w-10 min-w-10"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Checkbox
                           aria-label={t("bulk.selectRow", {
                             id: delivery.short_id,
                           })}
+                          className="cursor-pointer border-2 border-foreground"
                           checked={selected.has(delivery.id)}
                           disabled={!isBulkVerifiableDeliveryStatus(delivery.status)}
                           onCheckedChange={() => toggleRow(delivery.id)}
                         />
-                      </TableCell>
+                      </VisibleTableCell>
                       <VisibleTableCell
                         columnId="deliveryId"
                         isVisible={isColumnVisible}

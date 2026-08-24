@@ -231,6 +231,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-24` — **Deliveries bulk bar is visible as soon as Pending / Under review rows are listed.** Verify / Reject no longer wait for a first tick, so the queue no longer looks like a filter-only page. Select column is locked and high-contrast.
+
 - `[admin only] 2026-08-22` — **Deliveries bulk-verify checkboxes always show.** The column was gated on `deliveries.manage`, so Operator (view-only) saw Under review rows with no boxes. Selection is on the list; Verify / Reject still need manage. Operator is granted `deliveries.manage`. Migration `20260927100000`.
 
 - `[admin only] 2026-08-22` — **Vehicles list is no longer a stub.** `/vehicles` tabs All / Suspended / On Duty filter the real fleet; the six KPI cards (Total, On Duty, Suspended, Group, Rent, Maintenance) count rows instead of painting dashes; **Add Vehicle** opens the form. On Duty is a bike assigned to a clocked-in driver. Production `main` had been serving `ModuleIndexPage` with a disabled Add button.
