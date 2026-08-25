@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
+  ArrowLeft,
   CircleSlash,
   Clock,
   ExternalLink,
@@ -195,6 +196,15 @@ export function EsignSentShell() {
         ]}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              render={<Link href="/requests/esign" />}
+            >
+              <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
+              {t("back")}
+            </Button>
             <Button
               type="button"
               size="sm"
