@@ -139,6 +139,7 @@ export function DriverFormSheet({
   const [restaurantIds, setRestaurantIds] = useState<string[]>([]);
   const [zoneId, setZoneId] = useState("");
   const [vehicleId, setVehicleId] = useState(NONE_VEHICLE);
+  const [vehicleTypeKey, setVehicleTypeKey] = useState("bike");
   const [workflowStatus, setWorkflowStatus] = useState<DriverWorkflowStatus>("draft");
   const [selectedCatalogIds, setSelectedCatalogIds] = useState<Set<string>>(new Set());
   const [documents, setDocuments] = useState<Record<DriverDocumentType, File | null>>(
@@ -181,6 +182,7 @@ export function DriverFormSheet({
       setRestaurantIds(activeDriver.restaurant_ids);
       setZoneId(activeDriver.zone_id ?? "");
       setVehicleId(activeDriver.vehicle_id ?? NONE_VEHICLE);
+      setVehicleTypeKey(activeDriver.vehicle_type_key ?? "bike");
       setWorkflowStatus(
         activeDriver.linked || activeDriver.linked_profile_id
           ? workflowFromAccountStatus(activeDriver.account_status)
@@ -208,6 +210,7 @@ export function DriverFormSheet({
     setRestaurantIds([]);
     setZoneId("");
     setVehicleId(NONE_VEHICLE);
+    setVehicleTypeKey("bike");
     setWorkflowStatus("draft");
     setSelectedCatalogIds(new Set());
     setDocuments(EMPTY_DOCS);
@@ -438,6 +441,7 @@ export function DriverFormSheet({
       if (vehicleId && vehicleId !== NONE_VEHICLE) {
         formData.append("vehicleId", vehicleId);
       }
+      formData.append("vehicleTypeKey", vehicleTypeKey);
       for (const catalogItemId of selectedCatalogIds) {
         formData.append("catalogItemIds", catalogItemId);
       }
@@ -589,7 +593,13 @@ export function DriverFormSheet({
                   clearFieldError("zoneId");
                 }}
                 vehicleId={vehicleId || NONE_VEHICLE}
-                onVehicleChange={setVehicleId}
+                onVehicleChange={(value) => {
+                  setVehicleId(value);
+                  const picked = vehicles.find((vehicle) => vehicle.id === value);
+                  if (picked?.vehicle_type_key) setVehicleTypeKey(picked.vehicle_type_key);
+                }}
+                vehicleTypeKey={vehicleTypeKey}
+                onVehicleTypeChange={setVehicleTypeKey}
                 restaurants={allRestaurants}
                 selectedRestaurantIds={restaurantIds}
                 onRestaurantsChange={setRestaurantIds}
@@ -610,6 +620,7 @@ export function DriverFormSheet({
                   partner: tNew("fields.partner"),
                   zone: tNew("fields.zone"),
                   vehicle: tNew("fields.vehicle"),
+                  vehicleType: tNew("fields.vehicleType"),
                   restaurants: tNew("sections.restaurants"),
                 }}
               />

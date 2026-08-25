@@ -70,6 +70,7 @@ export type VehicleOption = {
   id: string;
   bike_id: string;
   reg_number: string | null;
+  vehicle_type_key?: string | null;
 };
 
 export type PartnerOption = {
@@ -199,6 +200,7 @@ export type DriverDetailModel = {
   partner_id: string | null;
   zone_id: string | null;
   vehicle_id: string | null;
+  vehicle_type_key: string | null;
   workflow_status: DriverWorkflowStatus;
   linked: boolean;
   linked_profile_id: string | null;

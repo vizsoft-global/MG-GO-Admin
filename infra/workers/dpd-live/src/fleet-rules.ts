@@ -17,6 +17,7 @@ import {
   fleetEventSeverity,
   fleetFlags,
   fleetStatus,
+  gpsOfflineGraceSeconds,
   isLowBattery,
   isOverspeeding,
   normalizeBatteryPct,
@@ -280,7 +281,10 @@ export function evaluateRules(previous: RuleState, input: RuleInput): RuleOutcom
       if (gpsOffline) {
         emit(FLEET_EVENT_KEYS.gpsOffline, null, {
           reason: status === "location_off" ? "location_off" : "silent",
-          threshold_seconds: thresholds.gpsOfflineSeconds,
+          // The grace that was actually applied, which depends on the cadence the rider was
+          // reporting at. Recording the moving figure for an idle rider would make the event
+          // disagree with the verdict that produced it.
+          threshold_seconds: gpsOfflineGraceSeconds(input.signals, thresholds),
         });
       } else {
         emit(FLEET_EVENT_KEYS.gpsRestored, null);

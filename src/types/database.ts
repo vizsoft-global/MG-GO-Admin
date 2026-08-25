@@ -1894,6 +1894,71 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_home_banners: {
+        Row: {
+          caption_ar: string | null
+          caption_en: string | null
+          created_at: string
+          created_by: string | null
+          deep_link: string | null
+          driver_group_ids: string[]
+          ends_at: string | null
+          id: string
+          image_object_key: string
+          image_url: string
+          is_active: boolean
+          partner_ids: string[]
+          sort_order: number
+          starts_at: string | null
+          updated_at: string
+          zone_ids: string[]
+        }
+        Insert: {
+          caption_ar?: string | null
+          caption_en?: string | null
+          created_at?: string
+          created_by?: string | null
+          deep_link?: string | null
+          driver_group_ids?: string[]
+          ends_at?: string | null
+          id?: string
+          image_object_key: string
+          image_url: string
+          is_active?: boolean
+          partner_ids?: string[]
+          sort_order?: number
+          starts_at?: string | null
+          updated_at?: string
+          zone_ids?: string[]
+        }
+        Update: {
+          caption_ar?: string | null
+          caption_en?: string | null
+          created_at?: string
+          created_by?: string | null
+          deep_link?: string | null
+          driver_group_ids?: string[]
+          ends_at?: string | null
+          id?: string
+          image_object_key?: string
+          image_url?: string
+          is_active?: boolean
+          partner_ids?: string[]
+          sort_order?: number
+          starts_at?: string | null
+          updated_at?: string
+          zone_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_home_banners_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_import_batches: {
         Row: {
           applied_count: number
@@ -1997,6 +2062,7 @@ export type Database = {
           status: Database["public"]["Enums"]["driver_intake_status"]
           updated_at: string
           vehicle_id: string | null
+          vehicle_type_key: string | null
           workflow_status: Database["public"]["Enums"]["driver_workflow_status"]
           zone_id: string | null
         }
@@ -2022,6 +2088,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["driver_intake_status"]
           updated_at?: string
           vehicle_id?: string | null
+          vehicle_type_key?: string | null
           workflow_status?: Database["public"]["Enums"]["driver_workflow_status"]
           zone_id?: string | null
         }
@@ -2047,6 +2114,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["driver_intake_status"]
           updated_at?: string
           vehicle_id?: string | null
+          vehicle_type_key?: string | null
           workflow_status?: Database["public"]["Enums"]["driver_workflow_status"]
           zone_id?: string | null
         }
@@ -2078,6 +2146,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vehicles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_intakes_vehicle_type_key_fkey"
+            columns: ["vehicle_type_key"]
+            isOneToOne: false
+            referencedRelation: "vehicle_types"
+            referencedColumns: ["key"]
           },
           {
             foreignKeyName: "driver_intakes_zone_id_fkey"
@@ -2797,6 +2872,7 @@ export type Database = {
           status: Database["public"]["Enums"]["driver_status"]
           updated_at: string
           vehicle_id: string | null
+          vehicle_type_key: string | null
           zone_id: string | null
         }
         Insert: {
@@ -2834,6 +2910,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["driver_status"]
           updated_at?: string
           vehicle_id?: string | null
+          vehicle_type_key?: string | null
           zone_id?: string | null
         }
         Update: {
@@ -2871,6 +2948,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["driver_status"]
           updated_at?: string
           vehicle_id?: string | null
+          vehicle_type_key?: string | null
           zone_id?: string | null
         }
         Relationships: [
@@ -2901,6 +2979,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vehicles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drivers_vehicle_type_key_fkey"
+            columns: ["vehicle_type_key"]
+            isOneToOne: false
+            referencedRelation: "vehicle_types"
+            referencedColumns: ["key"]
           },
           {
             foreignKeyName: "drivers_zone_id_fkey"
@@ -5545,6 +5630,30 @@ export type Database = {
           },
         ]
       }
+      vehicle_types: {
+        Row: {
+          is_active: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order: number
+        }
+        Insert: {
+          is_active?: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order?: number
+        }
+        Update: {
+          is_active?: boolean
+          key?: string
+          label_ar?: string
+          label_en?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       vehicles: {
         Row: {
           bike_id: string
@@ -5558,6 +5667,7 @@ export type Database = {
           reg_number: string | null
           status: Database["public"]["Enums"]["vehicle_status"]
           updated_at: string
+          vehicle_type_key: string
         }
         Insert: {
           bike_id: string
@@ -5571,6 +5681,7 @@ export type Database = {
           reg_number?: string | null
           status?: Database["public"]["Enums"]["vehicle_status"]
           updated_at?: string
+          vehicle_type_key?: string
         }
         Update: {
           bike_id?: string
@@ -5584,6 +5695,7 @@ export type Database = {
           reg_number?: string | null
           status?: Database["public"]["Enums"]["vehicle_status"]
           updated_at?: string
+          vehicle_type_key?: string
         }
         Relationships: [
           {
@@ -5599,6 +5711,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "drivers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_vehicle_type_key_fkey"
+            columns: ["vehicle_type_key"]
+            isOneToOne: false
+            referencedRelation: "vehicle_types"
+            referencedColumns: ["key"]
           },
         ]
       }
@@ -6363,6 +6482,14 @@ export type Database = {
         Returns: string
       }
       _delivery_parse_proof_keys: { Args: { p_raw: string }; Returns: string[] }
+      _delivery_resolve_restaurant_id: {
+        Args: {
+          p_driver_id: string
+          p_partner_id: string
+          p_restaurant_id: string
+        }
+        Returns: string
+      }
       _driver_assert_active_on_duty: {
         Args: { p_uid: string }
         Returns: {
@@ -6400,6 +6527,7 @@ export type Database = {
           status: Database["public"]["Enums"]["driver_status"]
           updated_at: string
           vehicle_id: string | null
+          vehicle_type_key: string | null
           zone_id: string | null
         }
         SetofOptions: {
@@ -6438,6 +6566,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      _driver_home_banner_for: { Args: { p_driver_id: string }; Returns: Json }
       _driver_restaurant_delivery_allowed: {
         Args: {
           p_driver_id: string
@@ -6567,6 +6696,10 @@ export type Database = {
         Returns: Json
       }
       admin_auto_close_requests: { Args: never; Returns: number }
+      admin_bulk_update_deliveries: {
+        Args: { p_ids: string[]; p_reason?: string; p_status: string }
+        Returns: Json
+      }
       admin_clear_request_attention: {
         Args: { p_request_id: string }
         Returns: Json
@@ -6884,7 +7017,19 @@ export type Database = {
         }
         Returns: number
       }
+      count_progress_deliveries: {
+        Args: {
+          p_driver_id: string
+          p_earn_date: string
+          p_incentive_rule_id: string
+        }
+        Returns: number
+      }
       delivery_matches_rules: {
+        Args: { p_delivery_id: string; p_on_date?: string }
+        Returns: boolean
+      }
+      delivery_progress_matches_rules: {
         Args: { p_delivery_id: string; p_on_date?: string }
         Returns: boolean
       }

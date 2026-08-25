@@ -88,6 +88,54 @@ describe("decideAutoCheckout", () => {
     });
     assert.deepEqual(decision, { shouldCheckout: false });
   });
+
+  it("checkouts at the configured shift end", () => {
+    const decision = decideAutoCheckout({
+      isOnDuty: true,
+      hasOpenAttendanceLog: true,
+      wentOfflineAt: null,
+      outOfZoneSince: null,
+      shiftEndAt: new Date(NOW - 1000).toISOString(),
+      thresholdMinutes: 45,
+      nowMs: NOW,
+    });
+    assert.deepEqual(decision, {
+      shouldCheckout: true,
+      reason: "auto_shift_end",
+    });
+  });
+
+  it("checkouts a leftover open log from a previous Kuwait day", () => {
+    const decision = decideAutoCheckout({
+      isOnDuty: true,
+      hasOpenAttendanceLog: true,
+      wentOfflineAt: null,
+      outOfZoneSince: null,
+      logDate: "2026-07-28",
+      todayDate: "2026-07-29",
+      thresholdMinutes: 45,
+      nowMs: NOW,
+    });
+    assert.deepEqual(decision, {
+      shouldCheckout: true,
+      reason: "auto_shift_end",
+    });
+  });
+
+  it("checkouts an orphaned on-duty flag with no open attendance log", () => {
+    const decision = decideAutoCheckout({
+      isOnDuty: true,
+      hasOpenAttendanceLog: false,
+      wentOfflineAt: null,
+      outOfZoneSince: null,
+      thresholdMinutes: 45,
+      nowMs: NOW,
+    });
+    assert.deepEqual(decision, {
+      shouldCheckout: true,
+      reason: "auto_shift_end",
+    });
+  });
 });
 
 describe("nextOutOfZoneSince", () => {

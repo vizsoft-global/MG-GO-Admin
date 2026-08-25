@@ -357,7 +357,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           position: [driver.lng ?? 0, driver.lat ?? 0],
           angle: driver.headingDeg,
           tone,
-          icon: fleetPinIcon(tone, stale),
+          icon: fleetPinIcon(tone, stale, driver.meta.vehicleTypeKey),
           alert: false,
           selected: false,
           located: driver.lat != null && driver.lng != null,
@@ -368,7 +368,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
 
       entity.name = driver.meta.driverName || driver.meta.driverCode || driverId;
       entity.tone = tone;
-      entity.icon = fleetPinIcon(tone, stale);
+      entity.icon = fleetPinIcon(tone, stale, driver.meta.vehicleTypeKey);
       entity.alert = isFleetAlert(driver.status, driver.flags);
       entity.selected = selected;
       entity.pulses = pulseEligible(driver.status, selected);

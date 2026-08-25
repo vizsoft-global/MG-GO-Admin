@@ -309,6 +309,7 @@ export async function createDriverIntake(
   const partnerId = String(formData.get("partnerId") ?? "").trim();
   const zoneId = String(formData.get("zoneId") ?? "").trim();
   const vehicleId = String(formData.get("vehicleId") ?? "").trim();
+  const vehicleTypeKey = String(formData.get("vehicleTypeKey") ?? "bike").trim() || "bike";
   const workflowStatusRaw = String(formData.get("workflowStatus") ?? "").trim();
   const workflowStatus: DriverWorkflowStatus =
     workflowStatusRaw === "approved" || workflowStatusRaw === "pending" || workflowStatusRaw === "draft"
@@ -416,6 +417,7 @@ export async function createDriverIntake(
       partner_id: partnerId || null,
       zone_id: zoneId || null,
       vehicle_id: vehicleId || null,
+      vehicle_type_key: vehicleTypeKey,
       avatar_url: intakeAvatarKey,
       status: "awaiting_app_link",
       workflow_status: normalizeIntakeWorkflowStatus(false, workflowStatus),
@@ -942,6 +944,7 @@ async function updateDriverIntakeInner(
   const partnerId = String(formData.get("partnerId") ?? "").trim();
   const zoneId = String(formData.get("zoneId") ?? "").trim();
   const vehicleId = String(formData.get("vehicleId") ?? "").trim();
+  const vehicleTypeKey = String(formData.get("vehicleTypeKey") ?? "bike").trim() || "bike";
   const employeeIdRaw = String(formData.get("employeeId") ?? "");
   const employeeId = normalizeEmployeeId(employeeIdRaw);
   const nationality = normalizeCountryCode(String(formData.get("nationality") ?? ""));
@@ -1059,6 +1062,7 @@ async function updateDriverIntakeInner(
       partner_id: partnerId || null,
       zone_id: zoneId || null,
       vehicle_id: vehicleId || null,
+      vehicle_type_key: vehicleTypeKey,
       avatar_url: intakeAvatarPath,
       workflow_status: resolvedWorkflowStatus,
       custom_fields: customParsed.values as unknown as Json,
@@ -1116,6 +1120,7 @@ async function updateDriverIntakeInner(
           partner_id: partnerId || null,
           zone_id: zoneId || null,
           vehicle_id: vehicleId || null,
+          vehicle_type_key: vehicleTypeKey,
           civil_id: civilIdNormalized,
           employee_id: employeeId,
           nationality,
@@ -1227,6 +1232,7 @@ async function fetchDriverDetailInner(
       partner_id,
       zone_id,
       vehicle_id,
+      vehicle_type_key,
       avatar_url,
       assets_issued,
       custom_fields,
@@ -1339,6 +1345,7 @@ async function fetchDriverDetailInner(
       partner_id: intake.partner_id ?? null,
       zone_id: intake.zone_id ?? null,
       vehicle_id: intake.vehicle_id,
+      vehicle_type_key: (intake as { vehicle_type_key?: string | null }).vehicle_type_key ?? null,
       workflow_status: intake.workflow_status as DriverWorkflowStatus,
       linked: intake.linked,
       linked_profile_id: intake.linked_profile_id,
@@ -1384,6 +1391,7 @@ async function fetchDriverDetailInner(
       joined_at,
       is_on_duty,
       vehicle_id,
+      vehicle_type_key,
       partner_id,
       zone_id,
       app_passcode,
@@ -1467,6 +1475,10 @@ async function fetchDriverDetailInner(
     partner_id: intakeForDriver?.partner_id ?? driverRow.partner_id ?? "",
     zone_id: intakeForDriver?.zone_id ?? driverRow.zone_id ?? "",
     vehicle_id: intakeForDriver?.vehicle_id ?? driverRow.vehicle_id,
+    vehicle_type_key:
+      (driverRow as { vehicle_type_key?: string | null }).vehicle_type_key ??
+      (intakeForDriver as { vehicle_type_key?: string | null } | null)?.vehicle_type_key ??
+      null,
     workflow_status:
       (intakeForDriver?.workflow_status as DriverWorkflowStatus) ?? "pending",
     linked: intakeForDriver?.linked ?? true,

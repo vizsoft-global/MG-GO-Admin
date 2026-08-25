@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import {
+  assertDeliveryOrdersReportRange,
   pivotDeliveryOrdersReport,
   type DeliveryOrdersReportData,
   type DeliveryOrdersReportRpcRow,
@@ -39,11 +40,9 @@ export async function fetchDeliveryOrdersReport(input: {
 }): Promise<DeliveryOrdersReportData> {
   await requireDeliveriesView();
 
-  const from = input.from?.slice(0, 10);
-  const to = input.to?.slice(0, 10);
-  if (!from || !to || from > to) {
-    throw new Error("invalid_date_range");
-  }
+  const from = input.from?.slice(0, 10) ?? "";
+  const to = input.to?.slice(0, 10) ?? "";
+  assertDeliveryOrdersReportRange(from, to);
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("report_delivery_orders", {

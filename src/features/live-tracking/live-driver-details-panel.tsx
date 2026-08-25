@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Bike, Package, Phone, X, MapPin } from "lucide-react";
+import { Bike, Car, Package, Phone, X, MapPin } from "lucide-react";
 import { Pill, SignalBars, StatusDot, type Tone } from "@/components/ui/metric-tile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "@/i18n/navigation";
@@ -243,8 +243,13 @@ export function LiveDriverDetailsPanel({
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-300">{meta?.zoneName ?? "—"}</p>
               <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                <Bike className="h-3 w-3" />
-                {t("filterVehicleType")} : Bike
+                {driver.vehicleType === "car" ? (
+                  <Car className="h-3 w-3" />
+                ) : (
+                  <Bike className="h-3 w-3" />
+                )}
+                {t("filterVehicleType")} :{" "}
+                {driver.vehicleType === "car" ? t("filterVehicleCar") : t("filterVehicleBike")}
               </div>
             </div>
             <div className="flex items-center gap-1.5">

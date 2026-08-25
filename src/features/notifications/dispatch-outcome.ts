@@ -33,6 +33,30 @@ export function isHardPushFailure(
   return item.status === "failed";
 }
 
+export type HardPushFailureKind =
+  | "invalid_credential"
+  | "sender_mismatch"
+  | "other";
+
+export function classifyHardPushFailure(
+  errorCode: string | null | undefined,
+): HardPushFailureKind {
+  const code = errorCode?.trim() ?? "";
+  if (
+    code === "app/invalid-credential" ||
+    code === "firebase_not_configured"
+  ) {
+    return "invalid_credential";
+  }
+  if (
+    code === "messaging/mismatched-credential" ||
+    code === "messaging/sender-id-mismatch"
+  ) {
+    return "sender_mismatch";
+  }
+  return "other";
+}
+
 export function summarizeDispatchOutcomes(items: DispatchOutcomeItem[]) {
   const pushSkipped = items.filter((i) => isPushSkippedNoToken(i)).length;
   const hardFailed = items.filter((i) => isHardPushFailure(i)).length;
@@ -49,6 +73,9 @@ export function summarizeDispatchOutcomes(items: DispatchOutcomeItem[]) {
   const seen = items.filter((i) => i.engagement_seen).length;
   const allPushSkipped = items.length > 0 && pushSkipped === items.length;
   const allHardFailed = items.length > 0 && hardFailed === items.length;
+  const firstHard = items.find((i) => isHardPushFailure(i));
+  const hardFailureCode = firstHard?.error_code?.trim() || null;
+  const hardFailureKind = classifyHardPushFailure(hardFailureCode);
   const inboxOpenedCount = items.filter(
     (i) =>
       i.engagement_seen ||
@@ -64,6 +91,8 @@ export function summarizeDispatchOutcomes(items: DispatchOutcomeItem[]) {
     allPushSkipped,
     allHardFailed,
     inboxOpenedCount,
+    hardFailureCode,
+    hardFailureKind,
     /** Inbox fan-out succeeded for every recipient when dispatch items exist. */
     inboxDelivered: items.length,
   };

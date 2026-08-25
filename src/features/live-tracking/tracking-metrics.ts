@@ -1,5 +1,6 @@
-import type { ZoneStatus } from "@/features/locations/types";
+import type { TrackingStatus, ZoneStatus } from "@/features/locations/types";
 import {
+  gpsLiveMaxAgeMs,
   isGpsLive,
   MOVING_SPEED_THRESHOLD_MPS,
   normalizeBatteryPct,
@@ -10,8 +11,21 @@ export { normalizeBatteryPct } from "@/features/locations/location-status";
 /** Kuwait urban delivery fleet cap. Speeds above this count as Overspeeding. */
 export const OVERSPEED_KMH = 60;
 
-/** Idle heartbeats are 45–60s; after this the GPS Offline insight should tick. */
-export const GPS_HEARTBEAT_STALE_MS = 90_000;
+/**
+ * When the GPS Offline insight should tick.
+ *
+ * This was a flat 90s, justified against idle heartbeats of "45–60s" — a cadence the driver
+ * app stopped using on 2026-08-14, when reporting split into one fix per second while moving
+ * and one per 30s otherwise. 90s then meant three missed beats for a parked rider, so the
+ * tile counted alive, on-duty, stationary drivers as offline. The window now comes from the
+ * shared V2 thresholds so the tile, the V1 list and the V2 map cannot disagree.
+ */
+export function gpsHeartbeatStaleMs(
+  trackingStatus?: TrackingStatus,
+  speedMps?: number | null,
+): number {
+  return gpsLiveMaxAgeMs(trackingStatus, speedMps);
+}
 
 export function displaySpeedMps(speedMps: number | null | undefined): number | null {
   if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0) return null;
@@ -33,9 +47,14 @@ export function isOverspeeding(
   return speedMps * 3.6 > limitKmh;
 }
 
-export function isGpsHeartbeatStale(lastSeenAt: string, now = Date.now()): boolean {
+export function isGpsHeartbeatStale(
+  lastSeenAt: string,
+  now = Date.now(),
+  trackingStatus?: TrackingStatus,
+  speedMps?: number | null,
+): boolean {
   const age = now - new Date(lastSeenAt).getTime();
-  return Number.isFinite(age) && age > GPS_HEARTBEAT_STALE_MS;
+  return Number.isFinite(age) && age > gpsHeartbeatStaleMs(trackingStatus, speedMps);
 }
 
 export function formatBatteryLevel(pct: number | null | undefined): string {

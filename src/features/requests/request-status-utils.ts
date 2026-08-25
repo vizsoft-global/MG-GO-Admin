@@ -1,5 +1,39 @@
 export type RequestStatusVariant = "success" | "warning" | "danger" | "info" | "neutral";
 
+export const REQUEST_STATUS_FILTERS = [
+  "all",
+  "submitted",
+  "pending",
+  "in_review",
+  "needs_clarification",
+  "rescheduled",
+  "approved",
+  "rejected",
+  "solved",
+  "responded",
+  "closed",
+  "overdue",
+] as const;
+
+export type RequestStatusFilter = (typeof REQUEST_STATUS_FILTERS)[number];
+
+/** Fuel only approve / reject / clarify — these queues never receive a fuel row. */
+const FUEL_HIDDEN_STATUS_FILTERS = new Set<RequestStatusFilter>([
+  "rescheduled",
+  "overdue",
+  "solved",
+  "responded",
+]);
+
+export function statusFiltersForRequestType(
+  type: string,
+): readonly RequestStatusFilter[] {
+  if (type === "fuel") {
+    return REQUEST_STATUS_FILTERS.filter((key) => !FUEL_HIDDEN_STATUS_FILTERS.has(key));
+  }
+  return REQUEST_STATUS_FILTERS;
+}
+
 /**
  * Distinct color per status so adjacent rows pass the squint test (ui-system.mdc §5).
  * Figma "Status & Acknowledgement Conventions" (node 4321:8349):

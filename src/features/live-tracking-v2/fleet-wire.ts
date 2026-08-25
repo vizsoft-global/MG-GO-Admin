@@ -203,6 +203,8 @@ export type DriverMeta = {
   partnerName: string | null;
   restaurantName: string | null;
   vehicleLabel: string | null;
+  /** Optional so an older room still hydrates. Missing key → client treats as bike. */
+  vehicleTypeKey?: string | null;
   accountStatus: string;
   onDutySince: string | null;
   deliveriesToday: number;

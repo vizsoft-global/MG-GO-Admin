@@ -30,6 +30,19 @@ describe("parseShiftAdherence", () => {
     assert.equal(parsed?.minutes_early_out, 30);
   });
 
+  it("caps 310 when scheduled_seconds is missing by deriving the window", () => {
+    const parsed = parseShiftAdherence({
+      scheduled_start_at: "2026-08-13T08:30:00+00:00",
+      scheduled_end_at: "2026-08-13T13:30:00+00:00",
+      actual_out_at: "2026-08-13T08:20:00+00:00",
+      minutes_late: 0,
+      minutes_early_out: 310,
+      online_seconds: 0,
+    });
+    assert.equal(parsed?.minutes_early_out, 300);
+    assert.equal(parsed?.scheduled_seconds, 18000);
+  });
+
   it("does not cap an overnight remaining window", () => {
     const parsed = parseShiftAdherence({
       scheduled_start_at: "2026-08-13T19:00:00+00:00",

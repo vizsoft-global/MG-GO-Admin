@@ -1,11 +1,42 @@
+import { gpsOfflineGraceSecondsFor } from "@/features/live-tracking-v2/fleet-status";
+
 import type { DriverLiveLocation, PinStatus, TrackingStatus, ZoneStatus } from "./types";
 
 const MOVING_STALE_MS = 45 * 1000;
 const IDLE_STALE_MS = 2 * 60 * 1000;
-/** Drivers with GPS older than this are excluded from the live map and counts. */
-export const LIVE_GPS_MAX_AGE_MS = 8 * 60 * 1000;
+
+/**
+ * How long a last-known pin is kept in the realtime cache for a driver we have never seen.
+ *
+ * Deliberately far longer than the liveness window below, because these answer different
+ * questions: dropping a row takes the driver off the map altogether, and an Offline driver's
+ * last pin is precisely what an operator goes looking for. Calling their *reading* stale is a
+ * label; deleting their pin is a disappearance.
+ */
+export const LIVE_PIN_RETENTION_MS = 8 * 60 * 1000;
+
 /** Matches driver-app AdaptiveLocationScheduler.movingSpeedThresholdMps. */
 export const MOVING_SPEED_THRESHOLD_MPS = 1.5;
+
+/**
+ * How old a fix may be before this driver stops counting as live, in ms.
+ *
+ * Sourced from the V2 thresholds rather than re-stated here, because both pages describe the
+ * same fleet and had drifted into three different answers: this file held a flat 8 minutes,
+ * the GPS Offline insight tile ticked at 90s, and V2 called the same rider `gps_offline`
+ * somewhere between the two. The grace depends on the cadence the app was reporting at — one
+ * fix per second while moving, one per 30s otherwise — so 90s of silence is ninety missed
+ * reports for one rider and three for another.
+ *
+ * Callers that cannot say which cadence a row was on get the idle grace, which is the
+ * conservative direction: it delays the Offline label rather than inventing one.
+ */
+export function gpsLiveMaxAgeMs(
+  trackingStatus?: TrackingStatus,
+  speedMps?: number | null,
+): number {
+  return gpsOfflineGraceSecondsFor(trackingStatus ?? "idle", speedMps) * 1000;
+}
 
 export function parseTrackingStatus(value: string): TrackingStatus {
   if (value === "moving" || value === "delivery_submit") return value;
@@ -34,9 +65,21 @@ export function isGpsLive(
   lastSeenAt: string,
   now = Date.now(),
   lastReportAt?: string | null,
+  trackingStatus?: TrackingStatus,
+  speedMps?: number | null,
 ): boolean {
   const age = now - new Date(latestGpsAt(lastSeenAt, lastReportAt)).getTime();
-  return Number.isFinite(age) && age <= LIVE_GPS_MAX_AGE_MS;
+  return Number.isFinite(age) && age <= gpsLiveMaxAgeMs(trackingStatus, speedMps);
+}
+
+/** Whether a last-known pin is old enough to be dropped from the realtime cache entirely. */
+export function isPinBeyondRetention(
+  lastSeenAt: string,
+  now = Date.now(),
+  lastReportAt?: string | null,
+): boolean {
+  const age = now - new Date(latestGpsAt(lastSeenAt, lastReportAt)).getTime();
+  return Number.isFinite(age) && age > LIVE_PIN_RETENTION_MS;
 }
 
 export function isMovingSpeed(speedMps: number | null | undefined): boolean {
@@ -72,7 +115,17 @@ export function derivePinStatus(input: {
 }): PinStatus {
   if (input.isBlocked) return "idle";
   if (input.isOnDuty === false) return "idle";
-  if (!isGpsLive(input.lastSeenAt)) return "idle";
+  if (
+    !isGpsLive(
+      input.lastSeenAt,
+      undefined,
+      undefined,
+      input.trackingStatus,
+      input.speedMps,
+    )
+  ) {
+    return "idle";
+  }
   if (input.zoneStatus === "out_of_zone") return "alert";
   const onDelivery =
     input.trackingStatus === "delivery_submit" && Boolean(input.activeDeliveryId);
@@ -143,6 +196,7 @@ export function liveLocationPayloadChanged(
         | "batteryPct"
         | "activeDeliveryId"
         | "lastSeenAt"
+        | "vehicleType"
       >
     | undefined,
   next: Pick<
@@ -158,6 +212,7 @@ export function liveLocationPayloadChanged(
     | "batteryPct"
     | "activeDeliveryId"
     | "lastSeenAt"
+    | "vehicleType"
   >,
 ): boolean {
   if (!prev) return true;
@@ -171,6 +226,7 @@ export function liveLocationPayloadChanged(
   if ((prev.speedMps ?? 0) !== (next.speedMps ?? 0)) return true;
   if (prev.batteryPct !== next.batteryPct) return true;
   if (prev.lastSeenAt !== next.lastSeenAt) return true;
+  if (prev.vehicleType !== next.vehicleType) return true;
   return false;
 }
 

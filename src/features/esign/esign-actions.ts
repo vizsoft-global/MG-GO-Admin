@@ -4,6 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { isEsignDueDateAllowed } from "./esign-due-date";
+import { esignDocumentHref } from "./esign-storage-key";
 import type {
   EsignCategoryRow,
   EsignDetail,
@@ -167,9 +170,12 @@ export async function fetchEsignRequestDetail(
 }
 
 const ESIGN_BUCKET = "esign-documents";
-const SIGNED_URL_TTL_SECONDS = 300;
 
-/** Short-lived signed URLs for the document preview / signature proof (Figma ESign 03). */
+function hasStorageKey(value: unknown): boolean {
+  return value != null && String(value).trim() !== "";
+}
+
+/** Same-origin preview / download links. Storage JWTs are never handed to the browser. */
 export async function fetchEsignDocumentLinks(id: string): Promise<{
   documentUrl: string | null;
   signatureUrl: string | null;
@@ -198,24 +204,16 @@ export async function fetchEsignDocumentLinks(id: string): Promise<{
   }
   const row = asRecord(data);
 
-  async function signedUrl(key: unknown): Promise<string | null> {
-    if (key == null || String(key).trim() === "") return null;
-    const { data: signed } = await supabase.storage
-      .from(ESIGN_BUCKET)
-      .createSignedUrl(String(key), SIGNED_URL_TTL_SECONDS);
-    return signed?.signedUrl ?? null;
-  }
-
-  const [documentUrl, signatureUrl, signedDocumentUrl] = await Promise.all([
-    signedUrl(row.document_storage_key),
-    signedUrl(row.signature_storage_key),
-    signedUrl(row.signed_document_storage_key),
-  ]);
-
   return {
-    documentUrl,
-    signatureUrl,
-    signedDocumentUrl,
+    documentUrl: hasStorageKey(row.document_storage_key)
+      ? esignDocumentHref(id, "document", "inline")
+      : null,
+    signatureUrl: hasStorageKey(row.signature_storage_key)
+      ? esignDocumentHref(id, "signature", "inline")
+      : null,
+    signedDocumentUrl: hasStorageKey(row.signed_document_storage_key)
+      ? esignDocumentHref(id, "signed", "inline")
+      : null,
     signedDocumentError:
       row.signed_document_error != null ? String(row.signed_document_error) : null,
   };
@@ -260,6 +258,9 @@ export async function createEsignRequest(input: {
   document_storage_key?: string | null;
 }): Promise<{ ok: boolean; id?: string; request_code?: string; error?: string }> {
   await requireRequestsManage();
+  if (!isEsignDueDateAllowed(input.due_at ?? "", kuwaitTodayYmd())) {
+    return { ok: false, error: "due_in_past" };
+  }
   const supabase = await createClient();
   const { data, error } = await (supabase as any).rpc("admin_create_esign_request", {
     p_driver_id: input.driver_id,
@@ -354,7 +355,7 @@ export async function upsertEsignCategory(input: {
     label_en,
     description: input.description?.trim() || null,
     icon_key: input.icon_key?.trim().slice(0, 2) || null,
-    screenshot_restricted: input.screenshot_restricted ?? true,
+    screenshot_restricted: input.screenshot_restricted ?? false,
     is_active: input.is_active ?? true,
     sort_order: input.sort_order ?? 0,
     updated_at: new Date().toISOString(),

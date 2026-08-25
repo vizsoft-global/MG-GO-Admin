@@ -102,13 +102,31 @@ export type FleetThresholds = {
   /** Battery at or below this is low. */
   lowBatteryPct: number;
   /**
-   * GPS silent for longer than this counts as `gps_offline`. At a 5s cadence this is ~18
-   * missed reports, so it is decisive; v1's 8 minutes was calibrated for 45–60s idle
-   * heartbeats and is far too slow here.
+   * GPS silent for longer than this counts as `gps_offline`, for a driver on the app's
+   * *moving* cadence of one fix per second. 90s is 90 missed reports, so it is decisive;
+   * v1's 8 minutes was calibrated for 45–60s idle heartbeats and is far too slow here.
    */
   gpsOfflineSeconds: number;
+  /**
+   * The same verdict for a driver on the app's *idle* cadence of one fix per 30s.
+   *
+   * A single threshold cannot serve both. `AdaptiveLocationScheduler` reports every 1s while
+   * moving and every 30s otherwise, so 90s of silence is 90 missed reports for one and *three*
+   * for the other — and three is inside the noise of one Android doze window or one dropped
+   * request. A parked, alive, on-duty rider was reading GPS Offline for that reason alone.
+   * 150s is five missed idle beats: still well under the time an operator would call a rider
+   * about, and no longer reachable by ordinary jitter.
+   */
+  gpsOfflineIdleSeconds: number;
   /** Warning tier before `gps_offline`: GPS is late but the driver is still shown live. */
   staleGpsSeconds: number;
+  /**
+   * The warning tier for the idle cadence, and it exists for a sharper reason than its
+   * `gps_offline` counterpart: at a 30s cadence a 30s warning is *always* true. Fix age
+   * oscillates 0–30s and crosses the line on every single beat, so every idle driver in the
+   * fleet carried a permanent `stale_gps` flag, which is the same as having no flag at all.
+   */
+  staleGpsIdleSeconds: number;
   /** Sustained idle before an idle event is emitted (minutes). */
   idleMinutes: number;
   /** Hysteresis buffer for zone entry/exit so boundary hovering does not flap. */
@@ -122,7 +140,9 @@ export const FLEET_DEFAULT_THRESHOLDS: FleetThresholds = {
   overspeedKmh: 60,
   lowBatteryPct: 20,
   gpsOfflineSeconds: 90,
+  gpsOfflineIdleSeconds: 150,
   staleGpsSeconds: 30,
+  staleGpsIdleSeconds: 75,
   idleMinutes: 5,
   zoneBufferMeters: 25,
   shiftLateGraceMinutes: 10,
@@ -140,6 +160,57 @@ export function resolveFleetThresholds(
     }
   }
   return merged;
+}
+
+/**
+ * The one mapping between `FleetThresholds` and the snake_case `settings` bag carried by the
+ * room's `hello` frame, its snapshots and `app_settings`.
+ *
+ * Both directions are derived from this object because they used to be four hand-written
+ * lists — one in the Worker's serialiser, one in the Worker's settings read, and two in the
+ * store — and adding a threshold to the type does not make it travel. `resolveFleetThresholds`
+ * falls back to the default for anything absent, so a list that missed a key failed *silently*:
+ * the Worker would enforce a new value while the browser kept the old one, which is exactly the
+ * drift this shared module exists to prevent. The duplication had already begun to show, too —
+ * one of the store's two copies mapped `movingSpeedMps` and the other did not.
+ */
+const THRESHOLD_SETTING_KEYS: Readonly<Record<keyof FleetThresholds, string>> = {
+  movingSpeedMps: "moving_speed_mps",
+  overspeedKmh: "overspeed_kmh",
+  lowBatteryPct: "low_battery_pct",
+  gpsOfflineSeconds: "gps_offline_seconds",
+  gpsOfflineIdleSeconds: "gps_offline_idle_seconds",
+  staleGpsSeconds: "stale_gps_seconds",
+  staleGpsIdleSeconds: "stale_gps_idle_seconds",
+  idleMinutes: "idle_minutes",
+  zoneBufferMeters: "zone_buffer_meters",
+  shiftLateGraceMinutes: "shift_late_grace_minutes",
+};
+
+const THRESHOLD_KEYS = Object.keys(THRESHOLD_SETTING_KEYS) as (keyof FleetThresholds)[];
+
+/** Read a settings bag (`hello` frame, snapshot, `app_settings`) into resolved thresholds. */
+export function fleetThresholdsFromSettings(
+  settings?: Record<string, number | null | undefined> | null,
+): FleetThresholds {
+  if (!settings) return FLEET_DEFAULT_THRESHOLDS;
+  const overrides: Partial<FleetThresholds> = {};
+  for (const key of THRESHOLD_KEYS) {
+    const value = settings[THRESHOLD_SETTING_KEYS[key]];
+    if (typeof value === "number") overrides[key] = value;
+  }
+  return resolveFleetThresholds(overrides);
+}
+
+/** Serialise thresholds back into the settings bag clients receive. */
+export function fleetThresholdsAsSettings(
+  thresholds: FleetThresholds,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const key of THRESHOLD_KEYS) {
+    out[THRESHOLD_SETTING_KEYS[key]] = thresholds[key];
+  }
+  return out;
 }
 
 export type FleetEntitySignals = {
@@ -186,6 +257,62 @@ export function isMovingSpeed(
     Number.isFinite(speedMps) &&
     speedMps >= thresholds.movingSpeedMps
   );
+}
+
+/**
+ * Which reporting cadence the driver app was on when it produced this fix, which is what
+ * decides how long silence has to last before it means anything.
+ *
+ * `AdaptiveLocationScheduler` picks its interval from its own tracking status, and that status
+ * rides along with every fix — so this is a read of the app's behaviour, not a guess at it.
+ * `delivery_submit` counts as idle because the scheduler reports it once, immediately, and then
+ * resets itself to `idle` in `markSampled`: a rider waiting at a pickup is on the 30s beat.
+ * Speed is consulted as well as the status because a fix can carry real motion while the
+ * scheduler has not yet promoted itself out of idle.
+ */
+function usesIdleCadence(
+  trackingStatus: FleetTrackingStatus,
+  speedMps: number | null | undefined,
+  thresholds: FleetThresholds,
+): boolean {
+  if (trackingStatus === "moving") return false;
+  return !isMovingSpeed(speedMps, thresholds);
+}
+
+/**
+ * Seconds of GPS silence that make a driver `gps_offline`, given the cadence their last fix
+ * was reported at. Exported in this primitive form as well as the `FleetEntitySignals` one
+ * below because v1 Live Tracking needs the same rule from a row that is not a signals object.
+ */
+export function gpsOfflineGraceSecondsFor(
+  trackingStatus: FleetTrackingStatus,
+  speedMps: number | null | undefined,
+  thresholds: FleetThresholds = FLEET_DEFAULT_THRESHOLDS,
+): number {
+  return usesIdleCadence(trackingStatus, speedMps, thresholds)
+    ? thresholds.gpsOfflineIdleSeconds
+    : thresholds.gpsOfflineSeconds;
+}
+
+export function gpsOfflineGraceSeconds(
+  signals: FleetEntitySignals,
+  thresholds: FleetThresholds,
+): number {
+  return gpsOfflineGraceSecondsFor(
+    signals.trackingStatus,
+    signals.speedMps,
+    thresholds,
+  );
+}
+
+/** Seconds of GPS silence that raise `stale_gps`, given their cadence. */
+function staleGpsGraceSeconds(
+  signals: FleetEntitySignals,
+  thresholds: FleetThresholds,
+): number {
+  return usesIdleCadence(signals.trackingStatus, signals.speedMps, thresholds)
+    ? thresholds.staleGpsIdleSeconds
+    : thresholds.staleGpsSeconds;
 }
 
 /**
@@ -253,7 +380,9 @@ export function fleetStatus(
   if (signals.locationOff === true) return "location_off";
 
   const age = gpsAgeSeconds(signals.lastFixAtMs, nowMs);
-  if (age == null || age > thresholds.gpsOfflineSeconds) return "gps_offline";
+  if (age == null || age > gpsOfflineGraceSeconds(signals, thresholds)) {
+    return "gps_offline";
+  }
 
   if (signals.onBreak === true) return "on_break";
 
@@ -332,8 +461,31 @@ export function decayedFleetStatus(
   }
   const thresholds = resolveFleetThresholds(thresholdOverrides);
   const age = gpsAgeSeconds(lastFixAtMs, nowMs);
-  if (age != null && age <= thresholds.gpsOfflineSeconds) return null;
+  if (age != null && age <= gpsGraceForStatus(status, thresholds).offline) return null;
   return "gps_offline";
+}
+
+/**
+ * Cadence-aware grace for a driver we hold a *status* for rather than a fix.
+ *
+ * The local decay clock runs on an interval with no position in hand, so it cannot read the
+ * app's tracking status off a frame the way `usesIdleCadence` does. Only `moving` earns the
+ * tight 1Hz grace here: `idle`, `on_delivery` and `on_break` all describe a rider who may be
+ * standing still, and a rider waiting at a pickup is on the 30s beat however their delivery is
+ * labelled. Erring long merely delays an Offline verdict; erring short invents one, which is
+ * the defect this exists to fix.
+ */
+export function gpsGraceForStatus(
+  status: FleetStatus,
+  thresholds: FleetThresholds,
+): { offline: number; stale: number } {
+  if (status === "moving") {
+    return { offline: thresholds.gpsOfflineSeconds, stale: thresholds.staleGpsSeconds };
+  }
+  return {
+    offline: thresholds.gpsOfflineIdleSeconds,
+    stale: thresholds.staleGpsIdleSeconds,
+  };
 }
 
 const EMPTY_FLAGS: FleetFlagSet = {
@@ -356,7 +508,7 @@ function hasLiveFix(
   thresholds: FleetThresholds,
 ): boolean {
   const age = gpsAgeSeconds(signals.lastFixAtMs, nowMs);
-  return age != null && age <= thresholds.gpsOfflineSeconds;
+  return age != null && age <= gpsOfflineGraceSeconds(signals, thresholds);
 }
 
 export function fleetFlags(
@@ -380,9 +532,9 @@ export function fleetFlags(
     out_of_range: outOfRange,
     overspeed: live && isOverspeeding(signals.speedMps, thresholds),
     low_battery: isLowBattery(signals.batteryPct, thresholds),
-    // Only a warning tier: once the driver is past gpsOfflineSeconds the status already says so.
+    // Only a warning tier: once the driver is past their offline grace the status says so.
     stale_gps:
-      live && age != null && age > thresholds.staleGpsSeconds,
+      live && age != null && age > staleGpsGraceSeconds(signals, thresholds),
     mocked_gps: signals.isMocked === true,
     ...shiftFlags(signals, nowMs, thresholds),
   };

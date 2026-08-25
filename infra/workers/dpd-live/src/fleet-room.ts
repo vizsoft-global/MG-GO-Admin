@@ -62,6 +62,8 @@ import {
 import {
   fleetFlags,
   fleetStatus,
+  fleetThresholdsAsSettings,
+  fleetThresholdsFromSettings,
   resolveFleetThresholds,
   type FleetEntitySignals,
   type FleetFlagSet,
@@ -336,15 +338,7 @@ export class FleetRoom implements DurableObject {
       .filter((zone): zone is WorkerZone => zone !== null);
 
     this.settings = snapshot.settings ?? {};
-    this.thresholds = resolveFleetThresholds({
-      overspeedKmh: this.settings.overspeed_kmh,
-      lowBatteryPct: this.settings.low_battery_pct,
-      idleMinutes: this.settings.idle_minutes,
-      gpsOfflineSeconds: this.settings.gps_offline_seconds,
-      staleGpsSeconds: this.settings.stale_gps_seconds,
-      zoneBufferMeters: this.settings.zone_buffer_meters,
-      shiftLateGraceMinutes: this.settings.shift_late_grace_minutes,
-    });
+    this.thresholds = fleetThresholdsFromSettings(this.settings);
 
     const seen = new Set<string>();
     for (const row of snapshot.drivers ?? []) {
@@ -401,6 +395,7 @@ export class FleetRoom implements DurableObject {
       partnerName: row.partner_name ?? null,
       restaurantName: row.restaurant_name ?? null,
       vehicleLabel: row.vehicle_reg_number ?? row.vehicle_bike_id ?? null,
+      vehicleTypeKey: row.vehicle_type_key ?? "bike",
       accountStatus: row.account_status ?? "pending",
       onDutySince: row.on_duty_since ?? null,
       deliveriesToday: numberOr(row.deliveries_today, 0),
@@ -873,7 +868,7 @@ export class FleetRoom implements DurableObject {
       room: this.env.FLEET_ROOM,
       serverTime: Date.now(),
       frameHz: Number(this.env.POSITION_FRAME_HZ) || 4,
-      settings: { ...this.settings, ...thresholdsAsSettings(this.thresholds) },
+      settings: { ...this.settings, ...fleetThresholdsAsSettings(this.thresholds) },
       zones: this.zones.map((zone) => ({
         id: zone.id,
         name: zone.name,
@@ -1382,6 +1377,7 @@ type SnapshotDriver = {
   restaurant_name: string | null;
   vehicle_reg_number: string | null;
   vehicle_bike_id: string | null;
+  vehicle_type_key?: string | null;
   latitude: number | string | null;
   longitude: number | string | null;
   speed_mps: number | string | null;
@@ -1438,19 +1434,6 @@ function normalizeRange(
 ): "in_zone" | "out_of_zone" | "unknown" | null {
   if (value === "in_zone" || value === "out_of_zone" || value === "unknown") return value;
   return null;
-}
-
-function thresholdsAsSettings(thresholds: FleetThresholds): Record<string, number> {
-  return {
-    moving_speed_mps: thresholds.movingSpeedMps,
-    overspeed_kmh: thresholds.overspeedKmh,
-    low_battery_pct: thresholds.lowBatteryPct,
-    gps_offline_seconds: thresholds.gpsOfflineSeconds,
-    stale_gps_seconds: thresholds.staleGpsSeconds,
-    idle_minutes: thresholds.idleMinutes,
-    zone_buffer_meters: thresholds.zoneBufferMeters,
-    shift_late_grace_minutes: thresholds.shiftLateGraceMinutes,
-  };
 }
 
 function normalizePoint(raw: unknown): PendingPoint | null {

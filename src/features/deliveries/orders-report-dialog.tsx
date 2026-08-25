@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
 import { fetchDeliveryOrdersReport } from "./orders-report-actions";
+import { assertDeliveryOrdersReportRange, ordersReportErrorKey } from "./orders-report-utils";
 import {
   buildDeliveryOrdersReportXlsx,
   downloadDeliveryOrdersReportXlsx,
@@ -42,12 +43,10 @@ export function OrdersReportDialog({
   }, [open, today]);
 
   const handleGenerate = () => {
-    if (!fromDate || !toDate) {
-      toast.error(t("invalidRange"));
-      return;
-    }
-    if (fromDate > toDate) {
-      toast.error(t("invalidRange"));
+    try {
+      assertDeliveryOrdersReportRange(fromDate, toDate);
+    } catch (error) {
+      toast.error(t(ordersReportErrorKey(error)));
       return;
     }
 
@@ -62,8 +61,8 @@ export function OrdersReportDialog({
         downloadDeliveryOrdersReportXlsx(report, buffer);
         toast.success(t("success", { count: report.rows.length }));
         onOpenChange(false);
-      } catch {
-        toast.error(t("failed"));
+      } catch (error) {
+        toast.error(t(ordersReportErrorKey(error)));
       }
     });
   };

@@ -43,7 +43,18 @@ export function liveListStatus(input: {
 }): LiveListStatus {
   if (input.isBlocked) return "blocked";
   if (!input.isOnDuty) return "offline";
-  if (!input.lastSeenAt || !isGpsLive(input.lastSeenAt, input.now)) return "offline";
+  if (
+    !input.lastSeenAt ||
+    !isGpsLive(
+      input.lastSeenAt,
+      input.now,
+      undefined,
+      input.trackingStatus,
+      input.speedMps,
+    )
+  ) {
+    return "offline";
+  }
   if (input.trackingStatus === "delivery_submit" && input.activeDeliveryId) {
     return "delivery_submit";
   }
@@ -75,7 +86,16 @@ export function fleetStatusFromLocation(input: {
 }): FleetStatusKey {
   if (input.isBlocked) return "offline";
   if (!input.isOnDuty) return "offline";
-  if (input.lastSeenAt != null && !isGpsLive(input.lastSeenAt, input.now)) {
+  if (
+    input.lastSeenAt != null &&
+    !isGpsLive(
+      input.lastSeenAt,
+      input.now,
+      undefined,
+      input.trackingStatus,
+      input.speedMps,
+    )
+  ) {
     return "offline";
   }
   if (input.pinStatus === "alert") return "alert";

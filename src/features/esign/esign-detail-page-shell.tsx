@@ -15,6 +15,7 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { esignDocumentHref } from "./esign-storage-key";
 import { useEsignDocumentLinks, useEsignRequestDetail } from "./use-esign";
 import type { EsignRequestStatus } from "./types";
 
@@ -156,7 +157,11 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               // capture the admin chrome, and the preview iframe is cross-origin.
               onClick={() =>
                 window.open(
-                  links?.signedDocumentUrl ?? links?.documentUrl ?? "",
+                  esignDocumentHref(
+                    request.id,
+                    links?.signedDocumentUrl ? "signed" : "document",
+                    "inline",
+                  ),
                   "_blank",
                   "noopener",
                 )
@@ -331,7 +336,11 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               type="button"
               className="h-9 w-full"
               render={
-                <a href={links.signedDocumentUrl} target="_blank" rel="noreferrer" />
+                <a
+                  href={esignDocumentHref(request.id, "signed", "attachment")}
+                  target="_blank"
+                  rel="noreferrer"
+                />
               }
             >
               <Download className="me-1.5 h-3.5 w-3.5" />
@@ -357,7 +366,11 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             disabled={!links?.documentUrl}
             render={
               links?.documentUrl ? (
-                <a href={links.documentUrl} target="_blank" rel="noreferrer" />
+                <a
+                  href={esignDocumentHref(request.id, "document", "attachment")}
+                  target="_blank"
+                  rel="noreferrer"
+                />
               ) : undefined
             }
           >
@@ -371,7 +384,11 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             disabled={!links?.signatureUrl}
             render={
               links?.signatureUrl ? (
-                <a href={links.signatureUrl} target="_blank" rel="noreferrer" />
+                <a
+                  href={esignDocumentHref(request.id, "signature", "attachment")}
+                  target="_blank"
+                  rel="noreferrer"
+                />
               ) : undefined
             }
           >

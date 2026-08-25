@@ -150,7 +150,7 @@ Migrations: `20260518000000_dpd_core_schema.sql`, `20260518120000_app_settings.s
 | Group | Tables |
 |-------|--------|
 | Workforce | `partners`, `zones`, `drivers`, `driver_documents`, `driver_assets` |
-| Fleet | `vehicles` |
+| Fleet | `vehicles`, `vehicle_types` |
 | Ops | `deliveries`, `attendance_logs`, `driver_sessions`, `fleet_events` (Live Tracking V2 edge-derived events) |
 | Compliance | `wrong_actions`, `hygiene_tasks`, `hygiene_submissions` |
 | HR | `requests`, `loan_terms` |
@@ -230,6 +230,30 @@ Change-log format:
 ---
 
 ## Change log
+
+- `[admin only] 2026-08-25` — **Fuel status tabs and Sent Requests Back.** Fuel list hides Rescheduled / Overdue / Solved / Responded (those queues never receive a fuel row). Sent Requests has a Back button to the e-sign hub.
+
+- `[admin+app] 2026-08-25` — **Fourteen RCM / e-sign QA reports.** Add Category fields have placeholders and default Screenshots to Allowed. `driver_get_esign_request` / `driver_list_esign_requests` return the live category `screenshot_restricted` so an Allowed category no longer shows “Screenshots disabled” on already-sent documents. App opens the full document in-app (no Notes / Downloads / Starting download / OEM ad / Content hidden). Fuel details show amount, Cash/Salary transfer type, rejection reason, and the full clarification thread; month pickers cannot pick a future date; empty Submit / Send Question validate. Migration `20260930100000`.
+
+- `[admin only] 2026-08-25` — **E-sign New request Title placeholder, due date, download/print.** Title has placeholder copy. Due date cannot be in the past (Kuwait today; RPC `due_in_past`). Print and downloads stream through `/api/esign/document-download` so an expired storage JWT no longer shows InvalidJWT. Migration `20260929100000`.
+
+- `[admin only] 2026-08-24` — **Delivery Orders Report finishes year-to-date.** `report_delivery_orders` now joins each delivery to that driver's shift windows instead of scanning every window three times per row. Jan–Aug (~38k deliveries) was ~25s and hit the 8s API timeout. Cap remains 366 days. Migration `20260928100000`.
+
+- `[admin only] 2026-08-24` — **Deliveries bulk select is a real square checkbox.** The Base UI control collapsed in the table to a vertical bar; the column now paints a 20px box with a check.
+
+- `[admin only] 2026-08-24` — **Deliveries bulk bar is visible as soon as Pending / Under review rows are listed.** Verify / Reject no longer wait for a first tick, so the queue no longer looks like a filter-only page. Select column is locked and high-contrast.
+
+- `[admin only] 2026-08-22` — **Deliveries bulk-verify checkboxes always show.** The column was gated on `deliveries.manage`, so Operator (view-only) saw Under review rows with no boxes. Selection is on the list; Verify / Reject still need manage. Operator is granted `deliveries.manage`. Migration `20260927100000`.
+
+- `[admin only] 2026-08-22` — **Vehicles list is no longer a stub.** `/vehicles` tabs All / Suspended / On Duty filter the real fleet; the six KPI cards (Total, On Duty, Suspended, Group, Rent, Maintenance) count rows instead of painting dashes; **Add Vehicle** opens the form. On Duty is a bike assigned to a clocked-in driver. Production `main` had been serving `ModuleIndexPage` with a disabled Add button.
+
+- `[admin+app] 2026-08-22` — **Home progress on submit, Extra Earnings `progress_count`.** `count_progress_deliveries` counts `in_transit`/`pending`/`under_review`/`verified`. Home `week.deliveries_count` and bumper/quest bars use that; `count_eligible_deliveries`, `compute_incentive_amount`, and wallet stay verified-only. App parses `progress_count` (falls back to eligible) and refreshes Home after pickup/finish. Raised center Add Delivery FAB on the 5-tab bar (`openDeliveryAction`). Migration `20260926100000`.
+
+- `[admin only] 2026-08-22` — **Bulk verify on `/deliveries`.** Checkbox column + toolbar (Verify / Reject / Clear). RPC `admin_bulk_update_deliveries` is set-based, `pending`/`under_review` only, cap 100, one earnings recalc per driver-day. Single-order Save Status is unchanged. Migration `20260926100000`.
+
+- `[admin+app] 2026-08-22` — **On Duty sync, shift-end checkout, Time in today, adherence, mute banner, avatar flicker.** Admin On Duty now requires today's open attendance log. Cron `admin_run_attendance_auto_checkout` adds `auto_shift_end` (shift end, leftover next-day duty, orphaned flag). `_driver_shift_adherence.online_seconds` uses closed `driver_sessions`; clock-out elapsed uses `went_online_at`. Early-out derives `scheduled_seconds` when the payload omits it. App clocks out at shift end and marks muted inbox rows seen before the toggle comes back on. Profile refresh no longer invalidates cached avatar bytes. Push failure banner names JWT vs SenderId. Migration `20260925100000`.
+
+- `[admin+app] 2026-08-20` — **Idle GPS Offline, Home banner, vehicle types.** Idle riders were decaying at the 90s moving cadence (three missed 30s beats). Shared thresholds add `gpsOfflineIdleSeconds` 150 / `staleGpsIdleSeconds` 75; the app heartbeats a coarse fix once the idle interval elapses so the room still advances `lastFixAtMs`. Home: `driver_get_home_dashboard` returns a targeted `banner`; admin CRUD on `/settings/app`; “Confirmed once verified” under weekly counts. Vehicles: `vehicle_types` seeded bike/car, `vehicles.vehicle_type_key` is the map source of truth (`COALESCE` in `admin_live_fleet_snapshot`), real `/vehicles` CRUD, V2 atlas + V1 filter. Migrations `20260924100000`, `20260924100100`.
 
 - `[admin+app] 2026-08-20` — **Multiple proof stills.** Pickup, Mark as Delivered, and Cancel Order accept up to 5 rear-camera photos. New `text[]` columns plus JSON-or-scalar RPC params; the original scalar key remains the first photo. Admin Delivery Details shows a thumb strip. Migration `20260923100000`.
 

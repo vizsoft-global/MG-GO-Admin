@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  LIVE_GPS_MAX_AGE_MS,
+  LIVE_PIN_RETENTION_MS,
   derivePinStatus,
+  gpsLiveMaxAgeMs,
   isGpsLive,
+  isPinBeyondRetention,
   latestGpsAt,
   liveLocationPayloadChanged,
   shouldShowOnLiveMap,
@@ -35,7 +37,7 @@ describe("shouldShowOnLiveMap", () => {
       true,
     );
     assert.equal(isGpsLive(isoMinutesAgo(9), NOW), false);
-    assert.ok(LIVE_GPS_MAX_AGE_MS < 9 * 60_000);
+    assert.ok(gpsLiveMaxAgeMs() < 9 * 60_000);
   });
 
   it("shows anyone with a fresh ping", () => {
@@ -68,7 +70,7 @@ describe("derivePinStatus", () => {
       derivePinStatus({
         zoneStatus: "in_zone",
         trackingStatus: "idle",
-        lastSeenAt: isoMinutesAgo(3),
+        lastSeenAt: isoMinutesAgo(2),
         isOnDuty: true,
         speedMps: 0,
       }),
@@ -141,6 +143,34 @@ describe("latestGpsAt / isGpsLive", () => {
     assert.equal(isGpsLive(frozen, NOW, heartbeat), true);
     assert.equal(isGpsLive(frozen, NOW), false);
   });
+
+  it("gives a parked rider the idle grace and a moving one the tight window", () => {
+    // The driver app reports every second while moving and every 30s otherwise, so the same
+    // silence means different things. V1 held a flat 8 minutes here, which is why its list
+    // still called a rider live long after V2 had them as GPS Offline.
+    const twoMinutes = isoMinutesAgo(2);
+    assert.equal(isGpsLive(twoMinutes, NOW, null, "idle", 0), true);
+    assert.equal(isGpsLive(twoMinutes, NOW, null, "moving", 9), false);
+  });
+
+  it("agrees with V2 on where the idle grace ends", () => {
+    assert.equal(gpsLiveMaxAgeMs("idle", 0), 150_000);
+    assert.equal(gpsLiveMaxAgeMs("moving", 9), 90_000);
+    // Real motion under an idle stamp is the moving cadence.
+    assert.equal(gpsLiveMaxAgeMs("idle", 9), 90_000);
+    // A caller with nothing to say gets the conservative window.
+    assert.equal(gpsLiveMaxAgeMs(), 150_000);
+  });
+
+  it("keeps a pin long past the point where its reading stops being live", () => {
+    // Retention and liveness answer different questions: calling a reading stale is a label,
+    // dropping the row takes the driver off the map.
+    const fiveMinutes = isoMinutesAgo(5);
+    assert.equal(isGpsLive(fiveMinutes, NOW), false);
+    assert.equal(isPinBeyondRetention(fiveMinutes, NOW), false);
+    assert.equal(isPinBeyondRetention(isoMinutesAgo(9), NOW), true);
+    assert.ok(LIVE_PIN_RETENTION_MS > gpsLiveMaxAgeMs());
+  });
 });
 
 describe("liveLocationPayloadChanged", () => {
@@ -156,6 +186,7 @@ describe("liveLocationPayloadChanged", () => {
     batteryPct: 80,
     activeDeliveryId: null,
     lastSeenAt: "2026-08-13T09:00:00.000Z",
+    vehicleType: "bike" as const,
   };
 
   it("notifies on any coordinate or last-seen change so the map pin can travel", () => {

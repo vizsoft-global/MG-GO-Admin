@@ -12,6 +12,7 @@ import {
   parseTrackingStatus,
   parseZoneStatus,
 } from "./location-status";
+import { vehicleTypeFromDriverJoin } from "@/features/vehicles/vehicle-type";
 import type { DriverLiveLocation, DriverLocationEvent } from "./types";
 
 async function requireDriversView() {
@@ -59,6 +60,11 @@ function mapLiveRow(row: {
     employee_id: string | null;
     is_on_duty: boolean;
     is_blocked?: boolean;
+    vehicle_type_key?: string | null;
+    vehicles?:
+      | { vehicle_type_key?: string | null }
+      | { vehicle_type_key?: string | null }[]
+      | null;
     profiles: { full_name: string | null } | { full_name: string | null }[] | null;
     driver_restaurants?: Array<{
       restaurants: { name: string } | { name: string }[] | null;
@@ -77,6 +83,7 @@ function mapLiveRow(row: {
     isOnDuty: driver?.is_on_duty ?? false,
     isBlocked: driver?.is_blocked ?? false,
     restaurantName: restaurantFromDriver(driver),
+    vehicleType: vehicleTypeFromDriverJoin(driver),
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
     speedMps: row.speed_mps != null ? Number(row.speed_mps) : null,
@@ -120,6 +127,8 @@ export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> 
         employee_id,
         is_on_duty,
         is_blocked,
+        vehicle_type_key,
+        vehicles ( vehicle_type_key ),
         profiles ( full_name ),
         driver_restaurants (
           restaurants ( name )

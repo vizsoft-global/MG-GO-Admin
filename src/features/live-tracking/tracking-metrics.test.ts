@@ -69,10 +69,20 @@ describe("isOverspeeding", () => {
 });
 
 describe("isGpsHeartbeatStale", () => {
-  it("flags GPS Offline after heartbeats stop (~90s), not after 8 minutes", () => {
+  it("flags GPS Offline after heartbeats stop, not after 8 minutes", () => {
     const twoMin = new Date(NOW - 2 * 60_000).toISOString();
     const thirtySec = new Date(NOW - 30_000).toISOString();
-    assert.equal(isGpsHeartbeatStale(twoMin, NOW), true);
-    assert.equal(isGpsHeartbeatStale(thirtySec, NOW), false);
+    assert.equal(isGpsHeartbeatStale(twoMin, NOW, "moving", 9), true);
+    assert.equal(isGpsHeartbeatStale(thirtySec, NOW, "moving", 9), false);
+  });
+
+  it("does not count a parked rider offline three beats into a 30s cadence", () => {
+    // The old flat 90s was justified against idle heartbeats of "45–60s". The app now reports
+    // every 30s when stationary, so 90s was three missed beats — one doze window — and the
+    // tile counted alive, on-duty, standing drivers as offline.
+    const twoMin = new Date(NOW - 2 * 60_000).toISOString();
+    assert.equal(isGpsHeartbeatStale(twoMin, NOW, "idle", 0), false);
+    const threeMin = new Date(NOW - 3 * 60_000).toISOString();
+    assert.equal(isGpsHeartbeatStale(threeMin, NOW, "idle", 0), true);
   });
 });
