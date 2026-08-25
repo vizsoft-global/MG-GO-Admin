@@ -44,6 +44,7 @@ const TEXT_KEYS = new Set([
   "language",
   "delivery_method",
   "subject",
+  "title",
 ]);
 const NUMBER_KEYS = new Set([
   "quantity",
@@ -594,6 +595,11 @@ export function RequestCreateDialog({
                         }
                         value={value(key)}
                         onChange={(e) => set(key, e.target.value)}
+                        placeholder={
+                          field.kind === "text" || field.kind === "textarea"
+                            ? t("create.asRiderStated")
+                            : undefined
+                        }
                       />
                     </div>
                   );

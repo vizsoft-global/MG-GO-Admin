@@ -3734,6 +3734,7 @@
           "fieldDriverPlaceholder": "اختر السائق…",
           "fieldDriverSearch": "بحث بالاسم أو الرقم أو الجوال",
           "fieldTitle": "العنوان",
+          "fieldTitlePlaceholder": "مثال: عقد العمل",
           "fieldCategory": "الفئة",
           "fieldCategoryPlaceholder": "فئة اختيارية",
           "fieldCategoryNone": "بدون فئة",
@@ -3743,7 +3744,8 @@
             "createFailed": "تعذر إنشاء الطلب",
             "uploadFailed": "تعذر رفع المستند",
             "unsupported_source_type": "نوع ملف غير مدعوم — ارفع ملف PDF أو PNG أو JPG",
-            "file_too_large": "حجم الملف أكبر من 10 ميجابايت"
+            "file_too_large": "حجم الملف أكبر من 10 ميجابايت",
+            "due_in_past": "لا يمكن أن يكون تاريخ الاستحقاق في الماضي"
           },
           "colSent": "أُرسل",
           "kpiSent": "أُرسل (30 يوم)",
@@ -4055,6 +4057,7 @@
           "delivery_method": "طريقة التسليم",
           "category": "الفئة",
           "subject": "الموضوع",
+          "title": "العنوان",
           "description": "الوصف",
           "salary_month": "شهر الراتب",
           "expected_amount": "المبلغ المتوقع",

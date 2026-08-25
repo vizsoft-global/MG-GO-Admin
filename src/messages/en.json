@@ -3815,6 +3815,7 @@
           "fieldDriverPlaceholder": "Select driver…",
           "fieldDriverSearch": "Search by name, ID, or mobile",
           "fieldTitle": "Title",
+          "fieldTitlePlaceholder": "e.g. Employment contract",
           "fieldCategory": "Category",
           "fieldCategoryPlaceholder": "Optional category",
           "fieldCategoryNone": "No category",
@@ -3824,7 +3825,8 @@
             "createFailed": "Could not create request",
             "uploadFailed": "Could not upload the document",
             "unsupported_source_type": "Unsupported file type — upload a PDF, PNG or JPG",
-            "file_too_large": "File is larger than 10 MB"
+            "file_too_large": "File is larger than 10 MB",
+            "due_in_past": "Due date cannot be in the past"
           },
           "colSent": "Sent",
           "kpiSent": "Sent (30d)",
@@ -4136,6 +4138,7 @@
           "delivery_method": "Delivery method",
           "category": "Category",
           "subject": "Subject",
+          "title": "Title",
           "description": "Description",
           "salary_month": "Salary Month",
           "expected_amount": "Expected amount",
