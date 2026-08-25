@@ -38,6 +38,8 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { driverSearchOptions } from "@/lib/search-options";
 import { selectOptions } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { isEsignDueDateAllowed } from "./esign-due-date";
 import { uploadEsignDocument } from "./esign-actions";
 import { EsignKpiStrip } from "./esign-kpi-strip";
 import {
@@ -135,6 +137,10 @@ export function EsignSentShell() {
       toast.error(t("errors.missingFields"));
       return;
     }
+    if (!isEsignDueDateAllowed(dueAt, kuwaitTodayYmd())) {
+      toast.error(t("errors.due_in_past"));
+      return;
+    }
 
     setUploading(true);
     const formData = new FormData();
@@ -156,7 +162,11 @@ export function EsignSentShell() {
       document_storage_key: upload.key,
     });
     if (!result.ok) {
-      toast.error(result.error ?? t("errors.createFailed"));
+      toast.error(
+        result.error === "due_in_past"
+          ? t("errors.due_in_past")
+          : (result.error ?? t("errors.createFailed")),
+      );
       return;
     }
     toast.success(t("created", { code: result.request_code ?? "" }));
@@ -356,6 +366,7 @@ export function EsignSentShell() {
                 className="h-9"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("fieldTitlePlaceholder")}
               />
             </div>
             <div className="space-y-1">
@@ -384,6 +395,7 @@ export function EsignSentShell() {
                 id="esign-due"
                 type="date"
                 className="h-9"
+                min={kuwaitTodayYmd()}
                 value={dueAt}
                 onChange={(e) => setDueAt(e.target.value)}
               />

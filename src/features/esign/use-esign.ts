@@ -42,7 +42,7 @@ export function useEsignDocumentLinks(id: string) {
     queryKey: [...queryKeys.esign.detail(id), "document-links"],
     queryFn: () => fetchEsignDocumentLinks(id),
     enabled: Boolean(id),
-    staleTime: 4 * 60 * 1000,
+    staleTime: 60_000,
   });
 }
 
