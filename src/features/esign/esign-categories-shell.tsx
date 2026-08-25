@@ -62,6 +62,7 @@ export function EsignCategoriesShell() {
   const [labelEn, setLabelEn] = useState("");
   const [description, setDescription] = useState("");
   const [iconKey, setIconKey] = useState("");
+  const [screenshotRestricted, setScreenshotRestricted] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,6 +85,7 @@ export function EsignCategoriesShell() {
     setLabelEn("");
     setDescription("");
     setIconKey("");
+    setScreenshotRestricted(false);
     setShowAdd(false);
   }
 
@@ -93,6 +95,7 @@ export function EsignCategoriesShell() {
     setLabelEn(row.label_en);
     setDescription(row.description ?? "");
     setIconKey(row.icon_key ?? "");
+    setScreenshotRestricted(row.screenshot_restricted);
     setShowAdd(true);
   }
 
@@ -104,7 +107,7 @@ export function EsignCategoriesShell() {
         label_en: labelEn,
         description: description.trim() || null,
         icon_key: iconKey.trim() || labelEn.trim().slice(0, 1),
-        screenshot_restricted: editing?.screenshot_restricted,
+        screenshot_restricted: screenshotRestricted,
         is_active: editing?.is_active,
         sort_order: editing?.sort_order,
       });
@@ -205,11 +208,17 @@ export function EsignCategoriesShell() {
               value={key}
               disabled={Boolean(editing)}
               onChange={(e) => setKey(e.target.value)}
+              placeholder={t("keyPlaceholder")}
             />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">{t("name")}</Label>
-            <Input className="h-9" value={labelEn} onChange={(e) => setLabelEn(e.target.value)} />
+            <Input
+              className="h-9"
+              value={labelEn}
+              onChange={(e) => setLabelEn(e.target.value)}
+              placeholder={t("namePlaceholder")}
+            />
           </div>
           <div className="space-y-1 sm:col-span-2">
             <Label className="text-xs">{t("description")}</Label>
@@ -217,6 +226,7 @@ export function EsignCategoriesShell() {
               className="h-9"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder={t("descriptionPlaceholder")}
             />
           </div>
           <div className="space-y-1">
@@ -224,10 +234,20 @@ export function EsignCategoriesShell() {
             <Input
               className="h-9"
               maxLength={2}
-              placeholder={labelEn.slice(0, 1).toUpperCase() || "A"}
+              placeholder={t("iconSlotPlaceholder")}
               value={iconKey}
               onChange={(e) => setIconKey(e.target.value)}
             />
+          </div>
+          <div className="flex items-center gap-2 sm:col-span-5">
+            <Switch
+              checked={!screenshotRestricted}
+              onCheckedChange={(allowed) => setScreenshotRestricted(!allowed)}
+              aria-label={t("colScreenshots")}
+            />
+            <span className="text-xs text-muted-foreground">
+              {screenshotRestricted ? t("screenshotBlocked") : t("screenshotAllowed")}
+            </span>
           </div>
           <div className="flex items-end gap-2 sm:col-span-5">
             <Button

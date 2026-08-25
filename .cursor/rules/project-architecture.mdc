@@ -231,6 +231,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-08-25` — **Fourteen RCM / e-sign QA reports.** Add Category fields have placeholders and default Screenshots to Allowed. `driver_get_esign_request` / `driver_list_esign_requests` return the live category `screenshot_restricted` so an Allowed category no longer shows “Screenshots disabled” on already-sent documents. App opens the full document in-app (no Notes / Downloads / Starting download / OEM ad / Content hidden). Fuel details show amount, Cash/Salary transfer type, rejection reason, and the full clarification thread; month pickers cannot pick a future date; empty Submit / Send Question validate. Migration `20260930100000`.
+
 - `[admin only] 2026-08-25` — **E-sign New request Title placeholder, due date, download/print.** Title has placeholder copy. Due date cannot be in the past (Kuwait today; RPC `due_in_past`). Print and downloads stream through `/api/esign/document-download` so an expired storage JWT no longer shows InvalidJWT. Migration `20260929100000`.
 
 - `[admin only] 2026-08-24` — **Delivery Orders Report finishes year-to-date.** `report_delivery_orders` now joins each delivery to that driver's shift windows instead of scanning every window three times per row. Jan–Aug (~38k deliveries) was ~25s and hit the 8s API timeout. Cap remains 366 days. Migration `20260928100000`.

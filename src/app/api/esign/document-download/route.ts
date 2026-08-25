@@ -11,7 +11,10 @@ import {
   normalizeEsignStorageKey,
 } from "@/features/esign/esign-storage-key";
 
-const KINDS = new Set<EsignDocumentKind>(["document", "signature", "signed"]);
+function parseKind(raw: string | null): EsignDocumentKind | null {
+  if (raw === "document" || raw === "signature" || raw === "signed") return raw;
+  return null;
+}
 
 const KEY_COLUMN: Record<EsignDocumentKind, string> = {
   document: "document_storage_key",
@@ -44,10 +47,10 @@ export async function GET(request: Request) {
 
   const params = new URL(request.url).searchParams;
   const id = params.get("id")?.trim() ?? "";
-  const kind = params.get("kind")?.trim() as EsignDocumentKind | "";
+  const kind = parseKind(params.get("kind")?.trim() ?? null);
   const disposition = params.get("disposition") === "inline" ? "inline" : "attachment";
 
-  if (!id || !KINDS.has(kind)) {
+  if (!id || !kind) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
