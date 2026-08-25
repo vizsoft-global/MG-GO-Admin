@@ -3794,6 +3794,7 @@
         "sent": {
           "title": "Sent requests",
           "subtitle": "Signature requests sent to drivers",
+          "back": "Back",
           "refresh": "Refresh",
           "create": "New request",
           "createTitle": "Send signature request",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
@@ -59,7 +59,12 @@ import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { RequestCreateDialog } from "./request-create-dialog";
-import { requestStatusLabelKey, requestStatusVariant } from "./request-status-utils";
+import {
+  requestStatusLabelKey,
+  requestStatusVariant,
+  statusFiltersForRequestType,
+  type RequestStatusFilter,
+} from "./request-status-utils";
 import { DECISION_TERM_TYPES, type RequestDatePreset, type RequestListRow } from "./types";
 import { useAdminRequestsList, useBulkDecideRequests } from "./use-requests";
 
@@ -146,21 +151,6 @@ function canBulkReject(row: RequestListRow): boolean {
   return !CLOSED_STATUSES.has(row.status);
 }
 
-const STATUS_FILTERS = [
-  "all",
-  "submitted",
-  "pending",
-  "in_review",
-  "needs_clarification",
-  "rescheduled",
-  "approved",
-  "rejected",
-  "solved",
-  "responded",
-  "closed",
-  "overdue",
-] as const;
-
 /** Only the rows currently on screen are exported, matching what the admin can see. */
 function exportRowsToCsv(rows: RequestListRow[], fileName: string) {
   const header = [
@@ -214,7 +204,7 @@ export function RequestsPageShell({
       ? initialType
       : "all",
   );
-  const [status, setStatus] = useState<string>("all");
+  const [status, setStatus] = useState<RequestStatusFilter>("all");
   const [departmentKey, setDepartmentKey] = useState<string>("all");
   const [zoneId, setZoneId] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -251,9 +241,18 @@ export function RequestsPageShell({
   const filteredTotal = data?.filteredTotal ?? rows.length;
   const departmentOptions = data?.departmentOptions ?? [];
 
+  const visibleStatusFilters = useMemo(
+    () => statusFiltersForRequestType(type),
+    [type],
+  );
+
+  useEffect(() => {
+    if (!visibleStatusFilters.includes(status)) setStatus("all");
+  }, [status, visibleStatusFilters]);
+
   const statusTabs = useMemo(
     () =>
-      STATUS_FILTERS.map((key) => {
+      visibleStatusFilters.map((key) => {
         const label =
           key === "all"
             ? t("statusFilter.all")
@@ -264,7 +263,7 @@ export function RequestsPageShell({
             : (statusCounts[key] ?? 0);
         return { id: key, label: `${label} ${count}` };
       }),
-    [statusCounts, t],
+    [statusCounts, t, visibleStatusFilters],
   );
 
   const selectableRows = rows.filter(canBulkReject);
@@ -378,7 +377,7 @@ export function RequestsPageShell({
               items={statusTabs}
               activeId={status}
               className="flex-nowrap gap-4 border-b-0 [&>button]:pb-2"
-              onSelect={setStatus}
+              onSelect={(id) => setStatus(id as RequestStatusFilter)}
             />
           </div>
           <div className="flex shrink-0 items-center gap-2">
