@@ -3961,6 +3961,10 @@
           "saveChanges": "Save changes",
           "cancel": "Cancel",
           "iconSlot": "Icon slot",
+          "keyPlaceholder": "e.g. housing",
+          "namePlaceholder": "e.g. Housing agreement",
+          "descriptionPlaceholder": "Short description of this category",
+          "iconSlotPlaceholder": "Ad",
           "colCategory": "Category",
           "colScreenshots": "Screenshots",
           "colActive": "Active"

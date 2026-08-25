@@ -355,7 +355,7 @@ export async function upsertEsignCategory(input: {
     label_en,
     description: input.description?.trim() || null,
     icon_key: input.icon_key?.trim().slice(0, 2) || null,
-    screenshot_restricted: input.screenshot_restricted ?? true,
+    screenshot_restricted: input.screenshot_restricted ?? false,
     is_active: input.is_active ?? true,
     sort_order: input.sort_order ?? 0,
     updated_at: new Date().toISOString(),

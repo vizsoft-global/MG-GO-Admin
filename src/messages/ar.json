@@ -3880,6 +3880,10 @@
           "saveChanges": "حفظ التغييرات",
           "cancel": "إلغاء",
           "iconSlot": "رمز الأيقونة",
+          "keyPlaceholder": "مثال: housing",
+          "namePlaceholder": "مثال: اتفاقية السكن",
+          "descriptionPlaceholder": "وصف مختصر لهذه الفئة",
+          "iconSlotPlaceholder": "سك",
           "colCategory": "الفئة",
           "colScreenshots": "لقطات الشاشة",
           "colActive": "نشط"
