@@ -1,16 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  cellBoundaryLatLng,
-  landHexCellsForMapView,
-} from "@/lib/geo/h3-blocks";
+import { hexGridForView } from "@/lib/geo/h3-blocks";
 import type {
   GoogleMapInstance,
   GoogleMapsApi,
-  GooglePolygonInstance,
+  GoogleOverlayViewInstance,
 } from "@/lib/google-maps/load";
-import { ZONE_BLOCK_HEX_STYLE } from "./zone-blocks-layer";
+import { createProjector, drawHexGrid, prepareCanvas } from "./hex-grid-canvas";
 import { latLngToTuple } from "./zone-map-google-utils";
 
 type BlockHitHandler = (
@@ -18,19 +15,6 @@ type BlockHitHandler = (
   lng: number,
   gesture: "click" | "drag",
 ) => void;
-
-function hexOptions(selected: boolean) {
-  const style = selected
-    ? ZONE_BLOCK_HEX_STYLE.selected
-    : ZONE_BLOCK_HEX_STYLE.unselected;
-  return {
-    ...style,
-    clickable: false,
-    editable: false,
-    draggable: false,
-    zIndex: selected ? 24 : 22,
-  };
-}
 
 function eventLatLng(e: unknown): { lat: number; lng: number } | null {
   const latLng = (e as { latLng?: { lat: () => number; lng: () => number } | null })
@@ -57,15 +41,17 @@ export function useGoogleZoneBlocks({
   onZoomCapped?: (capped: boolean) => void;
 }): { zoomCapped: boolean } {
   const [zoomCapped, setZoomCapped] = useState(false);
-  const polygonsRef = useRef<Map<string, GooglePolygonInstance>>(new Map());
+  const cellsRef = useRef<string[]>([]);
+  const gridVisibleRef = useRef(true);
   const selectedRef = useRef(new Set<string>());
   const onHitRef = useRef(onHit);
   const onZoomCappedRef = useRef(onZoomCapped);
   const resolutionRef = useRef(resolution);
   const paintingRef = useRef(false);
   const movedRef = useRef(false);
-  const zoomCappedRef = useRef(false);
+  const paintableRef = useRef(false);
   const syncViewportRef = useRef<() => void>(() => {});
+  const redrawRef = useRef<() => void>(() => {});
 
   onHitRef.current = onHit;
   onZoomCappedRef.current = onZoomCapped;
@@ -73,76 +59,120 @@ export function useGoogleZoneBlocks({
   selectedRef.current = new Set(selectedCells);
 
   useEffect(() => {
-    if (!map || !google || !enabled) {
-      for (const polygon of polygonsRef.current.values()) {
-        polygon.setMap(null);
-      }
-      polygonsRef.current.clear();
+    if (!map || !google || !enabled || !google.maps.OverlayView) {
       setZoomCapped(false);
       onZoomCappedRef.current?.(false);
       return;
     }
 
-    map.setOptions({ draggable: false, disableDoubleClickZoom: true });
+    // Capture post-guard so the overlay class body keeps the narrowed types.
+    const mapInstance = map;
+    mapInstance.setOptions({ draggable: false, disableDoubleClickZoom: true });
 
-    const restyle = () => {
-      for (const [cell, polygon] of polygonsRef.current) {
-        polygon.setOptions(hexOptions(selectedRef.current.has(cell)));
-      }
-    };
+    let overlay: GoogleOverlayViewInstance | null = null;
+    let canvas: HTMLCanvasElement | null = null;
+    let frame = 0;
 
-    const upsert = (cells: string[]) => {
-      const next = new Set(cells);
-      for (const [cell, polygon] of polygonsRef.current) {
-        if (!next.has(cell)) {
-          polygon.setMap(null);
-          polygonsRef.current.delete(cell);
-        }
+    /**
+     * One canvas covering the viewport, redrawn as a single path. Lives in the
+     * non-interactive overlay pane so the map still receives the mouse events
+     * that drive painting.
+     */
+    class HexGridOverlay extends google.maps.OverlayView {
+      override onAdd() {
+        const el = document.createElement("canvas");
+        el.style.position = "absolute";
+        el.style.pointerEvents = "none";
+        canvas = el;
+        this.getPanes()?.overlayLayer?.appendChild(el);
       }
-      for (const cell of cells) {
-        if (polygonsRef.current.has(cell)) continue;
-        const path = cellBoundaryLatLng(cell).map(([lat, lng]) => ({ lat, lng }));
-        if (path.length < 4) continue;
-        const polygon = new google.maps.Polygon({
-          paths: path,
-          map,
-          ...hexOptions(selectedRef.current.has(cell)),
+
+      override draw() {
+        if (!canvas) return;
+        const projection = this.getProjection();
+        const bounds = mapInstance.getBounds();
+        const zoom = mapInstance.getZoom();
+        if (!projection || !bounds || zoom == null) return;
+
+        // Anchor the canvas at the viewport's north-west corner and project
+        // every hex relative to that same point, so the two never disagree.
+        const [northLat] = latLngToTuple(bounds.getNorthEast());
+        const [, westLng] = latLngToTuple(bounds.getSouthWest());
+        const anchor = projection.fromLatLngToDivPixel({
+          lat: northLat,
+          lng: westLng,
         });
-        polygonsRef.current.set(cell, polygon);
+        if (!anchor) return;
+
+        const div = mapInstance.getDiv?.();
+        const width = Math.max(1, div?.clientWidth ?? 0);
+        const height = Math.max(1, div?.clientHeight ?? 0);
+
+        canvas.style.left = `${anchor.x}px`;
+        canvas.style.top = `${anchor.y}px`;
+        const ctx = prepareCanvas(canvas, width, height);
+        if (!ctx) return;
+
+        drawHexGrid({
+          ctx,
+          width,
+          height,
+          cells: cellsRef.current,
+          selected: selectedRef.current,
+          project: createProjector(zoom, northLat, westLng),
+          gridVisible: gridVisibleRef.current,
+        });
       }
-      restyle();
+
+      override onRemove() {
+        canvas?.remove();
+        canvas = null;
+      }
+    }
+
+    overlay = new HexGridOverlay();
+    overlay.setMap(map);
+
+    const redraw = () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        overlay?.draw();
+      });
     };
+    redrawRef.current = redraw;
 
     const syncViewport = () => {
-      const center = map.getCenter?.();
-      if (!center) return;
-      const [lat, lng] = latLngToTuple(center);
-      const bounds = map.getBounds?.();
-      const sw = bounds ? latLngToTuple(bounds.getSouthWest()) : [lat - 0.02, lng - 0.02];
-      const ne = bounds ? latLngToTuple(bounds.getNorthEast()) : [lat + 0.02, lng + 0.02];
-      const view = landHexCellsForMapView({
-        west: sw[1],
-        south: sw[0],
-        east: ne[1],
-        north: ne[0],
+      const bounds = map.getBounds();
+      const zoom = map.getZoom();
+      if (!bounds || zoom == null) return;
+      const [north, east] = latLngToTuple(bounds.getNorthEast());
+      const [south, west] = latLngToTuple(bounds.getSouthWest());
+      const view = hexGridForView({
+        west,
+        south,
+        east,
+        north,
+        zoom,
         resolution: resolutionRef.current,
         extraCells: [...selectedRef.current],
       });
-      setZoomCapped(!view.fullViewport);
-      zoomCappedRef.current = !view.fullViewport;
-      onZoomCappedRef.current?.(!view.fullViewport);
+      cellsRef.current = view.cells;
+      gridVisibleRef.current = view.visible;
+      paintableRef.current = view.paintable;
+      setZoomCapped(!view.paintable);
+      onZoomCappedRef.current?.(!view.paintable);
+      // Give panning back when the user cannot paint anyway.
       map.setOptions({
-        draggable: !view.fullViewport,
+        draggable: !view.paintable,
         disableDoubleClickZoom: true,
       });
-      upsert(view.cells);
+      redraw();
     };
-
     syncViewportRef.current = syncViewport;
 
     const onDown = ((e: unknown) => {
-      const point = eventLatLng(e);
-      if (!point) return;
+      if (!eventLatLng(e)) return;
       paintingRef.current = true;
       movedRef.current = false;
     }) as () => void;
@@ -152,23 +182,19 @@ export function useGoogleZoneBlocks({
       const point = eventLatLng(e);
       if (!point) return;
       movedRef.current = true;
-      if (zoomCappedRef.current) return;
+      if (!paintableRef.current) return;
       onHitRef.current?.(point.lat, point.lng, "drag");
     }) as () => void;
 
-    const finish = (e: unknown) => {
+    const onUp = ((e: unknown) => {
       if (!paintingRef.current) return;
       const point = eventLatLng(e);
       const wasDrag = movedRef.current;
       paintingRef.current = false;
       movedRef.current = false;
-      if (!wasDrag && point) {
+      if (!wasDrag && point && paintableRef.current) {
         onHitRef.current?.(point.lat, point.lng, "click");
       }
-    };
-
-    const onUp = ((e: unknown) => {
-      finish(e);
     }) as () => void;
 
     const idleListener = map.addListener("idle", syncViewport);
@@ -189,10 +215,10 @@ export function useGoogleZoneBlocks({
       moveListener.remove();
       upListener.remove();
       window.removeEventListener("mouseup", onWindowUp);
-      for (const polygon of polygonsRef.current.values()) {
-        polygon.setMap(null);
-      }
-      polygonsRef.current.clear();
+      if (frame) cancelAnimationFrame(frame);
+      overlay?.setMap(null);
+      overlay = null;
+      cellsRef.current = [];
       map.setOptions({ draggable: true, disableDoubleClickZoom: false });
       paintingRef.current = false;
       movedRef.current = false;
@@ -201,7 +227,10 @@ export function useGoogleZoneBlocks({
 
   useEffect(() => {
     if (!enabled) return;
-    syncViewportRef.current();
+    const known = new Set(cellsRef.current);
+    const needsRebuild = selectedCells.some((cell) => !known.has(cell));
+    if (needsRebuild) syncViewportRef.current();
+    else redrawRef.current();
   }, [enabled, selectedCells]);
 
   return { zoomCapped };

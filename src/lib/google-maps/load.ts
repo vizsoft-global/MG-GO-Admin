@@ -33,6 +33,7 @@ export type GoogleMapInstance = {
     draggable?: boolean;
   }) => void;
   addListener: (event: string, handler: () => void) => { remove: () => void };
+  getDiv?: () => HTMLElement;
   fitBounds: (
     bounds: GoogleLatLngBounds,
     padding?: number | { top?: number; right?: number; bottom?: number; left?: number },
@@ -103,6 +104,8 @@ export type GoogleMapProjection = {
 };
 
 export type GoogleMapPanes = {
+  /** Non-interactive pane, below markers — used by the block honeycomb canvas. */
+  overlayLayer?: HTMLElement;
   overlayMouseTarget?: HTMLElement;
   floatPane?: HTMLElement;
 };

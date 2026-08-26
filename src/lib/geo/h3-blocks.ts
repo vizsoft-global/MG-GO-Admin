@@ -1,18 +1,29 @@
-import { area, featureCollection, intersect, polygon, union } from "@turf/turf";
+import { featureCollection, union } from "@turf/turf";
 import kinks from "@turf/kinks";
 import {
+  POLYGON_TO_CELLS_FLAGS,
   areNeighborCells,
-  cellsToMultiPolygon,
   cellToBoundary,
+  cellToChildren,
   cellToLatLng,
+  cellsToMultiPolygon,
   getHexagonAreaAvg,
   gridDisk,
   latLngToCell,
   polygonToCells,
+  polygonToCellsExperimental,
 } from "h3-js";
-import type { Feature, MultiPolygon, Polygon, Position } from "geojson";
-import { KUWAIT_LAND, isKuwaitLand } from "./kuwait-land";
+import type { Feature, Polygon, Position } from "geojson";
+import {
+  KUWAIT_LAND_BBOX,
+  KUWAIT_LAND_INDEX_RES,
+  isKuwaitLand,
+  isKuwaitLandCell,
+  landIndexKind,
+} from "./kuwait-land";
 import { buildPolygonFeature, type ZoneGeoFeature } from "./zone-geometry";
+
+export { isKuwaitLandCell };
 
 export const H3_BLOCK_RESOLUTIONS = {
   S: 8,
@@ -24,8 +35,35 @@ export type H3BlockSize = keyof typeof H3_BLOCK_RESOLUTIONS;
 
 export const DEFAULT_H3_BLOCK_SIZE: H3BlockSize = "M";
 
-/** Skip `polygonToCells` when the land viewport would flood the map. */
-export const H3_VIEWPORT_CELL_CAP = 3000;
+/**
+ * Upper bound on hexes handed to the renderer in one frame.
+ *
+ * Sized so the grid can never disappear while it is still paintable: at the
+ * `MIN_PAINTABLE_HEX_PX` threshold a hex covers ~94px², so even a 2560x1440
+ * map full of land needs under 40k. The canvas overlay draws them as a single
+ * path, which is what makes a number this large affordable at all.
+ */
+export const H3_VIEWPORT_CELL_CAP = 60_000;
+
+/**
+ * Upper bound on hexes seeded into a *selection*, which is a far smaller number
+ * than the render cap above and deliberately not derived from it.
+ *
+ * Drawing is batched and costs a few milliseconds for tens of thousands of
+ * hexes, but every paint gesture re-unions the whole selection through turf,
+ * which is linear and expensive: ~110ms at 1k cells, ~360ms at 3k, ~2.6s at
+ * 20k. Seeding more than this would hand the user a zone they cannot edit.
+ */
+export const H3_SELECTION_CELL_CAP = 3_000;
+
+/** Never ask `polygonToCells` for more than this — protects against absurd views. */
+const GENERATE_CEILING = 120_000;
+
+/** Below this on-screen width a honeycomb is visual noise, so it stays hidden. */
+export const MIN_VISIBLE_HEX_PX = 5;
+
+/** Below this a hex is too small to click or drag over reliably. */
+export const MIN_PAINTABLE_HEX_PX = 12;
 
 export type H3UnionResult =
   | { ok: true; feature: ZoneGeoFeature }
@@ -35,18 +73,68 @@ function uniqueCells(cells: readonly string[]): string[] {
   return [...new Set(cells)];
 }
 
+/**
+ * Corner-to-corner width of a regular hexagon with the same area as an average
+ * cell at this resolution. H3 cells are not regular, so this is the honest
+ * "how big does one look" number rather than `getHexagonEdgeLengthAvg`.
+ */
+export function hexWidthMeters(resolution: number): number {
+  const areaM2 = getHexagonAreaAvg(resolution, "m2");
+  if (!Number.isFinite(areaM2) || areaM2 <= 0) return 0;
+  return 2 * Math.sqrt(areaM2 / ((3 * Math.sqrt(3)) / 2));
+}
+
+/** Web Mercator ground resolution at a given latitude and zoom. */
+export function metersPerPixel(lat: number, zoom: number): number {
+  return (156_543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
+}
+
+/** How wide one hex appears on screen, in CSS pixels. */
+export function hexWidthPixels(
+  resolution: number,
+  lat: number,
+  zoom: number,
+): number {
+  const mpp = metersPerPixel(lat, zoom);
+  if (!Number.isFinite(mpp) || mpp <= 0) return 0;
+  return hexWidthMeters(resolution) / mpp;
+}
+
+/** Lowest zoom at which hexes of this resolution reach `px` across. */
+export function minZoomForHexPx(
+  resolution: number,
+  lat: number,
+  px: number,
+): number {
+  const widthM = hexWidthMeters(resolution);
+  if (widthM <= 0 || px <= 0) return Number.POSITIVE_INFINITY;
+  const mpp = widthM / px;
+  return Math.log2((156_543.03392 * Math.cos((lat * Math.PI) / 180)) / mpp);
+}
+
+export type HexGridView = {
+  /** Land cells to draw, always including any selected cells passed in. */
+  cells: string[];
+  /** Is the background honeycomb drawn at this zoom? */
+  visible: boolean;
+  /** Are hexes big enough to click/drag accurately? */
+  paintable: boolean;
+  /** On-screen hex width, for hints and tuning. */
+  hexPx: number;
+};
+
+function selectedLandCells(cells: readonly string[]): string[] {
+  return uniqueCells(cells).filter((cell) => isKuwaitLandCell(cell));
+}
+
 function bboxAreaKm2(west: number, south: number, east: number, north: number): number {
   const latMid = (south + north) / 2;
-  const kmPerDegLat = 110.574;
-  const kmPerDegLng = 111.32 * Math.cos((latMid * Math.PI) / 180);
-  const heightKm = Math.abs(north - south) * kmPerDegLat;
-  const widthKm = Math.abs(east - west) * kmPerDegLng;
+  const heightKm = Math.abs(north - south) * 110.574;
+  const widthKm = Math.abs(east - west) * 111.32 * Math.cos((latMid * Math.PI) / 180);
   return Math.max(0, widthKm * heightKm);
 }
 
-/**
- * Cheap upper bound so we never call `polygonToCells` on a huge bbox at high res.
- */
+/** Rough hex count for a bbox — used only to refuse absurd `polygonToCells` calls. */
 export function estimateViewportCellCount(
   west: number,
   south: number,
@@ -59,193 +147,139 @@ export function estimateViewportCellCount(
   return Math.ceil(bboxAreaKm2(west, south, east, north) / avgKm2);
 }
 
-export function canPaintViewport(
-  west: number,
-  south: number,
-  east: number,
-  north: number,
-  resolution: number,
-  cap: number = H3_VIEWPORT_CELL_CAP,
-): boolean {
-  return estimateViewportCellCount(west, south, east, north, resolution) <= cap;
-}
+/**
+ * The honeycomb for the current map view: every Kuwait land hex inside the
+ * viewport, at a fixed resolution that simply scales as the map zooms.
+ *
+ * There is no area-based bail-out — the grid stays anchored to the map and is
+ * only hidden once hexes shrink past `MIN_VISIBLE_HEX_PX`, where they would be
+ * an unreadable smear anyway. Selected cells are always returned so a zone
+ * stays visible even when the background grid is not.
+ */
+export function hexGridForView(args: {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  zoom: number;
+  resolution: number;
+  extraCells?: readonly string[];
+  cap?: number;
+}): HexGridView {
+  const cap = args.cap ?? H3_VIEWPORT_CELL_CAP;
+  const selected = selectedLandCells(args.extraCells ?? []);
+  const lat = (args.south + args.north) / 2;
+  const hexPx = hexWidthPixels(args.resolution, lat, args.zoom);
+  const paintable = hexPx >= MIN_PAINTABLE_HEX_PX;
+  const hidden: HexGridView = {
+    cells: selected,
+    visible: false,
+    paintable: false,
+    hexPx,
+  };
 
-export function viewportHexCells(
-  west: number,
-  south: number,
-  east: number,
-  north: number,
-  resolution: number,
-  cap: number = H3_VIEWPORT_CELL_CAP,
-): string[] | null {
-  if (!canPaintViewport(west, south, east, north, resolution, cap)) return null;
-  const ring: Position[] = [
-    [west, south],
-    [east, south],
-    [east, north],
-    [west, north],
-    [west, south],
-  ];
-  try {
-    const cells = polygonToCells([ring], resolution, true);
-    if (cells.length > cap) return null;
-    return cells;
-  } catch {
-    return null;
+  if (hexPx < MIN_VISIBLE_HEX_PX) return hidden;
+
+  // Clamp to Kuwait so a view that is mostly Gulf or Iraq costs nothing.
+  const [landWest, landSouth, landEast, landNorth] = KUWAIT_LAND_BBOX;
+  const west = Math.max(args.west, landWest);
+  const south = Math.max(args.south, landSouth);
+  const east = Math.min(args.east, landEast);
+  const north = Math.min(args.north, landNorth);
+  if (west >= east || south >= north) {
+    return { cells: selected, visible: true, paintable, hexPx };
   }
-}
 
-/** Honeycomb around a point, grown until the next ring would exceed `cap`. */
-export function centerDiskCells(
-  lat: number,
-  lng: number,
-  resolution: number,
-  cap: number = H3_VIEWPORT_CELL_CAP,
-): string[] {
-  const origin = latLngToCell(lat, lng, resolution);
-  let best: string[] = [origin];
-  for (let k = 1; k <= 40; k++) {
-    let disk: string[];
-    try {
-      disk = gridDisk(origin, k);
-    } catch {
-      break;
-    }
-    if (disk.length > cap) break;
-    best = disk;
+  if (
+    estimateViewportCellCount(west, south, east, north, args.resolution) >
+    GENERATE_CEILING
+  ) {
+    return hidden;
   }
-  return best;
+
+  const cells = landCellsInBounds(west, south, east, north, args.resolution);
+  if (cells == null || cells.length > cap) return hidden;
+
+  return {
+    cells: uniqueCells([...cells, ...selected]),
+    visible: true,
+    paintable,
+    hexPx,
+  };
 }
 
-export type HexViewCells = {
-  cells: string[];
-  /** False when land in view has too many hexes; overlay shows selected cells only. */
-  fullViewport: boolean;
-};
-
-function viewportPolygon(
+/**
+ * Land hexes whose centre falls in the given bounds.
+ *
+ * Walks the coarse res-6 land index rather than enumerating the whole
+ * viewport: sea parents are skipped without generating a single hex, and
+ * descendants of a fully-land parent need no geometry test at all. Only hexes
+ * under a coastal parent pay for a point-in-polygon check.
+ */
+function landCellsInBounds(
   west: number,
   south: number,
   east: number,
   north: number,
-): Feature<Polygon> {
-  return polygon([
-    [
-      [west, south],
-      [east, south],
-      [east, north],
-      [west, north],
-      [west, south],
-    ],
-  ]);
-}
-
-function landOnlyCells(cells: readonly string[]): string[] {
-  return uniqueCells(cells).filter((cell) => {
-    const [lat, lng] = cellToLatLng(cell);
-    return isKuwaitLand(lat, lng);
-  });
-}
-
-function cellsFromLandGeometry(
-  geometry: Polygon | MultiPolygon,
   resolution: number,
-  cap: number,
 ): string[] | null {
-  const parts = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
-  const cells: string[] = [];
-  for (const coords of parts) {
-    let next: string[];
+  if (resolution <= KUWAIT_LAND_INDEX_RES) {
     try {
-      next = polygonToCells(coords, resolution, true);
+      const ring: Position[] = [
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south],
+      ];
+      return polygonToCells([ring], resolution, true).filter(isKuwaitLandCell);
     } catch {
       return null;
     }
-    if (cells.length + next.length > cap) return null;
-    cells.push(...next);
   }
-  const land = landOnlyCells(cells);
-  if (land.length > cap) return null;
-  return land;
-}
 
-/**
- * Viewport hexes when they fit under the cap; otherwise a center disk so the
- * honeycomb is always visible. `extraCells` (the current selection) are always kept.
- */
-export function hexCellsForMapView(args: {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-  lat: number;
-  lng: number;
-  resolution: number;
-  extraCells?: readonly string[];
-  cap?: number;
-}): HexViewCells {
-  const cap = args.cap ?? H3_VIEWPORT_CELL_CAP;
-  const viewport = viewportHexCells(
-    args.west,
-    args.south,
-    args.east,
-    args.north,
-    args.resolution,
-    cap,
-  );
-  const base =
-    viewport ?? centerDiskCells(args.lat, args.lng, args.resolution, cap);
-  return {
-    cells: uniqueCells([...base, ...(args.extraCells ?? [])]),
-    fullViewport: viewport != null,
-  };
-}
+  // Pad so parents that only clip a corner of the viewport are still included;
+  // children are filtered back to the true bounds below.
+  const pad = 0.02;
+  const paddedRing: Position[] = [
+    [west - pad, south - pad],
+    [east + pad, south - pad],
+    [east + pad, north + pad],
+    [west - pad, north + pad],
+    [west - pad, south - pad],
+  ];
 
-export function isKuwaitLandCell(h3Index: string): boolean {
-  const [lat, lng] = cellToLatLng(h3Index);
-  return isKuwaitLand(lat, lng);
-}
-
-/**
- * Faint honeycomb on Kuwait land inside the viewport. No sea cells and no
- * circular disk. When the land patch is too large, only selected land cells.
- */
-export function landHexCellsForMapView(args: {
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-  resolution: number;
-  extraCells?: readonly string[];
-  cap?: number;
-}): HexViewCells {
-  const cap = args.cap ?? H3_VIEWPORT_CELL_CAP;
-  const extra = landOnlyCells(args.extraCells ?? []);
-  const view = viewportPolygon(args.west, args.south, args.east, args.north);
-  let landPatch: Feature<Polygon | MultiPolygon> | null = null;
+  let parents: string[];
   try {
-    landPatch = intersect(featureCollection([KUWAIT_LAND, view]));
+    parents = polygonToCellsExperimental(
+      [paddedRing],
+      KUWAIT_LAND_INDEX_RES,
+      POLYGON_TO_CELLS_FLAGS.containmentOverlapping,
+      true,
+    );
   } catch {
-    landPatch = null;
-  }
-  if (!landPatch) {
-    return { cells: extra, fullViewport: true };
+    return null;
   }
 
-  const avgKm2 = getHexagonAreaAvg(args.resolution, "km2");
-  const patchKm2 = area(landPatch) / 1e6;
-  if (Number.isFinite(avgKm2) && avgKm2 > 0 && patchKm2 / avgKm2 > cap) {
-    return { cells: extra, fullViewport: false };
+  const cells: string[] = [];
+  for (const parent of parents) {
+    const kind = landIndexKind(parent);
+    if (kind === "sea") continue;
+    let children: string[];
+    try {
+      children = cellToChildren(parent, resolution);
+    } catch {
+      return null;
+    }
+    const needsGeometryTest = kind === "edge";
+    for (const child of children) {
+      const [lat, lng] = cellToLatLng(child);
+      if (lng < west || lng > east || lat < south || lat > north) continue;
+      if (needsGeometryTest && !isKuwaitLand(lat, lng)) continue;
+      cells.push(child);
+    }
   }
-
-  const base = cellsFromLandGeometry(landPatch.geometry, args.resolution, cap);
-  if (base == null) {
-    return { cells: extra, fullViewport: false };
-  }
-  return {
-    cells: uniqueCells([...base, ...extra]),
-    fullViewport: true,
-  };
+  return cells;
 }
 
 export function indexForLatLng(lat: number, lng: number, resolution: number): string {
@@ -381,7 +415,7 @@ export function unionCellsToPolygon(cells: readonly string[]): H3UnionResult {
 export function polygonToBlockCells(
   geometry: Polygon,
   resolution: number,
-  cap: number = H3_VIEWPORT_CELL_CAP,
+  cap: number = H3_SELECTION_CELL_CAP,
 ): string[] {
   try {
     const cells = polygonToCells(geometry.coordinates, resolution, true);

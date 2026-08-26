@@ -3,27 +3,12 @@
 import { useEffect, useRef } from "react";
 import { useMap } from "react-leaflet";
 import L from "leaflet";
+import { hexGridForView } from "@/lib/geo/h3-blocks";
 import {
-  cellBoundaryLatLng,
-  landHexCellsForMapView,
-} from "@/lib/geo/h3-blocks";
-import { ZONE_BLOCK_HEX_STYLE } from "./zone-blocks-layer";
-
-function hexPathOptions(selected: boolean): L.PathOptions {
-  const style = selected
-    ? ZONE_BLOCK_HEX_STYLE.selected
-    : ZONE_BLOCK_HEX_STYLE.unselected;
-  return {
-    color: style.strokeColor,
-    opacity: style.strokeOpacity,
-    weight: style.strokeWeight,
-    fillColor: style.fillColor,
-    fillOpacity: style.fillOpacity,
-    interactive: false,
-    bubblingMouseEvents: false,
-    pmIgnore: true,
-  } as L.PathOptions;
-}
+  createProjector,
+  drawHexGrid,
+  prepareCanvas,
+} from "./hex-grid-canvas";
 
 export function ZoneBlocksLeafletLayer({
   enabled,
@@ -39,16 +24,18 @@ export function ZoneBlocksLeafletLayer({
   onZoomCapped?: (capped: boolean) => void;
 }) {
   const map = useMap();
-  const groupRef = useRef<L.LayerGroup | null>(null);
-  const polygonsRef = useRef<Map<string, L.Polygon>>(new Map());
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const cellsRef = useRef<string[]>([]);
+  const gridVisibleRef = useRef(true);
   const selectedRef = useRef(new Set<string>());
   const onHitRef = useRef(onHit);
   const onZoomCappedRef = useRef(onZoomCapped);
   const resolutionRef = useRef(resolution);
   const paintingRef = useRef(false);
   const movedRef = useRef(false);
-  const zoomCappedRef = useRef(false);
+  const paintableRef = useRef(false);
   const syncViewportRef = useRef<() => void>(() => {});
+  const redrawRef = useRef<() => void>(() => {});
 
   onHitRef.current = onHit;
   onZoomCappedRef.current = onZoomCapped;
@@ -57,77 +44,99 @@ export function ZoneBlocksLeafletLayer({
 
   useEffect(() => {
     if (!enabled) {
-      groupRef.current?.remove();
-      groupRef.current = null;
-      polygonsRef.current.clear();
       onZoomCappedRef.current?.(false);
       return;
     }
 
-    const group = L.layerGroup().addTo(map);
-    groupRef.current = group;
+    const canvas = L.DomUtil.create(
+      "canvas",
+      "leaflet-zone-blocks-layer",
+    ) as HTMLCanvasElement;
+    canvas.style.position = "absolute";
+    canvas.style.left = "0";
+    canvas.style.top = "0";
+    // The map keeps receiving the mouse events that drive painting.
+    canvas.style.pointerEvents = "none";
+    // First child of the pane so drawn zones and handles stay above the grid.
+    const pane = map.getPanes().overlayPane;
+    pane.insertBefore(canvas, pane.firstChild);
+    canvasRef.current = canvas;
+
     map.dragging.disable();
     map.doubleClickZoom.disable();
 
-    const restyle = () => {
-      for (const [cell, polygon] of polygonsRef.current) {
-        polygon.setStyle(hexPathOptions(selectedRef.current.has(cell)));
-      }
+    const redraw = () => {
+      const size = map.getSize();
+      const ctx = prepareCanvas(canvas, size.x, size.y);
+      if (!ctx) return;
+      // Pin the canvas to the container's top-left in layer coordinates so
+      // canvas pixels line up with container pixels. This also clears any
+      // transform left over from a zoom animation.
+      L.DomUtil.setPosition(canvas, map.containerPointToLayerPoint([0, 0]));
+      const nw = map.getBounds().getNorthWest();
+      drawHexGrid({
+        ctx,
+        width: size.x,
+        height: size.y,
+        cells: cellsRef.current,
+        selected: selectedRef.current,
+        project: createProjector(map.getZoom(), nw.lat, nw.lng),
+        gridVisible: gridVisibleRef.current,
+      });
     };
-
-    const upsert = (cells: string[]) => {
-      const next = new Set(cells);
-      for (const [cell, polygon] of polygonsRef.current) {
-        if (!next.has(cell)) {
-          group.removeLayer(polygon);
-          polygonsRef.current.delete(cell);
-        }
-      }
-      for (const cell of cells) {
-        if (polygonsRef.current.has(cell)) continue;
-        const latlngs = cellBoundaryLatLng(cell);
-        if (latlngs.length < 4) continue;
-        const polygon = L.polygon(latlngs, hexPathOptions(selectedRef.current.has(cell)));
-        polygon.addTo(group);
-        polygonsRef.current.set(cell, polygon);
-      }
-      restyle();
-    };
+    redrawRef.current = redraw;
 
     const syncViewport = () => {
       const bounds = map.getBounds();
-      const view = landHexCellsForMapView({
+      const view = hexGridForView({
         west: bounds.getWest(),
         south: bounds.getSouth(),
         east: bounds.getEast(),
         north: bounds.getNorth(),
+        zoom: map.getZoom(),
         resolution: resolutionRef.current,
         extraCells: [...selectedRef.current],
       });
-      onZoomCappedRef.current?.(!view.fullViewport);
-      zoomCappedRef.current = !view.fullViewport;
-      if (view.fullViewport) {
-        map.dragging.disable();
-      } else {
-        map.dragging.enable();
-      }
-      upsert(view.cells);
+      cellsRef.current = view.cells;
+      gridVisibleRef.current = view.visible;
+      paintableRef.current = view.paintable;
+      onZoomCappedRef.current?.(!view.paintable);
+      // Give panning back when the user cannot paint anyway.
+      if (view.paintable) map.dragging.disable();
+      else map.dragging.enable();
+      redraw();
     };
-
     syncViewportRef.current = syncViewport;
+
+    // Transform the existing bitmap through the zoom animation, then redraw it
+    // crisply on zoomend. Mirrors what Leaflet's own canvas renderer does.
+    type ZoomAnimatableMap = L.Map & {
+      _latLngBoundsToNewLayerBounds: (
+        bounds: L.LatLngBounds,
+        zoom: number,
+        center: L.LatLng,
+      ) => L.Bounds;
+    };
+    const onZoomAnim = (e: L.ZoomAnimEvent) => {
+      const scale = map.getZoomScale(e.zoom, map.getZoom());
+      const offset = (map as ZoomAnimatableMap)._latLngBoundsToNewLayerBounds(
+        map.getBounds(),
+        e.zoom,
+        e.center,
+      ).min;
+      if (offset) L.DomUtil.setTransform(canvas, offset, scale);
+    };
 
     const onDown = (e: L.LeafletMouseEvent) => {
       paintingRef.current = true;
       movedRef.current = false;
-      if (!zoomCappedRef.current) {
-        L.DomEvent.preventDefault(e.originalEvent);
-      }
+      if (paintableRef.current) L.DomEvent.preventDefault(e.originalEvent);
     };
 
     const onMove = (e: L.LeafletMouseEvent) => {
       if (!paintingRef.current) return;
       movedRef.current = true;
-      if (zoomCappedRef.current) return;
+      if (!paintableRef.current) return;
       onHitRef.current?.(e.latlng.lat, e.latlng.lng, "drag");
     };
 
@@ -136,7 +145,7 @@ export function ZoneBlocksLeafletLayer({
       const wasDrag = movedRef.current;
       paintingRef.current = false;
       movedRef.current = false;
-      if (!wasDrag) {
+      if (!wasDrag && paintableRef.current) {
         onHitRef.current?.(e.latlng.lat, e.latlng.lng, "click");
       }
     };
@@ -148,6 +157,8 @@ export function ZoneBlocksLeafletLayer({
 
     map.on("moveend", syncViewport);
     map.on("zoomend", syncViewport);
+    map.on("resize", syncViewport);
+    map.on("zoomanim", onZoomAnim);
     map.on("mousedown", onDown);
     map.on("mousemove", onMove);
     map.on("mouseup", onUp);
@@ -157,13 +168,15 @@ export function ZoneBlocksLeafletLayer({
     return () => {
       map.off("moveend", syncViewport);
       map.off("zoomend", syncViewport);
+      map.off("resize", syncViewport);
+      map.off("zoomanim", onZoomAnim);
       map.off("mousedown", onDown);
       map.off("mousemove", onMove);
       map.off("mouseup", onUp);
       window.removeEventListener("mouseup", onWindowUp);
-      group.remove();
-      groupRef.current = null;
-      polygonsRef.current.clear();
+      canvas.remove();
+      canvasRef.current = null;
+      cellsRef.current = [];
       map.dragging.enable();
       map.doubleClickZoom.enable();
       paintingRef.current = false;
@@ -171,9 +184,14 @@ export function ZoneBlocksLeafletLayer({
     };
   }, [map, enabled, resolution]);
 
+  // Selection changes only need a repaint, not a viewport rebuild — unless a
+  // newly selected cell sits outside the current cell list.
   useEffect(() => {
     if (!enabled) return;
-    syncViewportRef.current();
+    const known = new Set(cellsRef.current);
+    const needsRebuild = selectedCells.some((cell) => !known.has(cell));
+    if (needsRebuild) syncViewportRef.current();
+    else redrawRef.current();
   }, [enabled, selectedCells]);
 
   return null;

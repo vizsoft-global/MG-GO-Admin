@@ -23,7 +23,11 @@ export const DEFAULT_ZONE_BLOCKS_STATE: ZoneBlocksState = {
   selectedCells: [],
 };
 
-/** Emerald selected / muted outline — must pop in under a second. */
+/**
+ * Emerald selection over a slate honeycomb. The unselected fill is deliberately
+ * light but must stay non-zero — at 0.02 the grid was effectively invisible on
+ * the light basemap.
+ */
 export const ZONE_BLOCK_HEX_STYLE = {
   selected: {
     fillColor: "#10b981",
@@ -34,9 +38,9 @@ export const ZONE_BLOCK_HEX_STYLE = {
   },
   unselected: {
     fillColor: "#94a3b8",
-    fillOpacity: 0.02,
-    strokeColor: "#94a3b8",
-    strokeOpacity: 0.7,
+    fillOpacity: 0.1,
+    strokeColor: "#64748b",
+    strokeOpacity: 0.65,
     strokeWeight: 1,
   },
 } as const;
