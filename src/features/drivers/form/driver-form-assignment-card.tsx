@@ -1,10 +1,15 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Briefcase, Car, MapPinned, Users } from "lucide-react";
+import { Briefcase, Building, Car, IdCard, MapPinned, Users } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DriverRestaurantPicker } from "../driver-restaurant-picker";
+import {
+  CLIENT_ID_MAX_LENGTH,
+  CLIENT_NAME_MAX_LENGTH,
+} from "../driver-client-fields";
 import type { PartnerOption, RestaurantOption, ZoneOption, VehicleOption } from "../types";
 import { FieldBlock, FieldError, SectionHeading } from "./driver-form-primitives";
 import { SearchableSelect } from "./searchable-select";
@@ -18,6 +23,10 @@ export function DriverFormAssignmentCard({
   onVehicleChange,
   vehicleTypeKey,
   onVehicleTypeChange,
+  clientId,
+  onClientIdChange,
+  clientName,
+  onClientNameChange,
   restaurants,
   selectedRestaurantIds,
   onRestaurantsChange,
@@ -30,6 +39,8 @@ export function DriverFormAssignmentCard({
   placeholderPartner,
   placeholderZone,
   placeholderVehicle,
+  placeholderClientId,
+  placeholderClientName,
   labels,
 }: {
   partnerId: string;
@@ -40,6 +51,10 @@ export function DriverFormAssignmentCard({
   onVehicleChange: (value: string) => void;
   vehicleTypeKey: string;
   onVehicleTypeChange: (value: string) => void;
+  clientId: string;
+  onClientIdChange: (value: string) => void;
+  clientName: string;
+  onClientNameChange: (value: string) => void;
   restaurants: RestaurantOption[];
   selectedRestaurantIds: string[];
   onRestaurantsChange: (ids: string[]) => void;
@@ -59,7 +74,11 @@ export function DriverFormAssignmentCard({
     vehicle: string;
     vehicleType: string;
     restaurants: string;
+    clientId: string;
+    clientName: string;
   };
+  placeholderClientId: string;
+  placeholderClientName: string;
 }) {
   const tLive = useTranslations("pages.liveTracking");
   return (
@@ -149,6 +168,38 @@ export function DriverFormAssignmentCard({
           </SelectContent>
         </Select>
       </FieldBlock>
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        <FieldBlock>
+          <Label htmlFor="driver-client-id" className="inline-flex items-center gap-1.5">
+            <IdCard className="h-3.5 w-3.5 text-muted-foreground" />
+            {labels.clientId}
+          </Label>
+          <Input
+            id="driver-client-id"
+            value={clientId}
+            disabled={disabled}
+            maxLength={CLIENT_ID_MAX_LENGTH}
+            placeholder={placeholderClientId}
+            onChange={(event) => onClientIdChange(event.target.value)}
+            className="h-9 rounded-md text-sm"
+          />
+        </FieldBlock>
+        <FieldBlock>
+          <Label htmlFor="driver-client-name" className="inline-flex items-center gap-1.5">
+            <Building className="h-3.5 w-3.5 text-muted-foreground" />
+            {labels.clientName}
+          </Label>
+          <Input
+            id="driver-client-name"
+            value={clientName}
+            disabled={disabled}
+            maxLength={CLIENT_NAME_MAX_LENGTH}
+            placeholder={placeholderClientName}
+            onChange={(event) => onClientNameChange(event.target.value)}
+            className="h-9 rounded-md text-sm"
+          />
+        </FieldBlock>
+      </div>
       <FieldBlock>
         <Label>{labels.restaurants}</Label>
         <DriverRestaurantPicker

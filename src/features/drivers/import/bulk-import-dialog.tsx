@@ -33,7 +33,12 @@ import {
   mapRowsFromSheet,
   saveStoredMapping,
 } from "./parse";
-import { DRIVER_IMPORT_TEMPLATE_PATH } from "./template";
+import {
+  DRIVER_IMPORT_TEMPLATE_PATH,
+  TEMPLATE_COLUMNS_PARAM,
+  resolveTemplateColumns,
+} from "./template";
+import { TemplateColumnPicker } from "./template-column-picker";
 import {
   buildCredentialsAoa,
   buildImportErrorAoa,
@@ -104,6 +109,41 @@ export function DriverBulkImportDialog({
     [customFieldDefs],
   );
   const customFieldKeys = useMemo(() => customFields.map((c) => c.key), [customFields]);
+
+  const templateCustomColumns = useMemo(
+    () =>
+      customFieldDefs
+        .filter((d) => d.is_active && !d.archived_at)
+        .map((d) => ({
+          key: d.key,
+          label: d.label,
+          field_type: d.field_type,
+          options: d.options ?? [],
+        })),
+    [customFieldDefs],
+  );
+  const templateColumns = useMemo(
+    () => resolveTemplateColumns(null, templateCustomColumns),
+    [templateCustomColumns],
+  );
+  // Null until the operator opens the picker, which keeps the download URL bare
+  // and the generated file identical to the un-customised template.
+  const [templateSelection, setTemplateSelection] = useState<Set<string> | null>(
+    null,
+  );
+  const templateSelected = useMemo(
+    () =>
+      templateSelection ??
+      new Set(templateColumns.map((column) => column.field)),
+    [templateSelection, templateColumns],
+  );
+  const templateHref = useMemo(() => {
+    if (!templateSelection) return DRIVER_IMPORT_TEMPLATE_PATH;
+    const cols = templateColumns
+      .filter((column) => templateSelected.has(column.field))
+      .map((column) => column.field);
+    return `${DRIVER_IMPORT_TEMPLATE_PATH}?${TEMPLATE_COLUMNS_PARAM}=${encodeURIComponent(cols.join(","))}`;
+  }, [templateSelection, templateSelected, templateColumns]);
 
   const summary = useMemo(() => {
     const ready = preview.filter((r) => r.status === "ok" && !r.skip).length;
@@ -298,7 +338,7 @@ export function DriverBulkImportDialog({
                   nativeButton={false}
                   render={
                     <a
-                      href={DRIVER_IMPORT_TEMPLATE_PATH}
+                      href={templateHref}
                       download="dpd-driver-import-template.xlsx"
                     />
                   }
@@ -306,6 +346,26 @@ export function DriverBulkImportDialog({
                   <Download className="me-2 h-4 w-4" />
                   {t("downloadSample")}
                 </Button>
+                <TemplateColumnPicker
+                  columns={templateColumns}
+                  selected={templateSelected}
+                  onToggle={(field) =>
+                    setTemplateSelection((prev) => {
+                      const base =
+                        prev ?? new Set(templateColumns.map((c) => c.field));
+                      const next = new Set(base);
+                      if (next.has(field)) next.delete(field);
+                      else next.add(field);
+                      return next;
+                    })
+                  }
+                  onSelectAll={() =>
+                    setTemplateSelection(
+                      new Set(templateColumns.map((c) => c.field)),
+                    )
+                  }
+                  onRequiredOnly={() => setTemplateSelection(new Set())}
+                />
                 <Button
                   type="button"
                   variant="outline"
@@ -322,6 +382,7 @@ export function DriverBulkImportDialog({
                   {t("downloadLookups")}
                 </Button>
               </div>
+              <p className="text-[10px] text-muted-foreground">{t("templateHint")}</p>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("lookupLists")}
               </p>

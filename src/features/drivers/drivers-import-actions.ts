@@ -19,6 +19,12 @@ import type {
 import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
 import { validateCustomFieldValues } from "@/lib/custom-fields/validate";
 import { resolveCountryInput } from "@/lib/geo/countries";
+import {
+  CLIENT_ID_MAX_LENGTH,
+  CLIENT_NAME_MAX_LENGTH,
+  clientValueTooLong,
+  normalizeClientValue,
+} from "./driver-client-fields";
 import { parseImportActive, parseRiderCategory } from "./import/parse";
 import {
   buildPartnerIndex,
@@ -307,6 +313,8 @@ export async function resolveDriverImportPreview(
     let restaurant_names: string[] = [];
     let nationality: string | null = null;
     let rider_category: DriverRiderCategory = "in_house";
+    let client_id: string | null = null;
+    let client_name: string | null = null;
     let active: boolean | null = null;
 
     const name = row.full_name?.trim();
@@ -390,6 +398,23 @@ export async function resolveDriverImportPreview(
       else rider_category = parsedCategory ?? "in_house";
     }
 
+    // Free text, so the only way a cell can be wrong is by being longer than
+    // the column. Caught here rather than at insert time, where it would abort
+    // the batch with a CHECK violation naming a constraint, not a row.
+    if (status === "ok") {
+      client_id = normalizeClientValue(row.client_id);
+      if (clientValueTooLong(client_id, CLIENT_ID_MAX_LENGTH)) {
+        status = "invalid_client_id";
+      }
+    }
+
+    if (status === "ok") {
+      client_name = normalizeClientValue(row.client_name);
+      if (clientValueTooLong(client_name, CLIENT_NAME_MAX_LENGTH)) {
+        status = "invalid_client_name";
+      }
+    }
+
     if (status === "ok") {
       const parsedActive = parseImportActive(row.active);
       if (parsedActive === "invalid") status = "invalid_active";
@@ -406,6 +431,8 @@ export async function resolveDriverImportPreview(
       restaurant_names,
       nationality,
       rider_category,
+      client_id,
+      client_name,
       active,
     };
   });
@@ -513,6 +540,8 @@ export async function applyDriverImportBatch(payload: {
               vehicle_id: row.vehicle_id,
               nationality: row.nationality,
               rider_category: row.rider_category,
+              client_id: row.client_id,
+              client_name: row.client_name,
               workflow_status: "pending",
               updated_at: new Date().toISOString(),
             })
@@ -581,6 +610,8 @@ export async function applyDriverImportBatch(payload: {
           vehicle_id: row.vehicle_id,
           nationality: row.nationality,
           rider_category: row.rider_category,
+          client_id: row.client_id,
+          client_name: row.client_name,
           status: "awaiting_app_link",
           workflow_status: "pending",
           linked: false,

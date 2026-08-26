@@ -1,7 +1,9 @@
 import * as XLSX from "xlsx";
 import {
-  DRIVER_IMPORT_HEADERS,
-  DRIVER_IMPORT_SAMPLE_ROW,
+  TEMPLATE_COLUMNS_PARAM,
+  resolveTemplateColumns,
+  templateGuideAoa,
+  type DriverImportCustomColumn,
 } from "@/features/drivers/import/template";
 import {
   partnersLookupAoa,
@@ -10,14 +12,18 @@ import {
 } from "@/features/drivers/import/lookups";
 import { fetchDriverImportLookups } from "@/features/drivers/drivers-import-actions";
 import { createClient } from "@/lib/supabase/server";
-import { DRIVER_ENTITY_TYPE } from "@/lib/custom-fields/types";
+import {
+  DRIVER_ENTITY_TYPE,
+  type CustomFieldOption,
+  type CustomFieldType,
+} from "@/lib/custom-fields/types";
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const [{ data: defs }, lookups] = await Promise.all([
     supabase
       .from("custom_field_definitions")
-      .select("key, label")
+      .select("key, label, field_type, options")
       .eq("entity_type", DRIVER_ENTITY_TYPE)
       .eq("is_active", true)
       .is("archived_at", null)
@@ -25,8 +31,21 @@ export async function GET() {
     fetchDriverImportLookups(),
   ]);
 
-  const customHeaders = (defs ?? []).map((d) => d.label || d.key);
-  const customSample = (defs ?? []).map(() => "");
+  const customColumns: DriverImportCustomColumn[] = (defs ?? []).map((d) => ({
+    key: d.key,
+    label: d.label || d.key,
+    field_type: d.field_type as CustomFieldType,
+    options: Array.isArray(d.options) ? (d.options as CustomFieldOption[]) : [],
+  }));
+
+  // Absent means the caller expressed no preference, which has to stay
+  // distinguishable from an empty selection or the plain template link would
+  // download nothing but the three required columns.
+  const raw = new URL(request.url).searchParams.get(TEMPLATE_COLUMNS_PARAM);
+  const selected =
+    raw === null ? null : raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const columns = resolveTemplateColumns(selected, customColumns);
+
   const lists =
     "error" in lookups
       ? { restaurants: [], zones: [], partners: [] }
@@ -36,11 +55,14 @@ export async function GET() {
   XLSX.utils.book_append_sheet(
     wb,
     XLSX.utils.aoa_to_sheet([
-      [...DRIVER_IMPORT_HEADERS, ...customHeaders],
-      [...DRIVER_IMPORT_SAMPLE_ROW, ...customSample],
+      columns.map((c) => c.header),
+      columns.map((c) => c.example),
     ]),
     "Drivers",
   );
+  const guide = XLSX.utils.aoa_to_sheet(templateGuideAoa(columns));
+  guide["!cols"] = [{ wch: 26 }, { wch: 12 }, { wch: 74 }, { wch: 22 }];
+  XLSX.utils.book_append_sheet(wb, guide, "Guide");
   XLSX.utils.book_append_sheet(
     wb,
     XLSX.utils.aoa_to_sheet(restaurantsLookupAoa(lists.restaurants)),

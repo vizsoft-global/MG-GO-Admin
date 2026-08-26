@@ -152,6 +152,8 @@ export function DriverFormSheet({
   const [employeeId, setEmployeeId] = useState("");
   const [nationality, setNationality] = useState("");
   const [riderCategory, setRiderCategory] = useState<DriverRiderCategory>("in_house");
+  const [clientId, setClientId] = useState("");
+  const [clientName, setClientName] = useState("");
   const [partnerId, setPartnerId] = useState("");
   const [restaurantIds, setRestaurantIds] = useState<string[]>([]);
   const [zoneId, setZoneId] = useState("");
@@ -195,6 +197,8 @@ export function DriverFormSheet({
       setEmployeeId(activeDriver.employee_id ?? "");
       setNationality(activeDriver.nationality ?? "");
       setRiderCategory(activeDriver.rider_category ?? "in_house");
+      setClientId(activeDriver.client_id ?? "");
+      setClientName(activeDriver.client_name ?? "");
       setPartnerId(activeDriver.partner_id ?? "");
       setRestaurantIds(activeDriver.restaurant_ids);
       setZoneId(activeDriver.zone_id ?? "");
@@ -223,6 +227,8 @@ export function DriverFormSheet({
     setCivilId("");
     setEmployeeId("");
     setNationality("");
+    setClientId("");
+    setClientName("");
     setPartnerId("");
     setRestaurantIds([]);
     setZoneId("");
@@ -286,6 +292,8 @@ export function DriverFormSheet({
       civilId,
       nationality,
       riderCategory,
+      clientId,
+      clientName,
       partnerId,
       zoneId,
       vehicleId,
@@ -298,6 +306,8 @@ export function DriverFormSheet({
       civilId,
       nationality,
       riderCategory,
+      clientId,
+      clientName,
       fullName,
       partnerId,
       phone,
@@ -324,6 +334,8 @@ export function DriverFormSheet({
       setCivilId(parsed.civilId ?? "");
       setNationality(parsed.nationality ?? "");
       setRiderCategory(parsed.riderCategory === "outsourced" ? "outsourced" : "in_house");
+      setClientId(parsed.clientId ?? "");
+      setClientName(parsed.clientName ?? "");
       setPartnerId(parsed.partnerId ?? "");
       setZoneId(parsed.zoneId ?? "");
       setVehicleId(parsed.vehicleId ?? NONE_VEHICLE);
@@ -456,6 +468,8 @@ export function DriverFormSheet({
       formData.append("employeeId", employeeId);
       formData.append("nationality", nationality);
       formData.append("riderCategory", riderCategory);
+      formData.append("clientId", clientId);
+      formData.append("clientName", clientName);
       formData.append("partnerId", partnerId);
       formData.append("zoneId", zoneId);
       formData.append("workflowStatus", workflowStatus);
@@ -621,6 +635,10 @@ export function DriverFormSheet({
                 }}
                 vehicleTypeKey={vehicleTypeKey}
                 onVehicleTypeChange={setVehicleTypeKey}
+                clientId={clientId}
+                onClientIdChange={setClientId}
+                clientName={clientName}
+                onClientNameChange={setClientName}
                 restaurants={allRestaurants}
                 selectedRestaurantIds={restaurantIds}
                 onRestaurantsChange={setRestaurantIds}
@@ -636,6 +654,8 @@ export function DriverFormSheet({
                 placeholderPartner={tNew("placeholders.partner")}
                 placeholderZone={tNew("placeholders.zone")}
                 placeholderVehicle={tNew("placeholders.vehicle")}
+                placeholderClientId={tNew("placeholders.clientId")}
+                placeholderClientName={tNew("placeholders.clientName")}
                 labels={{
                   section: tNew("stepper.assignment"),
                   partner: tNew("fields.partner"),
@@ -643,6 +663,8 @@ export function DriverFormSheet({
                   vehicle: tNew("fields.vehicle"),
                   vehicleType: tNew("fields.vehicleType"),
                   restaurants: tNew("sections.restaurants"),
+                  clientId: tNew("fields.clientId"),
+                  clientName: tNew("fields.clientName"),
                 }}
               />
 

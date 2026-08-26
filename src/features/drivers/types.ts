@@ -169,6 +169,8 @@ export type DriverListRow = {
   avatar_url: string | null;
   avatar_display_url: string | null;
   rider_category: DriverRiderCategory;
+  client_id: string | null;
+  client_name: string | null;
   custom_fields: Record<string, string | number | boolean | string[] | null>;
 };
 
@@ -194,6 +196,8 @@ export type DriverDetailModel = {
   employee_id: string | null;
   nationality: string | null;
   rider_category: DriverRiderCategory;
+  client_id: string | null;
+  client_name: string | null;
   avatar_url: string | null;
   partner_name: string;
   zone_label: string;
@@ -236,6 +240,8 @@ export const DRIVER_IMPORT_FIELDS = [
   "vehicle_label",
   "nationality",
   "rider_category",
+  "client_id",
+  "client_name",
   "active",
 ] as const;
 
@@ -267,6 +273,8 @@ export type DriverImportPreviewStatus =
   | "invalid_employee_id"
   | "invalid_nationality"
   | "invalid_rider_category"
+  | "invalid_client_id"
+  | "invalid_client_name"
   | "invalid_active"
   | "missing_fields"
   | "unmatched_partner"
@@ -293,6 +301,8 @@ export type DriverImportMappedRow = {
   restaurant_ids: string | null;
   nationality: string | null;
   rider_category: string | null;
+  client_id: string | null;
+  client_name: string | null;
   /** Raw "yes"/"no" cell asking for this driver to be approved on import. */
   active: string | null;
 };

@@ -144,7 +144,9 @@ function applyDriversListFilters(
       d.driver_code.toLowerCase().includes(q) ||
       (d.employee_id?.toLowerCase().includes(q) ?? false) ||
       d.partner_name.toLowerCase().includes(q) ||
-      d.zone_name.toLowerCase().includes(q);
+      d.zone_name.toLowerCase().includes(q) ||
+      (d.client_id?.toLowerCase().includes(q) ?? false) ||
+      (d.client_name?.toLowerCase().includes(q) ?? false);
     if (matchesText) return true;
     // A driver with no number simply cannot match a digit search — searching
     // for digits is asking for a phone.
@@ -165,6 +167,8 @@ function exportDriversCsv(
     "phone",
     "partner",
     "zone",
+    "client_id",
+    "client_name",
     "account_status",
     "on_duty",
     "today_deliveries",
@@ -188,6 +192,8 @@ function exportDriversCsv(
         r.phone ?? "",
         r.partner_name,
         r.zone_name,
+        r.client_id ?? "",
+        r.client_name ?? "",
         r.is_blocked ? "blocked" : r.account_status,
         r.is_on_duty ? "yes" : "no",
         r.today_deliveries,
@@ -444,6 +450,10 @@ function DriversPageContent() {
       { id: "phone", label: t("colPhone") },
       { id: "restaurants", label: t("colRestaurants") },
       { id: "zone", label: t("colZone") },
+      // Off by default: most operations never reference a client, and the list
+      // already runs to the edge of a 14" viewport.
+      { id: "clientId", label: t("colClientId"), defaultVisible: false as const },
+      { id: "clientName", label: t("colClientName"), defaultVisible: false as const },
       { id: "todayDeliveries", label: t("colTodayDeliveries") },
       { id: "status", label: t("colStatus") },
       { id: "attendance", label: t("colAttendance") },
@@ -497,6 +507,8 @@ function DriversPageContent() {
       { id: "phone", label: t("colPhone") },
       { id: "restaurants", label: t("colRestaurants") },
       { id: "zone", label: t("colZone") },
+      { id: "clientId", label: t("colClientId") },
+      { id: "clientName", label: t("colClientName") },
       { id: "todayDeliveries", label: t("colTodayDeliveries") },
       { id: "status", label: t("colStatus") },
       { id: "attendance", label: t("colAttendance") },
@@ -949,6 +961,20 @@ function DriversPageContent() {
                           className="text-sm text-muted-foreground"
                         >
                           {driver.zone_name}
+                        </VisibleTableCell>
+                        <VisibleTableCell
+                          columnId="clientId"
+                          isVisible={isColumnVisible}
+                          className="font-mono text-sm text-muted-foreground"
+                        >
+                          {driver.client_id ?? "—"}
+                        </VisibleTableCell>
+                        <VisibleTableCell
+                          columnId="clientName"
+                          isVisible={isColumnVisible}
+                          className="text-sm text-muted-foreground"
+                        >
+                          {driver.client_name ?? "—"}
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="todayDeliveries"

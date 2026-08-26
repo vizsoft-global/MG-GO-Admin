@@ -11,6 +11,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
+import { normalizeClientValue } from "./driver-client-fields";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
 import {
@@ -306,6 +307,8 @@ export async function createDriverIntake(
   const employeeId = normalizeEmployeeId(employeeIdRaw);
   const nationality = normalizeCountryCode(String(formData.get("nationality") ?? ""));
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
+  const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
+  const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
   const partnerId = String(formData.get("partnerId") ?? "").trim();
   const zoneId = String(formData.get("zoneId") ?? "").trim();
   const vehicleId = String(formData.get("vehicleId") ?? "").trim();
@@ -416,6 +419,8 @@ export async function createDriverIntake(
       employee_id: employeeId,
       nationality,
       rider_category: riderCategory,
+      client_id: clientId,
+      client_name: clientName,
       driver_code: allocatedCode,
       partner_id: partnerId || null,
       zone_id: zoneId || null,
@@ -490,6 +495,8 @@ type IntakeListRow = {
   archived_at: string | null;
   avatar_url: string | null;
   rider_category: DriverRiderCategory;
+  client_id: string | null;
+  client_name: string | null;
   custom_fields: Json;
   partners:
     | { name: string; logo_url: string | null }
@@ -593,6 +600,8 @@ export async function fetchDriversForAdmin(options?: {
       driver_code,
       employee_id,
       rider_category,
+      client_id,
+      client_name,
       avatar_url,
       partner_id,
       zone_id,
@@ -810,6 +819,8 @@ export async function fetchDriversForAdmin(options?: {
         avatar_url: row.avatar_url,
         avatar_display_url,
         rider_category: row.rider_category ?? "in_house",
+        client_id: row.client_id,
+        client_name: row.client_name,
         custom_fields: parseCustomFieldsJson(row.custom_fields),
       };
     }),
@@ -952,6 +963,8 @@ async function updateDriverIntakeInner(
   const employeeId = normalizeEmployeeId(employeeIdRaw);
   const nationality = normalizeCountryCode(String(formData.get("nationality") ?? ""));
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
+  const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
+  const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
   const catalogItemIds = parseCatalogItemIds(formData);
   const workflowStatus = String(formData.get("workflowStatus") ?? "").trim() as DriverWorkflowStatus;
   const avatarFile = formData.get("avatar");
@@ -1064,6 +1077,8 @@ async function updateDriverIntakeInner(
       employee_id: employeeId,
       nationality,
       rider_category: riderCategory,
+      client_id: clientId,
+      client_name: clientName,
       partner_id: partnerId || null,
       zone_id: zoneId || null,
       vehicle_id: vehicleId || null,
@@ -1130,6 +1145,8 @@ async function updateDriverIntakeInner(
           employee_id: employeeId,
           nationality,
           rider_category: riderCategory,
+          client_id: clientId,
+          client_name: clientName,
           custom_fields: customParsed.values as unknown as Json,
           updated_at: new Date().toISOString(),
         })
@@ -1230,6 +1247,8 @@ async function fetchDriverDetailInner(
       employee_id,
       nationality,
       rider_category,
+      client_id,
+      client_name,
       driver_code,
       workflow_status,
       linked,
@@ -1265,6 +1284,8 @@ async function fetchDriverDetailInner(
       employee_id: string | null;
       nationality: string | null;
       rider_category: DriverRiderCategory;
+      client_id: string | null;
+      client_name: string | null;
       is_blocked: boolean;
       blocked_reason: string | null;
       blocked_at: string | null;
@@ -1280,7 +1301,7 @@ async function fetchDriverDetailInner(
           .maybeSingle(),
         supabase
           .from("drivers")
-          .select("app_passcode, status, employee_id, nationality, rider_category, is_blocked, blocked_reason, blocked_at, login_verification_exempt, avatar_object_key")
+          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, is_blocked, blocked_reason, blocked_at, login_verification_exempt, avatar_object_key")
           .eq("id", linkedId)
           .maybeSingle(),
       ]);
@@ -1292,6 +1313,8 @@ async function fetchDriverDetailInner(
             employee_id: drv.employee_id ?? null,
             nationality: drv.nationality ?? null,
             rider_category: (drv.rider_category as DriverRiderCategory) ?? "in_house",
+            client_id: drv.client_id ?? null,
+            client_name: drv.client_name ?? null,
             is_blocked: drv.is_blocked ?? false,
             blocked_reason: drv.blocked_reason ?? null,
             blocked_at: drv.blocked_at ?? null,
@@ -1344,6 +1367,8 @@ async function fetchDriverDetailInner(
       employee_id: linkedDriver?.employee_id ?? intake.employee_id ?? null,
       nationality: linkedDriver?.nationality ?? intake.nationality ?? null,
       rider_category: linkedDriver?.rider_category ?? intake.rider_category ?? "in_house",
+      client_id: linkedDriver?.client_id ?? intake.client_id ?? null,
+      client_name: linkedDriver?.client_name ?? intake.client_name ?? null,
       avatar_url,
       partner_name: relName(
         intake.partners as { name: string } | { name: string }[] | null,
@@ -1406,6 +1431,8 @@ async function fetchDriverDetailInner(
       employee_id,
       nationality,
       rider_category,
+      client_id,
+      client_name,
       is_blocked,
       blocked_reason,
       blocked_at,
@@ -1474,6 +1501,8 @@ async function fetchDriverDetailInner(
     employee_id: driverRow.employee_id ?? null,
     nationality: driverRow.nationality ?? null,
     rider_category: (driverRow.rider_category as DriverRiderCategory) ?? "in_house",
+    client_id: driverRow.client_id ?? null,
+    client_name: driverRow.client_name ?? null,
     avatar_url,
     partner_name: relName(driverRow.partners as { name: string } | { name: string }[] | null),
     zone_label: relZone(driverRow.zones),

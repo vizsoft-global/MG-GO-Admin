@@ -2045,6 +2045,8 @@ export type Database = {
           assets_issued: Json
           avatar_url: string | null
           civil_id: string | null
+          client_id: string | null
+          client_name: string | null
           created_at: string
           custom_fields: Json
           driver_code: string
@@ -2071,6 +2073,8 @@ export type Database = {
           assets_issued?: Json
           avatar_url?: string | null
           civil_id?: string | null
+          client_id?: string | null
+          client_name?: string | null
           created_at?: string
           custom_fields?: Json
           driver_code: string
@@ -2097,6 +2101,8 @@ export type Database = {
           assets_issued?: Json
           avatar_url?: string | null
           civil_id?: string | null
+          client_id?: string | null
+          client_name?: string | null
           created_at?: string
           custom_fields?: Json
           driver_code?: string
@@ -2850,6 +2856,8 @@ export type Database = {
           blocked_by: string | null
           blocked_reason: string | null
           civil_id: string | null
+          client_id: string | null
+          client_name: string | null
           created_at: string
           current_app_channel: string | null
           current_app_platform: string | null
@@ -2888,6 +2896,8 @@ export type Database = {
           blocked_by?: string | null
           blocked_reason?: string | null
           civil_id?: string | null
+          client_id?: string | null
+          client_name?: string | null
           created_at?: string
           current_app_channel?: string | null
           current_app_platform?: string | null
@@ -2926,6 +2936,8 @@ export type Database = {
           blocked_by?: string | null
           blocked_reason?: string | null
           civil_id?: string | null
+          client_id?: string | null
+          client_name?: string | null
           created_at?: string
           current_app_channel?: string | null
           current_app_platform?: string | null
@@ -6505,6 +6517,8 @@ export type Database = {
           blocked_by: string | null
           blocked_reason: string | null
           civil_id: string | null
+          client_id: string | null
+          client_name: string | null
           created_at: string
           current_app_channel: string | null
           current_app_platform: string | null

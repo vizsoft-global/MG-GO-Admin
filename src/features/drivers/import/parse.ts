@@ -80,6 +80,8 @@ export function mapRowsFromSheet(
         restaurant_ids: get("restaurant_ids"),
         nationality: get("nationality"),
         rider_category: get("rider_category"),
+        client_id: get("client_id"),
+        client_name: get("client_name"),
         active: get("active"),
         custom_fields,
       };
@@ -95,6 +97,8 @@ export function mapRowsFromSheet(
         r.zone_id ||
         r.nationality ||
         r.rider_category ||
+        r.client_id ||
+        r.client_name ||
         Object.values(r.custom_fields).some(Boolean),
     );
 }
@@ -129,6 +133,11 @@ export function guessColumnMapping(
     ),
     nationality: find("nationality", "country"),
     rider_category: find("rider category", "category", "outsourced", "in house"),
+    // Deliberately not a bare "client" needle: `find` returns the first header
+    // matching any needle, so "client" would let a sheet carrying only Client ID
+    // fill Client name with the same column.
+    client_id: find("client id", "client_id", "client code"),
+    client_name: find("client name", "client_name"),
     // Not "status": the intake already has a workflow status column elsewhere,
     // and guessing that one onto this field would approve drivers nobody asked
     // to approve.

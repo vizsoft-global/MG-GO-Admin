@@ -1055,7 +1055,7 @@
         "lookupFailed": "Could not export the list.",
         "requiredTitle": "Required",
         "requiredList": "Full name, employee ID (4–8 digits), at least one restaurant.",
-        "optionalList": "Optional: phone (8 digits or +965), civil ID (12 digits), partner, zone, vehicle, nationality, rider category (in_house / outsourced), active (yes/no). Phone and civil ID may be blank, but must be unique when filled in.",
+        "optionalList": "Optional: phone (8 digits or +965), civil ID (12 digits), partner, zone, vehicle, nationality, rider category (in_house / outsourced), client ID, client name, active (yes/no). Phone and civil ID may be blank, but must be unique when filled in.",
         "mappingRequired": "Map every required field before preview.",
         "sourceColumns": "File columns",
         "targetFields": "Map to database fields",
@@ -1072,7 +1072,9 @@
           "restaurant_ids": "Restaurants (name, RST code, or UUID, comma-separated)",
           "nationality": "Nationality (ISO or country name)",
           "rider_category": "Rider category (in_house / outsourced)",
-          "active": "Active on import (yes / no)"
+          "active": "Active on import (yes / no)",
+          "client_id": "Client ID",
+          "client_name": "Client name"
         },
         "preview": "Preview",
         "back": "Back",
@@ -1116,8 +1118,15 @@
           "unmatched_restaurant": "Unknown restaurant",
           "ambiguous_partner": "Partner name matches more than one",
           "ambiguous_zone": "Zone name matches more than one",
-          "ambiguous_restaurant": "Restaurant name matches more than one"
-        }
+          "ambiguous_restaurant": "Restaurant name matches more than one",
+          "invalid_client_id": "Client ID is too long (max 64)",
+          "invalid_client_name": "Client name is too long (max 120)"
+        },
+        "templateColumns": "Columns",
+        "templateColumnsTitle": "Columns in the template",
+        "templateSelectAll": "Select all",
+        "templateRequiredOnly": "Required only",
+        "templateHint": "The template's Guide sheet lists every column with its allowed values and an example."
       },
       "assignSheet": {
         "titleRestaurant": "Assign drivers",
@@ -1156,7 +1165,9 @@
           "last_restaurant": "Cannot remove the last restaurant from an active driver.",
           "save_failed": "Could not save assignment. Please try again."
         }
-      }
+      },
+      "colClientId": "Client ID",
+      "colClientName": "Client"
     },
     "partners": {
       "title": "Partners",
@@ -1596,7 +1607,9 @@
           "not_authorized": "You do not have permission to block drivers.",
           "save_failed": "Could not update block status. Please try again."
         }
-      }
+      },
+      "fieldClientId": "Client ID",
+      "fieldClientName": "Client"
     },
     "driverGroups": {
       "title": "Driver groups",
@@ -1684,7 +1697,9 @@
         "partner": "Partner (optional)",
         "zone": "Zone (optional)",
         "vehicle": "Assign Vehicle",
-        "vehicleType": "Vehicle type"
+        "vehicleType": "Vehicle type",
+        "clientId": "Client ID (optional)",
+        "clientName": "Client name (optional)"
       },
       "placeholders": {
         "fullName": "Enter full name",
@@ -1696,7 +1711,9 @@
         "partner": "Select partner",
         "zone": "Select zone",
         "searchRestaurants": "Search restaurants...",
-        "vehicle": "Select vehicle"
+        "vehicle": "Select vehicle",
+        "clientId": "e.g. CLI-204",
+        "clientName": "e.g. Gulf Retail Group"
       },
       "assets": {
         "gps": "GPS Device",

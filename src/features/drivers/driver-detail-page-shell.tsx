@@ -472,6 +472,8 @@ function DriverDetailContent({ id }: { id: string }) {
       label: t("fieldRiderCategory"),
       value: tList(`riderCategory.${riderCategoryMessageKey(driver.rider_category)}`),
     },
+    { label: t("fieldClientId"), value: driver.client_id ?? "—" },
+    { label: t("fieldClientName"), value: driver.client_name ?? "—" },
     { label: t("fieldZone"), value: driver.zone_label },
     {
       label: t("fieldBaseEarnings"),

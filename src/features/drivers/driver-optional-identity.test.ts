@@ -116,8 +116,8 @@ describe("bulk import — phone and civil ID are no longer required columns", ()
 
   it("still auto-maps them when the sheet has them", () => {
     const mapping = guessColumnMapping([...DRIVER_IMPORT_HEADERS]);
-    assert.equal(mapping.phone, "Phone (+965, optional)");
-    assert.equal(mapping.civil_id, "Civil ID (optional)");
+    assert.equal(mapping.phone, "Phone");
+    assert.equal(mapping.civil_id, "Civil ID");
   });
 });
 
@@ -146,9 +146,16 @@ describe("parseImportActive", () => {
 describe("mapRowsFromSheet — Active column", () => {
   const headers = [...DRIVER_IMPORT_HEADERS];
   const mapping = guessColumnMapping(headers);
+  // Addressed by header rather than by position: the template's column order is
+  // a presentation choice and has already been changed once.
+  const columnAt = (header: string) => {
+    const index = headers.indexOf(header);
+    assert.notEqual(index, -1, `template has no ${header} column`);
+    return index;
+  };
 
   it("maps the Active cell from the template", () => {
-    assert.equal(mapping.active, "Active (yes/no)");
+    assert.equal(mapping.active, "Active");
     const [row] = mapRowsFromSheet(headers, [[...DRIVER_IMPORT_SAMPLE_ROW]], mapping);
     assert.equal(row!.active, "yes");
     assert.equal(row!.phone, "+96599123456");
@@ -157,8 +164,8 @@ describe("mapRowsFromSheet — Active column", () => {
 
   it("keeps a row whose phone and civil ID cells are blank", () => {
     const blanked = [...DRIVER_IMPORT_SAMPLE_ROW];
-    blanked[1] = "";
-    blanked[2] = "";
+    blanked[columnAt("Phone")] = "";
+    blanked[columnAt("Civil ID")] = "";
     const [row] = mapRowsFromSheet(headers, [blanked], mapping);
     assert.equal(row!.phone, null);
     assert.equal(row!.civil_id, null);
@@ -167,7 +174,7 @@ describe("mapRowsFromSheet — Active column", () => {
 
   it("does not resurrect an empty row that only carries an Active cell", () => {
     const onlyActive = headers.map(() => "");
-    onlyActive[headers.length - 1] = "yes";
+    onlyActive[columnAt("Active")] = "yes";
     assert.equal(mapRowsFromSheet(headers, [onlyActive], mapping).length, 0);
   });
 });
