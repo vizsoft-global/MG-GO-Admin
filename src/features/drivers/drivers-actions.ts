@@ -317,15 +317,18 @@ export async function createDriverIntake(
       : "draft";
   const catalogItemIds = parseCatalogItemIds(formData);
 
-  if (!fullName || !phoneRaw || !civilId || !employeeId) {
+  if (!fullName || !employeeId) {
     return { error: "missing_fields" };
   }
 
-  const phone = normalizeKuwaitPhone(phoneRaw);
-  if (!phone) return { error: "invalid_phone" };
+  // Optional, but a value that was typed still has to be a real one. Absent is
+  // NULL rather than '' — an empty string is a value, and two of them would
+  // collide on the phone unique index.
+  const phone = phoneRaw ? normalizeKuwaitPhone(phoneRaw) : null;
+  if (phoneRaw && !phone) return { error: "invalid_phone" };
 
-  const civilIdNormalized = normalizeCivilId(civilId);
-  if (!civilIdNormalized) return { error: "invalid_civil_id" };
+  const civilIdNormalized = civilId ? normalizeCivilId(civilId) : null;
+  if (civilId && !civilIdNormalized) return { error: "invalid_civil_id" };
 
   const customFieldDefs = await listCustomFieldDefinitions("driver", {
     includeInactive: true,
@@ -352,8 +355,8 @@ export async function createDriverIntake(
   const needsR2 = docsToUpload.length > 0 || hasAvatarUpload;
 
   const [phoneTaken, civilTaken, restaurantCheck, r2Configured] = await Promise.all([
-    phoneExists(phone),
-    civilIdExists(civilIdNormalized),
+    phone ? phoneExists(phone) : Promise.resolve(false),
+    civilIdNormalized ? civilIdExists(civilIdNormalized) : Promise.resolve(false),
     validateRestaurantsPublished(supabase, restaurantIds),
     needsR2 ? isR2Configured() : Promise.resolve(true),
   ]);
@@ -476,7 +479,7 @@ export async function createDriverIntake(
 type IntakeListRow = {
   id: string;
   full_name: string;
-  phone: string;
+  phone: string | null;
   driver_code: string;
   employee_id: string;
   partner_id: string;
@@ -963,7 +966,7 @@ async function updateDriverIntakeInner(
     return { error: "invalid_custom_fields" };
   }
 
-  if (!intakeId || !fullName || !phoneRaw || !civilId || !employeeId) {
+  if (!intakeId || !fullName || !employeeId) {
     return { error: "missing_fields" };
   }
 
@@ -971,18 +974,20 @@ async function updateDriverIntakeInner(
     return { error: "missing_fields" };
   }
 
-  const phone = normalizeKuwaitPhone(phoneRaw);
-  if (!phone) return { error: "invalid_phone" };
+  // Clearing the field is a legitimate edit, so an empty input means NULL —
+  // not "leave whatever was there".
+  const phone = phoneRaw ? normalizeKuwaitPhone(phoneRaw) : null;
+  if (phoneRaw && !phone) return { error: "invalid_phone" };
 
-  const civilIdNormalized = normalizeCivilId(civilId);
-  if (!civilIdNormalized) return { error: "invalid_civil_id" };
+  const civilIdNormalized = civilId ? normalizeCivilId(civilId) : null;
+  if (civilId && !civilIdNormalized) return { error: "invalid_civil_id" };
 
   const supabase = await createClient();
   const restaurantIds = parseRestaurantIds(formData);
 
   const [phoneTaken, civilTaken, existingResp, restaurantCheck, r2Configured] = await Promise.all([
-    phoneExists(phone, intakeId),
-    civilIdExists(civilIdNormalized, intakeId),
+    phone ? phoneExists(phone, intakeId) : Promise.resolve(false),
+    civilIdNormalized ? civilIdExists(civilIdNormalized, intakeId) : Promise.resolve(false),
     supabase
       .from("driver_intakes")
       .select("id, linked_profile_id, driver_code, avatar_url")
@@ -1330,9 +1335,12 @@ async function fetchDriverDetailInner(
       source: "intake",
       driver_code: intake.driver_code,
       full_name: profile?.full_name ?? intake.full_name,
-      phone: profile?.phone ?? intake.phone,
+      // Both are optional now. The em dash matches what the driver-sourced
+      // branch below has always returned for a missing value, and it reads back
+      // through the edit form as empty, since the inputs keep digits only.
+      phone: profile?.phone ?? intake.phone ?? "—",
       email: profile?.email ?? null,
-      civil_id: intake.civil_id,
+      civil_id: intake.civil_id ?? "—",
       employee_id: linkedDriver?.employee_id ?? intake.employee_id ?? null,
       nationality: linkedDriver?.nationality ?? intake.nationality ?? null,
       rider_category: linkedDriver?.rider_category ?? intake.rider_category ?? "in_house",

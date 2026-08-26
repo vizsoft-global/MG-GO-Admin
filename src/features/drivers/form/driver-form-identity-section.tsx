@@ -132,9 +132,7 @@ export function DriverFormIdentitySection({
         </FieldBlock>
 
         <FieldBlock>
-          <FieldLabel htmlFor="driver-phone" required>
-            {labels.phone}
-          </FieldLabel>
+          <FieldLabel htmlFor="driver-phone">{labels.phone}</FieldLabel>
           <DriverPhoneField
             id="driver-phone"
             value={phone}
@@ -146,9 +144,7 @@ export function DriverFormIdentitySection({
         </FieldBlock>
 
         <FieldBlock>
-          <FieldLabel htmlFor="driver-civil-id" required>
-            {labels.civilId}
-          </FieldLabel>
+          <FieldLabel htmlFor="driver-civil-id">{labels.civilId}</FieldLabel>
           <Input
             id="driver-civil-id"
             type="text"

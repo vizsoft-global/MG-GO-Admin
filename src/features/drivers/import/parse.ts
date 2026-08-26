@@ -19,6 +19,26 @@ export function parseRiderCategory(
   return "invalid";
 }
 
+/**
+ * Reads the sheet's Active cell.
+ *
+ * `null` (blank) is not the same as `false`: blank means the sheet expressed no
+ * opinion and the dialog's approve toggle decides, which is what keeps an
+ * uploaded file that predates this column behaving exactly as it used to.
+ * Anything unrecognised is `"invalid"` rather than a silent `false`, since
+ * quietly not approving a batch someone marked for approval is the failure
+ * this column exists to avoid.
+ */
+export function parseImportActive(
+  raw: string | null | undefined,
+): boolean | "invalid" | null {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (!value) return null;
+  if (["yes", "y", "true", "1", "active", "approved"].includes(value)) return true;
+  if (["no", "n", "false", "0", "inactive", "pending"].includes(value)) return false;
+  return "invalid";
+}
+
 export function mapRowsFromSheet(
   headers: string[],
   rows: string[][],
@@ -60,6 +80,7 @@ export function mapRowsFromSheet(
         restaurant_ids: get("restaurant_ids"),
         nationality: get("nationality"),
         rider_category: get("rider_category"),
+        active: get("active"),
         custom_fields,
       };
     })
@@ -108,6 +129,10 @@ export function guessColumnMapping(
     ),
     nationality: find("nationality", "country"),
     rider_category: find("rider category", "category", "outsourced", "in house"),
+    // Not "status": the intake already has a workflow status column elsewhere,
+    // and guessing that one onto this field would approve drivers nobody asked
+    // to approve.
+    active: find("active", "approve"),
   };
 
   for (const key of customFieldKeys) {

@@ -49,9 +49,10 @@ export type DriverRiderCategory = (typeof DRIVER_RIDER_CATEGORIES)[number];
 
 export type DriverIntakeRow = {
   id: string;
-  phone: string;
+  /** Optional contact detail — the app credential is employee ID + passcode. */
+  phone: string | null;
   full_name: string;
-  civil_id: string;
+  civil_id: string | null;
   driver_code: string;
   avatar_url: string | null;
   partner_id: string | null;
@@ -147,7 +148,7 @@ export type DriverListRow = {
   driver_code: string;
   employee_id: string | null;
   full_name: string;
-  phone: string;
+  phone: string | null;
   partner_id: string;
   partner_name: string;
   partner_logo_url: string | null;
@@ -235,12 +236,17 @@ export const DRIVER_IMPORT_FIELDS = [
   "vehicle_label",
   "nationality",
   "rider_category",
+  "active",
 ] as const;
 
+/**
+ * Phone and civil ID are deliberately absent: they are optional contact
+ * details, so a sheet without those columns is a valid sheet. Employee ID stays
+ * because it is half the app credential, and a restaurant because a driver
+ * cannot be activated without one.
+ */
 export const DRIVER_IMPORT_REQUIRED_FIELDS = [
   "full_name",
-  "phone",
-  "civil_id",
   "employee_id",
   "restaurant_ids",
 ] as const;
@@ -261,6 +267,7 @@ export type DriverImportPreviewStatus =
   | "invalid_employee_id"
   | "invalid_nationality"
   | "invalid_rider_category"
+  | "invalid_active"
   | "missing_fields"
   | "unmatched_partner"
   | "unmatched_zone"
@@ -286,11 +293,13 @@ export type DriverImportMappedRow = {
   restaurant_ids: string | null;
   nationality: string | null;
   rider_category: string | null;
+  /** Raw "yes"/"no" cell asking for this driver to be approved on import. */
+  active: string | null;
 };
 
 export type DriverImportPreviewRow = Omit<
   DriverImportMappedRow,
-  "partner_id" | "zone_id" | "restaurant_ids"
+  "partner_id" | "zone_id" | "restaurant_ids" | "active"
 > & {
   status: DriverImportPreviewStatus;
   partner_id: string | null;
@@ -300,6 +309,12 @@ export type DriverImportPreviewRow = Omit<
   restaurant_names: string[];
   nationality: string | null;
   rider_category: DriverRiderCategory;
+  /**
+   * Parsed Active cell. `null` means the sheet said nothing, in which case the
+   * dialog's own approve toggle decides — so an unmapped column behaves exactly
+   * as it did before the column existed.
+   */
+  active: boolean | null;
   skip?: boolean;
   custom_fields: Record<string, string | null>;
 };

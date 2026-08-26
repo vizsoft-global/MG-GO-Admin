@@ -2044,7 +2044,7 @@ export type Database = {
           archived_at: string | null
           assets_issued: Json
           avatar_url: string | null
-          civil_id: string
+          civil_id: string | null
           created_at: string
           custom_fields: Json
           driver_code: string
@@ -2056,7 +2056,7 @@ export type Database = {
           nationality: string | null
           otp_code: string | null
           partner_id: string | null
-          phone: string
+          phone: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
           status: Database["public"]["Enums"]["driver_intake_status"]
@@ -2070,7 +2070,7 @@ export type Database = {
           archived_at?: string | null
           assets_issued?: Json
           avatar_url?: string | null
-          civil_id: string
+          civil_id?: string | null
           created_at?: string
           custom_fields?: Json
           driver_code: string
@@ -2082,7 +2082,7 @@ export type Database = {
           nationality?: string | null
           otp_code?: string | null
           partner_id?: string | null
-          phone: string
+          phone?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
           status?: Database["public"]["Enums"]["driver_intake_status"]
@@ -2096,7 +2096,7 @@ export type Database = {
           archived_at?: string | null
           assets_issued?: Json
           avatar_url?: string | null
-          civil_id?: string
+          civil_id?: string | null
           created_at?: string
           custom_fields?: Json
           driver_code?: string
@@ -2108,7 +2108,7 @@ export type Database = {
           nationality?: string | null
           otp_code?: string | null
           partner_id?: string | null
-          phone?: string
+          phone?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
           status?: Database["public"]["Enums"]["driver_intake_status"]

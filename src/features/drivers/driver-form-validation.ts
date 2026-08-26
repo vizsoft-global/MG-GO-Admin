@@ -80,17 +80,17 @@ export function validateDriverForm(
     errors.fullName = "missing_fields";
   }
 
+  // Phone and civil ID are optional contact details, not credentials — the app
+  // signs in with employee ID + passcode. Left blank they are simply absent;
+  // typed in they still have to be a real number, since a half-entered one is
+  // worse than none.
   const phoneDigits = restrictDigits(input.phone.trim(), 8);
-  if (!phoneDigits) {
-    errors.phone = "missing_fields";
-  } else if (!isValidKuwaitPhoneDigits(phoneDigits)) {
+  if (phoneDigits && !isValidKuwaitPhoneDigits(phoneDigits)) {
     errors.phone = "invalid_phone";
   }
 
   const civilDigits = restrictDigits(input.civilId.trim(), 12);
-  if (!civilDigits) {
-    errors.civilId = "missing_fields";
-  } else if (!isValidCivilIdDigits(civilDigits)) {
+  if (civilDigits && !isValidCivilIdDigits(civilDigits)) {
     errors.civilId = "invalid_civil_id";
   }
 

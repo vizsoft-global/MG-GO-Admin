@@ -19,7 +19,7 @@ import type {
 import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
 import { validateCustomFieldValues } from "@/lib/custom-fields/validate";
 import { resolveCountryInput } from "@/lib/geo/countries";
-import { parseRiderCategory } from "./import/parse";
+import { parseImportActive, parseRiderCategory } from "./import/parse";
 import {
   buildPartnerIndex,
   buildRestaurantIndex,
@@ -138,10 +138,14 @@ export async function approveDriverIntake(
     return { error: "save_failed" };
   }
 
+  // The synthetic email is the auth identifier the passcode login exchanges a
+  // magic link on; phone is stored only as a contact detail. Omit the key
+  // entirely when there is no number rather than sending null, since
+  // `phone_confirm` on an absent phone is a claim about nothing.
+  const intakePhone = intake.phone?.trim() ? intake.phone.trim() : null;
   const { data: authUser, error: createError } = await admin.auth.admin.createUser({
-    phone: intake.phone,
+    ...(intakePhone ? { phone: intakePhone, phone_confirm: true } : {}),
     email,
-    phone_confirm: true,
     email_confirm: true,
     user_metadata: {
       full_name: intake.full_name,
@@ -303,17 +307,21 @@ export async function resolveDriverImportPreview(
     let restaurant_names: string[] = [];
     let nationality: string | null = null;
     let rider_category: DriverRiderCategory = "in_house";
+    let active: boolean | null = null;
 
     const name = row.full_name?.trim();
     const phoneNorm = row.phone ? normalizeKuwaitPhone(row.phone) : null;
     const civilNorm = row.civil_id ? normalizeCivilId(row.civil_id) : null;
     const empNorm = row.employee_id ? normalizeEmployeeId(row.employee_id) : null;
 
-    if (!name || !row.phone?.trim() || !row.civil_id?.trim() || !row.employee_id?.trim()) {
+    // Phone and civil ID are optional columns: a blank cell is a driver we do
+    // not have those details for, not a broken row. A cell with something in it
+    // still has to parse, or the sheet would silently drop a typo'd number.
+    if (!name || !row.employee_id?.trim()) {
       status = "missing_fields";
-    } else if (!phoneNorm) {
+    } else if (row.phone?.trim() && !phoneNorm) {
       status = "invalid_phone";
-    } else if (!civilNorm) {
+    } else if (row.civil_id?.trim() && !civilNorm) {
       status = "invalid_civil_id";
     } else if (!empNorm || !isValidEmployeeId(empNorm)) {
       status = "invalid_employee_id";
@@ -382,6 +390,12 @@ export async function resolveDriverImportPreview(
       else rider_category = parsedCategory ?? "in_house";
     }
 
+    if (status === "ok") {
+      const parsedActive = parseImportActive(row.active);
+      if (parsedActive === "invalid") status = "invalid_active";
+      else active = parsedActive;
+    }
+
     return {
       ...row,
       status,
@@ -392,6 +406,7 @@ export async function resolveDriverImportPreview(
       restaurant_names,
       nationality,
       rider_category,
+      active,
     };
   });
 }
@@ -447,10 +462,10 @@ export async function applyDriverImportBatch(payload: {
   for (let i = 0; i < ready.length; i += IMPORT_CHUNK) {
     const chunk = ready.slice(i, i + IMPORT_CHUNK);
     for (const row of chunk) {
-      const phone = normalizeKuwaitPhone(row.phone!);
-      const civilId = normalizeCivilId(row.civil_id!);
+      const phone = row.phone?.trim() ? normalizeKuwaitPhone(row.phone) : null;
+      const civilId = row.civil_id?.trim() ? normalizeCivilId(row.civil_id) : null;
       const employeeId = normalizeEmployeeId(row.employee_id!);
-      if (!phone || !civilId || !employeeId) {
+      if (!employeeId) {
         failures.push({ rowIndex: row.rowIndex, reason: "missing_fields" });
         continue;
       }
@@ -462,13 +477,22 @@ export async function applyDriverImportBatch(payload: {
       let intakeId: string | null = null;
       let driverCode: string | null = null;
 
-      if (payload.duplicateStrategy === "update") {
-        const { data: existing } = await supabase
+      // Phone used to be the key that matched an uploaded row to an existing
+      // intake. It is optional now, so a phone-less row falls back to employee
+      // ID — mandatory and unique, and therefore the stronger key of the two.
+      // Phone still wins when present, so rows that matched before still match.
+      const matchExisting = () => {
+        const query = supabase
           .from("driver_intakes")
           .select("id, linked, driver_code")
-          .eq("phone", phone)
-          .is("archived_at", null)
-          .maybeSingle();
+          .is("archived_at", null);
+        return phone
+          ? query.eq("phone", phone).maybeSingle()
+          : query.eq("employee_id", employeeId).maybeSingle();
+      };
+
+      if (payload.duplicateStrategy === "update") {
+        const { data: existing } = await matchExisting();
 
         if (existing) {
           if (existing.linked) {
@@ -509,14 +533,12 @@ export async function applyDriverImportBatch(payload: {
             .eq("intake_id", intakeId);
         }
       } else {
-        const { data: dup } = await supabase
-          .from("driver_intakes")
-          .select("id")
-          .eq("phone", phone)
-          .is("archived_at", null)
-          .maybeSingle();
+        const { data: dup } = await matchExisting();
         if (dup) {
-          failures.push({ rowIndex: row.rowIndex, reason: "Duplicate phone (skip)" });
+          failures.push({
+            rowIndex: row.rowIndex,
+            reason: phone ? "Duplicate phone (skip)" : "Duplicate employee ID (skip)",
+          });
           continue;
         }
       }
@@ -589,7 +611,12 @@ export async function applyDriverImportBatch(payload: {
 
       applied += 1;
 
-      if (payload.approveImmediately && intakeId) {
+      // The sheet's Active cell decides for its own row; the dialog toggle is
+      // the answer for every row that did not say. So an operator can approve
+      // the whole batch with the switch, or hand-pick rows in the spreadsheet,
+      // and neither can quietly cancel the other.
+      const approveRow = row.active ?? payload.approveImmediately;
+      if (approveRow && intakeId) {
         const result = await approveDriverIntake(intakeId);
         if ("success" in result && result.success) {
           approved += 1;

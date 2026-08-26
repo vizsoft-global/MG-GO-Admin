@@ -146,7 +146,9 @@ function applyDriversListFilters(
       d.partner_name.toLowerCase().includes(q) ||
       d.zone_name.toLowerCase().includes(q);
     if (matchesText) return true;
-    if (qDigits && d.phone.replace(/\D/g, "").includes(qDigits)) return true;
+    // A driver with no number simply cannot match a digit search — searching
+    // for digits is asking for a phone.
+    if (qDigits && (d.phone ?? "").replace(/\D/g, "").includes(qDigits)) return true;
     return false;
   });
 }
@@ -183,7 +185,7 @@ function exportDriversCsv(
         r.driver_code,
         r.employee_id ?? "",
         r.full_name,
-        r.phone,
+        r.phone ?? "",
         r.partner_name,
         r.zone_name,
         r.is_blocked ? "blocked" : r.account_status,

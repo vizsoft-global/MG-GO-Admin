@@ -1,7 +1,7 @@
 export const DRIVER_IMPORT_HEADERS = [
   "Full Name",
-  "Phone (+965)",
-  "Civil ID",
+  "Phone (+965, optional)",
+  "Civil ID (optional)",
   "Employee ID",
   "Restaurant IDs (name, RST code, or UUID)",
   "Partner",
@@ -9,6 +9,7 @@ export const DRIVER_IMPORT_HEADERS = [
   "Vehicle",
   "Nationality",
   "Rider Category",
+  "Active (yes/no)",
 ] as const;
 
 export const DRIVER_IMPORT_SAMPLE_ROW = [
@@ -22,6 +23,7 @@ export const DRIVER_IMPORT_SAMPLE_ROW = [
   "BIKE-1024",
   "IN",
   "in_house",
+  "yes",
 ] as const;
 
 export const DRIVER_IMPORT_TEMPLATE_PATH = "/api/drivers/import-template.xlsx";

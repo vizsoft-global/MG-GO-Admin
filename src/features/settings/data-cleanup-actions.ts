@@ -195,7 +195,7 @@ export async function fetchCleanupCandidates(
         id: row.id,
         purgeId: linked ? row.linked_profile_id! : row.id,
         purgeType: linked ? "driver" : "intake",
-        label: row.full_name?.trim() || row.driver_code || row.phone,
+        label: row.full_name?.trim() || row.driver_code || row.phone || row.id,
         sublabel: [row.driver_code, row.phone].filter(Boolean).join(" · "),
         status: row.archived_at
           ? "archived"

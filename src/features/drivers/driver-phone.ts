@@ -26,8 +26,18 @@ export function phoneStorageToDigits(stored: string): string {
   return digits;
 }
 
-/** Admin UI: always show 8 digits, never +965. */
-export function formatPhoneDisplay(stored: string): string {
+/** Placeholder for a driver who has no mobile number on file. */
+export const NO_PHONE_DISPLAY = "—";
+
+/**
+ * Admin UI: always show 8 digits, never +965.
+ *
+ * Accepts null because the number is optional — every list, table and detail
+ * row that renders a phone goes through here, so making the absent case safe
+ * once is what keeps a driver with no number from breaking a page.
+ */
+export function formatPhoneDisplay(stored: string | null | undefined): string {
+  if (!stored?.trim()) return NO_PHONE_DISPLAY;
   const digits = phoneStorageToDigits(stored);
   return isValidKuwaitPhoneDigits(digits) ? digits : stored;
 }

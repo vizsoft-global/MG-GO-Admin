@@ -18,7 +18,8 @@ export function formatDriverCodeDisplay(code: string): string {
   return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
 }
 
-export function formatPhoneInternational(stored: string): string {
+export function formatPhoneInternational(stored: string | null | undefined): string {
+  if (!stored?.trim()) return formatPhoneDisplay(stored);
   const digits = phoneStorageToDigits(stored);
   if (!isValidKuwaitPhoneDigits(digits)) return formatPhoneDisplay(stored);
   return `+965 ${digits.slice(0, 4)} ${digits.slice(4)}`;

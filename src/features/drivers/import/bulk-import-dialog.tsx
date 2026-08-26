@@ -452,9 +452,14 @@ export function DriverBulkImportDialog({
                 </Select>
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                <Label htmlFor="approve-immediately" className="text-sm">
-                  {t("approveImmediately")}
-                </Label>
+                <div>
+                  <Label htmlFor="approve-immediately" className="text-sm">
+                    {t("approveImmediately")}
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    {t("approveImmediatelyHint")}
+                  </p>
+                </div>
                 <Switch
                   id="approve-immediately"
                   checked={approveImmediately}
@@ -470,6 +475,7 @@ export function DriverBulkImportDialog({
                       <th className="px-2 py-1.5">{t("colPhone")}</th>
                       <th className="px-2 py-1.5">{t("colEmployeeId")}</th>
                       <th className="px-2 py-1.5">{t("colRestaurants")}</th>
+                      <th className="px-2 py-1.5">{t("colActive")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -487,6 +493,14 @@ export function DriverBulkImportDialog({
                           {row.restaurant_names.length > 0
                             ? row.restaurant_names.join(", ")
                             : "—"}
+                        </td>
+                        {/* Resolved the same way `applyDriverImportBatch` does,
+                            so the operator sees the answer before importing
+                            rather than reading it off the result summary. */}
+                        <td className="px-2 py-1">
+                          {(row.active ?? approveImmediately)
+                            ? t("activeYes")
+                            : t("activeNo")}
                         </td>
                       </tr>
                     ))}
