@@ -56,6 +56,7 @@ import {
 } from "./polygon-draw-controller";
 import type { ZoneDraftGeometryMeta } from "./zone-draft-geometry";
 import { useGoogleZoneBlocks } from "./zone-map-google-blocks";
+import { useGoogleZoneBlockOutlines } from "./zone-map-google-zone-blocks";
 
 function tupleToLatLng(center: [number, number]) {
   return { lat: center[0], lng: center[1] };
@@ -200,6 +201,15 @@ export function ZoneMapGoogleInner({
     selectedCells: selectedBlockCells,
     onHit: onBlockHit,
     onZoomCapped: onBlocksZoomCapped,
+  });
+
+  // Saved zones show the blocks they were painted from. Suppressed while the
+  // Blocks tool is live, where the paint grid already covers the map.
+  useGoogleZoneBlockOutlines({
+    mapRef,
+    googleRef,
+    zones,
+    enabled: mapState === "ready" && !blocksMode,
   });
 
   const clearCircleClickListener = useCallback(() => {

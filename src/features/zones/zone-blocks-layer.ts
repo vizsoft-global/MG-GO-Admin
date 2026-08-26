@@ -24,9 +24,11 @@ export const DEFAULT_ZONE_BLOCKS_STATE: ZoneBlocksState = {
 };
 
 /**
- * Emerald selection over a slate honeycomb. The unselected fill is deliberately
- * light but must stay non-zero — at 0.02 the grid was effectively invisible on
- * the light basemap.
+ * Emerald selection over a slate honeycomb. The unselected mesh sits at half the
+ * weight the selection does — it is scaffolding for aiming a paint stroke, not
+ * content, and at full strength it reads as a texture printed over the city.
+ * It must still stay non-zero: at 0.02 the grid was effectively invisible on the
+ * light basemap.
  */
 export const ZONE_BLOCK_HEX_STYLE = {
   selected: {
@@ -38,9 +40,9 @@ export const ZONE_BLOCK_HEX_STYLE = {
   },
   unselected: {
     fillColor: "#94a3b8",
-    fillOpacity: 0.1,
+    fillOpacity: 0.05,
     strokeColor: "#64748b",
-    strokeOpacity: 0.65,
+    strokeOpacity: 0.32,
     strokeWeight: 1,
   },
 } as const;

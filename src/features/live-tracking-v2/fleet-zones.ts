@@ -30,7 +30,7 @@ export function toFleetZone(row: ZoneRow): FleetZone | null {
   const feature = row.geometry as
     | {
         geometry?: { type?: string; coordinates?: unknown };
-        properties?: { radiusMeters?: number };
+        properties?: { radiusMeters?: number; blockSize?: "S" | "M" | "L" };
       }
     | null;
   const geometry = feature?.geometry;
@@ -64,6 +64,7 @@ export function toFleetZone(row: ZoneRow): FleetZone | null {
     ring,
     center: null,
     radiusMeters: 0,
+    blockSize: feature?.properties?.blockSize ?? null,
   };
 }
 

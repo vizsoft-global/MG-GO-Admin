@@ -8,6 +8,7 @@ import type {
   GoogleOverlayViewInstance,
 } from "@/lib/google-maps/load";
 import { createProjector, drawHexGrid, prepareCanvas } from "./hex-grid-canvas";
+import { buildBlocksModeStyles } from "./zone-map-google-styles";
 import { latLngToTuple } from "./zone-map-google-utils";
 
 type BlockHitHandler = (
@@ -21,6 +22,23 @@ function eventLatLng(e: unknown): { lat: number; lng: number } | null {
     ?.latLng;
   if (!latLng) return null;
   return { lat: latLng.lat(), lng: latLng.lng() };
+}
+
+/** Left button only paints; the right button is reserved for panning. */
+function isPrimaryButton(e: unknown): boolean {
+  const button = (e as { domEvent?: { button?: number } })?.domEvent?.button;
+  return button == null || button === 0;
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  return (
+    el.tagName === "INPUT" ||
+    el.tagName === "TEXTAREA" ||
+    el.tagName === "SELECT" ||
+    el.isContentEditable
+  );
 }
 
 export function useGoogleZoneBlocks({
@@ -67,7 +85,33 @@ export function useGoogleZoneBlocks({
 
     // Capture post-guard so the overlay class body keeps the narrowed types.
     const mapInstance = map;
-    mapInstance.setOptions({ draggable: false, disableDoubleClickZoom: true });
+    const mapDiv = mapInstance.getDiv?.() ?? null;
+
+    /**
+     * Painting owns the left drag, so panning needs gestures of its own: hold
+     * Space (the convention every canvas editor uses) or drag with the right
+     * button. Without one of these the only way to reach the next block was to
+     * leave Blocks for the Move tool, which hides the honeycomb and loses your
+     * place on the map.
+     */
+    let spacePanning = false;
+    let rightPanning = false;
+    let lastPanX = 0;
+    let lastPanY = 0;
+
+    const applyGestureMode = () => {
+      mapInstance.setOptions({
+        // The map drags itself while Space is held, and whenever the user is
+        // zoomed too far out to paint anyway.
+        draggable: spacePanning || !paintableRef.current,
+        disableDoubleClickZoom: true,
+        draggableCursor: spacePanning ? "grab" : "crosshair",
+        draggingCursor: spacePanning ? "grabbing" : "crosshair",
+      });
+    };
+
+    mapInstance.setOptions({ styles: buildBlocksModeStyles() });
+    applyGestureMode();
 
     let overlay: GoogleOverlayViewInstance | null = null;
     let canvas: HTMLCanvasElement | null = null;
@@ -162,16 +206,14 @@ export function useGoogleZoneBlocks({
       paintableRef.current = view.paintable;
       setZoomCapped(!view.paintable);
       onZoomCappedRef.current?.(!view.paintable);
-      // Give panning back when the user cannot paint anyway.
-      map.setOptions({
-        draggable: !view.paintable,
-        disableDoubleClickZoom: true,
-      });
+      applyGestureMode();
       redraw();
     };
     syncViewportRef.current = syncViewport;
 
     const onDown = ((e: unknown) => {
+      if (spacePanning || rightPanning) return;
+      if (!isPrimaryButton(e)) return;
       if (!eventLatLng(e)) return;
       paintingRef.current = true;
       movedRef.current = false;
@@ -207,7 +249,71 @@ export function useGoogleZoneBlocks({
       paintingRef.current = false;
       movedRef.current = false;
     };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat) return;
+      if (isTypingTarget(e.target)) return;
+      // Space would otherwise scroll the form or re-press a focused button.
+      e.preventDefault();
+      if (spacePanning) return;
+      spacePanning = true;
+      // Abandon any stroke in flight rather than finishing it as a click.
+      paintingRef.current = false;
+      movedRef.current = false;
+      applyGestureMode();
+    };
+
+    const endSpacePan = () => {
+      if (!spacePanning) return;
+      spacePanning = false;
+      applyGestureMode();
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") endSpacePan();
+    };
+
+    // A tab switch mid-pan never delivers the keyup, which would leave the map
+    // stuck in pan mode with no way back short of leaving Blocks.
+    const onWindowBlur = () => {
+      endSpacePan();
+      rightPanning = false;
+    };
+
+    const onDivMouseDown = (e: MouseEvent) => {
+      if (e.button !== 2) return;
+      e.preventDefault();
+      rightPanning = true;
+      lastPanX = e.clientX;
+      lastPanY = e.clientY;
+    };
+
+    const onDocMouseMove = (e: MouseEvent) => {
+      if (!rightPanning) return;
+      const dx = e.clientX - lastPanX;
+      const dy = e.clientY - lastPanY;
+      lastPanX = e.clientX;
+      lastPanY = e.clientY;
+      // `panBy` moves the viewport, so invert the delta to follow the cursor.
+      mapInstance.panBy?.(-dx, -dy);
+    };
+
+    const onDocMouseUp = () => {
+      rightPanning = false;
+    };
+
+    // Suppress the browser menu for the whole map, or the right-drag ends in a
+    // context menu the first time the user pauses.
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+
     window.addEventListener("mouseup", onWindowUp);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("mousemove", onDocMouseMove);
+    window.addEventListener("mouseup", onDocMouseUp);
+    mapDiv?.addEventListener("mousedown", onDivMouseDown);
+    mapDiv?.addEventListener("contextmenu", onContextMenu);
 
     return () => {
       idleListener.remove();
@@ -215,11 +321,24 @@ export function useGoogleZoneBlocks({
       moveListener.remove();
       upListener.remove();
       window.removeEventListener("mouseup", onWindowUp);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("mousemove", onDocMouseMove);
+      window.removeEventListener("mouseup", onDocMouseUp);
+      mapDiv?.removeEventListener("mousedown", onDivMouseDown);
+      mapDiv?.removeEventListener("contextmenu", onContextMenu);
       if (frame) cancelAnimationFrame(frame);
       overlay?.setMap(null);
       overlay = null;
       cellsRef.current = [];
-      map.setOptions({ draggable: true, disableDoubleClickZoom: false });
+      map.setOptions({
+        draggable: true,
+        disableDoubleClickZoom: false,
+        draggableCursor: null,
+        draggingCursor: null,
+        styles: [],
+      });
       paintingRef.current = false;
       movedRef.current = false;
     };

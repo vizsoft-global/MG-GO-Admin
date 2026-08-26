@@ -10,6 +10,19 @@ export type ZoneGeometryType = "polygon" | "circle";
 
 export type ZoneGeoProperties = {
   radiusMeters?: number;
+  /**
+   * Block size the polygon was painted at, when it came from the Blocks tool.
+   *
+   * The hex cells themselves are not stored — the union polygon is the zone, and
+   * the cells round-trip exactly from it at the resolution they were painted at.
+   * Keeping just the size lets every read-only map redraw the honeycomb without
+   * a schema change, and its absence correctly means "this zone was drawn by
+   * hand, so it has no blocks to show".
+   *
+   * Spelled out rather than imported as `H3BlockSize` to keep `lib/geo` free of
+   * a cycle: `h3-blocks` already imports this module.
+   */
+  blockSize?: "S" | "M" | "L";
 };
 
 export type ZoneGeoFeature = Feature<Polygon | Point, ZoneGeoProperties>;

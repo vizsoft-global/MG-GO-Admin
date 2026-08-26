@@ -877,6 +877,7 @@ export class FleetRoom implements DurableObject {
         ring: zone.ring,
         center: zone.center,
         radiusMeters: zone.radiusMeters,
+        blockSize: zone.blockSize,
       })),
     });
 

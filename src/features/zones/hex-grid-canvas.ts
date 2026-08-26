@@ -104,7 +104,7 @@ function addCell(
   return true;
 }
 
-type HexStyle = {
+export type HexStyle = {
   fillColor: string;
   fillOpacity: number;
   strokeColor: string;
@@ -156,6 +156,23 @@ function drawBatched(
     if (pending >= BATCH_SIZE) flush();
   }
   flush();
+}
+
+/**
+ * Draws one set of cells in one style. The read-only zone maps need this because
+ * their hexes are coloured per zone, so they cannot share the paint tool's fixed
+ * two-style split.
+ */
+export function drawCells(
+  ctx: CanvasRenderingContext2D,
+  cells: readonly string[],
+  style: HexStyle,
+  project: HexProjector,
+  width: number,
+  height: number,
+): void {
+  drawBatched(ctx, cells, style, project, width, height);
+  ctx.globalAlpha = 1;
 }
 
 export type DrawHexGridArgs = {

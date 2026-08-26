@@ -43,6 +43,12 @@ export type FleetZone = {
   ring: [number, number][] | null;
   center: [number, number] | null;
   radiusMeters: number;
+  /**
+   * Block size the zone was painted at, so the map can redraw its honeycomb.
+   * Optional because a Worker older than this client will not send it, and a
+   * missing size correctly means "draw the zone as one plain shape".
+   */
+  blockSize?: "S" | "M" | "L" | null;
 };
 
 export type FleetDriver = {

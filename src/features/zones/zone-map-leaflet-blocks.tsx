@@ -62,8 +62,25 @@ export function ZoneBlocksLeafletLayer({
     pane.insertBefore(canvas, pane.firstChild);
     canvasRef.current = canvas;
 
-    map.dragging.disable();
+    /**
+     * Painting owns the left drag, so panning gets Space-hold and right-drag —
+     * the same two gestures as the Google layer, since the tool is the same tool
+     * whichever basemap happens to be behind it.
+     */
+    let spacePanning = false;
+    let rightPanning = false;
+    let lastPanX = 0;
+    let lastPanY = 0;
+    const container = map.getContainer();
+
+    const applyGestureMode = () => {
+      if (spacePanning || !paintableRef.current) map.dragging.enable();
+      else map.dragging.disable();
+      container.style.cursor = spacePanning ? "grab" : "crosshair";
+    };
+
     map.doubleClickZoom.disable();
+    applyGestureMode();
 
     const redraw = () => {
       const size = map.getSize();
@@ -101,9 +118,7 @@ export function ZoneBlocksLeafletLayer({
       gridVisibleRef.current = view.visible;
       paintableRef.current = view.paintable;
       onZoomCappedRef.current?.(!view.paintable);
-      // Give panning back when the user cannot paint anyway.
-      if (view.paintable) map.dragging.disable();
-      else map.dragging.enable();
+      applyGestureMode();
       redraw();
     };
     syncViewportRef.current = syncViewport;
@@ -128,6 +143,8 @@ export function ZoneBlocksLeafletLayer({
     };
 
     const onDown = (e: L.LeafletMouseEvent) => {
+      if (spacePanning || rightPanning) return;
+      if (e.originalEvent.button !== 0) return;
       paintingRef.current = true;
       movedRef.current = false;
       if (paintableRef.current) L.DomEvent.preventDefault(e.originalEvent);
@@ -155,6 +172,77 @@ export function ZoneBlocksLeafletLayer({
       movedRef.current = false;
     };
 
+    const isTypingTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el || !el.tagName) return false;
+      return (
+        el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.tagName === "SELECT" ||
+        el.isContentEditable
+      );
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat) return;
+      if (isTypingTarget(e.target)) return;
+      // Space would otherwise scroll the form or re-press a focused button.
+      e.preventDefault();
+      if (spacePanning) return;
+      spacePanning = true;
+      paintingRef.current = false;
+      movedRef.current = false;
+      applyGestureMode();
+    };
+
+    const endSpacePan = () => {
+      if (!spacePanning) return;
+      spacePanning = false;
+      applyGestureMode();
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") endSpacePan();
+    };
+
+    // A tab switch mid-pan never delivers the keyup.
+    const onWindowBlur = () => {
+      endSpacePan();
+      rightPanning = false;
+    };
+
+    const onContainerMouseDown = (e: MouseEvent) => {
+      if (e.button !== 2) return;
+      e.preventDefault();
+      rightPanning = true;
+      lastPanX = e.clientX;
+      lastPanY = e.clientY;
+    };
+
+    const onDocMouseMove = (e: MouseEvent) => {
+      if (!rightPanning) return;
+      const dx = e.clientX - lastPanX;
+      const dy = e.clientY - lastPanY;
+      lastPanX = e.clientX;
+      lastPanY = e.clientY;
+      // Invert the delta so the map follows the cursor.
+      map.panBy([-dx, -dy], { animate: false });
+    };
+
+    const onDocMouseUp = () => {
+      rightPanning = false;
+    };
+
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("mousemove", onDocMouseMove);
+    window.addEventListener("mouseup", onDocMouseUp);
+    container.addEventListener("mousedown", onContainerMouseDown);
+    container.addEventListener("contextmenu", onContextMenu);
+
     map.on("moveend", syncViewport);
     map.on("zoomend", syncViewport);
     map.on("resize", syncViewport);
@@ -174,6 +262,14 @@ export function ZoneBlocksLeafletLayer({
       map.off("mousemove", onMove);
       map.off("mouseup", onUp);
       window.removeEventListener("mouseup", onWindowUp);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("mousemove", onDocMouseMove);
+      window.removeEventListener("mouseup", onDocMouseUp);
+      container.removeEventListener("mousedown", onContainerMouseDown);
+      container.removeEventListener("contextmenu", onContextMenu);
+      container.style.cursor = "";
       canvas.remove();
       canvasRef.current = null;
       cellsRef.current = [];

@@ -2542,7 +2542,7 @@
         "blockSizeL": "L",
         "blockPaint": "Paint",
         "blockErase": "Erase",
-        "blocksHint": "Click a hex to toggle. Drag to paint. Blocks must touch.",
+        "blocksHint": "Click to toggle, drag to paint. Hold Space or right-drag to move the map.",
         "blocksZoomIn": "Zoom in to paint blocks",
         "blocksDisconnected": "Blocks must connect",
         "formCreateTitle": "Create New Geofence",

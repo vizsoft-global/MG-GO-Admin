@@ -19,6 +19,12 @@ export type WorkerZone = {
   radiusMeters: number;
   /** [minLng, minLat, maxLng, maxLat] — cheap rejection before the ray cast. */
   bbox: [number, number, number, number];
+  /**
+   * Block size the zone was painted at, forwarded verbatim so the admin map can
+   * redraw its honeycomb. The room never reasons about it — geofencing is on the
+   * union ring, which is the zone.
+   */
+  blockSize: "S" | "M" | "L" | null;
 };
 
 const EARTH_RADIUS_M = 6_371_000;
@@ -48,7 +54,7 @@ export function parseZone(row: {
   const feature = row.geometry as
     | {
         geometry?: { type?: string; coordinates?: unknown };
-        properties?: { radiusMeters?: number };
+        properties?: { radiusMeters?: number; blockSize?: "S" | "M" | "L" };
       }
     | null;
   const geom = feature?.geometry;
@@ -71,6 +77,7 @@ export function parseZone(row: {
       center: [lng, lat],
       radiusMeters,
       bbox: [lng - dLng, lat - dLat, lng + dLng, lat + dLat],
+      blockSize: null,
     };
   }
 
@@ -99,6 +106,7 @@ export function parseZone(row: {
     center: null,
     radiusMeters: 0,
     bbox: [minLng, minLat, maxLng, maxLat],
+    blockSize: feature?.properties?.blockSize ?? null,
   };
 }
 

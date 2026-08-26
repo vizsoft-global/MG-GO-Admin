@@ -77,6 +77,7 @@ import {
   polygonToBlockCells,
   type H3BlockSize,
 } from "@/lib/geo/h3-blocks";
+import { zoneBlockSize } from "./zone-block-cells";
 import {
   ZoneFormFindMyLocation,
   ZoneFormMapTypeToggle,
@@ -193,8 +194,11 @@ export function ZoneFormBody({
   const [activeTool, setActiveTool] = useState<ZoneMapTool>(
     initialZoneMapTool(Boolean(zone?.geometry)),
   );
+  // Reopening a block-painted zone must resume at the size it was painted at, or
+  // re-entering Blocks would re-seed the selection on a grid that does not line
+  // up with the saved shape.
   const [blockSize, setBlockSize] = useState<H3BlockSize>(
-    DEFAULT_ZONE_BLOCKS_STATE.size,
+    zoneBlockSize(zone?.geometry) ?? DEFAULT_ZONE_BLOCKS_STATE.size,
   );
   const [blockPaintMode, setBlockPaintMode] = useState<ZoneBlockPaintMode>(
     DEFAULT_ZONE_BLOCKS_STATE.paintMode,
@@ -293,7 +297,13 @@ export function ZoneFormBody({
         return;
       }
       setSelectedBlockCells(result.cells);
-      setGeometry(result.feature);
+      // Record the size so read-only maps can redraw this zone's honeycomb.
+      // Editing the polygon by hand later drops it, which is correct: the shape
+      // stops being a union of whole blocks the moment a vertex moves.
+      setGeometry({
+        ...result.feature,
+        properties: { ...result.feature.properties, blockSize },
+      });
       setDraftIsProvisional(true);
     },
     [blockSize, blockPaintMode, t],
@@ -582,18 +592,22 @@ export function ZoneFormBody({
 
           <ZoneGeofenceTypeSection value={geofence} onChange={setGeofence} />
 
-          <ZoneGeofenceShapeSection
-            value={zoneType}
-            onChange={(next) => {
-              setZoneType(next);
-              setGeometry(null);
-              setSelectedBlockCells([]);
-              setDraftIsProvisional(false);
-              setActiveTool("draw");
-              mapAdapterRef.current?.clearDraft?.();
-              mapAdapterRef.current?.setDrawMode?.(next);
-            }}
-          />
+          {/* Blocks always produce a polygon, so the shape choice has nothing
+              left to decide while it is the active tool. */}
+          {activeTool === "blocks" ? null : (
+            <ZoneGeofenceShapeSection
+              value={zoneType}
+              onChange={(next) => {
+                setZoneType(next);
+                setGeometry(null);
+                setSelectedBlockCells([]);
+                setDraftIsProvisional(false);
+                setActiveTool("draw");
+                mapAdapterRef.current?.clearDraft?.();
+                mapAdapterRef.current?.setDrawMode?.(next);
+              }}
+            />
+          )}
 
           {zoneType === "circle" ? (
             <div className="space-y-1.5">

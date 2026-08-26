@@ -268,6 +268,7 @@ export type ServerFrame =
         ring: [number, number][] | null;
         center: [number, number] | null;
         radiusMeters: number;
+        blockSize?: "S" | "M" | "L" | null;
       }>;
     }
   | { t: "meta"; drivers: DriverMeta[] }

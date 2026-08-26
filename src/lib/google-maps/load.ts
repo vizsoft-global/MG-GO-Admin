@@ -25,12 +25,16 @@ export type GoogleMapInstance = {
   getBounds: () => GoogleLatLngBounds | undefined;
   getCenter: () => GoogleMapLatLng;
   panTo: (center: GoogleMapLatLng) => void;
+  /** Shifts the viewport by a pixel delta — used to hand-roll a right-drag pan. */
+  panBy?: (x: number, y: number) => void;
   setMapTypeId: (id: string) => void;
   setOptions: (opts: {
     styles?: GoogleMapStyleRule[];
     mapTypeId?: string;
     disableDoubleClickZoom?: boolean;
     draggable?: boolean;
+    draggableCursor?: string | null;
+    draggingCursor?: string | null;
   }) => void;
   addListener: (event: string, handler: () => void) => { remove: () => void };
   getDiv?: () => HTMLElement;
