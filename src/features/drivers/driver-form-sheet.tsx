@@ -45,13 +45,15 @@ import { DriverFormIdentitySection } from "./form/driver-form-identity-section";
 import { DriverFormOperationsCard } from "./form/driver-form-operations-card";
 import { DriverFormCustomFieldsSection } from "./form/driver-form-custom-fields-section";
 import { useDriverFormDraft } from "./form/use-driver-form-draft";
+import { sameCustomFieldValues } from "./form/custom-field-values-equal";
 import type { DriverErrorKey } from "./driver-errors";
 import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
 import {
   defaultsFromDefinitions,
   validateCustomFieldValues,
 } from "@/lib/custom-fields/validate";
-import type { CustomFieldValues } from "@/lib/custom-fields/types";
+import type { CustomFieldDefinition, CustomFieldValues } from "@/lib/custom-fields/types";
+import type { DriverFormCatalogItem } from "@/features/assets/types";
 import { customFieldsToFormEntries } from "@/lib/custom-fields/serialize";
 
 type DriverFormMode = "create" | "edit";
@@ -77,6 +79,19 @@ const EMPTY_EXPIRIES: Record<DriverDocumentType, DocumentExpiryConfig> = {
   work_permit: { ...EMPTY_DOCUMENT_EXPIRY },
   passport: { ...EMPTY_DOCUMENT_EXPIRY },
 };
+
+/**
+ * Stable fallbacks for queries that have not resolved.
+ *
+ * A destructuring default (`= []`) allocates a *new* array on every render for
+ * as long as `data` is undefined — which is the whole time a query is pending,
+ * and forever if it errors. That new identity flows into the memos below and
+ * re-fires the effects that depend on them, and those effects set state to a
+ * freshly built object, so the render loops until React gives up with
+ * "Maximum update depth exceeded" and blanks the page.
+ */
+const NO_CATALOG_ITEMS: DriverFormCatalogItem[] = [];
+const NO_CUSTOM_FIELD_DEFS: CustomFieldDefinition[] = [];
 
 export function DriverFormSheet({
   mode,
@@ -110,13 +125,15 @@ export function DriverFormSheet({
     activeDriver?.linked_profile_id ?? null,
     open && isEdit && Boolean(intakeIdForDocs),
   );
-  const { data: assetCatalog = [], isLoading: assetCatalogLoading } = useDriverFormAssetCatalog(
+  const { data: assetCatalogData, isLoading: assetCatalogLoading } = useDriverFormAssetCatalog(
     isEdit ? intakeIdForDocs || null : null,
     open,
   );
-  const { data: customFieldDefs = [] } = useCustomFieldDefinitions({
+  const assetCatalog = assetCatalogData ?? NO_CATALOG_ITEMS;
+  const { data: customFieldDefsData } = useCustomFieldDefinitions({
     includeInactive: false,
   });
+  const customFieldDefs = customFieldDefsData ?? NO_CUSTOM_FIELD_DEFS;
   const activeCustomDefs = useMemo(
     () => customFieldDefs.filter((d) => d.is_active && !d.archived_at),
     [customFieldDefs],
@@ -235,7 +252,11 @@ export function DriverFormSheet({
         if (Array.isArray(v) && v.length === 0) continue;
         next[k] = v;
       }
-      return next;
+      // Returning a fresh object unconditionally makes this effect a render
+      // whenever it runs, so anything that churns its dependencies becomes an
+      // infinite loop rather than wasted work. Keeping the previous object when
+      // the merge changed nothing is what makes it safe to re-run.
+      return sameCustomFieldValues(prev, next) ? prev : next;
     });
   }, [open, isEdit, activeCustomDefs]);
 
