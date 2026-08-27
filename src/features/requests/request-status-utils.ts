@@ -17,6 +17,24 @@ export const REQUEST_STATUS_FILTERS = [
 
 export type RequestStatusFilter = (typeof REQUEST_STATUS_FILTERS)[number];
 
+/**
+ * Outcomes that have already been decided. Selecting one cannot open
+ * Approve / Reject, so the All Requests list must not paint a checkbox.
+ * `responded` and `closed` sit here too — they are finished, not pending.
+ */
+export const REQUEST_DECIDED_STATUSES = new Set([
+  "approved",
+  "rejected",
+  "solved",
+  "responded",
+  "closed",
+]);
+
+/** A row the bulk bar can act on — approve, reject, or both. */
+export function canBulkSelectRequest(status: string): boolean {
+  return !REQUEST_DECIDED_STATUSES.has(status);
+}
+
 /** Fuel only approve / reject / clarify — these queues never receive a fuel row. */
 const FUEL_HIDDEN_STATUS_FILTERS = new Set<RequestStatusFilter>([
   "rescheduled",

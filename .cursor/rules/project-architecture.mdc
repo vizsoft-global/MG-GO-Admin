@@ -231,6 +231,10 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-27` — **All Requests hid the Driver ID behind a zone, and left a checkbox on rows that could never be decided.** The rider line preferred `driver_zone` whenever it was set, so Jenson Doe (who has a zone) showed Hawally instead of `100xx` while a rider with no zone still showed the code — two rows of the same column answering different questions. The line is the Driver ID for every row now; zone stays a filter and a CSV column, not a substitute.
+
+  The select column painted a disabled box on Approved / Rejected / Solved, which is how a control looks when it is broken rather than when it does not apply. `canBulkSelectRequest` is the one rule: a decided status (`approved`, `rejected`, `solved`, `responded`, `closed`) gets no checkbox, and the whole column drops off a page that has nothing left to decide. Open rows, including loan / asset / sick leave that can only be rejected in bulk, still get a box. Cases in `request-status-utils.test.ts`.
+
 - `[admin only] 2026-08-27` — **Fleet, HR and Operations can rate a rider, and the rating is inert until an admin says otherwise.** The composite score answers "did the rider hit their numbers", which is not the same question as "is this rider good to work with" — the second one only Fleet, HR and Operations can answer, and until now the panel had nowhere to record it.
 
   **A rating is one durable fact per team per driver per month.** `driver_performance_ratings` is keyed on `(driver_id, team_key, period_month)` with a `CHECK (period_month = date_trunc('month', period_month))`, because storing any other day in the month would make that uniqueness a lie. The month is deliberately *not* the date range on screen: a rating that changed when the operator moved the date filter would not be a rating. `admin_upsert_driver_performance_rating` normalises whatever date it is handed to the first of its Kuwait month, so mid-month is the same fact as month-end, and refuses a month that has not started (`future_period`) while allowing the current one — a review mid-month is a normal thing to record.

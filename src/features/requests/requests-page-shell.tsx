@@ -13,7 +13,6 @@ import {
   Download,
   Eye,
   Loader2,
-  MapPin,
   Plus,
   RefreshCw,
   Settings,
@@ -60,6 +59,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { RequestCreateDialog } from "./request-create-dialog";
 import {
+  canBulkSelectRequest,
   requestStatusLabelKey,
   requestStatusVariant,
   statusFiltersForRequestType,
@@ -134,21 +134,15 @@ const TYPE_FILTERS = [
   "salary_justification",
 ] as const;
 
-const CLOSED_STATUSES = new Set(["approved", "rejected", "solved"]);
-
 /**
  * Loan, asset and sick-leave approvals must capture terms (amount, tenure, penalty, document)
  * on the final step, which only the detail page can do — so they are never bulk approved.
  */
 function canBulkApprove(row: RequestListRow): boolean {
   return (
-    !CLOSED_STATUSES.has(row.status) &&
+    canBulkSelectRequest(row.status) &&
     !(DECISION_TERM_TYPES as readonly string[]).includes(row.request_type)
   );
-}
-
-function canBulkReject(row: RequestListRow): boolean {
-  return !CLOSED_STATUSES.has(row.status);
 }
 
 /** Only the rows currently on screen are exported, matching what the admin can see. */
@@ -266,7 +260,8 @@ export function RequestsPageShell({
     [statusCounts, t, visibleStatusFilters],
   );
 
-  const selectableRows = rows.filter(canBulkReject);
+  const selectableRows = rows.filter((row) => canBulkSelectRequest(row.status));
+  const showSelectColumn = canDecide && selectableRows.length > 0;
   const selectedRows = rows.filter((row) => selected.has(row.id));
   const approvableRows = selectedRows.filter(canBulkApprove);
 
@@ -608,7 +603,7 @@ export function RequestsPageShell({
         ) : (
           <AppDataTable
             columns={[
-              ...(canDecide
+              ...(showSelectColumn
                 ? [
                     {
                       id: "select",
@@ -616,10 +611,7 @@ export function RequestsPageShell({
                       label: (
                         <Checkbox
                           aria-label={t("bulk.selectAll")}
-                          checked={
-                            selectableRows.length > 0 &&
-                            selected.size === selectableRows.length
-                          }
+                          checked={selected.size === selectableRows.length}
                           onCheckedChange={toggleAll}
                         />
                       ),
@@ -645,14 +637,15 @@ export function RequestsPageShell({
                 )}
                 onClick={() => router.push(`/requests/${row.id}`)}
               >
-                {canDecide ? (
+                {showSelectColumn ? (
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                      aria-label={row.request_code}
-                      checked={selected.has(row.id)}
-                      disabled={!canBulkReject(row)}
-                      onCheckedChange={() => toggleRow(row.id)}
-                    />
+                    {canBulkSelectRequest(row.status) ? (
+                      <Checkbox
+                        aria-label={row.request_code}
+                        checked={selected.has(row.id)}
+                        onCheckedChange={() => toggleRow(row.id)}
+                      />
+                    ) : null}
                   </TableCell>
                 ) : null}
                 <TableCell>
@@ -687,15 +680,8 @@ export function RequestsPageShell({
                       <p className="truncate text-[13px] font-medium leading-tight">
                         {row.driver_name}
                       </p>
-                      <p className="flex items-center gap-1 text-[11px] leading-tight text-muted-foreground">
-                        {row.driver_zone ? (
-                          <>
-                            <MapPin className="h-3 w-3" />
-                            {row.driver_zone}
-                          </>
-                        ) : (
-                          row.driver_code
-                        )}
+                      <p className="text-[11px] leading-tight text-muted-foreground tabular-nums">
+                        {row.driver_code || "—"}
                       </p>
                     </div>
                   </div>
