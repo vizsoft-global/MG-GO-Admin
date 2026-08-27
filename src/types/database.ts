@@ -6784,6 +6784,10 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_dpd_live_snapshot: {
+        Args: { p_date?: string }
+        Returns: Json
+      }
       admin_driver_device_overview: {
         Args: { p_driver_id: string; p_history_limit?: number }
         Returns: Json

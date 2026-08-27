@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
+  fetchDpdLiveSnapshot,
   fetchDriverPerformanceDetail,
   fetchDriverPerformanceList,
   fetchRecentDeliveriesFeed,
@@ -46,6 +47,18 @@ export function useRecentDeliveriesFeed(
   return useQuery({
     queryKey: queryKeys.performance.recentDeliveries(limit),
     queryFn: () => fetchRecentDeliveriesFeed(limit),
+    enabled: options?.enabled ?? true,
+    refetchInterval: options?.refetchInterval ?? 30_000,
+  });
+}
+
+export function useDpdLiveSnapshot(
+  date: string,
+  options?: { enabled?: boolean; refetchInterval?: number | false },
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.liveSnapshot(date),
+    queryFn: () => fetchDpdLiveSnapshot(date),
     enabled: options?.enabled ?? true,
     refetchInterval: options?.refetchInterval ?? 30_000,
   });

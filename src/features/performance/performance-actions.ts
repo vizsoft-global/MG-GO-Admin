@@ -12,6 +12,9 @@ import {
 import {
   DEFAULT_PERFORMANCE_WEIGHTS,
   performanceBand,
+  type DpdLiveBreakdownRow,
+  type DpdLiveLeaderRow,
+  type DpdLiveSnapshot,
   type PerformanceDriverRow,
   type PerformanceExceptionSummary,
   type PerformanceKpis,
@@ -265,6 +268,97 @@ export async function fetchDriverPerformanceReport(input: {
     weights: result.weights,
     totalCount: result.totalCount,
     truncated: result.totalCount > result.rows.length,
+  };
+}
+
+function num(value: unknown): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseBreakdown(raw: unknown): DpdLiveBreakdownRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      id: o.id == null ? null : String(o.id),
+      label:
+        o.label == null || String(o.label).trim() === ""
+          ? null
+          : String(o.label),
+      deliveries: num(o.deliveries),
+      on_duty: num(o.on_duty),
+    };
+  });
+}
+
+function parseLeaderboard(raw: unknown): DpdLiveLeaderRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      driver_id: String(o.driver_id ?? ""),
+      driver_name: String(o.driver_name ?? "—"),
+      driver_code: String(o.driver_code ?? ""),
+      zone_name: o.zone_name == null ? null : String(o.zone_name),
+      partner_name: o.partner_name == null ? null : String(o.partner_name),
+      is_on_duty: Boolean(o.is_on_duty),
+      submitted: num(o.submitted),
+      verified: num(o.verified),
+      in_transit: num(o.in_transit),
+    };
+  });
+}
+
+/** One round trip for the live DPD tab — see admin_dpd_live_snapshot. */
+export async function fetchDpdLiveSnapshot(
+  date?: string,
+): Promise<DpdLiveSnapshot> {
+  await requirePerformanceView();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_dpd_live_snapshot", {
+    p_date: date ?? undefined,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const deliveries = (payload.deliveries ?? {}) as Record<string, unknown>;
+  const roster = (payload.roster ?? {}) as Record<string, unknown>;
+  const alerts = (payload.alerts ?? {}) as Record<string, unknown>;
+
+  return {
+    date: String(payload.date ?? date ?? kuwaitToday()),
+    generated_at: String(payload.generated_at ?? new Date().toISOString()),
+    deliveries: {
+      created: num(deliveries.created),
+      in_transit: num(deliveries.in_transit),
+      pending: num(deliveries.pending),
+      under_review: num(deliveries.under_review),
+      verified: num(deliveries.verified),
+      rejected: num(deliveries.rejected),
+      cancelled: num(deliveries.cancelled),
+    },
+    roster: {
+      active_drivers: num(roster.active_drivers),
+      total_drivers: num(roster.total_drivers),
+      on_duty: num(roster.on_duty),
+      tracking_live: num(roster.tracking_live),
+      checked_in: num(roster.checked_in),
+    },
+    alerts: {
+      out_of_zone: num(alerts.out_of_zone),
+      gps_offline: num(alerts.gps_offline),
+      low_battery: num(alerts.low_battery),
+    },
+    leaderboard: parseLeaderboard(payload.leaderboard),
+    zones: parseBreakdown(payload.zones),
+    partners: parseBreakdown(payload.partners),
+    score: parseKpis(payload.score),
   };
 }
 

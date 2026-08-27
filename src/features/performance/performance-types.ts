@@ -137,6 +137,56 @@ export type PerformanceReport = {
   totalCount: number;
 };
 
+export type DpdLiveBreakdownRow = {
+  /** Null means unassigned — a real bucket, not a missing row. */
+  id: string | null;
+  label: string | null;
+  deliveries: number;
+  on_duty: number;
+};
+
+export type DpdLiveLeaderRow = {
+  driver_id: string;
+  driver_name: string;
+  driver_code: string;
+  zone_name: string | null;
+  partner_name: string | null;
+  is_on_duty: boolean;
+  submitted: number;
+  verified: number;
+  in_transit: number;
+};
+
+export type DpdLiveSnapshot = {
+  date: string;
+  generated_at: string;
+  deliveries: {
+    created: number;
+    in_transit: number;
+    pending: number;
+    under_review: number;
+    verified: number;
+    rejected: number;
+    cancelled: number;
+  };
+  roster: {
+    active_drivers: number;
+    total_drivers: number;
+    on_duty: number;
+    tracking_live: number;
+    checked_in: number;
+  };
+  alerts: {
+    out_of_zone: number;
+    gps_offline: number;
+    low_battery: number;
+  };
+  leaderboard: DpdLiveLeaderRow[];
+  zones: DpdLiveBreakdownRow[];
+  partners: DpdLiveBreakdownRow[];
+  score: PerformanceKpis;
+};
+
 export type RecentDeliveryFeedItem = {
   id: string;
   driver_id: string | null;
