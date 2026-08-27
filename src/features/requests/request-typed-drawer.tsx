@@ -83,7 +83,11 @@ export function RequestTypedDrawer({
             </div>
 
             <div className="border-t border-border pt-2.5">
-              <RequesterHeader driverId={request.driver_id} requester={request.requester} />
+              <RequesterHeader
+                driverId={request.driver_id}
+                requestId={request.id}
+                requester={request.requester}
+              />
             </div>
 
             {subjectRow || message ? (

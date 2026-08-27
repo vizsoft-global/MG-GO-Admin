@@ -19,6 +19,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  inclusiveDurationDays,
+  shouldShowCreateField,
+  typedRequiredPayloadKeys,
+  typeUsesDateRange,
+} from "./request-create-utils";
 import { TYPE_FIELDS } from "./request-typed-fields";
 import { REQUEST_TYPE_SLUGS } from "./settings-types";
 import type {
@@ -168,7 +174,7 @@ export function RequestCreateDialog({
     ? fields.some((field) => field.key === "amount_kwd")
     : dynamicFields.some((field) => field.target === "amount_kwd");
   const hasDates = isTyped
-    ? fields.some((field) => field.key === "start_date")
+    ? typeUsesDateRange(type, fields)
     : Boolean(typeDef?.date_range_required) ||
       dynamicFields.some((field) => field.target === "start_date" || field.target === "end_date");
   const hasSeverity = isTyped
@@ -198,13 +204,17 @@ export function RequestCreateDialog({
       field.field_key !== "declaration_accepted",
   );
 
+  const typedRequired = isTyped ? typedRequiredPayloadKeys(type, draft) : [];
+  const durationDays = inclusiveDurationDays(value("start_date"), value("end_date"));
   const missingRequired =
     !driverId ||
     (hasDates && (!value("start_date") || !value("end_date"))) ||
     (hasDeclaration && !declaration) ||
+    typedRequired.some((key) => !value(key).trim()) ||
     extraDynamic.some(
       (field) =>
         field.is_required &&
+        shouldShowCreateField(field.field_key, draft) &&
         (field.kind === "checkbox"
           ? value(field.field_key) !== "true"
           : !value(field.field_key).trim()),
@@ -264,6 +274,12 @@ export function RequestCreateDialog({
   };
 
   const fieldLabel = (key: string) => t(`create.fields.${key}` as "create.fields.comment");
+  const fieldPlaceholder = (key: string) => {
+    const path = `create.placeholders.${key}` as "create.placeholders.comment";
+    return t.has(path) ? t(path) : t("create.asRiderStated");
+  };
+  const requiredMark = (key: string) =>
+    typedRequired.includes(key) ? <span className="text-destructive"> *</span> : null;
 
   return (
     <Dialog
@@ -337,6 +353,7 @@ export function RequestCreateDialog({
                     className="h-9"
                     value={value("start_date")}
                     onChange={(e) => set("start_date", e.target.value)}
+                    placeholder={fieldPlaceholder("start_date")}
                   />
                 </div>
                 <div className="space-y-1">
@@ -349,8 +366,19 @@ export function RequestCreateDialog({
                     min={value("start_date") || undefined}
                     value={value("end_date")}
                     onChange={(e) => set("end_date", e.target.value)}
+                    placeholder={fieldPlaceholder("end_date")}
                   />
                 </div>
+                {durationDays != null ? (
+                  <div className="space-y-1">
+                    <Label>{fieldLabel("duration_days")}</Label>
+                    <Input
+                      readOnly
+                      className="h-9 tabular-nums"
+                      value={t("create.daysCount", { count: durationDays })}
+                    />
+                  </div>
+                ) : null}
               </>
             ) : null}
 
@@ -399,11 +427,88 @@ export function RequestCreateDialog({
 
             {payloadFields.map((field) => {
               const key = field.key;
+              if (!shouldShowCreateField(key, draft)) return null;
+
+              if (key === "request_mode") {
+                const options = ["Renewal", "First Time"] as const;
+                return (
+                  <div key={key} className="space-y-1">
+                    <Label>
+                      {fieldLabel(key)}
+                      {requiredMark(key)}
+                    </Label>
+                    <Select
+                      items={options.map((option) => ({
+                        value: option,
+                        label: t(`create.assetModes.${option === "Renewal" ? "renewal" : "firstTime"}`),
+                      }))}
+                      value={value(key)}
+                      onValueChange={(next) => {
+                        set(key, next ?? "");
+                        if (next === "First Time") set("asset_current_status", "");
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder={fieldPlaceholder(key)} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {options.map((option) => (
+                          <SelectItem
+                            key={option}
+                            value={option}
+                            label={t(`create.assetModes.${option === "Renewal" ? "renewal" : "firstTime"}`)}
+                          >
+                            {t(`create.assetModes.${option === "Renewal" ? "renewal" : "firstTime"}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              }
+
+              if (key === "asset_current_status") {
+                const options = ["Lost", "Damaged"] as const;
+                return (
+                  <div key={key} className="space-y-1">
+                    <Label>
+                      {fieldLabel(key)}
+                      {requiredMark(key)}
+                    </Label>
+                    <Select
+                      items={options.map((option) => ({
+                        value: option,
+                        label: t(`create.assetStatus.${option.toLowerCase()}` as "create.assetStatus.lost"),
+                      }))}
+                      value={value(key)}
+                      onValueChange={(next) => set(key, next ?? "")}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder={fieldPlaceholder(key)} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {options.map((option) => (
+                          <SelectItem
+                            key={option}
+                            value={option}
+                            label={t(`create.assetStatus.${option.toLowerCase()}` as "create.assetStatus.lost")}
+                          >
+                            {t(`create.assetStatus.${option.toLowerCase()}` as "create.assetStatus.lost")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              }
 
               if (key === "tenure_months") {
                 return (
                   <div key={key} className="space-y-1">
-                    <Label>{fieldLabel(key)}</Label>
+                    <Label>
+                      {fieldLabel(key)}
+                      {requiredMark(key)}
+                    </Label>
                     <Select
                       items={(options?.loanTenures ?? []).map((option) => ({
                         value: String(option.months),
@@ -437,7 +542,10 @@ export function RequestCreateDialog({
               if (key === "category") {
                 return (
                   <div key={key} className="space-y-1">
-                    <Label>{fieldLabel(key)}</Label>
+                    <Label>
+                      {fieldLabel(key)}
+                      {requiredMark(key)}
+                    </Label>
                     <Select
                       items={(options?.complaintCategories ?? []).map((option) => ({
                         value: option.key,
@@ -471,11 +579,15 @@ export function RequestCreateDialog({
               if (LONG_TEXT_KEYS.has(key)) {
                 return (
                   <div key={key} className="space-y-1 sm:col-span-2">
-                    <Label>{fieldLabel(key)}</Label>
+                    <Label>
+                      {fieldLabel(key)}
+                      {requiredMark(key)}
+                    </Label>
                     <Textarea
                       rows={2}
                       value={value(key)}
                       onChange={(e) => set(key, e.target.value)}
+                      placeholder={fieldPlaceholder(key)}
                     />
                   </div>
                 );
@@ -483,7 +595,10 @@ export function RequestCreateDialog({
 
               return (
                 <div key={key} className="space-y-1">
-                  <Label>{fieldLabel(key)}</Label>
+                  <Label>
+                    {fieldLabel(key)}
+                    {requiredMark(key)}
+                  </Label>
                   <Input
                     className="h-9"
                     type={
@@ -498,14 +613,20 @@ export function RequestCreateDialog({
                     min={NUMBER_KEYS.has(key) ? 0 : undefined}
                     value={value(key)}
                     onChange={(e) => set(key, e.target.value)}
-                    placeholder={TEXT_KEYS.has(key) ? t("create.asRiderStated") : undefined}
+                    placeholder={
+                      DATE_KEYS.has(key) || MONTH_KEYS.has(key)
+                        ? fieldPlaceholder(key)
+                        : TEXT_KEYS.has(key)
+                          ? t("create.asRiderStated")
+                          : fieldPlaceholder(key)
+                    }
                   />
                 </div>
               );
             })}
 
             {!isTyped
-              ? extraDynamic.map((field) => {
+              ? extraDynamic.filter((field) => shouldShowCreateField(field.field_key, draft)).map((field) => {
                   const key = field.field_key;
                   const label = (
                     <>
@@ -574,6 +695,7 @@ export function RequestCreateDialog({
                           rows={2}
                           value={value(key)}
                           onChange={(e) => set(key, e.target.value)}
+                          placeholder={t("create.placeholders.comment")}
                         />
                       </div>
                     );
@@ -613,7 +735,7 @@ export function RequestCreateDialog({
                   onCheckedChange={(checked) => setDeclaration(checked === true)}
                 />
                 <span className="text-[11px] text-muted-foreground">
-                  {t("create.declaration")}
+                  {t("create.declaration")} <span className="text-destructive">*</span>
                 </span>
               </label>
             ) : null}

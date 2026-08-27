@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   graphql_public: {
     Tables: {
@@ -6796,6 +6796,7 @@ export type Database = {
           latest_activity_at: string
         }[]
       }
+      admin_expire_esign_requests: { Args: never; Returns: number }
       admin_expire_stale_pickups: { Args: never; Returns: number }
       admin_force_sign_out_driver: {
         Args: { p_driver_id: string }

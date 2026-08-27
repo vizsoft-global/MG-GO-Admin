@@ -45,6 +45,7 @@ import {
   requestStatusLabelKey,
   requestStatusVariant,
 } from "./request-status-utils";
+import { fuelFinalApproveBlocked } from "./request-create-utils";
 import { RequesterHeader } from "./requester-header";
 import { DECISION_TERM_TYPES } from "./types";
 import type {
@@ -169,6 +170,17 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const currentTerms = decidedTerms(steps);
   const acknowledged = request != null && isDriverAcknowledged(request.status, request.payload);
   const termsOnApprove = takesTerms && isFinalApprovalStep(steps);
+  const fuelApproveBlocked =
+    request != null &&
+    fuelFinalApproveBlocked({
+      requestType: request.request_type,
+      fuelTransferType: request.fuel_transfer_type,
+      isFinalStep: isFinalApprovalStep(steps),
+    });
+  const ackNote =
+    typeof request?.payload?.driver_ack_note === "string"
+      ? request.payload.driver_ack_note.trim()
+      : "";
 
   const runAction = async (
     action: string,
@@ -179,6 +191,10 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     },
   ) => {
     const note = (options?.reasonOverride ?? reason).trim();
+    if (action === "approve" && fuelApproveBlocked) {
+      toast.error(t("detail.fuelTransfer.requiredBeforeApprove"));
+      return;
+    }
     if (REASON_REQUIRED_ACTIONS.has(action) && !note) {
       toast.error(t("detail.reasonRequired"));
       return;
@@ -190,7 +206,11 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
       reschedule: options?.reschedule,
     });
     if (!result.ok) {
-      toast.error(result.error ?? t("detail.actionFailed"));
+      toast.error(
+        result.error === "fuel_transfer_type_required"
+          ? t("detail.fuelTransfer.requiredBeforeApprove")
+          : (result.error ?? t("detail.actionFailed")),
+      );
       return;
     }
     toast.success(t("detail.actionOk"));
@@ -262,7 +282,11 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
       />
 
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-        <RequesterHeader driverId={request.driver_id} requester={request.requester} />
+        <RequesterHeader
+          driverId={request.driver_id}
+          requestId={request.id}
+          requester={request.requester}
+        />
       </div>
 
       <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
@@ -411,8 +435,12 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                         type="button"
                         variant={index === 0 ? "default" : "outline"}
                         className="h-9"
-                        disabled={decide.isPending}
+                        disabled={decide.isPending || (action === "approve" && fuelApproveBlocked)}
                         onClick={() => {
+                          if (action === "approve" && fuelApproveBlocked) {
+                            toast.error(t("detail.fuelTransfer.requiredBeforeApprove"));
+                            return;
+                          }
                           if (action === "approve" && termsOnApprove) {
                             setTermsMode("approve");
                             return;
@@ -549,6 +577,14 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 {t(`status.${requestStatusLabelKey(request.status, request.payload)}` as "status.pending")}
               </StatusPill>
             </div>
+            {acknowledged && ackNote ? (
+              <div className="mt-2 rounded-lg border border-border bg-muted/30 px-2.5 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t("detail.terms.riderNote")}
+                </p>
+                <p className="mt-0.5 whitespace-pre-wrap text-sm">{ackNote}</p>
+              </div>
+            ) : null}
           </section>
         ) : null}
         </div>

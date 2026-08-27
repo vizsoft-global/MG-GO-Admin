@@ -18,7 +18,7 @@ const TILES = [
   { href: "/requests/esign/sent", key: "sent", icon: FileSignature },
   { href: "/requests/esign/signatures", key: "signatures", icon: ListChecks },
   { href: "/requests/esign/categories", key: "categories", icon: Tags },
-  { href: "/visit-bookings/calendar", key: "calendar", icon: CalendarDays },
+  { href: "/visit-bookings/calendar?from=requests-esign", key: "calendar", icon: CalendarDays },
   { href: "/requests/settings/screenshot", key: "screenshot", icon: ShieldCheck },
 ] as const;
 

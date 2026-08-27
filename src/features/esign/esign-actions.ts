@@ -5,7 +5,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
-import { isEsignDueDateAllowed } from "./esign-due-date";
+import { effectiveEsignStatus, isEsignDueDateAllowed } from "./esign-due-date";
 import { esignDocumentHref } from "./esign-storage-key";
 import type {
   EsignCategoryRow,
@@ -35,6 +35,8 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function mapListRow(r: Record<string, unknown>): EsignListRow {
+  const storedStatus = String(r.display_status ?? r.status ?? "pending");
+  const dueAt = r.due_at != null ? String(r.due_at) : null;
   return {
     id: String(r.id),
     request_code: String(r.request_code ?? ""),
@@ -44,7 +46,7 @@ function mapListRow(r: Record<string, unknown>): EsignListRow {
     driver_id: String(r.driver_id ?? ""),
     driver_name: String(r.driver_name ?? "—"),
     driver_code: String(r.driver_code ?? ""),
-    status: String(r.status ?? "pending") as EsignRequestStatus,
+    status: effectiveEsignStatus(storedStatus, dueAt, kuwaitTodayYmd()) as EsignRequestStatus,
     due_at: r.due_at != null ? String(r.due_at) : null,
     screenshot_restricted: Boolean(r.screenshot_restricted),
     sent_at: String(r.sent_at ?? r.created_at ?? ""),
@@ -92,19 +94,22 @@ export async function fetchEsignStatusCounts(): Promise<EsignStatusCounts> {
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
 
   const [requests, categories] = await Promise.all([
-    (supabase as any).from("esign_requests").select("status, created_at, signed_at"),
+    (supabase as any).from("esign_requests").select("status, due_at, created_at, signed_at"),
     supabase
       .from("esign_categories")
       .select("id", { count: "exact", head: true })
       .eq("is_active", true),
   ]);
 
+  const today = kuwaitTodayYmd();
   const rows = (requests.data ?? []) as {
     status: string;
+    due_at: string | null;
     created_at: string | null;
     signed_at: string | null;
   }[];
-  const count = (status: string) => rows.filter((row) => row.status === status).length;
+  const count = (status: string) =>
+    rows.filter((row) => effectiveEsignStatus(row.status, row.due_at, today) === status).length;
 
   return {
     all: rows.length,
@@ -256,8 +261,12 @@ export async function createEsignRequest(input: {
   category_key?: string | null;
   due_at?: string | null;
   document_storage_key?: string | null;
+  screenshot_restricted?: boolean | null;
 }): Promise<{ ok: boolean; id?: string; request_code?: string; error?: string }> {
   await requireRequestsManage();
+  if (!input.category_key?.trim()) {
+    return { ok: false, error: "category_required" };
+  }
   if (!isEsignDueDateAllowed(input.due_at ?? "", kuwaitTodayYmd())) {
     return { ok: false, error: "due_in_past" };
   }
@@ -265,9 +274,10 @@ export async function createEsignRequest(input: {
   const { data, error } = await (supabase as any).rpc("admin_create_esign_request", {
     p_driver_id: input.driver_id,
     p_title: input.title.trim(),
-    p_category_key: input.category_key || undefined,
+    p_category_key: input.category_key.trim(),
     p_due_at: input.due_at || undefined,
     p_document_storage_key: input.document_storage_key || undefined,
+    p_screenshot_restricted: input.screenshot_restricted ?? undefined,
   });
 
   if (error) return { ok: false, error: error.message };

@@ -105,11 +105,13 @@ type DetailTabId =
  */
 const DRIVER_BACK_TARGETS: Record<
   string,
-  { href: string; labelKey: "backToList" | "backToLiveTracking" }
+  { href: string; labelKey: "backToList" | "backToLiveTracking" | "backToRequest" }
 > = {
   "live-tracking-v2": { href: "/live-tracking-v2", labelKey: "backToLiveTracking" },
   "live-tracking": { href: "/live-tracking", labelKey: "backToLiveTracking" },
 };
+
+const REQUEST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function DetailSkeleton() {
   return (
@@ -353,10 +355,15 @@ function DriverDetailContent({ id }: { id: string }) {
    * list rather than being trusted as a path, so the parameter cannot be used to point the
    * button at an arbitrary URL.
    */
-  const backTarget = DRIVER_BACK_TARGETS[searchParams.get("from") ?? ""] ?? {
-    href: "/drivers",
-    labelKey: "backToList" as const,
-  };
+  const from = searchParams.get("from");
+  const requestId = searchParams.get("requestId");
+  const backTarget =
+    from === "requests" && requestId && REQUEST_ID_RE.test(requestId)
+      ? { href: `/requests/${requestId}`, labelKey: "backToRequest" as const }
+      : (DRIVER_BACK_TARGETS[from ?? ""] ?? {
+          href: "/drivers",
+          labelKey: "backToList" as const,
+        });
 
   const handleEditOpenChange = (open: boolean) => {
     if (!open) {

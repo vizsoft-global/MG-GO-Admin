@@ -116,15 +116,6 @@ export function EsignSentShell() {
     () => categoriesData?.rows.filter((c) => c.is_active) ?? [],
     [categoriesData?.rows],
   );
-  // Base UI Select renders the raw value in the trigger unless it is given `items`.
-  const categoryItems = useMemo(
-    () =>
-      selectOptions([
-        { value: "__none", label: t("fieldCategoryNone") },
-        ...categories.map((c) => ({ value: c.key, label: c.label_en })),
-      ]),
-    [categories, t],
-  );
 
   useEffect(() => {
     if (searchParams.get("add") === "1") {
@@ -134,7 +125,7 @@ export function EsignSentShell() {
   }, [searchParams, router]);
 
   const submitCreate = async () => {
-    if (!driverId || !title.trim() || !documentFile) {
+    if (!driverId || !title.trim() || !categoryKey || !documentFile) {
       toast.error(t("errors.missingFields"));
       return;
     }
@@ -155,18 +146,22 @@ export function EsignSentShell() {
       return;
     }
 
+    const category = categories.find((row) => row.key === categoryKey);
     const result = await create.mutateAsync({
       driver_id: driverId,
       title: title.trim(),
-      category_key: categoryKey || null,
+      category_key: categoryKey,
       due_at: dueAt || null,
       document_storage_key: upload.key,
+      screenshot_restricted: category?.screenshot_restricted ?? false,
     });
     if (!result.ok) {
       toast.error(
         result.error === "due_in_past"
           ? t("errors.due_in_past")
-          : (result.error ?? t("errors.createFailed")),
+          : result.error === "category_required"
+            ? t("errors.categoryRequired")
+            : (result.error ?? t("errors.createFailed")),
       );
       return;
     }
@@ -358,7 +353,9 @@ export function EsignSentShell() {
         <DialogContent className="overflow-visible pt-4" showCloseButton closeOutside>
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label>{t("fieldDriver")}</Label>
+              <Label>
+                {t("fieldDriver")} <span className="text-destructive">*</span>
+              </Label>
               <SearchSelect
                 items={driverItems}
                 value={driverId}
@@ -370,7 +367,9 @@ export function EsignSentShell() {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="esign-title">{t("fieldTitle")}</Label>
+              <Label htmlFor="esign-title">
+                {t("fieldTitle")} <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="esign-title"
                 className="h-9"
@@ -380,17 +379,18 @@ export function EsignSentShell() {
               />
             </div>
             <div className="space-y-1">
-              <Label>{t("fieldCategory")}</Label>
+              <Label>
+                {t("fieldCategory")} <span className="text-destructive">*</span>
+              </Label>
               <Select
-                items={categoryItems}
-                value={categoryKey || "__none"}
-                onValueChange={(v) => setCategoryKey(v === "__none" ? "" : (v ?? ""))}
+                items={selectOptions(categories.map((c) => ({ value: c.key, label: c.label_en })))}
+                value={categoryKey || undefined}
+                onValueChange={(v) => setCategoryKey(v ?? "")}
               >
                 <SelectTrigger className="h-9 w-full">
                   <SelectValue placeholder={t("fieldCategoryPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none">{t("fieldCategoryNone")}</SelectItem>
                   {categories.map((c) => (
                     <SelectItem key={c.key} value={c.key}>
                       {c.label_en}
@@ -436,7 +436,14 @@ export function EsignSentShell() {
             <Button
               type="button"
               className="h-9"
-              disabled={create.isPending || uploading || !driverId || !title.trim() || !documentFile}
+              disabled={
+                create.isPending ||
+                uploading ||
+                !driverId ||
+                !title.trim() ||
+                !categoryKey ||
+                !documentFile
+              }
               onClick={() => void submitCreate()}
             >
               {create.isPending || uploading ? (
