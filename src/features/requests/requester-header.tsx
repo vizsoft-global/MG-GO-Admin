@@ -19,13 +19,18 @@ function initials(name: string): string {
 
 export function RequesterHeader({
   driverId,
+  requestId,
   requester,
 }: {
   driverId: string;
+  requestId?: string;
   requester: RequestRequester | null;
 }) {
   const t = useTranslations("pages.requests");
   const name = requester?.name || "—";
+  const profileHref = requestId
+    ? `/drivers/${driverId}?from=requests&requestId=${requestId}`
+    : `/drivers/${driverId}`;
 
   return (
     <div className="flex items-center justify-between gap-2">
@@ -55,7 +60,7 @@ export function RequesterHeader({
         variant="outline"
         size="sm"
         className="h-8 shrink-0"
-        render={<Link href={`/drivers/${driverId}`} />}
+        render={<Link href={profileHref} />}
       >
         <ExternalLink className="me-1.5 h-3.5 w-3.5" />
         {t("detail.viewProfile")}

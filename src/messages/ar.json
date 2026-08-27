@@ -1338,6 +1338,7 @@
       "subtitle": "الملف والسجل التشغيلي",
       "backToList": "العودة إلى السائقين",
       "backToLiveTracking": "العودة إلى التتبع المباشر",
+      "backToRequest": "العودة إلى الطلب",
       "editDriver": "تعديل السائق",
       "approveAction": "تحقق واعتماد",
       "approveConfirmBody": "إنشاء حساب السائق وتفعيله وإصدار رمز دخول من 6 أرقام؟",
@@ -3231,7 +3232,8 @@
           "penaltyAmount": "مبلغ الغرامة",
           "requiredDocument": "المستند المطلوب",
           "requiredDocumentPlaceholder": "مثال: شهادة طبية",
-          "ackDone": "أقرّ العامل بهذه الشروط في التطبيق."
+          "ackDone": "أقرّ العامل بهذه الشروط في التطبيق.",
+          "riderNote": "ملاحظة المندوب"
         },
         "otherDetails": "تفاصيل أخرى",
         "stepSkipped": "غير مطلوب",
@@ -3248,6 +3250,7 @@
           "title": "طريقة الصرف (عند الموافقة)",
           "hint": "اختر طريقة صرف المبلغ. اضغط على الخيار المحدد لإلغائه.",
           "notSet": "غير محدد — لن تعرف الرواتب كيفية صرف المبلغ.",
+          "requiredBeforeApprove": "اختر نقدًا أو مع الراتب قبل اعتماد هذا الصرف.",
           "saved": "تم حفظ طريقة الصرف",
           "failed": "تعذر حفظ طريقة الصرف",
           "options": {
@@ -3760,11 +3763,12 @@
           "fieldTitle": "العنوان",
           "fieldTitlePlaceholder": "مثال: عقد العمل",
           "fieldCategory": "الفئة",
-          "fieldCategoryPlaceholder": "فئة اختيارية",
+          "fieldCategoryPlaceholder": "اختر الفئة…",
           "fieldCategoryNone": "بدون فئة",
           "fieldDue": "تاريخ الاستحقاق",
           "errors": {
-            "missingFields": "السائق والعنوان والمستند مطلوبة",
+            "missingFields": "السائق والعنوان والفئة والمستند مطلوبة",
+            "categoryRequired": "اختر فئة",
             "createFailed": "تعذر إنشاء الطلب",
             "uploadFailed": "تعذر رفع المستند",
             "unsupported_source_type": "نوع ملف غير مدعوم — ارفع ملف PDF أو PNG أو JPG",
@@ -4094,6 +4098,29 @@
           "declaration_accepted": "الإقرار",
           "date_range": "الفترة"
         },
+        "placeholders": {
+          "start_date": "اختر تاريخ البداية",
+          "end_date": "اختر تاريخ النهاية",
+          "duration_days": "الأيام",
+          "comment": "أضف ملاحظة",
+          "justification": "أضف مبرراً",
+          "symptoms_details": "صف الأعراض",
+          "reason": "أضف سبباً",
+          "description": "صف المشكلة",
+          "needed_by": "اختر التاريخ",
+          "request_mode": "تجديد أو أول مرة",
+          "asset_current_status": "مفقود أو تالف",
+          "leave_type": "مثال: سنوية"
+        },
+        "daysCount": "{count} أيام",
+        "assetModes": {
+          "renewal": "تجديد",
+          "firstTime": "أول مرة"
+        },
+        "assetStatus": {
+          "lost": "مفقود",
+          "damaged": "تالف"
+        },
         "severities": {
           "low": "منخفضة",
           "medium": "متوسطة",
@@ -4287,7 +4314,8 @@
         "full": "مكتمل",
         "blocked": "محجوب",
         "deskCount": "مكتب {count}",
-        "lunchBreak": "استراحة الغداء · {from} – {to}"
+        "lunchBreak": "استراحة الغداء · {from} – {to}",
+        "backToEsign": "العودة إلى الطلبات والتوقيع الإلكتروني"
       },
       "reception": {
         "title": "مكتب الاستقبال",

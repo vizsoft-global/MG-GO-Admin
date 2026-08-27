@@ -1349,6 +1349,7 @@
       "subtitle": "Profile and operational history",
       "backToList": "Back to drivers",
       "backToLiveTracking": "Back to live tracking",
+      "backToRequest": "Back to request",
       "editDriver": "Edit driver",
       "approveAction": "Verify & approve",
       "approveConfirmBody": "Create the driver account, activate them, and generate a 6-digit app passcode?",
@@ -3312,7 +3313,8 @@
           "penaltyAmount": "Penalty amount",
           "requiredDocument": "Required document",
           "requiredDocumentPlaceholder": "e.g. Medical certificate",
-          "ackDone": "The worker acknowledged these terms in the app."
+          "ackDone": "The worker acknowledged these terms in the app.",
+          "riderNote": "Rider note"
         },
         "otherDetails": "Other details",
         "stepSkipped": "Not needed",
@@ -3329,6 +3331,7 @@
           "title": "Transfer type (on approval)",
           "hint": "Select how the reimbursement is paid out. Click the selected option to clear it.",
           "notSet": "Not set — payroll will not know how to pay this out.",
+          "requiredBeforeApprove": "Select Cash or Salary before approving this payout.",
           "saved": "Transfer type saved",
           "failed": "Could not save the transfer type",
           "options": {
@@ -3841,11 +3844,12 @@
           "fieldTitle": "Title",
           "fieldTitlePlaceholder": "e.g. Employment contract",
           "fieldCategory": "Category",
-          "fieldCategoryPlaceholder": "Optional category",
+          "fieldCategoryPlaceholder": "Select category…",
           "fieldCategoryNone": "No category",
           "fieldDue": "Due date",
           "errors": {
-            "missingFields": "Driver, title and document are required",
+            "missingFields": "Driver, title, category and document are required",
+            "categoryRequired": "Select a category",
             "createFailed": "Could not create request",
             "uploadFailed": "Could not upload the document",
             "unsupported_source_type": "Unsupported file type — upload a PDF, PNG or JPG",
@@ -4175,6 +4179,29 @@
           "declaration_accepted": "Declaration",
           "date_range": "Dates"
         },
+        "placeholders": {
+          "start_date": "Select start date",
+          "end_date": "Select end date",
+          "duration_days": "Days",
+          "comment": "Add a comment",
+          "justification": "Add a justification",
+          "symptoms_details": "Describe the symptoms",
+          "reason": "Add a reason",
+          "description": "Describe the issue",
+          "needed_by": "Select date",
+          "request_mode": "Renewal or first time",
+          "asset_current_status": "Lost or damaged",
+          "leave_type": "e.g. Annual"
+        },
+        "daysCount": "{count} days",
+        "assetModes": {
+          "renewal": "Renewal",
+          "firstTime": "First Time"
+        },
+        "assetStatus": {
+          "lost": "Lost",
+          "damaged": "Damaged"
+        },
         "severities": {
           "low": "Low",
           "medium": "Medium",
@@ -4368,7 +4395,8 @@
         "full": "Full",
         "blocked": "Blocked",
         "deskCount": "Desk {count}",
-        "lunchBreak": "Lunch break · {from} – {to}"
+        "lunchBreak": "Lunch break · {from} – {to}",
+        "backToEsign": "Back to Requests & E-Signature"
       },
       "reception": {
         "title": "Reception desk",

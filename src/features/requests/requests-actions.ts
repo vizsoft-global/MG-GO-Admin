@@ -412,7 +412,13 @@ export async function decideAdminRequest(input: {
     p_meta: meta,
   });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    const message = error.message ?? "";
+    if (message.includes("fuel_transfer_type_required")) {
+      return { ok: false, error: "fuel_transfer_type_required" };
+    }
+    return { ok: false, error: error.message };
+  }
   const payload = asRecord(data);
   if (payload.ok === false) {
     return { ok: false, error: String(payload.error ?? "failed") };

@@ -134,7 +134,7 @@ export function EsignScreenshotSettingsShell() {
               {(defaultData?.value ?? true) ? t("blocked") : t("allowed")}
             </span>
             <Switch
-              checked={defaultData?.value ?? true}
+              checked={!(defaultData?.value ?? true)}
               onCheckedChange={() => void toggleDefault()}
               aria-label={t("defaultLabel")}
             />
@@ -179,7 +179,7 @@ export function EsignScreenshotSettingsShell() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Switch
-                          checked={row.screenshot_restricted}
+                          checked={!row.screenshot_restricted}
                           onCheckedChange={() => toggleType(row)}
                           aria-label={tTypes(row.request_type as RequestTypeSlug)}
                         />
@@ -228,7 +228,7 @@ export function EsignScreenshotSettingsShell() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Switch
-                            checked={row.screenshot_restricted}
+                            checked={!row.screenshot_restricted}
                             onCheckedChange={() => toggleCategory(row)}
                             aria-label={row.label_en}
                           />

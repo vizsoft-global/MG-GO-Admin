@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Building2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, Building2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Breadcrumb,
@@ -86,7 +86,11 @@ function LegendDot({ className, label }: { className: string; label: string }) {
   );
 }
 
-export function VisitsCalendarShell() {
+export function VisitsCalendarShell({
+  fromEsignHub = false,
+}: {
+  fromEsignHub?: boolean;
+}) {
   const t = useTranslations("pages.visitBookings");
   const [mode, setMode] = useState<BoardMode>("day");
   const [date, setDate] = useState(() => new Date());
@@ -275,10 +279,21 @@ export function VisitsCalendarShell() {
     <AppPage className="space-y-3">
       <Breadcrumb>
         <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/visit-bookings">{t("title")}</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
+          {fromEsignHub ? (
+            <>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/requests/esign">{t("calendar.backToEsign")}</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+            </>
+          ) : (
+            <>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/visit-bookings">{t("title")}</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+            </>
+          )}
           <BreadcrumbItem>
             <BreadcrumbPage>{t("calendar.title")}</BreadcrumbPage>
           </BreadcrumbItem>
@@ -287,6 +302,17 @@ export function VisitsCalendarShell() {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
+          {fromEsignHub ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              render={<Link href="/requests/esign" />}
+            >
+              <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
+              {t("calendar.backToEsign")}
+            </Button>
+          ) : null}
           {configs.length > 0 ? (
             <Select
               items={branchItems}

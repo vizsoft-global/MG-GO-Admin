@@ -19,16 +19,19 @@ export async function GET(request: Request): Promise<Response> {
     async () => {
       try {
         const supabase = createAdminClient();
-        const [closed, breached] = await Promise.all([
+        const [closed, breached, expired] = await Promise.all([
           supabase.rpc("admin_auto_close_requests"),
           supabase.rpc("admin_run_request_sla_sweep"),
+          supabase.rpc("admin_expire_esign_requests"),
         ]);
         if (closed.error) throw closed.error;
         if (breached.error) throw breached.error;
+        if (expired.error) throw expired.error;
         return NextResponse.json({
           ok: true,
           closed: closed.data ?? 0,
           slaBreached: breached.data ?? 0,
+          esignExpired: expired.data ?? 0,
         });
       } catch (e) {
         Sentry.captureException(e);
