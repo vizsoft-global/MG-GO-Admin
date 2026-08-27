@@ -5404,6 +5404,7 @@
           "deliveries": "Deliveries",
           "zones": "Zones",
           "attendance": "Attendance",
+          "performance": "Performance",
           "requests": "Requests",
           "compliance": "Compliance",
           "earnings": "Earnings",
@@ -5927,7 +5928,42 @@
       "liveDeliveriesTitle": "Recent deliveries",
       "liveDeliveriesEmpty": "No recent deliveries",
       "liveDeliveriesEmptyHint": "New submissions appear here as they arrive.",
-      "onDuty": "On duty"
+      "onDuty": "On duty",
+      "colRank": "#",
+      "kpiTop": "Top performer",
+      "kpiBottom": "Lowest performer",
+      "bands": {
+        "top": "Top",
+        "good": "Good",
+        "watch": "Watch",
+        "critical": "Critical"
+      },
+      "bandSummary": "Top {top} · Good {good} · Watch {watch} · Critical {critical}",
+      "export": "Export report",
+      "report": {
+        "title": "DPD performance report",
+        "subtitle": "Ranked highest to lowest, with a summary sheet",
+        "hint": "Excel export of the DPD ranking for the selected period.",
+        "from": "From",
+        "to": "To",
+        "presets": {
+          "last7": "Last 7 days",
+          "last30": "Last 30 days",
+          "thisMonth": "This month",
+          "lastMonth": "Last month"
+        },
+        "filtersNote": "The report uses the filters and search currently applied to the list.",
+        "cancel": "Cancel",
+        "generate": "Generate",
+        "empty": "No drivers in this period",
+        "success": "Report ready — {count} drivers",
+        "truncated": "Report capped at {rows} of {total} drivers. Narrow the filters for a complete report.",
+        "errors": {
+          "invalidRange": "Choose a valid date range",
+          "notAuthorized": "You do not have permission to export reports",
+          "failed": "Could not generate the report"
+        }
+      }
     }
   }
 }

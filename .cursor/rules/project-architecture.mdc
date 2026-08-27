@@ -231,6 +231,16 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-27` — **DPD performance is ranked, banded and exportable.** `/performance` could already sort by score, but a sorted list is not a ranking: there was no rank to quote, no band to filter on, and the toolbar's export button was wired to `() => undefined`.
+
+ **Rank is computed on the score, never on `p_sort`.** `RANK() OVER (ORDER BY overall_score DESC)` sits in its own CTE above the existing `ROW_NUMBER()` that honours the operator's sort, so a driver's DPD rank stays theirs when the table is sorted by deliveries or by name — which is the whole point of quoting one. Ties share a rank. Bands come off the same score (`top` ≥ 80, `good` ≥ 70, `watch` ≥ 50, else `critical`) and the KPI block gained the top and bottom scorer by name plus a count per band, so "who are the bottom twenty" is a number rather than something counted by eye.
+
+ **`p_limit` is capped at 2000 and anything larger is *rejected*, not clamped.** A silently truncated report is the same failure as a silently short distance total: the caller has no way to know. The export requests exactly 2000, compares what came back against `totalCount`, and when the fleet is larger the workbook says so on its Summary sheet *and* the toast is a warning rather than a success. Verified on production that the guard raises `limit_too_large` rather than being inverted.
+
+ **`/performance` stopped borrowing `drivers.view`.** New `performance.view` / `performance.export`, and the migration grants both to every role that already holds `drivers.view` — without that the module would vanish from the sidebar for all four existing roles the moment the menu registry pointed at the new slug. The export action is gated on `performance.export` and reads through an ungated internal helper rather than through the view-gated list action, so a role granted export without view still exports instead of failing on a permission it was never asked for.
+
+ The workbook is two sheets (`DPD Ranking` + `Summary`) built on the `orders-report-xlsx` styling constants, band-tinted score cells, frozen through the driver column. Range presets are a pure `performanceRange(preset, today)` — "this month" ends **today**, not at month end, because a report must not claim days that have not happened. Migration `20261003100000`; 14 cases in `performance-ranking.test.ts` via the new `npm run test:performance`.
+
 - `[admin+app] 2026-08-27` — **Thirteen RCM / e-sign / asset QA reports.** Fuel on-behalf rows stay on one line (staff name + formatted time). Admin Calendar opened from the e-sign hub has Back to Requests & E-Signature. Final fuel approve requires Cash/Salary (UI + trigger). E-sign Settings switch is on = Allowed; New request requires a category and stamps its screenshot flag. Sent Requests marks overdue pending as Expired (Kuwait date; `admin_expire_esign_requests`). View Profile from a request returns to that request. New Request has a date picker, placeholders, and required stars that match Create. Asset First Time hides Lost/Damaged; Add Note focuses the field; admin shows `payload.driver_ack_note`. Migration `20260931100000`.
 
 - `[admin only] 2026-08-26` — **Client ID and Client name on a driver, and an import template that finally documents itself.** Two changes that meet in the same file.

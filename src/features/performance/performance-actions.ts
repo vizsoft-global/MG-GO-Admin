@@ -11,22 +11,46 @@ import {
 } from "./performance-formulas";
 import {
   DEFAULT_PERFORMANCE_WEIGHTS,
+  performanceBand,
   type PerformanceDriverRow,
   type PerformanceExceptionSummary,
   type PerformanceKpis,
   type PerformanceListFilters,
   type PerformanceListResult,
+  type PerformanceReport,
   type PerformanceScoreWeights,
   type RecentDeliveryFeedItem,
 } from "./performance-types";
 
 const DEFAULT_PAGE_SIZE = 50;
 
-async function requireDriversView() {
+/** Matches the server cap in admin_list_driver_performance. */
+const MAX_EXPORT_ROWS = 2000;
+
+async function requirePerformanceView() {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "drivers.view", session.isSuperAdmin)
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.view",
+      session.isSuperAdmin,
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+  return session;
+}
+
+async function requirePerformanceExport() {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.export",
+      session.isSuperAdmin,
+    )
   ) {
     throw new Error("not_authorized");
   }
@@ -92,6 +116,14 @@ function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
       .map(parseException)
       .filter((e): e is PerformanceExceptionSummary => e != null),
     overall_score: Number(raw.overall_score ?? 0),
+    dpd_rank: Number(raw.dpd_rank ?? 0),
+    score_band:
+      raw.score_band === "top" ||
+      raw.score_band === "good" ||
+      raw.score_band === "watch" ||
+      raw.score_band === "critical"
+        ? raw.score_band
+        : performanceBand(Number(raw.overall_score ?? 0)),
   };
 }
 
@@ -104,30 +136,36 @@ function parseKpis(raw: unknown): PerformanceKpis {
     const num = Number(v);
     return Number.isFinite(num) ? num : null;
   };
+  const s = (k: string) => {
+    const v = o[k];
+    return v == null || String(v).trim() === "" ? null : String(v);
+  };
   return {
     avg_overall: n("avg_overall"),
     avg_delivery_pct: n("avg_delivery_pct"),
     avg_utilization_pct: n("avg_utilization_pct"),
     avg_compliance: n("avg_compliance"),
     below_threshold: Number(o.below_threshold ?? 0),
+    top_score: n("top_score"),
+    bottom_score: n("bottom_score"),
+    top_driver_name: s("top_driver_name"),
+    bottom_driver_name: s("bottom_driver_name"),
+    band_top: Number(o.band_top ?? 0),
+    band_good: Number(o.band_good ?? 0),
+    band_watch: Number(o.band_watch ?? 0),
+    band_critical: Number(o.band_critical ?? 0),
   };
 }
 
-export async function fetchDriverPerformanceList(
-  filters: PerformanceListFilters = {},
+/** Ungated read. Every caller must have gated on its own permission first. */
+async function runPerformanceList(
+  filters: PerformanceListFilters,
 ): Promise<PerformanceListResult> {
-  await requireDriversView();
   const today = kuwaitToday();
   const from = filters.fromDate ?? addDays(today, -6);
   const to = filters.toDate ?? today;
   const page = filters.page ?? 0;
   const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
-
-  void logAdminRead("performance", "fetchDriverPerformanceList", {
-    from,
-    to,
-    filters,
-  });
 
   const supabase = await createClient();
   // RPC present in prod; regenerate database.ts when CLI types catch up.
@@ -166,6 +204,67 @@ export async function fetchDriverPerformanceList(
     weights: parsePerformanceWeights(payload.weights),
     from: String(payload.from ?? from),
     to: String(payload.to ?? to),
+    maxExportRows: Number(payload.maxExportRows ?? MAX_EXPORT_ROWS),
+  };
+}
+
+export async function fetchDriverPerformanceList(
+  filters: PerformanceListFilters = {},
+): Promise<PerformanceListResult> {
+  await requirePerformanceView();
+
+  void logAdminRead("performance", "fetchDriverPerformanceList", {
+    from: filters.fromDate,
+    to: filters.toDate,
+    filters,
+  });
+
+  return runPerformanceList(filters);
+}
+
+/**
+ * One unpaged read for the Excel report. Always ranked highest to lowest,
+ * whatever the operator has the table sorted by — the report is the ranking.
+ */
+export async function fetchDriverPerformanceReport(input: {
+  from: string;
+  to: string;
+  filters?: Omit<
+    PerformanceListFilters,
+    "page" | "pageSize" | "sort" | "fromDate" | "toDate"
+  >;
+}): Promise<PerformanceReport> {
+  await requirePerformanceExport();
+
+  const from = input.from?.slice(0, 10) ?? "";
+  const to = input.to?.slice(0, 10) ?? "";
+  if (!from || !to || to < from) {
+    throw new Error("invalid_date_range");
+  }
+
+  const result = await runPerformanceList({
+    ...(input.filters ?? {}),
+    fromDate: from,
+    toDate: to,
+    sort: "overall_desc",
+    page: 0,
+    pageSize: MAX_EXPORT_ROWS,
+  });
+
+  void logAdminRead("performance_report", "fetchDriverPerformanceReport", {
+    from,
+    to,
+    rowCount: result.rows.length,
+  });
+
+  return {
+    from: result.from,
+    to: result.to,
+    rows: result.rows,
+    kpis: result.kpis,
+    weights: result.weights,
+    totalCount: result.totalCount,
+    truncated: result.totalCount > result.rows.length,
   };
 }
 
@@ -190,7 +289,7 @@ export async function getPerformanceScoreWeights(): Promise<PerformanceScoreWeig
     !session ||
     !(
       session.isSuperAdmin ||
-      hasPermissionInSet(session.permissions, "drivers.view", session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "performance.view", session.isSuperAdmin) ||
       hasPermissionInSet(session.permissions, "attendance.manage", session.isSuperAdmin) ||
       hasPermissionInSet(session.permissions, "settings.manage", session.isSuperAdmin)
     )
@@ -254,7 +353,7 @@ export async function updatePerformanceScoreWeights(
 export async function fetchRecentDeliveriesFeed(
   limit = 30,
 ): Promise<RecentDeliveryFeedItem[]> {
-  await requireDriversView();
+  await requirePerformanceView();
   const supabase = await createClient();
 
   const { data, error } = await supabase

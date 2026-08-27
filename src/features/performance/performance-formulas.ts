@@ -70,3 +70,43 @@ export function addDays(isoDate: string, delta: number): string {
   const dt = new Date(Date.UTC(y, m - 1, d + delta));
   return dt.toISOString().slice(0, 10);
 }
+
+export const PERFORMANCE_RANGE_PRESETS = [
+  "last7",
+  "last30",
+  "thisMonth",
+  "lastMonth",
+] as const;
+
+export type PerformanceRangePreset =
+  (typeof PERFORMANCE_RANGE_PRESETS)[number];
+
+/**
+ * Resolve a preset against a Kuwait date. "This month" ends today rather than
+ * at month end — a report must not claim days that have not happened.
+ */
+export function performanceRange(
+  preset: PerformanceRangePreset,
+  today: string,
+): { from: string; to: string } {
+  const [y, m] = today.split("-").map(Number);
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  switch (preset) {
+    case "last7":
+      return { from: addDays(today, -6), to: today };
+    case "last30":
+      return { from: addDays(today, -29), to: today };
+    case "thisMonth":
+      return { from: `${y}-${pad(m)}-01`, to: today };
+    case "lastMonth": {
+      const prevY = m === 1 ? y - 1 : y;
+      const prevM = m === 1 ? 12 : m - 1;
+      const lastDay = new Date(Date.UTC(prevY, prevM, 0)).getUTCDate();
+      return {
+        from: `${prevY}-${pad(prevM)}-01`,
+        to: `${prevY}-${pad(prevM)}-${pad(lastDay)}`,
+      };
+    }
+  }
+}

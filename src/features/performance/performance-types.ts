@@ -40,6 +40,24 @@ export type PerformanceListFilters = {
   driverId?: string;
 };
 
+/** Score bands, widest first. Thresholds mirror admin_list_driver_performance. */
+export type PerformanceScoreBand = "top" | "good" | "watch" | "critical";
+
+export const PERFORMANCE_BAND_FLOOR: Record<PerformanceScoreBand, number> = {
+  top: 80,
+  good: 70,
+  watch: 50,
+  critical: 0,
+};
+
+export function performanceBand(score: number): PerformanceScoreBand {
+  if (!Number.isFinite(score)) return "critical";
+  if (score >= PERFORMANCE_BAND_FLOOR.top) return "top";
+  if (score >= PERFORMANCE_BAND_FLOOR.good) return "good";
+  if (score >= PERFORMANCE_BAND_FLOOR.watch) return "watch";
+  return "critical";
+}
+
 export type PerformanceExceptionSummary = {
   exception_type: string;
   exception_date: string;
@@ -76,6 +94,9 @@ export type PerformanceDriverRow = {
   exception_count: number;
   exceptions: PerformanceExceptionSummary[];
   overall_score: number;
+  /** Rank across the filtered fleet by score — not the row position. */
+  dpd_rank: number;
+  score_band: PerformanceScoreBand;
 };
 
 export type PerformanceKpis = {
@@ -84,6 +105,14 @@ export type PerformanceKpis = {
   avg_utilization_pct: number | null;
   avg_compliance: number | null;
   below_threshold: number;
+  top_score: number | null;
+  bottom_score: number | null;
+  top_driver_name: string | null;
+  bottom_driver_name: string | null;
+  band_top: number;
+  band_good: number;
+  band_watch: number;
+  band_critical: number;
 };
 
 export type PerformanceListResult = {
@@ -93,6 +122,19 @@ export type PerformanceListResult = {
   weights: PerformanceScoreWeights;
   from: string;
   to: string;
+  /** Server-side row ceiling for one export call. */
+  maxExportRows: number;
+};
+
+export type PerformanceReport = {
+  from: string;
+  to: string;
+  rows: PerformanceDriverRow[];
+  kpis: PerformanceKpis;
+  weights: PerformanceScoreWeights;
+  /** True when the fleet is larger than one export can carry. */
+  truncated: boolean;
+  totalCount: number;
 };
 
 export type RecentDeliveryFeedItem = {

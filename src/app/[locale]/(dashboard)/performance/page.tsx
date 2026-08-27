@@ -9,7 +9,7 @@ export default async function PerformancePage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requirePermission(locale, "drivers.view");
+  await requirePermission(locale, "performance.view");
 
   return <PerformancePageShell />;
 }
