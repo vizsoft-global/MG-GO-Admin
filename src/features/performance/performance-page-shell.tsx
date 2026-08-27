@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Percent } from "lucide-react";
+import { Loader2, Percent, Settings2, Star } from "lucide-react";
 import {
   AppEmptyState,
   AppListCard,
@@ -28,14 +28,24 @@ import {
   type PerformanceFiltersState,
 } from "./performance-filters-sheet";
 import { PerformanceLivePanel } from "./performance-live-panel";
-import type {
-  PerformanceDriverRow,
-  PerformanceHubTab,
-  PerformanceSortKey,
+import { PerformanceReportDialog } from "./performance-report-dialog";
+import {
+  scoreToStars,
+  type PerformanceDriverRow,
+  type PerformanceHubTab,
+  type PerformanceScoreBand,
+  type PerformanceSortKey,
 } from "./performance-types";
 import { useDriverPerformanceList } from "./use-performance";
 
 const PAGE_SIZE = 50;
+
+const BAND_CHIP_CLASS: Record<PerformanceScoreBand, string> = {
+  top: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  good: "border-border bg-muted/40 text-foreground",
+  watch: "border-amber-200 bg-amber-50 text-amber-800",
+  critical: "border-destructive/30 bg-destructive/10 text-destructive",
+};
 
 const SORT_OPTIONS: { value: PerformanceSortKey; labelKey: string }[] = [
   { value: "overall_desc", labelKey: "sortOverallDesc" },
@@ -43,6 +53,7 @@ const SORT_OPTIONS: { value: PerformanceSortKey; labelKey: string }[] = [
   { value: "delivery_desc", labelKey: "sortDeliveryDesc" },
   { value: "utilization_desc", labelKey: "sortUtilizationDesc" },
   { value: "compliance_desc", labelKey: "sortComplianceDesc" },
+  { value: "manual_desc", labelKey: "sortManualDesc" },
   { value: "name_asc", labelKey: "sortNameAsc" },
 ];
 
@@ -53,13 +64,6 @@ function countActiveFilters(filters: PerformanceFiltersState): number {
     filters.restaurantId,
     filters.driverStatus !== "all" ? filters.driverStatus : "",
   ].filter(Boolean).length;
-}
-
-function scoreTone(score: number): "success" | "warning" | "danger" | "neutral" {
-  if (score >= 80) return "success";
-  if (score >= 70) return "neutral";
-  if (score >= 50) return "warning";
-  return "danger";
 }
 
 export function PerformancePageShell() {
@@ -79,6 +83,7 @@ export function PerformancePageShell() {
   const [toDate, setToDate] = useState(today);
   const [selected, setSelected] = useState<PerformanceDriverRow | null>(null);
   const [drillOpen, setDrillOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -116,6 +121,7 @@ export function PerformancePageShell() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const columns = [
+    { id: "rank", label: t("colRank"), className: "w-12 text-center" },
     { id: "driver", label: t("colDriver"), className: "min-w-[160px]" },
     { id: "partner", label: t("colPartner") },
     { id: "zone", label: t("colZone") },
@@ -123,6 +129,7 @@ export function PerformancePageShell() {
     { id: "deliveryPct", label: t("colDeliveryPct"), className: "text-end" },
     { id: "utilization", label: t("colUtilization"), className: "text-end" },
     { id: "compliance", label: t("colCompliance"), className: "text-end" },
+    { id: "rating", label: t("colRating"), className: "text-end" },
     { id: "overall", label: t("colOverall"), className: "text-end" },
   ];
 
@@ -132,16 +139,25 @@ export function PerformancePageShell() {
         title={t("title")}
         description={t("subtitle")}
         actions={
-          tab === "period" ? (
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => void refetch()}
-              disabled={isFetching}
+          <div className="flex items-center gap-2">
+            {tab === "period" ? (
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline"
+                onClick={() => void refetch()}
+                disabled={isFetching}
+              >
+                {isFetching ? t("refreshing") : t("refresh")}
+              </button>
+            ) : null}
+            <Link
+              href="/performance/settings"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-2.5 text-sm text-primary transition-colors hover:bg-primary/10"
             >
-              {isFetching ? t("refreshing") : t("refresh")}
-            </button>
-          ) : null
+              <Settings2 className="size-3.5" />
+              {t("settingsLink")}
+            </Link>
+          </div>
         }
       />
 
@@ -189,12 +205,19 @@ export function PerformancePageShell() {
                 accent: "success",
               },
               {
-                label: t("kpiBelow"),
-                value: kpis?.below_threshold ?? 0,
-                accent:
-                  (kpis?.below_threshold ?? 0) > 0 ? "warning" : undefined,
+                label: t("kpiTop"),
+                value: kpis?.top_score ?? "—",
+                caption: kpis?.top_driver_name ?? undefined,
+                accent: "success",
+              },
+              {
+                label: t("kpiBottom"),
+                value: kpis?.bottom_score ?? "—",
+                caption: kpis?.bottom_driver_name ?? undefined,
+                accent: "danger",
               },
             ]}
+            compact
           />
 
           <AppListCard className="p-4">
@@ -219,8 +242,8 @@ export function PerformancePageShell() {
               onRefresh={() => void refetch()}
               isRefreshing={isFetching}
               refreshLabel={t("refresh")}
-              onExport={() => undefined}
-              exportDisabled
+              onExport={() => setReportOpen(true)}
+              exportLabel={t("export")}
               filterSlot={
                 <PerformanceFiltersButton
                   activeCount={countActiveFilters(filters)}
@@ -266,6 +289,9 @@ export function PerformancePageShell() {
                         setDrillOpen(true);
                       }}
                     >
+                      <TableCell className="text-center tabular-nums text-xs font-semibold text-muted-foreground">
+                        {row.dpd_rank}
+                      </TableCell>
                       <TableCell>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">
@@ -302,16 +328,29 @@ export function PerformancePageShell() {
                         {Math.round(row.compliance_score)}%
                       </TableCell>
                       <TableCell className="text-end">
+                        {row.manual_score == null ? (
+                          <span
+                            className="text-xs text-muted-foreground"
+                            title={t("ratingNone")}
+                          >
+                            —
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs font-medium tabular-nums"
+                            title={t("ratingTeamsHint", {
+                              count: row.manual_rating_count,
+                            })}
+                          >
+                            <Star className="size-3 fill-amber-400 text-amber-500" />
+                            {scoreToStars(row.manual_score)}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-end">
                         <span
-                          className={
-                            scoreTone(row.overall_score) === "success"
-                              ? "inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800"
-                              : scoreTone(row.overall_score) === "warning"
-                                ? "inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"
-                                : scoreTone(row.overall_score) === "danger"
-                                  ? "inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive"
-                                  : "inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-0.5 text-xs font-semibold"
-                          }
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${BAND_CHIP_CLASS[row.score_band]}`}
+                          title={t(`bands.${row.score_band}`)}
                         >
                           <Percent className="size-3 opacity-60" />
                           {row.overall_score}
@@ -321,13 +360,31 @@ export function PerformancePageShell() {
                   ))}
                 </AppDataTable>
 
-                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>
+                <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <span className="min-w-0">
                     {t("pageInfo", {
                       page: page + 1,
                       pages: totalPages,
                       total: totalCount,
                     })}
+                    {kpis ? (
+                      <span className="ms-2 hidden sm:inline">
+                        {t("bandSummary", {
+                          top: kpis.band_top,
+                          good: kpis.band_good,
+                          watch: kpis.band_watch,
+                          critical: kpis.band_critical,
+                        })}
+                      </span>
+                    ) : null}
+                    {kpis && kpis.rated_drivers > 0 ? (
+                      <span className="ms-2 hidden lg:inline">
+                        {t("ratingSummary", {
+                          rated: kpis.rated_drivers,
+                          avg: kpis.avg_manual ?? 0,
+                        })}
+                      </span>
+                    ) : null}
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -369,6 +426,15 @@ export function PerformancePageShell() {
         onOpenChange={setDrillOpen}
         fromDate={fromDate}
         toDate={toDate}
+      />
+
+      <PerformanceReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        fromDate={fromDate}
+        toDate={toDate}
+        filters={filters}
+        search={debouncedSearch}
       />
     </AppPage>
   );

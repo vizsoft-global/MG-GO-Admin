@@ -178,6 +178,12 @@ export const queryKeys = {
     recentDeliveries: (limit: number) =>
       ["performance", "recent-deliveries", limit] as const,
     weights: () => ["performance", "weights"] as const,
+    liveSnapshot: (date: string) =>
+      ["performance", "dpd-live", date] as const,
+    ratings: (driverId: string, periodMonth: string) =>
+      ["performance", "ratings", driverId, periodMonth] as const,
+    ratingTeams: () => ["performance", "rating-teams"] as const,
+    ratingStaff: () => ["performance", "rating-staff"] as const,
   },
   driverShifts: {
     all: () => ["driver-shifts"] as const,

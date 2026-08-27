@@ -229,7 +229,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/performance",
     defaultGroup: "Operations",
     defaultOrder: 8,
-    permission: "drivers.view",
+    permission: "performance.view",
   },
   {
     id: "requests",

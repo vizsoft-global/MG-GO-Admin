@@ -8,25 +8,58 @@ import {
   addDays,
   kuwaitToday,
   parsePerformanceWeights,
+  ratingPeriodMonth,
 } from "./performance-formulas";
 import {
   DEFAULT_PERFORMANCE_WEIGHTS,
+  performanceBand,
+  type DpdLiveBreakdownRow,
+  type DpdLiveLeaderRow,
+  type DpdLiveSnapshot,
   type PerformanceDriverRow,
   type PerformanceExceptionSummary,
   type PerformanceKpis,
   type PerformanceListFilters,
   type PerformanceListResult,
+  type PerformanceManualTeamScore,
+  type PerformanceRatingPanel,
+  type PerformanceRatingTeamConfig,
+  type PerformanceRatingTeamRow,
+  type PerformanceReport,
+  type PerformanceReportTeam,
   type PerformanceScoreWeights,
   type RecentDeliveryFeedItem,
 } from "./performance-types";
 
 const DEFAULT_PAGE_SIZE = 50;
 
-async function requireDriversView() {
+/** Matches the server cap in admin_list_driver_performance. */
+const MAX_EXPORT_ROWS = 2000;
+
+async function requirePerformanceView() {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "drivers.view", session.isSuperAdmin)
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.view",
+      session.isSuperAdmin,
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+  return session;
+}
+
+async function requirePerformanceExport() {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.export",
+      session.isSuperAdmin,
+    )
   ) {
     throw new Error("not_authorized");
   }
@@ -56,6 +89,19 @@ function parseException(raw: unknown): PerformanceExceptionSummary | null {
     resolution_status:
       o.resolution_status != null ? String(o.resolution_status) : null,
   };
+}
+
+function parseManualTeams(raw: unknown): PerformanceManualTeamScore[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      team_key: String(o.team_key ?? ""),
+      score: Number(o.score ?? 0),
+      months_rated: Number(o.months_rated ?? 0),
+      last_rated_at: o.last_rated_at == null ? null : String(o.last_rated_at),
+    };
+  });
 }
 
 function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
@@ -91,7 +137,21 @@ function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
     exceptions: exceptionsRaw
       .map(parseException)
       .filter((e): e is PerformanceExceptionSummary => e != null),
+    manual_score:
+      raw.manual_score == null || !Number.isFinite(Number(raw.manual_score))
+        ? null
+        : Number(raw.manual_score),
+    manual_rating_count: Number(raw.manual_rating_count ?? 0),
+    manual_teams: parseManualTeams(raw.manual_teams),
     overall_score: Number(raw.overall_score ?? 0),
+    dpd_rank: Number(raw.dpd_rank ?? 0),
+    score_band:
+      raw.score_band === "top" ||
+      raw.score_band === "good" ||
+      raw.score_band === "watch" ||
+      raw.score_band === "critical"
+        ? raw.score_band
+        : performanceBand(Number(raw.overall_score ?? 0)),
   };
 }
 
@@ -104,30 +164,38 @@ function parseKpis(raw: unknown): PerformanceKpis {
     const num = Number(v);
     return Number.isFinite(num) ? num : null;
   };
+  const s = (k: string) => {
+    const v = o[k];
+    return v == null || String(v).trim() === "" ? null : String(v);
+  };
   return {
     avg_overall: n("avg_overall"),
     avg_delivery_pct: n("avg_delivery_pct"),
     avg_utilization_pct: n("avg_utilization_pct"),
     avg_compliance: n("avg_compliance"),
     below_threshold: Number(o.below_threshold ?? 0),
+    top_score: n("top_score"),
+    bottom_score: n("bottom_score"),
+    top_driver_name: s("top_driver_name"),
+    bottom_driver_name: s("bottom_driver_name"),
+    band_top: Number(o.band_top ?? 0),
+    band_good: Number(o.band_good ?? 0),
+    band_watch: Number(o.band_watch ?? 0),
+    band_critical: Number(o.band_critical ?? 0),
+    avg_manual: n("avg_manual"),
+    rated_drivers: Number(o.rated_drivers ?? 0),
   };
 }
 
-export async function fetchDriverPerformanceList(
-  filters: PerformanceListFilters = {},
+/** Ungated read. Every caller must have gated on its own permission first. */
+async function runPerformanceList(
+  filters: PerformanceListFilters,
 ): Promise<PerformanceListResult> {
-  await requireDriversView();
   const today = kuwaitToday();
   const from = filters.fromDate ?? addDays(today, -6);
   const to = filters.toDate ?? today;
   const page = filters.page ?? 0;
   const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
-
-  void logAdminRead("performance", "fetchDriverPerformanceList", {
-    from,
-    to,
-    filters,
-  });
 
   const supabase = await createClient();
   // RPC present in prod; regenerate database.ts when CLI types catch up.
@@ -166,6 +234,175 @@ export async function fetchDriverPerformanceList(
     weights: parsePerformanceWeights(payload.weights),
     from: String(payload.from ?? from),
     to: String(payload.to ?? to),
+    maxExportRows: Number(payload.maxExportRows ?? MAX_EXPORT_ROWS),
+  };
+}
+
+export async function fetchDriverPerformanceList(
+  filters: PerformanceListFilters = {},
+): Promise<PerformanceListResult> {
+  await requirePerformanceView();
+
+  void logAdminRead("performance", "fetchDriverPerformanceList", {
+    from: filters.fromDate,
+    to: filters.toDate,
+    filters,
+  });
+
+  return runPerformanceList(filters);
+}
+
+/**
+ * One unpaged read for the Excel report. Always ranked highest to lowest,
+ * whatever the operator has the table sorted by — the report is the ranking.
+ */
+export async function fetchDriverPerformanceReport(input: {
+  from: string;
+  to: string;
+  filters?: Omit<
+    PerformanceListFilters,
+    "page" | "pageSize" | "sort" | "fromDate" | "toDate"
+  >;
+}): Promise<PerformanceReport> {
+  await requirePerformanceExport();
+
+  const from = input.from?.slice(0, 10) ?? "";
+  const to = input.to?.slice(0, 10) ?? "";
+  if (!from || !to || to < from) {
+    throw new Error("invalid_date_range");
+  }
+
+  const result = await runPerformanceList({
+    ...(input.filters ?? {}),
+    fromDate: from,
+    toDate: to,
+    sort: "overall_desc",
+    page: 0,
+    pageSize: MAX_EXPORT_ROWS,
+  });
+
+  void logAdminRead("performance_report", "fetchDriverPerformanceReport", {
+    from,
+    to,
+    rowCount: result.rows.length,
+  });
+
+  return {
+    from: result.from,
+    to: result.to,
+    rows: result.rows,
+    kpis: result.kpis,
+    weights: result.weights,
+    ratingTeams: await reportRatingTeams(),
+    totalCount: result.totalCount,
+    truncated: result.totalCount > result.rows.length,
+  };
+}
+
+/**
+ * Team columns come from the team table rather than from the rows, so the
+ * workbook's shape does not change with who happened to be rated. A failure
+ * here yields no team columns instead of no report.
+ */
+async function reportRatingTeams(): Promise<PerformanceReportTeam[]> {
+  try {
+    const teams = await fetchPerformanceRatingTeams();
+    return teams
+      .filter((team) => team.is_active)
+      .map((team) => ({ key: team.key, label: team.label_en }));
+  } catch {
+    return [];
+  }
+}
+
+function num(value: unknown): number {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseBreakdown(raw: unknown): DpdLiveBreakdownRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      id: o.id == null ? null : String(o.id),
+      label:
+        o.label == null || String(o.label).trim() === ""
+          ? null
+          : String(o.label),
+      deliveries: num(o.deliveries),
+      on_duty: num(o.on_duty),
+    };
+  });
+}
+
+function parseLeaderboard(raw: unknown): DpdLiveLeaderRow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      driver_id: String(o.driver_id ?? ""),
+      driver_name: String(o.driver_name ?? "—"),
+      driver_code: String(o.driver_code ?? ""),
+      zone_name: o.zone_name == null ? null : String(o.zone_name),
+      partner_name: o.partner_name == null ? null : String(o.partner_name),
+      is_on_duty: Boolean(o.is_on_duty),
+      submitted: num(o.submitted),
+      verified: num(o.verified),
+      in_transit: num(o.in_transit),
+    };
+  });
+}
+
+/** One round trip for the live DPD tab — see admin_dpd_live_snapshot. */
+export async function fetchDpdLiveSnapshot(
+  date?: string,
+): Promise<DpdLiveSnapshot> {
+  await requirePerformanceView();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_dpd_live_snapshot", {
+    p_date: date ?? undefined,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const deliveries = (payload.deliveries ?? {}) as Record<string, unknown>;
+  const roster = (payload.roster ?? {}) as Record<string, unknown>;
+  const alerts = (payload.alerts ?? {}) as Record<string, unknown>;
+
+  return {
+    date: String(payload.date ?? date ?? kuwaitToday()),
+    generated_at: String(payload.generated_at ?? new Date().toISOString()),
+    deliveries: {
+      created: num(deliveries.created),
+      in_transit: num(deliveries.in_transit),
+      pending: num(deliveries.pending),
+      under_review: num(deliveries.under_review),
+      verified: num(deliveries.verified),
+      rejected: num(deliveries.rejected),
+      cancelled: num(deliveries.cancelled),
+    },
+    roster: {
+      active_drivers: num(roster.active_drivers),
+      total_drivers: num(roster.total_drivers),
+      on_duty: num(roster.on_duty),
+      tracking_live: num(roster.tracking_live),
+      checked_in: num(roster.checked_in),
+    },
+    alerts: {
+      out_of_zone: num(alerts.out_of_zone),
+      gps_offline: num(alerts.gps_offline),
+      low_battery: num(alerts.low_battery),
+    },
+    leaderboard: parseLeaderboard(payload.leaderboard),
+    zones: parseBreakdown(payload.zones),
+    partners: parseBreakdown(payload.partners),
+    score: parseKpis(payload.score),
   };
 }
 
@@ -190,7 +427,7 @@ export async function getPerformanceScoreWeights(): Promise<PerformanceScoreWeig
     !session ||
     !(
       session.isSuperAdmin ||
-      hasPermissionInSet(session.permissions, "drivers.view", session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "performance.view", session.isSuperAdmin) ||
       hasPermissionInSet(session.permissions, "attendance.manage", session.isSuperAdmin) ||
       hasPermissionInSet(session.permissions, "settings.manage", session.isSuperAdmin)
     )
@@ -251,10 +488,277 @@ export async function updatePerformanceScoreWeights(
   }
 }
 
+function parseRatingTeamRow(raw: unknown): PerformanceRatingTeamRow {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    team_key: String(o.team_key ?? ""),
+    label_en: String(o.label_en ?? ""),
+    label_ar: String(o.label_ar ?? ""),
+    weight: num(o.weight ?? 1),
+    score:
+      o.score == null || !Number.isFinite(Number(o.score))
+        ? null
+        : Number(o.score),
+    comment: o.comment == null ? null : String(o.comment),
+    rated_at: o.rated_at == null ? null : String(o.rated_at),
+    rated_by: o.rated_by == null ? null : String(o.rated_by),
+    rated_by_name: o.rated_by_name == null ? null : String(o.rated_by_name),
+    can_edit: Boolean(o.can_edit),
+  };
+}
+
+export async function fetchDriverPerformanceRatings(
+  driverId: string,
+  periodMonth?: string,
+): Promise<PerformanceRatingPanel> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc(
+    "admin_list_driver_performance_ratings",
+    {
+      p_driver_id: driverId,
+      p_period_month: periodMonth ?? ratingPeriodMonth(kuwaitToday()),
+    },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const teams = Array.isArray(payload.teams) ? payload.teams : [];
+
+  return {
+    driver_id: String(payload.driver_id ?? driverId),
+    period_month: String(
+      payload.period_month ?? periodMonth ?? ratingPeriodMonth(kuwaitToday()),
+    ),
+    teams: teams.map(parseRatingTeamRow),
+  };
+}
+
+export async function saveDriverPerformanceRating(input: {
+  driverId: string;
+  teamKey: string;
+  periodMonth: string;
+  score: number;
+  comment?: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getSessionUser();
+    if (
+      !session ||
+      !hasPermissionInSet(
+        session.permissions,
+        "performance.rate",
+        session.isSuperAdmin,
+      )
+    ) {
+      throw new Error("not_authorized");
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_upsert_driver_performance_rating",
+      {
+        p_driver_id: input.driverId,
+        p_team_key: input.teamKey,
+        p_period_month: input.periodMonth,
+        p_score: input.score,
+        p_comment: input.comment ?? undefined,
+      },
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "driver_performance_rating",
+      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      routeName: "saveDriverPerformanceRating",
+      after: { score: input.score },
+      context: { team: input.teamKey, period: input.periodMonth },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "save_failed",
+    };
+  }
+}
+
+export async function clearDriverPerformanceRating(input: {
+  driverId: string;
+  teamKey: string;
+  periodMonth: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getSessionUser();
+    if (
+      !session ||
+      !hasPermissionInSet(
+        session.permissions,
+        "performance.rate",
+        session.isSuperAdmin,
+      )
+    ) {
+      throw new Error("not_authorized");
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_delete_driver_performance_rating",
+      {
+        p_driver_id: input.driverId,
+        p_team_key: input.teamKey,
+        p_period_month: input.periodMonth,
+      },
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: "delete",
+      entityType: "driver_performance_rating",
+      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      routeName: "clearDriverPerformanceRating",
+      context: { team: input.teamKey, period: input.periodMonth },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "delete_failed",
+    };
+  }
+}
+
+export async function fetchPerformanceRatingTeams(): Promise<
+  PerformanceRatingTeamConfig[]
+> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc(
+    "admin_list_performance_rating_teams",
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const teams = Array.isArray(payload.teams) ? payload.teams : [];
+
+  return teams.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    const members = Array.isArray(o.members) ? o.members : [];
+    return {
+      key: String(o.key ?? ""),
+      label_en: String(o.label_en ?? ""),
+      label_ar: String(o.label_ar ?? ""),
+      weight: num(o.weight ?? 1),
+      sort_order: num(o.sort_order),
+      is_active: Boolean(o.is_active),
+      members: members.map((m) => {
+        const mo = (m ?? {}) as Record<string, unknown>;
+        return {
+          profile_id: String(mo.profile_id ?? ""),
+          full_name: String(mo.full_name ?? "—"),
+          email: mo.email == null ? null : String(mo.email),
+        };
+      }),
+    };
+  });
+}
+
+export async function setPerformanceTeamMember(input: {
+  teamKey: string;
+  profileId: string;
+  member: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getSessionUser();
+    if (
+      !session ||
+      !hasPermissionInSet(
+        session.permissions,
+        "performance.manage_teams",
+        session.isSuperAdmin,
+      )
+    ) {
+      throw new Error("not_authorized");
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("admin_set_performance_team_member", {
+      p_team_key: input.teamKey,
+      p_profile_id: input.profileId,
+      p_member: input.member,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: input.member ? "create" : "delete",
+      entityType: "performance_rating_team_member",
+      entityId: `${input.teamKey}:${input.profileId}`,
+      routeName: "setPerformanceTeamMember",
+      context: { team: input.teamKey, member: input.member },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "update_failed",
+    };
+  }
+}
+
+/** Panel staff eligible to sit on a rating team. */
+export async function fetchRatingEligibleStaff(): Promise<
+  { id: string; full_name: string; email: string | null }[]
+> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .eq("role", "staff")
+    .eq("approval_status", "approved")
+    .not("admin_role_id", "is", null)
+    .is("archived_at", null)
+    .order("full_name");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    full_name: String(row.full_name ?? "—"),
+    email: row.email != null ? String(row.email) : null,
+  }));
+}
+
 export async function fetchRecentDeliveriesFeed(
   limit = 30,
 ): Promise<RecentDeliveryFeedItem[]> {
-  await requireDriversView();
+  await requirePerformanceView();
   const supabase = await createClient();
 
   const { data, error } = await supabase

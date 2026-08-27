@@ -6784,6 +6784,14 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_delete_driver_performance_rating: {
+        Args: { p_driver_id: string; p_period_month: string; p_team_key: string }
+        Returns: Json
+      }
+      admin_dpd_live_snapshot: {
+        Args: { p_date?: string }
+        Returns: Json
+      }
       admin_driver_device_overview: {
         Args: { p_driver_id: string; p_history_limit?: number }
         Returns: Json
@@ -6851,6 +6859,28 @@ export type Database = {
           p_sort?: string
           p_to: string
           p_zone_id?: string
+        }
+        Returns: Json
+      }
+      admin_list_driver_performance_ratings: {
+        Args: { p_driver_id: string; p_period_month?: string }
+        Returns: Json
+      }
+      admin_list_performance_rating_teams: {
+        Args: never
+        Returns: Json
+      }
+      admin_set_performance_team_member: {
+        Args: { p_member: boolean; p_profile_id: string; p_team_key: string }
+        Returns: Json
+      }
+      admin_upsert_driver_performance_rating: {
+        Args: {
+          p_comment?: string
+          p_driver_id: string
+          p_period_month: string
+          p_score: number
+          p_team_key: string
         }
         Returns: Json
       }

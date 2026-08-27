@@ -29,6 +29,7 @@ export function parsePerformanceWeights(raw: unknown): PerformanceScoreWeights {
     delivery: num("delivery", DEFAULT_PERFORMANCE_WEIGHTS.delivery),
     utilization: num("utilization", DEFAULT_PERFORMANCE_WEIGHTS.utilization),
     compliance: num("compliance", DEFAULT_PERFORMANCE_WEIGHTS.compliance),
+    manual: num("manual", DEFAULT_PERFORMANCE_WEIGHTS.manual),
     exception_penalty: num(
       "exception_penalty",
       DEFAULT_PERFORMANCE_WEIGHTS.exception_penalty,
@@ -37,24 +38,32 @@ export function parsePerformanceWeights(raw: unknown): PerformanceScoreWeights {
 }
 
 /**
- * Composite score 0–100.
- * OPEN: default equal weights need client/product sign-off.
+ * Composite score 0–100. Mirrors admin_list_driver_performance.
+ *
+ * `manualScore` null means no team has rated the driver, and an unrated driver
+ * must not be penalised: the manual term is dropped and the remaining weights
+ * renormalise, so the score is exactly what it would be with no manual weight
+ * configured at all.
  */
 export function computeOverallScore(
   deliveryEfficiency: number,
   utilization: number,
   complianceScore: number,
   weights: PerformanceScoreWeights = DEFAULT_PERFORMANCE_WEIGHTS,
+  manualScore: number | null = null,
 ): number {
   const wD = Math.max(0, weights.delivery);
   const wU = Math.max(0, weights.utilization);
   const wC = Math.max(0, weights.compliance);
-  const sum = wD + wU + wC || 1;
+  const rated = manualScore != null && Number.isFinite(manualScore);
+  const wM = rated ? Math.max(0, weights.manual) : 0;
+  const sum = wD + wU + wC + wM || 1;
   const score =
     100 *
     ((wD * clamp01(deliveryEfficiency) +
       wU * clamp01(utilization) +
-      wC * clamp01(complianceScore / 100)) /
+      wC * clamp01(complianceScore / 100) +
+      wM * clamp01((manualScore ?? 0) / 100)) /
       sum);
   return Math.round(score * 10) / 10;
 }
@@ -65,8 +74,57 @@ export function kuwaitToday(): string {
   );
 }
 
+/**
+ * The rating period a Kuwait date falls in, as the first of that month.
+ * A rating is keyed on a month, so the date range on screen only decides which
+ * month is being edited — never the identity of the rating itself.
+ */
+export function ratingPeriodMonth(isoDate: string): string {
+  return `${isoDate.slice(0, 7)}-01`;
+}
+
 export function addDays(isoDate: string, delta: number): string {
   const [y, m, d] = isoDate.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d + delta));
   return dt.toISOString().slice(0, 10);
+}
+
+export const PERFORMANCE_RANGE_PRESETS = [
+  "last7",
+  "last30",
+  "thisMonth",
+  "lastMonth",
+] as const;
+
+export type PerformanceRangePreset =
+  (typeof PERFORMANCE_RANGE_PRESETS)[number];
+
+/**
+ * Resolve a preset against a Kuwait date. "This month" ends today rather than
+ * at month end — a report must not claim days that have not happened.
+ */
+export function performanceRange(
+  preset: PerformanceRangePreset,
+  today: string,
+): { from: string; to: string } {
+  const [y, m] = today.split("-").map(Number);
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  switch (preset) {
+    case "last7":
+      return { from: addDays(today, -6), to: today };
+    case "last30":
+      return { from: addDays(today, -29), to: today };
+    case "thisMonth":
+      return { from: `${y}-${pad(m)}-01`, to: today };
+    case "lastMonth": {
+      const prevY = m === 1 ? y - 1 : y;
+      const prevM = m === 1 ? 12 : m - 1;
+      const lastDay = new Date(Date.UTC(prevY, prevM, 0)).getUTCDate();
+      return {
+        from: `${prevY}-${pad(prevM)}-01`,
+        to: `${prevY}-${pad(prevM)}-${pad(lastDay)}`,
+      };
+    }
+  }
 }
