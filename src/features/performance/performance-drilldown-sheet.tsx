@@ -6,7 +6,8 @@ import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Link } from "@/i18n/navigation";
-import { pct, rawPct } from "./performance-formulas";
+import { pct, rawPct, ratingPeriodMonth } from "./performance-formulas";
+import { PerformanceRatingPanel } from "./performance-rating-panel";
 import { useDriverPerformanceDetail } from "./use-performance";
 import type { PerformanceDriverRow } from "./performance-types";
 
@@ -51,7 +52,7 @@ function DrilldownBody({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="space-y-3 px-5 pb-3 pt-4">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pb-3 pt-4">
         {isLoading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -90,6 +91,13 @@ function DrilldownBody({
                 hint={t("exceptionsCount", { count: detail.exception_count })}
               />
             </div>
+
+            <PerformanceRatingPanel
+              driverId={detail.driver_id}
+              periodMonth={ratingPeriodMonth(toDate)}
+              rangeScore={detail.manual_score}
+              rangeTeamCount={detail.manual_rating_count}
+            />
 
             <div className="grid grid-cols-3 gap-2 text-center text-xs">
               <div className="rounded-lg border border-border p-2">

@@ -1,6 +1,8 @@
 import ExcelJS from "exceljs";
+import { scoreToStars } from "./performance-types";
 import type {
   PerformanceReport,
+  PerformanceReportTeam,
   PerformanceScoreBand,
 } from "./performance-types";
 
@@ -54,18 +56,37 @@ export const PERFORMANCE_REPORT_HEADERS = [
   "Utilization %",
   "Compliance",
   "Exceptions",
+  "Rating",
   "Score",
   "Band",
 ] as const;
 
 const COLUMN_WIDTHS = [
-  7, 10, 10, 28, 18, 16, 11, 12, 11, 12, 11, 9, 11, 13, 11, 11, 8, 10,
+  7, 10, 10, 28, 18, 16, 11, 12, 11, 12, 11, 9, 11, 13, 11, 11, 9, 8, 10,
 ];
+
+/** Width of one per-team rating column. */
+const TEAM_COLUMN_WIDTH = 13;
+
+/**
+ * Header order, with one column per rating team appended. Team columns go last
+ * so the fixed columns keep their positions whatever the tenant's teams are.
+ */
+export function performanceReportHeaders(
+  teams: PerformanceReportTeam[] = [],
+): string[] {
+  return [
+    ...PERFORMANCE_REPORT_HEADERS,
+    ...teams.map((team) => `${team.label} (1-5)`),
+  ];
+}
 
 /** One row of the report, in header order. Exported for the test. */
 export function performanceReportRow(
   row: PerformanceReport["rows"][number],
+  teams: PerformanceReportTeam[] = [],
 ): (string | number)[] {
+  const byTeam = new Map(row.manual_teams.map((t) => [t.team_key, t.score]));
   return [
     row.dpd_rank,
     row.employee_id ?? "",
@@ -83,8 +104,15 @@ export function performanceReportRow(
     Math.round(row.utilization * 100),
     Math.round(row.compliance_score),
     row.exception_count,
+    // The 1–5 the raters picked, not the 0–100 the formula uses: a reader of the
+    // sheet compares this against a rating, not against a percentage.
+    row.manual_score == null ? "—" : scoreToStars(row.manual_score),
     row.overall_score,
     BAND_LABEL[row.score_band],
+    ...teams.map((team) => {
+      const score = byTeam.get(team.key);
+      return score == null ? "—" : Math.round(score * 10) / 10;
+    }),
   ];
 }
 
@@ -103,9 +131,14 @@ export async function buildPerformanceReportXlsx(
     views: [{ state: "frozen", xSplit: 4, ySplit: 1 }],
   });
 
-  sheet.columns = COLUMN_WIDTHS.map((width) => ({ width }));
+  const teams = report.ratingTeams ?? [];
 
-  const headerRow = sheet.addRow([...PERFORMANCE_REPORT_HEADERS]);
+  sheet.columns = [
+    ...COLUMN_WIDTHS,
+    ...teams.map(() => TEAM_COLUMN_WIDTH),
+  ].map((width) => ({ width }));
+
+  const headerRow = sheet.addRow(performanceReportHeaders(teams));
   headerRow.height = 22;
   headerRow.eachCell((cell) => styleHeaderCell(cell));
 
@@ -113,7 +146,7 @@ export async function buildPerformanceReportXlsx(
   const bandCol = PERFORMANCE_REPORT_HEADERS.indexOf("Band") + 1;
 
   for (const row of report.rows) {
-    const dataRow = sheet.addRow(performanceReportRow(row));
+    const dataRow = sheet.addRow(performanceReportRow(row, teams));
     const bandFill: ExcelJS.Fill = {
       type: "pattern",
       pattern: "solid",
@@ -161,11 +194,20 @@ export async function buildPerformanceReportXlsx(
     ["Good (70-79)", k.band_good],
     ["Watch (50-69)", k.band_watch],
     ["Critical (under 50)", k.band_critical],
+    ["Drivers with a team rating", k.rated_drivers],
+    ["Average team rating", k.avg_manual != null ? scoreToStars(k.avg_manual) : "—"],
     [
       "Score weights",
-      `delivery ${report.weights.delivery} · utilization ${report.weights.utilization} · compliance ${report.weights.compliance}`,
+      `delivery ${report.weights.delivery} · utilization ${report.weights.utilization} · compliance ${report.weights.compliance} · rating ${report.weights.manual}`,
     ],
   ];
+
+  if (report.weights.manual === 0) {
+    summaryRows.push([
+      "Note",
+      "Team rating weight is 0 — ratings are reported but do not move the score",
+    ]);
+  }
 
   if (report.truncated) {
     summaryRows.push([

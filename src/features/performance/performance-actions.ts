@@ -8,6 +8,7 @@ import {
   addDays,
   kuwaitToday,
   parsePerformanceWeights,
+  ratingPeriodMonth,
 } from "./performance-formulas";
 import {
   DEFAULT_PERFORMANCE_WEIGHTS,
@@ -20,7 +21,12 @@ import {
   type PerformanceKpis,
   type PerformanceListFilters,
   type PerformanceListResult,
+  type PerformanceManualTeamScore,
+  type PerformanceRatingPanel,
+  type PerformanceRatingTeamConfig,
+  type PerformanceRatingTeamRow,
   type PerformanceReport,
+  type PerformanceReportTeam,
   type PerformanceScoreWeights,
   type RecentDeliveryFeedItem,
 } from "./performance-types";
@@ -85,6 +91,19 @@ function parseException(raw: unknown): PerformanceExceptionSummary | null {
   };
 }
 
+function parseManualTeams(raw: unknown): PerformanceManualTeamScore[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      team_key: String(o.team_key ?? ""),
+      score: Number(o.score ?? 0),
+      months_rated: Number(o.months_rated ?? 0),
+      last_rated_at: o.last_rated_at == null ? null : String(o.last_rated_at),
+    };
+  });
+}
+
 function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
   const exceptionsRaw = Array.isArray(raw.exceptions) ? raw.exceptions : [];
   return {
@@ -118,6 +137,12 @@ function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
     exceptions: exceptionsRaw
       .map(parseException)
       .filter((e): e is PerformanceExceptionSummary => e != null),
+    manual_score:
+      raw.manual_score == null || !Number.isFinite(Number(raw.manual_score))
+        ? null
+        : Number(raw.manual_score),
+    manual_rating_count: Number(raw.manual_rating_count ?? 0),
+    manual_teams: parseManualTeams(raw.manual_teams),
     overall_score: Number(raw.overall_score ?? 0),
     dpd_rank: Number(raw.dpd_rank ?? 0),
     score_band:
@@ -157,6 +182,8 @@ function parseKpis(raw: unknown): PerformanceKpis {
     band_good: Number(o.band_good ?? 0),
     band_watch: Number(o.band_watch ?? 0),
     band_critical: Number(o.band_critical ?? 0),
+    avg_manual: n("avg_manual"),
+    rated_drivers: Number(o.rated_drivers ?? 0),
   };
 }
 
@@ -266,9 +293,26 @@ export async function fetchDriverPerformanceReport(input: {
     rows: result.rows,
     kpis: result.kpis,
     weights: result.weights,
+    ratingTeams: await reportRatingTeams(),
     totalCount: result.totalCount,
     truncated: result.totalCount > result.rows.length,
   };
+}
+
+/**
+ * Team columns come from the team table rather than from the rows, so the
+ * workbook's shape does not change with who happened to be rated. A failure
+ * here yields no team columns instead of no report.
+ */
+async function reportRatingTeams(): Promise<PerformanceReportTeam[]> {
+  try {
+    const teams = await fetchPerformanceRatingTeams();
+    return teams
+      .filter((team) => team.is_active)
+      .map((team) => ({ key: team.key, label: team.label_en }));
+  } catch {
+    return [];
+  }
 }
 
 function num(value: unknown): number {
@@ -442,6 +486,273 @@ export async function updatePerformanceScoreWeights(
       error: e instanceof Error ? e.message : "update_failed",
     };
   }
+}
+
+function parseRatingTeamRow(raw: unknown): PerformanceRatingTeamRow {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    team_key: String(o.team_key ?? ""),
+    label_en: String(o.label_en ?? ""),
+    label_ar: String(o.label_ar ?? ""),
+    weight: num(o.weight ?? 1),
+    score:
+      o.score == null || !Number.isFinite(Number(o.score))
+        ? null
+        : Number(o.score),
+    comment: o.comment == null ? null : String(o.comment),
+    rated_at: o.rated_at == null ? null : String(o.rated_at),
+    rated_by: o.rated_by == null ? null : String(o.rated_by),
+    rated_by_name: o.rated_by_name == null ? null : String(o.rated_by_name),
+    can_edit: Boolean(o.can_edit),
+  };
+}
+
+export async function fetchDriverPerformanceRatings(
+  driverId: string,
+  periodMonth?: string,
+): Promise<PerformanceRatingPanel> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc(
+    "admin_list_driver_performance_ratings",
+    {
+      p_driver_id: driverId,
+      p_period_month: periodMonth ?? ratingPeriodMonth(kuwaitToday()),
+    },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const teams = Array.isArray(payload.teams) ? payload.teams : [];
+
+  return {
+    driver_id: String(payload.driver_id ?? driverId),
+    period_month: String(
+      payload.period_month ?? periodMonth ?? ratingPeriodMonth(kuwaitToday()),
+    ),
+    teams: teams.map(parseRatingTeamRow),
+  };
+}
+
+export async function saveDriverPerformanceRating(input: {
+  driverId: string;
+  teamKey: string;
+  periodMonth: string;
+  score: number;
+  comment?: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getSessionUser();
+    if (
+      !session ||
+      !hasPermissionInSet(
+        session.permissions,
+        "performance.rate",
+        session.isSuperAdmin,
+      )
+    ) {
+      throw new Error("not_authorized");
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_upsert_driver_performance_rating",
+      {
+        p_driver_id: input.driverId,
+        p_team_key: input.teamKey,
+        p_period_month: input.periodMonth,
+        p_score: input.score,
+        p_comment: input.comment ?? undefined,
+      },
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "driver_performance_rating",
+      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      routeName: "saveDriverPerformanceRating",
+      after: { score: input.score },
+      context: { team: input.teamKey, period: input.periodMonth },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "save_failed",
+    };
+  }
+}
+
+export async function clearDriverPerformanceRating(input: {
+  driverId: string;
+  teamKey: string;
+  periodMonth: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getSessionUser();
+    if (
+      !session ||
+      !hasPermissionInSet(
+        session.permissions,
+        "performance.rate",
+        session.isSuperAdmin,
+      )
+    ) {
+      throw new Error("not_authorized");
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_delete_driver_performance_rating",
+      {
+        p_driver_id: input.driverId,
+        p_team_key: input.teamKey,
+        p_period_month: input.periodMonth,
+      },
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: "delete",
+      entityType: "driver_performance_rating",
+      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      routeName: "clearDriverPerformanceRating",
+      context: { team: input.teamKey, period: input.periodMonth },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "delete_failed",
+    };
+  }
+}
+
+export async function fetchPerformanceRatingTeams(): Promise<
+  PerformanceRatingTeamConfig[]
+> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc(
+    "admin_list_performance_rating_teams",
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const teams = Array.isArray(payload.teams) ? payload.teams : [];
+
+  return teams.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    const members = Array.isArray(o.members) ? o.members : [];
+    return {
+      key: String(o.key ?? ""),
+      label_en: String(o.label_en ?? ""),
+      label_ar: String(o.label_ar ?? ""),
+      weight: num(o.weight ?? 1),
+      sort_order: num(o.sort_order),
+      is_active: Boolean(o.is_active),
+      members: members.map((m) => {
+        const mo = (m ?? {}) as Record<string, unknown>;
+        return {
+          profile_id: String(mo.profile_id ?? ""),
+          full_name: String(mo.full_name ?? "—"),
+          email: mo.email == null ? null : String(mo.email),
+        };
+      }),
+    };
+  });
+}
+
+export async function setPerformanceTeamMember(input: {
+  teamKey: string;
+  profileId: string;
+  member: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await getSessionUser();
+    if (
+      !session ||
+      !hasPermissionInSet(
+        session.permissions,
+        "performance.manage_teams",
+        session.isSuperAdmin,
+      )
+    ) {
+      throw new Error("not_authorized");
+    }
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("admin_set_performance_team_member", {
+      p_team_key: input.teamKey,
+      p_profile_id: input.profileId,
+      p_member: input.member,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: input.member ? "create" : "delete",
+      entityType: "performance_rating_team_member",
+      entityId: `${input.teamKey}:${input.profileId}`,
+      routeName: "setPerformanceTeamMember",
+      context: { team: input.teamKey, member: input.member },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "update_failed",
+    };
+  }
+}
+
+/** Panel staff eligible to sit on a rating team. */
+export async function fetchRatingEligibleStaff(): Promise<
+  { id: string; full_name: string; email: string | null }[]
+> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .eq("role", "staff")
+    .eq("approval_status", "approved")
+    .not("admin_role_id", "is", null)
+    .is("archived_at", null)
+    .order("full_name");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    full_name: String(row.full_name ?? "—"),
+    email: row.email != null ? String(row.email) : null,
+  }));
 }
 
 export async function fetchRecentDeliveriesFeed(

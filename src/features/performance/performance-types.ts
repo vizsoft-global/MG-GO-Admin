@@ -9,6 +9,8 @@ export type PerformanceSortKey =
   | "utilization_asc"
   | "compliance_desc"
   | "compliance_asc"
+  | "manual_desc"
+  | "manual_asc"
   | "name_asc"
   | "name_desc";
 
@@ -16,6 +18,8 @@ export type PerformanceScoreWeights = {
   delivery: number;
   utilization: number;
   compliance: number;
+  /** Fleet / HR / Operations rating. 0 = the rating does not move any score. */
+  manual: number;
   exception_penalty: number;
 };
 
@@ -23,8 +27,26 @@ export const DEFAULT_PERFORMANCE_WEIGHTS: PerformanceScoreWeights = {
   delivery: 1,
   utilization: 1,
   compliance: 1,
+  manual: 0,
   exception_penalty: 5,
 };
+
+/** 1–5 onto 0–100 with the midpoint preserved: 3 of 5 is average, so it is 50. */
+export function manualRatingToScore(rating: number): number {
+  if (!Number.isFinite(rating)) return 0;
+  const clamped = Math.min(5, Math.max(1, rating));
+  return Math.round(((clamped - 1) / 4) * 1000) / 10;
+}
+
+/**
+ * The inverse, so a list cell can show the 1–5 a rater actually picked rather
+ * than the normalised score the formula uses.
+ */
+export function scoreToStars(score: number): number {
+  if (!Number.isFinite(score)) return 1;
+  const clamped = Math.min(100, Math.max(0, score));
+  return Math.round(((clamped / 100) * 4 + 1) * 10) / 10;
+}
 
 export type PerformanceListFilters = {
   search?: string;
@@ -65,6 +87,17 @@ export type PerformanceExceptionSummary = {
   resolution_status: string | null;
 };
 
+/** Mirrors the CHECK on driver_performance_ratings.score. */
+export const RATING_SCALE_MAX = 5;
+
+export type PerformanceManualTeamScore = {
+  team_key: string;
+  /** Team average on the 1–5 scale across the months the range covers. */
+  score: number;
+  months_rated: number;
+  last_rated_at: string | null;
+};
+
 export type PerformanceDriverRow = {
   driver_id: string;
   driver_code: string;
@@ -93,6 +126,11 @@ export type PerformanceDriverRow = {
   compliance_score: number;
   exception_count: number;
   exceptions: PerformanceExceptionSummary[];
+  /** Null when no active team has rated this driver in the period. */
+  manual_score: number | null;
+  /** Number of teams holding a rating, not the number of rating rows. */
+  manual_rating_count: number;
+  manual_teams: PerformanceManualTeamScore[];
   overall_score: number;
   /** Rank across the filtered fleet by score — not the row position. */
   dpd_rank: number;
@@ -113,6 +151,45 @@ export type PerformanceKpis = {
   band_good: number;
   band_watch: number;
   band_critical: number;
+  /** Averaged over rated drivers only — otherwise it would measure coverage. */
+  avg_manual: number | null;
+  rated_drivers: number;
+};
+
+export type PerformanceRatingTeamRow = {
+  team_key: string;
+  label_en: string;
+  label_ar: string;
+  weight: number;
+  score: number | null;
+  comment: string | null;
+  rated_at: string | null;
+  rated_by: string | null;
+  rated_by_name: string | null;
+  /** Decided by the server from team membership, never by the client. */
+  can_edit: boolean;
+};
+
+export type PerformanceRatingPanel = {
+  driver_id: string;
+  period_month: string;
+  teams: PerformanceRatingTeamRow[];
+};
+
+export type PerformanceTeamMember = {
+  profile_id: string;
+  full_name: string;
+  email: string | null;
+};
+
+export type PerformanceRatingTeamConfig = {
+  key: string;
+  label_en: string;
+  label_ar: string;
+  weight: number;
+  sort_order: number;
+  is_active: boolean;
+  members: PerformanceTeamMember[];
 };
 
 export type PerformanceListResult = {
@@ -126,12 +203,23 @@ export type PerformanceListResult = {
   maxExportRows: number;
 };
 
+export type PerformanceReportTeam = {
+  key: string;
+  label: string;
+};
+
 export type PerformanceReport = {
   from: string;
   to: string;
   rows: PerformanceDriverRow[];
   kpis: PerformanceKpis;
   weights: PerformanceScoreWeights;
+  /**
+   * Active rating teams in display order, so the workbook has one column per
+   * team even for a team that rated nobody in the period — a missing column
+   * and an unrated fleet are different facts.
+   */
+  ratingTeams: PerformanceReportTeam[];
   /** True when the fleet is larger than one export can carry. */
   truncated: boolean;
   totalCount: number;

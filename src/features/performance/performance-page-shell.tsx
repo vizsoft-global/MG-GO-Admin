@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Percent } from "lucide-react";
+import { Loader2, Percent, Settings2, Star } from "lucide-react";
 import {
   AppEmptyState,
   AppListCard,
@@ -29,11 +29,12 @@ import {
 } from "./performance-filters-sheet";
 import { PerformanceLivePanel } from "./performance-live-panel";
 import { PerformanceReportDialog } from "./performance-report-dialog";
-import type {
-  PerformanceDriverRow,
-  PerformanceHubTab,
-  PerformanceScoreBand,
-  PerformanceSortKey,
+import {
+  scoreToStars,
+  type PerformanceDriverRow,
+  type PerformanceHubTab,
+  type PerformanceScoreBand,
+  type PerformanceSortKey,
 } from "./performance-types";
 import { useDriverPerformanceList } from "./use-performance";
 
@@ -52,6 +53,7 @@ const SORT_OPTIONS: { value: PerformanceSortKey; labelKey: string }[] = [
   { value: "delivery_desc", labelKey: "sortDeliveryDesc" },
   { value: "utilization_desc", labelKey: "sortUtilizationDesc" },
   { value: "compliance_desc", labelKey: "sortComplianceDesc" },
+  { value: "manual_desc", labelKey: "sortManualDesc" },
   { value: "name_asc", labelKey: "sortNameAsc" },
 ];
 
@@ -127,6 +129,7 @@ export function PerformancePageShell() {
     { id: "deliveryPct", label: t("colDeliveryPct"), className: "text-end" },
     { id: "utilization", label: t("colUtilization"), className: "text-end" },
     { id: "compliance", label: t("colCompliance"), className: "text-end" },
+    { id: "rating", label: t("colRating"), className: "text-end" },
     { id: "overall", label: t("colOverall"), className: "text-end" },
   ];
 
@@ -136,16 +139,25 @@ export function PerformancePageShell() {
         title={t("title")}
         description={t("subtitle")}
         actions={
-          tab === "period" ? (
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => void refetch()}
-              disabled={isFetching}
+          <div className="flex items-center gap-2">
+            {tab === "period" ? (
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline"
+                onClick={() => void refetch()}
+                disabled={isFetching}
+              >
+                {isFetching ? t("refreshing") : t("refresh")}
+              </button>
+            ) : null}
+            <Link
+              href="/performance/settings"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-2.5 text-sm text-primary transition-colors hover:bg-primary/10"
             >
-              {isFetching ? t("refreshing") : t("refresh")}
-            </button>
-          ) : null
+              <Settings2 className="size-3.5" />
+              {t("settingsLink")}
+            </Link>
+          </div>
         }
       />
 
@@ -316,6 +328,26 @@ export function PerformancePageShell() {
                         {Math.round(row.compliance_score)}%
                       </TableCell>
                       <TableCell className="text-end">
+                        {row.manual_score == null ? (
+                          <span
+                            className="text-xs text-muted-foreground"
+                            title={t("ratingNone")}
+                          >
+                            —
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs font-medium tabular-nums"
+                            title={t("ratingTeamsHint", {
+                              count: row.manual_rating_count,
+                            })}
+                          >
+                            <Star className="size-3 fill-amber-400 text-amber-500" />
+                            {scoreToStars(row.manual_score)}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-end">
                         <span
                           className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${BAND_CHIP_CLASS[row.score_band]}`}
                           title={t(`bands.${row.score_band}`)}
@@ -342,6 +374,14 @@ export function PerformancePageShell() {
                           good: kpis.band_good,
                           watch: kpis.band_watch,
                           critical: kpis.band_critical,
+                        })}
+                      </span>
+                    ) : null}
+                    {kpis && kpis.rated_drivers > 0 ? (
+                      <span className="ms-2 hidden lg:inline">
+                        {t("ratingSummary", {
+                          rated: kpis.rated_drivers,
+                          avg: kpis.avg_manual ?? 0,
                         })}
                       </span>
                     ) : null}

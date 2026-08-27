@@ -72,6 +72,16 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     label: "Export performance reports",
     category: "performance",
   },
+  {
+    slug: "performance.rate",
+    label: "Rate drivers as a team",
+    category: "performance",
+  },
+  {
+    slug: "performance.manage_teams",
+    label: "Manage rating teams and members",
+    category: "performance",
+  },
   { slug: "requests.view", label: "View requests", category: "requests" },
   { slug: "requests.manage", label: "Manage requests", category: "requests" },
   {

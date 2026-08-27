@@ -41,6 +41,9 @@ function row(overrides: Partial<PerformanceDriverRow> = {}): PerformanceDriverRo
     compliance_score: 90,
     exception_count: 0,
     exceptions: [],
+    manual_score: null,
+    manual_rating_count: 0,
+    manual_teams: [],
     overall_score: 84.4,
     dpd_rank: 1,
     score_band: "top",
@@ -169,13 +172,17 @@ describe("report rows", () => {
         band_good: 0,
         band_watch: 0,
         band_critical: 1,
+        avg_manual: null,
+        rated_drivers: 0,
       },
       weights: {
         delivery: 1,
         utilization: 1,
         compliance: 1,
+        manual: 0,
         exception_penalty: 5,
       },
+      ratingTeams: [],
     };
     const complete: PerformanceReport = {
       ...base,

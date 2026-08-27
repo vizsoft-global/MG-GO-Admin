@@ -29,6 +29,7 @@ export function parsePerformanceWeights(raw: unknown): PerformanceScoreWeights {
     delivery: num("delivery", DEFAULT_PERFORMANCE_WEIGHTS.delivery),
     utilization: num("utilization", DEFAULT_PERFORMANCE_WEIGHTS.utilization),
     compliance: num("compliance", DEFAULT_PERFORMANCE_WEIGHTS.compliance),
+    manual: num("manual", DEFAULT_PERFORMANCE_WEIGHTS.manual),
     exception_penalty: num(
       "exception_penalty",
       DEFAULT_PERFORMANCE_WEIGHTS.exception_penalty,
@@ -37,24 +38,32 @@ export function parsePerformanceWeights(raw: unknown): PerformanceScoreWeights {
 }
 
 /**
- * Composite score 0–100.
- * OPEN: default equal weights need client/product sign-off.
+ * Composite score 0–100. Mirrors admin_list_driver_performance.
+ *
+ * `manualScore` null means no team has rated the driver, and an unrated driver
+ * must not be penalised: the manual term is dropped and the remaining weights
+ * renormalise, so the score is exactly what it would be with no manual weight
+ * configured at all.
  */
 export function computeOverallScore(
   deliveryEfficiency: number,
   utilization: number,
   complianceScore: number,
   weights: PerformanceScoreWeights = DEFAULT_PERFORMANCE_WEIGHTS,
+  manualScore: number | null = null,
 ): number {
   const wD = Math.max(0, weights.delivery);
   const wU = Math.max(0, weights.utilization);
   const wC = Math.max(0, weights.compliance);
-  const sum = wD + wU + wC || 1;
+  const rated = manualScore != null && Number.isFinite(manualScore);
+  const wM = rated ? Math.max(0, weights.manual) : 0;
+  const sum = wD + wU + wC + wM || 1;
   const score =
     100 *
     ((wD * clamp01(deliveryEfficiency) +
       wU * clamp01(utilization) +
-      wC * clamp01(complianceScore / 100)) /
+      wC * clamp01(complianceScore / 100) +
+      wM * clamp01((manualScore ?? 0) / 100)) /
       sum);
   return Math.round(score * 10) / 10;
 }
@@ -63,6 +72,15 @@ export function kuwaitToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuwait" }).format(
     new Date(),
   );
+}
+
+/**
+ * The rating period a Kuwait date falls in, as the first of that month.
+ * A rating is keyed on a month, so the date range on screen only decides which
+ * month is being edited — never the identity of the rating itself.
+ */
+export function ratingPeriodMonth(isoDate: string): string {
+  return `${isoDate.slice(0, 7)}-01`;
 }
 
 export function addDays(isoDate: string, delta: number): string {
