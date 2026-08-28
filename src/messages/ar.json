@@ -5894,12 +5894,14 @@
         "yourTurn": "يمكنك التقييم باسم هذا الفريق",
         "notYourTeam": "هذا الفريق فقط يمكنه التقييم هنا",
         "noTeams": "لا فِرَق تقييم مُفعّلة. أضِفها من الإعدادات.",
+        "noCriteria": "لا توجد معايير لهذا الفريق بعد. أضِفها من الإعدادات.",
         "saved": "تم حفظ تقييم {team}",
         "cleared": "تم حذف تقييم {team}",
         "errorNotTeamMember": "أنت لست عضواً في هذا الفريق",
         "errorNotAuthorized": "لا تملك صلاحية تقييم المندوبين",
         "errorFuturePeriod": "هذا الشهر لم يبدأ بعد",
         "errorInvalidScore": "التقييم يجب أن يكون بين 1 و 5",
+        "errorUnknownCriterion": "هذا المعيار لم يعد مُفعّلاً",
         "errorGeneric": "تعذّر حفظ التقييم"
       },
       "settings": {
@@ -5948,7 +5950,22 @@
         "memberAdded": "تمت إضافة العضو",
         "memberRemoved": "تمت إزالة العضو",
         "teamsSaveFailed": "تعذّر تحديث الفريق",
-        "teamsNotAuthorized": "لا تملك صلاحية إدارة فِرَق التقييم"
+        "teamsNotAuthorized": "لا تملك صلاحية إدارة فِرَق التقييم",
+        "criteriaTitle": "ما يقيّمه كل فريق",
+        "criteriaHint": "درجة الفريق هي المتوسط المرجّح لمعاييره. الأوزان هنا داخل الفريق فقط — وزن الفريق أعلاه يحدد ثقله مقابل الفِرَق الأخرى.",
+        "noCriteria": "لا توجد معايير بعد. لا شيء لهذا الفريق ليقيّمه.",
+        "addCriterion": "إضافة معيار",
+        "criterionPlaceholder": "مثال: التواصل",
+        "criterionWeight": "الوزن",
+        "criterionRatings": "{count} تقييم مُسجّل",
+        "criterionOn": "مُفعّل",
+        "criterionOff": "مُعطّل",
+        "removeCriterion": "حذف المعيار",
+        "criterionAdded": "تمت إضافة المعيار",
+        "criterionSaved": "تم حفظ المعيار",
+        "criterionDeleted": "تم حذف المعيار",
+        "criterionInUse": "هذا المعيار يحتوي على تقييمات. عطّله بدلاً من حذفه.",
+        "criterionDuplicate": "لدى هذا الفريق معيار بنفس الاسم"
       },
       "live": {
         "kpiCreated": "طلبات اليوم",

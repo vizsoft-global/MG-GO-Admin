@@ -28,10 +28,12 @@ import {
   type PerformanceListFilters,
   type PerformanceListResult,
   type PerformanceManualTeamScore,
+  type PerformanceRatingCriterion,
   type PerformanceRatingPanel,
   type PerformanceRatingTeamConfig,
   type PerformanceRatingTeamRow,
   type PerformanceReport,
+  type PerformanceReportCriterion,
   type PerformanceReportTeam,
   type PerformanceScoreWeights,
   type RecentDeliveryFeedItem,
@@ -148,6 +150,17 @@ function parseComponents(raw: unknown): PerformanceComponent[] {
     .filter((c): c is PerformanceComponent => c != null);
 }
 
+/** `team_key.criterion_key` -> the 1-5 average a rater actually picked. */
+function parseManualCriteria(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(value);
+    if (Number.isFinite(n)) out[key] = n;
+  }
+  return out;
+}
+
 function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
   const exceptionsRaw = Array.isArray(raw.exceptions) ? raw.exceptions : [];
   return {
@@ -198,6 +211,7 @@ function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
         : Number(raw.manual_score),
     manual_rating_count: Number(raw.manual_rating_count ?? 0),
     manual_teams: parseManualTeams(raw.manual_teams),
+    manual_criteria: parseManualCriteria(raw.manual_criteria),
     overall_score: Number(raw.overall_score ?? 0),
     dpd_rank: Number(raw.dpd_rank ?? 0),
     score_band:
@@ -289,6 +303,7 @@ async function runPerformanceList(
     kpis: parseKpis(payload.kpis),
     weights: parsePerformanceWeights(payload.weights),
     components: parseComponents(payload.components),
+    criteria: parseCriteria(payload.criteria),
     slaMinutes: Number(payload.slaMinutes ?? 45),
     from: String(payload.from ?? from),
     to: String(payload.to ?? to),
@@ -353,6 +368,7 @@ export async function fetchDriverPerformanceReport(input: {
     weights: result.weights,
     ratingTeams: await reportRatingTeams(),
     components: result.components.filter((c) => c.is_active && c.weight > 0),
+    criteria: result.criteria,
     totalCount: result.totalCount,
     truncated: result.totalCount > result.rows.length,
   };
@@ -738,6 +754,25 @@ export async function updatePerformanceComponents(input: {
   }
 }
 
+function nullableNum(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseRatingCriterion(raw: unknown): PerformanceRatingCriterion {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    criterion_id: String(o.criterion_id ?? ""),
+    key: String(o.key ?? ""),
+    label_en: String(o.label_en ?? ""),
+    label_ar: String(o.label_ar ?? ""),
+    weight: num(o.weight ?? 1),
+    score: nullableNum(o.score),
+    rated_at: o.rated_at == null ? null : String(o.rated_at),
+  };
+}
+
 function parseRatingTeamRow(raw: unknown): PerformanceRatingTeamRow {
   const o = (raw ?? {}) as Record<string, unknown>;
   return {
@@ -745,16 +780,34 @@ function parseRatingTeamRow(raw: unknown): PerformanceRatingTeamRow {
     label_en: String(o.label_en ?? ""),
     label_ar: String(o.label_ar ?? ""),
     weight: num(o.weight ?? 1),
-    score:
-      o.score == null || !Number.isFinite(Number(o.score))
-        ? null
-        : Number(o.score),
+    score: nullableNum(o.score),
     comment: o.comment == null ? null : String(o.comment),
+    comment_at: o.comment_at == null ? null : String(o.comment_at),
+    comment_by_name:
+      o.comment_by_name == null ? null : String(o.comment_by_name),
     rated_at: o.rated_at == null ? null : String(o.rated_at),
-    rated_by: o.rated_by == null ? null : String(o.rated_by),
     rated_by_name: o.rated_by_name == null ? null : String(o.rated_by_name),
     can_edit: Boolean(o.can_edit),
+    criteria: Array.isArray(o.criteria)
+      ? o.criteria.map(parseRatingCriterion)
+      : [],
   };
+}
+
+function parseCriteria(raw: unknown): PerformanceReportCriterion[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      id: String(o.id ?? ""),
+      team_key: String(o.team_key ?? ""),
+      key: String(o.key ?? ""),
+      label_en: String(o.label_en ?? ""),
+      label_ar: String(o.label_ar ?? ""),
+      team_label_en: String(o.team_label_en ?? o.team_key ?? ""),
+      team_label_ar: String(o.team_label_ar ?? o.team_key ?? ""),
+    };
+  });
 }
 
 export async function fetchDriverPerformanceRatings(
@@ -789,35 +842,37 @@ export async function fetchDriverPerformanceRatings(
   };
 }
 
+async function requireRatePermission() {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.rate",
+      session.isSuperAdmin,
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+}
+
 export async function saveDriverPerformanceRating(input: {
   driverId: string;
-  teamKey: string;
+  criterionId: string;
   periodMonth: string;
   score: number;
-  comment?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await getSessionUser();
-    if (
-      !session ||
-      !hasPermissionInSet(
-        session.permissions,
-        "performance.rate",
-        session.isSuperAdmin,
-      )
-    ) {
-      throw new Error("not_authorized");
-    }
+    await requireRatePermission();
 
     const supabase = await createClient();
     const { error } = await supabase.rpc(
       "admin_upsert_driver_performance_rating",
       {
         p_driver_id: input.driverId,
-        p_team_key: input.teamKey,
+        p_criterion_id: input.criterionId,
         p_period_month: input.periodMonth,
         p_score: input.score,
-        p_comment: input.comment ?? undefined,
       },
     );
 
@@ -828,10 +883,10 @@ export async function saveDriverPerformanceRating(input: {
     void logAdminMutation({
       action: "update",
       entityType: "driver_performance_rating",
-      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      entityId: `${input.driverId}:${input.criterionId}:${input.periodMonth}`,
       routeName: "saveDriverPerformanceRating",
       after: { score: input.score },
-      context: { team: input.teamKey, period: input.periodMonth },
+      context: { criterion: input.criterionId, period: input.periodMonth },
     });
 
     return { success: true };
@@ -845,28 +900,18 @@ export async function saveDriverPerformanceRating(input: {
 
 export async function clearDriverPerformanceRating(input: {
   driverId: string;
-  teamKey: string;
+  criterionId: string;
   periodMonth: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await getSessionUser();
-    if (
-      !session ||
-      !hasPermissionInSet(
-        session.permissions,
-        "performance.rate",
-        session.isSuperAdmin,
-      )
-    ) {
-      throw new Error("not_authorized");
-    }
+    await requireRatePermission();
 
     const supabase = await createClient();
     const { error } = await supabase.rpc(
       "admin_delete_driver_performance_rating",
       {
         p_driver_id: input.driverId,
-        p_team_key: input.teamKey,
+        p_criterion_id: input.criterionId,
         p_period_month: input.periodMonth,
       },
     );
@@ -878,9 +923,9 @@ export async function clearDriverPerformanceRating(input: {
     void logAdminMutation({
       action: "delete",
       entityType: "driver_performance_rating",
-      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      entityId: `${input.driverId}:${input.criterionId}:${input.periodMonth}`,
       routeName: "clearDriverPerformanceRating",
-      context: { team: input.teamKey, period: input.periodMonth },
+      context: { criterion: input.criterionId, period: input.periodMonth },
     });
 
     return { success: true };
@@ -888,6 +933,51 @@ export async function clearDriverPerformanceRating(input: {
     return {
       success: false,
       error: e instanceof Error ? e.message : "delete_failed",
+    };
+  }
+}
+
+/**
+ * One note per team per month. Kept off the score path so a rater can adjust a
+ * star without retyping the paragraph, and vice versa.
+ */
+export async function saveDriverPerformanceRatingNote(input: {
+  driverId: string;
+  teamKey: string;
+  periodMonth: string;
+  comment: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireRatePermission();
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_set_driver_performance_rating_note",
+      {
+        p_driver_id: input.driverId,
+        p_team_key: input.teamKey,
+        p_period_month: input.periodMonth,
+        p_comment: input.comment ?? "",
+      },
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "driver_performance_rating_note",
+      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      routeName: "saveDriverPerformanceRatingNote",
+      context: { team: input.teamKey, period: input.periodMonth },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "save_failed",
     };
   }
 }
@@ -913,8 +1003,10 @@ export async function fetchPerformanceRatingTeams(): Promise<
   return teams.map((entry) => {
     const o = (entry ?? {}) as Record<string, unknown>;
     const members = Array.isArray(o.members) ? o.members : [];
+    const criteria = Array.isArray(o.criteria) ? o.criteria : [];
+    const teamKey = String(o.key ?? "");
     return {
-      key: String(o.key ?? ""),
+      key: teamKey,
       label_en: String(o.label_en ?? ""),
       label_ar: String(o.label_ar ?? ""),
       weight: num(o.weight ?? 1),
@@ -928,8 +1020,126 @@ export async function fetchPerformanceRatingTeams(): Promise<
           email: mo.email == null ? null : String(mo.email),
         };
       }),
+      criteria: criteria.map((c) => {
+        const co = (c ?? {}) as Record<string, unknown>;
+        return {
+          id: String(co.id ?? ""),
+          team_key: String(co.team_key ?? teamKey),
+          key: String(co.key ?? ""),
+          label_en: String(co.label_en ?? ""),
+          label_ar: String(co.label_ar ?? ""),
+          weight: num(co.weight ?? 1),
+          sort_order: num(co.sort_order),
+          is_active: Boolean(co.is_active),
+          rating_count: num(co.rating_count),
+        };
+      }),
     };
   });
+}
+
+async function requireManageTeams() {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.manage_teams",
+      session.isSuperAdmin,
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+}
+
+export async function savePerformanceRatingCriterion(input: {
+  id?: string | null;
+  teamKey: string;
+  key?: string | null;
+  labelEn: string;
+  labelAr: string;
+  weight: number;
+  sortOrder: number;
+  isActive: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireManageTeams();
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_upsert_performance_rating_criterion",
+      {
+        // Null, not omitted: a null p_id is what tells the RPC this is an
+        // insert, so the parameter has to arrive.
+        p_id: input.id ?? null,
+        p_team_key: input.teamKey,
+        p_key: input.key ?? null,
+        p_label_en: input.labelEn,
+        p_label_ar: input.labelAr,
+        p_weight: input.weight,
+        p_sort_order: input.sortOrder,
+        p_is_active: input.isActive,
+      } as never,
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: input.id ? "update" : "create",
+      entityType: "performance_rating_criterion",
+      entityId: input.id ?? `${input.teamKey}:${input.key ?? input.labelEn}`,
+      routeName: "savePerformanceRatingCriterion",
+      after: {
+        team_key: input.teamKey,
+        label_en: input.labelEn,
+        label_ar: input.labelAr,
+        weight: input.weight,
+        sort_order: input.sortOrder,
+        is_active: input.isActive,
+      },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "save_failed",
+    };
+  }
+}
+
+export async function deletePerformanceRatingCriterion(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireManageTeams();
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_delete_performance_rating_criterion",
+      { p_id: id },
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: "delete",
+      entityType: "performance_rating_criterion",
+      entityId: id,
+      routeName: "deletePerformanceRatingCriterion",
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "delete_failed",
+    };
+  }
 }
 
 export async function setPerformanceTeamMember(input: {

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   clearDriverPerformanceRating,
+  deletePerformanceRatingCriterion,
   fetchDpdLiveSnapshot,
   fetchDriverPerformanceDetail,
   fetchDriverPerformanceList,
@@ -16,6 +17,8 @@ import {
   fetchRecentDeliveriesFeed,
   getPerformanceScoreWeights,
   saveDriverPerformanceRating,
+  saveDriverPerformanceRatingNote,
+  savePerformanceRatingCriterion,
   setPerformanceTeamMember,
   updatePerformanceComponents,
   updatePerformanceScoreWeights,
@@ -175,6 +178,53 @@ export function useClearDriverPerformanceRating() {
         queryKey: queryKeys.performance.ratings(input.driverId, input.periodMonth),
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.performance.all() });
+    },
+  });
+}
+
+export function useSaveDriverPerformanceRatingNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: saveDriverPerformanceRatingNote,
+    onSuccess: (_result, input) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.ratings(
+          input.driverId,
+          input.periodMonth,
+        ),
+      });
+      // A note carries no score, so nothing outside this panel is stale.
+    },
+  });
+}
+
+export function useSavePerformanceRatingCriterion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: savePerformanceRatingCriterion,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.ratingTeams(),
+      });
+      // A criterion weight re-blends every team score, so the list moves too.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.all(),
+      });
+    },
+  });
+}
+
+export function useDeletePerformanceRatingCriterion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deletePerformanceRatingCriterion,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.ratingTeams(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.all(),
+      });
     },
   });
 }

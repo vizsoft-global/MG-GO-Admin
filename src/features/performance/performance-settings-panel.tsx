@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Check,
   Gauge,
+  ListChecks,
   Loader2,
   Plus,
   Star,
@@ -26,16 +27,22 @@ import {
   kuwaitToday,
 } from "./performance-formulas";
 import {
+  useDeletePerformanceRatingCriterion,
   useDriverPerformanceList,
   usePerformanceComponents,
   usePerformanceRatingTeams,
   usePerformanceScoreWeights,
   useRatingEligibleStaff,
+  useSavePerformanceRatingCriterion,
   useSetPerformanceTeamMember,
   useUpdatePerformanceComponents,
   useUpdatePerformanceScoreWeights,
 } from "./use-performance";
-import type { PerformanceComponent } from "./performance-types";
+import type {
+  PerformanceComponent,
+  PerformanceCriterionConfig,
+  PerformanceRatingTeamConfig,
+} from "./performance-types";
 
 /** A field whose value is a non-negative weight. */
 function WeightField({
@@ -621,6 +628,231 @@ function TeamsSection() {
   );
 }
 
+/**
+ * What one team judges on. Weights are within the team, never across it — a
+ * criterion weight of 2 means it counts double against its siblings, not that
+ * the team outvotes another team.
+ */
+function CriteriaCard({ team }: { team: PerformanceRatingTeamConfig }) {
+  const t = useTranslations("pages.performance.settings");
+  const locale = useLocale();
+  const isArabic = locale.startsWith("ar");
+  const label = isArabic ? team.label_ar : team.label_en;
+
+  const { mutateAsync: save } = useSavePerformanceRatingCriterion();
+  const { mutateAsync: remove } = useDeletePerformanceRatingCriterion();
+
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
+  const [draftWeight, setDraftWeight] = useState("1");
+
+  function criterionError(error?: string) {
+    if (error === "not_authorized") return t("teamsNotAuthorized");
+    if (error === "criterion_in_use") return t("criterionInUse");
+    if (error === "duplicate_key") return t("criterionDuplicate");
+    return error ?? t("teamsSaveFailed");
+  }
+
+  async function persist(
+    criterion: PerformanceCriterionConfig,
+    patch: Partial<Pick<PerformanceCriterionConfig, "weight" | "is_active">>,
+  ) {
+    setPendingId(criterion.id);
+    try {
+      const result = await save({
+        id: criterion.id,
+        teamKey: team.key,
+        labelEn: criterion.label_en,
+        labelAr: criterion.label_ar,
+        weight: patch.weight ?? criterion.weight,
+        sortOrder: criterion.sort_order,
+        isActive: patch.is_active ?? criterion.is_active,
+      });
+      if (!result.success) {
+        toast.error(criterionError(result.error));
+        return;
+      }
+      toast.success(t("criterionSaved"));
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  async function add() {
+    const labelText = draftLabel.trim();
+    if (labelText === "") return;
+    setPendingId("new");
+    try {
+      const result = await save({
+        teamKey: team.key,
+        labelEn: labelText,
+        // One label until a translator supplies the other. An empty Arabic
+        // label would render as a blank star row rather than as a gap to fill.
+        labelAr: labelText,
+        weight: Number(draftWeight) || 1,
+        sortOrder: team.criteria.length,
+        isActive: true,
+      });
+      if (!result.success) {
+        toast.error(criterionError(result.error));
+        return;
+      }
+      setDraftLabel("");
+      setDraftWeight("1");
+      toast.success(t("criterionAdded"));
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  async function drop(criterion: PerformanceCriterionConfig) {
+    setPendingId(criterion.id);
+    try {
+      const result = await remove(criterion.id);
+      if (!result.success) {
+        toast.error(criterionError(result.error));
+        return;
+      }
+      toast.success(t("criterionDeleted"));
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  return (
+    <div className="flex h-full flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-center gap-2">
+        <ListChecks className="size-3.5 text-primary" />
+        <p className="text-sm font-semibold">{label}</p>
+      </div>
+
+      <ul className="mt-3 min-h-0 flex-1 space-y-1">
+        {team.criteria.length === 0 ? (
+          <li className="rounded-lg border border-dashed border-border px-2 py-3 text-center text-[10px] text-muted-foreground">
+            {t("noCriteria")}
+          </li>
+        ) : (
+          team.criteria.map((criterion) => (
+            <li
+              key={criterion.id}
+              className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">
+                  {isArabic ? criterion.label_ar : criterion.label_en}
+                </p>
+                <p className="truncate text-[10px] text-muted-foreground">
+                  {t("criterionRatings", { count: criterion.rating_count })}
+                </p>
+              </div>
+              <Input
+                type="number"
+                min="0"
+                step="0.1"
+                className="h-8 w-16 shrink-0 text-xs"
+                defaultValue={String(criterion.weight)}
+                disabled={pendingId === criterion.id}
+                aria-label={t("criterionWeight")}
+                onBlur={(e) => {
+                  const next = Number(e.target.value);
+                  if (!Number.isFinite(next) || next === criterion.weight)
+                    return;
+                  void persist(criterion, { weight: next });
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 px-2 text-[10px]"
+                disabled={pendingId === criterion.id}
+                onClick={() =>
+                  void persist(criterion, { is_active: !criterion.is_active })
+                }
+              >
+                {criterion.is_active ? t("criterionOn") : t("criterionOff")}
+              </Button>
+              {/*
+                Delete is only offered when nothing was filed against it. The
+                server refuses otherwise, and offering a button that reports a
+                refusal is worse than not offering it.
+              */}
+              {criterion.rating_count === 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 text-destructive hover:bg-destructive/10"
+                  disabled={pendingId === criterion.id}
+                  onClick={() => void drop(criterion)}
+                  aria-label={t("removeCriterion")}
+                  title={t("removeCriterion")}
+                >
+                  {pendingId === criterion.id ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-3.5" />
+                  )}
+                </Button>
+              ) : null}
+            </li>
+          ))
+        )}
+      </ul>
+
+      <div className="mt-3 flex items-end gap-2">
+        <div className="min-w-0 flex-1 space-y-1">
+          <Label className="text-[10px]">{t("addCriterion")}</Label>
+          <Input
+            className="h-9 text-xs"
+            value={draftLabel}
+            maxLength={60}
+            placeholder={t("criterionPlaceholder")}
+            onChange={(e) => setDraftLabel(e.target.value)}
+          />
+        </div>
+        <div className="w-16 shrink-0 space-y-1">
+          <Label className="text-[10px]">{t("criterionWeight")}</Label>
+          <Input
+            type="number"
+            min="0"
+            step="0.1"
+            className="h-9 text-xs"
+            value={draftWeight}
+            onChange={(e) => setDraftWeight(e.target.value)}
+          />
+        </div>
+        <Button
+          type="button"
+          className="h-9 shrink-0"
+          disabled={draftLabel.trim() === "" || pendingId === "new"}
+          onClick={() => void add()}
+        >
+          <Plus className="size-3.5" />
+          {t("add")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CriteriaSection() {
+  const t = useTranslations("pages.performance.settings");
+  const { data: teams, isLoading } = usePerformanceRatingTeams();
+
+  if (isLoading) return null;
+
+  return (
+    <AppFormSection title={t("criteriaTitle")} description={t("criteriaHint")}>
+      <div className="grid gap-3 lg:grid-cols-3 lg:items-stretch">
+        {(teams ?? []).map((team) => (
+          <CriteriaCard key={team.key} team={team} />
+        ))}
+      </div>
+    </AppFormSection>
+  );
+}
+
 export function PerformanceSettingsPanel() {
   const t = useTranslations("pages.performance.settings");
 
@@ -642,6 +874,7 @@ export function PerformanceSettingsPanel() {
       <WeightsSection />
       <ComponentsSection />
       <TeamsSection />
+      <CriteriaSection />
     </AppPage>
   );
 }

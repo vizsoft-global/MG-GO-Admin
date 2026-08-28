@@ -10,9 +10,13 @@ import {
   useClearDriverPerformanceRating,
   useDriverPerformanceRatings,
   useSaveDriverPerformanceRating,
+  useSaveDriverPerformanceRatingNote,
 } from "./use-performance";
 import { RATING_SCALE_MAX } from "./performance-types";
-import type { PerformanceRatingTeamRow } from "./performance-types";
+import type {
+  PerformanceRatingCriterion,
+  PerformanceRatingTeamRow,
+} from "./performance-types";
 
 function RatingStars({
   value,
@@ -52,38 +56,33 @@ function RatingStars({
   );
 }
 
-function TeamRatingRow({
+function CriterionRow({
   driverId,
   periodMonth,
-  team,
+  criterion,
+  canEdit,
 }: {
   driverId: string;
   periodMonth: string;
-  team: PerformanceRatingTeamRow;
+  criterion: PerformanceRatingCriterion;
+  canEdit: boolean;
 }) {
   const t = useTranslations("pages.performance.rating");
   const locale = useLocale();
-  const label = locale.startsWith("ar") ? team.label_ar : team.label_en;
+  const label = locale.startsWith("ar")
+    ? criterion.label_ar
+    : criterion.label_en;
 
-  const [comment, setComment] = useState(team.comment ?? "");
   const save = useSaveDriverPerformanceRating();
   const clear = useClearDriverPerformanceRating();
-
-  // The server row is the truth; a refetch after someone else rates must not be
-  // overwritten by whatever is in this input.
-  useEffect(() => {
-    setComment(team.comment ?? "");
-  }, [team.comment]);
-
   const busy = save.isPending || clear.isPending;
 
-  async function submit(score: number, nextComment: string) {
+  async function submit(score: number) {
     const result = await save.mutateAsync({
       driverId,
-      teamKey: team.team_key,
+      criterionId: criterion.criterion_id,
       periodMonth,
       score,
-      comment: nextComment.trim() === "" ? null : nextComment.trim(),
     });
     if (!result.success) {
       toast.error(t(ratingErrorKey(result.error)));
@@ -95,7 +94,7 @@ function TeamRatingRow({
   async function remove() {
     const result = await clear.mutateAsync({
       driverId,
-      teamKey: team.team_key,
+      criterionId: criterion.criterion_id,
       periodMonth,
     });
     if (!result.success) {
@@ -106,6 +105,85 @@ function TeamRatingRow({
   }
 
   return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="truncate text-[11px] text-muted-foreground">
+          {label}
+        </span>
+        {criterion.score != null ? (
+          <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-semibold tabular-nums text-emerald-800">
+            {criterion.score}/{RATING_SCALE_MAX}
+          </span>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {busy ? (
+          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+        ) : null}
+        <RatingStars
+          value={criterion.score}
+          disabled={!canEdit || busy}
+          onPick={(score) => void submit(score)}
+        />
+        {canEdit && criterion.score != null ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 text-destructive hover:bg-destructive/10"
+            disabled={busy}
+            onClick={() => void remove()}
+            aria-label={t("clear")}
+            title={t("clear")}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function TeamRatingSection({
+  driverId,
+  periodMonth,
+  team,
+}: {
+  driverId: string;
+  periodMonth: string;
+  team: PerformanceRatingTeamRow;
+}) {
+  const t = useTranslations("pages.performance.rating");
+  const locale = useLocale();
+  const isArabic = locale.startsWith("ar");
+  const label = isArabic ? team.label_ar : team.label_en;
+
+  const [comment, setComment] = useState(team.comment ?? "");
+  const saveNote = useSaveDriverPerformanceRatingNote();
+
+  // The server row is the truth; a refetch after someone else rates must not be
+  // overwritten by whatever is in this input.
+  useEffect(() => {
+    setComment(team.comment ?? "");
+  }, [team.comment]);
+
+  async function submitNote() {
+    const next = comment.trim();
+    if ((team.comment ?? "") === next) return;
+    const result = await saveNote.mutateAsync({
+      driverId,
+      teamKey: team.team_key,
+      periodMonth,
+      comment: next === "" ? null : next,
+    });
+    if (!result.success) {
+      toast.error(t(ratingErrorKey(result.error)));
+    }
+  }
+
+  const criteria = team.criteria;
+
+  return (
     <li className="space-y-1.5 px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -113,7 +191,7 @@ function TeamRatingRow({
           <span className="truncate text-xs font-medium">{label}</span>
           {team.score != null ? (
             <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-semibold tabular-nums text-emerald-800">
-              {team.score}/{RATING_SCALE_MAX}
+              {team.score.toFixed(1)}/{RATING_SCALE_MAX}
             </span>
           ) : (
             <span className="shrink-0 rounded-md border border-border bg-muted/30 px-1.5 text-[10px] text-muted-foreground">
@@ -121,48 +199,34 @@ function TeamRatingRow({
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {busy ? (
-            <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-          ) : null}
-          <RatingStars
-            value={team.score}
-            disabled={!team.can_edit || busy}
-            onPick={(score) => void submit(score, comment)}
-          />
-          {team.can_edit && team.score != null ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7 text-destructive hover:bg-destructive/10"
-              disabled={busy}
-              onClick={() => void remove()}
-              aria-label={t("clear")}
-              title={t("clear")}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          ) : null}
-        </div>
       </div>
 
-      {team.can_edit ? (
-        <div className="flex items-center gap-2">
-          <Input
-            className="h-8 text-xs"
-            placeholder={t("commentPlaceholder")}
-            value={comment}
-            maxLength={280}
-            disabled={busy}
-            onChange={(e) => setComment(e.target.value)}
-            onBlur={() => {
-              if (team.score == null) return;
-              if ((team.comment ?? "") === comment.trim()) return;
-              void submit(team.score, comment);
-            }}
-          />
+      {criteria.length === 0 ? (
+        <p className="text-[10px] text-muted-foreground">{t("noCriteria")}</p>
+      ) : (
+        <div className="space-y-1">
+          {criteria.map((criterion) => (
+            <CriterionRow
+              key={criterion.criterion_id}
+              driverId={driverId}
+              periodMonth={periodMonth}
+              criterion={criterion}
+              canEdit={team.can_edit}
+            />
+          ))}
         </div>
+      )}
+
+      {team.can_edit ? (
+        <Input
+          className="h-8 text-xs"
+          placeholder={t("commentPlaceholder")}
+          value={comment}
+          maxLength={280}
+          disabled={saveNote.isPending}
+          onChange={(e) => setComment(e.target.value)}
+          onBlur={() => void submitNote()}
+        />
       ) : team.comment ? (
         <p className="text-[10px] text-muted-foreground">{team.comment}</p>
       ) : null}
@@ -192,6 +256,8 @@ function ratingErrorKey(error?: string): string {
       return "errorFuturePeriod";
     case "invalid_score":
       return "errorInvalidScore";
+    case "unknown_criterion":
+      return "errorUnknownCriterion";
     default:
       return "errorGeneric";
   }
@@ -248,7 +314,7 @@ export function PerformanceRatingPanel({
       ) : (
         <ul className="divide-y divide-border">
           {teams.map((team) => (
-            <TeamRatingRow
+            <TeamRatingSection
               key={team.team_key}
               driverId={driverId}
               periodMonth={periodMonth}

@@ -213,6 +213,12 @@ export type PerformanceDriverRow = {
   /** Number of teams holding a rating, not the number of rating rows. */
   manual_rating_count: number;
   manual_teams: PerformanceManualTeamScore[];
+  /**
+   * Per-criterion averages on the 1-5 scale, keyed `team_key.criterion_key` —
+   * the same 1-5 a rater picked, not the normalised score, because that is what
+   * a reader of the export compares against.
+   */
+  manual_criteria: Record<string, number>;
   overall_score: number;
   /** Rank across the filtered fleet by score — not the row position. */
   dpd_rank: number;
@@ -240,18 +246,34 @@ export type PerformanceKpis = {
   rated_drivers: number;
 };
 
+/** One thing a team judges on. Weight is within its own team, never across. */
+export type PerformanceRatingCriterion = {
+  criterion_id: string;
+  key: string;
+  label_en: string;
+  label_ar: string;
+  weight: number;
+  /** Null when this team has not scored this criterion for the month. */
+  score: number | null;
+  rated_at: string | null;
+};
+
 export type PerformanceRatingTeamRow = {
   team_key: string;
   label_en: string;
   label_ar: string;
   weight: number;
+  /** The team's weighted roll-up of its own criteria, 1-5. Null when unrated. */
   score: number | null;
+  /** One note per team per month — not per criterion. */
   comment: string | null;
+  comment_at: string | null;
+  comment_by_name: string | null;
   rated_at: string | null;
-  rated_by: string | null;
   rated_by_name: string | null;
   /** Decided by the server from team membership, never by the client. */
   can_edit: boolean;
+  criteria: PerformanceRatingCriterion[];
 };
 
 export type PerformanceRatingPanel = {
@@ -266,6 +288,23 @@ export type PerformanceTeamMember = {
   email: string | null;
 };
 
+export type PerformanceCriterionConfig = {
+  id: string;
+  team_key: string;
+  key: string;
+  label_en: string;
+  label_ar: string;
+  weight: number;
+  sort_order: number;
+  is_active: boolean;
+  /**
+   * How many ratings the criterion holds. The settings list needs it to decide
+   * whether Delete is offered at all, rather than offering it and reporting the
+   * server's refusal afterwards.
+   */
+  rating_count: number;
+};
+
 export type PerformanceRatingTeamConfig = {
   key: string;
   label_en: string;
@@ -274,6 +313,18 @@ export type PerformanceRatingTeamConfig = {
   sort_order: number;
   is_active: boolean;
   members: PerformanceTeamMember[];
+  criteria: PerformanceCriterionConfig[];
+};
+
+/** A criterion as the list and the export see it: identified by team and key. */
+export type PerformanceReportCriterion = {
+  id: string;
+  team_key: string;
+  key: string;
+  label_en: string;
+  label_ar: string;
+  team_label_en: string;
+  team_label_ar: string;
 };
 
 export type PerformanceListResult = {
@@ -283,6 +334,8 @@ export type PerformanceListResult = {
   weights: PerformanceScoreWeights;
   /** Active components in display order, so a column exists even for an unmeasured one. */
   components: PerformanceComponent[];
+  /** Active rating criteria, for the same reason components are here. */
+  criteria: PerformanceReportCriterion[];
   slaMinutes: number;
   from: string;
   to: string;
@@ -313,6 +366,12 @@ export type PerformanceReport = {
    * than as a component that was never configured.
    */
   components: PerformanceComponent[];
+  /**
+   * Active criteria, appended after the team columns. Driven off the criteria
+   * table rather than off the rows, so a criterion nobody scored still gets its
+   * column.
+   */
+  criteria: PerformanceReportCriterion[];
   /** True when the fleet is larger than one export can carry. */
   truncated: boolean;
   totalCount: number;

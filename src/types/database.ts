@@ -2637,41 +2637,97 @@ export type Database = {
           },
         ]
       }
+      driver_performance_rating_notes: {
+        Row: {
+          authored_by: string | null
+          comment: string
+          driver_id: string
+          id: string
+          period_month: string
+          team_key: string
+          updated_at: string
+        }
+        Insert: {
+          authored_by?: string | null
+          comment: string
+          driver_id: string
+          id?: string
+          period_month: string
+          team_key: string
+          updated_at?: string
+        }
+        Update: {
+          authored_by?: string | null
+          comment?: string
+          driver_id?: string
+          id?: string
+          period_month?: string
+          team_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_performance_rating_notes_authored_by_fkey"
+            columns: ["authored_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_performance_rating_notes_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_performance_rating_notes_team_key_fkey"
+            columns: ["team_key"]
+            isOneToOne: false
+            referencedRelation: "performance_rating_teams"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
       driver_performance_ratings: {
         Row: {
-          comment: string | null
+          criterion_id: string
           driver_id: string
           id: string
           period_month: string
           rated_at: string
           rated_by: string | null
           score: number
-          team_key: string
           updated_at: string
         }
         Insert: {
-          comment?: string | null
+          criterion_id: string
           driver_id: string
           id?: string
           period_month: string
           rated_at?: string
           rated_by?: string | null
           score: number
-          team_key: string
           updated_at?: string
         }
         Update: {
-          comment?: string | null
+          criterion_id?: string
           driver_id?: string
           id?: string
           period_month?: string
           rated_at?: string
           rated_by?: string | null
           score?: number
-          team_key?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "driver_performance_ratings_criterion_id_fkey"
+            columns: ["criterion_id"]
+            isOneToOne: false
+            referencedRelation: "performance_rating_criteria"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "driver_performance_ratings_driver_id_fkey"
             columns: ["driver_id"]
@@ -2685,13 +2741,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "driver_performance_ratings_team_key_fkey"
-            columns: ["team_key"]
-            isOneToOne: false
-            referencedRelation: "performance_rating_teams"
-            referencedColumns: ["key"]
           },
         ]
       }
@@ -4818,6 +4867,50 @@ export type Database = {
         }
         Relationships: []
       }
+      performance_rating_criteria: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order: number
+          team_key: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order?: number
+          team_key: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key?: string
+          label_ar?: string
+          label_en?: string
+          sort_order?: number
+          team_key?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_rating_criteria_team_key_fkey"
+            columns: ["team_key"]
+            isOneToOne: false
+            referencedRelation: "performance_rating_teams"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
       performance_rating_team_members: {
         Row: {
           created_at: string
@@ -6919,6 +7012,7 @@ export type Database = {
         Args: { p_lat1: number; p_lat2: number; p_lng1: number; p_lng2: number }
         Returns: number
       }
+      _performance_components_snapshot: { Args: never; Returns: Json }
       _point_in_restaurant_geofence: {
         Args: {
           p_geometry: Json
@@ -7065,15 +7159,23 @@ export type Database = {
       }
       admin_delete_driver_performance_rating: {
         Args: {
+          p_criterion_id: string
           p_driver_id: string
           p_period_month: string
-          p_team_key: string
         }
+        Returns: Json
+      }
+      admin_delete_performance_rating_criterion: {
+        Args: { p_id: string }
         Returns: Json
       }
       admin_dpd_live_snapshot: { Args: { p_date?: string }; Returns: Json }
       admin_driver_device_overview: {
         Args: { p_driver_id: string; p_history_limit?: number }
+        Returns: Json
+      }
+      admin_driver_performance_daily: {
+        Args: { p_driver_id: string; p_from: string; p_to: string }
         Returns: Json
       }
       admin_drivers_multi_device_recent: {
@@ -7244,6 +7346,15 @@ export type Database = {
         Returns: Json
       }
       admin_run_request_sla_sweep: { Args: never; Returns: number }
+      admin_set_driver_performance_rating_note: {
+        Args: {
+          p_comment: string
+          p_driver_id: string
+          p_period_month: string
+          p_team_key: string
+        }
+        Returns: Json
+      }
       admin_set_fuel_transfer_type: {
         Args: { p_request_id: string; p_transfer_type: string }
         Returns: Json
@@ -7271,11 +7382,10 @@ export type Database = {
       }
       admin_upsert_driver_performance_rating: {
         Args: {
-          p_comment?: string
+          p_criterion_id: string
           p_driver_id: string
           p_period_month: string
           p_score: number
-          p_team_key: string
         }
         Returns: Json
       }
@@ -7288,6 +7398,19 @@ export type Database = {
           p_exception_type: string
           p_note?: string
           p_resolution_status: string
+        }
+        Returns: Json
+      }
+      admin_upsert_performance_rating_criterion: {
+        Args: {
+          p_id: string
+          p_is_active: boolean
+          p_key: string
+          p_label_ar: string
+          p_label_en: string
+          p_sort_order: number
+          p_team_key: string
+          p_weight: number
         }
         Returns: Json
       }

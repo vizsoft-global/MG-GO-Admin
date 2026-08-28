@@ -15,6 +15,7 @@ import {
   type PerformanceComponent,
   type PerformanceComponentKey,
   type PerformanceDriverRow,
+  type PerformanceReportCriterion,
   type PerformanceReportTeam,
 } from "./performance-types";
 import {
@@ -63,6 +64,7 @@ function row(overrides: Partial<PerformanceDriverRow> = {}): PerformanceDriverRo
     manual_score: null,
     manual_rating_count: 0,
     manual_teams: [],
+    manual_criteria: {},
     overall_score: 84.4,
     dpd_rank: 1,
     score_band: "top",
@@ -400,6 +402,102 @@ describe("report rating columns", () => {
       performanceReportRow(row()).length,
       PERFORMANCE_REPORT_HEADERS.length,
     );
+  });
+});
+
+describe("report criterion columns", () => {
+  const teams: PerformanceReportTeam[] = [
+    { key: "fleet", label: "Fleet" },
+    { key: "operations", label: "Operations" },
+  ];
+
+  const criteria: PerformanceReportCriterion[] = [
+    {
+      id: "c1",
+      team_key: "operations",
+      key: "behavior",
+      label_en: "Behavior",
+      label_ar: "السلوك",
+      team_label_en: "Operations",
+      team_label_ar: "العمليات",
+    },
+    {
+      id: "c2",
+      team_key: "operations",
+      key: "appearance",
+      label_en: "Appearance",
+      label_ar: "المظهر",
+      team_label_en: "Operations",
+      team_label_ar: "العمليات",
+    },
+  ];
+
+  it("puts criterion columns after the team columns, so team order is stable", () => {
+    const headers = performanceReportHeaders(teams, [], criteria);
+    assert.equal(
+      headers.length,
+      PERFORMANCE_REPORT_HEADERS.length + teams.length + criteria.length,
+    );
+    assert.equal(headers.at(-2), "Operations · Behavior (1-5)");
+    assert.equal(headers.at(-1), "Operations · Appearance (1-5)");
+    assert.equal(
+      headers.indexOf("Fleet (1-5)"),
+      PERFORMANCE_REPORT_HEADERS.length,
+    );
+  });
+
+  it("a row has exactly one cell per header, criteria included", () => {
+    const headers = performanceReportHeaders(teams, [], criteria);
+    assert.equal(
+      performanceReportRow(row(), teams, [], criteria).length,
+      headers.length,
+    );
+  });
+
+  it("reads the 1-5 a rater picked, keyed on team and criterion together", () => {
+    const cells = performanceReportRow(
+      row({ manual_criteria: { "operations.behavior": 4.5 } }),
+      teams,
+      [],
+      criteria,
+    );
+    const headers = performanceReportHeaders(teams, [], criteria);
+    assert.equal(cells[headers.indexOf("Operations · Behavior (1-5)")], 4.5);
+  });
+
+  it("a criterion nobody scored still gets a column, marked as unrated", () => {
+    const cells = performanceReportRow(
+      row({ manual_criteria: { "operations.behavior": 3 } }),
+      teams,
+      [],
+      criteria,
+    );
+    const headers = performanceReportHeaders(teams, [], criteria);
+    assert.equal(cells[headers.indexOf("Operations · Appearance (1-5)")], "—");
+  });
+
+  it("does not read one team's criterion as another's", () => {
+    const twoTeams: PerformanceReportCriterion[] = [
+      ...criteria,
+      {
+        id: "c3",
+        team_key: "fleet",
+        key: "behavior",
+        label_en: "Behavior",
+        label_ar: "السلوك",
+        team_label_en: "Fleet",
+        team_label_ar: "الأسطول",
+      },
+    ];
+    const cells = performanceReportRow(
+      row({ manual_criteria: { "operations.behavior": 5 } }),
+      teams,
+      [],
+      twoTeams,
+    );
+    const headers = performanceReportHeaders(teams, [], twoTeams);
+    assert.equal(cells[headers.indexOf("Operations · Behavior (1-5)")], 5);
+    assert.equal(cells[headers.indexOf("Fleet · Behavior (1-5)")], "—");
   });
 });
 

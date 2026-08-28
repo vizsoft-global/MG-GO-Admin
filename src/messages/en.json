@@ -5978,12 +5978,14 @@
         "yourTurn": "You can rate as this team",
         "notYourTeam": "Only this team can rate here",
         "noTeams": "No active rating teams. Add them under Settings.",
+        "noCriteria": "This team has nothing to rate yet. Add criteria under Settings.",
         "saved": "{team} rating saved",
         "cleared": "{team} rating cleared",
         "errorNotTeamMember": "You are not a member of this team",
         "errorNotAuthorized": "You do not have permission to rate drivers",
         "errorFuturePeriod": "That month has not started yet",
         "errorInvalidScore": "Rating must be between 1 and 5",
+        "errorUnknownCriterion": "That criterion is no longer active",
         "errorGeneric": "Could not save the rating"
       },
       "settings": {
@@ -6032,7 +6034,22 @@
         "memberAdded": "Member added",
         "memberRemoved": "Member removed",
         "teamsSaveFailed": "Could not update the team",
-        "teamsNotAuthorized": "You do not have permission to manage rating teams"
+        "teamsNotAuthorized": "You do not have permission to manage rating teams",
+        "criteriaTitle": "What each team rates",
+        "criteriaHint": "A team score is the weighted average of its own criteria. Weights count within the team only — the team weight above decides how the team counts against other teams.",
+        "noCriteria": "No criteria yet. This team has nothing to rate.",
+        "addCriterion": "Add criterion",
+        "criterionPlaceholder": "e.g. Communication",
+        "criterionWeight": "Weight",
+        "criterionRatings": "{count} ratings filed",
+        "criterionOn": "Active",
+        "criterionOff": "Inactive",
+        "removeCriterion": "Delete criterion",
+        "criterionAdded": "Criterion added",
+        "criterionSaved": "Criterion saved",
+        "criterionDeleted": "Criterion deleted",
+        "criterionInUse": "This criterion holds ratings. Set it inactive instead.",
+        "criterionDuplicate": "This team already has a criterion with that name"
       },
       "live": {
         "kpiCreated": "Orders today",
