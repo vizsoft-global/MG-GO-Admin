@@ -184,6 +184,19 @@ export const queryKeys = {
       ["performance", "ratings", driverId, periodMonth] as const,
     ratingTeams: () => ["performance", "rating-teams"] as const,
     ratingStaff: () => ["performance", "rating-staff"] as const,
+    components: () => ["performance", "components"] as const,
+    daily: (driverId: string, from: string, to: string) =>
+      ["performance", "daily", driverId, from, to] as const,
+    rank: (driverId: string, from: string, to: string) =>
+      ["performance", "rank", driverId, from, to] as const,
+    trend: (filters: Record<string, unknown> = {}) =>
+      ["performance", "trend", filters] as const,
+  },
+  wrongActions: {
+    all: () => ["wrong-actions"] as const,
+    list: (filters: Record<string, unknown> = {}) => ["wrong-actions", "list", filters] as const,
+    detail: (id: string) => ["wrong-actions", "detail", id] as const,
+    forDriver: (driverId: string) => ["wrong-actions", "driver", driverId] as const,
   },
   driverShifts: {
     all: () => ["driver-shifts"] as const,

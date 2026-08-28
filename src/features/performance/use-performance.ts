@@ -4,21 +4,30 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   clearDriverPerformanceRating,
+  deletePerformanceRatingCriterion,
   fetchDpdLiveSnapshot,
   fetchDriverPerformanceDetail,
   fetchDriverPerformanceList,
+  fetchDriverPerformanceDaily,
+  fetchDriverPerformanceRank,
   fetchDriverPerformanceRatings,
+  fetchPerformanceComponents,
+  fetchPerformanceTrend,
   fetchPerformanceRatingTeams,
   fetchRatingEligibleStaff,
   fetchRecentDeliveriesFeed,
   getPerformanceScoreWeights,
   saveDriverPerformanceRating,
+  saveDriverPerformanceRatingNote,
+  savePerformanceRatingCriterion,
   setPerformanceTeamMember,
+  updatePerformanceComponents,
   updatePerformanceScoreWeights,
 } from "./performance-actions";
 import type {
   PerformanceListFilters,
   PerformanceScoreWeights,
+  PerformanceTrendBucket,
 } from "./performance-types";
 
 export function useDriverPerformanceList(
@@ -89,6 +98,69 @@ export function useUpdatePerformanceScoreWeights() {
   });
 }
 
+export function useDriverPerformanceDaily(
+  driverId: string | null,
+  from: string,
+  to: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.daily(driverId ?? "", from, to),
+    queryFn: () => fetchDriverPerformanceDaily(driverId!, from, to),
+    enabled: Boolean(driverId) && enabled,
+  });
+}
+
+export function useDriverPerformanceRank(
+  driverId: string | null,
+  from: string,
+  to: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.rank(driverId ?? "", from, to),
+    queryFn: () => fetchDriverPerformanceRank(driverId!, from, to),
+    enabled: Boolean(driverId) && enabled,
+  });
+}
+
+export function usePerformanceTrend(
+  input: {
+    fromDate: string;
+    toDate: string;
+    bucket?: PerformanceTrendBucket;
+    zoneId?: string;
+    partnerId?: string;
+  },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.trend(input),
+    queryFn: () => fetchPerformanceTrend(input),
+    enabled,
+  });
+}
+
+export function usePerformanceComponents(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.performance.components(),
+    queryFn: fetchPerformanceComponents,
+    enabled,
+  });
+}
+
+export function useUpdatePerformanceComponents() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updatePerformanceComponents,
+    onSuccess: () => {
+      // One save re-scores the whole fleet, so nothing derived from the list
+      // survives it — including the preview this editor reads back.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.performance.all() });
+    },
+  });
+}
+
 export function useDriverPerformanceRatings(
   driverId: string | null,
   periodMonth: string,
@@ -125,6 +197,53 @@ export function useClearDriverPerformanceRating() {
         queryKey: queryKeys.performance.ratings(input.driverId, input.periodMonth),
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.performance.all() });
+    },
+  });
+}
+
+export function useSaveDriverPerformanceRatingNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: saveDriverPerformanceRatingNote,
+    onSuccess: (_result, input) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.ratings(
+          input.driverId,
+          input.periodMonth,
+        ),
+      });
+      // A note carries no score, so nothing outside this panel is stale.
+    },
+  });
+}
+
+export function useSavePerformanceRatingCriterion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: savePerformanceRatingCriterion,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.ratingTeams(),
+      });
+      // A criterion weight re-blends every team score, so the list moves too.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.all(),
+      });
+    },
+  });
+}
+
+export function useDeletePerformanceRatingCriterion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deletePerformanceRatingCriterion,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.ratingTeams(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.all(),
+      });
     },
   });
 }

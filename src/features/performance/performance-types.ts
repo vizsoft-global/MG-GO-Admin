@@ -1,4 +1,77 @@
-export type PerformanceHubTab = "period" | "live";
+export type PerformanceHubTab = "period" | "live" | "analysis";
+
+/**
+ * Components blended into the compliance pillar. Keys are locked — SQL keys on
+ * them, so a rename would silently orphan a component's weight and history.
+ */
+export const PERFORMANCE_COMPONENT_KEYS = [
+  "punctuality",
+  "duty_ratio",
+  "on_time",
+  "speed",
+  "zone",
+  "gps",
+  "conduct",
+] as const;
+
+export type PerformanceComponentKey =
+  (typeof PERFORMANCE_COMPONENT_KEYS)[number];
+
+export type PerformanceComponent = {
+  key: PerformanceComponentKey;
+  label_en: string;
+  label_ar: string;
+  weight: number;
+  sort_order: number;
+  is_active: boolean;
+};
+
+/**
+ * Per-driver component ratios in [0,1]. A key is absent when the period held no
+ * data for it — absent and 0 are different facts, which is the whole reason the
+ * blend renormalises instead of substituting a zero.
+ */
+export type PerformanceComponentScores = Partial<
+  Record<PerformanceComponentKey, number>
+>;
+
+export type PerformanceComponentSettings = {
+  /**
+   * Pickup-to-delivered budget. Deliberately not a customer promise: allocation
+   * is external, so no ETA exists anywhere in this schema.
+   */
+  delivery_ontime_minutes: number;
+  /** Per worked day, so the score does not move with the width of the filter. */
+  speed_allowance_per_day: number;
+  conduct_allowance_per_day: number;
+};
+
+/** One rolled-up day for one driver, with the blend opened up. */
+export type PerformanceDailyRow = {
+  log_date: string;
+  worked: boolean;
+  on_leave: boolean;
+  absent: boolean;
+  /** Null when the day held nothing measurable — never 0. */
+  compliance_score: number | null;
+  component_scores: PerformanceComponentScores;
+  deliveries_completed: number | null;
+  deliveries_within_sla: number | null;
+  overspeed_events: number | null;
+  /**
+   * Sources that had data when the row was written. A missing source means the
+   * component is unknown for that day, which is why the UI can say so instead of
+   * drawing an absence as compliance.
+   */
+  sources_complete: string[];
+};
+
+export type PerformanceDailyResult = {
+  rows: PerformanceDailyRow[];
+  components: PerformanceComponent[];
+  from: string;
+  to: string;
+};
 
 export type PerformanceSortKey =
   | "overall_desc"
@@ -80,6 +153,105 @@ export function performanceBand(score: number): PerformanceScoreBand {
   return "critical";
 }
 
+/** One point on the trend line. `score` is null when nothing scored that bucket. */
+export type PerformanceTrendPoint = {
+  bucket: string;
+  score: number | null;
+  drivers: number;
+  worked_days: number;
+  leave_days: number;
+  absent_days: number;
+  deliveries: number;
+  within_sla: number;
+  components: PerformanceComponentScores;
+};
+
+/**
+ * One half of the comparison. `components_measured` is what makes the delta
+ * honest: the blend renormalises over whichever components had data, so two
+ * halves that measured different sets are not comparable and the UI has to say
+ * so rather than reporting the difference as a change in performance.
+ */
+export type PerformanceTrendTotals = {
+  score: number | null;
+  drivers: number;
+  worked_days: number;
+  leave_days: number;
+  absent_days: number;
+  deliveries: number;
+  within_sla: number;
+  sla_rate: number | null;
+  overspeed_events: number;
+  conduct_weighted: number;
+  components_measured: PerformanceComponentKey[];
+};
+
+/** A zone, partner or rating-team cut. `key` is null for the unassigned bucket. */
+export type PerformanceTrendGroup = {
+  key: string | null;
+  label: string;
+  score: number | null;
+  drivers: number;
+  deliveries?: number;
+  avg_rating?: number | null;
+};
+
+export type PerformanceBandCounts = Record<PerformanceScoreBand, number>;
+
+export type PerformanceBandMigration = {
+  improved: number;
+  declined: number;
+  unchanged: number;
+  current: PerformanceBandCounts;
+  previous: PerformanceBandCounts;
+};
+
+export type PerformanceTrendBucket = "day" | "week" | "month";
+
+export type PerformanceTrend = {
+  from: string;
+  to: string;
+  previous_from: string;
+  previous_to: string;
+  bucket: PerformanceTrendBucket;
+  components: PerformanceComponent[];
+  series: PerformanceTrendPoint[];
+  totals: PerformanceTrendTotals;
+  previous_totals: PerformanceTrendTotals;
+  by_zone: PerformanceTrendGroup[];
+  by_partner: PerformanceTrendGroup[];
+  by_team: PerformanceTrendGroup[];
+  bands: PerformanceBandMigration;
+};
+
+/**
+ * Whether the two halves measured the same components. A delta across a
+ * boundary where a component appeared or went dark is a change of blend, not a
+ * change of performance, and reporting it as the latter is how a retention gap
+ * gets read as a fleet falling apart.
+ */
+export function trendIsComparable(trend: {
+  totals: Pick<PerformanceTrendTotals, "components_measured">;
+  previous_totals: Pick<PerformanceTrendTotals, "components_measured">;
+}): boolean {
+  const now = [...trend.totals.components_measured].sort();
+  const prev = [...trend.previous_totals.components_measured].sort();
+  return now.length === prev.length && now.every((k, i) => k === prev[i]);
+}
+
+/** Components present in one half and not the other, in a stable order. */
+export function trendCoverageDiff(trend: {
+  totals: Pick<PerformanceTrendTotals, "components_measured">;
+  previous_totals: Pick<PerformanceTrendTotals, "components_measured">;
+}): { added: PerformanceComponentKey[]; removed: PerformanceComponentKey[] } {
+  const now = new Set(trend.totals.components_measured);
+  const prev = new Set(trend.previous_totals.components_measured);
+  return {
+    added: PERFORMANCE_COMPONENT_KEYS.filter((k) => now.has(k) && !prev.has(k)),
+    removed: PERFORMANCE_COMPONENT_KEYS.filter((k) => prev.has(k) && !now.has(k)),
+  };
+}
+
 export type PerformanceExceptionSummary = {
   exception_type: string;
   exception_date: string;
@@ -123,14 +295,29 @@ export type PerformanceDriverRow = {
   delivery_efficiency: number;
   delivery_efficiency_raw: number;
   utilization: number;
-  compliance_score: number;
+  /**
+   * The component blend. Null when no component could be measured — a driver
+   * nobody has data on is not a driver who scored zero.
+   */
+  compliance_score: number | null;
+  /** The pre-component number, kept so the settings preview can show old vs new. */
+  legacy_compliance_score: number | null;
+  component_scores: PerformanceComponentScores;
   exception_count: number;
+  /** Only the types no component measures still cost points. */
+  penalised_exception_count: number;
   exceptions: PerformanceExceptionSummary[];
   /** Null when no active team has rated this driver in the period. */
   manual_score: number | null;
   /** Number of teams holding a rating, not the number of rating rows. */
   manual_rating_count: number;
   manual_teams: PerformanceManualTeamScore[];
+  /**
+   * Per-criterion averages on the 1-5 scale, keyed `team_key.criterion_key` —
+   * the same 1-5 a rater picked, not the normalised score, because that is what
+   * a reader of the export compares against.
+   */
+  manual_criteria: Record<string, number>;
   overall_score: number;
   /** Rank across the filtered fleet by score — not the row position. */
   dpd_rank: number;
@@ -142,6 +329,8 @@ export type PerformanceKpis = {
   avg_delivery_pct: number | null;
   avg_utilization_pct: number | null;
   avg_compliance: number | null;
+  /** The same fleet under the pre-component rule, for the settings preview. */
+  avg_legacy_compliance?: number | null;
   below_threshold: number;
   top_score: number | null;
   bottom_score: number | null;
@@ -156,18 +345,34 @@ export type PerformanceKpis = {
   rated_drivers: number;
 };
 
+/** One thing a team judges on. Weight is within its own team, never across. */
+export type PerformanceRatingCriterion = {
+  criterion_id: string;
+  key: string;
+  label_en: string;
+  label_ar: string;
+  weight: number;
+  /** Null when this team has not scored this criterion for the month. */
+  score: number | null;
+  rated_at: string | null;
+};
+
 export type PerformanceRatingTeamRow = {
   team_key: string;
   label_en: string;
   label_ar: string;
   weight: number;
+  /** The team's weighted roll-up of its own criteria, 1-5. Null when unrated. */
   score: number | null;
+  /** One note per team per month — not per criterion. */
   comment: string | null;
+  comment_at: string | null;
+  comment_by_name: string | null;
   rated_at: string | null;
-  rated_by: string | null;
   rated_by_name: string | null;
   /** Decided by the server from team membership, never by the client. */
   can_edit: boolean;
+  criteria: PerformanceRatingCriterion[];
 };
 
 export type PerformanceRatingPanel = {
@@ -182,6 +387,23 @@ export type PerformanceTeamMember = {
   email: string | null;
 };
 
+export type PerformanceCriterionConfig = {
+  id: string;
+  team_key: string;
+  key: string;
+  label_en: string;
+  label_ar: string;
+  weight: number;
+  sort_order: number;
+  is_active: boolean;
+  /**
+   * How many ratings the criterion holds. The settings list needs it to decide
+   * whether Delete is offered at all, rather than offering it and reporting the
+   * server's refusal afterwards.
+   */
+  rating_count: number;
+};
+
 export type PerformanceRatingTeamConfig = {
   key: string;
   label_en: string;
@@ -190,6 +412,18 @@ export type PerformanceRatingTeamConfig = {
   sort_order: number;
   is_active: boolean;
   members: PerformanceTeamMember[];
+  criteria: PerformanceCriterionConfig[];
+};
+
+/** A criterion as the list and the export see it: identified by team and key. */
+export type PerformanceReportCriterion = {
+  id: string;
+  team_key: string;
+  key: string;
+  label_en: string;
+  label_ar: string;
+  team_label_en: string;
+  team_label_ar: string;
 };
 
 export type PerformanceListResult = {
@@ -197,6 +431,11 @@ export type PerformanceListResult = {
   totalCount: number;
   kpis: PerformanceKpis;
   weights: PerformanceScoreWeights;
+  /** Active components in display order, so a column exists even for an unmeasured one. */
+  components: PerformanceComponent[];
+  /** Active rating criteria, for the same reason components are here. */
+  criteria: PerformanceReportCriterion[];
+  slaMinutes: number;
   from: string;
   to: string;
   /** Server-side row ceiling for one export call. */
@@ -220,6 +459,18 @@ export type PerformanceReport = {
    * and an unrated fleet are different facts.
    */
   ratingTeams: PerformanceReportTeam[];
+  /**
+   * Active score components, for the same reason: a component nobody could be
+   * measured on still gets a column, so a blank column reads as no data rather
+   * than as a component that was never configured.
+   */
+  components: PerformanceComponent[];
+  /**
+   * Active criteria, appended after the team columns. Driven off the criteria
+   * table rather than off the rows, so a criterion nobody scored still gets its
+   * column.
+   */
+  criteria: PerformanceReportCriterion[];
   /** True when the fleet is larger than one export can carry. */
   truncated: boolean;
   totalCount: number;

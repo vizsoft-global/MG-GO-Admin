@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   ArrowLeft,
+  Check,
   Gauge,
+  ListChecks,
   Loader2,
   Plus,
   Star,
@@ -18,14 +20,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Link } from "@/i18n/navigation";
-import { computeOverallScore } from "./performance-formulas";
 import {
+  addDays,
+  computeComponentBlend,
+  computeOverallScore,
+  kuwaitToday,
+} from "./performance-formulas";
+import {
+  useDeletePerformanceRatingCriterion,
+  useDriverPerformanceList,
+  usePerformanceComponents,
   usePerformanceRatingTeams,
   usePerformanceScoreWeights,
   useRatingEligibleStaff,
+  useSavePerformanceRatingCriterion,
   useSetPerformanceTeamMember,
+  useUpdatePerformanceComponents,
   useUpdatePerformanceScoreWeights,
 } from "./use-performance";
+import type {
+  PerformanceComponent,
+  PerformanceCriterionConfig,
+  PerformanceRatingTeamConfig,
+} from "./performance-types";
 
 /** A field whose value is a non-negative weight. */
 function WeightField({
@@ -174,6 +191,288 @@ function WeightsSection() {
       <div className="mt-4">
         <Button type="button" className="h-9" onClick={handleSave} disabled={pending}>
           {pending ? t("saving") : t("save")}
+        </Button>
+      </div>
+    </AppFormSection>
+  );
+}
+
+/** Drivers sampled for the preview. Enough to be representative, small enough
+ *  that a settings page does not pull the whole fleet on every keystroke. */
+const PREVIEW_SAMPLE = 200;
+const PREVIEW_DAYS = 30;
+
+function averageBlend(
+  rows: { component_scores: Record<string, number | undefined> }[],
+  components: PerformanceComponent[],
+): number | null {
+  let sum = 0;
+  let count = 0;
+  for (const row of rows) {
+    const blend = computeComponentBlend(row.component_scores, components);
+    if (blend == null) continue;
+    sum += blend;
+    count += 1;
+  }
+  if (count === 0) return null;
+  return Math.round((sum / count) * 10) / 10;
+}
+
+function ComponentsSection() {
+  const t = useTranslations("pages.performance.settings");
+  const locale = useLocale();
+  const { data, isLoading } = usePerformanceComponents();
+  const { mutateAsync: save } = useUpdatePerformanceComponents();
+  const [pending, startTransition] = useTransition();
+
+  const [weights, setWeights] = useState<Record<string, string>>({});
+  const [active, setActive] = useState<Record<string, boolean>>({});
+  const [sla, setSla] = useState("45");
+  const [speedAllowance, setSpeedAllowance] = useState("2");
+  const [conductAllowance, setConductAllowance] = useState("0.25");
+
+  useEffect(() => {
+    if (!data) return;
+    setWeights(
+      Object.fromEntries(data.components.map((c) => [c.key, String(c.weight)])),
+    );
+    setActive(
+      Object.fromEntries(data.components.map((c) => [c.key, c.is_active])),
+    );
+    setSla(String(data.settings.delivery_ontime_minutes));
+    setSpeedAllowance(String(data.settings.speed_allowance_per_day));
+    setConductAllowance(String(data.settings.conduct_allowance_per_day));
+  }, [data]);
+
+  const today = kuwaitToday();
+  // The preview is measured on the real fleet rather than on an invented driver:
+  // a what-if an operator cannot recognise is one they will not trust.
+  const { data: sample, isLoading: sampleLoading } = useDriverPerformanceList({
+    fromDate: addDays(today, -(PREVIEW_DAYS - 1)),
+    toDate: today,
+    page: 0,
+    pageSize: PREVIEW_SAMPLE,
+    sort: "overall_desc",
+  });
+
+  /** The components as edited but not yet saved, for the third preview number. */
+  const editedComponents = useMemo<PerformanceComponent[]>(
+    () =>
+      (data?.components ?? []).map((c) => ({
+        ...c,
+        weight: Number.isFinite(Number(weights[c.key]))
+          ? Math.max(0, Number(weights[c.key]))
+          : c.weight,
+        is_active: active[c.key] ?? c.is_active,
+      })),
+    [data?.components, weights, active],
+  );
+
+  const rows = sample?.rows ?? [];
+  const savedAverage = useMemo(
+    () =>
+      rows.length === 0
+        ? null
+        : Math.round(
+            (rows.reduce(
+              (acc, r) => acc + (r.compliance_score ?? 0),
+              0,
+            ) /
+              Math.max(1, rows.filter((r) => r.compliance_score != null).length)) *
+              10,
+          ) / 10,
+    [rows],
+  );
+  const legacyAverage = useMemo(
+    () =>
+      rows.length === 0
+        ? null
+        : Math.round(
+            (rows.reduce(
+              (acc, r) => acc + (r.legacy_compliance_score ?? 0),
+              0,
+            ) /
+              Math.max(
+                1,
+                rows.filter((r) => r.legacy_compliance_score != null).length,
+              )) *
+              10,
+          ) / 10,
+    [rows],
+  );
+  const editedAverage = useMemo(
+    () => averageBlend(rows, editedComponents),
+    [rows, editedComponents],
+  );
+
+  function handleSave() {
+    startTransition(async () => {
+      const result = await save({
+        components: (data?.components ?? []).map((c) => ({
+          key: c.key,
+          weight: Math.max(0, Number(weights[c.key] ?? c.weight)),
+          is_active: active[c.key] ?? c.is_active,
+        })),
+        settings: {
+          delivery_ontime_minutes: Math.max(1, Number(sla) || 45),
+          speed_allowance_per_day: Math.max(0, Number(speedAllowance) || 0),
+          conduct_allowance_per_day: Math.max(0, Number(conductAllowance) || 0),
+        },
+      });
+      if (!result.success) {
+        toast.error(result.error ?? t("componentsSaveFailed"));
+        return;
+      }
+      toast.success(t("componentsSaved"));
+    });
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <AppFormSection
+      title={t("componentsTitle")}
+      description={t("componentsHint")}
+    >
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-stretch">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <ul className="space-y-2">
+            {(data?.components ?? []).map((c) => {
+              const label = locale.startsWith("ar") ? c.label_ar : c.label_en;
+              const on = active[c.key] ?? c.is_active;
+              return (
+                <li key={c.key} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setActive((prev) => ({ ...prev, [c.key]: !on }))
+                    }
+                    className={`inline-flex h-9 min-w-0 flex-1 items-center gap-1.5 rounded-lg border px-2.5 text-start text-xs transition-colors ${
+                      on
+                        ? "border-emerald-500 bg-emerald-100 font-semibold text-emerald-900 ring-1 ring-emerald-400/50"
+                        : "border-border bg-muted/30 text-muted-foreground"
+                    }`}
+                  >
+                    {on ? (
+                      <Check className="size-3.5 shrink-0" />
+                    ) : (
+                      <Gauge className="size-3.5 shrink-0 opacity-60" />
+                    )}
+                    <span className="truncate">{label}</span>
+                  </button>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    aria-label={label}
+                    className="h-9 w-20 shrink-0"
+                    value={weights[c.key] ?? String(c.weight)}
+                    disabled={!on}
+                    onChange={(e) =>
+                      setWeights((prev) => ({
+                        ...prev,
+                        [c.key]: e.target.value,
+                      }))
+                    }
+                  />
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2 text-[10px] text-muted-foreground">
+            {t("componentsDropNote")}
+          </p>
+        </div>
+
+        <div className="flex h-full flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <WeightField
+              id="c-sla"
+              label={t("slaMinutes")}
+              hint={t("slaMinutesHint")}
+              value={sla}
+              onChange={setSla}
+              step="1"
+            />
+            <WeightField
+              id="c-speed-allowance"
+              label={t("speedAllowance")}
+              hint={t("speedAllowanceHint")}
+              value={speedAllowance}
+              onChange={setSpeedAllowance}
+              step="0.5"
+            />
+            <WeightField
+              id="c-conduct-allowance"
+              label={t("conductAllowance")}
+              hint={t("conductAllowanceHint")}
+              value={conductAllowance}
+              onChange={setConductAllowance}
+              step="0.05"
+            />
+          </div>
+
+          <div className="rounded-xl border border-border bg-muted/20 p-3">
+            <p className="text-[11px] font-medium">
+              {t("componentsPreviewTitle", {
+                days: PREVIEW_DAYS,
+                drivers: rows.length,
+              })}
+            </p>
+            {sampleLoading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg border border-border bg-card p-2">
+                  <p className="text-[10px] text-muted-foreground">
+                    {t("previewLegacy")}
+                  </p>
+                  <p className="text-lg font-semibold tabular-nums">
+                    {legacyAverage ?? "—"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-2">
+                  <p className="text-[10px] text-muted-foreground">
+                    {t("previewSaved")}
+                  </p>
+                  <p className="text-lg font-semibold tabular-nums">
+                    {savedAverage ?? "—"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-2">
+                  <p className="text-[10px] text-primary">
+                    {t("previewEdited")}
+                  </p>
+                  <p className="text-lg font-semibold tabular-nums text-primary">
+                    {editedAverage ?? "—"}
+                  </p>
+                </div>
+              </div>
+            )}
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              {t("componentsPreviewNote")}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <Button
+          type="button"
+          className="h-9"
+          onClick={handleSave}
+          disabled={pending}
+        >
+          {pending ? t("saving") : t("componentsSave")}
         </Button>
       </div>
     </AppFormSection>
@@ -338,6 +637,231 @@ function TeamsSection() {
   );
 }
 
+/**
+ * What one team judges on. Weights are within the team, never across it — a
+ * criterion weight of 2 means it counts double against its siblings, not that
+ * the team outvotes another team.
+ */
+function CriteriaCard({ team }: { team: PerformanceRatingTeamConfig }) {
+  const t = useTranslations("pages.performance.settings");
+  const locale = useLocale();
+  const isArabic = locale.startsWith("ar");
+  const label = isArabic ? team.label_ar : team.label_en;
+
+  const { mutateAsync: save } = useSavePerformanceRatingCriterion();
+  const { mutateAsync: remove } = useDeletePerformanceRatingCriterion();
+
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
+  const [draftWeight, setDraftWeight] = useState("1");
+
+  function criterionError(error?: string) {
+    if (error === "not_authorized") return t("teamsNotAuthorized");
+    if (error === "criterion_in_use") return t("criterionInUse");
+    if (error === "duplicate_key") return t("criterionDuplicate");
+    return error ?? t("teamsSaveFailed");
+  }
+
+  async function persist(
+    criterion: PerformanceCriterionConfig,
+    patch: Partial<Pick<PerformanceCriterionConfig, "weight" | "is_active">>,
+  ) {
+    setPendingId(criterion.id);
+    try {
+      const result = await save({
+        id: criterion.id,
+        teamKey: team.key,
+        labelEn: criterion.label_en,
+        labelAr: criterion.label_ar,
+        weight: patch.weight ?? criterion.weight,
+        sortOrder: criterion.sort_order,
+        isActive: patch.is_active ?? criterion.is_active,
+      });
+      if (!result.success) {
+        toast.error(criterionError(result.error));
+        return;
+      }
+      toast.success(t("criterionSaved"));
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  async function add() {
+    const labelText = draftLabel.trim();
+    if (labelText === "") return;
+    setPendingId("new");
+    try {
+      const result = await save({
+        teamKey: team.key,
+        labelEn: labelText,
+        // One label until a translator supplies the other. An empty Arabic
+        // label would render as a blank star row rather than as a gap to fill.
+        labelAr: labelText,
+        weight: Number(draftWeight) || 1,
+        sortOrder: team.criteria.length,
+        isActive: true,
+      });
+      if (!result.success) {
+        toast.error(criterionError(result.error));
+        return;
+      }
+      setDraftLabel("");
+      setDraftWeight("1");
+      toast.success(t("criterionAdded"));
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  async function drop(criterion: PerformanceCriterionConfig) {
+    setPendingId(criterion.id);
+    try {
+      const result = await remove(criterion.id);
+      if (!result.success) {
+        toast.error(criterionError(result.error));
+        return;
+      }
+      toast.success(t("criterionDeleted"));
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  return (
+    <div className="flex h-full flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-center gap-2">
+        <ListChecks className="size-3.5 text-primary" />
+        <p className="text-sm font-semibold">{label}</p>
+      </div>
+
+      <ul className="mt-3 min-h-0 flex-1 space-y-1">
+        {team.criteria.length === 0 ? (
+          <li className="rounded-lg border border-dashed border-border px-2 py-3 text-center text-[10px] text-muted-foreground">
+            {t("noCriteria")}
+          </li>
+        ) : (
+          team.criteria.map((criterion) => (
+            <li
+              key={criterion.id}
+              className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">
+                  {isArabic ? criterion.label_ar : criterion.label_en}
+                </p>
+                <p className="truncate text-[10px] text-muted-foreground">
+                  {t("criterionRatings", { count: criterion.rating_count })}
+                </p>
+              </div>
+              <Input
+                type="number"
+                min="0"
+                step="0.1"
+                className="h-8 w-16 shrink-0 text-xs"
+                defaultValue={String(criterion.weight)}
+                disabled={pendingId === criterion.id}
+                aria-label={t("criterionWeight")}
+                onBlur={(e) => {
+                  const next = Number(e.target.value);
+                  if (!Number.isFinite(next) || next === criterion.weight)
+                    return;
+                  void persist(criterion, { weight: next });
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 px-2 text-[10px]"
+                disabled={pendingId === criterion.id}
+                onClick={() =>
+                  void persist(criterion, { is_active: !criterion.is_active })
+                }
+              >
+                {criterion.is_active ? t("criterionOn") : t("criterionOff")}
+              </Button>
+              {/*
+                Delete is only offered when nothing was filed against it. The
+                server refuses otherwise, and offering a button that reports a
+                refusal is worse than not offering it.
+              */}
+              {criterion.rating_count === 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 text-destructive hover:bg-destructive/10"
+                  disabled={pendingId === criterion.id}
+                  onClick={() => void drop(criterion)}
+                  aria-label={t("removeCriterion")}
+                  title={t("removeCriterion")}
+                >
+                  {pendingId === criterion.id ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-3.5" />
+                  )}
+                </Button>
+              ) : null}
+            </li>
+          ))
+        )}
+      </ul>
+
+      <div className="mt-3 flex items-end gap-2">
+        <div className="min-w-0 flex-1 space-y-1">
+          <Label className="text-[10px]">{t("addCriterion")}</Label>
+          <Input
+            className="h-9 text-xs"
+            value={draftLabel}
+            maxLength={60}
+            placeholder={t("criterionPlaceholder")}
+            onChange={(e) => setDraftLabel(e.target.value)}
+          />
+        </div>
+        <div className="w-16 shrink-0 space-y-1">
+          <Label className="text-[10px]">{t("criterionWeight")}</Label>
+          <Input
+            type="number"
+            min="0"
+            step="0.1"
+            className="h-9 text-xs"
+            value={draftWeight}
+            onChange={(e) => setDraftWeight(e.target.value)}
+          />
+        </div>
+        <Button
+          type="button"
+          className="h-9 shrink-0"
+          disabled={draftLabel.trim() === "" || pendingId === "new"}
+          onClick={() => void add()}
+        >
+          <Plus className="size-3.5" />
+          {t("add")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CriteriaSection() {
+  const t = useTranslations("pages.performance.settings");
+  const { data: teams, isLoading } = usePerformanceRatingTeams();
+
+  if (isLoading) return null;
+
+  return (
+    <AppFormSection title={t("criteriaTitle")} description={t("criteriaHint")}>
+      <div className="grid gap-3 lg:grid-cols-3 lg:items-stretch">
+        {(teams ?? []).map((team) => (
+          <CriteriaCard key={team.key} team={team} />
+        ))}
+      </div>
+    </AppFormSection>
+  );
+}
+
 export function PerformanceSettingsPanel() {
   const t = useTranslations("pages.performance.settings");
 
@@ -357,7 +881,9 @@ export function PerformanceSettingsPanel() {
         }
       />
       <WeightsSection />
+      <ComponentsSection />
       <TeamsSection />
+      <CriteriaSection />
     </AppPage>
   );
 }

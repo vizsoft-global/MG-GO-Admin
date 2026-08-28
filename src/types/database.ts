@@ -378,6 +378,7 @@ export type Database = {
           attendance_gps_stale_minutes: number
           attendance_late_grace_minutes: number
           attendance_offline_alert_minutes: number
+          delivery_ontime_minutes: number
           driver_app_delivery_proximity_meters: number
           driver_app_icon_url: string | null
           driver_app_login_hint: string
@@ -407,7 +408,9 @@ export type Database = {
           logo_type: string
           logo_url: string | null
           maintenance_mode: boolean
+          performance_conduct_allowance_per_day: number
           performance_score_weights: Json
+          performance_speed_allowance_per_day: number
           pickup_auto_cancel_hours: number
           request_auto_close_days: number
           super_admin_claimed: boolean
@@ -425,6 +428,7 @@ export type Database = {
           attendance_gps_stale_minutes?: number
           attendance_late_grace_minutes?: number
           attendance_offline_alert_minutes?: number
+          delivery_ontime_minutes?: number
           driver_app_delivery_proximity_meters?: number
           driver_app_icon_url?: string | null
           driver_app_login_hint?: string
@@ -454,7 +458,9 @@ export type Database = {
           logo_type?: string
           logo_url?: string | null
           maintenance_mode?: boolean
+          performance_conduct_allowance_per_day?: number
           performance_score_weights?: Json
+          performance_speed_allowance_per_day?: number
           pickup_auto_cancel_hours?: number
           request_auto_close_days?: number
           super_admin_claimed?: boolean
@@ -472,6 +478,7 @@ export type Database = {
           attendance_gps_stale_minutes?: number
           attendance_late_grace_minutes?: number
           attendance_offline_alert_minutes?: number
+          delivery_ontime_minutes?: number
           driver_app_delivery_proximity_meters?: number
           driver_app_icon_url?: string | null
           driver_app_login_hint?: string
@@ -501,7 +508,9 @@ export type Database = {
           logo_type?: string
           logo_url?: string | null
           maintenance_mode?: boolean
+          performance_conduct_allowance_per_day?: number
           performance_score_weights?: Json
+          performance_speed_allowance_per_day?: number
           pickup_auto_cancel_hours?: number
           request_auto_close_days?: number
           super_admin_claimed?: boolean
@@ -1229,6 +1238,41 @@ export type Database = {
             columns: ["zone_id"]
             isOneToOne: false
             referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_sla_overrides: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          minutes: number
+          scope_id: string
+          scope_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          minutes: number
+          scope_id: string
+          scope_type: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          minutes?: number
+          scope_id?: string
+          scope_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_sla_overrides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2521,6 +2565,181 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "payout_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_performance_daily: {
+        Row: {
+          absent: boolean
+          computed_at: string
+          conduct_weighted: number | null
+          deliveries_completed: number | null
+          deliveries_within_sla: number | null
+          driver_id: string
+          duty_seconds: number | null
+          gps_offline_minutes: number | null
+          log_date: string
+          lost_minutes: number | null
+          on_leave: boolean
+          online_seconds: number | null
+          out_of_zone_minutes: number | null
+          overspeed_events: number | null
+          scheduled_minutes: number | null
+          sources_complete: string[]
+          worked: boolean
+        }
+        Insert: {
+          absent?: boolean
+          computed_at?: string
+          conduct_weighted?: number | null
+          deliveries_completed?: number | null
+          deliveries_within_sla?: number | null
+          driver_id: string
+          duty_seconds?: number | null
+          gps_offline_minutes?: number | null
+          log_date: string
+          lost_minutes?: number | null
+          on_leave?: boolean
+          online_seconds?: number | null
+          out_of_zone_minutes?: number | null
+          overspeed_events?: number | null
+          scheduled_minutes?: number | null
+          sources_complete?: string[]
+          worked?: boolean
+        }
+        Update: {
+          absent?: boolean
+          computed_at?: string
+          conduct_weighted?: number | null
+          deliveries_completed?: number | null
+          deliveries_within_sla?: number | null
+          driver_id?: string
+          duty_seconds?: number | null
+          gps_offline_minutes?: number | null
+          log_date?: string
+          lost_minutes?: number | null
+          on_leave?: boolean
+          online_seconds?: number | null
+          out_of_zone_minutes?: number | null
+          overspeed_events?: number | null
+          scheduled_minutes?: number | null
+          sources_complete?: string[]
+          worked?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_performance_daily_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_performance_rating_notes: {
+        Row: {
+          authored_by: string | null
+          comment: string
+          driver_id: string
+          id: string
+          period_month: string
+          team_key: string
+          updated_at: string
+        }
+        Insert: {
+          authored_by?: string | null
+          comment: string
+          driver_id: string
+          id?: string
+          period_month: string
+          team_key: string
+          updated_at?: string
+        }
+        Update: {
+          authored_by?: string | null
+          comment?: string
+          driver_id?: string
+          id?: string
+          period_month?: string
+          team_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_performance_rating_notes_authored_by_fkey"
+            columns: ["authored_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_performance_rating_notes_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_performance_rating_notes_team_key_fkey"
+            columns: ["team_key"]
+            isOneToOne: false
+            referencedRelation: "performance_rating_teams"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      driver_performance_ratings: {
+        Row: {
+          criterion_id: string
+          driver_id: string
+          id: string
+          period_month: string
+          rated_at: string
+          rated_by: string | null
+          score: number
+          updated_at: string
+        }
+        Insert: {
+          criterion_id: string
+          driver_id: string
+          id?: string
+          period_month: string
+          rated_at?: string
+          rated_by?: string | null
+          score: number
+          updated_at?: string
+        }
+        Update: {
+          criterion_id?: string
+          driver_id?: string
+          id?: string
+          period_month?: string
+          rated_at?: string
+          rated_by?: string | null
+          score?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_performance_ratings_criterion_id_fkey"
+            columns: ["criterion_id"]
+            isOneToOne: false
+            referencedRelation: "performance_rating_criteria"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_performance_ratings_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_performance_ratings_rated_by_fkey"
+            columns: ["rated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -4648,6 +4867,159 @@ export type Database = {
         }
         Relationships: []
       }
+      performance_rating_criteria: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order: number
+          team_key: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order?: number
+          team_key: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key?: string
+          label_ar?: string
+          label_en?: string
+          sort_order?: number
+          team_key?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_rating_criteria_team_key_fkey"
+            columns: ["team_key"]
+            isOneToOne: false
+            referencedRelation: "performance_rating_teams"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      performance_rating_team_members: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          profile_id: string
+          team_key: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          profile_id: string
+          team_key: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          profile_id?: string
+          team_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_rating_team_members_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_rating_team_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_rating_team_members_team_key_fkey"
+            columns: ["team_key"]
+            isOneToOne: false
+            referencedRelation: "performance_rating_teams"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      performance_rating_teams: {
+        Row: {
+          created_at: string
+          is_active: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order: number
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          is_active?: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order?: number
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          is_active?: boolean
+          key?: string
+          label_ar?: string
+          label_en?: string
+          sort_order?: number
+          weight?: number
+        }
+        Relationships: []
+      }
+      performance_score_components: {
+        Row: {
+          created_at: string
+          is_active: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order: number
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          is_active?: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order?: number
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          is_active?: boolean
+          key?: string
+          label_ar?: string
+          label_en?: string
+          sort_order?: number
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           admin_role_id: string | null
@@ -6205,6 +6577,7 @@ export type Database = {
         Row: {
           action_type: Database["public"]["Enums"]["wrong_action_type"]
           created_at: string
+          created_by: string | null
           details: string | null
           driver_id: string
           id: string
@@ -6216,6 +6589,7 @@ export type Database = {
         Insert: {
           action_type: Database["public"]["Enums"]["wrong_action_type"]
           created_at?: string
+          created_by?: string | null
           details?: string | null
           driver_id: string
           id?: string
@@ -6227,6 +6601,7 @@ export type Database = {
         Update: {
           action_type?: Database["public"]["Enums"]["wrong_action_type"]
           created_at?: string
+          created_by?: string | null
           details?: string | null
           driver_id?: string
           id?: string
@@ -6236,6 +6611,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "wrong_actions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "wrong_actions_driver_id_fkey"
             columns: ["driver_id"]
@@ -6640,6 +7022,7 @@ export type Database = {
         Args: { p_lat1: number; p_lat2: number; p_lng1: number; p_lng2: number }
         Returns: number
       }
+      _performance_components_snapshot: { Args: never; Returns: Json }
       _point_in_restaurant_geofence: {
         Args: {
           p_geometry: Json
@@ -6785,15 +7168,24 @@ export type Database = {
         Returns: Json
       }
       admin_delete_driver_performance_rating: {
-        Args: { p_driver_id: string; p_period_month: string; p_team_key: string }
+        Args: {
+          p_criterion_id: string
+          p_driver_id: string
+          p_period_month: string
+        }
         Returns: Json
       }
-      admin_dpd_live_snapshot: {
-        Args: { p_date?: string }
+      admin_delete_performance_rating_criterion: {
+        Args: { p_id: string }
         Returns: Json
       }
+      admin_dpd_live_snapshot: { Args: { p_date?: string }; Returns: Json }
       admin_driver_device_overview: {
         Args: { p_driver_id: string; p_history_limit?: number }
+        Returns: Json
+      }
+      admin_driver_performance_daily: {
+        Args: { p_driver_id: string; p_from: string; p_to: string }
         Returns: Json
       }
       admin_drivers_multi_device_recent: {
@@ -6866,24 +7258,6 @@ export type Database = {
         Args: { p_driver_id: string; p_period_month?: string }
         Returns: Json
       }
-      admin_list_performance_rating_teams: {
-        Args: never
-        Returns: Json
-      }
-      admin_set_performance_team_member: {
-        Args: { p_member: boolean; p_profile_id: string; p_team_key: string }
-        Returns: Json
-      }
-      admin_upsert_driver_performance_rating: {
-        Args: {
-          p_comment?: string
-          p_driver_id: string
-          p_period_month: string
-          p_score: number
-          p_team_key: string
-        }
-        Returns: Json
-      }
       admin_list_esign_requests: {
         Args: { p_limit?: number; p_offset?: number; p_status?: string }
         Returns: Json
@@ -6901,6 +7275,8 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_list_performance_components: { Args: never; Returns: Json }
+      admin_list_performance_rating_teams: { Args: never; Returns: Json }
       admin_list_requests: {
         Args: {
           p_date_from?: string
@@ -6937,6 +7313,16 @@ export type Database = {
         Args: { p_seen_within_minutes?: number }
         Returns: Json
       }
+      admin_performance_trend: {
+        Args: {
+          p_bucket?: string
+          p_from: string
+          p_partner_id?: string
+          p_to: string
+          p_zone_id?: string
+        }
+        Returns: Json
+      }
       admin_preview_purge: {
         Args: { p_entity_type: string; p_ids: string[] }
         Returns: Json
@@ -6949,6 +7335,10 @@ export type Database = {
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
+      admin_rebuild_driver_performance_daily: {
+        Args: { p_driver_id?: string; p_from: string; p_to: string }
+        Returns: number
+      }
       admin_record_fleet_events: { Args: { p_events: Json }; Returns: Json }
       admin_request_department_report: {
         Args: { p_date_from?: string; p_date_to?: string }
@@ -6971,13 +7361,34 @@ export type Database = {
         }[]
       }
       admin_run_attendance_auto_checkout: { Args: never; Returns: number }
+      admin_run_performance_daily_rollup: {
+        Args: { p_lookback_days?: number }
+        Returns: Json
+      }
       admin_run_request_sla_sweep: { Args: never; Returns: number }
+      admin_set_driver_performance_rating_note: {
+        Args: {
+          p_comment: string
+          p_driver_id: string
+          p_period_month: string
+          p_team_key: string
+        }
+        Returns: Json
+      }
       admin_set_fuel_transfer_type: {
         Args: { p_request_id: string; p_transfer_type: string }
         Returns: Json
       }
+      admin_set_performance_team_member: {
+        Args: { p_member: boolean; p_profile_id: string; p_team_key: string }
+        Returns: Json
+      }
       admin_set_request_decision_meta: {
         Args: { p_meta: Json; p_request_id: string }
+        Returns: Json
+      }
+      admin_update_performance_components: {
+        Args: { p_components: Json; p_settings?: Json }
         Returns: Json
       }
       admin_update_visit_status: {
@@ -6986,6 +7397,15 @@ export type Database = {
           p_new_date?: string
           p_new_slot_id?: string
           p_status: Database["public"]["Enums"]["visit_booking_status"]
+        }
+        Returns: Json
+      }
+      admin_upsert_driver_performance_rating: {
+        Args: {
+          p_criterion_id: string
+          p_driver_id: string
+          p_period_month: string
+          p_score: number
         }
         Returns: Json
       }
@@ -6998,6 +7418,19 @@ export type Database = {
           p_exception_type: string
           p_note?: string
           p_resolution_status: string
+        }
+        Returns: Json
+      }
+      admin_upsert_performance_rating_criterion: {
+        Args: {
+          p_id: string
+          p_is_active: boolean
+          p_key: string
+          p_label_ar: string
+          p_label_en: string
+          p_sort_order: number
+          p_team_key: string
+          p_weight: number
         }
         Returns: Json
       }
@@ -7642,6 +8075,27 @@ export type Database = {
         }
         Returns: Json
       }
+      performance_daily_source: {
+        Args: { p_driver_id?: string; p_from: string; p_to: string }
+        Returns: {
+          absent: boolean
+          conduct_weighted: number
+          deliveries_completed: number
+          deliveries_within_sla: number
+          driver_id: string
+          duty_seconds: number
+          gps_offline_minutes: number
+          log_date: string
+          lost_minutes: number
+          on_leave: boolean
+          online_seconds: number
+          out_of_zone_minutes: number
+          overspeed_events: number
+          scheduled_minutes: number
+          sources_complete: string[]
+          worked: boolean
+        }[]
+      }
       preview_driver_earnings: { Args: { p_earn_date: string }; Returns: Json }
       rcm_materialize_approval_steps: {
         Args: { p_request_id: string }
@@ -7710,6 +8164,10 @@ export type Database = {
           store_name: string
         }[]
       }
+      resolve_delivery_sla_minutes: {
+        Args: { p_partner_id: string; p_zone_id: string }
+        Returns: number
+      }
       resolve_import_driver_ids: {
         Args: { p_import_spec: Json }
         Returns: string[]
@@ -7731,6 +8189,7 @@ export type Database = {
         Returns: string
       }
       staff_has_permission: { Args: { p_slug: string }; Returns: boolean }
+      staff_rates_for_team: { Args: { p_team_key: string }; Returns: boolean }
       sync_driver_wallet_earning_credit: {
         Args: {
           p_approved_by?: string

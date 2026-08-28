@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  componentPct,
+  computeComponentBlend,
   computeOverallScore,
   parsePerformanceWeights,
   ratingPeriodMonth,
@@ -10,7 +12,10 @@ import {
   scoreToStars,
   DEFAULT_PERFORMANCE_WEIGHTS,
   RATING_SCALE_MAX,
+  type PerformanceComponent,
+  type PerformanceComponentKey,
   type PerformanceDriverRow,
+  type PerformanceReportCriterion,
   type PerformanceReportTeam,
 } from "./performance-types";
 import {
@@ -51,17 +56,151 @@ function row(overrides: Partial<PerformanceDriverRow> = {}): PerformanceDriverRo
     delivery_efficiency_raw: 0.8,
     utilization: 0.83,
     compliance_score: 90,
+    legacy_compliance_score: 90,
+    component_scores: {},
     exception_count: 0,
+    penalised_exception_count: 0,
     exceptions: [],
     manual_score: null,
     manual_rating_count: 0,
     manual_teams: [],
+    manual_criteria: {},
     overall_score: 84.4,
     dpd_rank: 1,
     score_band: "top",
     ...overrides,
   };
 }
+
+function component(
+  key: PerformanceComponentKey,
+  weight = 1,
+  is_active = true,
+): PerformanceComponent {
+  return {
+    key,
+    label_en: key,
+    label_ar: key,
+    weight,
+    sort_order: 0,
+    is_active,
+  };
+}
+
+const ALL_COMPONENTS: PerformanceComponent[] = [
+  component("punctuality"),
+  component("duty_ratio"),
+  component("on_time"),
+  component("speed"),
+  component("zone"),
+  component("gps"),
+];
+
+describe("component blend", () => {
+  it("is the weighted average of the components that have a value", () => {
+    const blend = computeComponentBlend(
+      { punctuality: 0.9, duty_ratio: 0.5 },
+      [component("punctuality", 1), component("duty_ratio", 1)],
+    );
+    assert.equal(blend, 70);
+  });
+
+  it("honours weights", () => {
+    // 3:1 in favour of punctuality: (3*0.9 + 1*0.5) / 4 = 0.8
+    const blend = computeComponentBlend(
+      { punctuality: 0.9, duty_ratio: 0.5 },
+      [component("punctuality", 3), component("duty_ratio", 1)],
+    );
+    assert.equal(blend, 80);
+  });
+
+  it("drops an unmeasured component along with its weight", () => {
+    // A driver who logged no deliveries has no on-time ratio. Scoring it 0 would
+    // make the component a penalty for what the period did not contain.
+    const dropped = computeComponentBlend(
+      { punctuality: 0.9, duty_ratio: 0.5 },
+      ALL_COMPONENTS,
+    );
+    const configured = computeComponentBlend(
+      { punctuality: 0.9, duty_ratio: 0.5 },
+      [component("punctuality"), component("duty_ratio")],
+    );
+    assert.equal(dropped, configured);
+    assert.equal(dropped, 70);
+  });
+
+  it("an absent component is not the same as a zero one", () => {
+    const absent = computeComponentBlend({ punctuality: 1 }, ALL_COMPONENTS);
+    const zeroed = computeComponentBlend(
+      { punctuality: 1, duty_ratio: 0, on_time: 0, speed: 0, zone: 0, gps: 0 },
+      ALL_COMPONENTS,
+    );
+    assert.equal(absent, 100);
+    assert.notEqual(absent, zeroed);
+    assert.ok((zeroed ?? 0) < 20);
+  });
+
+  it("is null, never 0, when nothing could be measured", () => {
+    assert.equal(computeComponentBlend({}, ALL_COMPONENTS), null);
+  });
+
+  it("ignores inactive components and zero-weight ones", () => {
+    const blend = computeComponentBlend(
+      { punctuality: 1, duty_ratio: 0, on_time: 0 },
+      [
+        component("punctuality", 1),
+        component("duty_ratio", 1, false),
+        component("on_time", 0),
+      ],
+    );
+    assert.equal(blend, 100);
+  });
+
+  it("clamps a component value into 0-1 rather than extrapolating", () => {
+    assert.equal(computeComponentBlend({ punctuality: 4 }, ALL_COMPONENTS), 100);
+    assert.equal(computeComponentBlend({ punctuality: -2 }, ALL_COMPONENTS), 0);
+  });
+
+  it("treats a non-finite value as absent", () => {
+    assert.equal(
+      computeComponentBlend({ punctuality: Number.NaN }, ALL_COMPONENTS),
+      null,
+    );
+  });
+
+  it("componentPct reports a share, and null for an absent component", () => {
+    assert.equal(componentPct({ gps: 0.873 }, "gps"), 87.3);
+    assert.equal(componentPct({ gps: 0.873 }, "speed"), null);
+  });
+});
+
+describe("overall score with an unmeasurable compliance pillar", () => {
+  it("drops the compliance term along with its weight", () => {
+    const dropped = computeOverallScore(0.8, 0.5, null);
+    const twoPillars = computeOverallScore(0.8, 0.5, null, {
+      ...DEFAULT_PERFORMANCE_WEIGHTS,
+      compliance: 0,
+    });
+    assert.equal(dropped, twoPillars);
+    assert.equal(dropped, 65);
+  });
+
+  it("does not score an unmeasured pillar as zero", () => {
+    const dropped = computeOverallScore(0.8, 0.5, null);
+    const zeroed = computeOverallScore(0.8, 0.5, 0);
+    assert.notEqual(dropped, zeroed);
+    assert.ok(dropped > zeroed);
+  });
+
+  it("drops both pillars at once without dividing by zero", () => {
+    const score = computeOverallScore(1, 1, null, DEFAULT_PERFORMANCE_WEIGHTS, null);
+    assert.equal(score, 100);
+  });
+
+  it("still uses a measured compliance pillar", () => {
+    assert.equal(computeOverallScore(0.8, 0.5, 80), 70);
+  });
+});
 
 describe("manual rating normalisation", () => {
   it("preserves the midpoint: 3 of 5 is average, so it is 50", () => {
@@ -263,6 +402,102 @@ describe("report rating columns", () => {
       performanceReportRow(row()).length,
       PERFORMANCE_REPORT_HEADERS.length,
     );
+  });
+});
+
+describe("report criterion columns", () => {
+  const teams: PerformanceReportTeam[] = [
+    { key: "fleet", label: "Fleet" },
+    { key: "operations", label: "Operations" },
+  ];
+
+  const criteria: PerformanceReportCriterion[] = [
+    {
+      id: "c1",
+      team_key: "operations",
+      key: "behavior",
+      label_en: "Behavior",
+      label_ar: "السلوك",
+      team_label_en: "Operations",
+      team_label_ar: "العمليات",
+    },
+    {
+      id: "c2",
+      team_key: "operations",
+      key: "appearance",
+      label_en: "Appearance",
+      label_ar: "المظهر",
+      team_label_en: "Operations",
+      team_label_ar: "العمليات",
+    },
+  ];
+
+  it("puts criterion columns after the team columns, so team order is stable", () => {
+    const headers = performanceReportHeaders(teams, [], criteria);
+    assert.equal(
+      headers.length,
+      PERFORMANCE_REPORT_HEADERS.length + teams.length + criteria.length,
+    );
+    assert.equal(headers.at(-2), "Operations · Behavior (1-5)");
+    assert.equal(headers.at(-1), "Operations · Appearance (1-5)");
+    assert.equal(
+      headers.indexOf("Fleet (1-5)"),
+      PERFORMANCE_REPORT_HEADERS.length,
+    );
+  });
+
+  it("a row has exactly one cell per header, criteria included", () => {
+    const headers = performanceReportHeaders(teams, [], criteria);
+    assert.equal(
+      performanceReportRow(row(), teams, [], criteria).length,
+      headers.length,
+    );
+  });
+
+  it("reads the 1-5 a rater picked, keyed on team and criterion together", () => {
+    const cells = performanceReportRow(
+      row({ manual_criteria: { "operations.behavior": 4.5 } }),
+      teams,
+      [],
+      criteria,
+    );
+    const headers = performanceReportHeaders(teams, [], criteria);
+    assert.equal(cells[headers.indexOf("Operations · Behavior (1-5)")], 4.5);
+  });
+
+  it("a criterion nobody scored still gets a column, marked as unrated", () => {
+    const cells = performanceReportRow(
+      row({ manual_criteria: { "operations.behavior": 3 } }),
+      teams,
+      [],
+      criteria,
+    );
+    const headers = performanceReportHeaders(teams, [], criteria);
+    assert.equal(cells[headers.indexOf("Operations · Appearance (1-5)")], "—");
+  });
+
+  it("does not read one team's criterion as another's", () => {
+    const twoTeams: PerformanceReportCriterion[] = [
+      ...criteria,
+      {
+        id: "c3",
+        team_key: "fleet",
+        key: "behavior",
+        label_en: "Behavior",
+        label_ar: "السلوك",
+        team_label_en: "Fleet",
+        team_label_ar: "الأسطول",
+      },
+    ];
+    const cells = performanceReportRow(
+      row({ manual_criteria: { "operations.behavior": 5 } }),
+      teams,
+      [],
+      twoTeams,
+    );
+    const headers = performanceReportHeaders(teams, [], twoTeams);
+    assert.equal(cells[headers.indexOf("Operations · Behavior (1-5)")], 5);
+    assert.equal(cells[headers.indexOf("Fleet · Behavior (1-5)")], "—");
   });
 });
 

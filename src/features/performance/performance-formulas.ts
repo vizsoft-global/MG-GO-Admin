@@ -1,5 +1,8 @@
 import {
   DEFAULT_PERFORMANCE_WEIGHTS,
+  type PerformanceComponent,
+  type PerformanceComponentKey,
+  type PerformanceComponentScores,
   type PerformanceScoreWeights,
 } from "./performance-types";
 
@@ -38,23 +41,61 @@ export function parsePerformanceWeights(raw: unknown): PerformanceScoreWeights {
 }
 
 /**
+ * Blend the measured components into the compliance pillar, 0–100.
+ *
+ * Mirrors the `blended` CTE in admin_list_driver_performance. A component with
+ * no value for the period is dropped **along with its weight**, so the pillar is
+ * what it would have been with that component not configured at all. Scoring an
+ * absent component as 0 would make it a penalty for whatever the period did not
+ * contain — a driver who logged no deliveries has no on-time ratio, not a bad one.
+ *
+ * Returns null when nothing at all could be measured. Null is not 0: 0 says
+ * "measured, and terrible", which is a much stronger claim than the data supports.
+ */
+export function computeComponentBlend(
+  scores: PerformanceComponentScores,
+  components: PerformanceComponent[],
+): number | null {
+  let num = 0;
+  let den = 0;
+
+  for (const component of components) {
+    if (!component.is_active) continue;
+    const weight = Math.max(0, component.weight);
+    if (weight <= 0) continue;
+
+    const value = scores[component.key];
+    if (value == null || !Number.isFinite(value)) continue;
+
+    num += weight * clamp01(value);
+    den += weight;
+  }
+
+  if (den <= 0) return null;
+  return Math.round((100 * num) / den * 10) / 10;
+}
+
+/**
  * Composite score 0–100. Mirrors admin_list_driver_performance.
  *
- * `manualScore` null means no team has rated the driver, and an unrated driver
- * must not be penalised: the manual term is dropped and the remaining weights
- * renormalise, so the score is exactly what it would be with no manual weight
- * configured at all.
+ * A null term is dropped along with its weight and the survivors renormalise.
+ * `manualScore` null means no team has rated the driver; `complianceScore` null
+ * means no component could be measured. Neither may be scored as 0 — that would
+ * turn an unfinished review cycle, or a driver the rollup has no data for, into
+ * a penalty. Dropping instead gives exactly the score that pillar not being
+ * configured would have produced.
  */
 export function computeOverallScore(
   deliveryEfficiency: number,
   utilization: number,
-  complianceScore: number,
+  complianceScore: number | null,
   weights: PerformanceScoreWeights = DEFAULT_PERFORMANCE_WEIGHTS,
   manualScore: number | null = null,
 ): number {
   const wD = Math.max(0, weights.delivery);
   const wU = Math.max(0, weights.utilization);
-  const wC = Math.max(0, weights.compliance);
+  const measured = complianceScore != null && Number.isFinite(complianceScore);
+  const wC = measured ? Math.max(0, weights.compliance) : 0;
   const rated = manualScore != null && Number.isFinite(manualScore);
   const wM = rated ? Math.max(0, weights.manual) : 0;
   const sum = wD + wU + wC + wM || 1;
@@ -62,10 +103,23 @@ export function computeOverallScore(
     100 *
     ((wD * clamp01(deliveryEfficiency) +
       wU * clamp01(utilization) +
-      wC * clamp01(complianceScore / 100) +
+      wC * clamp01((complianceScore ?? 0) / 100) +
       wM * clamp01((manualScore ?? 0) / 100)) /
       sum);
   return Math.round(score * 10) / 10;
+}
+
+/**
+ * Component score to a share, for a progress bar or a cell. Kept beside the
+ * blend so a display can never disagree with the number it is illustrating.
+ */
+export function componentPct(
+  scores: PerformanceComponentScores,
+  key: PerformanceComponentKey,
+): number | null {
+  const value = scores[key];
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.round(clamp01(value) * 1000) / 10;
 }
 
 export function kuwaitToday(): string {

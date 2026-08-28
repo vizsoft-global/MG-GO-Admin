@@ -37,6 +37,10 @@
     {
       "path": "/api/cron/driver-telemetry-retention",
       "schedule": "40 1 * * *"
+    },
+    {
+      "path": "/api/cron/performance-rollup",
+      "schedule": "0 2 * * *"
     }
   ]
 }

@@ -27,6 +27,7 @@ import {
   Pencil,
   Phone,
   RefreshCw,
+  Gauge,
   Shield,
   Smartphone,
   Wallet,
@@ -50,6 +51,8 @@ import { DriverDevicesTab } from "./driver-devices-tab";
 import { DriverLocationTab } from "./driver-location-tab";
 import { DriverAttendanceTab } from "./driver-attendance-tab";
 import { DriverActivityTab } from "./driver-activity-tab";
+import { DriverPerformanceTab } from "./driver-performance-tab";
+import { DriverWrongActionsTab } from "@/features/wrong-actions/driver-wrong-actions-tab";
 import { DriverEditSheet } from "./driver-edit-sheet";
 import { getCountryLabel } from "@/lib/geo/countries";
 import { riderCategoryMessageKey } from "./driver-rider-category";
@@ -85,6 +88,7 @@ import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
 
 type DetailTabId =
   | "attendance"
+  | "performance"
   | "activity"
   | "location"
   | "documents"
@@ -271,6 +275,8 @@ function DriverDetailContent({ id }: { id: string }) {
   const { can } = useAuth();
   const canManage = can("drivers.manage");
   const canViewOps = can("driver_ops.view");
+  const canViewPerformance = can("performance.view");
+  const canViewWrongActions = can("wrong_actions.view");
   const canExportOps = can("driver_ops.export");
   const { data: driver, isLoading, isError } = useDriverDetail(id);
   const { data: customFieldDefs = [] } = useCustomFieldDefinitions({
@@ -342,7 +348,19 @@ function DriverDetailContent({ id }: { id: string }) {
     if (tab === "activity" && driver?.linked_profile_id && canViewOps) {
       setActiveTab("activity");
     }
-  }, [searchParams, driver?.linked_profile_id, canViewOps]);
+    if (
+      tab === "performance" &&
+      driver?.linked_profile_id &&
+      canViewPerformance
+    ) {
+      setActiveTab("performance");
+    }
+  }, [
+    searchParams,
+    driver?.linked_profile_id,
+    canViewOps,
+    canViewPerformance,
+  ]);
 
   /*
    * Where "back" goes, when the caller says so.
@@ -377,6 +395,9 @@ function DriverDetailContent({ id }: { id: string }) {
 
   const tabs: TabItem[] = [
     { id: "attendance", label: t("tabAttendance"), icon: CalendarClock },
+    ...(canViewPerformance && driver?.linked_profile_id
+      ? [{ id: "performance" as const, label: t("tabPerformance"), icon: Gauge }]
+      : []),
     ...(driver?.linked_profile_id
       ? [{ id: "location" as const, label: t("tabLocation"), icon: MapPin }]
       : []),
@@ -391,7 +412,9 @@ function DriverDetailContent({ id }: { id: string }) {
     { id: "deductions", label: t("tabDeductions"), icon: Banknote },
     { id: "loan", label: t("tabLoan"), icon: Banknote },
     { id: "complaint", label: t("tabComplaint"), icon: AlertTriangle },
-    { id: "wrong-actions", label: t("tabWrongActions"), icon: Shield },
+    ...(canViewWrongActions
+      ? [{ id: "wrong-actions" as const, label: t("tabWrongActions"), icon: Shield }]
+      : []),
   ];
 
   if (isLoading) return <DetailSkeleton />;
@@ -524,6 +547,37 @@ function DriverDetailContent({ id }: { id: string }) {
 
     if (activeTab === "attendance" && driver.linked_profile_id) {
       return <DriverAttendanceTab driverId={driver.linked_profile_id} />;
+    }
+
+    if (
+      activeTab === "performance" &&
+      driver.linked_profile_id &&
+      canViewPerformance
+    ) {
+      return (
+        <DriverPerformanceTab
+          driverId={driver.linked_profile_id}
+          driverName={driver.full_name}
+        />
+      );
+    }
+
+    // Incidents are filed against `drivers.id`, which is the linked profile. An
+    // intake that has never been approved has no driver row to attach one to.
+    if (activeTab === "wrong-actions" && canViewWrongActions) {
+      if (!driver.linked_profile_id) {
+        return (
+          <div className="rounded-xl border border-border bg-card shadow-sm">
+            <div className="py-12">
+              <AppEmptyState
+                title={t("attendanceNeedsLinkTitle")}
+                description={t("attendanceNeedsLinkDescription")}
+              />
+            </div>
+          </div>
+        );
+      }
+      return <DriverWrongActionsTab driverId={driver.linked_profile_id} />;
     }
 
     if (activeTab === "activity" && driver.linked_profile_id && canViewOps) {

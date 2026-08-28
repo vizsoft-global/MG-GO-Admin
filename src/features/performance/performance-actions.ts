@@ -13,6 +13,12 @@ import {
 import {
   DEFAULT_PERFORMANCE_WEIGHTS,
   performanceBand,
+  PERFORMANCE_COMPONENT_KEYS,
+  type PerformanceComponent,
+  type PerformanceComponentKey,
+  type PerformanceComponentScores,
+  type PerformanceComponentSettings,
+  type PerformanceDailyResult,
   type DpdLiveBreakdownRow,
   type DpdLiveLeaderRow,
   type DpdLiveSnapshot,
@@ -22,12 +28,20 @@ import {
   type PerformanceListFilters,
   type PerformanceListResult,
   type PerformanceManualTeamScore,
+  type PerformanceRatingCriterion,
   type PerformanceRatingPanel,
   type PerformanceRatingTeamConfig,
   type PerformanceRatingTeamRow,
   type PerformanceReport,
+  type PerformanceReportCriterion,
   type PerformanceReportTeam,
   type PerformanceScoreWeights,
+  type PerformanceBandCounts,
+  type PerformanceBandMigration,
+  type PerformanceTrend,
+  type PerformanceTrendBucket,
+  type PerformanceTrendGroup,
+  type PerformanceTrendTotals,
   type RecentDeliveryFeedItem,
 } from "./performance-types";
 
@@ -104,6 +118,55 @@ function parseManualTeams(raw: unknown): PerformanceManualTeamScore[] {
   });
 }
 
+const COMPONENT_KEY_SET = new Set<string>(PERFORMANCE_COMPONENT_KEYS);
+
+/**
+ * Absent stays absent. A key the server did not send is a component with no data
+ * for the period, and coalescing it to 0 here would undo the whole point of the
+ * blend renormalising around it.
+ */
+function parseComponentScores(raw: unknown): PerformanceComponentScores {
+  if (!raw || typeof raw !== "object") return {};
+  const source = raw as Record<string, unknown>;
+  const out: PerformanceComponentScores = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (!COMPONENT_KEY_SET.has(key) || value == null) continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) out[key as PerformanceComponentKey] = n;
+  }
+  return out;
+}
+
+function parseComponents(raw: unknown): PerformanceComponent[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      const o = (entry ?? {}) as Record<string, unknown>;
+      const key = String(o.key ?? "");
+      if (!COMPONENT_KEY_SET.has(key)) return null;
+      return {
+        key: key as PerformanceComponentKey,
+        label_en: String(o.label_en ?? key),
+        label_ar: String(o.label_ar ?? key),
+        weight: Number(o.weight ?? 1),
+        sort_order: Number(o.sort_order ?? index),
+        is_active: o.is_active == null ? true : Boolean(o.is_active),
+      };
+    })
+    .filter((c): c is PerformanceComponent => c != null);
+}
+
+/** `team_key.criterion_key` -> the 1-5 average a rater actually picked. */
+function parseManualCriteria(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(value);
+    if (Number.isFinite(n)) out[key] = n;
+  }
+  return out;
+}
+
 function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
   const exceptionsRaw = Array.isArray(raw.exceptions) ? raw.exceptions : [];
   return {
@@ -132,8 +195,19 @@ function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
     delivery_efficiency: Number(raw.delivery_efficiency ?? 0),
     delivery_efficiency_raw: Number(raw.delivery_efficiency_raw ?? 0),
     utilization: Number(raw.utilization ?? 0),
-    compliance_score: Number(raw.compliance_score ?? 0),
+    compliance_score:
+      raw.compliance_score == null ||
+      !Number.isFinite(Number(raw.compliance_score))
+        ? null
+        : Number(raw.compliance_score),
+    legacy_compliance_score:
+      raw.legacy_compliance_score == null ||
+      !Number.isFinite(Number(raw.legacy_compliance_score))
+        ? null
+        : Number(raw.legacy_compliance_score),
+    component_scores: parseComponentScores(raw.component_scores),
     exception_count: Number(raw.exception_count ?? 0),
+    penalised_exception_count: Number(raw.penalised_exception_count ?? 0),
     exceptions: exceptionsRaw
       .map(parseException)
       .filter((e): e is PerformanceExceptionSummary => e != null),
@@ -143,6 +217,7 @@ function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
         : Number(raw.manual_score),
     manual_rating_count: Number(raw.manual_rating_count ?? 0),
     manual_teams: parseManualTeams(raw.manual_teams),
+    manual_criteria: parseManualCriteria(raw.manual_criteria),
     overall_score: Number(raw.overall_score ?? 0),
     dpd_rank: Number(raw.dpd_rank ?? 0),
     score_band:
@@ -173,6 +248,7 @@ function parseKpis(raw: unknown): PerformanceKpis {
     avg_delivery_pct: n("avg_delivery_pct"),
     avg_utilization_pct: n("avg_utilization_pct"),
     avg_compliance: n("avg_compliance"),
+    avg_legacy_compliance: n("avg_legacy_compliance"),
     below_threshold: Number(o.below_threshold ?? 0),
     top_score: n("top_score"),
     bottom_score: n("bottom_score"),
@@ -232,6 +308,9 @@ async function runPerformanceList(
     totalCount: Number(payload.totalCount ?? 0),
     kpis: parseKpis(payload.kpis),
     weights: parsePerformanceWeights(payload.weights),
+    components: parseComponents(payload.components),
+    criteria: parseCriteria(payload.criteria),
+    slaMinutes: Number(payload.slaMinutes ?? 45),
     from: String(payload.from ?? from),
     to: String(payload.to ?? to),
     maxExportRows: Number(payload.maxExportRows ?? MAX_EXPORT_ROWS),
@@ -294,6 +373,8 @@ export async function fetchDriverPerformanceReport(input: {
     kpis: result.kpis,
     weights: result.weights,
     ratingTeams: await reportRatingTeams(),
+    components: result.components.filter((c) => c.is_active && c.weight > 0),
+    criteria: result.criteria,
     totalCount: result.totalCount,
     truncated: result.totalCount > result.rows.length,
   };
@@ -457,6 +538,13 @@ export async function updatePerformanceScoreWeights(
     const session = await requireSettingsManage();
     const next = parsePerformanceWeights(weights);
     const supabase = await createClient();
+
+    // One save re-scores the whole fleet, so the entry has to say what it was
+    // before. A read here can race a concurrent save; that is acceptable for
+    // weights, which are edited by one operator on one settings page, and the
+    // alternative is another RPC for a field the panel already owns.
+    const previous = await getPerformanceScoreWeights().catch(() => null);
+
     const { error } = await supabase
       .from("app_settings")
       .update({
@@ -475,6 +563,7 @@ export async function updatePerformanceScoreWeights(
       entityType: "app_settings",
       entityId: "1",
       routeName: "updatePerformanceScoreWeights",
+      before: previous ? { weights: previous } : null,
       after: { weights: next },
       context: { weights: next },
     });
@@ -488,6 +577,371 @@ export async function updatePerformanceScoreWeights(
   }
 }
 
+/**
+ * One driver's standing in the whole fleet, for their detail page.
+ *
+ * It has to be read from the *unfiltered* list, because `dpd_rank` is computed
+ * over whatever population the filters leave: asking for one driver would return
+ * rank 1 out of 1 for everybody, which is a number that looks right and means
+ * nothing. The fleet-wide read happens here rather than in the browser so the
+ * page pays for a rank, not for two thousand rows it would throw away.
+ *
+ * Above the cap the rank is returned as null instead of a wrong one — a driver
+ * ranked against a truncated fleet is the same lie in a smaller size.
+ */
+export async function fetchDriverPerformanceRank(
+  driverId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<{ rank: number | null; total: number; band: string | null }> {
+  await requirePerformanceView();
+
+  const result = await runPerformanceList({
+    fromDate,
+    toDate,
+    sort: "overall_desc",
+    page: 0,
+    pageSize: MAX_EXPORT_ROWS,
+  });
+
+  if (result.totalCount > result.rows.length) {
+    return { rank: null, total: result.totalCount, band: null };
+  }
+
+  const row = result.rows.find((entry) => entry.driver_id === driverId);
+  return {
+    rank: row?.dpd_rank ?? null,
+    total: result.totalCount,
+    band: row?.score_band ?? null,
+  };
+}
+
+/**
+ * The per-day breakdown behind the compliance column.
+ *
+ * Gated on attendance.view as well as performance.view, because the surface it
+ * feeds is the Attendance page: requiring the performance permission there would
+ * hide the explanation from exactly the operator whose column it explains.
+ */
+export async function fetchDriverPerformanceDaily(
+  driverId: string,
+  from: string,
+  to: string,
+): Promise<PerformanceDailyResult> {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !(
+      session.isSuperAdmin ||
+      hasPermissionInSet(session.permissions, "performance.view", session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "attendance.view", session.isSuperAdmin)
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "admin_driver_performance_daily" as never,
+    { p_driver_id: driverId, p_from: from, p_to: to } as never,
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const rowsRaw = Array.isArray(payload.rows) ? payload.rows : [];
+
+  return {
+    rows: rowsRaw.map((entry) => {
+      const o = (entry ?? {}) as Record<string, unknown>;
+      const n = (key: string) => {
+        const v = o[key];
+        if (v == null) return null;
+        const num = Number(v);
+        return Number.isFinite(num) ? num : null;
+      };
+      return {
+        log_date: String(o.log_date ?? ""),
+        worked: Boolean(o.worked),
+        on_leave: Boolean(o.on_leave),
+        absent: Boolean(o.absent),
+        compliance_score: n("compliance_score"),
+        component_scores: parseComponentScores(o.component_scores),
+        deliveries_completed: n("deliveries_completed"),
+        deliveries_within_sla: n("deliveries_within_sla"),
+        overspeed_events: n("overspeed_events"),
+        sources_complete: Array.isArray(o.sources_complete)
+          ? o.sources_complete.map(String)
+          : [],
+      };
+    }),
+    components: parseComponents(payload.components),
+    from: String(payload.from ?? from),
+    to: String(payload.to ?? to),
+  };
+}
+
+/**
+ * The whole analysis tab in one round trip — see admin_performance_trend.
+ *
+ * The comparison half comes back from the same call rather than from a second
+ * fetch with shifted dates: two calls could straddle a rollup and produce a
+ * delta between a window read before it and one read after.
+ */
+export async function fetchPerformanceTrend(input: {
+  fromDate: string;
+  toDate: string;
+  bucket?: PerformanceTrendBucket;
+  zoneId?: string;
+  partnerId?: string;
+}): Promise<PerformanceTrend> {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.analyze",
+      session.isSuperAdmin,
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "admin_performance_trend" as never,
+    {
+      p_from: input.fromDate,
+      p_to: input.toDate,
+      p_bucket: input.bucket ?? "day",
+      p_zone_id: input.zoneId || null,
+      p_partner_id: input.partnerId || null,
+    } as never,
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  void logAdminRead("performance_trend", "/performance", {
+    from: input.fromDate,
+    to: input.toDate,
+    bucket: input.bucket ?? "day",
+  });
+
+  return parsePerformanceTrend(data, input);
+}
+
+function parsePerformanceTrend(
+  data: unknown,
+  input: { fromDate: string; toDate: string; bucket?: PerformanceTrendBucket },
+): PerformanceTrend {
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+
+  return {
+    from: String(payload.from ?? input.fromDate),
+    to: String(payload.to ?? input.toDate),
+    previous_from: String(payload.previous_from ?? ""),
+    previous_to: String(payload.previous_to ?? ""),
+    bucket: parseTrendBucket(payload.bucket) ?? input.bucket ?? "day",
+    components: parseComponents(payload.components),
+    series: (Array.isArray(payload.series) ? payload.series : []).map((entry) => {
+      const o = (entry ?? {}) as Record<string, unknown>;
+      return {
+        bucket: String(o.bucket ?? ""),
+        score: nullableNumber(o.score),
+        drivers: countOf(o.drivers),
+        worked_days: countOf(o.worked_days),
+        leave_days: countOf(o.leave_days),
+        absent_days: countOf(o.absent_days),
+        deliveries: countOf(o.deliveries),
+        within_sla: countOf(o.within_sla),
+        components: parseComponentScores(o.components),
+      };
+    }),
+    totals: parseTrendTotals(payload.totals),
+    previous_totals: parseTrendTotals(payload.previous_totals),
+    by_zone: parseTrendGroups(payload.by_zone),
+    by_partner: parseTrendGroups(payload.by_partner),
+    by_team: parseTrendGroups(payload.by_team),
+    bands: parseBandMigration(payload.bands),
+  };
+}
+
+function parseTrendBucket(value: unknown): PerformanceTrendBucket | null {
+  return value === "day" || value === "week" || value === "month" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function countOf(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseTrendTotals(value: unknown): PerformanceTrendTotals {
+  const o = (value ?? {}) as Record<string, unknown>;
+  const measured = Array.isArray(o.components_measured)
+    ? o.components_measured
+        .map(String)
+        .filter((k): k is PerformanceComponentKey =>
+          (PERFORMANCE_COMPONENT_KEYS as readonly string[]).includes(k),
+        )
+    : [];
+  return {
+    score: nullableNumber(o.score),
+    drivers: countOf(o.drivers),
+    worked_days: countOf(o.worked_days),
+    leave_days: countOf(o.leave_days),
+    absent_days: countOf(o.absent_days),
+    deliveries: countOf(o.deliveries),
+    within_sla: countOf(o.within_sla),
+    sla_rate: nullableNumber(o.sla_rate),
+    overspeed_events: countOf(o.overspeed_events),
+    conduct_weighted: countOf(o.conduct_weighted),
+    components_measured: measured,
+  };
+}
+
+function parseTrendGroups(value: unknown): PerformanceTrendGroup[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      key: o.key == null ? null : String(o.key),
+      label: String(o.label ?? ""),
+      score: nullableNumber(o.score),
+      drivers: countOf(o.drivers),
+      deliveries: o.deliveries == null ? undefined : countOf(o.deliveries),
+      avg_rating: o.avg_rating == null ? null : nullableNumber(o.avg_rating),
+    };
+  });
+}
+
+function parseBandCounts(value: unknown): PerformanceBandCounts {
+  const o = (value ?? {}) as Record<string, unknown>;
+  return {
+    top: countOf(o.top),
+    good: countOf(o.good),
+    watch: countOf(o.watch),
+    critical: countOf(o.critical),
+  };
+}
+
+function parseBandMigration(value: unknown): PerformanceBandMigration {
+  const o = (value ?? {}) as Record<string, unknown>;
+  return {
+    improved: countOf(o.improved),
+    declined: countOf(o.declined),
+    unchanged: countOf(o.unchanged),
+    current: parseBandCounts(o.current),
+    previous: parseBandCounts(o.previous),
+  };
+}
+
+export async function fetchPerformanceComponents(): Promise<{
+  components: PerformanceComponent[];
+  settings: PerformanceComponentSettings;
+}> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc(
+    "admin_list_performance_components" as never,
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const settings = (payload.settings ?? {}) as Record<string, unknown>;
+
+  return {
+    components: parseComponents(payload.components),
+    settings: {
+      delivery_ontime_minutes: Number(settings.delivery_ontime_minutes ?? 45),
+      speed_allowance_per_day: Number(settings.speed_allowance_per_day ?? 2),
+      conduct_allowance_per_day: Number(settings.conduct_allowance_per_day ?? 0.25),
+    },
+  };
+}
+
+/**
+ * One save re-scores the entire fleet, so the previous and new values are both
+ * recorded. The RPC returns both from inside the same statement rather than the
+ * caller reading before and after, which could race another admin's save.
+ */
+export async function updatePerformanceComponents(input: {
+  components: { key: string; weight?: number; is_active?: boolean }[];
+  settings?: Partial<PerformanceComponentSettings>;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireSettingsManage();
+
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc(
+      "admin_update_performance_components" as never,
+      {
+        p_components: input.components,
+        p_settings: input.settings ?? null,
+      } as never,
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const result =
+      data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "performance_score_components",
+      entityId: "all",
+      routeName: "updatePerformanceComponents",
+      before: (result.before ?? null) as Record<string, unknown> | null,
+      after: (result.after ?? null) as Record<string, unknown> | null,
+      context: { settings: input.settings ?? null },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "update_failed",
+    };
+  }
+}
+
+function nullableNum(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseRatingCriterion(raw: unknown): PerformanceRatingCriterion {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    criterion_id: String(o.criterion_id ?? ""),
+    key: String(o.key ?? ""),
+    label_en: String(o.label_en ?? ""),
+    label_ar: String(o.label_ar ?? ""),
+    weight: num(o.weight ?? 1),
+    score: nullableNum(o.score),
+    rated_at: o.rated_at == null ? null : String(o.rated_at),
+  };
+}
+
 function parseRatingTeamRow(raw: unknown): PerformanceRatingTeamRow {
   const o = (raw ?? {}) as Record<string, unknown>;
   return {
@@ -495,16 +949,34 @@ function parseRatingTeamRow(raw: unknown): PerformanceRatingTeamRow {
     label_en: String(o.label_en ?? ""),
     label_ar: String(o.label_ar ?? ""),
     weight: num(o.weight ?? 1),
-    score:
-      o.score == null || !Number.isFinite(Number(o.score))
-        ? null
-        : Number(o.score),
+    score: nullableNum(o.score),
     comment: o.comment == null ? null : String(o.comment),
+    comment_at: o.comment_at == null ? null : String(o.comment_at),
+    comment_by_name:
+      o.comment_by_name == null ? null : String(o.comment_by_name),
     rated_at: o.rated_at == null ? null : String(o.rated_at),
-    rated_by: o.rated_by == null ? null : String(o.rated_by),
     rated_by_name: o.rated_by_name == null ? null : String(o.rated_by_name),
     can_edit: Boolean(o.can_edit),
+    criteria: Array.isArray(o.criteria)
+      ? o.criteria.map(parseRatingCriterion)
+      : [],
   };
+}
+
+function parseCriteria(raw: unknown): PerformanceReportCriterion[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      id: String(o.id ?? ""),
+      team_key: String(o.team_key ?? ""),
+      key: String(o.key ?? ""),
+      label_en: String(o.label_en ?? ""),
+      label_ar: String(o.label_ar ?? ""),
+      team_label_en: String(o.team_label_en ?? o.team_key ?? ""),
+      team_label_ar: String(o.team_label_ar ?? o.team_key ?? ""),
+    };
+  });
 }
 
 export async function fetchDriverPerformanceRatings(
@@ -539,35 +1011,37 @@ export async function fetchDriverPerformanceRatings(
   };
 }
 
+async function requireRatePermission() {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.rate",
+      session.isSuperAdmin,
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+}
+
 export async function saveDriverPerformanceRating(input: {
   driverId: string;
-  teamKey: string;
+  criterionId: string;
   periodMonth: string;
   score: number;
-  comment?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await getSessionUser();
-    if (
-      !session ||
-      !hasPermissionInSet(
-        session.permissions,
-        "performance.rate",
-        session.isSuperAdmin,
-      )
-    ) {
-      throw new Error("not_authorized");
-    }
+    await requireRatePermission();
 
     const supabase = await createClient();
     const { error } = await supabase.rpc(
       "admin_upsert_driver_performance_rating",
       {
         p_driver_id: input.driverId,
-        p_team_key: input.teamKey,
+        p_criterion_id: input.criterionId,
         p_period_month: input.periodMonth,
         p_score: input.score,
-        p_comment: input.comment ?? undefined,
       },
     );
 
@@ -578,10 +1052,10 @@ export async function saveDriverPerformanceRating(input: {
     void logAdminMutation({
       action: "update",
       entityType: "driver_performance_rating",
-      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      entityId: `${input.driverId}:${input.criterionId}:${input.periodMonth}`,
       routeName: "saveDriverPerformanceRating",
       after: { score: input.score },
-      context: { team: input.teamKey, period: input.periodMonth },
+      context: { criterion: input.criterionId, period: input.periodMonth },
     });
 
     return { success: true };
@@ -595,28 +1069,18 @@ export async function saveDriverPerformanceRating(input: {
 
 export async function clearDriverPerformanceRating(input: {
   driverId: string;
-  teamKey: string;
+  criterionId: string;
   periodMonth: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await getSessionUser();
-    if (
-      !session ||
-      !hasPermissionInSet(
-        session.permissions,
-        "performance.rate",
-        session.isSuperAdmin,
-      )
-    ) {
-      throw new Error("not_authorized");
-    }
+    await requireRatePermission();
 
     const supabase = await createClient();
     const { error } = await supabase.rpc(
       "admin_delete_driver_performance_rating",
       {
         p_driver_id: input.driverId,
-        p_team_key: input.teamKey,
+        p_criterion_id: input.criterionId,
         p_period_month: input.periodMonth,
       },
     );
@@ -628,9 +1092,9 @@ export async function clearDriverPerformanceRating(input: {
     void logAdminMutation({
       action: "delete",
       entityType: "driver_performance_rating",
-      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      entityId: `${input.driverId}:${input.criterionId}:${input.periodMonth}`,
       routeName: "clearDriverPerformanceRating",
-      context: { team: input.teamKey, period: input.periodMonth },
+      context: { criterion: input.criterionId, period: input.periodMonth },
     });
 
     return { success: true };
@@ -638,6 +1102,51 @@ export async function clearDriverPerformanceRating(input: {
     return {
       success: false,
       error: e instanceof Error ? e.message : "delete_failed",
+    };
+  }
+}
+
+/**
+ * One note per team per month. Kept off the score path so a rater can adjust a
+ * star without retyping the paragraph, and vice versa.
+ */
+export async function saveDriverPerformanceRatingNote(input: {
+  driverId: string;
+  teamKey: string;
+  periodMonth: string;
+  comment: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireRatePermission();
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_set_driver_performance_rating_note",
+      {
+        p_driver_id: input.driverId,
+        p_team_key: input.teamKey,
+        p_period_month: input.periodMonth,
+        p_comment: input.comment ?? "",
+      },
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "driver_performance_rating_note",
+      entityId: `${input.driverId}:${input.teamKey}:${input.periodMonth}`,
+      routeName: "saveDriverPerformanceRatingNote",
+      context: { team: input.teamKey, period: input.periodMonth },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "save_failed",
     };
   }
 }
@@ -663,8 +1172,10 @@ export async function fetchPerformanceRatingTeams(): Promise<
   return teams.map((entry) => {
     const o = (entry ?? {}) as Record<string, unknown>;
     const members = Array.isArray(o.members) ? o.members : [];
+    const criteria = Array.isArray(o.criteria) ? o.criteria : [];
+    const teamKey = String(o.key ?? "");
     return {
-      key: String(o.key ?? ""),
+      key: teamKey,
       label_en: String(o.label_en ?? ""),
       label_ar: String(o.label_ar ?? ""),
       weight: num(o.weight ?? 1),
@@ -678,8 +1189,126 @@ export async function fetchPerformanceRatingTeams(): Promise<
           email: mo.email == null ? null : String(mo.email),
         };
       }),
+      criteria: criteria.map((c) => {
+        const co = (c ?? {}) as Record<string, unknown>;
+        return {
+          id: String(co.id ?? ""),
+          team_key: String(co.team_key ?? teamKey),
+          key: String(co.key ?? ""),
+          label_en: String(co.label_en ?? ""),
+          label_ar: String(co.label_ar ?? ""),
+          weight: num(co.weight ?? 1),
+          sort_order: num(co.sort_order),
+          is_active: Boolean(co.is_active),
+          rating_count: num(co.rating_count),
+        };
+      }),
     };
   });
+}
+
+async function requireManageTeams() {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.manage_teams",
+      session.isSuperAdmin,
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+}
+
+export async function savePerformanceRatingCriterion(input: {
+  id?: string | null;
+  teamKey: string;
+  key?: string | null;
+  labelEn: string;
+  labelAr: string;
+  weight: number;
+  sortOrder: number;
+  isActive: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireManageTeams();
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_upsert_performance_rating_criterion",
+      {
+        // Null, not omitted: a null p_id is what tells the RPC this is an
+        // insert, so the parameter has to arrive.
+        p_id: input.id ?? null,
+        p_team_key: input.teamKey,
+        p_key: input.key ?? null,
+        p_label_en: input.labelEn,
+        p_label_ar: input.labelAr,
+        p_weight: input.weight,
+        p_sort_order: input.sortOrder,
+        p_is_active: input.isActive,
+      } as never,
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: input.id ? "update" : "create",
+      entityType: "performance_rating_criterion",
+      entityId: input.id ?? `${input.teamKey}:${input.key ?? input.labelEn}`,
+      routeName: "savePerformanceRatingCriterion",
+      after: {
+        team_key: input.teamKey,
+        label_en: input.labelEn,
+        label_ar: input.labelAr,
+        weight: input.weight,
+        sort_order: input.sortOrder,
+        is_active: input.isActive,
+      },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "save_failed",
+    };
+  }
+}
+
+export async function deletePerformanceRatingCriterion(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireManageTeams();
+
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      "admin_delete_performance_rating_criterion",
+      { p_id: id },
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    void logAdminMutation({
+      action: "delete",
+      entityType: "performance_rating_criterion",
+      entityId: id,
+      routeName: "deletePerformanceRatingCriterion",
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "delete_failed",
+    };
+  }
 }
 
 export async function setPerformanceTeamMember(input: {

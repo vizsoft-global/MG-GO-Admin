@@ -7,9 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Link } from "@/i18n/navigation";
 import { pct, rawPct, ratingPeriodMonth } from "./performance-formulas";
+import { PerformanceComponentBreakdown } from "./performance-component-breakdown";
 import { PerformanceRatingPanel } from "./performance-rating-panel";
 import { useDriverPerformanceDetail } from "./use-performance";
-import type { PerformanceDriverRow } from "./performance-types";
+import type {
+  PerformanceComponent,
+  PerformanceDriverRow,
+} from "./performance-types";
 
 function MetricBlock({
   label,
@@ -33,11 +37,13 @@ function MetricBlock({
 
 function DrilldownBody({
   row,
+  components,
   fromDate,
   toDate,
   onClose,
 }: {
   row: PerformanceDriverRow;
+  components: PerformanceComponent[];
   fromDate: string;
   toDate: string;
   onClose: () => void;
@@ -87,10 +93,22 @@ function DrilldownBody({
               />
               <MetricBlock
                 label={t("colCompliance")}
-                value={`${Math.round(detail.compliance_score)}%`}
-                hint={t("exceptionsCount", { count: detail.exception_count })}
+                value={
+                  detail.compliance_score == null
+                    ? "—"
+                    : `${Math.round(detail.compliance_score)}%`
+                }
+                hint={t("exceptionsCount", {
+                  count: detail.penalised_exception_count,
+                })}
               />
             </div>
+
+            <PerformanceComponentBreakdown
+              scores={detail.component_scores}
+              components={components}
+              compliance={detail.compliance_score}
+            />
 
             <PerformanceRatingPanel
               driverId={detail.driver_id}
@@ -174,12 +192,14 @@ function DrilldownBody({
 
 export function PerformanceDrilldownSheet({
   row,
+  components = [],
   open,
   onOpenChange,
   fromDate,
   toDate,
 }: {
   row: PerformanceDriverRow | null;
+  components?: PerformanceComponent[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   fromDate: string;
@@ -196,6 +216,7 @@ export function PerformanceDrilldownSheet({
           <DrilldownBody
             key={row.driver_id}
             row={row}
+            components={components}
             fromDate={fromDate}
             toDate={toDate}
             onClose={() => onOpenChange(false)}

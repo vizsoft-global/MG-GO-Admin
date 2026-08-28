@@ -4,13 +4,30 @@ import { performanceRange } from "./performance-formulas";
 import {
   performanceBand,
   PERFORMANCE_BAND_FLOOR,
+  type PerformanceComponent,
+  type PerformanceComponentKey,
   type PerformanceDriverRow,
   type PerformanceReport,
 } from "./performance-types";
 import {
   PERFORMANCE_REPORT_HEADERS,
+  performanceReportHeaders,
   performanceReportRow,
 } from "./performance-report-xlsx";
+
+function component(
+  key: PerformanceComponentKey,
+  label: string,
+): PerformanceComponent {
+  return {
+    key,
+    label_en: label,
+    label_ar: label,
+    weight: 1,
+    sort_order: 0,
+    is_active: true,
+  };
+}
 
 function row(overrides: Partial<PerformanceDriverRow> = {}): PerformanceDriverRow {
   return {
@@ -39,7 +56,10 @@ function row(overrides: Partial<PerformanceDriverRow> = {}): PerformanceDriverRo
     delivery_efficiency_raw: 0.8,
     utilization: 0.83,
     compliance_score: 90,
+    legacy_compliance_score: 88,
+    component_scores: { punctuality: 0.9, duty_ratio: 0.9 },
     exception_count: 0,
+    penalised_exception_count: 0,
     exceptions: [],
     manual_score: null,
     manual_rating_count: 0,
@@ -154,6 +174,46 @@ describe("report rows", () => {
     assert.equal(cells[PERFORMANCE_REPORT_HEADERS.indexOf("Emp ID")], "");
   });
 
+  it("an unmeasurable compliance blend is a dash, never a zero", () => {
+    const cells = performanceReportRow(
+      row({ compliance_score: null, component_scores: {} }),
+    );
+    assert.equal(cells[PERFORMANCE_REPORT_HEADERS.indexOf("Compliance")], "—");
+  });
+
+  it("only the exceptions no component measures are reported as penalties", () => {
+    const cells = performanceReportRow(
+      row({ exception_count: 9, penalised_exception_count: 2 }),
+    );
+    assert.equal(cells[PERFORMANCE_REPORT_HEADERS.indexOf("Exceptions")], 2);
+  });
+
+  it("component columns sit after the fixed ones and before the teams", () => {
+    const components = [
+      component("punctuality", "Shift adherence"),
+      component("gps", "GPS availability"),
+    ];
+    const teams = [{ key: "fleet", label: "Fleet" }];
+    const headers = performanceReportHeaders(teams, components);
+
+    assert.deepEqual(headers.slice(PERFORMANCE_REPORT_HEADERS.length), [
+      "Shift adherence %",
+      "GPS availability %",
+      "Fleet (1-5)",
+    ]);
+
+    const cells = performanceReportRow(
+      row({ component_scores: { punctuality: 0.812 } }),
+      teams,
+      components,
+    );
+    assert.equal(cells.length, headers.length);
+    assert.equal(cells[headers.indexOf("Shift adherence %")], 81);
+    // gps was never measured for this driver, so its cell states that rather
+    // than reporting a zero the blend never used.
+    assert.equal(cells[headers.indexOf("GPS availability %")], "—");
+  });
+
   it("truncation is derived from the total, not assumed", () => {
     const base: Omit<PerformanceReport, "rows" | "truncated" | "totalCount"> = {
       from: "2026-08-01",
@@ -183,6 +243,7 @@ describe("report rows", () => {
         exception_penalty: 5,
       },
       ratingTeams: [],
+      components: [],
     };
     const complete: PerformanceReport = {
       ...base,
