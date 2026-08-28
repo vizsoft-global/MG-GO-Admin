@@ -7,6 +7,7 @@ import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import type { RequestDecisionTerms } from "./types";
 
 type Draft = {
@@ -79,8 +80,16 @@ export function RequestDecisionTermsDialog({
   const [draft, setDraft] = useState<Draft>(() => toDraft(initialTerms));
 
   useEffect(() => {
-    if (open) setDraft(toDraft(initialTerms));
-  }, [open, initialTerms]);
+    if (!open) return;
+    const next = toDraft(initialTerms);
+    if (requestType === "loan" && !next.deduction_start_date) {
+      next.deduction_start_date = kuwaitTodayYmd();
+    }
+    setDraft(next);
+  }, [open, initialTerms, requestType]);
+
+  const loanTermsIncomplete =
+    requestType === "loan" && !draft.deduction_start_date;
 
   const set = (key: keyof Draft) => (value: string) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -117,7 +126,9 @@ export function RequestDecisionTermsDialog({
                 />
               </div>
               <div className="space-y-1 sm:col-span-2">
-                <Label>{t("deductionStart")}</Label>
+                <Label>
+                  {t("deductionStart")} <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   type="date"
                   className="h-9"
@@ -174,7 +185,7 @@ export function RequestDecisionTermsDialog({
             <Button
               type="button"
               className="h-9"
-              disabled={submitting}
+              disabled={submitting || loanTermsIncomplete}
               onClick={() => onSubmit(toTerms(draft, requestType))}
             >
               {mode === "approve" ? t("approveSubmit") : t("editSubmit")}

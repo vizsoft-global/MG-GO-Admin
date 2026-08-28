@@ -3765,6 +3765,12 @@
           "allActions": "All action types",
           "searchPlaceholder": "Search route or entity…",
           "eventCount": "{count} events",
+          "eventCountInRange": "{count} events · {range}",
+          "detailsOpened": "Opened {target}",
+          "detailsCreated": "Created {target}",
+          "detailsDecided": "{outcome} · {target}",
+          "detailsTerms": "Decision terms on {target}: {fields}",
+          "detailsFuel": "Fuel transfer {transfer} · {target}",
           "colWhen": "Timestamp",
           "colAction": "Action",
           "colRoute": "Route",
@@ -4203,7 +4209,7 @@
           "needed_by": "Select date",
           "request_mode": "Renewal or first time",
           "asset_current_status": "Lost or damaged",
-          "leave_type": "e.g. Annual"
+          "leave_type": "Select leave type"
         },
         "daysCount": "{count} days",
         "assetModes": {
@@ -4237,7 +4243,10 @@
           "tenure_options_not_configured": "Loan tenure options are not configured yet",
           "category_required": "Select a complaint category",
           "complaint_categories_not_configured": "Complaint categories are not configured yet",
-          "medical_documents_required": "Medical documents are required for sick / accident requests"
+          "medical_documents_required": "Medical documents are required for sick / accident requests",
+          "invalid_option": "Choose a valid {field}",
+          "field_required": "{field} is required",
+          "date_in_past": "Needed-by cannot be earlier than today"
         }
       }
     },

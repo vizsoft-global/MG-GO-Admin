@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { datePresetToBounds } from "./date-presets";
+import { isNeededByInPast } from "./request-create-utils";
 import { FUEL_TRANSFER_TYPES } from "./types";
 import type {
   FuelTransferType,
@@ -608,6 +610,13 @@ export async function createRequestOnBehalf(input: RequestCreateInput): Promise<
   error?: string;
 }> {
   await requireRequestsManage();
+  if (
+    input.type === "loan" &&
+    typeof input.payload.needed_by === "string" &&
+    isNeededByInPast(input.payload.needed_by, kuwaitTodayYmd())
+  ) {
+    return { ok: false, error: "date_in_past" };
+  }
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("admin_create_request", {

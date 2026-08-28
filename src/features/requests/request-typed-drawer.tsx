@@ -7,9 +7,9 @@ import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 import { fetchRequestAttachmentUrl } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
+import { RequestFieldRow } from "./request-field-row";
 import { getExtraPayloadRows, getTypedFieldRows } from "./request-typed-fields";
 import { requestStatusLabelKey, requestStatusVariant } from "./request-status-utils";
 import { RequesterHeader } from "./requester-header";
@@ -150,26 +150,19 @@ export function RequestTypedDrawer({
                 </p>
                 <div className="divide-y divide-border rounded-lg border border-border">
                   {detailRows.map((row) => (
-                    <div
+                    <RequestFieldRow
                       key={row.key}
-                      className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-sm"
+                      label={row.label}
+                      muted={row.value === "—" && !row.gatedKey}
                     >
-                      <span className="text-xs text-muted-foreground">{row.label}</span>
                       {row.gatedKey ? (
-                        <span className="text-[11px] text-warning">
+                        <span className="text-[11px] font-normal text-warning">
                           {t(`detail.${row.gatedKey}` as "detail.categoryGated")}
                         </span>
                       ) : (
-                        <span
-                          className={cn(
-                            "max-w-[60%] break-words text-end font-medium",
-                            row.value === "—" && "text-muted-foreground",
-                          )}
-                        >
-                          {row.value}
-                        </span>
+                        row.value
                       )}
-                    </div>
+                    </RequestFieldRow>
                   ))}
                 </div>
               </div>

@@ -256,7 +256,9 @@ Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settin
 
 Related tables: `request_approval_steps`, `request_clarifications`, `request_attachments`.  
 Config: `loan_tenure_options` (6 rows: 3/6/9/12/18/24 months) and `complaint_categories` (9 rows) were seeded 2026-08-12, so neither gate fires any more. Both remain admin-editable, so keep handling an empty list.  
-**Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests` (includes `payload`), `driver_get_request`, `driver_submit_clarification`, `driver_acknowledge_request` (clears `payload.awaiting_driver_ack`, sets `driver_ack_at`, raises Admin `needs_attention`). Final admin approve on `loan` / `asset` / `sick_leave` sets `payload.awaiting_driver_ack=true`.  
+**Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests` (includes `payload`), `driver_get_request`, `driver_submit_clarification`, `driver_acknowledge_request` (clears `payload.awaiting_driver_ack`, sets `driver_ack_at`, raises Admin `needs_attention`). Final admin approve on `loan` / `asset` / `sick_leave` sets `payload.awaiting_driver_ack=true`.
+
+The **Admin response** card (loan / asset / sick_leave decision terms) stays visible after acknowledgement while the request is `approved` or `closed`. Deduction start date is always listed for an approved loan — from the latest completed step `meta`, then payload, otherwise "Not specified". New admin approvals default that date to Kuwait today and refuse Save without it.  
 Loan submit requires rows in `loan_tenure_options`; complaint submit requires `complaint_categories` rows. Both are seeded as of 2026-08-12; the `tenure_options_not_configured` and `complaint_categories_not_configured` errors now only appear if an admin deactivates every option.
 
 ### Request types are data now (2026-08-12)

@@ -86,3 +86,64 @@ export function fuelFinalApproveBlocked(input: {
     (input.fuelTransferType == null || input.fuelTransferType === "")
   );
 }
+
+/**
+ * Same catalogues `rcm_validate_request_input` seeds. Used when the
+ * field-definitions query is empty so Create cannot fall back to free text.
+ */
+const CATALOG_FALLBACKS: Record<string, string[]> = {
+  leave_type: ["Annual", "Emergency", "Accident", "Unpaid Leave"],
+  leave_subtype: ["Sick leave", "Injury", "Accident", "Other"],
+  asset_type: [
+    "SIM card",
+    "Fuel card",
+    "Fuel limit change",
+    "Raincoat",
+    "Delivery bag",
+    "Reflective vest",
+    "Winter jacket",
+    "Delivery attire",
+    "Delivery pants",
+    "New bike",
+    "Helmet",
+    "Delivery box",
+    "Fuel chip",
+    "Phone",
+    "Mobile holder",
+  ],
+  size: ["S", "M", "L", "XL", "XXL"],
+  document_type: [
+    "Civil ID copy",
+    "License Copy",
+    "Work permit copy",
+    "Registration copy",
+    "Vehicle document copy",
+    "Salary certification",
+  ],
+};
+
+/** Static select options the create RPC will accept — same list the rider app uses. */
+export function staticOptionsForField(
+  fieldKey: string,
+  fields: ReadonlyArray<{ field_key: string; options: readonly string[] }>,
+): string[] {
+  const fromDb = [...(fields.find((field) => field.field_key === fieldKey)?.options ?? [])];
+  return fromDb.length > 0 ? fromDb : (CATALOG_FALLBACKS[fieldKey] ?? []);
+}
+
+export function isNeededByInPast(neededBy: string, todayYmd: string): boolean {
+  return Boolean(neededBy) && neededBy < todayYmd;
+}
+
+/** `invalid_option:leave_type` is a server code, not an i18n path. */
+export function parseCreateRequestError(error: string | undefined): {
+  key: string;
+  field?: string;
+} {
+  if (!error) return { key: "failed" };
+  const option = /^invalid_option:(.+)$/.exec(error);
+  if (option) return { key: "invalid_option", field: option[1] };
+  const required = /^field_required:(.+)$/.exec(error);
+  if (required) return { key: "field_required", field: required[1] };
+  return { key: error };
+}

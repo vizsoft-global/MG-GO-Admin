@@ -19,9 +19,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import {
   inclusiveDurationDays,
+  isNeededByInPast,
+  parseCreateRequestError,
   shouldShowCreateField,
+  staticOptionsForField,
   typedRequiredPayloadKeys,
   typeUsesDateRange,
 } from "./request-create-utils";
@@ -38,20 +42,8 @@ const SYSTEM_TYPES = new Set<string>(REQUEST_TYPE_SLUGS);
 
 const SEVERITIES = ["low", "medium", "high"] as const;
 
-/** Payload keys the rider app sends as free text — there is no configured vocabulary for them. */
-const TEXT_KEYS = new Set([
-  "leave_type",
-  "leave_subtype",
-  "asset_type",
-  "size",
-  "request_mode",
-  "asset_current_status",
-  "document_type",
-  "language",
-  "delivery_method",
-  "subject",
-  "title",
-]);
+/** Free-text keys only — leave/asset/document selects come from request_field_definitions. */
+const TEXT_KEYS = new Set(["subject", "title"]);
 const NUMBER_KEYS = new Set([
   "quantity",
   "distance_km",
@@ -252,6 +244,11 @@ export function RequestCreateDialog({
     }
     if (hasDeclaration) payload.declaration_accepted = declaration;
 
+    if (type === "loan" && isNeededByInPast(value("needed_by"), kuwaitTodayYmd())) {
+      toast.error(t("create.errors.date_in_past"));
+      return;
+    }
+
     const amount = value("amount_kwd").trim();
     const result = await create.mutateAsync({
       driverId,
@@ -265,7 +262,18 @@ export function RequestCreateDialog({
     });
 
     if (!result.ok) {
-      toast.error(t(`create.errors.${result.error ?? "failed"}` as "create.errors.failed"));
+      const parsed = parseCreateRequestError(result.error);
+      const fieldLabel =
+        parsed.field && t.has(`create.fields.${parsed.field}` as "create.fields.comment")
+          ? t(`create.fields.${parsed.field}` as "create.fields.comment")
+          : parsed.field;
+      toast.error(
+        parsed.field
+          ? t(`create.errors.${parsed.key}` as "create.errors.invalid_option", {
+              field: fieldLabel ?? parsed.field,
+            })
+          : t(`create.errors.${parsed.key}` as "create.errors.failed"),
+      );
       return;
     }
     toast.success(t("create.success", { code: result.requestCode ?? "" }));
@@ -539,6 +547,37 @@ export function RequestCreateDialog({
                 );
               }
 
+              const catalogOptions = staticOptionsForField(key, dynamicFields);
+              if (catalogOptions.length > 0) {
+                return (
+                  <div key={key} className="space-y-1">
+                    <Label>
+                      {fieldLabel(key)}
+                      {requiredMark(key)}
+                    </Label>
+                    <Select
+                      items={catalogOptions.map((option) => ({
+                        value: option,
+                        label: option,
+                      }))}
+                      value={value(key)}
+                      onValueChange={(next) => set(key, next ?? "")}
+                    >
+                      <SelectTrigger className="h-9 w-full">
+                        <SelectValue placeholder={fieldPlaceholder(key)} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {catalogOptions.map((option) => (
+                          <SelectItem key={option} value={option} label={option}>
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              }
+
               if (key === "category") {
                 return (
                   <div key={key} className="space-y-1">
@@ -610,7 +649,13 @@ export function RequestCreateDialog({
                             ? "date"
                             : "text"
                     }
-                    min={NUMBER_KEYS.has(key) ? 0 : undefined}
+                    min={
+                      NUMBER_KEYS.has(key)
+                        ? 0
+                        : key === "needed_by"
+                          ? kuwaitTodayYmd()
+                          : undefined
+                    }
                     value={value(key)}
                     onChange={(e) => set(key, e.target.value)}
                     placeholder={
@@ -715,6 +760,7 @@ export function RequestCreateDialog({
                                 ? "date"
                                 : "text"
                         }
+                        min={key === "needed_by" ? kuwaitTodayYmd() : undefined}
                         value={value(key)}
                         onChange={(e) => set(key, e.target.value)}
                         placeholder={
