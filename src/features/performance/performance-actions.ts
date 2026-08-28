@@ -36,6 +36,12 @@ import {
   type PerformanceReportCriterion,
   type PerformanceReportTeam,
   type PerformanceScoreWeights,
+  type PerformanceBandCounts,
+  type PerformanceBandMigration,
+  type PerformanceTrend,
+  type PerformanceTrendBucket,
+  type PerformanceTrendGroup,
+  type PerformanceTrendTotals,
   type RecentDeliveryFeedItem,
 } from "./performance-types";
 
@@ -675,6 +681,169 @@ export async function fetchDriverPerformanceDaily(
     components: parseComponents(payload.components),
     from: String(payload.from ?? from),
     to: String(payload.to ?? to),
+  };
+}
+
+/**
+ * The whole analysis tab in one round trip — see admin_performance_trend.
+ *
+ * The comparison half comes back from the same call rather than from a second
+ * fetch with shifted dates: two calls could straddle a rollup and produce a
+ * delta between a window read before it and one read after.
+ */
+export async function fetchPerformanceTrend(input: {
+  fromDate: string;
+  toDate: string;
+  bucket?: PerformanceTrendBucket;
+  zoneId?: string;
+  partnerId?: string;
+}): Promise<PerformanceTrend> {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(
+      session.permissions,
+      "performance.analyze",
+      session.isSuperAdmin,
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "admin_performance_trend" as never,
+    {
+      p_from: input.fromDate,
+      p_to: input.toDate,
+      p_bucket: input.bucket ?? "day",
+      p_zone_id: input.zoneId || null,
+      p_partner_id: input.partnerId || null,
+    } as never,
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  void logAdminRead("performance_trend", "/performance", {
+    from: input.fromDate,
+    to: input.toDate,
+    bucket: input.bucket ?? "day",
+  });
+
+  return parsePerformanceTrend(data, input);
+}
+
+function parsePerformanceTrend(
+  data: unknown,
+  input: { fromDate: string; toDate: string; bucket?: PerformanceTrendBucket },
+): PerformanceTrend {
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+
+  return {
+    from: String(payload.from ?? input.fromDate),
+    to: String(payload.to ?? input.toDate),
+    previous_from: String(payload.previous_from ?? ""),
+    previous_to: String(payload.previous_to ?? ""),
+    bucket: parseTrendBucket(payload.bucket) ?? input.bucket ?? "day",
+    components: parseComponents(payload.components),
+    series: (Array.isArray(payload.series) ? payload.series : []).map((entry) => {
+      const o = (entry ?? {}) as Record<string, unknown>;
+      return {
+        bucket: String(o.bucket ?? ""),
+        score: nullableNumber(o.score),
+        drivers: countOf(o.drivers),
+        worked_days: countOf(o.worked_days),
+        leave_days: countOf(o.leave_days),
+        absent_days: countOf(o.absent_days),
+        deliveries: countOf(o.deliveries),
+        within_sla: countOf(o.within_sla),
+        components: parseComponentScores(o.components),
+      };
+    }),
+    totals: parseTrendTotals(payload.totals),
+    previous_totals: parseTrendTotals(payload.previous_totals),
+    by_zone: parseTrendGroups(payload.by_zone),
+    by_partner: parseTrendGroups(payload.by_partner),
+    by_team: parseTrendGroups(payload.by_team),
+    bands: parseBandMigration(payload.bands),
+  };
+}
+
+function parseTrendBucket(value: unknown): PerformanceTrendBucket | null {
+  return value === "day" || value === "week" || value === "month" ? value : null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function countOf(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseTrendTotals(value: unknown): PerformanceTrendTotals {
+  const o = (value ?? {}) as Record<string, unknown>;
+  const measured = Array.isArray(o.components_measured)
+    ? o.components_measured
+        .map(String)
+        .filter((k): k is PerformanceComponentKey =>
+          (PERFORMANCE_COMPONENT_KEYS as readonly string[]).includes(k),
+        )
+    : [];
+  return {
+    score: nullableNumber(o.score),
+    drivers: countOf(o.drivers),
+    worked_days: countOf(o.worked_days),
+    leave_days: countOf(o.leave_days),
+    absent_days: countOf(o.absent_days),
+    deliveries: countOf(o.deliveries),
+    within_sla: countOf(o.within_sla),
+    sla_rate: nullableNumber(o.sla_rate),
+    overspeed_events: countOf(o.overspeed_events),
+    conduct_weighted: countOf(o.conduct_weighted),
+    components_measured: measured,
+  };
+}
+
+function parseTrendGroups(value: unknown): PerformanceTrendGroup[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    const o = (entry ?? {}) as Record<string, unknown>;
+    return {
+      key: o.key == null ? null : String(o.key),
+      label: String(o.label ?? ""),
+      score: nullableNumber(o.score),
+      drivers: countOf(o.drivers),
+      deliveries: o.deliveries == null ? undefined : countOf(o.deliveries),
+      avg_rating: o.avg_rating == null ? null : nullableNumber(o.avg_rating),
+    };
+  });
+}
+
+function parseBandCounts(value: unknown): PerformanceBandCounts {
+  const o = (value ?? {}) as Record<string, unknown>;
+  return {
+    top: countOf(o.top),
+    good: countOf(o.good),
+    watch: countOf(o.watch),
+    critical: countOf(o.critical),
+  };
+}
+
+function parseBandMigration(value: unknown): PerformanceBandMigration {
+  const o = (value ?? {}) as Record<string, unknown>;
+  return {
+    improved: countOf(o.improved),
+    declined: countOf(o.declined),
+    unchanged: countOf(o.unchanged),
+    current: parseBandCounts(o.current),
+    previous: parseBandCounts(o.previous),
   };
 }
 

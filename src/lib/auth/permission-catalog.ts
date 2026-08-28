@@ -73,6 +73,11 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     category: "performance",
   },
   {
+    slug: "performance.analyze",
+    label: "View performance analysis",
+    category: "performance",
+  },
+  {
     slug: "performance.rate",
     label: "Rate drivers as a team",
     category: "performance",

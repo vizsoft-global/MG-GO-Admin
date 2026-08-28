@@ -153,6 +153,105 @@ export function performanceBand(score: number): PerformanceScoreBand {
   return "critical";
 }
 
+/** One point on the trend line. `score` is null when nothing scored that bucket. */
+export type PerformanceTrendPoint = {
+  bucket: string;
+  score: number | null;
+  drivers: number;
+  worked_days: number;
+  leave_days: number;
+  absent_days: number;
+  deliveries: number;
+  within_sla: number;
+  components: PerformanceComponentScores;
+};
+
+/**
+ * One half of the comparison. `components_measured` is what makes the delta
+ * honest: the blend renormalises over whichever components had data, so two
+ * halves that measured different sets are not comparable and the UI has to say
+ * so rather than reporting the difference as a change in performance.
+ */
+export type PerformanceTrendTotals = {
+  score: number | null;
+  drivers: number;
+  worked_days: number;
+  leave_days: number;
+  absent_days: number;
+  deliveries: number;
+  within_sla: number;
+  sla_rate: number | null;
+  overspeed_events: number;
+  conduct_weighted: number;
+  components_measured: PerformanceComponentKey[];
+};
+
+/** A zone, partner or rating-team cut. `key` is null for the unassigned bucket. */
+export type PerformanceTrendGroup = {
+  key: string | null;
+  label: string;
+  score: number | null;
+  drivers: number;
+  deliveries?: number;
+  avg_rating?: number | null;
+};
+
+export type PerformanceBandCounts = Record<PerformanceScoreBand, number>;
+
+export type PerformanceBandMigration = {
+  improved: number;
+  declined: number;
+  unchanged: number;
+  current: PerformanceBandCounts;
+  previous: PerformanceBandCounts;
+};
+
+export type PerformanceTrendBucket = "day" | "week" | "month";
+
+export type PerformanceTrend = {
+  from: string;
+  to: string;
+  previous_from: string;
+  previous_to: string;
+  bucket: PerformanceTrendBucket;
+  components: PerformanceComponent[];
+  series: PerformanceTrendPoint[];
+  totals: PerformanceTrendTotals;
+  previous_totals: PerformanceTrendTotals;
+  by_zone: PerformanceTrendGroup[];
+  by_partner: PerformanceTrendGroup[];
+  by_team: PerformanceTrendGroup[];
+  bands: PerformanceBandMigration;
+};
+
+/**
+ * Whether the two halves measured the same components. A delta across a
+ * boundary where a component appeared or went dark is a change of blend, not a
+ * change of performance, and reporting it as the latter is how a retention gap
+ * gets read as a fleet falling apart.
+ */
+export function trendIsComparable(trend: {
+  totals: Pick<PerformanceTrendTotals, "components_measured">;
+  previous_totals: Pick<PerformanceTrendTotals, "components_measured">;
+}): boolean {
+  const now = [...trend.totals.components_measured].sort();
+  const prev = [...trend.previous_totals.components_measured].sort();
+  return now.length === prev.length && now.every((k, i) => k === prev[i]);
+}
+
+/** Components present in one half and not the other, in a stable order. */
+export function trendCoverageDiff(trend: {
+  totals: Pick<PerformanceTrendTotals, "components_measured">;
+  previous_totals: Pick<PerformanceTrendTotals, "components_measured">;
+}): { added: PerformanceComponentKey[]; removed: PerformanceComponentKey[] } {
+  const now = new Set(trend.totals.components_measured);
+  const prev = new Set(trend.previous_totals.components_measured);
+  return {
+    added: PERFORMANCE_COMPONENT_KEYS.filter((k) => now.has(k) && !prev.has(k)),
+    removed: PERFORMANCE_COMPONENT_KEYS.filter((k) => prev.has(k) && !now.has(k)),
+  };
+}
+
 export type PerformanceExceptionSummary = {
   exception_type: string;
   exception_date: string;

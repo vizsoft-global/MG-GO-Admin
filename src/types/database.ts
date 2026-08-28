@@ -6577,6 +6577,7 @@ export type Database = {
         Row: {
           action_type: Database["public"]["Enums"]["wrong_action_type"]
           created_at: string
+          created_by: string | null
           details: string | null
           driver_id: string
           id: string
@@ -6588,6 +6589,7 @@ export type Database = {
         Insert: {
           action_type: Database["public"]["Enums"]["wrong_action_type"]
           created_at?: string
+          created_by?: string | null
           details?: string | null
           driver_id: string
           id?: string
@@ -6599,6 +6601,7 @@ export type Database = {
         Update: {
           action_type?: Database["public"]["Enums"]["wrong_action_type"]
           created_at?: string
+          created_by?: string | null
           details?: string | null
           driver_id?: string
           id?: string
@@ -6608,6 +6611,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "wrong_actions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "wrong_actions_driver_id_fkey"
             columns: ["driver_id"]
@@ -7301,6 +7311,16 @@ export type Database = {
       }
       admin_live_fleet_snapshot: {
         Args: { p_seen_within_minutes?: number }
+        Returns: Json
+      }
+      admin_performance_trend: {
+        Args: {
+          p_bucket?: string
+          p_from: string
+          p_partner_id?: string
+          p_to: string
+          p_zone_id?: string
+        }
         Returns: Json
       }
       admin_preview_purge: {
@@ -8059,6 +8079,7 @@ export type Database = {
         Args: { p_driver_id?: string; p_from: string; p_to: string }
         Returns: {
           absent: boolean
+          conduct_weighted: number
           deliveries_completed: number
           deliveries_within_sla: number
           driver_id: string

@@ -52,6 +52,7 @@ import { DriverLocationTab } from "./driver-location-tab";
 import { DriverAttendanceTab } from "./driver-attendance-tab";
 import { DriverActivityTab } from "./driver-activity-tab";
 import { DriverPerformanceTab } from "./driver-performance-tab";
+import { DriverWrongActionsTab } from "@/features/wrong-actions/driver-wrong-actions-tab";
 import { DriverEditSheet } from "./driver-edit-sheet";
 import { getCountryLabel } from "@/lib/geo/countries";
 import { riderCategoryMessageKey } from "./driver-rider-category";
@@ -275,6 +276,7 @@ function DriverDetailContent({ id }: { id: string }) {
   const canManage = can("drivers.manage");
   const canViewOps = can("driver_ops.view");
   const canViewPerformance = can("performance.view");
+  const canViewWrongActions = can("wrong_actions.view");
   const canExportOps = can("driver_ops.export");
   const { data: driver, isLoading, isError } = useDriverDetail(id);
   const { data: customFieldDefs = [] } = useCustomFieldDefinitions({
@@ -410,7 +412,9 @@ function DriverDetailContent({ id }: { id: string }) {
     { id: "deductions", label: t("tabDeductions"), icon: Banknote },
     { id: "loan", label: t("tabLoan"), icon: Banknote },
     { id: "complaint", label: t("tabComplaint"), icon: AlertTriangle },
-    { id: "wrong-actions", label: t("tabWrongActions"), icon: Shield },
+    ...(canViewWrongActions
+      ? [{ id: "wrong-actions" as const, label: t("tabWrongActions"), icon: Shield }]
+      : []),
   ];
 
   if (isLoading) return <DetailSkeleton />;
@@ -556,6 +560,24 @@ function DriverDetailContent({ id }: { id: string }) {
           driverName={driver.full_name}
         />
       );
+    }
+
+    // Incidents are filed against `drivers.id`, which is the linked profile. An
+    // intake that has never been approved has no driver row to attach one to.
+    if (activeTab === "wrong-actions" && canViewWrongActions) {
+      if (!driver.linked_profile_id) {
+        return (
+          <div className="rounded-xl border border-border bg-card shadow-sm">
+            <div className="py-12">
+              <AppEmptyState
+                title={t("attendanceNeedsLinkTitle")}
+                description={t("attendanceNeedsLinkDescription")}
+              />
+            </div>
+          </div>
+        );
+      }
+      return <DriverWrongActionsTab driverId={driver.linked_profile_id} />;
     }
 
     if (activeTab === "activity" && driver.linked_profile_id && canViewOps) {

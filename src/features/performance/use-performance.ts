@@ -12,6 +12,7 @@ import {
   fetchDriverPerformanceRank,
   fetchDriverPerformanceRatings,
   fetchPerformanceComponents,
+  fetchPerformanceTrend,
   fetchPerformanceRatingTeams,
   fetchRatingEligibleStaff,
   fetchRecentDeliveriesFeed,
@@ -26,6 +27,7 @@ import {
 import type {
   PerformanceListFilters,
   PerformanceScoreWeights,
+  PerformanceTrendBucket,
 } from "./performance-types";
 
 export function useDriverPerformanceList(
@@ -119,6 +121,23 @@ export function useDriverPerformanceRank(
     queryKey: queryKeys.performance.rank(driverId ?? "", from, to),
     queryFn: () => fetchDriverPerformanceRank(driverId!, from, to),
     enabled: Boolean(driverId) && enabled,
+  });
+}
+
+export function usePerformanceTrend(
+  input: {
+    fromDate: string;
+    toDate: string;
+    bucket?: PerformanceTrendBucket;
+    zoneId?: string;
+    partnerId?: string;
+  },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.trend(input),
+    queryFn: () => fetchPerformanceTrend(input),
+    enabled,
   });
 }
 

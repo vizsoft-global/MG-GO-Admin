@@ -192,6 +192,12 @@ export const queryKeys = {
     trend: (filters: Record<string, unknown> = {}) =>
       ["performance", "trend", filters] as const,
   },
+  wrongActions: {
+    all: () => ["wrong-actions"] as const,
+    list: (filters: Record<string, unknown> = {}) => ["wrong-actions", "list", filters] as const,
+    detail: (id: string) => ["wrong-actions", "detail", id] as const,
+    forDriver: (driverId: string) => ["wrong-actions", "driver", driverId] as const,
+  },
   driverShifts: {
     all: () => ["driver-shifts"] as const,
     list: (filters: Record<string, unknown> = {}) => ["driver-shifts", "list", filters] as const,

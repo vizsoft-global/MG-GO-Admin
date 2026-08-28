@@ -229,6 +229,7 @@ function ComponentsSection() {
   const [active, setActive] = useState<Record<string, boolean>>({});
   const [sla, setSla] = useState("45");
   const [speedAllowance, setSpeedAllowance] = useState("2");
+  const [conductAllowance, setConductAllowance] = useState("0.25");
 
   useEffect(() => {
     if (!data) return;
@@ -240,6 +241,7 @@ function ComponentsSection() {
     );
     setSla(String(data.settings.delivery_ontime_minutes));
     setSpeedAllowance(String(data.settings.speed_allowance_per_day));
+    setConductAllowance(String(data.settings.conduct_allowance_per_day));
   }, [data]);
 
   const today = kuwaitToday();
@@ -314,8 +316,7 @@ function ComponentsSection() {
         settings: {
           delivery_ontime_minutes: Math.max(1, Number(sla) || 45),
           speed_allowance_per_day: Math.max(0, Number(speedAllowance) || 0),
-          conduct_allowance_per_day:
-            data?.settings.conduct_allowance_per_day ?? 0.25,
+          conduct_allowance_per_day: Math.max(0, Number(conductAllowance) || 0),
         },
       });
       if (!result.success) {
@@ -407,6 +408,14 @@ function ComponentsSection() {
               value={speedAllowance}
               onChange={setSpeedAllowance}
               step="0.5"
+            />
+            <WeightField
+              id="c-conduct-allowance"
+              label={t("conductAllowance")}
+              hint={t("conductAllowanceHint")}
+              value={conductAllowance}
+              onChange={setConductAllowance}
+              step="0.05"
             />
           </div>
 

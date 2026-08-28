@@ -16,6 +16,7 @@ import {
 } from "@/components/app/app-data-table";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
+import { useAuth } from "@/contexts/auth-context";
 import { TrackingTableToolbar } from "@/features/driver-tracking/table-toolbar";
 import { Link } from "@/i18n/navigation";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import {
   rawPct,
 } from "./performance-formulas";
 import { componentLabel } from "./performance-component-breakdown";
+import { PerformanceAnalysisPanel } from "./performance-analysis-panel";
 import { PerformanceDrilldownSheet } from "./performance-drilldown-sheet";
 import {
   DEFAULT_PERFORMANCE_FILTERS,
@@ -77,6 +79,9 @@ export function PerformancePageShell() {
   const t = useTranslations("pages.performance");
   const locale = useLocale();
   const today = kuwaitToday();
+
+  const { can } = useAuth();
+  const canAnalyze = can("performance.analyze");
 
   const [tab, setTab] = useState<PerformanceHubTab>("period");
   const [search, setSearch] = useState("");
@@ -186,6 +191,9 @@ export function PerformancePageShell() {
         items={[
           { id: "period", label: t("tabPeriod") },
           { id: "live", label: t("tabLive") },
+          ...(canAnalyze
+            ? [{ id: "analysis", label: t("tabAnalysis") }]
+            : []),
         ]}
         activeId={tab}
         onSelect={(id) => setTab(id as PerformanceHubTab)}
@@ -194,6 +202,8 @@ export function PerformancePageShell() {
 
       {tab === "live" ? (
         <PerformanceLivePanel />
+      ) : tab === "analysis" ? (
+        <PerformanceAnalysisPanel />
       ) : (
         <>
           <KpiGrid

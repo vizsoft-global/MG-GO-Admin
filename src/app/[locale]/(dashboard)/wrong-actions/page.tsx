@@ -1,31 +1,18 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { setRequestLocale } from "next-intl/server";
 import { requirePermission } from "@/lib/auth/require-permission";
-import { ModuleListShell } from "@/components/dashboard/module-list-shell";
+import { WrongActionsPageShell } from "@/features/wrong-actions/wrong-actions-page-shell";
 
 export default async function WrongActionsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ add?: string; tab?: string }>;
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
   await requirePermission(locale, "wrong_actions.view");
-  const t = await getTranslations("pages.wrongActions");
+  const { add, tab } = await searchParams;
 
-  return (
-    <ModuleListShell
-      title={t("title")}
-      subtitle={t("subtitle")}
-      kpis={[
-        { label: t("kpiTotal"), value: "—" },
-        { label: t("kpiHigh"), value: "—" },
-        { label: t("kpiMedium"), value: "—" },
-        { label: t("kpiLow"), value: "—" },
-        { label: t("kpiThisWeek"), value: "—" },
-        { label: t("kpiPenalties"), value: "—" },
-      ]}
-      columns={[t("colDriver"), t("colType"), t("colSeverity"), t("colDate"), t("colSource")]}
-      emptyTitle={t("emptyTitle")}
-    />
-  );
+  return <WrongActionsPageShell addOpen={add === "1"} tab={tab} />;
 }
