@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   ArrowLeft,
+  Check,
   Gauge,
   Loader2,
   Plus,
@@ -18,14 +19,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Link } from "@/i18n/navigation";
-import { computeOverallScore } from "./performance-formulas";
 import {
+  addDays,
+  computeComponentBlend,
+  computeOverallScore,
+  kuwaitToday,
+} from "./performance-formulas";
+import {
+  useDriverPerformanceList,
+  usePerformanceComponents,
   usePerformanceRatingTeams,
   usePerformanceScoreWeights,
   useRatingEligibleStaff,
   useSetPerformanceTeamMember,
+  useUpdatePerformanceComponents,
   useUpdatePerformanceScoreWeights,
 } from "./use-performance";
+import type { PerformanceComponent } from "./performance-types";
 
 /** A field whose value is a non-negative weight. */
 function WeightField({
@@ -174,6 +184,279 @@ function WeightsSection() {
       <div className="mt-4">
         <Button type="button" className="h-9" onClick={handleSave} disabled={pending}>
           {pending ? t("saving") : t("save")}
+        </Button>
+      </div>
+    </AppFormSection>
+  );
+}
+
+/** Drivers sampled for the preview. Enough to be representative, small enough
+ *  that a settings page does not pull the whole fleet on every keystroke. */
+const PREVIEW_SAMPLE = 200;
+const PREVIEW_DAYS = 30;
+
+function averageBlend(
+  rows: { component_scores: Record<string, number | undefined> }[],
+  components: PerformanceComponent[],
+): number | null {
+  let sum = 0;
+  let count = 0;
+  for (const row of rows) {
+    const blend = computeComponentBlend(row.component_scores, components);
+    if (blend == null) continue;
+    sum += blend;
+    count += 1;
+  }
+  if (count === 0) return null;
+  return Math.round((sum / count) * 10) / 10;
+}
+
+function ComponentsSection() {
+  const t = useTranslations("pages.performance.settings");
+  const locale = useLocale();
+  const { data, isLoading } = usePerformanceComponents();
+  const { mutateAsync: save } = useUpdatePerformanceComponents();
+  const [pending, startTransition] = useTransition();
+
+  const [weights, setWeights] = useState<Record<string, string>>({});
+  const [active, setActive] = useState<Record<string, boolean>>({});
+  const [sla, setSla] = useState("45");
+  const [speedAllowance, setSpeedAllowance] = useState("2");
+
+  useEffect(() => {
+    if (!data) return;
+    setWeights(
+      Object.fromEntries(data.components.map((c) => [c.key, String(c.weight)])),
+    );
+    setActive(
+      Object.fromEntries(data.components.map((c) => [c.key, c.is_active])),
+    );
+    setSla(String(data.settings.delivery_ontime_minutes));
+    setSpeedAllowance(String(data.settings.speed_allowance_per_day));
+  }, [data]);
+
+  const today = kuwaitToday();
+  // The preview is measured on the real fleet rather than on an invented driver:
+  // a what-if an operator cannot recognise is one they will not trust.
+  const { data: sample, isLoading: sampleLoading } = useDriverPerformanceList({
+    fromDate: addDays(today, -(PREVIEW_DAYS - 1)),
+    toDate: today,
+    page: 0,
+    pageSize: PREVIEW_SAMPLE,
+    sort: "overall_desc",
+  });
+
+  /** The components as edited but not yet saved, for the third preview number. */
+  const editedComponents = useMemo<PerformanceComponent[]>(
+    () =>
+      (data?.components ?? []).map((c) => ({
+        ...c,
+        weight: Number.isFinite(Number(weights[c.key]))
+          ? Math.max(0, Number(weights[c.key]))
+          : c.weight,
+        is_active: active[c.key] ?? c.is_active,
+      })),
+    [data?.components, weights, active],
+  );
+
+  const rows = sample?.rows ?? [];
+  const savedAverage = useMemo(
+    () =>
+      rows.length === 0
+        ? null
+        : Math.round(
+            (rows.reduce(
+              (acc, r) => acc + (r.compliance_score ?? 0),
+              0,
+            ) /
+              Math.max(1, rows.filter((r) => r.compliance_score != null).length)) *
+              10,
+          ) / 10,
+    [rows],
+  );
+  const legacyAverage = useMemo(
+    () =>
+      rows.length === 0
+        ? null
+        : Math.round(
+            (rows.reduce(
+              (acc, r) => acc + (r.legacy_compliance_score ?? 0),
+              0,
+            ) /
+              Math.max(
+                1,
+                rows.filter((r) => r.legacy_compliance_score != null).length,
+              )) *
+              10,
+          ) / 10,
+    [rows],
+  );
+  const editedAverage = useMemo(
+    () => averageBlend(rows, editedComponents),
+    [rows, editedComponents],
+  );
+
+  function handleSave() {
+    startTransition(async () => {
+      const result = await save({
+        components: (data?.components ?? []).map((c) => ({
+          key: c.key,
+          weight: Math.max(0, Number(weights[c.key] ?? c.weight)),
+          is_active: active[c.key] ?? c.is_active,
+        })),
+        settings: {
+          delivery_ontime_minutes: Math.max(1, Number(sla) || 45),
+          speed_allowance_per_day: Math.max(0, Number(speedAllowance) || 0),
+          conduct_allowance_per_day:
+            data?.settings.conduct_allowance_per_day ?? 0.25,
+        },
+      });
+      if (!result.success) {
+        toast.error(result.error ?? t("componentsSaveFailed"));
+        return;
+      }
+      toast.success(t("componentsSaved"));
+    });
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <AppFormSection
+      title={t("componentsTitle")}
+      description={t("componentsHint")}
+    >
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-stretch">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <ul className="space-y-2">
+            {(data?.components ?? []).map((c) => {
+              const label = locale.startsWith("ar") ? c.label_ar : c.label_en;
+              const on = active[c.key] ?? c.is_active;
+              return (
+                <li key={c.key} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setActive((prev) => ({ ...prev, [c.key]: !on }))
+                    }
+                    className={`inline-flex h-9 min-w-0 flex-1 items-center gap-1.5 rounded-lg border px-2.5 text-start text-xs transition-colors ${
+                      on
+                        ? "border-emerald-500 bg-emerald-100 font-semibold text-emerald-900 ring-1 ring-emerald-400/50"
+                        : "border-border bg-muted/30 text-muted-foreground"
+                    }`}
+                  >
+                    {on ? (
+                      <Check className="size-3.5 shrink-0" />
+                    ) : (
+                      <Gauge className="size-3.5 shrink-0 opacity-60" />
+                    )}
+                    <span className="truncate">{label}</span>
+                  </button>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    aria-label={label}
+                    className="h-9 w-20 shrink-0"
+                    value={weights[c.key] ?? String(c.weight)}
+                    disabled={!on}
+                    onChange={(e) =>
+                      setWeights((prev) => ({
+                        ...prev,
+                        [c.key]: e.target.value,
+                      }))
+                    }
+                  />
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2 text-[10px] text-muted-foreground">
+            {t("componentsDropNote")}
+          </p>
+        </div>
+
+        <div className="flex h-full flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <WeightField
+              id="c-sla"
+              label={t("slaMinutes")}
+              hint={t("slaMinutesHint")}
+              value={sla}
+              onChange={setSla}
+              step="1"
+            />
+            <WeightField
+              id="c-speed-allowance"
+              label={t("speedAllowance")}
+              hint={t("speedAllowanceHint")}
+              value={speedAllowance}
+              onChange={setSpeedAllowance}
+              step="0.5"
+            />
+          </div>
+
+          <div className="rounded-xl border border-border bg-muted/20 p-3">
+            <p className="text-[11px] font-medium">
+              {t("componentsPreviewTitle", {
+                days: PREVIEW_DAYS,
+                drivers: rows.length,
+              })}
+            </p>
+            {sampleLoading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg border border-border bg-card p-2">
+                  <p className="text-[10px] text-muted-foreground">
+                    {t("previewLegacy")}
+                  </p>
+                  <p className="text-lg font-semibold tabular-nums">
+                    {legacyAverage ?? "—"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-2">
+                  <p className="text-[10px] text-muted-foreground">
+                    {t("previewSaved")}
+                  </p>
+                  <p className="text-lg font-semibold tabular-nums">
+                    {savedAverage ?? "—"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-2">
+                  <p className="text-[10px] text-primary">
+                    {t("previewEdited")}
+                  </p>
+                  <p className="text-lg font-semibold tabular-nums text-primary">
+                    {editedAverage ?? "—"}
+                  </p>
+                </div>
+              </div>
+            )}
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              {t("componentsPreviewNote")}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <Button
+          type="button"
+          className="h-9"
+          onClick={handleSave}
+          disabled={pending}
+        >
+          {pending ? t("saving") : t("componentsSave")}
         </Button>
       </div>
     </AppFormSection>
@@ -357,6 +640,7 @@ export function PerformanceSettingsPanel() {
         }
       />
       <WeightsSection />
+      <ComponentsSection />
       <TeamsSection />
     </AppPage>
   );

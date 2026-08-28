@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
-import { Loader2, Percent, Settings2, Star } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { Columns3, Loader2, Percent, Settings2, Star } from "lucide-react";
 import {
   AppEmptyState,
   AppListCard,
@@ -19,7 +19,14 @@ import { TabBar } from "@/components/dashboard/tab-bar";
 import { TrackingTableToolbar } from "@/features/driver-tracking/table-toolbar";
 import { Link } from "@/i18n/navigation";
 import { Input } from "@/components/ui/input";
-import { addDays, kuwaitToday, pct, rawPct } from "./performance-formulas";
+import {
+  addDays,
+  componentPct,
+  kuwaitToday,
+  pct,
+  rawPct,
+} from "./performance-formulas";
+import { componentLabel } from "./performance-component-breakdown";
 import { PerformanceDrilldownSheet } from "./performance-drilldown-sheet";
 import {
   DEFAULT_PERFORMANCE_FILTERS,
@@ -68,6 +75,7 @@ function countActiveFilters(filters: PerformanceFiltersState): number {
 
 export function PerformancePageShell() {
   const t = useTranslations("pages.performance");
+  const locale = useLocale();
   const today = kuwaitToday();
 
   const [tab, setTab] = useState<PerformanceHubTab>("period");
@@ -84,6 +92,7 @@ export function PerformancePageShell() {
   const [selected, setSelected] = useState<PerformanceDriverRow | null>(null);
   const [drillOpen, setDrillOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [showComponents, setShowComponents] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -120,6 +129,11 @@ export function PerformancePageShell() {
   const totalCount = data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
+  const components = useMemo(
+    () => (data?.components ?? []).filter((c) => c.is_active && c.weight > 0),
+    [data?.components],
+  );
+
   const columns = [
     { id: "rank", label: t("colRank"), className: "w-12 text-center" },
     { id: "driver", label: t("colDriver"), className: "min-w-[160px]" },
@@ -129,6 +143,13 @@ export function PerformancePageShell() {
     { id: "deliveryPct", label: t("colDeliveryPct"), className: "text-end" },
     { id: "utilization", label: t("colUtilization"), className: "text-end" },
     { id: "compliance", label: t("colCompliance"), className: "text-end" },
+    ...(showComponents
+      ? components.map((c) => ({
+          id: `component-${c.key}`,
+          label: componentLabel(c, locale),
+          className: "text-end",
+        }))
+      : []),
     { id: "rating", label: t("colRating"), className: "text-end" },
     { id: "overall", label: t("colOverall"), className: "text-end" },
   ];
@@ -245,10 +266,28 @@ export function PerformancePageShell() {
               onExport={() => setReportOpen(true)}
               exportLabel={t("export")}
               filterSlot={
-                <PerformanceFiltersButton
-                  activeCount={countActiveFilters(filters)}
-                  onClick={() => setFiltersOpen(true)}
-                />
+                <div className="flex items-center gap-2">
+                  <PerformanceFiltersButton
+                    activeCount={countActiveFilters(filters)}
+                    onClick={() => setFiltersOpen(true)}
+                  />
+                  {components.length > 0 ? (
+                    <button
+                      type="button"
+                      aria-pressed={showComponents}
+                      onClick={() => setShowComponents((v) => !v)}
+                      title={t("components.toggleHint")}
+                      className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-sm transition-colors ${
+                        showComponents
+                          ? "border-emerald-500 bg-emerald-100 font-semibold text-emerald-900 ring-1 ring-emerald-400/50"
+                          : "border-border bg-muted/30 text-muted-foreground"
+                      }`}
+                    >
+                      <Columns3 className="size-3.5" />
+                      {t("components.toggle")}
+                    </button>
+                  ) : null}
+                </div>
               }
               dateSlot={
                 <div className="flex flex-wrap items-center gap-2">
@@ -325,8 +364,35 @@ export function PerformancePageShell() {
                         {pct(row.utilization, 0)}
                       </TableCell>
                       <TableCell className="text-end tabular-nums text-sm">
-                        {Math.round(row.compliance_score)}%
+                        {row.compliance_score == null
+                          ? "—"
+                          : `${Math.round(row.compliance_score)}%`}
                       </TableCell>
+                      {showComponents
+                        ? components.map((c) => {
+                            const value = componentPct(
+                              row.component_scores,
+                              c.key,
+                            );
+                            return (
+                              <TableCell
+                                key={c.key}
+                                className="text-end tabular-nums text-sm"
+                              >
+                                {value == null ? (
+                                  <span
+                                    className="text-muted-foreground"
+                                    title={t("components.unmeasuredHint")}
+                                  >
+                                    —
+                                  </span>
+                                ) : (
+                                  `${Math.round(value)}%`
+                                )}
+                              </TableCell>
+                            );
+                          })
+                        : null}
                       <TableCell className="text-end">
                         {row.manual_score == null ? (
                           <span
@@ -422,6 +488,7 @@ export function PerformancePageShell() {
 
       <PerformanceDrilldownSheet
         row={selected}
+        components={components}
         open={drillOpen}
         onOpenChange={setDrillOpen}
         fromDate={fromDate}

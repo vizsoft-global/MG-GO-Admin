@@ -13,6 +13,12 @@ import {
 import {
   DEFAULT_PERFORMANCE_WEIGHTS,
   performanceBand,
+  PERFORMANCE_COMPONENT_KEYS,
+  type PerformanceComponent,
+  type PerformanceComponentKey,
+  type PerformanceComponentScores,
+  type PerformanceComponentSettings,
+  type PerformanceDailyResult,
   type DpdLiveBreakdownRow,
   type DpdLiveLeaderRow,
   type DpdLiveSnapshot,
@@ -104,6 +110,44 @@ function parseManualTeams(raw: unknown): PerformanceManualTeamScore[] {
   });
 }
 
+const COMPONENT_KEY_SET = new Set<string>(PERFORMANCE_COMPONENT_KEYS);
+
+/**
+ * Absent stays absent. A key the server did not send is a component with no data
+ * for the period, and coalescing it to 0 here would undo the whole point of the
+ * blend renormalising around it.
+ */
+function parseComponentScores(raw: unknown): PerformanceComponentScores {
+  if (!raw || typeof raw !== "object") return {};
+  const source = raw as Record<string, unknown>;
+  const out: PerformanceComponentScores = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (!COMPONENT_KEY_SET.has(key) || value == null) continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) out[key as PerformanceComponentKey] = n;
+  }
+  return out;
+}
+
+function parseComponents(raw: unknown): PerformanceComponent[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      const o = (entry ?? {}) as Record<string, unknown>;
+      const key = String(o.key ?? "");
+      if (!COMPONENT_KEY_SET.has(key)) return null;
+      return {
+        key: key as PerformanceComponentKey,
+        label_en: String(o.label_en ?? key),
+        label_ar: String(o.label_ar ?? key),
+        weight: Number(o.weight ?? 1),
+        sort_order: Number(o.sort_order ?? index),
+        is_active: o.is_active == null ? true : Boolean(o.is_active),
+      };
+    })
+    .filter((c): c is PerformanceComponent => c != null);
+}
+
 function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
   const exceptionsRaw = Array.isArray(raw.exceptions) ? raw.exceptions : [];
   return {
@@ -132,8 +176,19 @@ function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
     delivery_efficiency: Number(raw.delivery_efficiency ?? 0),
     delivery_efficiency_raw: Number(raw.delivery_efficiency_raw ?? 0),
     utilization: Number(raw.utilization ?? 0),
-    compliance_score: Number(raw.compliance_score ?? 0),
+    compliance_score:
+      raw.compliance_score == null ||
+      !Number.isFinite(Number(raw.compliance_score))
+        ? null
+        : Number(raw.compliance_score),
+    legacy_compliance_score:
+      raw.legacy_compliance_score == null ||
+      !Number.isFinite(Number(raw.legacy_compliance_score))
+        ? null
+        : Number(raw.legacy_compliance_score),
+    component_scores: parseComponentScores(raw.component_scores),
     exception_count: Number(raw.exception_count ?? 0),
+    penalised_exception_count: Number(raw.penalised_exception_count ?? 0),
     exceptions: exceptionsRaw
       .map(parseException)
       .filter((e): e is PerformanceExceptionSummary => e != null),
@@ -173,6 +228,7 @@ function parseKpis(raw: unknown): PerformanceKpis {
     avg_delivery_pct: n("avg_delivery_pct"),
     avg_utilization_pct: n("avg_utilization_pct"),
     avg_compliance: n("avg_compliance"),
+    avg_legacy_compliance: n("avg_legacy_compliance"),
     below_threshold: Number(o.below_threshold ?? 0),
     top_score: n("top_score"),
     bottom_score: n("bottom_score"),
@@ -232,6 +288,8 @@ async function runPerformanceList(
     totalCount: Number(payload.totalCount ?? 0),
     kpis: parseKpis(payload.kpis),
     weights: parsePerformanceWeights(payload.weights),
+    components: parseComponents(payload.components),
+    slaMinutes: Number(payload.slaMinutes ?? 45),
     from: String(payload.from ?? from),
     to: String(payload.to ?? to),
     maxExportRows: Number(payload.maxExportRows ?? MAX_EXPORT_ROWS),
@@ -294,6 +352,7 @@ export async function fetchDriverPerformanceReport(input: {
     kpis: result.kpis,
     weights: result.weights,
     ratingTeams: await reportRatingTeams(),
+    components: result.components.filter((c) => c.is_active && c.weight > 0),
     totalCount: result.totalCount,
     truncated: result.totalCount > result.rows.length,
   };
@@ -457,6 +516,13 @@ export async function updatePerformanceScoreWeights(
     const session = await requireSettingsManage();
     const next = parsePerformanceWeights(weights);
     const supabase = await createClient();
+
+    // One save re-scores the whole fleet, so the entry has to say what it was
+    // before. A read here can race a concurrent save; that is acceptable for
+    // weights, which are edited by one operator on one settings page, and the
+    // alternative is another RPC for a field the panel already owns.
+    const previous = await getPerformanceScoreWeights().catch(() => null);
+
     const { error } = await supabase
       .from("app_settings")
       .update({
@@ -475,8 +541,192 @@ export async function updatePerformanceScoreWeights(
       entityType: "app_settings",
       entityId: "1",
       routeName: "updatePerformanceScoreWeights",
+      before: previous ? { weights: previous } : null,
       after: { weights: next },
       context: { weights: next },
+    });
+
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "update_failed",
+    };
+  }
+}
+
+/**
+ * One driver's standing in the whole fleet, for their detail page.
+ *
+ * It has to be read from the *unfiltered* list, because `dpd_rank` is computed
+ * over whatever population the filters leave: asking for one driver would return
+ * rank 1 out of 1 for everybody, which is a number that looks right and means
+ * nothing. The fleet-wide read happens here rather than in the browser so the
+ * page pays for a rank, not for two thousand rows it would throw away.
+ *
+ * Above the cap the rank is returned as null instead of a wrong one — a driver
+ * ranked against a truncated fleet is the same lie in a smaller size.
+ */
+export async function fetchDriverPerformanceRank(
+  driverId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<{ rank: number | null; total: number; band: string | null }> {
+  await requirePerformanceView();
+
+  const result = await runPerformanceList({
+    fromDate,
+    toDate,
+    sort: "overall_desc",
+    page: 0,
+    pageSize: MAX_EXPORT_ROWS,
+  });
+
+  if (result.totalCount > result.rows.length) {
+    return { rank: null, total: result.totalCount, band: null };
+  }
+
+  const row = result.rows.find((entry) => entry.driver_id === driverId);
+  return {
+    rank: row?.dpd_rank ?? null,
+    total: result.totalCount,
+    band: row?.score_band ?? null,
+  };
+}
+
+/**
+ * The per-day breakdown behind the compliance column.
+ *
+ * Gated on attendance.view as well as performance.view, because the surface it
+ * feeds is the Attendance page: requiring the performance permission there would
+ * hide the explanation from exactly the operator whose column it explains.
+ */
+export async function fetchDriverPerformanceDaily(
+  driverId: string,
+  from: string,
+  to: string,
+): Promise<PerformanceDailyResult> {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !(
+      session.isSuperAdmin ||
+      hasPermissionInSet(session.permissions, "performance.view", session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "attendance.view", session.isSuperAdmin)
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "admin_driver_performance_daily" as never,
+    { p_driver_id: driverId, p_from: from, p_to: to } as never,
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const rowsRaw = Array.isArray(payload.rows) ? payload.rows : [];
+
+  return {
+    rows: rowsRaw.map((entry) => {
+      const o = (entry ?? {}) as Record<string, unknown>;
+      const n = (key: string) => {
+        const v = o[key];
+        if (v == null) return null;
+        const num = Number(v);
+        return Number.isFinite(num) ? num : null;
+      };
+      return {
+        log_date: String(o.log_date ?? ""),
+        worked: Boolean(o.worked),
+        on_leave: Boolean(o.on_leave),
+        absent: Boolean(o.absent),
+        compliance_score: n("compliance_score"),
+        component_scores: parseComponentScores(o.component_scores),
+        deliveries_completed: n("deliveries_completed"),
+        deliveries_within_sla: n("deliveries_within_sla"),
+        overspeed_events: n("overspeed_events"),
+        sources_complete: Array.isArray(o.sources_complete)
+          ? o.sources_complete.map(String)
+          : [],
+      };
+    }),
+    components: parseComponents(payload.components),
+    from: String(payload.from ?? from),
+    to: String(payload.to ?? to),
+  };
+}
+
+export async function fetchPerformanceComponents(): Promise<{
+  components: PerformanceComponent[];
+  settings: PerformanceComponentSettings;
+}> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc(
+    "admin_list_performance_components" as never,
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const settings = (payload.settings ?? {}) as Record<string, unknown>;
+
+  return {
+    components: parseComponents(payload.components),
+    settings: {
+      delivery_ontime_minutes: Number(settings.delivery_ontime_minutes ?? 45),
+      speed_allowance_per_day: Number(settings.speed_allowance_per_day ?? 2),
+      conduct_allowance_per_day: Number(settings.conduct_allowance_per_day ?? 0.25),
+    },
+  };
+}
+
+/**
+ * One save re-scores the entire fleet, so the previous and new values are both
+ * recorded. The RPC returns both from inside the same statement rather than the
+ * caller reading before and after, which could race another admin's save.
+ */
+export async function updatePerformanceComponents(input: {
+  components: { key: string; weight?: number; is_active?: boolean }[];
+  settings?: Partial<PerformanceComponentSettings>;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireSettingsManage();
+
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc(
+      "admin_update_performance_components" as never,
+      {
+        p_components: input.components,
+        p_settings: input.settings ?? null,
+      } as never,
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const result =
+      data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "performance_score_components",
+      entityId: "all",
+      routeName: "updatePerformanceComponents",
+      before: (result.before ?? null) as Record<string, unknown> | null,
+      after: (result.after ?? null) as Record<string, unknown> | null,
+      context: { settings: input.settings ?? null },
     });
 
     return { success: true };

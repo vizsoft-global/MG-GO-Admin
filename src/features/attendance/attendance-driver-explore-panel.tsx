@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { AppEmptyState } from "@/components/app";
+import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { Input } from "@/components/ui/input";
 import { StatusPill } from "@/components/dashboard/status-pill";
+import { componentPct } from "@/features/performance/performance-formulas";
+import { useDriverPerformanceDaily } from "@/features/performance/use-performance";
 import { queryKeys } from "@/lib/query/query-keys";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 import { cn } from "@/lib/utils";
@@ -21,6 +24,101 @@ import {
   useDriverAttendanceDetail,
   useDriverAttendanceRange,
 } from "./use-attendance-table";
+
+/**
+ * The compliance number on this page is a weighted blend, so it needs to be
+ * openable here rather than only on /performance — the day an operator is asking
+ * about is the day they are looking at.
+ *
+ * Read from driver_performance_daily through the RPC, never re-derived from
+ * attendance_logs and fleet_events: a second implementation of the component
+ * rules would disagree with the first the moment either changed.
+ */
+function AttendanceComplianceBreakdown({
+  driverId,
+  from,
+  to,
+}: {
+  driverId: string;
+  from: string;
+  to: string;
+}) {
+  const t = useTranslations("pages.attendance");
+  const locale = useLocale();
+  const { data, isLoading } = useDriverPerformanceDaily(driverId, from, to);
+
+  const components = data?.components ?? [];
+  const rows = data?.rows ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (components.length === 0 || rows.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <h3 className="mb-2 text-sm font-semibold">
+        {t("complianceBreakdownTitle")}
+      </h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border">
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-start")}>
+                {t("colDate")}
+              </th>
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-end")}>
+                {t("kpiCompliance")}
+              </th>
+              {components.map((c) => (
+                <th
+                  key={c.key}
+                  className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-end")}
+                >
+                  {locale.startsWith("ar") ? c.label_ar : c.label_en}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.log_date} className="border-b border-border/60">
+                <td className="px-2 py-1.5 tabular-nums">{row.log_date}</td>
+                <td className="px-2 py-1.5 text-end font-semibold tabular-nums">
+                  {row.compliance_score == null
+                    ? "—"
+                    : `${Math.round(row.compliance_score)}%`}
+                </td>
+                {components.map((c) => {
+                  const value = componentPct(row.component_scores, c.key);
+                  return (
+                    <td
+                      key={c.key}
+                      className={cn(
+                        "px-2 py-1.5 text-end tabular-nums",
+                        value == null ? "text-muted-foreground" : undefined,
+                      )}
+                    >
+                      {value == null ? "—" : `${Math.round(value)}%`}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[10px] text-muted-foreground">
+        {t("complianceBreakdownHint")}
+      </p>
+    </div>
+  );
+}
 
 export function AttendanceDriverExplorePanel({
   driverId,
@@ -127,6 +225,12 @@ export function AttendanceDriverExplorePanel({
           </p>
         </div>
       </div>
+
+      <AttendanceComplianceBreakdown
+        driverId={driverId}
+        from={fromDate}
+        to={date}
+      />
 
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold">{t("timelineTitle")}</h3>

@@ -7,13 +7,17 @@ import {
   fetchDpdLiveSnapshot,
   fetchDriverPerformanceDetail,
   fetchDriverPerformanceList,
+  fetchDriverPerformanceDaily,
+  fetchDriverPerformanceRank,
   fetchDriverPerformanceRatings,
+  fetchPerformanceComponents,
   fetchPerformanceRatingTeams,
   fetchRatingEligibleStaff,
   fetchRecentDeliveriesFeed,
   getPerformanceScoreWeights,
   saveDriverPerformanceRating,
   setPerformanceTeamMember,
+  updatePerformanceComponents,
   updatePerformanceScoreWeights,
 } from "./performance-actions";
 import type {
@@ -84,6 +88,52 @@ export function useUpdatePerformanceScoreWeights() {
     mutationFn: (weights: PerformanceScoreWeights) =>
       updatePerformanceScoreWeights(weights),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.performance.all() });
+    },
+  });
+}
+
+export function useDriverPerformanceDaily(
+  driverId: string | null,
+  from: string,
+  to: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.daily(driverId ?? "", from, to),
+    queryFn: () => fetchDriverPerformanceDaily(driverId!, from, to),
+    enabled: Boolean(driverId) && enabled,
+  });
+}
+
+export function useDriverPerformanceRank(
+  driverId: string | null,
+  from: string,
+  to: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.rank(driverId ?? "", from, to),
+    queryFn: () => fetchDriverPerformanceRank(driverId!, from, to),
+    enabled: Boolean(driverId) && enabled,
+  });
+}
+
+export function usePerformanceComponents(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.performance.components(),
+    queryFn: fetchPerformanceComponents,
+    enabled,
+  });
+}
+
+export function useUpdatePerformanceComponents() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updatePerformanceComponents,
+    onSuccess: () => {
+      // One save re-scores the whole fleet, so nothing derived from the list
+      // survives it — including the preview this editor reads back.
       void queryClient.invalidateQueries({ queryKey: queryKeys.performance.all() });
     },
   });

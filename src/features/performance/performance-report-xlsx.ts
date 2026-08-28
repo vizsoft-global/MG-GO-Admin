@@ -1,6 +1,8 @@
 import ExcelJS from "exceljs";
 import { scoreToStars } from "./performance-types";
+import { componentPct } from "./performance-formulas";
 import type {
+  PerformanceComponent,
   PerformanceReport,
   PerformanceReportTeam,
   PerformanceScoreBand,
@@ -68,15 +70,21 @@ const COLUMN_WIDTHS = [
 /** Width of one per-team rating column. */
 const TEAM_COLUMN_WIDTH = 13;
 
+/** Width of one per-component column. */
+const COMPONENT_COLUMN_WIDTH = 14;
+
 /**
- * Header order, with one column per rating team appended. Team columns go last
- * so the fixed columns keep their positions whatever the tenant's teams are.
+ * Header order, with one column per score component and then one per rating
+ * team appended. Both are tenant-configurable, so both go after the fixed
+ * columns — the fixed ones keep their positions whatever a tenant has set up.
  */
 export function performanceReportHeaders(
   teams: PerformanceReportTeam[] = [],
+  components: PerformanceComponent[] = [],
 ): string[] {
   return [
     ...PERFORMANCE_REPORT_HEADERS,
+    ...components.map((c) => `${c.label_en} %`),
     ...teams.map((team) => `${team.label} (1-5)`),
   ];
 }
@@ -85,6 +93,7 @@ export function performanceReportHeaders(
 export function performanceReportRow(
   row: PerformanceReport["rows"][number],
   teams: PerformanceReportTeam[] = [],
+  components: PerformanceComponent[] = [],
 ): (string | number)[] {
   const byTeam = new Map(row.manual_teams.map((t) => [t.team_key, t.score]));
   return [
@@ -102,13 +111,20 @@ export function performanceReportRow(
     row.target_deliveries,
     Math.round(row.delivery_efficiency_raw * 100),
     Math.round(row.utilization * 100),
-    Math.round(row.compliance_score),
-    row.exception_count,
+    // An em dash, never 0. A component blend with nothing to measure is not a
+    // driver who scored zero, and a reader sorting this column must not be told
+    // it was.
+    row.compliance_score == null ? "—" : Math.round(row.compliance_score),
+    row.penalised_exception_count,
     // The 1–5 the raters picked, not the 0–100 the formula uses: a reader of the
     // sheet compares this against a rating, not against a percentage.
     row.manual_score == null ? "—" : scoreToStars(row.manual_score),
     row.overall_score,
     BAND_LABEL[row.score_band],
+    ...components.map((c) => {
+      const value = componentPct(row.component_scores, c.key);
+      return value == null ? "—" : Math.round(value);
+    }),
     ...teams.map((team) => {
       const score = byTeam.get(team.key);
       return score == null ? "—" : Math.round(score * 10) / 10;
@@ -132,13 +148,15 @@ export async function buildPerformanceReportXlsx(
   });
 
   const teams = report.ratingTeams ?? [];
+  const components = report.components ?? [];
 
   sheet.columns = [
     ...COLUMN_WIDTHS,
+    ...components.map(() => COMPONENT_COLUMN_WIDTH),
     ...teams.map(() => TEAM_COLUMN_WIDTH),
   ].map((width) => ({ width }));
 
-  const headerRow = sheet.addRow(performanceReportHeaders(teams));
+  const headerRow = sheet.addRow(performanceReportHeaders(teams, components));
   headerRow.height = 22;
   headerRow.eachCell((cell) => styleHeaderCell(cell));
 
@@ -146,7 +164,7 @@ export async function buildPerformanceReportXlsx(
   const bandCol = PERFORMANCE_REPORT_HEADERS.indexOf("Band") + 1;
 
   for (const row of report.rows) {
-    const dataRow = sheet.addRow(performanceReportRow(row, teams));
+    const dataRow = sheet.addRow(performanceReportRow(row, teams, components));
     const bandFill: ExcelJS.Fill = {
       type: "pattern",
       pattern: "solid",

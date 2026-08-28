@@ -1,4 +1,77 @@
-export type PerformanceHubTab = "period" | "live";
+export type PerformanceHubTab = "period" | "live" | "analysis";
+
+/**
+ * Components blended into the compliance pillar. Keys are locked — SQL keys on
+ * them, so a rename would silently orphan a component's weight and history.
+ */
+export const PERFORMANCE_COMPONENT_KEYS = [
+  "punctuality",
+  "duty_ratio",
+  "on_time",
+  "speed",
+  "zone",
+  "gps",
+  "conduct",
+] as const;
+
+export type PerformanceComponentKey =
+  (typeof PERFORMANCE_COMPONENT_KEYS)[number];
+
+export type PerformanceComponent = {
+  key: PerformanceComponentKey;
+  label_en: string;
+  label_ar: string;
+  weight: number;
+  sort_order: number;
+  is_active: boolean;
+};
+
+/**
+ * Per-driver component ratios in [0,1]. A key is absent when the period held no
+ * data for it — absent and 0 are different facts, which is the whole reason the
+ * blend renormalises instead of substituting a zero.
+ */
+export type PerformanceComponentScores = Partial<
+  Record<PerformanceComponentKey, number>
+>;
+
+export type PerformanceComponentSettings = {
+  /**
+   * Pickup-to-delivered budget. Deliberately not a customer promise: allocation
+   * is external, so no ETA exists anywhere in this schema.
+   */
+  delivery_ontime_minutes: number;
+  /** Per worked day, so the score does not move with the width of the filter. */
+  speed_allowance_per_day: number;
+  conduct_allowance_per_day: number;
+};
+
+/** One rolled-up day for one driver, with the blend opened up. */
+export type PerformanceDailyRow = {
+  log_date: string;
+  worked: boolean;
+  on_leave: boolean;
+  absent: boolean;
+  /** Null when the day held nothing measurable — never 0. */
+  compliance_score: number | null;
+  component_scores: PerformanceComponentScores;
+  deliveries_completed: number | null;
+  deliveries_within_sla: number | null;
+  overspeed_events: number | null;
+  /**
+   * Sources that had data when the row was written. A missing source means the
+   * component is unknown for that day, which is why the UI can say so instead of
+   * drawing an absence as compliance.
+   */
+  sources_complete: string[];
+};
+
+export type PerformanceDailyResult = {
+  rows: PerformanceDailyRow[];
+  components: PerformanceComponent[];
+  from: string;
+  to: string;
+};
 
 export type PerformanceSortKey =
   | "overall_desc"
@@ -123,8 +196,17 @@ export type PerformanceDriverRow = {
   delivery_efficiency: number;
   delivery_efficiency_raw: number;
   utilization: number;
-  compliance_score: number;
+  /**
+   * The component blend. Null when no component could be measured — a driver
+   * nobody has data on is not a driver who scored zero.
+   */
+  compliance_score: number | null;
+  /** The pre-component number, kept so the settings preview can show old vs new. */
+  legacy_compliance_score: number | null;
+  component_scores: PerformanceComponentScores;
   exception_count: number;
+  /** Only the types no component measures still cost points. */
+  penalised_exception_count: number;
   exceptions: PerformanceExceptionSummary[];
   /** Null when no active team has rated this driver in the period. */
   manual_score: number | null;
@@ -142,6 +224,8 @@ export type PerformanceKpis = {
   avg_delivery_pct: number | null;
   avg_utilization_pct: number | null;
   avg_compliance: number | null;
+  /** The same fleet under the pre-component rule, for the settings preview. */
+  avg_legacy_compliance?: number | null;
   below_threshold: number;
   top_score: number | null;
   bottom_score: number | null;
@@ -197,6 +281,9 @@ export type PerformanceListResult = {
   totalCount: number;
   kpis: PerformanceKpis;
   weights: PerformanceScoreWeights;
+  /** Active components in display order, so a column exists even for an unmeasured one. */
+  components: PerformanceComponent[];
+  slaMinutes: number;
   from: string;
   to: string;
   /** Server-side row ceiling for one export call. */
@@ -220,6 +307,12 @@ export type PerformanceReport = {
    * and an unrated fleet are different facts.
    */
   ratingTeams: PerformanceReportTeam[];
+  /**
+   * Active score components, for the same reason: a component nobody could be
+   * measured on still gets a column, so a blank column reads as no data rather
+   * than as a component that was never configured.
+   */
+  components: PerformanceComponent[];
   /** True when the fleet is larger than one export can carry. */
   truncated: boolean;
   totalCount: number;
