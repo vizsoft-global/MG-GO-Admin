@@ -5936,6 +5936,8 @@
       "viewDetails": "عرض التفاصيل",
       "emptyTitle": "لا يوجد سائقون في النطاق",
       "emptyHint": "عدّل عوامل التصفية أو نطاق التاريخ.",
+      "listErrorTitle": "تعذّر تحميل قائمة الأداء",
+      "listErrorHint": "حدّث الصفحة. إن بقيت فارغة فقد فشلت عملية الحساب — هذا ليس نطاق تاريخ فارغ.",
       "showingCount": "عرض {visible} من {total}",
       "pageInfo": "صفحة {page} من {pages} · {total} سائق",
       "prev": "السابق",

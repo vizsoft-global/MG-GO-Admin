@@ -6020,6 +6020,8 @@
       "viewDetails": "View details",
       "emptyTitle": "No drivers in range",
       "emptyHint": "Adjust filters or date range.",
+      "listErrorTitle": "Performance list could not be loaded",
+      "listErrorHint": "Refresh the page. If it stays empty, the score query failed — this is not an empty date range.",
       "showingCount": "Showing {visible} of {total}",
       "pageInfo": "Page {page} of {pages} · {total} drivers",
       "prev": "Previous",
