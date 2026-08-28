@@ -35,8 +35,11 @@ export function canBulkSelectRequest(status: string): boolean {
   return !REQUEST_DECIDED_STATUSES.has(status);
 }
 
-/** Fuel only approve / reject / clarify — these queues never receive a fuel row. */
-const FUEL_HIDDEN_STATUS_FILTERS = new Set<RequestStatusFilter>([
+/**
+ * Fuel and asset only approve / reject / clarify — these queues never receive
+ * a row of either type. Loan can reschedule; complaints can solve / respond.
+ */
+const UNUSED_ACTION_STATUS_FILTERS = new Set<RequestStatusFilter>([
   "rescheduled",
   "overdue",
   "solved",
@@ -46,8 +49,8 @@ const FUEL_HIDDEN_STATUS_FILTERS = new Set<RequestStatusFilter>([
 export function statusFiltersForRequestType(
   type: string,
 ): readonly RequestStatusFilter[] {
-  if (type === "fuel") {
-    return REQUEST_STATUS_FILTERS.filter((key) => !FUEL_HIDDEN_STATUS_FILTERS.has(key));
+  if (type === "fuel" || type === "asset") {
+    return REQUEST_STATUS_FILTERS.filter((key) => !UNUSED_ACTION_STATUS_FILTERS.has(key));
   }
   return REQUEST_STATUS_FILTERS;
 }

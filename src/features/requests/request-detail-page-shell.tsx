@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { fetchRequestAttachmentUrl } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
 import { RequestDecisionTermsDialog } from "./request-decision-terms-dialog";
+import { RequestFieldRow } from "./request-field-row";
 import { RequestFuelTransferCard } from "./request-fuel-transfer-card";
 import { RequestRescheduleDialog } from "./request-reschedule-dialog";
 import { RequestTypedDrawer } from "./request-typed-drawer";
@@ -318,26 +319,19 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
           ) : (
             <div className="divide-y divide-border rounded-lg border border-border text-sm">
               {allDetailRows.map((row) => (
-                <div
+                <RequestFieldRow
                   key={row.key}
-                  className="flex items-center justify-between gap-2 px-2.5 py-1.5"
+                  label={row.label}
+                  muted={row.value === "—" && !row.gatedKey}
                 >
-                  <span className="text-xs text-muted-foreground">{row.label}</span>
                   {row.gatedKey ? (
-                    <span className="text-[11px] text-warning">
+                    <span className="text-[11px] font-normal text-warning">
                       {t(`detail.${row.gatedKey}` as "detail.categoryGated")}
                     </span>
                   ) : (
-                    <span
-                      className={cn(
-                        "max-w-[60%] break-words text-end font-medium",
-                        row.value === "—" && "text-muted-foreground",
-                      )}
-                    >
-                      {row.value}
-                    </span>
+                    row.value
                   )}
-                </div>
+                </RequestFieldRow>
               ))}
             </div>
           )}
@@ -533,19 +527,15 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             </div>
             <div className="divide-y divide-border rounded-lg border border-border text-sm">
               {termRowsFor(request.request_type, currentTerms).map((row) => (
-                <div key={row.key} className="flex items-center justify-between gap-2 px-2.5 py-1.5">
-                  <span className="text-xs text-muted-foreground">
-                    {t(`detail.terms.${row.key}` as "detail.terms.approvedAmount")}
-                  </span>
-                  <span
-                    className={cn(
-                      "font-medium",
-                      row.value == null && "text-[11px] font-normal text-warning",
-                    )}
-                  >
+                <RequestFieldRow
+                  key={row.key}
+                  label={t(`detail.terms.${row.key}` as "detail.terms.approvedAmount")}
+                  muted={row.value == null}
+                >
+                  <span className={cn(row.value == null && "text-[11px] text-warning")}>
                     {row.value ?? t("detail.terms.notSet")}
                   </span>
-                </div>
+                </RequestFieldRow>
               ))}
             </div>
             <div

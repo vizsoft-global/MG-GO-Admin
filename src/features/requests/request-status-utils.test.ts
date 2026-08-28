@@ -6,8 +6,8 @@ import {
 } from "./request-status-utils";
 
 describe("statusFiltersForRequestType", () => {
-  it("hides fuel-unused queues on the Fuel list", () => {
-    assert.deepEqual(statusFiltersForRequestType("fuel"), [
+  it("hides unused queues on Fuel and Asset lists", () => {
+    const expected = [
       "all",
       "submitted",
       "pending",
@@ -16,7 +16,9 @@ describe("statusFiltersForRequestType", () => {
       "approved",
       "rejected",
       "closed",
-    ]);
+    ];
+    assert.deepEqual(statusFiltersForRequestType("fuel"), expected);
+    assert.deepEqual(statusFiltersForRequestType("asset"), expected);
   });
 
   it("keeps the full set on All Requests and other types", () => {

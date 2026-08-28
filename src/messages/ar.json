@@ -3684,6 +3684,12 @@
           "allActions": "كل أنواع الإجراءات",
           "searchPlaceholder": "ابحث عن مسار أو كيان…",
           "eventCount": "{count} حدث",
+          "eventCountInRange": "{count} حدث · {range}",
+          "detailsOpened": "تم فتح {target}",
+          "detailsCreated": "تم إنشاء {target}",
+          "detailsDecided": "{outcome} · {target}",
+          "detailsTerms": "شروط القرار على {target}: {fields}",
+          "detailsFuel": "تحويل الوقود {transfer} · {target}",
           "colWhen": "الوقت",
           "colAction": "الإجراء",
           "colRoute": "المسار",
@@ -4122,7 +4128,7 @@
           "needed_by": "اختر التاريخ",
           "request_mode": "تجديد أو أول مرة",
           "asset_current_status": "مفقود أو تالف",
-          "leave_type": "مثال: سنوية"
+          "leave_type": "اختر نوع الإجازة"
         },
         "daysCount": "{count} أيام",
         "assetModes": {
@@ -4156,7 +4162,10 @@
           "tenure_options_not_configured": "لم يتم إعداد خيارات مدة السداد بعد",
           "category_required": "اختر فئة الشكوى",
           "complaint_categories_not_configured": "لم يتم إعداد فئات الشكاوى بعد",
-          "medical_documents_required": "المستندات الطبية مطلوبة لطلبات المرض / الحادث"
+          "medical_documents_required": "المستندات الطبية مطلوبة لطلبات المرض / الحادث",
+          "invalid_option": "اختر {field} صالحاً",
+          "field_required": "{field} مطلوب",
+          "date_in_past": "لا يمكن أن يكون تاريخ الاحتياج أقدم من اليوم"
         }
       }
     },

@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
+import {
+  describeRequestsAudit,
+  isRequestsListScan,
+  type RequestsAuditDetail,
+} from "./request-audit-summary";
 import type {
   AccessLevel,
   AppointmentStatusCounts,
@@ -437,35 +442,14 @@ export type RequestsAuditLogRow = {
   actor_id: string | null;
   actor_name: string;
   actor_role: string | null;
-  /** Human-readable summary built from changed fields / context. */
-  details: string | null;
+  /** Structured DETAILS — the panel translates this so a preset never leaks through. */
+  detail: RequestsAuditDetail;
   /** RCM-#### code of the request the row is about, when it can be resolved. */
   target_code: string | null;
   target_type: string | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Compact "field: value" summary for the Figma DETAILS column. */
-function summarizeLogContext(
-  context: unknown,
-  changedFields: unknown,
-  errorMessage: string | null,
-): string | null {
-  if (errorMessage) return errorMessage;
-  const fields = Array.isArray(changedFields)
-    ? changedFields.map(String).filter(Boolean)
-    : [];
-  if (fields.length > 0) return fields.join(", ");
-  const record = asRecord(context);
-  const parts = Object.entries(record)
-    .filter(([, value]) => value != null && typeof value !== "object")
-    // Raw ids are noise in the DETAILS column; the TARGET column carries the request code.
-    .filter(([, value]) => !UUID_RE.test(String(value)))
-    .slice(0, 3)
-    .map(([key, value]) => `${key}: ${String(value)}`);
-  return parts.length > 0 ? parts.join(" · ") : null;
-}
 
 export async function fetchRequestsAuditLogs(): Promise<{
   rows: RequestsAuditLogRow[];
@@ -480,7 +464,7 @@ export async function fetchRequestsAuditLogs(): Promise<{
     )
     .eq("entity_type", "requests")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(400);
 
   if (error) return { rows: [], error: error.message };
 
@@ -520,25 +504,34 @@ export async function fetchRequestsAuditLogs(): Promise<{
   }
 
   return {
-    rows: (data ?? []).map((row) => {
-      const contextRequestId = asRecord(row.context).requestId;
-      const target =
-        requestById.get(row.entity_id ?? "") ??
-        (typeof contextRequestId === "string" ? requestById.get(contextRequestId) : undefined);
-      return {
-        id: row.id,
-        action: row.action,
-        route_name: row.route_name,
-        entity_id: row.entity_id,
-        created_at: row.created_at,
-        actor_id: row.admin_user_id,
-        actor_name: row.admin_user_id ? (nameById.get(row.admin_user_id) ?? "—") : "System",
-        actor_role: row.admin_role_slug,
-        details: summarizeLogContext(row.context, row.changed_fields, row.error_message),
-        target_code: target?.code ?? null,
-        target_type: target?.type ?? null,
-      };
-    }),
+    rows: (data ?? [])
+      .filter((row) => !isRequestsListScan(row.route_name))
+      .map((row) => {
+        const contextRequestId = asRecord(row.context).requestId;
+        const target =
+          requestById.get(row.entity_id ?? "") ??
+          (typeof contextRequestId === "string" ? requestById.get(contextRequestId) : undefined);
+        return {
+          id: row.id,
+          action: row.action,
+          route_name: row.route_name,
+          entity_id: row.entity_id,
+          created_at: row.created_at,
+          actor_id: row.admin_user_id,
+          actor_name: row.admin_user_id ? (nameById.get(row.admin_user_id) ?? "—") : "System",
+          actor_role: row.admin_role_slug,
+          detail: describeRequestsAudit({
+            routeName: row.route_name,
+            context: row.context,
+            changedFields: row.changed_fields,
+            errorMessage: row.error_message,
+            targetCode: target?.code ?? null,
+            targetType: target?.type ?? null,
+          }),
+          target_code: target?.code ?? null,
+          target_type: target?.type ?? null,
+        };
+      }),
   };
 }
 

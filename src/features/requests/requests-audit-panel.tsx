@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { selectOptions, selectOptionsFrom } from "@/lib/select-items";
 import { fetchRequestsAuditLogs, type RequestsAuditLogRow } from "./requests-settings-actions";
+import { auditDetailSearchText, type RequestsAuditDetail } from "./request-audit-summary";
 import { datePresetToBounds } from "./date-presets";
 import type { RequestDatePreset } from "./types";
 
@@ -61,6 +62,42 @@ function formatTimestamp(value: string, locale: string): string {
     hour12: false,
   }).format(date);
   return `${day} ${month}, ${time}`;
+}
+
+function formatAuditDetail(
+  detail: RequestsAuditDetail,
+  t: ReturnType<typeof useTranslations<"pages.requests.settings.audit">>,
+  typeLabel: (type: string | null) => string,
+): string {
+  const target = (code: string | null, type: string | null) =>
+    [code, typeLabel(type)].filter(Boolean).join(" · ");
+  switch (detail.kind) {
+    case "error":
+      return detail.message;
+    case "opened":
+      return t("detailsOpened", { target: target(detail.code, detail.type) || "—" });
+    case "created":
+      return t("detailsCreated", { target: target(detail.code, detail.type) || "—" });
+    case "decided": {
+      const outcome = detail.status || detail.action;
+      return t("detailsDecided", {
+        target: target(detail.code, detail.type) || "—",
+        outcome,
+      });
+    }
+    case "terms":
+      return t("detailsTerms", {
+        target: detail.code ?? "—",
+        fields: detail.fields.join(", ") || "—",
+      });
+    case "fuel":
+      return t("detailsFuel", {
+        target: detail.code ?? "—",
+        transfer: detail.transferType ?? "—",
+      });
+    case "text":
+      return detail.text || "—";
+  }
 }
 
 function initialsOf(name: string): string {
@@ -135,7 +172,7 @@ export function RequestsAuditPanel() {
         (row.target_code ?? "").toLowerCase().includes(q) ||
         (row.entity_id ?? "").toLowerCase().includes(q) ||
         row.actor_name.toLowerCase().includes(q) ||
-        (row.details ?? "").toLowerCase().includes(q)
+        auditDetailSearchText(row.detail).toLowerCase().includes(q)
       );
     });
   }, [rows, search, actionFilter, actorFilter, datePreset]);
@@ -225,7 +262,11 @@ export function RequestsAuditPanel() {
             </SelectTrigger>
             <SelectContent>
               {DATE_PRESETS.map((preset) => (
-                <SelectItem key={preset} value={preset}>
+                <SelectItem
+                  key={preset}
+                  value={preset}
+                  label={tRoot(`datePresets.${preset}`)}
+                >
                   {tRoot(`datePresets.${preset}`)}
                 </SelectItem>
               ))}
@@ -238,7 +279,12 @@ export function RequestsAuditPanel() {
             onChange={(e) => setSearch(e.target.value)}
           />
           <span className="ms-auto text-[11px] text-muted-foreground">
-            {loading ? "" : t("eventCount", { count: filteredRows.length })}
+            {loading
+              ? ""
+              : t("eventCountInRange", {
+                  count: filteredRows.length,
+                  range: tRoot(`datePresets.${datePreset}`),
+                })}
           </span>
         </div>
         <AppDataTable
@@ -299,8 +345,13 @@ export function RequestsAuditPanel() {
                     <p className="truncate text-[10px] text-muted-foreground">{row.route_name}</p>
                   ) : null}
                 </TableCell>
-                <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
-                  {row.details ?? "—"}
+                <TableCell className="max-w-[280px] whitespace-normal text-xs text-muted-foreground">
+                  {formatAuditDetail(row.detail, t, (type) => {
+                    if (!type) return "";
+                    return tTypes.has(type as "leave")
+                      ? tTypes(type as "leave")
+                      : type;
+                  })}
                 </TableCell>
               </AppDataTableRow>
             ))
