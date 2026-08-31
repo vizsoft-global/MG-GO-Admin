@@ -52,7 +52,7 @@ import type { DriverImportLookups } from "./import/lookups";
 
 type ImportApplyClient = Awaited<ReturnType<typeof createClient>>;
 
-async function requireDriversManager() {
+export async function requireDriversManager() {
   const session = await getSessionUser();
   if (
     !session ||
@@ -477,7 +477,7 @@ function logWho(row: DriverImportPreviewRow) {
   };
 }
 
-async function applyOneImportRow(
+export async function applyOneImportRow(
   row: DriverImportPreviewRow,
   ctx: {
     supabase: ImportApplyClient;

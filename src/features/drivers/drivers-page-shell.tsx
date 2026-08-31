@@ -290,6 +290,11 @@ function DriversPageContent() {
     if (searchParams.get("add") === "1") {
       setAddOpen(true);
       router.replace("/drivers");
+      return;
+    }
+    if (searchParams.get("import") === "1") {
+      setBulkOpen(true);
+      router.replace("/drivers");
     }
   }, [searchParams, router]);
 

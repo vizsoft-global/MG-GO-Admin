@@ -11,6 +11,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppSecondaryNav } from "@/components/layout/app-secondary-nav";
 import { SentryUserSync } from "@/components/system/sentry-user-sync";
 import { LAYOUT } from "@/components/app/layout-spacing";
+import { DriverImportJobProvider } from "@/features/drivers/import/driver-import-job-provider";
 import { cn } from "@/lib/utils";
 
 export default async function DashboardLayout({
@@ -57,7 +58,7 @@ export default async function DashboardLayout({
               <div className="flex h-full min-h-0 overflow-hidden bg-muted/30">
                 <AppSecondaryNav />
                 <main className={cn("flex-1 overflow-auto bg-muted/30", LAYOUT.commandPageInset)}>
-                  {children}
+                  <DriverImportJobProvider>{children}</DriverImportJobProvider>
                 </main>
               </div>
             </SidebarInset>
