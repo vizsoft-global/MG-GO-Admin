@@ -48,6 +48,7 @@ import {
 } from "@/lib/storage/document-tracking";
 import { resolveDriverAvatarUrl } from "@/lib/storage/driver-avatar-url";
 import { resolvePartnerLogoUrl } from "@/lib/storage/partner-logo-url";
+import { fetchAllIn } from "@/lib/supabase/in-chunks";
 import {
   uploadDriverAvatarFile,
   uploadIntakeAvatarFile,
@@ -703,17 +704,19 @@ export async function fetchDriversForAdmin(options?: {
 
   const intakeIds = rows.map((r) => r.id);
   if (intakeIds.length > 0) {
-    const [{ data: intakeRestRows }, { data: driverRestRows }] = await Promise.all([
-      supabase
-        .from("driver_intake_restaurants")
-        .select("intake_id, restaurants (id, name)")
-        .in("intake_id", intakeIds),
-      linkedIds.length > 0
-        ? supabase
-            .from("driver_restaurants")
-            .select("driver_id, restaurants (id, name)")
-            .in("driver_id", linkedIds)
-        : Promise.resolve({ data: [] as never[] }),
+    const [intakeRestRows, driverRestRows] = await Promise.all([
+      fetchAllIn(intakeIds, (chunk) =>
+        supabase
+          .from("driver_intake_restaurants")
+          .select("intake_id, restaurants (id, name)")
+          .in("intake_id", chunk),
+      ),
+      fetchAllIn(linkedIds, (chunk) =>
+        supabase
+          .from("driver_restaurants")
+          .select("driver_id, restaurants (id, name)")
+          .in("driver_id", chunk),
+      ),
     ]);
 
     for (const link of (intakeRestRows ?? []) as Array<{
@@ -746,20 +749,22 @@ export async function fetchDriversForAdmin(options?: {
   }
 
   if (linkedIds.length > 0) {
-    const [{ data: driverRows }, { data: deliveryRows }] = await Promise.all([
-      supabase
-        .from("drivers")
-        .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id")
-        .in("id", linkedIds),
-      (() => {
-        const { start, end } = kuwaitDayBounds();
-        return supabase
+    const { start, end } = kuwaitDayBounds();
+    const [driverRows, deliveryRows] = await Promise.all([
+      fetchAllIn(linkedIds, (chunk) =>
+        supabase
+          .from("drivers")
+          .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id")
+          .in("id", chunk),
+      ),
+      fetchAllIn(linkedIds, (chunk) =>
+        supabase
           .from("deliveries")
           .select("driver_id")
-          .in("driver_id", linkedIds)
+          .in("driver_id", chunk)
           .gte("delivered_at", start)
-          .lte("delivered_at", end);
-      })(),
+          .lte("delivered_at", end),
+      ),
     ]);
 
     for (const driver of driverRows ?? []) {
@@ -860,10 +865,7 @@ export async function fetchDriversForAdmin(options?: {
         today_deliveries: row.linked_profile_id
           ? (deliveryCountByDriverId.get(row.linked_profile_id) ?? 0)
           : 0,
-        app_passcode:
-          account_status === "active" && !row.archived_at
-            ? (linkedDriver?.app_passcode ?? null)
-            : null,
+        app_passcode: row.archived_at ? null : (linkedDriver?.app_passcode ?? null),
         archived_at: row.archived_at,
         avatar_url: row.avatar_url,
         avatar_display_url,

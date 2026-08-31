@@ -77,6 +77,15 @@ describe("buildDriversExportAoa", () => {
     assert.equal(withCode[1]?.at(-1), "123456");
   });
 
+  it("still writes the passcode when the account is pending", () => {
+    const aoa = buildDriversExportAoa(
+      [row({ account_status: "pending", app_passcode: "654321" })],
+      [],
+      { includeAppCode: true },
+    );
+    assert.equal(aoa[1]?.at(-1), "654321");
+  });
+
   it("does not write a passcode for an archived rider", () => {
     const aoa = buildDriversExportAoa(
       [row({ archived_at: "2026-08-01T00:00:00.000Z" })],

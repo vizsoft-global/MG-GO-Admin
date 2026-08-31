@@ -949,7 +949,11 @@ function DriversPageContent() {
                           onKeyDown={(e) => e.stopPropagation()}
                         >
                           <PasscodeCell
-                            passcode={driver.archived_at ? null : driver.app_passcode}
+                            passcode={
+                              driver.archived_at || driver.account_status !== "active"
+                                ? null
+                                : driver.app_passcode
+                            }
                           />
                         </VisibleTableCell>
                         {activeCustomDefs.map((def) => {

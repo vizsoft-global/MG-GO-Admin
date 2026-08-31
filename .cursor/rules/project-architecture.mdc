@@ -231,6 +231,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-08-31` — **Export can write the app code even when the Status column says Pending.** The list used to drop `app_passcode` unless `account_status` was Active, and the driver join was one `.in()` of every linked id — long enough that PostgREST could miss the row. The list now loads those joins in chunks of 100, keeps the passcode on the row (the table still hides it unless Active), and the CSV writes it whenever Include app code is on. Archived rows stay blank.
+
 - `[admin only] 2026-08-31` — **Drivers export asks which columns to write, and the app code stays off unless you turn it on.** Export used to dump every list field including `app_passcode` the moment you clicked the button. The button now opens a footer-first picker: Driver ID / Employee ID / Name are always in the file, the rest are chips (on by default), and **Include app code** is a Switch that defaults off. Archived rows still write a blank passcode when that switch is on. The raw intake UUID is no longer exported.
 
 - `[admin only] 2026-08-31` — **Bulk import can hide, pause, resume, and cancel, and it keeps running after the dialog closes.** The sheet still applies in browser chunks (Vercel cannot hang on a hundred approves), but the remaining rows, journal, and credentials now live on `driver_import_batches`. Hide leaves a bar on the dashboard; Pause / Resume / Cancel sit there and on Previous imports. A silent tab auto-pauses after 90s so Resume can take it. One running job at a time (`claim_driver_import_chunk` + `import_already_running`). Passcodes stay off the journal. Migrations `20261009100000`, `20261009100010`.
