@@ -1052,7 +1052,7 @@
         "downloadZones": "Zones",
         "downloadPartners": "Partners",
         "lookupLists": "Existing restaurants, zones, and partners",
-        "lookupHint": "Copy RST code into Restaurants. Copy Partner and Zone from the same restaurant row if you want those assigned too.",
+        "lookupHint": "Copy an RST code into Restaurant IDs, or a Zone name/code from the Zones sheet. A driver needs one of the two — leave the other cell blank.",
         "lookupFailed": "Could not export the list.",
         "requiredTitle": "Required",
         "requiredList": "Full name, employee ID (4–8 digits), and a zone or at least one restaurant.",
@@ -1129,7 +1129,7 @@
         "templateColumnsTitle": "Columns in the template",
         "templateSelectAll": "Select all",
         "templateRequiredOnly": "Required only",
-        "templateHint": "The template's Guide sheet lists every column with its allowed values and an example."
+        "templateHint": "The Drivers sheet has two sample rows: one restaurant-only, one zone-only. The Guide sheet lists every column with its allowed values."
       },
       "assignSheet": {
         "titleRestaurant": "Assign drivers",

@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import {
   TEMPLATE_COLUMNS_PARAM,
   resolveTemplateColumns,
+  templateDriversAoa,
   templateGuideAoa,
   type DriverImportCustomColumn,
 } from "@/features/drivers/import/template";
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
 
   // Absent means the caller expressed no preference, which has to stay
   // distinguishable from an empty selection or the plain template link would
-  // download nothing but the three required columns.
+  // download nothing but the pinned identity + assignment columns.
   const raw = new URL(request.url).searchParams.get(TEMPLATE_COLUMNS_PARAM);
   const selected =
     raw === null ? null : raw.split(",").map((s) => s.trim()).filter(Boolean);
@@ -52,16 +53,29 @@ export async function GET(request: Request) {
       : lookups;
 
   const wb = XLSX.utils.book_new();
+  const restaurantExample =
+    lists.restaurants.find((row) => row.importable && row.restaurant_code)
+      ?.restaurant_code ||
+    lists.restaurants.find((row) => row.importable)?.name ||
+    "";
+  const zoneExample = lists.zones[0]?.name || lists.zones[0]?.code || "";
+  const documented = columns.map((column) => {
+    if (column.field === "restaurant_ids" && restaurantExample) {
+      return { ...column, example: restaurantExample };
+    }
+    if (column.field === "zone_id" && zoneExample) {
+      return { ...column, example: zoneExample };
+    }
+    return column;
+  });
+
   XLSX.utils.book_append_sheet(
     wb,
-    XLSX.utils.aoa_to_sheet([
-      columns.map((c) => c.header),
-      columns.map((c) => c.example),
-    ]),
+    XLSX.utils.aoa_to_sheet(templateDriversAoa(documented)),
     "Drivers",
   );
-  const guide = XLSX.utils.aoa_to_sheet(templateGuideAoa(columns));
-  guide["!cols"] = [{ wch: 26 }, { wch: 12 }, { wch: 74 }, { wch: 22 }];
+  const guide = XLSX.utils.aoa_to_sheet(templateGuideAoa(documented));
+  guide["!cols"] = [{ wch: 26 }, { wch: 18 }, { wch: 74 }, { wch: 22 }];
   XLSX.utils.book_append_sheet(wb, guide, "Guide");
   XLSX.utils.book_append_sheet(
     wb,

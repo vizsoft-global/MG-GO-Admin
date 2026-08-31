@@ -140,7 +140,7 @@ export function DriverBulkImportDialog({
   const templateHref = useMemo(() => {
     if (!templateSelection) return DRIVER_IMPORT_TEMPLATE_PATH;
     const cols = templateColumns
-      .filter((column) => templateSelected.has(column.field))
+      .filter((column) => column.pinned || templateSelected.has(column.field))
       .map((column) => column.field);
     return `${DRIVER_IMPORT_TEMPLATE_PATH}?${TEMPLATE_COLUMNS_PARAM}=${encodeURIComponent(cols.join(","))}`;
   }, [templateSelection, templateSelected, templateColumns]);

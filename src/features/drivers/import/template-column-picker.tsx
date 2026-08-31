@@ -30,7 +30,7 @@ export function TemplateColumnPicker({
 }) {
   const t = useTranslations("pages.drivers.import");
   const included = columns.filter(
-    (column) => column.required || selected.has(column.field),
+    (column) => column.pinned || selected.has(column.field),
   ).length;
 
   return (
@@ -48,9 +48,9 @@ export function TemplateColumnPicker({
           {columns.map((column) => (
             <DropdownMenuCheckboxItem
               key={column.field}
-              // A required column cannot be dropped: the sheet would not import.
-              checked={column.required || selected.has(column.field)}
-              disabled={column.required}
+              // Identity and the zone/restaurant pair cannot be dropped.
+              checked={column.pinned || selected.has(column.field)}
+              disabled={column.pinned}
               onCheckedChange={() => onToggle(column.field)}
               className="cursor-pointer"
             >

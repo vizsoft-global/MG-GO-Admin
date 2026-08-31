@@ -12,6 +12,7 @@ import {
   DRIVER_IMPORT_HEADERS,
   DRIVER_IMPORT_SAMPLE_ROW,
   resolveTemplateColumns,
+  templateDriversAoa,
   templateGuideAoa,
 } from "./import/template";
 import { DRIVER_IMPORT_FIELDS, DRIVER_IMPORT_REQUIRED_FIELDS } from "./types";
@@ -92,12 +93,14 @@ describe("resolveTemplateColumns", () => {
     assert.ok(all.some((c) => c.header === "Shift"));
   });
 
-  it("keeps required columns even when the operator ticked nothing", () => {
+  it("keeps identity and the zone/restaurant pair when the operator ticked nothing", () => {
     const chosen = resolveTemplateColumns([], custom);
+    const fields = chosen.map((c) => c.field).sort();
     assert.deepEqual(
-      chosen.map((c) => c.field).sort(),
-      [...DRIVER_IMPORT_REQUIRED_FIELDS].sort(),
+      fields,
+      ["employee_id", "full_name", "restaurant_ids", "zone_id"].sort(),
     );
+    assert.ok(chosen.every((c) => c.pinned));
   });
 
   it("returns the ticked optional columns alongside the required ones", () => {
@@ -145,6 +148,32 @@ describe("templateGuideAoa", () => {
 
     const nameRow = aoa.find((row) => row[0] === "Full Name")!;
     assert.equal(nameRow[1], "Required");
+
+    const zoneRow = aoa.find((row) => row[0] === "Zone")!;
+    assert.equal(zoneRow[1], "If no restaurant");
+    const restaurantRow = aoa.find((row) => row[0] === "Restaurant IDs")!;
+    assert.equal(restaurantRow[1], "If no zone");
+  });
+});
+
+describe("templateDriversAoa", () => {
+  it("ships a restaurant-only row and a zone-only row", () => {
+    const columns = resolveTemplateColumns(null, []);
+    const aoa = templateDriversAoa(columns, {
+      restaurant: "RST-0001",
+      zone: "Hawalli",
+    });
+    assert.equal(aoa.length, 3);
+    const headers = aoa[0]!;
+    const restaurantOnly = aoa[1]!;
+    const zoneOnly = aoa[2]!;
+    const zoneAt = headers.indexOf("Zone");
+    const restaurantAt = headers.indexOf("Restaurant IDs");
+    assert.ok(zoneAt >= 0 && restaurantAt >= 0);
+    assert.equal(restaurantOnly[restaurantAt], "RST-0001");
+    assert.equal(restaurantOnly[zoneAt], "");
+    assert.equal(zoneOnly[zoneAt], "Hawalli");
+    assert.equal(zoneOnly[restaurantAt], "");
   });
 });
 

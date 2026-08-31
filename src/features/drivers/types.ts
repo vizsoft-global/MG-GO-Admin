@@ -246,11 +246,11 @@ export const DRIVER_IMPORT_FIELDS = [
 ] as const;
 
 /**
- * Phone, civil ID, zone and restaurant are deliberately absent: a sheet
- * without those columns is still a valid sheet. Employee ID stays because it
- * is half the app credential. Zone and restaurant are an either/or at preview
- * — mapping must include at least one of them, but neither is a required
- * column on its own.
+ * Phone and civil ID are deliberately absent: a sheet without those columns
+ * is still a valid sheet. Employee ID stays because it is half the app
+ * credential. Zone and restaurant are an either/or — mapping must include
+ * at least one of them, and the download sample always ships both so the
+ * sheet teaches the same rule as Add / Edit.
  */
 export const DRIVER_IMPORT_REQUIRED_FIELDS = [
   "full_name",
