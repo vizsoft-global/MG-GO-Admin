@@ -193,6 +193,10 @@ export function DriverBulkImportDialog({
       toast.error(t("mappingRequired"));
       return;
     }
+    if (!mapping.zone_id && !mapping.restaurant_ids) {
+      toast.error(t("assignmentMappingRequired"));
+      return;
+    }
     saveStoredMapping(headerSignature, mapping);
     const mapped = mapRowsFromSheet(headers, rows, mapping, customFieldKeys);
     startTransition(async () => {
@@ -305,7 +309,9 @@ export function DriverBulkImportDialog({
     });
   };
 
-  const requiredMapped = DRIVER_IMPORT_REQUIRED_FIELDS.every((field) => mapping[field]);
+  const requiredMapped =
+    DRIVER_IMPORT_REQUIRED_FIELDS.every((field) => mapping[field]) &&
+    Boolean(mapping.zone_id || mapping.restaurant_ids);
 
   return (
     <Dialog

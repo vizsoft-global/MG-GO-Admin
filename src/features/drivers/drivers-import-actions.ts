@@ -25,6 +25,7 @@ import {
   clientValueTooLong,
   normalizeClientValue,
 } from "./driver-client-fields";
+import { hasOpsAssignment } from "./driver-assignment";
 import { parseImportActive, parseRiderCategory } from "./import/parse";
 import {
   buildPartnerIndex,
@@ -123,12 +124,12 @@ export async function approveDriverIntake(
     return { error: "missing_fields" };
   }
 
-  const { data: hasActiveRestaurant, error: restaurantCheckError } = await supabase.rpc(
-    "intake_has_active_restaurant",
+  const { data: hasAssignment, error: assignmentCheckError } = await supabase.rpc(
+    "intake_has_ops_assignment",
     { p_intake_id: intakeId },
   );
-  if (restaurantCheckError || !hasActiveRestaurant) {
-    return { error: "missing_active_restaurant" };
+  if (assignmentCheckError || !hasAssignment) {
+    return { error: "missing_assignment" };
   }
 
   const civilIdNormalized = normalizeCivilId(intake.civil_id ?? "");
@@ -198,8 +199,8 @@ export async function approveDriverIntake(
       /* rollback */
     }
     const err = payload.error ?? "save_failed";
-    if (err === "driver_missing_active_restaurant") {
-      return { error: "missing_active_restaurant" };
+    if (err === "driver_missing_active_restaurant" || err === "driver_missing_assignment") {
+      return { error: "missing_assignment" };
     }
     if (err === "intake_already_linked") return { error: "intake_already_linked" };
     if (err === "intake_archived") return { error: "save_failed" };
@@ -385,12 +386,17 @@ export async function resolveDriverImportPreview(
         restaurant_ids = restaurantsHit.ids;
         restaurant_names = restaurantsHit.names;
       } else if (restaurantsHit.status === "empty") {
-        status = "missing_fields";
+        restaurant_ids = [];
+        restaurant_names = [];
       } else if (restaurantsHit.status === "ambiguous") {
         status = "ambiguous_restaurant";
       } else {
         status = "unmatched_restaurant";
       }
+    }
+
+    if (status === "ok" && !hasOpsAssignment(zone_id, restaurant_ids)) {
+      status = "missing_assignment";
     }
 
     if (status === "ok" && row.nationality?.trim()) {
@@ -504,8 +510,8 @@ export async function applyDriverImportBatch(payload: {
         failures.push({ rowIndex: row.rowIndex, reason: "missing_fields" });
         continue;
       }
-      if (row.restaurant_ids.length === 0) {
-        failures.push({ rowIndex: row.rowIndex, reason: "missing_active_restaurant" });
+      if (!hasOpsAssignment(row.zone_id, row.restaurant_ids)) {
+        failures.push({ rowIndex: row.rowIndex, reason: "missing_assignment" });
         continue;
       }
 

@@ -7804,6 +7804,10 @@ export type Database = {
         Args: { p_driver_id: string }
         Returns: boolean
       }
+      driver_has_ops_assignment: {
+        Args: { p_driver_id: string }
+        Returns: boolean
+      }
       driver_heartbeat: { Args: { p_device_id: string }; Returns: Json }
       driver_ingest_telemetry: { Args: { p_events: Json }; Returns: Json }
       driver_is_within_delivery_range: {
@@ -8000,6 +8004,10 @@ export type Database = {
         Returns: boolean
       }
       intake_has_active_restaurant: {
+        Args: { p_intake_id: string }
+        Returns: boolean
+      }
+      intake_has_ops_assignment: {
         Args: { p_intake_id: string }
         Returns: boolean
       }

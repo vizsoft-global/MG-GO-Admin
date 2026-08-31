@@ -31,7 +31,8 @@ function formInput(overrides: Partial<Parameters<typeof validateDriverForm>[0]>)
     civilId: "281010100001",
     employeeId: "12345",
     partnerId: "",
-    zoneId: "",
+    zoneId: "zone-1",
+    restaurantIds: [],
     documents: noDocuments,
     ...overrides,
   };
@@ -111,7 +112,8 @@ describe("bulk import — phone and civil ID are no longer required columns", ()
     const required = [...DRIVER_IMPORT_REQUIRED_FIELDS] as string[];
     assert.ok(!required.includes("phone"));
     assert.ok(!required.includes("civil_id"));
-    assert.deepEqual(required, ["full_name", "employee_id", "restaurant_ids"]);
+    assert.ok(!required.includes("restaurant_ids"));
+    assert.deepEqual(required, ["full_name", "employee_id"]);
   });
 
   it("still auto-maps them when the sheet has them", () => {

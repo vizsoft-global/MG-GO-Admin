@@ -42,6 +42,7 @@ import { Button } from "@/components/ui/button";
 import { MetricTile, type Tone } from "@/components/ui/metric-tile";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { hasOpsAssignment } from "./driver-assignment";
 import { DriverAccountStatusEditor } from "./driver-account-status-editor";
 import { DriverBlockEditor } from "./driver-block-editor";
 import { DriverLoginVerificationExemptEditor } from "./driver-login-verification-exempt-editor";
@@ -465,7 +466,7 @@ function DriverDetailContent({ id }: { id: string }) {
     !isArchived &&
     Boolean(driver.intake_id) &&
     !driver.linked_profile_id &&
-    driver.restaurant_ids.length > 0;
+    hasOpsAssignment(driver.zone_id, driver.restaurant_ids);
 
   const showApproveButton = canApprove || holdApproveSlot;
 
@@ -996,7 +997,10 @@ function DriverDetailContent({ id }: { id: string }) {
                     driverId={driver.linked_profile_id}
                     intakeId={driver.intake_id ?? driver.id}
                     status={driver.account_status}
-                    hasPublishedRestaurant={driver.has_published_restaurant}
+                    canActivate={hasOpsAssignment(
+                      driver.zone_id,
+                      driver.has_published_restaurant ? 1 : 0,
+                    )}
                     canManage={canManage}
                   />
                 ) : (

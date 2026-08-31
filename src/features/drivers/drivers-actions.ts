@@ -11,6 +11,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
+import { hasOpsAssignment } from "./driver-assignment";
 import { normalizeClientValue } from "./driver-client-fields";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
@@ -342,6 +343,9 @@ export async function createDriverIntake(
   }
 
   const restaurantIds = parseRestaurantIds(formData);
+  if (!hasOpsAssignment(zoneId, restaurantIds)) {
+    return { error: "missing_assignment" };
+  }
   const supabase = await createClient();
   const intakeId = crypto.randomUUID();
 
@@ -997,6 +1001,9 @@ async function updateDriverIntakeInner(
 
   const supabase = await createClient();
   const restaurantIds = parseRestaurantIds(formData);
+  if (!hasOpsAssignment(zoneId, restaurantIds)) {
+    return { error: "missing_assignment" };
+  }
 
   const [phoneTaken, civilTaken, existingResp, restaurantCheck, r2Configured] = await Promise.all([
     phone ? phoneExists(phone, intakeId) : Promise.resolve(false),
@@ -1030,17 +1037,19 @@ async function updateDriverIntakeInner(
     currentAccountStatus = (linkedDriver?.status as DriverAccountStatus | null) ?? null;
 
     if (linkedDriver?.status === "active") {
-      if (restaurantIds.length === 0) {
-        return { error: "missing_active_restaurant" };
+      if (!hasOpsAssignment(zoneId, restaurantIds)) {
+        return { error: "missing_assignment" };
       }
-      const { data: publishedRows } = await supabase
-        .from("restaurants")
-        .select("id")
-        .eq("status", "published")
-        .eq("is_active", true)
-        .in("id", restaurantIds);
-      if ((publishedRows ?? []).length === 0) {
-        return { error: "missing_active_restaurant" };
+      if (restaurantIds.length > 0) {
+        const { data: publishedRows } = await supabase
+          .from("restaurants")
+          .select("id")
+          .eq("status", "published")
+          .eq("is_active", true)
+          .in("id", restaurantIds);
+        if ((publishedRows ?? []).length === 0 && !hasOpsAssignment(zoneId, [])) {
+          return { error: "missing_assignment" };
+        }
       }
     }
   }
@@ -1185,8 +1194,11 @@ async function updateDriverIntakeInner(
       if (statusError) return { error: "save_failed" };
       const payload = (statusData ?? {}) as { ok?: boolean; error?: string };
       if (!payload.ok) {
-        if (payload.error === "driver_missing_active_restaurant") {
-          return { error: "missing_active_restaurant" };
+        if (
+          payload.error === "driver_missing_active_restaurant" ||
+          payload.error === "driver_missing_assignment"
+        ) {
+          return { error: "missing_assignment" };
         }
         return { error: "save_failed" };
       }
@@ -1605,8 +1617,11 @@ export async function updateDriverAccountStatus(
 
   const payload = (data ?? {}) as { ok?: boolean; error?: string };
   if (!payload.ok) {
-    if (payload.error === "driver_missing_active_restaurant") {
-      return { error: "missing_active_restaurant" };
+    if (
+      payload.error === "driver_missing_active_restaurant" ||
+      payload.error === "driver_missing_assignment"
+    ) {
+      return { error: "missing_assignment" };
     }
     if (payload.error === "driver_not_found") return { error: "driver_not_found" };
     if (payload.error === "not_authorized") return { error: "not_authorized" };

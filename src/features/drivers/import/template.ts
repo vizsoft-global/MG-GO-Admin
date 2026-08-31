@@ -50,7 +50,7 @@ const STANDARD_COLUMNS: Array<Omit<DriverImportColumnSpec, "required"> & {
     field: "restaurant_ids",
     header: "Restaurant IDs",
     allowed:
-      "Restaurant name, RST code, or UUID. Separate several with commas. See the Restaurants sheet.",
+      "Restaurant name, RST code, or UUID. Separate several with commas. See the Restaurants sheet. Required if Zone is blank — a driver needs a zone or a restaurant.",
     example: "RST-0001",
   },
   {
@@ -75,7 +75,8 @@ const STANDARD_COLUMNS: Array<Omit<DriverImportColumnSpec, "required"> & {
   {
     field: "zone_id",
     header: "Zone",
-    allowed: "Zone name, zone code, or UUID. See the Zones sheet.",
+    allowed:
+      "Zone name, zone code, or UUID. See the Zones sheet. Required if Restaurant IDs is blank — a driver needs a zone or a restaurant.",
     example: "",
   },
   {

@@ -246,15 +246,15 @@ export const DRIVER_IMPORT_FIELDS = [
 ] as const;
 
 /**
- * Phone and civil ID are deliberately absent: they are optional contact
- * details, so a sheet without those columns is a valid sheet. Employee ID stays
- * because it is half the app credential, and a restaurant because a driver
- * cannot be activated without one.
+ * Phone, civil ID, zone and restaurant are deliberately absent: a sheet
+ * without those columns is still a valid sheet. Employee ID stays because it
+ * is half the app credential. Zone and restaurant are an either/or at preview
+ * — mapping must include at least one of them, but neither is a required
+ * column on its own.
  */
 export const DRIVER_IMPORT_REQUIRED_FIELDS = [
   "full_name",
   "employee_id",
-  "restaurant_ids",
 ] as const;
 
 export type DriverImportRequiredField = (typeof DRIVER_IMPORT_REQUIRED_FIELDS)[number];
@@ -277,6 +277,7 @@ export type DriverImportPreviewStatus =
   | "invalid_client_name"
   | "invalid_active"
   | "missing_fields"
+  | "missing_assignment"
   | "unmatched_partner"
   | "unmatched_zone"
   | "unmatched_vehicle"

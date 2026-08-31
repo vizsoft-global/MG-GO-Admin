@@ -17,6 +17,7 @@ export const DRIVER_ERROR_KEYS = [
   "r2_not_configured",
   "invalid_restaurants",
   "missing_active_restaurant",
+  "missing_assignment",
   "missing_block_reason",
   "driver_not_found",
   "intake_already_linked",

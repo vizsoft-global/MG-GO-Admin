@@ -27,13 +27,13 @@ export function DriverAccountStatusEditor({
   driverId,
   intakeId,
   status,
-  hasPublishedRestaurant,
+  canActivate,
   canManage,
 }: {
   driverId: string;
   intakeId?: string | null;
   status: DriverAccountStatus;
-  hasPublishedRestaurant: boolean;
+  canActivate: boolean;
   canManage: boolean;
 }) {
   const t = useTranslations("pages.driverDetail.accountStatus");
@@ -56,7 +56,7 @@ export function DriverAccountStatusEditor({
   const onChange = (next: string | null) => {
     if (!next || next === status || !canManage) return;
     const nextStatus = next as DriverAccountStatus;
-    if (nextStatus === "active" && !hasPublishedRestaurant) {
+    if (nextStatus === "active" && !canActivate) {
       toast.error(t("missingRestaurant"));
       return;
     }
@@ -101,7 +101,7 @@ export function DriverAccountStatusEditor({
                 key={s}
                 value={s}
                 label={labelFor(s)}
-                disabled={s === "active" && !hasPublishedRestaurant}
+                disabled={s === "active" && !canActivate}
               >
                 {labelFor(s)}
               </SelectItem>
@@ -109,7 +109,7 @@ export function DriverAccountStatusEditor({
           </SelectContent>
         </Select>
       ) : null}
-      {!hasPublishedRestaurant ? (
+      {!canActivate ? (
         <p className="text-xs text-muted-foreground">{t("restaurantRequired")}</p>
       ) : null}
       {isPending ? (

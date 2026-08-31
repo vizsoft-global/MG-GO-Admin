@@ -415,6 +415,7 @@ export function DriverFormSheet({
       employeeId,
       partnerId,
       zoneId,
+      restaurantIds,
       documents: isEdit ? EMPTY_DOCS : documents,
     });
     setShowErrors(true);
@@ -626,6 +627,7 @@ export function DriverFormSheet({
                 onZoneChange={(value) => {
                   setZoneId(value);
                   clearFieldError("zoneId");
+                  clearFieldError("restaurants");
                 }}
                 vehicleId={vehicleId || NONE_VEHICLE}
                 onVehicleChange={(value) => {
@@ -641,7 +643,11 @@ export function DriverFormSheet({
                 onClientNameChange={setClientName}
                 restaurants={allRestaurants}
                 selectedRestaurantIds={restaurantIds}
-                onRestaurantsChange={setRestaurantIds}
+                onRestaurantsChange={(ids) => {
+                  setRestaurantIds(ids);
+                  clearFieldError("restaurants");
+                  clearFieldError("zoneId");
+                }}
                 partners={partners}
                 zones={zones}
                 vehicles={vehicles}
@@ -649,6 +655,7 @@ export function DriverFormSheet({
                 errors={{
                   partnerId: showFieldError("partnerId"),
                   zoneId: showFieldError("zoneId"),
+                  restaurants: showFieldError("restaurants"),
                 }}
                 noVehicleLabel={tNew("noVehicle")}
                 placeholderPartner={tNew("placeholders.partner")}
@@ -656,6 +663,7 @@ export function DriverFormSheet({
                 placeholderVehicle={tNew("placeholders.vehicle")}
                 placeholderClientId={tNew("placeholders.clientId")}
                 placeholderClientName={tNew("placeholders.clientName")}
+                assignmentHint={tNew("assignmentHint")}
                 labels={{
                   section: tNew("stepper.assignment"),
                   partner: tNew("fields.partner"),

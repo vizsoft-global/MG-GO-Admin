@@ -41,6 +41,7 @@ export function DriverFormAssignmentCard({
   placeholderVehicle,
   placeholderClientId,
   placeholderClientName,
+  assignmentHint,
   labels,
 }: {
   partnerId: string;
@@ -62,7 +63,8 @@ export function DriverFormAssignmentCard({
   zones: ZoneOption[];
   vehicles: VehicleOption[];
   disabled?: boolean;
-  errors: { partnerId?: string; zoneId?: string };
+  errors: { partnerId?: string; zoneId?: string; restaurants?: string };
+  assignmentHint: string;
   noVehicleLabel: string;
   placeholderPartner: string;
   placeholderZone: string;
@@ -121,6 +123,7 @@ export function DriverFormAssignmentCard({
           <FieldError message={errors.zoneId} />
         </FieldBlock>
       </div>
+      <p className="text-[10px] text-muted-foreground">{assignmentHint}</p>
       <FieldBlock>
         <Label className="inline-flex items-center gap-1.5">
           <Car className="h-3.5 w-3.5 text-muted-foreground" />
@@ -209,6 +212,7 @@ export function DriverFormAssignmentCard({
           onChange={onRestaurantsChange}
           disabled={disabled}
         />
+        <FieldError message={errors.restaurants} />
       </FieldBlock>
     </section>
   );
