@@ -48,9 +48,11 @@ export function isPinnedTemplateField(field: string): boolean {
  * returns the first header matching any needle, and "name" would otherwise let
  * Client Name capture the full-name mapping.
  */
-const STANDARD_COLUMNS: Array<Omit<DriverImportColumnSpec, "required"> & {
-  field: DriverImportStandardField;
-}> = [
+const STANDARD_COLUMNS: Array<
+  Omit<DriverImportColumnSpec, "required" | "pinned"> & {
+    field: DriverImportStandardField;
+  }
+> = [
   {
     field: "full_name",
     header: "Full Name",
