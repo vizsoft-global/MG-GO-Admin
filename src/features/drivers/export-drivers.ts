@@ -28,6 +28,12 @@ export const DRIVER_EXPORT_OPTIONAL_IDS = DRIVER_EXPORT_COLUMNS.filter(
   (column) => !column.pinned,
 ).map((column) => column.id);
 
+const PINNED_EXPORT_IDS = new Set<string>(DRIVER_EXPORT_PINNED_IDS);
+
+export function isPinnedExportColumn(id: string): boolean {
+  return PINNED_EXPORT_IDS.has(id);
+}
+
 export const APP_CODE_EXPORT_ID = "app_passcode";
 
 export type DriverExportCustomField = { key: string; label: string };

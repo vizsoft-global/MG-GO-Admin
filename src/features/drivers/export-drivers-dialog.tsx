@@ -31,8 +31,8 @@ import {
   buildDriversExportAoa,
   customExportColumnId,
   downloadDriversCsv,
+  isPinnedExportColumn,
   resolveExportColumnIds,
-  type DriverExportColumnId,
   type DriverExportCustomField,
 } from "./export-drivers";
 import type { DriverListRow } from "./types";
@@ -92,7 +92,7 @@ export function DriversExportDialog({
   const toggle = (id: string) => {
     setSelected((current) => {
       const next = new Set(resolveExportColumnIds(current, customFields));
-      if (next.has(id) && !DRIVER_EXPORT_PINNED_IDS.includes(id as DriverExportColumnId)) {
+      if (next.has(id) && !isPinnedExportColumn(id)) {
         next.delete(id);
       } else {
         next.add(id);
