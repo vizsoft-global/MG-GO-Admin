@@ -266,7 +266,7 @@ export function DriverBulkImportDialog({
     downloadAoaXlsx(
       "driver-import-credentials.xlsx",
       "Credentials",
-      buildCredentialsAoa(result.credentials),
+      buildCredentialsAoa(result.credentials, customFields),
     );
   };
 

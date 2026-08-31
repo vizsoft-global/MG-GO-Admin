@@ -307,7 +307,9 @@ export async function resolveDriverImportPreview(
   return rows.map((row) => {
     let status: DriverImportPreviewStatus = "ok";
     let partner_id: string | null = null;
+    let partner_name: string | null = null;
     let zone_id: string | null = null;
+    let zone_name: string | null = null;
     let vehicle_id: string | null = null;
     let restaurant_ids: string[] = [];
     let restaurant_names: string[] = [];
@@ -355,15 +357,19 @@ export async function resolveDriverImportPreview(
 
     if (status === "ok" && row.partner_id?.trim()) {
       const hit = resolvePartnerToken(row.partner_id, partnerIndex);
-      if (hit.status === "ok") partner_id = hit.id;
-      else if (hit.status === "ambiguous") status = "ambiguous_partner";
+      if (hit.status === "ok") {
+        partner_id = hit.id;
+        partner_name = hit.name;
+      } else if (hit.status === "ambiguous") status = "ambiguous_partner";
       else status = "unmatched_partner";
     }
 
     if (status === "ok" && row.zone_id?.trim()) {
       const hit = resolveZoneToken(row.zone_id, zoneIndex);
-      if (hit.status === "ok") zone_id = hit.id;
-      else if (hit.status === "ambiguous") status = "ambiguous_zone";
+      if (hit.status === "ok") {
+        zone_id = hit.id;
+        zone_name = hit.name;
+      } else if (hit.status === "ambiguous") status = "ambiguous_zone";
       else status = "unmatched_zone";
     }
 
@@ -425,7 +431,9 @@ export async function resolveDriverImportPreview(
       ...row,
       status,
       partner_id,
+      partner_name,
       zone_id,
+      zone_name,
       vehicle_id,
       restaurant_ids,
       restaurant_names,
@@ -653,9 +661,21 @@ export async function applyDriverImportBatch(payload: {
           approved += 1;
           credentials.push({
             rowIndex: row.rowIndex,
+            full_name: row.full_name!.trim(),
             employee_id: employeeId,
             driver_code: driverCode ?? "",
             passcode: result.passcode,
+            phone,
+            civil_id: civilId,
+            partner_name: row.partner_name,
+            zone_name: row.zone_name,
+            vehicle_label: row.vehicle_label,
+            restaurant_names: row.restaurant_names,
+            nationality: row.nationality,
+            rider_category: row.rider_category,
+            client_id: row.client_id,
+            client_name: row.client_name,
+            custom_fields: row.custom_fields ?? {},
           });
         } else {
           failures.push({

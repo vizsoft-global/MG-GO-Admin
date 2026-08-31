@@ -317,6 +317,8 @@ export type DriverImportPreviewRow = Omit<
   vehicle_id: string | null;
   restaurant_ids: string[];
   restaurant_names: string[];
+  partner_name: string | null;
+  zone_name: string | null;
   nationality: string | null;
   rider_category: DriverRiderCategory;
   /**
@@ -331,7 +333,19 @@ export type DriverImportPreviewRow = Omit<
 
 export type DriverImportCredential = {
   rowIndex: number;
+  full_name: string;
   employee_id: string;
   driver_code: string;
   passcode: string;
+  phone: string | null;
+  civil_id: string | null;
+  partner_name: string | null;
+  zone_name: string | null;
+  vehicle_label: string | null;
+  restaurant_names: string[];
+  nationality: string | null;
+  rider_category: DriverRiderCategory;
+  client_id: string | null;
+  client_name: string | null;
+  custom_fields: Record<string, string | null>;
 };
