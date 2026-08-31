@@ -329,6 +329,8 @@ export type DriverImportPreviewRow = Omit<
    */
   active: boolean | null;
   skip?: boolean;
+  /** True when this employee ID already exists in the fleet (not a second sheet row). */
+  existingByEmployeeId?: boolean;
   custom_fields: Record<string, string | null>;
 };
 

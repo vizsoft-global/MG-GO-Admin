@@ -53,7 +53,12 @@ export function mapDriverDbError(
   return "save_failed";
 }
 
-const EMPLOYEE_ID_RE = /^[0-9]{4,8}$/;
+export const EMPLOYEE_ID_MAX = 100;
+const EMPLOYEE_ID_RE = /^[A-Za-z0-9]{1,100}$/;
+
+export function employeeIdKey(raw: string): string {
+  return raw.trim().toLowerCase();
+}
 
 export function normalizeEmployeeId(raw: string): string | null {
   const trimmed = raw.trim();

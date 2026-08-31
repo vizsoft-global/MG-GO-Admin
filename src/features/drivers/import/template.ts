@@ -62,8 +62,8 @@ const STANDARD_COLUMNS: Array<
   {
     field: "employee_id",
     header: "Employee ID",
-    allowed: "4 to 8 digits. Must be unique — this is half the app login.",
-    example: "12345",
+    allowed: "Letters and digits, 1 to 100 characters. Unique — this is half the app login. Used to match an existing driver on Update.",
+    example: "EMP2048",
   },
   {
     field: "zone_id",
@@ -269,7 +269,7 @@ export function templateDriversAoa(
     if (column.field === "restaurant_ids") return "";
     if (column.field === "zone_id") return zoneExample;
     if (column.field === "full_name") return "Sara Hassan";
-    if (column.field === "employee_id") return "12346";
+    if (column.field === "employee_id") return "EMP2049";
     if (column.field === "phone") return "";
     if (column.field === "civil_id") return "";
     return column.example;

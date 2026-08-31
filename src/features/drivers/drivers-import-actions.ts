@@ -6,7 +6,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
-import { isValidEmployeeId, normalizeEmployeeId } from "./driver-errors";
+import { employeeIdKey, normalizeEmployeeId } from "./driver-errors";
+import {
+  evaluateImportIdentity,
+  isImportRowReady,
+  type ImportIdentityRoster,
+  type ImportIdentitySeen,
+} from "./import/import-identity";
 import { civilIdExists } from "./driver-uniqueness";
 import { intakeMissingApprovalFields } from "./driver-approve-validation";
 import type {
@@ -297,28 +303,46 @@ export async function resolveDriverImportPreview(
     if (bike && reg) vehicleByLabel.set(`${bike} · ${reg}`, v.id);
   }
 
-  const phoneSet = new Set<string>();
-  const civilSet = new Set<string>();
-  const empSet = new Set<string>();
-  for (const intake of intakes ?? []) {
-    if (intake.phone) phoneSet.add(intake.phone);
-    if (intake.civil_id) civilSet.add(intake.civil_id);
-    if (intake.employee_id) empSet.add(intake.employee_id);
-  }
+  const roster: ImportIdentityRoster = {
+    employeeIds: new Set(),
+    phoneToEmployee: new Map(),
+    civilToEmployee: new Map(),
+  };
+  const driverEmpById = new Map<string, string>();
   for (const driver of drivers ?? []) {
-    if (driver.civil_id) civilSet.add(driver.civil_id);
-    if (driver.employee_id) empSet.add(driver.employee_id);
+    if (!driver.employee_id) continue;
+    const key = employeeIdKey(driver.employee_id);
+    roster.employeeIds.add(key);
+    driverEmpById.set(driver.id, key);
+    if (driver.civil_id) {
+      roster.civilToEmployee.set(normalizeCivilId(driver.civil_id) ?? driver.civil_id, key);
+    }
+  }
+  for (const intake of intakes ?? []) {
+    if (!intake.employee_id) continue;
+    const key = employeeIdKey(intake.employee_id);
+    roster.employeeIds.add(key);
+    if (intake.phone) {
+      roster.phoneToEmployee.set(normalizeKuwaitPhone(intake.phone) ?? intake.phone, key);
+    }
+    if (intake.civil_id) {
+      roster.civilToEmployee.set(normalizeCivilId(intake.civil_id) ?? intake.civil_id, key);
+    }
   }
   for (const profile of profiles ?? []) {
-    if (profile.phone) phoneSet.add(profile.phone);
+    const emp = driverEmpById.get(profile.id);
+    if (profile.phone && emp) {
+      roster.phoneToEmployee.set(normalizeKuwaitPhone(profile.phone) ?? profile.phone, emp);
+    }
   }
 
-  const seenPhone = new Set<string>();
-  const seenCivil = new Set<string>();
-  const seenEmp = new Set<string>();
+  const seen: ImportIdentitySeen = {
+    employeeIds: new Set(),
+    phones: new Map(),
+    civils: new Map(),
+  };
 
   return rows.map((row) => {
-    let status: DriverImportPreviewStatus = "ok";
     let partner_id: string | null = null;
     let partner_name: string | null = null;
     let zone_id: string | null = null;
@@ -332,43 +356,13 @@ export async function resolveDriverImportPreview(
     let client_name: string | null = null;
     let active: boolean | null = null;
 
-    const name = row.full_name?.trim();
-    const phoneNorm = row.phone ? normalizeKuwaitPhone(row.phone) : null;
-    const civilNorm = row.civil_id ? normalizeCivilId(row.civil_id) : null;
-    const empNorm = row.employee_id ? normalizeEmployeeId(row.employee_id) : null;
+    const identity = evaluateImportIdentity(row, roster, seen);
+    let status: DriverImportPreviewStatus = identity.status;
+    const existingByEmployeeId = identity.existingByEmployeeId;
+    const lookupStillOpen = () =>
+      status === "ok" || (status === "duplicate_employee_id" && existingByEmployeeId);
 
-    // Phone and civil ID are optional columns: a blank cell is a driver we do
-    // not have those details for, not a broken row. A cell with something in it
-    // still has to parse, or the sheet would silently drop a typo'd number.
-    if (!name || !row.employee_id?.trim()) {
-      status = "missing_fields";
-    } else if (row.phone?.trim() && !phoneNorm) {
-      status = "invalid_phone";
-    } else if (row.civil_id?.trim() && !civilNorm) {
-      status = "invalid_civil_id";
-    } else if (!empNorm || !isValidEmployeeId(empNorm)) {
-      status = "invalid_employee_id";
-    }
-
-    if (status === "ok" && phoneNorm) {
-      if (phoneSet.has(phoneNorm) || seenPhone.has(phoneNorm)) {
-        status = "duplicate_phone";
-      } else seenPhone.add(phoneNorm);
-    }
-
-    if (status === "ok" && civilNorm) {
-      if (civilSet.has(civilNorm) || seenCivil.has(civilNorm)) {
-        status = "duplicate_civil_id";
-      } else seenCivil.add(civilNorm);
-    }
-
-    if (status === "ok" && empNorm) {
-      if (empSet.has(empNorm) || seenEmp.has(empNorm)) {
-        status = "duplicate_employee_id";
-      } else seenEmp.add(empNorm);
-    }
-
-    if (status === "ok" && row.partner_id?.trim()) {
+    if (lookupStillOpen() && row.partner_id?.trim()) {
       const hit = resolvePartnerToken(row.partner_id, partnerIndex);
       if (hit.status === "ok") {
         partner_id = hit.id;
@@ -377,7 +371,7 @@ export async function resolveDriverImportPreview(
       else status = "unmatched_partner";
     }
 
-    if (status === "ok" && row.zone_id?.trim()) {
+    if (lookupStillOpen() && row.zone_id?.trim()) {
       const hit = resolveZoneToken(row.zone_id, zoneIndex);
       if (hit.status === "ok") {
         zone_id = hit.id;
@@ -386,13 +380,13 @@ export async function resolveDriverImportPreview(
       else status = "unmatched_zone";
     }
 
-    if (status === "ok" && row.vehicle_label?.trim()) {
+    if (lookupStillOpen() && row.vehicle_label?.trim()) {
       const vlabel = row.vehicle_label.trim().toLowerCase();
       vehicle_id = vehicleByLabel.get(vlabel) ?? null;
       if (!vehicle_id) status = "unmatched_vehicle";
     }
 
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       const restaurantsHit = resolveRestaurantTokens(row.restaurant_ids, restaurantIndex);
       if (restaurantsHit.status === "ok") {
         restaurant_ids = restaurantsHit.ids;
@@ -407,16 +401,16 @@ export async function resolveDriverImportPreview(
       }
     }
 
-    if (status === "ok" && !hasOpsAssignment(zone_id, restaurant_ids)) {
+    if (lookupStillOpen() && !hasOpsAssignment(zone_id, restaurant_ids)) {
       status = "missing_assignment";
     }
 
-    if (status === "ok" && row.nationality?.trim()) {
+    if (lookupStillOpen() && row.nationality?.trim()) {
       nationality = resolveCountryInput(row.nationality);
       if (!nationality) status = "invalid_nationality";
     }
 
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       const parsedCategory = parseRiderCategory(row.rider_category);
       if (parsedCategory === "invalid") status = "invalid_rider_category";
       else rider_category = parsedCategory ?? "in_house";
@@ -425,29 +419,34 @@ export async function resolveDriverImportPreview(
     // Free text, so the only way a cell can be wrong is by being longer than
     // the column. Caught here rather than at insert time, where it would abort
     // the batch with a CHECK violation naming a constraint, not a row.
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       client_id = normalizeClientValue(row.client_id);
       if (clientValueTooLong(client_id, CLIENT_ID_MAX_LENGTH)) {
         status = "invalid_client_id";
       }
     }
 
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       client_name = normalizeClientValue(row.client_name);
       if (clientValueTooLong(client_name, CLIENT_NAME_MAX_LENGTH)) {
         status = "invalid_client_name";
       }
     }
 
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       const parsedActive = parseImportActive(row.active);
       if (parsedActive === "invalid") status = "invalid_active";
       else active = parsedActive;
     }
 
+    if (lookupStillOpen() && existingByEmployeeId) {
+      status = "duplicate_employee_id";
+    }
+
     return {
       ...row,
       status,
+      existingByEmployeeId,
       partner_id,
       partner_name,
       zone_id,
@@ -518,28 +517,24 @@ async function applyOneImportRow(
   let updated = false;
   let beforeSnap = {};
 
-  const matchExisting = () => {
-    const query = ctx.supabase
+  const matchExisting = () =>
+    ctx.supabase
       .from("driver_intakes")
-      .select("id, linked, driver_code")
-      .is("archived_at", null);
-    return phone
-      ? query.eq("phone", phone).maybeSingle()
-      : query.eq("employee_id", employeeId).maybeSingle();
-  };
+      .select("id, linked, driver_code, linked_profile_id")
+      .is("archived_at", null)
+      .ilike("employee_id", employeeId)
+      .maybeSingle();
 
   if (ctx.duplicateStrategy === "update") {
     const { data: existing } = await matchExisting();
 
     if (existing) {
-      if (existing.linked) {
-        return fail("Intake already linked (cannot update)");
-      }
       const prior = await loadIntakeProfileSnapshot(ctx.supabase, existing.id);
       beforeSnap = prior?.snapshot ?? {};
       const { error: updErr } = await ctx.supabase
         .from("driver_intakes")
         .update({
+          phone,
           full_name: row.full_name!.trim(),
           civil_id: civilId,
           employee_id: employeeId,
@@ -550,7 +545,6 @@ async function applyOneImportRow(
           rider_category: row.rider_category,
           client_id: row.client_id,
           client_name: row.client_name,
-          workflow_status: "pending",
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id);
@@ -563,17 +557,70 @@ async function applyOneImportRow(
         .from("driver_intake_restaurants")
         .delete()
         .eq("intake_id", intakeId);
+
+      if (existing.linked_profile_id) {
+        const linkedId = existing.linked_profile_id;
+        const { error: driverErr } = await ctx.supabase
+          .from("drivers")
+          .update({
+            partner_id: row.partner_id,
+            zone_id: row.zone_id,
+            vehicle_id: row.vehicle_id,
+            civil_id: civilId,
+            employee_id: employeeId,
+            nationality: row.nationality,
+            rider_category: row.rider_category,
+            client_id: row.client_id,
+            client_name: row.client_name,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", linkedId);
+        if (driverErr) return fail(driverErr.message);
+        await ctx.supabase
+          .from("profiles")
+          .update({
+            full_name: row.full_name!.trim(),
+            phone,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", linkedId);
+        const { data: existingLinks } = await ctx.supabase
+          .from("driver_restaurants")
+          .select("restaurant_id")
+          .eq("driver_id", linkedId);
+        const have = new Set((existingLinks ?? []).map((r) => r.restaurant_id));
+        const want = new Set(row.restaurant_ids);
+        const toAdd = row.restaurant_ids.filter((id) => !have.has(id));
+        const toRemove = [...have].filter((id) => !want.has(id));
+        if (toAdd.length > 0) {
+          const { error: addErr } = await ctx.supabase.from("driver_restaurants").insert(
+            toAdd.map((restaurant_id) => ({ driver_id: linkedId, restaurant_id })),
+          );
+          if (addErr) return fail(addErr.message);
+        }
+        if (toRemove.length > 0) {
+          await ctx.supabase
+            .from("driver_restaurants")
+            .delete()
+            .eq("driver_id", linkedId)
+            .in("restaurant_id", toRemove);
+        }
+      }
     }
   } else {
     const { data: dup } = await matchExisting();
     if (dup) {
-      const reason = phone ? "Duplicate phone (skip)" : "Duplicate employee ID (skip)";
-      events.push({ at: nowIso(), kind: "skipped", ...who, detail: reason });
+      events.push({
+        at: nowIso(),
+        kind: "skipped",
+        ...who,
+        detail: "Duplicate employee ID (skip)",
+      });
       return {
         events,
         applied: 0,
         approved: 0,
-        failure: { rowIndex: row.rowIndex, reason },
+        failure: { rowIndex: row.rowIndex, reason: "Duplicate employee ID (skip)" },
       };
     }
   }
@@ -749,7 +796,9 @@ export async function applyDriverImportChunk(payload: {
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 
-  const ready = payload.rows.filter((r) => r.status === "ok" && !r.skip);
+  const ready = payload.rows.filter((r) =>
+    isImportRowReady(r, payload.duplicateStrategy),
+  );
   const supabase = await createClient();
   let batchId = payload.batchId ?? null;
 
@@ -859,7 +908,9 @@ export async function applyDriverImportBatch(payload: {
     }
   | { error: string }
 > {
-  const ready = payload.rows.filter((r) => r.status === "ok" && !r.skip);
+  const ready = payload.rows.filter((r) =>
+    isImportRowReady(r, payload.duplicateStrategy),
+  );
   const preSkipped = payload.rows.length - ready.length;
   const result = await applyDriverImportChunk({
     fileName: payload.fileName,

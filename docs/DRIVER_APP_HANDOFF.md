@@ -76,7 +76,7 @@ Staff use **Verify & approve** on `/drivers/[id]` (or bulk import with **Approve
 - Inserts `profiles` + `drivers`, copies `driver_intake_restaurants` → `driver_restaurants`, sets `drivers.status = 'active'`, mints `app_passcode`, marks intake `linked`.
 - Driver signs in with **driver_code + passcode** via edge function `driver-passcode-login` (magic link on synthetic email).
 
-`employee_id` on intakes/drivers: **required**, 4–8 digits, unique (same as app login).
+`employee_id` on intakes/drivers: **required**, letters and digits, 1–100 characters, unique case-insensitive (same as app login). Bulk import matches an existing rider on this field.
 
 `nationality` on intakes/drivers: **optional**, ISO 3166-1 alpha-2 code (e.g. `KW`, `IN`). Admin create/edit uses searchable country list; copied to `drivers` on **Verify & approve**.
 
@@ -100,7 +100,7 @@ For intakes still `linked = false` from before admin-first approval, the driver 
 3. **Else** (no intake): create minimal `profiles` + `drivers` (self-signup path).
 
 Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edit; auth users are created on **Verify & approve** (not on intake insert alone).
-- `employee_id` required on every intake (4–8 digits)
+- `employee_id` required on every intake (letters and digits, 1–100 characters)
 - `linked = false` until **Verify & approve** (or legacy OTP link)
 
 | Table / bucket | Admin | Driver app |
@@ -1111,7 +1111,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-31 — [admin+app] Activation and approve need a zone **or** a published restaurant (`driver_has_ops_assignment` / `intake_has_ops_assignment`). Zone-only riders can go Active; neither is still refused. Migration `20261006100000`. No app payload change.*
+*Last synced: 2026-08-31 — [admin+app] Employee ID is letters and digits, 1–100 characters, unique case-insensitive. Bulk import matches and updates on this field. Login lookup is `lower(employee_id)` or exact `driver_code`. Migration `20261008100000`. A rider with a new alphanumeric ID cannot sign in until the matching app build is installed.*
 
 *Prior: 2026-08-22 — [admin+app] Home bumper/quest progress uses `progress_count` (submitted orders); `eligible_count` / payout stay verified. Home `week.deliveries_count` is submitted. Extra earnings adds `progress_count`. App: invalidate Home + Extra Earnings after pickup/finish; raised center Add Delivery FAB on the 5-tab bar (`openDeliveryAction`). [admin only] `admin_bulk_update_deliveries` on `/deliveries`. Migration `20260926100000`.*
 

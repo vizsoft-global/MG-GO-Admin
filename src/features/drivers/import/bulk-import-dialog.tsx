@@ -11,14 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { StatusPill } from "@/components/dashboard/status-pill";
+import { isImportRowReady } from "./import-identity";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
 import { applyDriverImportChunk, fetchDriverImportLookups } from "../drivers-import-actions";
 import { invalidateDriverCaches } from "../invalidate-driver-caches";
@@ -64,11 +58,11 @@ import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-f
 type Step = "upload" | "map" | "preview" | "result";
 
 function previewVariant(
-  status: DriverImportPreviewRow["status"],
+  row: DriverImportPreviewRow,
+  strategy: "skip" | "update",
 ): "success" | "warning" | "danger" | "neutral" {
-  switch (status) {
-    case "ok":
-      return "success";
+  if (isImportRowReady(row, strategy)) return "success";
+  switch (row.status) {
     case "duplicate_phone":
     case "duplicate_civil_id":
     case "duplicate_employee_id":
@@ -95,7 +89,7 @@ export function DriverBulkImportDialog({
   const [headerSignature, setHeaderSignature] = useState("");
   const [mapping, setMapping] = useState<Partial<Record<DriverImportTargetField, string>>>({});
   const [preview, setPreview] = useState<DriverImportPreviewRow[]>([]);
-  const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "update">("skip");
+  const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "update">("update");
   const [approveImmediately, setApproveImmediately] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [importing, setImporting] = useState(false);
@@ -159,13 +153,17 @@ export function DriverBulkImportDialog({
   }, [templateSelection, templateSelected, templateColumns]);
 
   const summary = useMemo(() => {
-    const ready = preview.filter((r) => r.status === "ok" && !r.skip).length;
-    const duplicate = preview.filter((r) =>
-      ["duplicate_phone", "duplicate_civil_id", "duplicate_employee_id"].includes(r.status),
+    const ready = preview.filter((r) => isImportRowReady(r, duplicateStrategy)).length;
+    const duplicate = preview.filter(
+      (r) => r.existingByEmployeeId && r.status === "duplicate_employee_id",
     ).length;
-    const invalid = preview.filter((r) => r.status !== "ok").length - duplicate;
+    const invalid = preview.filter(
+      (r) =>
+        !isImportRowReady(r, duplicateStrategy) &&
+        !(r.existingByEmployeeId && r.status === "duplicate_employee_id"),
+    ).length;
     return { ready, duplicate, invalid, total: preview.length };
-  }, [preview]);
+  }, [preview, duplicateStrategy]);
 
   const errorRowCount = useMemo(() => {
     if (!result) return preview.filter((r) => r.status !== "ok").length;
@@ -232,7 +230,7 @@ export function DriverBulkImportDialog({
   };
 
   const handleImport = () => {
-    const ready = preview.filter((row) => row.status === "ok" && !row.skip);
+    const ready = preview.filter((row) => isImportRowReady(row, duplicateStrategy));
     if (ready.length === 0) return;
     const size = importChunkSize(ready, approveImmediately);
     const chunks = chunkRows(ready, size);
@@ -585,33 +583,21 @@ export function DriverBulkImportDialog({
                   invalid: summary.invalid,
                 })}
               </p>
-              <div className="flex flex-wrap items-center gap-3">
-                <Label className="text-sm">{t("duplicateStrategy")}</Label>
-                <Select
-                  items={[
-                    { value: "skip", label: t("duplicateSkip") },
-                    { value: "update", label: t("duplicateUpdate") },
-                  ]}
-                  value={duplicateStrategy}
-                  onValueChange={(v) => {
-                    if (v === "skip" || v === "update") setDuplicateStrategy(v);
-                  }}
-                >
-                  <SelectTrigger
-                    className="h-9 w-48 cursor-pointer rounded-lg"
-                    disabled={importing}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="skip" label={t("duplicateSkip")}>
-                      {t("duplicateSkip")}
-                    </SelectItem>
-                    <SelectItem value="update" label={t("duplicateUpdate")}>
-                      {t("duplicateUpdate")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                <div>
+                  <Label htmlFor="update-by-employee-id" className="text-sm">
+                    {t("duplicateStrategy")}
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    {t("duplicateUpdateHint")}
+                  </p>
+                </div>
+                <Switch
+                  id="update-by-employee-id"
+                  checked={duplicateStrategy === "update"}
+                  onCheckedChange={(on) => setDuplicateStrategy(on ? "update" : "skip")}
+                  disabled={importing}
+                />
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                 <div>
@@ -668,8 +654,11 @@ export function DriverBulkImportDialog({
                       {preview.slice(0, 200).map((row) => (
                         <tr key={row.rowIndex} className="border-t border-border/60">
                           <td className="px-2 py-1">
-                            <StatusPill variant={previewVariant(row.status)} dot={false}>
-                              {t(`status.${row.status}`)}
+                            <StatusPill variant={previewVariant(row, duplicateStrategy)} dot={false}>
+                              {isImportRowReady(row, duplicateStrategy) &&
+                              row.existingByEmployeeId
+                                ? t("status.will_update")
+                                : t(`status.${row.status}`)}
                             </StatusPill>
                           </td>
                           <td className="px-2 py-1">{row.full_name ?? "—"}</td>

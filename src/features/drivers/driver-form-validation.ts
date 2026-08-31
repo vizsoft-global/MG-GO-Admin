@@ -98,10 +98,10 @@ export function validateDriverForm(
     errors.civilId = "invalid_civil_id";
   }
 
-  const empDigits = restrictDigits(input.employeeId.trim(), 8);
-  if (!empDigits) {
+  const employeeId = input.employeeId.trim();
+  if (!employeeId) {
     errors.employeeId = "missing_fields";
-  } else if (!isValidEmployeeId(empDigits)) {
+  } else if (!isValidEmployeeId(employeeId)) {
     errors.employeeId = "employee_id_format";
   }
 
