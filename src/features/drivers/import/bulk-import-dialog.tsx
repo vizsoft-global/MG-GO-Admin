@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Building2, Download, Loader2, MapPin, Store, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -18,12 +20,19 @@ import {
 } from "@/components/ui/select";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
-import { fetchDriverImportLookups } from "../drivers-import-actions";
+import { applyDriverImportChunk, fetchDriverImportLookups } from "../drivers-import-actions";
+import { invalidateDriverCaches } from "../invalidate-driver-caches";
 import {
-  useApplyDriverImportBatch,
   useResolveDriverImportPreview,
   type DriverImportPreviewRow,
 } from "../use-drivers";
+import {
+  chunkRows,
+  importChunkSize,
+  importProgressLabel,
+  type DriverImportLogEvent,
+} from "./import-progress";
+import { ImportLogPanel } from "./import-log-panel";
 import type { DriverImportCredential, DriverImportTargetField } from "../types";
 import { DRIVER_IMPORT_REQUIRED_FIELDS } from "../types";
 import { DriverMappingBoard } from "./mapping-board";
@@ -89,6 +98,10 @@ export function DriverBulkImportDialog({
   const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "update">("skip");
   const [approveImmediately, setApproveImmediately] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [importing, setImporting] = useState(false);
+  const importingRef = useRef(false);
+  const [importLog, setImportLog] = useState<DriverImportLogEvent[]>([]);
+  const [importDone, setImportDone] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [result, setResult] = useState<{
     applied: number;
@@ -98,8 +111,8 @@ export function DriverBulkImportDialog({
     credentials: DriverImportCredential[];
   } | null>(null);
 
+  const queryClient = useQueryClient();
   const resolvePreview = useResolveDriverImportPreview();
-  const applyBatch = useApplyDriverImportBatch();
   const { data: customFieldDefs = [] } = useCustomFieldDefinitions();
   const customFields = useMemo(
     () =>
@@ -170,6 +183,10 @@ export function DriverBulkImportDialog({
     setPreview([]);
     setApproveImmediately(false);
     setResult(null);
+    setImporting(false);
+    importingRef.current = false;
+    setImportLog([]);
+    setImportDone(0);
     setDragActive(false);
   }, []);
 
@@ -215,48 +232,122 @@ export function DriverBulkImportDialog({
   };
 
   const handleImport = () => {
-    startTransition(async () => {
-      const applyResult = await applyBatch.mutateAsync({
-        fileName,
-        mapping: mapping as Record<string, string>,
-        rows: preview,
-        duplicateStrategy,
-        approveImmediately,
-      });
-      if ("error" in applyResult) {
-        toast.error(t("importFailed"));
-        return;
-      }
-      setResult({
-        applied: applyResult.applied,
-        skipped: applyResult.skipped,
-        approved: applyResult.approved,
-        failures: applyResult.failures,
-        credentials: applyResult.credentials,
-      });
-      setStep("result");
-      const failureSample = applyResult.failures
-        .slice(0, 3)
-        .map((f) => `Row ${f.rowIndex + 1}: ${f.reason}`)
-        .join("\n");
-      if (applyResult.applied === 0 && applyResult.failures.length > 0) {
-        toast.error(t("importFailed"), {
-          description: failureSample,
-          duration: 12_000,
+    const ready = preview.filter((row) => row.status === "ok" && !row.skip);
+    if (ready.length === 0) return;
+    const size = importChunkSize(ready, approveImmediately);
+    const chunks = chunkRows(ready, size);
+    const preSkipped = preview.length - ready.length;
+    const startedAt = new Date().toISOString();
+
+    importingRef.current = true;
+    setImporting(true);
+    setImportDone(0);
+    setImportLog([
+      {
+        at: startedAt,
+        kind: "created",
+        rowIndex: -1,
+        name: fileName || "sheet",
+        detail: `${ready.length} ready  chunk=${size}  approve=${approveImmediately ? "on" : "off"}`,
+      },
+    ]);
+
+    void (async () => {
+      let batchId: string | undefined;
+      let applied = 0;
+      let skipped = preSkipped;
+      let approved = 0;
+      const failures: Array<{ rowIndex: number; reason: string }> = [];
+      const allCredentials: DriverImportCredential[] = [];
+      let aborted = false;
+
+      try {
+        for (let i = 0; i < chunks.length; i += 1) {
+          const chunk = chunks[i]!;
+          const applyResult = await applyDriverImportChunk({
+            fileName,
+            mapping: mapping as Record<string, string>,
+            rows: chunk,
+            duplicateStrategy,
+            approveImmediately,
+            batchId,
+            sheetRowCount: preview.length,
+            preSkipped,
+            appliedSoFar: applied,
+            skippedSoFar: skipped,
+            approvedSoFar: approved,
+            isLast: i === chunks.length - 1,
+          });
+          if ("error" in applyResult) {
+            aborted = true;
+            setImportLog((prev) => [
+              ...prev,
+              {
+                at: new Date().toISOString(),
+                kind: "failed",
+                rowIndex: chunk[0]?.rowIndex ?? -1,
+                name: "batch",
+                detail: applyResult.error,
+              },
+            ]);
+            toast.error(t("importFailed"));
+            break;
+          }
+          batchId = applyResult.batchId;
+          applied += applyResult.applied;
+          skipped += applyResult.skipped;
+          approved += applyResult.approved;
+          failures.push(...applyResult.failures);
+          allCredentials.push(...applyResult.credentials);
+          setImportDone(Math.min(ready.length, (i + 1) * size));
+          setImportLog((prev) => [...prev, ...applyResult.events]);
+        }
+
+        if (!aborted) setImportDone(ready.length);
+        setImportLog((prev) => [
+          ...prev,
+          {
+            at: new Date().toISOString(),
+            kind: applied > 0 ? "created" : "failed",
+            rowIndex: -1,
+            name: "done",
+            detail: `applied=${applied}  approved=${approved}  failed=${failures.length}  skipped=${skipped}`,
+          },
+        ]);
+        if (aborted && applied === 0) return;
+        setResult({
+          applied,
+          skipped,
+          approved,
+          failures,
+          credentials: allCredentials,
         });
-        return;
+        setStep("result");
+        await invalidateDriverCaches(queryClient);
+        const failureSample = failures
+          .slice(0, 3)
+          .map((f) => `Row ${f.rowIndex + 1}: ${f.reason}`)
+          .join("\n");
+        if (applied === 0 && failures.length > 0) {
+          toast.error(t("importFailed"), {
+            description: failureSample,
+            duration: 12_000,
+          });
+          return;
+        }
+        toast.success(
+          t("importSuccess", {
+            applied,
+            skipped,
+            approved,
+          }),
+          failureSample ? { description: failureSample, duration: 10_000 } : undefined,
+        );
+      } finally {
+        importingRef.current = false;
+        setImporting(false);
       }
-      toast.success(
-        t("importSuccess", {
-          applied: applyResult.applied,
-          skipped: applyResult.skipped,
-          approved: applyResult.approved,
-        }),
-        failureSample
-          ? { description: failureSample, duration: 10_000 }
-          : undefined,
-      );
-    });
+    })();
   };
 
   const downloadErrors = () => {
@@ -317,14 +408,15 @@ export function DriverBulkImportDialog({
     <Dialog
       open={open}
       onOpenChange={(v) => {
+        if (importingRef.current) return;
         if (!v) reset();
         onOpenChange(v);
       }}
     >
       <DialogContent
-        className="flex max-h-[min(92vh,880px)] flex-col gap-0 overflow-visible rounded-xl p-0 sm:max-w-3xl"
-        showCloseButton
-        closeOutside
+        className="flex max-h-[min(92vh,880px)] w-[min(1200px,96vw)] flex-col gap-0 overflow-visible rounded-xl p-0 sm:max-w-[min(1200px,96vw)]"
+        showCloseButton={!importing}
+        closeOutside={!importing}
       >
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pt-4 pb-3">
           {step === "upload" ? (
@@ -505,7 +597,10 @@ export function DriverBulkImportDialog({
                     if (v === "skip" || v === "update") setDuplicateStrategy(v);
                   }}
                 >
-                  <SelectTrigger className="h-9 w-48 cursor-pointer rounded-lg">
+                  <SelectTrigger
+                    className="h-9 w-48 cursor-pointer rounded-lg"
+                    disabled={importing}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -531,49 +626,72 @@ export function DriverBulkImportDialog({
                   id="approve-immediately"
                   checked={approveImmediately}
                   onCheckedChange={setApproveImmediately}
+                  disabled={importing}
                 />
               </div>
-              <div className="max-h-64 overflow-auto rounded-lg border border-border">
-                <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-muted/80">
-                    <tr>
-                      <th className="px-2 py-1.5">{t("colStatus")}</th>
-                      <th className="px-2 py-1.5">{t("colName")}</th>
-                      <th className="px-2 py-1.5">{t("colPhone")}</th>
-                      <th className="px-2 py-1.5">{t("colEmployeeId")}</th>
-                      <th className="px-2 py-1.5">{t("colRestaurants")}</th>
-                      <th className="px-2 py-1.5">{t("colActive")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.slice(0, 200).map((row) => (
-                      <tr key={row.rowIndex} className="border-t border-border/60">
-                        <td className="px-2 py-1">
-                          <StatusPill variant={previewVariant(row.status)} dot={false}>
-                            {t(`status.${row.status}`)}
-                          </StatusPill>
-                        </td>
-                        <td className="px-2 py-1">{row.full_name ?? "—"}</td>
-                        <td className="px-2 py-1">{row.phone ?? "—"}</td>
-                        <td className="px-2 py-1 tabular-nums">{row.employee_id ?? "—"}</td>
-                        <td className="px-2 py-1">
-                          {row.restaurant_names.length > 0
-                            ? row.restaurant_names.join(", ")
-                            : "—"}
-                        </td>
-                        {/* Resolved the same way `applyDriverImportBatch` does,
-                            so the operator sees the answer before importing
-                            rather than reading it off the result summary. */}
-                        <td className="px-2 py-1">
-                          {(row.active ?? approveImmediately)
-                            ? t("activeYes")
-                            : t("activeNo")}
-                        </td>
+              {importing || importLog.length > 0 ? (
+                <>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full bg-emerald-500 transition-[width] duration-200"
+                      style={{
+                        width: `${
+                          summary.ready === 0
+                            ? 0
+                            : Math.round((importDone / summary.ready) * 100)
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <ImportLogPanel
+                    events={importLog}
+                    progressLabel={importProgressLabel(importDone, summary.ready)}
+                    title={t("importLog")}
+                    waitingLabel={t("importWaiting")}
+                  />
+                </>
+              ) : (
+                <div className="max-h-64 overflow-auto rounded-lg border border-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-muted/80">
+                      <tr>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colStatus")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colName")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPhone")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colEmployeeId")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colZone")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colRestaurants")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colActive")}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {preview.slice(0, 200).map((row) => (
+                        <tr key={row.rowIndex} className="border-t border-border/60">
+                          <td className="px-2 py-1">
+                            <StatusPill variant={previewVariant(row.status)} dot={false}>
+                              {t(`status.${row.status}`)}
+                            </StatusPill>
+                          </td>
+                          <td className="px-2 py-1">{row.full_name ?? "—"}</td>
+                          <td className="px-2 py-1">{row.phone ?? "—"}</td>
+                          <td className="px-2 py-1 tabular-nums">{row.employee_id ?? "—"}</td>
+                          <td className="px-2 py-1">{row.zone_name ?? "—"}</td>
+                          <td className="px-2 py-1">
+                            {row.restaurant_names.length > 0
+                              ? row.restaurant_names.join(", ")
+                              : "—"}
+                          </td>
+                          <td className="px-2 py-1">
+                            {(row.active ?? approveImmediately)
+                              ? t("activeYes")
+                              : t("activeNo")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </>
           ) : null}
 
@@ -586,6 +704,14 @@ export function DriverBulkImportDialog({
                   approved: result.approved,
                 })}
               </p>
+              {importLog.length > 0 ? (
+                <ImportLogPanel
+                  events={importLog}
+                  progressLabel={importProgressLabel(importDone, summary.ready)}
+                  title={t("importLog")}
+                  waitingLabel={t("importWaiting")}
+                />
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -617,21 +743,26 @@ export function DriverBulkImportDialog({
           <AppModalFooter
             title={t("title")}
             subtitle={
-              step === "map"
-                ? requiredMapped
-                  ? t("dropHint")
-                  : t("mappingRequired")
-                : step === "result" && result
-                  ? t("importSuccess", {
-                      applied: result.applied,
-                      skipped: result.skipped,
-                      approved: result.approved,
-                    })
-                  : t("previewSummary", {
-                      ready: summary.ready,
-                      duplicate: summary.duplicate,
-                      invalid: summary.invalid,
-                    })
+              importing
+                ? t("importProgress", {
+                    done: importDone,
+                    total: summary.ready,
+                  })
+                : step === "map"
+                  ? requiredMapped
+                    ? t("dropHint")
+                    : t("mappingRequired")
+                  : step === "result" && result
+                    ? t("importSuccess", {
+                        applied: result.applied,
+                        skipped: result.skipped,
+                        approved: result.approved,
+                      })
+                    : t("previewSummary", {
+                        ready: summary.ready,
+                        duplicate: summary.duplicate,
+                        invalid: summary.invalid,
+                      })
             }
           >
             {step === "map" ? (
@@ -667,7 +798,12 @@ export function DriverBulkImportDialog({
                   variant="outline"
                   size="sm"
                   className="h-9 cursor-pointer rounded-md"
-                  onClick={() => setStep("map")}
+                  disabled={importing}
+                  onClick={() => {
+                    setImportLog([]);
+                    setImportDone(0);
+                    setStep("map");
+                  }}
                 >
                   {t("back")}
                 </Button>
@@ -675,11 +811,14 @@ export function DriverBulkImportDialog({
                   type="button"
                   size="sm"
                   className="h-9 cursor-pointer rounded-md px-4"
-                  disabled={isPending || summary.ready === 0}
+                  disabled={importing || summary.ready === 0}
                   onClick={handleImport}
                 >
-                  {isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  {importing ? (
+                    <>
+                      <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                      {t("importing")}
+                    </>
                   ) : (
                     t("import", { count: summary.ready })
                   )}

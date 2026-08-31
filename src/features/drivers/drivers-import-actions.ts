@@ -26,6 +26,7 @@ import {
   normalizeClientValue,
 } from "./driver-client-fields";
 import { hasOpsAssignment } from "./driver-assignment";
+import type { DriverImportLogEvent } from "./import/import-progress";
 import { parseImportActive, parseRiderCategory } from "./import/parse";
 import {
   buildPartnerIndex,
@@ -37,7 +38,7 @@ import {
 } from "./import/resolve-lookups";
 import type { DriverImportLookups } from "./import/lookups";
 
-const IMPORT_CHUNK = 200;
+type ImportApplyClient = Awaited<ReturnType<typeof createClient>>;
 
 async function requireDriversManager() {
   const session = await getSessionUser();
@@ -452,6 +453,353 @@ export async function resolveDriverImportPreview(
   });
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function logWho(row: DriverImportPreviewRow) {
+  return {
+    rowIndex: row.rowIndex,
+    name: row.full_name?.trim() ?? "",
+    employeeId: row.employee_id ?? undefined,
+    zone: row.zone_name ?? undefined,
+  };
+}
+
+async function applyOneImportRow(
+  row: DriverImportPreviewRow,
+  ctx: {
+    supabase: ImportApplyClient;
+    duplicateStrategy: "skip" | "update";
+    approveImmediately: boolean;
+    customFieldDefs: Awaited<ReturnType<typeof listCustomFieldDefinitions>>;
+  },
+): Promise<{
+  events: DriverImportLogEvent[];
+  applied: 0 | 1;
+  approved: 0 | 1;
+  failure?: { rowIndex: number; reason: string };
+  credential?: DriverImportCredential;
+}> {
+  const events: DriverImportLogEvent[] = [];
+  const who = logWho(row);
+  const fail = (reason: string) => {
+    events.push({ at: nowIso(), kind: "failed", ...who, detail: reason });
+    return {
+      events,
+      applied: 0 as const,
+      approved: 0 as const,
+      failure: { rowIndex: row.rowIndex, reason },
+    };
+  };
+
+  const phone = row.phone?.trim() ? normalizeKuwaitPhone(row.phone) : null;
+  const civilId = row.civil_id?.trim() ? normalizeCivilId(row.civil_id) : null;
+  const employeeId = normalizeEmployeeId(row.employee_id!);
+  if (!employeeId) return fail("missing_fields");
+  if (!hasOpsAssignment(row.zone_id, row.restaurant_ids)) {
+    return fail("missing_assignment");
+  }
+
+  let intakeId: string | null = null;
+  let driverCode: string | null = null;
+  let updated = false;
+
+  const matchExisting = () => {
+    const query = ctx.supabase
+      .from("driver_intakes")
+      .select("id, linked, driver_code")
+      .is("archived_at", null);
+    return phone
+      ? query.eq("phone", phone).maybeSingle()
+      : query.eq("employee_id", employeeId).maybeSingle();
+  };
+
+  if (ctx.duplicateStrategy === "update") {
+    const { data: existing } = await matchExisting();
+
+    if (existing) {
+      if (existing.linked) {
+        return fail("Intake already linked (cannot update)");
+      }
+      const { error: updErr } = await ctx.supabase
+        .from("driver_intakes")
+        .update({
+          full_name: row.full_name!.trim(),
+          civil_id: civilId,
+          employee_id: employeeId,
+          partner_id: row.partner_id,
+          zone_id: row.zone_id,
+          vehicle_id: row.vehicle_id,
+          nationality: row.nationality,
+          rider_category: row.rider_category,
+          client_id: row.client_id,
+          client_name: row.client_name,
+          workflow_status: "pending",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+
+      if (updErr) return fail(updErr.message);
+      intakeId = existing.id;
+      driverCode = existing.driver_code;
+      updated = true;
+      await ctx.supabase
+        .from("driver_intake_restaurants")
+        .delete()
+        .eq("intake_id", intakeId);
+    }
+  } else {
+    const { data: dup } = await matchExisting();
+    if (dup) {
+      const reason = phone ? "Duplicate phone (skip)" : "Duplicate employee ID (skip)";
+      events.push({ at: nowIso(), kind: "skipped", ...who, detail: reason });
+      return {
+        events,
+        applied: 0,
+        approved: 0,
+        failure: { rowIndex: row.rowIndex, reason },
+      };
+    }
+  }
+
+  if (!intakeId) {
+    const { data: code, error: codeErr } = await ctx.supabase.rpc("allocate_driver_code");
+    if (codeErr || !code) return fail("Could not allocate driver code");
+
+    const newId = crypto.randomUUID();
+    const mappedCustom = row.custom_fields ?? {};
+    const defsForRow = ctx.customFieldDefs.map((d) => ({
+      ...d,
+      required: d.required && Object.prototype.hasOwnProperty.call(mappedCustom, d.key),
+    }));
+    const { values: customValues, errors: customErrors } = validateCustomFieldValues(
+      defsForRow,
+      mappedCustom,
+    );
+    if (customErrors.length > 0) {
+      return fail(`custom_fields: ${customErrors.map((e) => e.key).join(",")}`);
+    }
+    const { error: insErr } = await ctx.supabase.from("driver_intakes").insert({
+      id: newId,
+      phone,
+      full_name: row.full_name!.trim(),
+      civil_id: civilId,
+      employee_id: employeeId,
+      driver_code: code,
+      partner_id: row.partner_id,
+      zone_id: row.zone_id,
+      vehicle_id: row.vehicle_id,
+      nationality: row.nationality,
+      rider_category: row.rider_category,
+      client_id: row.client_id,
+      client_name: row.client_name,
+      status: "awaiting_app_link",
+      workflow_status: "pending",
+      linked: false,
+      assets_issued: {},
+      custom_fields: customValues as unknown as import("@/types/database").Json,
+    });
+
+    if (insErr) return fail(insErr.message);
+    intakeId = newId;
+    driverCode = String(code);
+  }
+
+  if (row.restaurant_ids.length > 0) {
+    const { error: linkErr } = await ctx.supabase.from("driver_intake_restaurants").insert(
+      row.restaurant_ids.map((restaurant_id) => ({
+        intake_id: intakeId!,
+        restaurant_id,
+      })),
+    );
+    if (linkErr) return fail(linkErr.message);
+  }
+
+  events.push({
+    at: nowIso(),
+    kind: updated ? "updated" : "created",
+    ...who,
+    driverCode: driverCode ?? undefined,
+  });
+
+  let approved: 0 | 1 = 0;
+  let credential: DriverImportCredential | undefined;
+  const approveRow = row.active ?? ctx.approveImmediately;
+  if (approveRow && intakeId) {
+    const result = await approveDriverIntake(intakeId);
+    if ("success" in result && result.success) {
+      approved = 1;
+      events.push({
+        at: nowIso(),
+        kind: "approved",
+        ...who,
+        driverCode: driverCode ?? undefined,
+        detail: "passcode minted",
+      });
+      credential = {
+        rowIndex: row.rowIndex,
+        full_name: row.full_name!.trim(),
+        employee_id: employeeId,
+        driver_code: driverCode ?? "",
+        passcode: result.passcode,
+        phone,
+        civil_id: civilId,
+        partner_name: row.partner_name,
+        zone_name: row.zone_name,
+        vehicle_label: row.vehicle_label,
+        restaurant_names: row.restaurant_names,
+        nationality: row.nationality,
+        rider_category: row.rider_category,
+        client_id: row.client_id,
+        client_name: row.client_name,
+        custom_fields: row.custom_fields ?? {},
+      };
+    } else {
+      return {
+        events: [
+          ...events,
+          {
+            at: nowIso(),
+            kind: "failed",
+            ...who,
+            detail: `Approved intake failed: ${"error" in result ? result.error : "save_failed"}`,
+          },
+        ],
+        applied: 1,
+        approved: 0,
+        failure: {
+          rowIndex: row.rowIndex,
+          reason: `Approved intake failed: ${"error" in result ? result.error : "save_failed"}`,
+        },
+        credential,
+      };
+    }
+  }
+
+  return { events, applied: 1, approved, credential };
+}
+
+export async function applyDriverImportChunk(payload: {
+  fileName: string;
+  mapping: Record<string, string>;
+  rows: DriverImportPreviewRow[];
+  duplicateStrategy: "skip" | "update";
+  approveImmediately: boolean;
+  batchId?: string | null;
+  sheetRowCount: number;
+  preSkipped: number;
+  appliedSoFar: number;
+  skippedSoFar: number;
+  approvedSoFar: number;
+  isLast: boolean;
+}): Promise<
+  | {
+      success: true;
+      batchId: string;
+      events: DriverImportLogEvent[];
+      applied: number;
+      skipped: number;
+      approved: number;
+      failures: Array<{ rowIndex: number; reason: string }>;
+      credentials: DriverImportCredential[];
+    }
+  | { error: string }
+> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+
+  const ready = payload.rows.filter((r) => r.status === "ok" && !r.skip);
+  const supabase = await createClient();
+  let batchId = payload.batchId ?? null;
+
+  if (!batchId) {
+    const { data: batch, error: batchError } = await supabase
+      .from("driver_import_batches")
+      .insert({
+        file_name: payload.fileName,
+        mapping: payload.mapping,
+        row_count: payload.sheetRowCount,
+        applied_count: 0,
+        skipped_count: payload.preSkipped,
+        approved_count: 0,
+        status: "previewed",
+        uploaded_by: auth.session.id,
+      })
+      .select("id")
+      .single();
+    if (batchError || !batch) return { error: "save_failed" };
+    batchId = batch.id;
+  }
+
+  const customFieldDefs = await listCustomFieldDefinitions("driver");
+  const events: DriverImportLogEvent[] = [];
+  const failures: Array<{ rowIndex: number; reason: string }> = [];
+  const credentials: DriverImportCredential[] = [];
+  let applied = 0;
+  let approved = 0;
+  let skipped = 0;
+
+  for (const row of ready) {
+    const result = await applyOneImportRow(row, {
+      supabase,
+      duplicateStrategy: payload.duplicateStrategy,
+      approveImmediately: payload.approveImmediately,
+      customFieldDefs,
+    });
+    events.push(...result.events);
+    applied += result.applied;
+    approved += result.approved;
+    if (result.credential) credentials.push(result.credential);
+    if (result.failure) {
+      failures.push(result.failure);
+      if (result.applied === 0) skipped += 1;
+    }
+  }
+
+  const appliedTotal = payload.appliedSoFar + applied;
+  const skippedTotal = payload.skippedSoFar + skipped;
+  const approvedTotal = payload.approvedSoFar + approved;
+  await supabase
+    .from("driver_import_batches")
+    .update({
+      applied_count: appliedTotal,
+      skipped_count: skippedTotal,
+      approved_count: approvedTotal,
+      ...(payload.isLast
+        ? { status: appliedTotal > 0 ? "applied" : "failed" }
+        : {}),
+    })
+    .eq("id", batchId);
+
+  if (payload.isLast) {
+    void logAdminMutation({
+      action: "create",
+      entityType: "driver_import_batch",
+      entityId: batchId,
+      routeName: "applyDriverImportChunk",
+      after: {
+        applied: appliedTotal,
+        approved: approvedTotal,
+        skipped: skippedTotal,
+        failures: failures.length,
+        credentials: credentials.length,
+      },
+    });
+  }
+
+  return {
+    success: true,
+    batchId,
+    events,
+    applied,
+    skipped,
+    approved,
+    failures,
+    credentials,
+  };
+}
+
 export async function applyDriverImportBatch(payload: {
   fileName: string;
   mapping: Record<string, string>;
@@ -470,253 +818,30 @@ export async function applyDriverImportBatch(payload: {
     }
   | { error: string }
 > {
-  const auth = await requireDriversManager();
-  if (auth.error) return { error: auth.error };
-
   const ready = payload.rows.filter((r) => r.status === "ok" && !r.skip);
   const preSkipped = payload.rows.length - ready.length;
-
-  const supabase = await createClient();
-  const { data: batch, error: batchError } = await supabase
-    .from("driver_import_batches")
-    .insert({
-      file_name: payload.fileName,
-      mapping: payload.mapping,
-      row_count: payload.rows.length,
-      applied_count: 0,
-      skipped_count: preSkipped,
-      approved_count: 0,
-      status: "applied",
-      uploaded_by: auth.session.id,
-    })
-    .select("id")
-    .single();
-
-  if (batchError || !batch) return { error: "save_failed" };
-
-  let applied = 0;
-  let approved = 0;
-  const failures: Array<{ rowIndex: number; reason: string }> = [];
-  const credentials: DriverImportCredential[] = [];
-  const customFieldDefs = await listCustomFieldDefinitions("driver");
-
-  for (let i = 0; i < ready.length; i += IMPORT_CHUNK) {
-    const chunk = ready.slice(i, i + IMPORT_CHUNK);
-    for (const row of chunk) {
-      const phone = row.phone?.trim() ? normalizeKuwaitPhone(row.phone) : null;
-      const civilId = row.civil_id?.trim() ? normalizeCivilId(row.civil_id) : null;
-      const employeeId = normalizeEmployeeId(row.employee_id!);
-      if (!employeeId) {
-        failures.push({ rowIndex: row.rowIndex, reason: "missing_fields" });
-        continue;
-      }
-      if (!hasOpsAssignment(row.zone_id, row.restaurant_ids)) {
-        failures.push({ rowIndex: row.rowIndex, reason: "missing_assignment" });
-        continue;
-      }
-
-      let intakeId: string | null = null;
-      let driverCode: string | null = null;
-
-      // Phone used to be the key that matched an uploaded row to an existing
-      // intake. It is optional now, so a phone-less row falls back to employee
-      // ID — mandatory and unique, and therefore the stronger key of the two.
-      // Phone still wins when present, so rows that matched before still match.
-      const matchExisting = () => {
-        const query = supabase
-          .from("driver_intakes")
-          .select("id, linked, driver_code")
-          .is("archived_at", null);
-        return phone
-          ? query.eq("phone", phone).maybeSingle()
-          : query.eq("employee_id", employeeId).maybeSingle();
-      };
-
-      if (payload.duplicateStrategy === "update") {
-        const { data: existing } = await matchExisting();
-
-        if (existing) {
-          if (existing.linked) {
-            failures.push({
-              rowIndex: row.rowIndex,
-              reason: "Intake already linked (cannot update)",
-            });
-            continue;
-          }
-          const { error: updErr } = await supabase
-            .from("driver_intakes")
-            .update({
-              full_name: row.full_name!.trim(),
-              civil_id: civilId,
-              employee_id: employeeId,
-              partner_id: row.partner_id,
-              zone_id: row.zone_id,
-              vehicle_id: row.vehicle_id,
-              nationality: row.nationality,
-              rider_category: row.rider_category,
-              client_id: row.client_id,
-              client_name: row.client_name,
-              workflow_status: "pending",
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-
-          if (updErr) {
-            failures.push({
-              rowIndex: row.rowIndex,
-              reason: updErr.message,
-            });
-            continue;
-          }
-          intakeId = existing.id;
-          driverCode = existing.driver_code;
-          await supabase
-            .from("driver_intake_restaurants")
-            .delete()
-            .eq("intake_id", intakeId);
-        }
-      } else {
-        const { data: dup } = await matchExisting();
-        if (dup) {
-          failures.push({
-            rowIndex: row.rowIndex,
-            reason: phone ? "Duplicate phone (skip)" : "Duplicate employee ID (skip)",
-          });
-          continue;
-        }
-      }
-
-      if (!intakeId) {
-        const { data: code, error: codeErr } = await supabase.rpc("allocate_driver_code");
-        if (codeErr || !code) {
-          failures.push({ rowIndex: row.rowIndex, reason: "Could not allocate driver code" });
-          continue;
-        }
-
-        const newId = crypto.randomUUID();
-        const mappedCustom = row.custom_fields ?? {};
-        // Import: only validate keys present in the mapping; do not fail on unmapped required defs
-        const defsForRow = customFieldDefs.map((d) => ({
-          ...d,
-          required:
-            d.required && Object.prototype.hasOwnProperty.call(mappedCustom, d.key),
-        }));
-        const { values: customValues, errors: customErrors } = validateCustomFieldValues(
-          defsForRow,
-          mappedCustom,
-        );
-        if (customErrors.length > 0) {
-          failures.push({
-            rowIndex: row.rowIndex,
-            reason: `custom_fields: ${customErrors.map((e) => e.key).join(",")}`,
-          });
-          continue;
-        }
-        const { error: insErr } = await supabase.from("driver_intakes").insert({
-          id: newId,
-          phone,
-          full_name: row.full_name!.trim(),
-          civil_id: civilId,
-          employee_id: employeeId,
-          driver_code: code,
-          partner_id: row.partner_id,
-          zone_id: row.zone_id,
-          vehicle_id: row.vehicle_id,
-          nationality: row.nationality,
-          rider_category: row.rider_category,
-          client_id: row.client_id,
-          client_name: row.client_name,
-          status: "awaiting_app_link",
-          workflow_status: "pending",
-          linked: false,
-          assets_issued: {},
-          custom_fields: customValues as unknown as import("@/types/database").Json,
-        });
-
-        if (insErr) {
-          failures.push({ rowIndex: row.rowIndex, reason: insErr.message });
-          continue;
-        }
-        intakeId = newId;
-        driverCode = String(code);
-      }
-
-      if (row.restaurant_ids.length > 0) {
-        const { error: linkErr } = await supabase.from("driver_intake_restaurants").insert(
-          row.restaurant_ids.map((restaurant_id) => ({
-            intake_id: intakeId!,
-            restaurant_id,
-          })),
-        );
-        if (linkErr) {
-          failures.push({ rowIndex: row.rowIndex, reason: linkErr.message });
-          continue;
-        }
-      }
-
-      applied += 1;
-
-      // The sheet's Active cell decides for its own row; the dialog toggle is
-      // the answer for every row that did not say. So an operator can approve
-      // the whole batch with the switch, or hand-pick rows in the spreadsheet,
-      // and neither can quietly cancel the other.
-      const approveRow = row.active ?? payload.approveImmediately;
-      if (approveRow && intakeId) {
-        const result = await approveDriverIntake(intakeId);
-        if ("success" in result && result.success) {
-          approved += 1;
-          credentials.push({
-            rowIndex: row.rowIndex,
-            full_name: row.full_name!.trim(),
-            employee_id: employeeId,
-            driver_code: driverCode ?? "",
-            passcode: result.passcode,
-            phone,
-            civil_id: civilId,
-            partner_name: row.partner_name,
-            zone_name: row.zone_name,
-            vehicle_label: row.vehicle_label,
-            restaurant_names: row.restaurant_names,
-            nationality: row.nationality,
-            rider_category: row.rider_category,
-            client_id: row.client_id,
-            client_name: row.client_name,
-            custom_fields: row.custom_fields ?? {},
-          });
-        } else {
-          failures.push({
-            rowIndex: row.rowIndex,
-            reason: `Approved intake failed: ${"error" in result ? result.error : "save_failed"}`,
-          });
-        }
-      }
-    }
-  }
-
-  await supabase
-    .from("driver_import_batches")
-    .update({
-      applied_count: applied,
-      skipped_count: preSkipped + (ready.length - applied),
-      approved_count: approved,
-    })
-    .eq("id", batch.id);
-
-  void logAdminMutation({
-    action: "create",
-    entityType: "driver_import_batch",
-    entityId: batch.id,
-    routeName: "applyDriverImportBatch",
-    after: { applied, approved, failures: failures.length, credentials: credentials.length },
+  const result = await applyDriverImportChunk({
+    fileName: payload.fileName,
+    mapping: payload.mapping,
+    rows: ready,
+    duplicateStrategy: payload.duplicateStrategy,
+    approveImmediately: payload.approveImmediately,
+    sheetRowCount: payload.rows.length,
+    preSkipped,
+    appliedSoFar: 0,
+    skippedSoFar: preSkipped,
+    approvedSoFar: 0,
+    isLast: true,
   });
-
+  if ("error" in result) return result;
   return {
     success: true,
-    batchId: batch.id,
-    applied,
-    skipped: preSkipped + (ready.length - applied),
-    approved,
-    failures,
-    credentials,
+    batchId: result.batchId,
+    applied: result.applied,
+    skipped: preSkipped + result.skipped,
+    approved: result.approved,
+    failures: result.failures,
+    credentials: result.credentials,
   };
 }
+
