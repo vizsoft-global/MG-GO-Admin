@@ -149,7 +149,7 @@ describe("templateGuideAoa", () => {
     const nameRow = aoa.find((row) => row[0] === "Full Name")!;
     assert.equal(nameRow[1], "Required");
 
-    const zoneRow = aoa.find((row) => row[0] === "Zone")!;
+    const zoneRow = aoa.find((row) => row[0] === "Zone ID")!;
     assert.equal(zoneRow[1], "If no restaurant");
     const restaurantRow = aoa.find((row) => row[0] === "Restaurant IDs")!;
     assert.equal(restaurantRow[1], "If no zone");
@@ -161,18 +161,18 @@ describe("templateDriversAoa", () => {
     const columns = resolveTemplateColumns(null, []);
     const aoa = templateDriversAoa(columns, {
       restaurant: "RST-0001",
-      zone: "Hawalli",
+      zone: "55555555-5555-4555-8555-555555555555",
     });
     assert.equal(aoa.length, 3);
     const headers = aoa[0]!;
     const restaurantOnly = aoa[1]!;
     const zoneOnly = aoa[2]!;
-    const zoneAt = headers.indexOf("Zone");
+    const zoneAt = headers.indexOf("Zone ID");
     const restaurantAt = headers.indexOf("Restaurant IDs");
     assert.ok(zoneAt >= 0 && restaurantAt >= 0);
     assert.equal(restaurantOnly[restaurantAt], "RST-0001");
     assert.equal(restaurantOnly[zoneAt], "");
-    assert.equal(zoneOnly[zoneAt], "Hawalli");
+    assert.equal(zoneOnly[zoneAt], "55555555-5555-4555-8555-555555555555");
     assert.equal(zoneOnly[restaurantAt], "");
   });
 });

@@ -58,7 +58,7 @@ export async function GET(request: Request) {
       ?.restaurant_code ||
     lists.restaurants.find((row) => row.importable)?.name ||
     "";
-  const zoneExample = lists.zones[0]?.name || lists.zones[0]?.code || "";
+  const zoneExample = lists.zones[0]?.id || "";
   const documented = columns.map((column) => {
     if (column.field === "restaurant_ids" && restaurantExample) {
       return { ...column, example: restaurantExample };

@@ -67,10 +67,10 @@ const STANDARD_COLUMNS: Array<
   },
   {
     field: "zone_id",
-    header: "Zone",
+    header: "Zone ID",
     allowed:
-      "Zone name, zone code, or UUID. See the Zones sheet. Required if Restaurant IDs is blank — a driver needs a zone or a restaurant.",
-    example: "Hawalli",
+      "Zone UUID from the Zones sheet ID column. Code or unique name also match. Required if Restaurant IDs is blank — a driver needs a zone or a restaurant.",
+    example: "55555555-5555-4555-8555-555555555555",
   },
   {
     field: "restaurant_ids",
