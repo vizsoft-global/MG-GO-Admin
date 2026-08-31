@@ -12,6 +12,13 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { hasOpsAssignment } from "./driver-assignment";
+import {
+  flattenProfileSnapshot,
+  loadChangeLabels,
+  loadIntakeProfileSnapshot,
+  logDriverChange,
+  resolveIntakeIdForDriver,
+} from "./driver-change-log";
 import { normalizeClientValue } from "./driver-client-fields";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
@@ -482,6 +489,44 @@ export async function createDriverIntake(
     after: { driver_code: data.driver_code, partner_id: partnerId, zone_id: zoneId },
   });
 
+  const labels = await loadChangeLabels(supabase, {
+    zoneId: zoneId || null,
+    partnerId: partnerId || null,
+    vehicleId: vehicleId || null,
+    restaurantIds,
+  });
+  void logDriverChange({
+    intakeId: data.id,
+    source: "manual_create",
+    before: {},
+    after: flattenProfileSnapshot({
+      full_name: fullName,
+      phone,
+      civil_id: civilIdNormalized,
+      employee_id: employeeId,
+      driver_code: data.driver_code,
+      partner: labels.partner,
+      zone: labels.zone,
+      restaurants: labels.restaurants,
+      vehicle: labels.vehicle,
+      nationality,
+      rider_category: riderCategory,
+      client_id: clientId,
+      client_name: clientName,
+      workflow_status: normalizeIntakeWorkflowStatus(false, workflowStatus),
+      custom_fields: customParsed.values as Record<string, unknown>,
+    }),
+  });
+  for (const { docType } of docsToUpload) {
+    void logDriverChange({
+      intakeId: data.id,
+      source: "document",
+      before: { [`document.${docType}`]: "absent" },
+      after: { [`document.${docType}`]: "uploaded" },
+      context: { doc_type: docType },
+    });
+  }
+
   return { success: true, id: data.id, driver_code: data.driver_code };
 }
 
@@ -851,6 +896,18 @@ export async function archiveDriverIntake(
     return { error: payload.error ?? "save_failed" };
   }
 
+  const { data: archived } = await supabase
+    .from("driver_intakes")
+    .select("linked_profile_id")
+    .eq("id", intakeId)
+    .maybeSingle();
+  void logDriverChange({
+    intakeId,
+    driverId: archived?.linked_profile_id,
+    source: "archive",
+    context: { note: "archive" },
+  });
+
   return { success: true, id: intakeId };
 }
 
@@ -906,6 +963,12 @@ export async function restoreDriverIntake(
     routeName: "restoreDriverIntake",
     after: { archived_at: null },
   });
+  void logDriverChange({
+    intakeId,
+    driverId: intake.linked_profile_id,
+    source: "restore",
+    context: { note: "restore" },
+  });
 
   return { success: true, id: intakeId };
 }
@@ -918,6 +981,7 @@ export async function updateDriverWorkflowStatus(
   if (auth.error) return { error: auth.error };
 
   const supabase = await createClient();
+  const before = await loadIntakeProfileSnapshot(supabase, intakeId);
   const { error } = await supabase
     .from("driver_intakes")
     .update({
@@ -934,6 +998,13 @@ export async function updateDriverWorkflowStatus(
     entityId: intakeId,
     routeName: "updateDriverWorkflowStatus",
     after: { workflow_status: workflowStatus },
+  });
+  void logDriverChange({
+    intakeId,
+    driverId: before?.driverId,
+    source: "status",
+    before: before?.snapshot ?? {},
+    after: { ...(before?.snapshot ?? {}), workflow_status: workflowStatus },
   });
   return { success: true };
 }
@@ -1025,6 +1096,8 @@ async function updateDriverIntakeInner(
 
   const existing = existingResp.data;
   if (!existing) return { error: "save_failed" };
+
+  const beforeChange = await loadIntakeProfileSnapshot(supabase, intakeId);
 
   let currentAccountStatus: DriverAccountStatus | null = null;
   if (existing.linked_profile_id) {
@@ -1217,6 +1290,37 @@ async function updateDriverIntakeInner(
     entityId: intakeId,
     routeName: "updateDriverIntake",
     after: { workflow_status: workflowStatus, partner_id: partnerId },
+  });
+
+  const afterLabels = await loadChangeLabels(supabase, {
+    zoneId: zoneId || null,
+    partnerId: partnerId || null,
+    vehicleId: vehicleId || null,
+    restaurantIds,
+  });
+  void logDriverChange({
+    intakeId,
+    driverId: existing.linked_profile_id,
+    source: "edit",
+    before: beforeChange?.snapshot ?? {},
+    after: flattenProfileSnapshot({
+      full_name: fullName,
+      phone,
+      civil_id: civilIdNormalized,
+      employee_id: employeeId,
+      driver_code: existing.driver_code,
+      partner: afterLabels.partner,
+      zone: afterLabels.zone,
+      restaurants: afterLabels.restaurants,
+      vehicle: afterLabels.vehicle,
+      nationality,
+      rider_category: riderCategory,
+      client_id: clientId,
+      client_name: clientName,
+      workflow_status: resolvedWorkflowStatus,
+      account_status: currentAccountStatus,
+      custom_fields: customParsed.values as Record<string, unknown>,
+    }),
   });
 
   return { success: true, id: intakeId };
@@ -1608,6 +1712,11 @@ export async function updateDriverAccountStatus(
   }
 
   const supabase = await createClient();
+  const { data: beforeDriver } = await supabase
+    .from("drivers")
+    .select("status")
+    .eq("id", driverId)
+    .maybeSingle();
   const { data, error } = await supabase.rpc("set_driver_account_status", {
     p_driver_id: driverId,
     p_status: status,
@@ -1635,6 +1744,17 @@ export async function updateDriverAccountStatus(
     routeName: "updateDriverAccountStatus",
     after: { status },
   });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: "status",
+      before: { account_status: beforeDriver?.status ?? null },
+      after: { account_status: status },
+    });
+  }
 
   return { success: true };
 }
@@ -1673,6 +1793,20 @@ export async function setDriverBlocked(
     routeName: "setDriverBlocked",
     after: blocked ? { is_blocked: true, blocked_reason: reason?.trim() } : { is_blocked: false },
   });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: blocked ? "block" : "unblock",
+      before: { blocked: blocked ? "no" : "yes" },
+      after: {
+        blocked: blocked ? "yes" : "no",
+        ...(blocked && reason?.trim() ? { block_reason: reason.trim() } : {}),
+      },
+    });
+  }
 
   return { success: true };
 }
@@ -1713,6 +1847,16 @@ export async function regenerateDriverPasscode(
     routeName: "regenerateDriverAppPasscode",
     context: { passcode_rotated: true },
   });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: "passcode",
+      context: { note: "passcode replaced" },
+    });
+  }
 
   return { success: true, passcode: payload.passcode };
 }

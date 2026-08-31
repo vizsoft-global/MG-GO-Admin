@@ -72,5 +72,15 @@ export async function DELETE(request: Request): Promise<Response> {
     docType,
   });
 
+  const { logDriverChange } = await import("@/features/drivers/driver-change-log");
+  void logDriverChange({
+    intakeId,
+    driverId: targetDriverId,
+    source: "document",
+    before: { [`document.${docType}`]: "uploaded" },
+    after: { [`document.${docType}`]: "absent" },
+    context: { doc_type: docType },
+  });
+
   return NextResponse.json({ ok: true });
 }

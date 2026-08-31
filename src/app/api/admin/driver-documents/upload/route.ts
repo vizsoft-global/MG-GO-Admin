@@ -85,6 +85,9 @@ export async function POST(request: Request): Promise<Response> {
   const source: "driver" | "intake" =
     useDriverPath && targetDriverId ? "driver" : "intake";
 
+  const existingDocs = await listExistingDriverDocuments(intakeId, targetDriverId);
+  const hadDoc = Boolean(existingDocs[docType]);
+
   const keysToClear = allDocumentKeysForType(
     intakeId,
     targetDriverId,
@@ -159,6 +162,16 @@ export async function POST(request: Request): Promise<Response> {
   if (!doc) {
     return NextResponse.json({ error: "upload_failed" }, { status: 500 });
   }
+
+  const { logDriverChange } = await import("@/features/drivers/driver-change-log");
+  void logDriverChange({
+    intakeId,
+    driverId: targetDriverId,
+    source: "document",
+    before: { [`document.${docType}`]: hadDoc ? "uploaded" : "absent" },
+    after: { [`document.${docType}`]: hadDoc ? "replaced" : "uploaded" },
+    context: { doc_type: docType },
+  });
 
   return NextResponse.json({
     ok: true,

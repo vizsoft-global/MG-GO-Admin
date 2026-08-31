@@ -106,6 +106,7 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 | Table / bucket | Admin | Driver app |
 |----------------|-------|------------|
 | `driver_intakes` | insert (staff RLS) | read on link (service role / RPC) |
+| `driver_change_events` | staff History tab (SELECT via `is_admin_panel_user()`; writes are service-role only) | **none** — no driver policy |
 | R2 `drivers/intakes/…` | admin upload (server) | copy to `drivers/{driverId}/…` on link |
 | `drivers` | — | row after OTP link |
 | `profiles.phone` | duplicate check on create | unique identity for link |
@@ -144,6 +145,8 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 ---
 
 ## 4. Database schema (driver-visible)
+
+**Staff-only, not driver-visible:** `driver_change_events` (admin `/drivers/[id]` History tab). Staff SELECT via `is_admin_panel_user()`; no INSERT/UPDATE/DELETE policy; riders have no access.
 
 ### `profiles` (existing)
 - `id` uuid PK (= auth.uid)

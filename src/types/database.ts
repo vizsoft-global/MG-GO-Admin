@@ -99,6 +99,57 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_change_events: {
+        Row: {
+          actor_id: string
+          actor_name: string
+          changes: Json
+          context: Json
+          created_at: string
+          driver_id: string | null
+          id: string
+          intake_id: string
+          source: string
+        }
+        Insert: {
+          actor_id: string
+          actor_name: string
+          changes?: Json
+          context?: Json
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          intake_id: string
+          source: string
+        }
+        Update: {
+          actor_id?: string
+          actor_name?: string
+          changes?: Json
+          context?: Json
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          intake_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_change_events_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "driver_intakes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_change_events_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_allowlist: {
         Row: {
           created_at: string

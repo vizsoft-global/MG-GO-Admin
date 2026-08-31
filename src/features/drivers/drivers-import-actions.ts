@@ -26,6 +26,11 @@ import {
   normalizeClientValue,
 } from "./driver-client-fields";
 import { hasOpsAssignment } from "./driver-assignment";
+import {
+  flattenProfileSnapshot,
+  loadIntakeProfileSnapshot,
+  logDriverChange,
+} from "./driver-change-log";
 import type { DriverImportLogEvent } from "./import/import-progress";
 import { parseImportActive, parseRiderCategory } from "./import/parse";
 import {
@@ -222,6 +227,12 @@ export async function approveDriverIntake(
       driver_id: payload.driver_id,
       driver_code: intake.driver_code,
     },
+  });
+  void logDriverChange({
+    intakeId,
+    driverId: payload.driver_id ?? userId,
+    source: "approve",
+    context: { note: "approve" },
   });
 
   return {
@@ -473,6 +484,7 @@ async function applyOneImportRow(
     duplicateStrategy: "skip" | "update";
     approveImmediately: boolean;
     customFieldDefs: Awaited<ReturnType<typeof listCustomFieldDefinitions>>;
+    fileName?: string;
   },
 ): Promise<{
   events: DriverImportLogEvent[];
@@ -504,6 +516,7 @@ async function applyOneImportRow(
   let intakeId: string | null = null;
   let driverCode: string | null = null;
   let updated = false;
+  let beforeSnap = {};
 
   const matchExisting = () => {
     const query = ctx.supabase
@@ -522,6 +535,8 @@ async function applyOneImportRow(
       if (existing.linked) {
         return fail("Intake already linked (cannot update)");
       }
+      const prior = await loadIntakeProfileSnapshot(ctx.supabase, existing.id);
+      beforeSnap = prior?.snapshot ?? {};
       const { error: updErr } = await ctx.supabase
         .from("driver_intakes")
         .update({
@@ -622,6 +637,31 @@ async function applyOneImportRow(
     ...who,
     driverCode: driverCode ?? undefined,
   });
+
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      source: "bulk_import",
+      before: beforeSnap,
+      after: flattenProfileSnapshot({
+        full_name: row.full_name,
+        phone,
+        civil_id: civilId,
+        employee_id: employeeId,
+        driver_code: driverCode,
+        partner: row.partner_name,
+        zone: row.zone_name,
+        restaurants: row.restaurant_names,
+        vehicle: row.vehicle_label,
+        nationality: row.nationality,
+        rider_category: row.rider_category,
+        client_id: row.client_id,
+        client_name: row.client_name,
+        custom_fields: row.custom_fields ?? {},
+      }),
+      context: ctx.fileName ? { file: ctx.fileName } : {},
+    });
+  }
 
   let approved: 0 | 1 = 0;
   let credential: DriverImportCredential | undefined;
@@ -746,6 +786,7 @@ export async function applyDriverImportChunk(payload: {
       duplicateStrategy: payload.duplicateStrategy,
       approveImmediately: payload.approveImmediately,
       customFieldDefs,
+      fileName: payload.fileName,
     });
     events.push(...result.events);
     applied += result.applied;
