@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   evaluateImportIdentity,
   isImportRowReady,
+  shouldApproveImportRow,
   type ImportIdentityRoster,
   type ImportIdentitySeen,
 } from "./import-identity";
@@ -94,5 +95,13 @@ describe("evaluateImportIdentity", () => {
     assert.equal(result.status, "ok");
     assert.equal(result.existingByEmployeeId, false);
     assert.equal(isImportRowReady(result, "skip"), true);
+  });
+});
+
+describe("shouldApproveImportRow", () => {
+  it("does not re-approve an intake that already has a login", () => {
+    assert.equal(shouldApproveImportRow(true, true), false);
+    assert.equal(shouldApproveImportRow(true, false), true);
+    assert.equal(shouldApproveImportRow(false, false), false);
   });
 });

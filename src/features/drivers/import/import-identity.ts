@@ -146,3 +146,11 @@ export function isImportRowReady(
     row.existingByEmployeeId === true
   );
 }
+
+/** Approve mints a login. An intake that is already linked already has one. */
+export function shouldApproveImportRow(
+  approveRequested: boolean,
+  alreadyLinked: boolean,
+): boolean {
+  return approveRequested && !alreadyLinked;
+}

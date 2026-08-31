@@ -10,6 +10,7 @@ import { employeeIdKey, normalizeEmployeeId } from "./driver-errors";
 import {
   evaluateImportIdentity,
   isImportRowReady,
+  shouldApproveImportRow,
   type ImportIdentityRoster,
   type ImportIdentitySeen,
 } from "./import/import-identity";
@@ -515,6 +516,7 @@ async function applyOneImportRow(
   let intakeId: string | null = null;
   let driverCode: string | null = null;
   let updated = false;
+  let alreadyLinked = false;
   let beforeSnap = {};
 
   const matchExisting = () =>
@@ -529,6 +531,7 @@ async function applyOneImportRow(
     const { data: existing } = await matchExisting();
 
     if (existing) {
+      alreadyLinked = Boolean(existing.linked || existing.linked_profile_id);
       const prior = await loadIntakeProfileSnapshot(ctx.supabase, existing.id);
       beforeSnap = prior?.snapshot ?? {};
       const { error: updErr } = await ctx.supabase
@@ -712,7 +715,10 @@ async function applyOneImportRow(
 
   let approved: 0 | 1 = 0;
   let credential: DriverImportCredential | undefined;
-  const approveRow = row.active ?? ctx.approveImmediately;
+  const approveRow = shouldApproveImportRow(
+    row.active ?? ctx.approveImmediately,
+    alreadyLinked,
+  );
   if (approveRow && intakeId) {
     const result = await approveDriverIntake(intakeId);
     if ("success" in result && result.success) {
