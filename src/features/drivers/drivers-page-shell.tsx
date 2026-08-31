@@ -69,6 +69,7 @@ import { fetchDriverDetail } from "./drivers-actions";
 import { useAuth } from "@/contexts/auth-context";
 import { useApproveDriverIntake, useDriverDetail, useDriversList, useDriversMultiDeviceRecent, useRestoreDriverIntake, type DriversTabFilter } from "./use-drivers";
 import { DriverBulkImportDialog } from "./import/bulk-import-dialog";
+import { DriversExportDialog } from "./export-drivers-dialog";
 import { isDriverErrorKey } from "./driver-errors";
 import {
   DRIVERS_PAGE_SIZE,
@@ -155,71 +156,6 @@ function applyDriversListFilters(
   });
 }
 
-function exportDriversCsv(
-  rows: DriverListRow[],
-  customKeys: { key: string; label: string }[] = [],
-) {
-  const header = [
-    "id",
-    "driver_code",
-    "employee_id",
-    "full_name",
-    "phone",
-    "partner",
-    "zone",
-    "client_id",
-    "client_name",
-    "account_status",
-    "on_duty",
-    "today_deliveries",
-    "workflow_status",
-    "linked",
-    "app_passcode",
-    ...customKeys.map((c) => c.key),
-  ];
-  const escape = (v: string | number | boolean) => {
-    const s = String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const lines = [
-    header.join(","),
-    ...rows.map((r) =>
-      [
-        r.id,
-        r.driver_code,
-        r.employee_id ?? "",
-        r.full_name,
-        r.phone ?? "",
-        r.partner_name,
-        r.zone_name,
-        r.client_id ?? "",
-        r.client_name ?? "",
-        r.is_blocked ? "blocked" : r.account_status,
-        r.is_on_duty ? "yes" : "no",
-        r.today_deliveries,
-        r.workflow_status,
-        r.linked ? "yes" : "no",
-        r.archived_at ? "" : (r.app_passcode ?? ""),
-        ...customKeys.map((c) => {
-          const v = r.custom_fields?.[c.key];
-          return v == null ? "" : String(v);
-        }),
-      ]
-        .map(escape)
-        .join(","),
-    ),
-  ];
-  const blob = new Blob(["\uFEFF" + lines.join("\n")], {
-    type: "text/csv;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `drivers-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 function DriversPageSkeleton() {
   return (
     <div className="flex h-48 items-center justify-center">
@@ -241,6 +177,7 @@ function DriversPageContent() {
   const approveDriver = useApproveDriverIntake();
   const restoreDriver = useRestoreDriverIntake();
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
@@ -795,12 +732,7 @@ function DriversPageContent() {
                       variant="outline"
                       size="icon"
                       className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
-                      onClick={() =>
-                        exportDriversCsv(
-                          sorted,
-                          activeCustomDefs.map((d) => ({ key: d.key, label: d.label })),
-                        )
-                      }
+                      onClick={() => setExportOpen(true)}
                       disabled={sorted.length === 0}
                       aria-label={t("export")}
                     >
@@ -1207,6 +1139,12 @@ function DriversPageContent() {
           }}
         />
       ) : null}
+      <DriversExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        rows={sorted}
+        customFields={activeCustomDefs.map((d) => ({ key: d.key, label: d.label }))}
+      />
       {canManage ? (
         <DriverBulkImportDialog open={bulkOpen} onOpenChange={setBulkOpen} />
       ) : null}
