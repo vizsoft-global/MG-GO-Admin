@@ -99,6 +99,57 @@ export type Database = {
         }
         Relationships: []
       }
+      driver_change_events: {
+        Row: {
+          actor_id: string
+          actor_name: string
+          changes: Json
+          context: Json
+          created_at: string
+          driver_id: string | null
+          id: string
+          intake_id: string
+          source: string
+        }
+        Insert: {
+          actor_id: string
+          actor_name: string
+          changes?: Json
+          context?: Json
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          intake_id: string
+          source: string
+        }
+        Update: {
+          actor_id?: string
+          actor_name?: string
+          changes?: Json
+          context?: Json
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          intake_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_change_events_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "driver_intakes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_change_events_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_allowlist: {
         Row: {
           created_at: string
@@ -2006,10 +2057,20 @@ export type Database = {
       driver_import_batches: {
         Row: {
           applied_count: number
+          approve_immediately: boolean
           approved_count: number
+          credentials: Json
+          duplicate_strategy: string
+          events: Json
+          failed_count: number
+          failures: Json
           file_name: string
+          heartbeat_at: string | null
           id: string
           mapping: Json
+          ready_count: number
+          remaining_count: number
+          remaining_rows: Json
           row_count: number
           skipped_count: number
           status: Database["public"]["Enums"]["driver_import_batch_status"]
@@ -2018,10 +2079,20 @@ export type Database = {
         }
         Insert: {
           applied_count?: number
+          approve_immediately?: boolean
           approved_count?: number
+          credentials?: Json
+          duplicate_strategy?: string
+          events?: Json
+          failed_count?: number
+          failures?: Json
           file_name: string
+          heartbeat_at?: string | null
           id?: string
           mapping?: Json
+          ready_count?: number
+          remaining_count?: number
+          remaining_rows?: Json
           row_count?: number
           skipped_count?: number
           status?: Database["public"]["Enums"]["driver_import_batch_status"]
@@ -2030,10 +2101,20 @@ export type Database = {
         }
         Update: {
           applied_count?: number
+          approve_immediately?: boolean
           approved_count?: number
+          credentials?: Json
+          duplicate_strategy?: string
+          events?: Json
+          failed_count?: number
+          failures?: Json
           file_name?: string
+          heartbeat_at?: string | null
           id?: string
           mapping?: Json
+          ready_count?: number
+          remaining_count?: number
+          remaining_rows?: Json
           row_count?: number
           skipped_count?: number
           status?: Database["public"]["Enums"]["driver_import_batch_status"]
@@ -7446,6 +7527,10 @@ export type Database = {
       approve_payout_run: { Args: { p_run_id: string }; Returns: undefined }
       archive_driver_intake: { Args: { p_intake_id: string }; Returns: Json }
       assert_external_order_id: { Args: { p_raw: string }; Returns: string }
+      claim_driver_import_chunk: {
+        Args: { p_id: string; p_size: number }
+        Returns: Json
+      }
       claim_super_admin: { Args: { p_user_id: string }; Returns: boolean }
       cleanup_driver_location_events: {
         Args: { p_batch?: number; p_keep?: string }
@@ -7804,6 +7889,10 @@ export type Database = {
         Args: { p_driver_id: string }
         Returns: boolean
       }
+      driver_has_ops_assignment: {
+        Args: { p_driver_id: string }
+        Returns: boolean
+      }
       driver_heartbeat: { Args: { p_device_id: string }; Returns: Json }
       driver_ingest_telemetry: { Args: { p_events: Json }; Returns: Json }
       driver_is_within_delivery_range: {
@@ -8000,6 +8089,10 @@ export type Database = {
         Returns: boolean
       }
       intake_has_active_restaurant: {
+        Args: { p_intake_id: string }
+        Returns: boolean
+      }
+      intake_has_ops_assignment: {
         Args: { p_intake_id: string }
         Returns: boolean
       }
@@ -8244,7 +8337,13 @@ export type Database = {
         | "in_transit"
         | "cancelled"
       document_type: "license" | "civil_id" | "work_permit" | "passport"
-      driver_import_batch_status: "previewed" | "applied" | "failed"
+      driver_import_batch_status:
+        | "previewed"
+        | "applied"
+        | "failed"
+        | "running"
+        | "paused"
+        | "cancelled"
       driver_intake_status: "awaiting_app_link" | "linked" | "cancelled"
       driver_rider_category: "in_house" | "outsourced"
       driver_status: "active" | "suspended" | "pending"
@@ -8553,7 +8652,14 @@ export const Constants = {
         "cancelled",
       ],
       document_type: ["license", "civil_id", "work_permit", "passport"],
-      driver_import_batch_status: ["previewed", "applied", "failed"],
+      driver_import_batch_status: [
+        "previewed",
+        "applied",
+        "failed",
+        "running",
+        "paused",
+        "cancelled",
+      ],
       driver_intake_status: ["awaiting_app_link", "linked", "cancelled"],
       driver_rider_category: ["in_house", "outsourced"],
       driver_status: ["active", "suspended", "pending"],

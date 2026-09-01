@@ -28,6 +28,7 @@ import {
   Phone,
   RefreshCw,
   Gauge,
+  History,
   Shield,
   Smartphone,
   Wallet,
@@ -42,6 +43,7 @@ import { Button } from "@/components/ui/button";
 import { MetricTile, type Tone } from "@/components/ui/metric-tile";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { hasOpsAssignment } from "./driver-assignment";
 import { DriverAccountStatusEditor } from "./driver-account-status-editor";
 import { DriverBlockEditor } from "./driver-block-editor";
 import { DriverLoginVerificationExemptEditor } from "./driver-login-verification-exempt-editor";
@@ -51,6 +53,7 @@ import { DriverDevicesTab } from "./driver-devices-tab";
 import { DriverLocationTab } from "./driver-location-tab";
 import { DriverAttendanceTab } from "./driver-attendance-tab";
 import { DriverActivityTab } from "./driver-activity-tab";
+import { DriverHistoryTab } from "./driver-history-tab";
 import { DriverPerformanceTab } from "./driver-performance-tab";
 import { DriverWrongActionsTab } from "@/features/wrong-actions/driver-wrong-actions-tab";
 import { DriverEditSheet } from "./driver-edit-sheet";
@@ -87,6 +90,7 @@ import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-f
 import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
 
 type DetailTabId =
+  | "history"
   | "attendance"
   | "performance"
   | "activity"
@@ -333,6 +337,9 @@ function DriverDetailContent({ id }: { id: string }) {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
+    if (tab === "history") {
+      setActiveTab("history");
+    }
     if (tab === "location" && driver?.linked_profile_id) {
       setActiveTab("location");
     }
@@ -394,6 +401,7 @@ function DriverDetailContent({ id }: { id: string }) {
   };
 
   const tabs: TabItem[] = [
+    { id: "history", label: t("tabHistory"), icon: History },
     { id: "attendance", label: t("tabAttendance"), icon: CalendarClock },
     ...(canViewPerformance && driver?.linked_profile_id
       ? [{ id: "performance" as const, label: t("tabPerformance"), icon: Gauge }]
@@ -465,7 +473,7 @@ function DriverDetailContent({ id }: { id: string }) {
     !isArchived &&
     Boolean(driver.intake_id) &&
     !driver.linked_profile_id &&
-    driver.restaurant_ids.length > 0;
+    hasOpsAssignment(driver.zone_id, driver.restaurant_ids);
 
   const showApproveButton = canApprove || holdApproveSlot;
 
@@ -536,6 +544,22 @@ function DriverDetailContent({ id }: { id: string }) {
   ];
 
   const renderTabPanel = () => {
+    if (activeTab === "history") {
+      if (!driver.intake_id) {
+        return (
+          <div className="rounded-xl border border-border bg-card shadow-sm">
+            <div className="py-12">
+              <AppEmptyState
+                title={t("history.emptyTitle")}
+                description={t("history.emptyDescription")}
+              />
+            </div>
+          </div>
+        );
+      }
+      return <DriverHistoryTab intakeId={driver.intake_id} />;
+    }
+
     if (activeTab === "location" && driver.linked_profile_id) {
       return (
         <DriverLocationTab
@@ -996,7 +1020,10 @@ function DriverDetailContent({ id }: { id: string }) {
                     driverId={driver.linked_profile_id}
                     intakeId={driver.intake_id ?? driver.id}
                     status={driver.account_status}
-                    hasPublishedRestaurant={driver.has_published_restaurant}
+                    canActivate={hasOpsAssignment(
+                      driver.zone_id,
+                      driver.has_published_restaurant ? 1 : 0,
+                    )}
                     canManage={canManage}
                   />
                 ) : (

@@ -178,14 +178,12 @@ export function DriverFormIdentitySection({
             id="driver-employee-id"
             value={employeeId}
             disabled={disabled}
-            inputMode="numeric"
-            maxLength={8}
-            minLength={4}
+            maxLength={100}
             placeholder={placeholders.employeeId}
             onChange={(event) =>
-              onEmployeeIdChange(restrictDigits(event.target.value, 8))
+              onEmployeeIdChange(event.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 100))
             }
-            className="h-9 rounded-md font-mono text-sm tabular-nums"
+            className="h-9 rounded-md font-mono text-sm"
             aria-invalid={Boolean(errors.employeeId)}
           />
           {placeholders.employeeIdHelp ? (

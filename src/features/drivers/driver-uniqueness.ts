@@ -48,7 +48,7 @@ export async function employeeIdExists(
   let intakeQuery = supabase
     .from("driver_intakes")
     .select("id")
-    .eq("employee_id", employeeId)
+    .ilike("employee_id", employeeId)
     .is("archived_at", null)
     .limit(1);
   if (excludeIntakeId) intakeQuery = intakeQuery.neq("id", excludeIntakeId);
@@ -59,7 +59,7 @@ export async function employeeIdExists(
   const { data: driverHits } = await supabase
     .from("drivers")
     .select("id")
-    .eq("employee_id", employeeId);
+    .ilike("employee_id", employeeId);
 
   if (!driverHits?.length) return false;
   if (!excludeIntakeId) return true;

@@ -91,6 +91,13 @@ export async function PATCH(request: Request): Promise<Response> {
   }
 
   const targetDriverId = parsed.driverProfileId ?? linkedId;
+  const { data: prior } = await supabase
+    .from("document_tracking")
+    .select("expires_at, track_expiry")
+    .eq("intake_id", parsed.intakeId)
+    .eq("doc_type", parsed.docType)
+    .maybeSingle();
+
   const result = await upsertDocumentTracking({
     intakeId: parsed.intakeId,
     driverProfileId: targetDriverId,
@@ -101,6 +108,23 @@ export async function PATCH(request: Request): Promise<Response> {
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
+
+  const { logDriverChange } = await import("@/features/drivers/driver-change-log");
+  const field = `document.${parsed.docType}.expiry`;
+  void logDriverChange({
+    intakeId: parsed.intakeId,
+    driverId: targetDriverId,
+    source: "document",
+    before: {
+      [field]: prior?.track_expiry ? (prior.expires_at ?? "tracked") : "off",
+    },
+    after: {
+      [field]: parsed.expiry.trackExpiry
+        ? (parsed.expiry.expiresAt ?? "tracked")
+        : "off",
+    },
+    context: { doc_type: parsed.docType },
+  });
 
   return NextResponse.json({ ok: true });
 }

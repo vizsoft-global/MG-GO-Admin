@@ -11,6 +11,14 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
+import { hasOpsAssignment } from "./driver-assignment";
+import {
+  flattenProfileSnapshot,
+  loadChangeLabels,
+  loadIntakeProfileSnapshot,
+  logDriverChange,
+  resolveIntakeIdForDriver,
+} from "./driver-change-log";
 import { normalizeClientValue } from "./driver-client-fields";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
@@ -40,6 +48,7 @@ import {
 } from "@/lib/storage/document-tracking";
 import { resolveDriverAvatarUrl } from "@/lib/storage/driver-avatar-url";
 import { resolvePartnerLogoUrl } from "@/lib/storage/partner-logo-url";
+import { fetchAllIn } from "@/lib/supabase/in-chunks";
 import {
   uploadDriverAvatarFile,
   uploadIntakeAvatarFile,
@@ -342,6 +351,9 @@ export async function createDriverIntake(
   }
 
   const restaurantIds = parseRestaurantIds(formData);
+  if (!hasOpsAssignment(zoneId, restaurantIds)) {
+    return { error: "missing_assignment" };
+  }
   const supabase = await createClient();
   const intakeId = crypto.randomUUID();
 
@@ -477,6 +489,44 @@ export async function createDriverIntake(
     routeName: "createDriverIntake",
     after: { driver_code: data.driver_code, partner_id: partnerId, zone_id: zoneId },
   });
+
+  const labels = await loadChangeLabels(supabase, {
+    zoneId: zoneId || null,
+    partnerId: partnerId || null,
+    vehicleId: vehicleId || null,
+    restaurantIds,
+  });
+  void logDriverChange({
+    intakeId: data.id,
+    source: "manual_create",
+    before: {},
+    after: flattenProfileSnapshot({
+      full_name: fullName,
+      phone,
+      civil_id: civilIdNormalized,
+      employee_id: employeeId,
+      driver_code: data.driver_code,
+      partner: labels.partner,
+      zone: labels.zone,
+      restaurants: labels.restaurants,
+      vehicle: labels.vehicle,
+      nationality,
+      rider_category: riderCategory,
+      client_id: clientId,
+      client_name: clientName,
+      workflow_status: normalizeIntakeWorkflowStatus(false, workflowStatus),
+      custom_fields: customParsed.values as Record<string, unknown>,
+    }),
+  });
+  for (const { docType } of docsToUpload) {
+    void logDriverChange({
+      intakeId: data.id,
+      source: "document",
+      before: { [`document.${docType}`]: "absent" },
+      after: { [`document.${docType}`]: "uploaded" },
+      context: { doc_type: docType },
+    });
+  }
 
   return { success: true, id: data.id, driver_code: data.driver_code };
 }
@@ -654,17 +704,19 @@ export async function fetchDriversForAdmin(options?: {
 
   const intakeIds = rows.map((r) => r.id);
   if (intakeIds.length > 0) {
-    const [{ data: intakeRestRows }, { data: driverRestRows }] = await Promise.all([
-      supabase
-        .from("driver_intake_restaurants")
-        .select("intake_id, restaurants (id, name)")
-        .in("intake_id", intakeIds),
-      linkedIds.length > 0
-        ? supabase
-            .from("driver_restaurants")
-            .select("driver_id, restaurants (id, name)")
-            .in("driver_id", linkedIds)
-        : Promise.resolve({ data: [] as never[] }),
+    const [intakeRestRows, driverRestRows] = await Promise.all([
+      fetchAllIn(intakeIds, (chunk) =>
+        supabase
+          .from("driver_intake_restaurants")
+          .select("intake_id, restaurants (id, name)")
+          .in("intake_id", chunk),
+      ),
+      fetchAllIn(linkedIds, (chunk) =>
+        supabase
+          .from("driver_restaurants")
+          .select("driver_id, restaurants (id, name)")
+          .in("driver_id", chunk),
+      ),
     ]);
 
     for (const link of (intakeRestRows ?? []) as Array<{
@@ -697,20 +749,22 @@ export async function fetchDriversForAdmin(options?: {
   }
 
   if (linkedIds.length > 0) {
-    const [{ data: driverRows }, { data: deliveryRows }] = await Promise.all([
-      supabase
-        .from("drivers")
-        .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id")
-        .in("id", linkedIds),
-      (() => {
-        const { start, end } = kuwaitDayBounds();
-        return supabase
+    const { start, end } = kuwaitDayBounds();
+    const [driverRows, deliveryRows] = await Promise.all([
+      fetchAllIn(linkedIds, (chunk) =>
+        supabase
+          .from("drivers")
+          .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id")
+          .in("id", chunk),
+      ),
+      fetchAllIn(linkedIds, (chunk) =>
+        supabase
           .from("deliveries")
           .select("driver_id")
-          .in("driver_id", linkedIds)
+          .in("driver_id", chunk)
           .gte("delivered_at", start)
-          .lte("delivered_at", end);
-      })(),
+          .lte("delivered_at", end),
+      ),
     ]);
 
     for (const driver of driverRows ?? []) {
@@ -811,10 +865,7 @@ export async function fetchDriversForAdmin(options?: {
         today_deliveries: row.linked_profile_id
           ? (deliveryCountByDriverId.get(row.linked_profile_id) ?? 0)
           : 0,
-        app_passcode:
-          account_status === "active" && !row.archived_at
-            ? (linkedDriver?.app_passcode ?? null)
-            : null,
+        app_passcode: row.archived_at ? null : (linkedDriver?.app_passcode ?? null),
         archived_at: row.archived_at,
         avatar_url: row.avatar_url,
         avatar_display_url,
@@ -846,6 +897,18 @@ export async function archiveDriverIntake(
     if (payload.error === "intake_not_found") return { error: "save_failed" };
     return { error: payload.error ?? "save_failed" };
   }
+
+  const { data: archived } = await supabase
+    .from("driver_intakes")
+    .select("linked_profile_id")
+    .eq("id", intakeId)
+    .maybeSingle();
+  void logDriverChange({
+    intakeId,
+    driverId: archived?.linked_profile_id,
+    source: "archive",
+    context: { note: "archive" },
+  });
 
   return { success: true, id: intakeId };
 }
@@ -902,6 +965,12 @@ export async function restoreDriverIntake(
     routeName: "restoreDriverIntake",
     after: { archived_at: null },
   });
+  void logDriverChange({
+    intakeId,
+    driverId: intake.linked_profile_id,
+    source: "restore",
+    context: { note: "restore" },
+  });
 
   return { success: true, id: intakeId };
 }
@@ -914,6 +983,7 @@ export async function updateDriverWorkflowStatus(
   if (auth.error) return { error: auth.error };
 
   const supabase = await createClient();
+  const before = await loadIntakeProfileSnapshot(supabase, intakeId);
   const { error } = await supabase
     .from("driver_intakes")
     .update({
@@ -930,6 +1000,13 @@ export async function updateDriverWorkflowStatus(
     entityId: intakeId,
     routeName: "updateDriverWorkflowStatus",
     after: { workflow_status: workflowStatus },
+  });
+  void logDriverChange({
+    intakeId,
+    driverId: before?.driverId,
+    source: "status",
+    before: before?.snapshot ?? {},
+    after: { ...(before?.snapshot ?? {}), workflow_status: workflowStatus },
   });
   return { success: true };
 }
@@ -997,6 +1074,9 @@ async function updateDriverIntakeInner(
 
   const supabase = await createClient();
   const restaurantIds = parseRestaurantIds(formData);
+  if (!hasOpsAssignment(zoneId, restaurantIds)) {
+    return { error: "missing_assignment" };
+  }
 
   const [phoneTaken, civilTaken, existingResp, restaurantCheck, r2Configured] = await Promise.all([
     phone ? phoneExists(phone, intakeId) : Promise.resolve(false),
@@ -1019,6 +1099,8 @@ async function updateDriverIntakeInner(
   const existing = existingResp.data;
   if (!existing) return { error: "save_failed" };
 
+  const beforeChange = await loadIntakeProfileSnapshot(supabase, intakeId);
+
   let currentAccountStatus: DriverAccountStatus | null = null;
   if (existing.linked_profile_id) {
     const { data: linkedDriver } = await supabase
@@ -1030,17 +1112,19 @@ async function updateDriverIntakeInner(
     currentAccountStatus = (linkedDriver?.status as DriverAccountStatus | null) ?? null;
 
     if (linkedDriver?.status === "active") {
-      if (restaurantIds.length === 0) {
-        return { error: "missing_active_restaurant" };
+      if (!hasOpsAssignment(zoneId, restaurantIds)) {
+        return { error: "missing_assignment" };
       }
-      const { data: publishedRows } = await supabase
-        .from("restaurants")
-        .select("id")
-        .eq("status", "published")
-        .eq("is_active", true)
-        .in("id", restaurantIds);
-      if ((publishedRows ?? []).length === 0) {
-        return { error: "missing_active_restaurant" };
+      if (restaurantIds.length > 0) {
+        const { data: publishedRows } = await supabase
+          .from("restaurants")
+          .select("id")
+          .eq("status", "published")
+          .eq("is_active", true)
+          .in("id", restaurantIds);
+        if ((publishedRows ?? []).length === 0 && !hasOpsAssignment(zoneId, [])) {
+          return { error: "missing_assignment" };
+        }
       }
     }
   }
@@ -1185,8 +1269,11 @@ async function updateDriverIntakeInner(
       if (statusError) return { error: "save_failed" };
       const payload = (statusData ?? {}) as { ok?: boolean; error?: string };
       if (!payload.ok) {
-        if (payload.error === "driver_missing_active_restaurant") {
-          return { error: "missing_active_restaurant" };
+        if (
+          payload.error === "driver_missing_active_restaurant" ||
+          payload.error === "driver_missing_assignment"
+        ) {
+          return { error: "missing_assignment" };
         }
         return { error: "save_failed" };
       }
@@ -1205,6 +1292,37 @@ async function updateDriverIntakeInner(
     entityId: intakeId,
     routeName: "updateDriverIntake",
     after: { workflow_status: workflowStatus, partner_id: partnerId },
+  });
+
+  const afterLabels = await loadChangeLabels(supabase, {
+    zoneId: zoneId || null,
+    partnerId: partnerId || null,
+    vehicleId: vehicleId || null,
+    restaurantIds,
+  });
+  void logDriverChange({
+    intakeId,
+    driverId: existing.linked_profile_id,
+    source: "edit",
+    before: beforeChange?.snapshot ?? {},
+    after: flattenProfileSnapshot({
+      full_name: fullName,
+      phone,
+      civil_id: civilIdNormalized,
+      employee_id: employeeId,
+      driver_code: existing.driver_code,
+      partner: afterLabels.partner,
+      zone: afterLabels.zone,
+      restaurants: afterLabels.restaurants,
+      vehicle: afterLabels.vehicle,
+      nationality,
+      rider_category: riderCategory,
+      client_id: clientId,
+      client_name: clientName,
+      workflow_status: resolvedWorkflowStatus,
+      account_status: currentAccountStatus,
+      custom_fields: customParsed.values as Record<string, unknown>,
+    }),
   });
 
   return { success: true, id: intakeId };
@@ -1596,6 +1714,11 @@ export async function updateDriverAccountStatus(
   }
 
   const supabase = await createClient();
+  const { data: beforeDriver } = await supabase
+    .from("drivers")
+    .select("status")
+    .eq("id", driverId)
+    .maybeSingle();
   const { data, error } = await supabase.rpc("set_driver_account_status", {
     p_driver_id: driverId,
     p_status: status,
@@ -1605,8 +1728,11 @@ export async function updateDriverAccountStatus(
 
   const payload = (data ?? {}) as { ok?: boolean; error?: string };
   if (!payload.ok) {
-    if (payload.error === "driver_missing_active_restaurant") {
-      return { error: "missing_active_restaurant" };
+    if (
+      payload.error === "driver_missing_active_restaurant" ||
+      payload.error === "driver_missing_assignment"
+    ) {
+      return { error: "missing_assignment" };
     }
     if (payload.error === "driver_not_found") return { error: "driver_not_found" };
     if (payload.error === "not_authorized") return { error: "not_authorized" };
@@ -1620,6 +1746,17 @@ export async function updateDriverAccountStatus(
     routeName: "updateDriverAccountStatus",
     after: { status },
   });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: "status",
+      before: { account_status: beforeDriver?.status ?? null },
+      after: { account_status: status },
+    });
+  }
 
   return { success: true };
 }
@@ -1658,6 +1795,20 @@ export async function setDriverBlocked(
     routeName: "setDriverBlocked",
     after: blocked ? { is_blocked: true, blocked_reason: reason?.trim() } : { is_blocked: false },
   });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: blocked ? "block" : "unblock",
+      before: { blocked: blocked ? "no" : "yes" },
+      after: {
+        blocked: blocked ? "yes" : "no",
+        ...(blocked && reason?.trim() ? { block_reason: reason.trim() } : {}),
+      },
+    });
+  }
 
   return { success: true };
 }
@@ -1698,6 +1849,16 @@ export async function regenerateDriverPasscode(
     routeName: "regenerateDriverAppPasscode",
     context: { passcode_rotated: true },
   });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: "passcode",
+      context: { note: "passcode replaced" },
+    });
+  }
 
   return { success: true, passcode: payload.passcode };
 }

@@ -33,12 +33,16 @@ describe("parsePastedDriverLookupIds", () => {
     ]);
   });
 
-  it("extracts digits from labeled tokens", () => {
-    assert.deepEqual(parsePastedDriverLookupIds("Emp 26063"), ["26063"]);
+  it("keeps alphanumeric employee IDs and splits a label from a number", () => {
+    assert.deepEqual(parsePastedDriverLookupIds("EMP2048, Emp 26063"), [
+      "EMP2048",
+      "Emp",
+      "26063",
+    ]);
   });
 
-  it("rejects overlong digit runs", () => {
-    assert.deepEqual(parsePastedDriverLookupIds("96512345678"), []);
+  it("rejects a 101-character token", () => {
+    assert.deepEqual(parsePastedDriverLookupIds("A".repeat(101)), []);
   });
 });
 

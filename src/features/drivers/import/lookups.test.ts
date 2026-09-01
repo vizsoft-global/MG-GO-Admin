@@ -38,6 +38,7 @@ describe("lookup spreadsheets", () => {
     const aoa = zonesLookupAoa([
       { name: "Hawalli", code: "HAW", id: "55555555-5555-4555-8555-555555555555" },
     ]);
+    assert.equal(aoa[0]?.[2], "ID (paste this)");
     assert.deepEqual(aoa[1], ["Hawalli", "HAW", "55555555-5555-4555-8555-555555555555"]);
   });
 

@@ -246,15 +246,15 @@ export const DRIVER_IMPORT_FIELDS = [
 ] as const;
 
 /**
- * Phone and civil ID are deliberately absent: they are optional contact
- * details, so a sheet without those columns is a valid sheet. Employee ID stays
- * because it is half the app credential, and a restaurant because a driver
- * cannot be activated without one.
+ * Phone and civil ID are deliberately absent: a sheet without those columns
+ * is still a valid sheet. Employee ID stays because it is half the app
+ * credential. Zone and restaurant are an either/or — mapping must include
+ * at least one of them, and the download sample always ships both so the
+ * sheet teaches the same rule as Add / Edit.
  */
 export const DRIVER_IMPORT_REQUIRED_FIELDS = [
   "full_name",
   "employee_id",
-  "restaurant_ids",
 ] as const;
 
 export type DriverImportRequiredField = (typeof DRIVER_IMPORT_REQUIRED_FIELDS)[number];
@@ -277,6 +277,7 @@ export type DriverImportPreviewStatus =
   | "invalid_client_name"
   | "invalid_active"
   | "missing_fields"
+  | "missing_assignment"
   | "unmatched_partner"
   | "unmatched_zone"
   | "unmatched_vehicle"
@@ -317,6 +318,8 @@ export type DriverImportPreviewRow = Omit<
   vehicle_id: string | null;
   restaurant_ids: string[];
   restaurant_names: string[];
+  partner_name: string | null;
+  zone_name: string | null;
   nationality: string | null;
   rider_category: DriverRiderCategory;
   /**
@@ -326,12 +329,26 @@ export type DriverImportPreviewRow = Omit<
    */
   active: boolean | null;
   skip?: boolean;
+  /** True when this employee ID already exists in the fleet (not a second sheet row). */
+  existingByEmployeeId?: boolean;
   custom_fields: Record<string, string | null>;
 };
 
 export type DriverImportCredential = {
   rowIndex: number;
+  full_name: string;
   employee_id: string;
   driver_code: string;
   passcode: string;
+  phone: string | null;
+  civil_id: string | null;
+  partner_name: string | null;
+  zone_name: string | null;
+  vehicle_label: string | null;
+  restaurant_names: string[];
+  nationality: string | null;
+  rider_category: DriverRiderCategory;
+  client_id: string | null;
+  client_name: string | null;
+  custom_fields: Record<string, string | null>;
 };

@@ -65,7 +65,7 @@ The admin panel auto-issues a **6-digit numeric passcode** (`drivers.app_passcod
 - `app_passcode ~ '^[0-9]{6}$'` (check constraint)
 - `UNIQUE` partial index across non-null values (no two drivers share a code)
 - `BEFORE INSERT OR UPDATE OF status` trigger mints a code the first time `status` becomes `active`
-- **`drivers.status = 'active'` is blocked** unless the driver has ≥1 **published + active** restaurant in `driver_restaurants` (helper `driver_has_active_restaurant`, trigger on `drivers` + auto-downgrade when restaurants are removed). Admins set status via RPC `set_driver_account_status(p_driver_id, p_status)` on `/drivers/[id]`. Leaving `active` (Operations **Inactive** → `suspended`, or `pending`) **clocks the driver out immediately**: `is_on_duty = false`, open `driver_sessions` row closed, open `attendance_logs` row stamped `check_out_reason = admin`, last-known GPS kept. `driver_set_duty_state` raises `inactive` if the rider tries to clock back in. The app already syncs duty off via `drivers` realtime (`remoteDutyMonitor`) so Time in today stops without a manual clock-out.
+- **`drivers.status = 'active'` is blocked** unless the driver has a **zone** (`drivers.zone_id`) **or** ≥1 **published + active** restaurant in `driver_restaurants` (helper `driver_has_ops_assignment`; restaurant-only still uses `driver_has_active_restaurant`). Trigger on `drivers` status + auto-downgrade when the last restaurant is removed *and* there is no zone, or when the zone is cleared and there is no restaurant. Admins set status via RPC `set_driver_account_status(p_driver_id, p_status)` on `/drivers/[id]`. Leaving `active` (Operations **Inactive** → `suspended`, or `pending`) **clocks the driver out immediately**: `is_on_duty = false`, open `driver_sessions` row closed, open `attendance_logs` row stamped `check_out_reason = admin`, last-known GPS kept. `driver_set_duty_state` raises `inactive` if the rider tries to clock back in. The app already syncs duty off via `drivers` realtime (`remoteDutyMonitor`) so Time in today stops without a manual clock-out.
 - **Admin app block** (`drivers.is_blocked`, `drivers.blocked_reason`): separate from account status. Admins block/unblock on `/drivers/[id]` via RPC `set_driver_blocked(p_driver_id, p_blocked, p_reason)`. Blocking forces `is_on_duty = false` **and clocks out** the open `driver_sessions` row plus the open `attendance_logs` row (`check_out_reason = admin`) so a leftover `is_online = true` cannot keep the home Online toggle on after unblock + login. Last-known `driver_locations` are kept. On login, `driver_app_lookup_by_passcode` returns `{ ok: false, error: 'driver_blocked', message: '<reason>' }`. For signed-in sessions, subscribe to `drivers` realtime and read `is_blocked` + `blocked_reason`; show a full-screen block view when blocked.
 - **Admin archive** (`drivers.archived_at`): `archive_driver_intake` stamps the intake and driver. Trigger `drivers_end_session_on_archive` clocks out (`_end_driver_duty_keep_gps`) and revokes every open `driver_device_sessions` row (`revoked_reason = archived`) so an already-open app cannot keep adding or finishing deliveries. `_driver_assert_active_on_duty` and `driver_set_duty_state` raise `driver_archived`. The app must treat `archived_at` like a block on the `drivers` realtime channel (sign out + `/blocked` with the archived copy) and map pickup/complete `driver_archived` the same way. Restore (`restore_driver_intake`) only clears `archived_at` — it does not mint a new session.
 
@@ -76,7 +76,7 @@ Staff use **Verify & approve** on `/drivers/[id]` (or bulk import with **Approve
 - Inserts `profiles` + `drivers`, copies `driver_intake_restaurants` → `driver_restaurants`, sets `drivers.status = 'active'`, mints `app_passcode`, marks intake `linked`.
 - Driver signs in with **driver_code + passcode** via edge function `driver-passcode-login` (magic link on synthetic email).
 
-`employee_id` on intakes/drivers: **required**, 4–8 digits, unique (same as app login).
+`employee_id` on intakes/drivers: **required**, letters and digits, 1–100 characters, unique case-insensitive (same as app login). Bulk import matches an existing rider on this field.
 
 `nationality` on intakes/drivers: **optional**, ISO 3166-1 alpha-2 code (e.g. `KW`, `IN`). Admin create/edit uses searchable country list; copied to `drivers` on **Verify & approve**.
 
@@ -100,12 +100,13 @@ For intakes still `linked = false` from before admin-first approval, the driver 
 3. **Else** (no intake): create minimal `profiles` + `drivers` (self-signup path).
 
 Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edit; auth users are created on **Verify & approve** (not on intake insert alone).
-- `employee_id` required on every intake (4–8 digits)
+- `employee_id` required on every intake (letters and digits, 1–100 characters)
 - `linked = false` until **Verify & approve** (or legacy OTP link)
 
 | Table / bucket | Admin | Driver app |
 |----------------|-------|------------|
 | `driver_intakes` | insert (staff RLS) | read on link (service role / RPC) |
+| `driver_change_events` | staff History tab (SELECT via `is_admin_panel_user()`; writes are service-role only) | **none** — no driver policy |
 | R2 `drivers/intakes/…` | admin upload (server) | copy to `drivers/{driverId}/…` on link |
 | `drivers` | — | row after OTP link |
 | `profiles.phone` | duplicate check on create | unique identity for link |
@@ -144,6 +145,8 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 ---
 
 ## 4. Database schema (driver-visible)
+
+**Staff-only, not driver-visible:** `driver_change_events` (admin `/drivers/[id]` History tab). Staff SELECT via `is_admin_panel_user()`; no INSERT/UPDATE/DELETE policy; riders have no access.
 
 ### `profiles` (existing)
 - `id` uuid PK (= auth.uid)
@@ -1102,12 +1105,15 @@ No new RPC was added; the existing function's restaurant objects gained the `geo
 | `driver_finalize_reconciliation` | Unchanged — accepts flushed rows during override grace. |
 | Weekly/monthly incentives | Accrue **once** on period end day (Kuwait week/month end) in `driver_earnings_daily.incentive_kwd`. |
 | `driver_has_active_restaurant` | Requires linked restaurant with `status = published` AND `is_active = true`. |
+| `driver_has_ops_assignment` / `intake_has_ops_assignment` | Zone set **or** an active restaurant mapping. Activation / approve use this pair, not restaurant alone. |
 
 Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-22 — [admin+app] Home bumper/quest progress uses `progress_count` (submitted orders); `eligible_count` / payout stay verified. Home `week.deliveries_count` is submitted. Extra earnings adds `progress_count`. App: invalidate Home + Extra Earnings after pickup/finish; raised center Add Delivery FAB on the 5-tab bar (`openDeliveryAction`). [admin only] `admin_bulk_update_deliveries` on `/deliveries`. Migration `20260926100000`.*
+*Last synced: 2026-08-31 — [admin+app] Employee ID is letters and digits, 1–100 characters, unique case-insensitive. Bulk import matches and updates on this field. Login lookup is `lower(employee_id)` or exact `driver_code`. Migration `20261008100000`. A rider with a new alphanumeric ID cannot sign in until the matching app build is installed.*
+
+*Prior: 2026-08-22 — [admin+app] Home bumper/quest progress uses `progress_count` (submitted orders); `eligible_count` / payout stay verified. Home `week.deliveries_count` is submitted. Extra earnings adds `progress_count`. App: invalidate Home + Extra Earnings after pickup/finish; raised center Add Delivery FAB on the 5-tab bar (`openDeliveryAction`). [admin only] `admin_bulk_update_deliveries` on `/deliveries`. Migration `20260926100000`.*
 
 *Prior: 2026-08-20 — [admin+app] Pickup / Delivered / Cancel proofs accept up to 5 rear-camera stills (`pickup_proof_urls` / `order_proof_urls` / `cancel_proof_urls`). RPC text params take a single key or a JSON array; the scalar column stays the first key. Migration `20260923100000`.*
 

@@ -17,6 +17,7 @@ export const DRIVER_ERROR_KEYS = [
   "r2_not_configured",
   "invalid_restaurants",
   "missing_active_restaurant",
+  "missing_assignment",
   "missing_block_reason",
   "driver_not_found",
   "intake_already_linked",
@@ -52,7 +53,12 @@ export function mapDriverDbError(
   return "save_failed";
 }
 
-const EMPLOYEE_ID_RE = /^[0-9]{4,8}$/;
+export const EMPLOYEE_ID_MAX = 100;
+const EMPLOYEE_ID_RE = /^[A-Za-z0-9]{1,100}$/;
+
+export function employeeIdKey(raw: string): string {
+  return raw.trim().toLowerCase();
+}
 
 export function normalizeEmployeeId(raw: string): string | null {
   const trimmed = raw.trim();

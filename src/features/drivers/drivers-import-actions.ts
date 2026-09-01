@@ -6,7 +6,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
-import { isValidEmployeeId, normalizeEmployeeId } from "./driver-errors";
+import { employeeIdKey, normalizeEmployeeId } from "./driver-errors";
+import {
+  evaluateImportIdentity,
+  isImportRowReady,
+  shouldApproveImportRow,
+  type ImportIdentityRoster,
+  type ImportIdentitySeen,
+} from "./import/import-identity";
 import { civilIdExists } from "./driver-uniqueness";
 import { intakeMissingApprovalFields } from "./driver-approve-validation";
 import type {
@@ -25,6 +32,13 @@ import {
   clientValueTooLong,
   normalizeClientValue,
 } from "./driver-client-fields";
+import { hasOpsAssignment } from "./driver-assignment";
+import {
+  flattenProfileSnapshot,
+  loadIntakeProfileSnapshot,
+  logDriverChange,
+} from "./driver-change-log";
+import type { DriverImportLogEvent } from "./import/import-progress";
 import { parseImportActive, parseRiderCategory } from "./import/parse";
 import {
   buildPartnerIndex,
@@ -36,9 +50,9 @@ import {
 } from "./import/resolve-lookups";
 import type { DriverImportLookups } from "./import/lookups";
 
-const IMPORT_CHUNK = 200;
+type ImportApplyClient = Awaited<ReturnType<typeof createClient>>;
 
-async function requireDriversManager() {
+export async function requireDriversManager() {
   const session = await getSessionUser();
   if (
     !session ||
@@ -123,12 +137,12 @@ export async function approveDriverIntake(
     return { error: "missing_fields" };
   }
 
-  const { data: hasActiveRestaurant, error: restaurantCheckError } = await supabase.rpc(
-    "intake_has_active_restaurant",
+  const { data: hasAssignment, error: assignmentCheckError } = await supabase.rpc(
+    "intake_has_ops_assignment",
     { p_intake_id: intakeId },
   );
-  if (restaurantCheckError || !hasActiveRestaurant) {
-    return { error: "missing_active_restaurant" };
+  if (assignmentCheckError || !hasAssignment) {
+    return { error: "missing_assignment" };
   }
 
   const civilIdNormalized = normalizeCivilId(intake.civil_id ?? "");
@@ -198,8 +212,8 @@ export async function approveDriverIntake(
       /* rollback */
     }
     const err = payload.error ?? "save_failed";
-    if (err === "driver_missing_active_restaurant") {
-      return { error: "missing_active_restaurant" };
+    if (err === "driver_missing_active_restaurant" || err === "driver_missing_assignment") {
+      return { error: "missing_assignment" };
     }
     if (err === "intake_already_linked") return { error: "intake_already_linked" };
     if (err === "intake_archived") return { error: "save_failed" };
@@ -220,6 +234,12 @@ export async function approveDriverIntake(
       driver_id: payload.driver_id,
       driver_code: intake.driver_code,
     },
+  });
+  void logDriverChange({
+    intakeId,
+    driverId: payload.driver_id ?? userId,
+    source: "approve",
+    context: { note: "approve" },
   });
 
   return {
@@ -284,30 +304,50 @@ export async function resolveDriverImportPreview(
     if (bike && reg) vehicleByLabel.set(`${bike} · ${reg}`, v.id);
   }
 
-  const phoneSet = new Set<string>();
-  const civilSet = new Set<string>();
-  const empSet = new Set<string>();
-  for (const intake of intakes ?? []) {
-    if (intake.phone) phoneSet.add(intake.phone);
-    if (intake.civil_id) civilSet.add(intake.civil_id);
-    if (intake.employee_id) empSet.add(intake.employee_id);
-  }
+  const roster: ImportIdentityRoster = {
+    employeeIds: new Set(),
+    phoneToEmployee: new Map(),
+    civilToEmployee: new Map(),
+  };
+  const driverEmpById = new Map<string, string>();
   for (const driver of drivers ?? []) {
-    if (driver.civil_id) civilSet.add(driver.civil_id);
-    if (driver.employee_id) empSet.add(driver.employee_id);
+    if (!driver.employee_id) continue;
+    const key = employeeIdKey(driver.employee_id);
+    roster.employeeIds.add(key);
+    driverEmpById.set(driver.id, key);
+    if (driver.civil_id) {
+      roster.civilToEmployee.set(normalizeCivilId(driver.civil_id) ?? driver.civil_id, key);
+    }
+  }
+  for (const intake of intakes ?? []) {
+    if (!intake.employee_id) continue;
+    const key = employeeIdKey(intake.employee_id);
+    roster.employeeIds.add(key);
+    if (intake.phone) {
+      roster.phoneToEmployee.set(normalizeKuwaitPhone(intake.phone) ?? intake.phone, key);
+    }
+    if (intake.civil_id) {
+      roster.civilToEmployee.set(normalizeCivilId(intake.civil_id) ?? intake.civil_id, key);
+    }
   }
   for (const profile of profiles ?? []) {
-    if (profile.phone) phoneSet.add(profile.phone);
+    const emp = driverEmpById.get(profile.id);
+    if (profile.phone && emp) {
+      roster.phoneToEmployee.set(normalizeKuwaitPhone(profile.phone) ?? profile.phone, emp);
+    }
   }
 
-  const seenPhone = new Set<string>();
-  const seenCivil = new Set<string>();
-  const seenEmp = new Set<string>();
+  const seen: ImportIdentitySeen = {
+    employeeIds: new Set(),
+    phones: new Map(),
+    civils: new Map(),
+  };
 
   return rows.map((row) => {
-    let status: DriverImportPreviewStatus = "ok";
     let partner_id: string | null = null;
+    let partner_name: string | null = null;
     let zone_id: string | null = null;
+    let zone_name: string | null = null;
     let vehicle_id: string | null = null;
     let restaurant_ids: string[] = [];
     let restaurant_names: string[] = [];
@@ -317,69 +357,44 @@ export async function resolveDriverImportPreview(
     let client_name: string | null = null;
     let active: boolean | null = null;
 
-    const name = row.full_name?.trim();
-    const phoneNorm = row.phone ? normalizeKuwaitPhone(row.phone) : null;
-    const civilNorm = row.civil_id ? normalizeCivilId(row.civil_id) : null;
-    const empNorm = row.employee_id ? normalizeEmployeeId(row.employee_id) : null;
+    const identity = evaluateImportIdentity(row, roster, seen);
+    let status: DriverImportPreviewStatus = identity.status;
+    const existingByEmployeeId = identity.existingByEmployeeId;
+    const lookupStillOpen = () =>
+      status === "ok" || (status === "duplicate_employee_id" && existingByEmployeeId);
 
-    // Phone and civil ID are optional columns: a blank cell is a driver we do
-    // not have those details for, not a broken row. A cell with something in it
-    // still has to parse, or the sheet would silently drop a typo'd number.
-    if (!name || !row.employee_id?.trim()) {
-      status = "missing_fields";
-    } else if (row.phone?.trim() && !phoneNorm) {
-      status = "invalid_phone";
-    } else if (row.civil_id?.trim() && !civilNorm) {
-      status = "invalid_civil_id";
-    } else if (!empNorm || !isValidEmployeeId(empNorm)) {
-      status = "invalid_employee_id";
-    }
-
-    if (status === "ok" && phoneNorm) {
-      if (phoneSet.has(phoneNorm) || seenPhone.has(phoneNorm)) {
-        status = "duplicate_phone";
-      } else seenPhone.add(phoneNorm);
-    }
-
-    if (status === "ok" && civilNorm) {
-      if (civilSet.has(civilNorm) || seenCivil.has(civilNorm)) {
-        status = "duplicate_civil_id";
-      } else seenCivil.add(civilNorm);
-    }
-
-    if (status === "ok" && empNorm) {
-      if (empSet.has(empNorm) || seenEmp.has(empNorm)) {
-        status = "duplicate_employee_id";
-      } else seenEmp.add(empNorm);
-    }
-
-    if (status === "ok" && row.partner_id?.trim()) {
+    if (lookupStillOpen() && row.partner_id?.trim()) {
       const hit = resolvePartnerToken(row.partner_id, partnerIndex);
-      if (hit.status === "ok") partner_id = hit.id;
-      else if (hit.status === "ambiguous") status = "ambiguous_partner";
+      if (hit.status === "ok") {
+        partner_id = hit.id;
+        partner_name = hit.name;
+      } else if (hit.status === "ambiguous") status = "ambiguous_partner";
       else status = "unmatched_partner";
     }
 
-    if (status === "ok" && row.zone_id?.trim()) {
+    if (lookupStillOpen() && row.zone_id?.trim()) {
       const hit = resolveZoneToken(row.zone_id, zoneIndex);
-      if (hit.status === "ok") zone_id = hit.id;
-      else if (hit.status === "ambiguous") status = "ambiguous_zone";
+      if (hit.status === "ok") {
+        zone_id = hit.id;
+        zone_name = hit.name;
+      } else if (hit.status === "ambiguous") status = "ambiguous_zone";
       else status = "unmatched_zone";
     }
 
-    if (status === "ok" && row.vehicle_label?.trim()) {
+    if (lookupStillOpen() && row.vehicle_label?.trim()) {
       const vlabel = row.vehicle_label.trim().toLowerCase();
       vehicle_id = vehicleByLabel.get(vlabel) ?? null;
       if (!vehicle_id) status = "unmatched_vehicle";
     }
 
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       const restaurantsHit = resolveRestaurantTokens(row.restaurant_ids, restaurantIndex);
       if (restaurantsHit.status === "ok") {
         restaurant_ids = restaurantsHit.ids;
         restaurant_names = restaurantsHit.names;
       } else if (restaurantsHit.status === "empty") {
-        status = "missing_fields";
+        restaurant_ids = [];
+        restaurant_names = [];
       } else if (restaurantsHit.status === "ambiguous") {
         status = "ambiguous_restaurant";
       } else {
@@ -387,12 +402,16 @@ export async function resolveDriverImportPreview(
       }
     }
 
-    if (status === "ok" && row.nationality?.trim()) {
+    if (lookupStillOpen() && !hasOpsAssignment(zone_id, restaurant_ids)) {
+      status = "missing_assignment";
+    }
+
+    if (lookupStillOpen() && row.nationality?.trim()) {
       nationality = resolveCountryInput(row.nationality);
       if (!nationality) status = "invalid_nationality";
     }
 
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       const parsedCategory = parseRiderCategory(row.rider_category);
       if (parsedCategory === "invalid") status = "invalid_rider_category";
       else rider_category = parsedCategory ?? "in_house";
@@ -401,31 +420,38 @@ export async function resolveDriverImportPreview(
     // Free text, so the only way a cell can be wrong is by being longer than
     // the column. Caught here rather than at insert time, where it would abort
     // the batch with a CHECK violation naming a constraint, not a row.
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       client_id = normalizeClientValue(row.client_id);
       if (clientValueTooLong(client_id, CLIENT_ID_MAX_LENGTH)) {
         status = "invalid_client_id";
       }
     }
 
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       client_name = normalizeClientValue(row.client_name);
       if (clientValueTooLong(client_name, CLIENT_NAME_MAX_LENGTH)) {
         status = "invalid_client_name";
       }
     }
 
-    if (status === "ok") {
+    if (lookupStillOpen()) {
       const parsedActive = parseImportActive(row.active);
       if (parsedActive === "invalid") status = "invalid_active";
       else active = parsedActive;
     }
 
+    if (lookupStillOpen() && existingByEmployeeId) {
+      status = "duplicate_employee_id";
+    }
+
     return {
       ...row,
       status,
+      existingByEmployeeId,
       partner_id,
+      partner_name,
       zone_id,
+      zone_name,
       vehicle_id,
       restaurant_ids,
       restaurant_names,
@@ -436,6 +462,438 @@ export async function resolveDriverImportPreview(
       active,
     };
   });
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function logWho(row: DriverImportPreviewRow) {
+  return {
+    rowIndex: row.rowIndex,
+    name: row.full_name?.trim() ?? "",
+    employeeId: row.employee_id ?? undefined,
+    zone: row.zone_name ?? undefined,
+  };
+}
+
+export async function applyOneImportRow(
+  row: DriverImportPreviewRow,
+  ctx: {
+    supabase: ImportApplyClient;
+    duplicateStrategy: "skip" | "update";
+    approveImmediately: boolean;
+    customFieldDefs: Awaited<ReturnType<typeof listCustomFieldDefinitions>>;
+    fileName?: string;
+  },
+): Promise<{
+  events: DriverImportLogEvent[];
+  applied: 0 | 1;
+  approved: 0 | 1;
+  failure?: { rowIndex: number; reason: string };
+  credential?: DriverImportCredential;
+}> {
+  const events: DriverImportLogEvent[] = [];
+  const who = logWho(row);
+  const fail = (reason: string) => {
+    events.push({ at: nowIso(), kind: "failed", ...who, detail: reason });
+    return {
+      events,
+      applied: 0 as const,
+      approved: 0 as const,
+      failure: { rowIndex: row.rowIndex, reason },
+    };
+  };
+
+  const phone = row.phone?.trim() ? normalizeKuwaitPhone(row.phone) : null;
+  const civilId = row.civil_id?.trim() ? normalizeCivilId(row.civil_id) : null;
+  const employeeId = normalizeEmployeeId(row.employee_id!);
+  if (!employeeId) return fail("missing_fields");
+  if (!hasOpsAssignment(row.zone_id, row.restaurant_ids)) {
+    return fail("missing_assignment");
+  }
+
+  let intakeId: string | null = null;
+  let driverCode: string | null = null;
+  let updated = false;
+  let alreadyLinked = false;
+  let beforeSnap = {};
+
+  const matchExisting = () =>
+    ctx.supabase
+      .from("driver_intakes")
+      .select("id, linked, driver_code, linked_profile_id")
+      .is("archived_at", null)
+      .ilike("employee_id", employeeId)
+      .maybeSingle();
+
+  if (ctx.duplicateStrategy === "update") {
+    const { data: existing } = await matchExisting();
+
+    if (existing) {
+      alreadyLinked = Boolean(existing.linked || existing.linked_profile_id);
+      const prior = await loadIntakeProfileSnapshot(ctx.supabase, existing.id);
+      beforeSnap = prior?.snapshot ?? {};
+      const { error: updErr } = await ctx.supabase
+        .from("driver_intakes")
+        .update({
+          phone,
+          full_name: row.full_name!.trim(),
+          civil_id: civilId,
+          employee_id: employeeId,
+          partner_id: row.partner_id,
+          zone_id: row.zone_id,
+          vehicle_id: row.vehicle_id,
+          nationality: row.nationality,
+          rider_category: row.rider_category,
+          client_id: row.client_id,
+          client_name: row.client_name,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+
+      if (updErr) return fail(updErr.message);
+      intakeId = existing.id;
+      driverCode = existing.driver_code;
+      updated = true;
+      await ctx.supabase
+        .from("driver_intake_restaurants")
+        .delete()
+        .eq("intake_id", intakeId);
+
+      if (existing.linked_profile_id) {
+        const linkedId = existing.linked_profile_id;
+        const { error: driverErr } = await ctx.supabase
+          .from("drivers")
+          .update({
+            partner_id: row.partner_id,
+            zone_id: row.zone_id,
+            vehicle_id: row.vehicle_id,
+            civil_id: civilId,
+            employee_id: employeeId,
+            nationality: row.nationality,
+            rider_category: row.rider_category,
+            client_id: row.client_id,
+            client_name: row.client_name,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", linkedId);
+        if (driverErr) return fail(driverErr.message);
+        await ctx.supabase
+          .from("profiles")
+          .update({
+            full_name: row.full_name!.trim(),
+            phone,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", linkedId);
+        const { data: existingLinks } = await ctx.supabase
+          .from("driver_restaurants")
+          .select("restaurant_id")
+          .eq("driver_id", linkedId);
+        const have = new Set((existingLinks ?? []).map((r) => r.restaurant_id));
+        const want = new Set(row.restaurant_ids);
+        const toAdd = row.restaurant_ids.filter((id) => !have.has(id));
+        const toRemove = [...have].filter((id) => !want.has(id));
+        if (toAdd.length > 0) {
+          const { error: addErr } = await ctx.supabase.from("driver_restaurants").insert(
+            toAdd.map((restaurant_id) => ({ driver_id: linkedId, restaurant_id })),
+          );
+          if (addErr) return fail(addErr.message);
+        }
+        if (toRemove.length > 0) {
+          await ctx.supabase
+            .from("driver_restaurants")
+            .delete()
+            .eq("driver_id", linkedId)
+            .in("restaurant_id", toRemove);
+        }
+      }
+    }
+  } else {
+    const { data: dup } = await matchExisting();
+    if (dup) {
+      events.push({
+        at: nowIso(),
+        kind: "skipped",
+        ...who,
+        detail: "Duplicate employee ID (skip)",
+      });
+      return {
+        events,
+        applied: 0,
+        approved: 0,
+        failure: { rowIndex: row.rowIndex, reason: "Duplicate employee ID (skip)" },
+      };
+    }
+  }
+
+  if (!intakeId) {
+    const { data: code, error: codeErr } = await ctx.supabase.rpc("allocate_driver_code");
+    if (codeErr || !code) return fail("Could not allocate driver code");
+
+    const newId = crypto.randomUUID();
+    const mappedCustom = row.custom_fields ?? {};
+    const defsForRow = ctx.customFieldDefs.map((d) => ({
+      ...d,
+      required: d.required && Object.prototype.hasOwnProperty.call(mappedCustom, d.key),
+    }));
+    const { values: customValues, errors: customErrors } = validateCustomFieldValues(
+      defsForRow,
+      mappedCustom,
+    );
+    if (customErrors.length > 0) {
+      return fail(`custom_fields: ${customErrors.map((e) => e.key).join(",")}`);
+    }
+    const { error: insErr } = await ctx.supabase.from("driver_intakes").insert({
+      id: newId,
+      phone,
+      full_name: row.full_name!.trim(),
+      civil_id: civilId,
+      employee_id: employeeId,
+      driver_code: code,
+      partner_id: row.partner_id,
+      zone_id: row.zone_id,
+      vehicle_id: row.vehicle_id,
+      nationality: row.nationality,
+      rider_category: row.rider_category,
+      client_id: row.client_id,
+      client_name: row.client_name,
+      status: "awaiting_app_link",
+      workflow_status: "pending",
+      linked: false,
+      assets_issued: {},
+      custom_fields: customValues as unknown as import("@/types/database").Json,
+    });
+
+    if (insErr) return fail(insErr.message);
+    intakeId = newId;
+    driverCode = String(code);
+  }
+
+  if (row.restaurant_ids.length > 0) {
+    const { error: linkErr } = await ctx.supabase.from("driver_intake_restaurants").insert(
+      row.restaurant_ids.map((restaurant_id) => ({
+        intake_id: intakeId!,
+        restaurant_id,
+      })),
+    );
+    if (linkErr) return fail(linkErr.message);
+  }
+
+  events.push({
+    at: nowIso(),
+    kind: updated ? "updated" : "created",
+    ...who,
+    driverCode: driverCode ?? undefined,
+  });
+
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      source: "bulk_import",
+      before: beforeSnap,
+      after: flattenProfileSnapshot({
+        full_name: row.full_name,
+        phone,
+        civil_id: civilId,
+        employee_id: employeeId,
+        driver_code: driverCode,
+        partner: row.partner_name,
+        zone: row.zone_name,
+        restaurants: row.restaurant_names,
+        vehicle: row.vehicle_label,
+        nationality: row.nationality,
+        rider_category: row.rider_category,
+        client_id: row.client_id,
+        client_name: row.client_name,
+        custom_fields: row.custom_fields ?? {},
+      }),
+      context: ctx.fileName ? { file: ctx.fileName } : {},
+    });
+  }
+
+  let approved: 0 | 1 = 0;
+  let credential: DriverImportCredential | undefined;
+  const approveRow = shouldApproveImportRow(
+    row.active ?? ctx.approveImmediately,
+    alreadyLinked,
+  );
+  if (approveRow && intakeId) {
+    const result = await approveDriverIntake(intakeId);
+    if ("success" in result && result.success) {
+      approved = 1;
+      events.push({
+        at: nowIso(),
+        kind: "approved",
+        ...who,
+        driverCode: driverCode ?? undefined,
+        detail: "passcode minted",
+      });
+      credential = {
+        rowIndex: row.rowIndex,
+        full_name: row.full_name!.trim(),
+        employee_id: employeeId,
+        driver_code: driverCode ?? "",
+        passcode: result.passcode,
+        phone,
+        civil_id: civilId,
+        partner_name: row.partner_name,
+        zone_name: row.zone_name,
+        vehicle_label: row.vehicle_label,
+        restaurant_names: row.restaurant_names,
+        nationality: row.nationality,
+        rider_category: row.rider_category,
+        client_id: row.client_id,
+        client_name: row.client_name,
+        custom_fields: row.custom_fields ?? {},
+      };
+    } else {
+      return {
+        events: [
+          ...events,
+          {
+            at: nowIso(),
+            kind: "failed",
+            ...who,
+            detail: `Approved intake failed: ${"error" in result ? result.error : "save_failed"}`,
+          },
+        ],
+        applied: 1,
+        approved: 0,
+        failure: {
+          rowIndex: row.rowIndex,
+          reason: `Approved intake failed: ${"error" in result ? result.error : "save_failed"}`,
+        },
+        credential,
+      };
+    }
+  }
+
+  return { events, applied: 1, approved, credential };
+}
+
+export async function applyDriverImportChunk(payload: {
+  fileName: string;
+  mapping: Record<string, string>;
+  rows: DriverImportPreviewRow[];
+  duplicateStrategy: "skip" | "update";
+  approveImmediately: boolean;
+  batchId?: string | null;
+  sheetRowCount: number;
+  preSkipped: number;
+  appliedSoFar: number;
+  skippedSoFar: number;
+  approvedSoFar: number;
+  isLast: boolean;
+}): Promise<
+  | {
+      success: true;
+      batchId: string;
+      events: DriverImportLogEvent[];
+      applied: number;
+      skipped: number;
+      approved: number;
+      failures: Array<{ rowIndex: number; reason: string }>;
+      credentials: DriverImportCredential[];
+    }
+  | { error: string }
+> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+
+  const ready = payload.rows.filter((r) =>
+    isImportRowReady(r, payload.duplicateStrategy),
+  );
+  const supabase = await createClient();
+  let batchId = payload.batchId ?? null;
+
+  if (!batchId) {
+    const { data: batch, error: batchError } = await supabase
+      .from("driver_import_batches")
+      .insert({
+        file_name: payload.fileName,
+        mapping: payload.mapping,
+        row_count: payload.sheetRowCount,
+        applied_count: 0,
+        skipped_count: payload.preSkipped,
+        approved_count: 0,
+        status: "previewed",
+        uploaded_by: auth.session.id,
+      })
+      .select("id")
+      .single();
+    if (batchError || !batch) return { error: "save_failed" };
+    batchId = batch.id;
+  }
+
+  const customFieldDefs = await listCustomFieldDefinitions("driver");
+  const events: DriverImportLogEvent[] = [];
+  const failures: Array<{ rowIndex: number; reason: string }> = [];
+  const credentials: DriverImportCredential[] = [];
+  let applied = 0;
+  let approved = 0;
+  let skipped = 0;
+
+  for (const row of ready) {
+    const result = await applyOneImportRow(row, {
+      supabase,
+      duplicateStrategy: payload.duplicateStrategy,
+      approveImmediately: payload.approveImmediately,
+      customFieldDefs,
+      fileName: payload.fileName,
+    });
+    events.push(...result.events);
+    applied += result.applied;
+    approved += result.approved;
+    if (result.credential) credentials.push(result.credential);
+    if (result.failure) {
+      failures.push(result.failure);
+      if (result.applied === 0) skipped += 1;
+    }
+  }
+
+  const appliedTotal = payload.appliedSoFar + applied;
+  const skippedTotal = payload.skippedSoFar + skipped;
+  const approvedTotal = payload.approvedSoFar + approved;
+  await supabase
+    .from("driver_import_batches")
+    .update({
+      applied_count: appliedTotal,
+      skipped_count: skippedTotal,
+      approved_count: approvedTotal,
+      ...(payload.isLast
+        ? { status: appliedTotal > 0 ? "applied" : "failed" }
+        : {}),
+    })
+    .eq("id", batchId);
+
+  if (payload.isLast) {
+    void logAdminMutation({
+      action: "create",
+      entityType: "driver_import_batch",
+      entityId: batchId,
+      routeName: "applyDriverImportChunk",
+      after: {
+        applied: appliedTotal,
+        approved: approvedTotal,
+        skipped: skippedTotal,
+        failures: failures.length,
+        credentials: credentials.length,
+      },
+    });
+  }
+
+  return {
+    success: true,
+    batchId,
+    events,
+    applied,
+    skipped,
+    approved,
+    failures,
+    credentials,
+  };
 }
 
 export async function applyDriverImportBatch(payload: {
@@ -456,241 +914,32 @@ export async function applyDriverImportBatch(payload: {
     }
   | { error: string }
 > {
-  const auth = await requireDriversManager();
-  if (auth.error) return { error: auth.error };
-
-  const ready = payload.rows.filter((r) => r.status === "ok" && !r.skip);
+  const ready = payload.rows.filter((r) =>
+    isImportRowReady(r, payload.duplicateStrategy),
+  );
   const preSkipped = payload.rows.length - ready.length;
-
-  const supabase = await createClient();
-  const { data: batch, error: batchError } = await supabase
-    .from("driver_import_batches")
-    .insert({
-      file_name: payload.fileName,
-      mapping: payload.mapping,
-      row_count: payload.rows.length,
-      applied_count: 0,
-      skipped_count: preSkipped,
-      approved_count: 0,
-      status: "applied",
-      uploaded_by: auth.session.id,
-    })
-    .select("id")
-    .single();
-
-  if (batchError || !batch) return { error: "save_failed" };
-
-  let applied = 0;
-  let approved = 0;
-  const failures: Array<{ rowIndex: number; reason: string }> = [];
-  const credentials: DriverImportCredential[] = [];
-  const customFieldDefs = await listCustomFieldDefinitions("driver");
-
-  for (let i = 0; i < ready.length; i += IMPORT_CHUNK) {
-    const chunk = ready.slice(i, i + IMPORT_CHUNK);
-    for (const row of chunk) {
-      const phone = row.phone?.trim() ? normalizeKuwaitPhone(row.phone) : null;
-      const civilId = row.civil_id?.trim() ? normalizeCivilId(row.civil_id) : null;
-      const employeeId = normalizeEmployeeId(row.employee_id!);
-      if (!employeeId) {
-        failures.push({ rowIndex: row.rowIndex, reason: "missing_fields" });
-        continue;
-      }
-      if (row.restaurant_ids.length === 0) {
-        failures.push({ rowIndex: row.rowIndex, reason: "missing_active_restaurant" });
-        continue;
-      }
-
-      let intakeId: string | null = null;
-      let driverCode: string | null = null;
-
-      // Phone used to be the key that matched an uploaded row to an existing
-      // intake. It is optional now, so a phone-less row falls back to employee
-      // ID — mandatory and unique, and therefore the stronger key of the two.
-      // Phone still wins when present, so rows that matched before still match.
-      const matchExisting = () => {
-        const query = supabase
-          .from("driver_intakes")
-          .select("id, linked, driver_code")
-          .is("archived_at", null);
-        return phone
-          ? query.eq("phone", phone).maybeSingle()
-          : query.eq("employee_id", employeeId).maybeSingle();
-      };
-
-      if (payload.duplicateStrategy === "update") {
-        const { data: existing } = await matchExisting();
-
-        if (existing) {
-          if (existing.linked) {
-            failures.push({
-              rowIndex: row.rowIndex,
-              reason: "Intake already linked (cannot update)",
-            });
-            continue;
-          }
-          const { error: updErr } = await supabase
-            .from("driver_intakes")
-            .update({
-              full_name: row.full_name!.trim(),
-              civil_id: civilId,
-              employee_id: employeeId,
-              partner_id: row.partner_id,
-              zone_id: row.zone_id,
-              vehicle_id: row.vehicle_id,
-              nationality: row.nationality,
-              rider_category: row.rider_category,
-              client_id: row.client_id,
-              client_name: row.client_name,
-              workflow_status: "pending",
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-
-          if (updErr) {
-            failures.push({
-              rowIndex: row.rowIndex,
-              reason: updErr.message,
-            });
-            continue;
-          }
-          intakeId = existing.id;
-          driverCode = existing.driver_code;
-          await supabase
-            .from("driver_intake_restaurants")
-            .delete()
-            .eq("intake_id", intakeId);
-        }
-      } else {
-        const { data: dup } = await matchExisting();
-        if (dup) {
-          failures.push({
-            rowIndex: row.rowIndex,
-            reason: phone ? "Duplicate phone (skip)" : "Duplicate employee ID (skip)",
-          });
-          continue;
-        }
-      }
-
-      if (!intakeId) {
-        const { data: code, error: codeErr } = await supabase.rpc("allocate_driver_code");
-        if (codeErr || !code) {
-          failures.push({ rowIndex: row.rowIndex, reason: "Could not allocate driver code" });
-          continue;
-        }
-
-        const newId = crypto.randomUUID();
-        const mappedCustom = row.custom_fields ?? {};
-        // Import: only validate keys present in the mapping; do not fail on unmapped required defs
-        const defsForRow = customFieldDefs.map((d) => ({
-          ...d,
-          required:
-            d.required && Object.prototype.hasOwnProperty.call(mappedCustom, d.key),
-        }));
-        const { values: customValues, errors: customErrors } = validateCustomFieldValues(
-          defsForRow,
-          mappedCustom,
-        );
-        if (customErrors.length > 0) {
-          failures.push({
-            rowIndex: row.rowIndex,
-            reason: `custom_fields: ${customErrors.map((e) => e.key).join(",")}`,
-          });
-          continue;
-        }
-        const { error: insErr } = await supabase.from("driver_intakes").insert({
-          id: newId,
-          phone,
-          full_name: row.full_name!.trim(),
-          civil_id: civilId,
-          employee_id: employeeId,
-          driver_code: code,
-          partner_id: row.partner_id,
-          zone_id: row.zone_id,
-          vehicle_id: row.vehicle_id,
-          nationality: row.nationality,
-          rider_category: row.rider_category,
-          client_id: row.client_id,
-          client_name: row.client_name,
-          status: "awaiting_app_link",
-          workflow_status: "pending",
-          linked: false,
-          assets_issued: {},
-          custom_fields: customValues as unknown as import("@/types/database").Json,
-        });
-
-        if (insErr) {
-          failures.push({ rowIndex: row.rowIndex, reason: insErr.message });
-          continue;
-        }
-        intakeId = newId;
-        driverCode = String(code);
-      }
-
-      if (row.restaurant_ids.length > 0) {
-        const { error: linkErr } = await supabase.from("driver_intake_restaurants").insert(
-          row.restaurant_ids.map((restaurant_id) => ({
-            intake_id: intakeId!,
-            restaurant_id,
-          })),
-        );
-        if (linkErr) {
-          failures.push({ rowIndex: row.rowIndex, reason: linkErr.message });
-          continue;
-        }
-      }
-
-      applied += 1;
-
-      // The sheet's Active cell decides for its own row; the dialog toggle is
-      // the answer for every row that did not say. So an operator can approve
-      // the whole batch with the switch, or hand-pick rows in the spreadsheet,
-      // and neither can quietly cancel the other.
-      const approveRow = row.active ?? payload.approveImmediately;
-      if (approveRow && intakeId) {
-        const result = await approveDriverIntake(intakeId);
-        if ("success" in result && result.success) {
-          approved += 1;
-          credentials.push({
-            rowIndex: row.rowIndex,
-            employee_id: employeeId,
-            driver_code: driverCode ?? "",
-            passcode: result.passcode,
-          });
-        } else {
-          failures.push({
-            rowIndex: row.rowIndex,
-            reason: `Approved intake failed: ${"error" in result ? result.error : "save_failed"}`,
-          });
-        }
-      }
-    }
-  }
-
-  await supabase
-    .from("driver_import_batches")
-    .update({
-      applied_count: applied,
-      skipped_count: preSkipped + (ready.length - applied),
-      approved_count: approved,
-    })
-    .eq("id", batch.id);
-
-  void logAdminMutation({
-    action: "create",
-    entityType: "driver_import_batch",
-    entityId: batch.id,
-    routeName: "applyDriverImportBatch",
-    after: { applied, approved, failures: failures.length, credentials: credentials.length },
+  const result = await applyDriverImportChunk({
+    fileName: payload.fileName,
+    mapping: payload.mapping,
+    rows: ready,
+    duplicateStrategy: payload.duplicateStrategy,
+    approveImmediately: payload.approveImmediately,
+    sheetRowCount: payload.rows.length,
+    preSkipped,
+    appliedSoFar: 0,
+    skippedSoFar: preSkipped,
+    approvedSoFar: 0,
+    isLast: true,
   });
-
+  if ("error" in result) return result;
   return {
     success: true,
-    batchId: batch.id,
-    applied,
-    skipped: preSkipped + (ready.length - applied),
-    approved,
-    failures,
-    credentials,
+    batchId: result.batchId,
+    applied: result.applied,
+    skipped: preSkipped + result.skipped,
+    approved: result.approved,
+    failures: result.failures,
+    credentials: result.credentials,
   };
 }
+

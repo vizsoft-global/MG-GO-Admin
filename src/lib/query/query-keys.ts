@@ -17,8 +17,12 @@ export const queryKeys = {
     assignZone: (zoneId: string) => ["drivers", "assign", "zone", zoneId] as const,
     assignPreview: (driverId: string) => ["drivers", "assign", "preview", driverId] as const,
     assignSearch: (query: string) => ["drivers", "assign", "search", query] as const,
+    history: (intakeId: string, source: string = "all") =>
+      ["drivers", "history", intakeId, source] as const,
     documents: (intakeId: string, profileId: string | null) =>
       ["drivers", "documents", intakeId, profileId] as const,
+    importJobs: () => ["drivers", "import-jobs"] as const,
+    importJob: (id: string) => ["drivers", "import-job", id] as const,
     loginVerifications: (
       driverId: string,
       startDate: string | null,

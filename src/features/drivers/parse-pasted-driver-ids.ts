@@ -1,7 +1,7 @@
 /**
  * Parse pasted employee / driver lookup IDs from free text.
  * Accepts commas, whitespace, Arabic separators, Excel `.0` / scientific forms.
- * Values are 1–8 digit strings (employee_id format; driver_code is 5 digits).
+ * Values are 1–100 letter/digit tokens (employee_id) or 5-digit driver codes.
  */
 export function parsePastedDriverLookupIds(raw: string): string[] {
   if (!raw.trim()) return [];
@@ -11,7 +11,7 @@ export function parsePastedDriverLookupIds(raw: string): string[] {
     const n = Number(`${base}e${exp}`);
     if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) return full;
     const asInt = String(n);
-    return asInt.length >= 1 && asInt.length <= 8 ? asInt : full;
+    return asInt.length >= 1 && asInt.length <= 100 ? asInt : full;
   });
 
   const tokens = expanded
@@ -29,20 +29,20 @@ export function parsePastedDriverLookupIds(raw: string): string[] {
 
     if (/^\d+\.0+$/.test(cleaned)) {
       const whole = cleaned.slice(0, cleaned.indexOf("."));
-      if (/^\d{1,8}$/.test(whole)) {
+      if (/^\d{1,100}$/.test(whole)) {
         ids.push(whole);
         continue;
       }
     }
 
-    if (/^\d{1,8}$/.test(cleaned)) {
+    if (/^[A-Za-z0-9]{1,100}$/.test(cleaned)) {
       ids.push(cleaned);
       continue;
     }
 
-    // "ID:12345" / "Emp 12345" — only when every digit in the token forms one 1–8 id.
+    // "ID:12345" — digits-only remainder, still a legal employee id.
     const digits = cleaned.replace(/\D/g, "");
-    if (/^\d{1,8}$/.test(digits)) {
+    if (/^\d{1,100}$/.test(digits)) {
       ids.push(digits);
     }
   }

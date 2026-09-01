@@ -12,12 +12,29 @@ export type DriverImportColumnSpec = {
   /** Header text written into the sheet. */
   header: string;
   required: boolean;
+  /** Always written into the workbook, even on "Required only". */
+  pinned: boolean;
   /** What the cell may contain, shown on the Guide sheet. */
   allowed: string;
   example: string;
 };
 
 const REQUIRED = new Set<string>(DRIVER_IMPORT_REQUIRED_FIELDS);
+
+/** A driver needs one of these. Neither is required alone; both stay in the sample. */
+export const DRIVER_IMPORT_ASSIGNMENT_FIELDS = [
+  "zone_id",
+  "restaurant_ids",
+] as const;
+
+const PINNED = new Set<string>([
+  ...DRIVER_IMPORT_REQUIRED_FIELDS,
+  ...DRIVER_IMPORT_ASSIGNMENT_FIELDS,
+]);
+
+export function isPinnedTemplateField(field: string): boolean {
+  return PINNED.has(field);
+}
 
 /**
  * Single source of truth for the template: header text, the example row, and
@@ -31,9 +48,11 @@ const REQUIRED = new Set<string>(DRIVER_IMPORT_REQUIRED_FIELDS);
  * returns the first header matching any needle, and "name" would otherwise let
  * Client Name capture the full-name mapping.
  */
-const STANDARD_COLUMNS: Array<Omit<DriverImportColumnSpec, "required"> & {
-  field: DriverImportStandardField;
-}> = [
+const STANDARD_COLUMNS: Array<
+  Omit<DriverImportColumnSpec, "required" | "pinned"> & {
+    field: DriverImportStandardField;
+  }
+> = [
   {
     field: "full_name",
     header: "Full Name",
@@ -43,14 +62,21 @@ const STANDARD_COLUMNS: Array<Omit<DriverImportColumnSpec, "required"> & {
   {
     field: "employee_id",
     header: "Employee ID",
-    allowed: "4 to 8 digits. Must be unique — this is half the app login.",
-    example: "12345",
+    allowed: "Letters and digits, 1 to 100 characters. Unique — this is half the app login. Used to match an existing driver on Update.",
+    example: "EMP2048",
+  },
+  {
+    field: "zone_id",
+    header: "Zone ID",
+    allowed:
+      "Zone UUID from the Zones sheet ID column. Code or unique name also match. Required if Restaurant IDs is blank — a driver needs a zone or a restaurant.",
+    example: "55555555-5555-4555-8555-555555555555",
   },
   {
     field: "restaurant_ids",
     header: "Restaurant IDs",
     allowed:
-      "Restaurant name, RST code, or UUID. Separate several with commas. See the Restaurants sheet.",
+      "Restaurant name, RST code, or UUID. Separate several with commas. See the Restaurants sheet. Required if Zone is blank — a driver needs a zone or a restaurant.",
     example: "RST-0001",
   },
   {
@@ -70,12 +96,6 @@ const STANDARD_COLUMNS: Array<Omit<DriverImportColumnSpec, "required"> & {
     field: "partner_id",
     header: "Partner",
     allowed: "Partner name or UUID. See the Partners sheet.",
-    example: "",
-  },
-  {
-    field: "zone_id",
-    header: "Zone",
-    allowed: "Zone name, zone code, or UUID. See the Zones sheet.",
     example: "",
   },
   {
@@ -121,6 +141,7 @@ export const DRIVER_IMPORT_COLUMNS: readonly DriverImportColumnSpec[] =
   STANDARD_COLUMNS.map((column) => ({
     ...column,
     required: REQUIRED.has(column.field),
+    pinned: PINNED.has(column.field),
   }));
 
 /** Legacy positional exports — the full template, every column, in order. */
@@ -187,6 +208,7 @@ export function customFieldColumnSpec(
     field: customFieldColumnId(column.key) as DriverImportTargetField,
     header: column.label || column.key,
     required: false,
+    pinned: false,
     allowed: describeCustomField(column),
     example: exampleCustomField(column),
   };
@@ -196,9 +218,9 @@ export function customFieldColumnSpec(
  * Resolve the operator's tick boxes into the columns the workbook will carry.
  *
  * `selected` of `null` means "no choice expressed" and yields every column,
- * which is what keeps a plain download of the template complete. A required
- * column is always present regardless of what was ticked — a template that
- * cannot be imported is not a template.
+ * which is what keeps a plain download of the template complete. Pinned
+ * columns (identity + zone + restaurant) are always present — a template
+ * that cannot be imported is not a template.
  */
 export function resolveTemplateColumns(
   selected: readonly string[] | null,
@@ -210,7 +232,50 @@ export function resolveTemplateColumns(
   ];
   if (selected === null) return all;
   const wanted = new Set(selected);
-  return all.filter((column) => column.required || wanted.has(column.field));
+  return all.filter((column) => column.pinned || wanted.has(column.field));
+}
+
+export function guideRequiredLabel(column: DriverImportColumnSpec): string {
+  if (column.required) return "Required";
+  if (column.field === "zone_id") return "If no restaurant";
+  if (column.field === "restaurant_ids") return "If no zone";
+  return "Optional";
+}
+
+/**
+ * Drivers sheet: header plus two example rows so the download shows the
+ * same rule as Add / Edit — restaurant-only and zone-only are both legal.
+ */
+export function templateDriversAoa(
+  columns: readonly DriverImportColumnSpec[],
+  assignmentExamples: { zone?: string; restaurant?: string } = {},
+): string[][] {
+  const restaurantExample =
+    assignmentExamples.restaurant ||
+    columns.find((column) => column.field === "restaurant_ids")?.example ||
+    "";
+  const zoneExample =
+    assignmentExamples.zone ||
+    columns.find((column) => column.field === "zone_id")?.example ||
+    "";
+
+  const restaurantOnly = columns.map((column) => {
+    if (column.field === "zone_id") return "";
+    if (column.field === "restaurant_ids") return restaurantExample;
+    return column.example;
+  });
+
+  const zoneOnly = columns.map((column) => {
+    if (column.field === "restaurant_ids") return "";
+    if (column.field === "zone_id") return zoneExample;
+    if (column.field === "full_name") return "Sara Hassan";
+    if (column.field === "employee_id") return "EMP2049";
+    if (column.field === "phone") return "";
+    if (column.field === "civil_id") return "";
+    return column.example;
+  });
+
+  return [columns.map((column) => column.header), restaurantOnly, zoneOnly];
 }
 
 export const TEMPLATE_GUIDE_HEADERS = [
@@ -227,7 +292,7 @@ export function templateGuideAoa(
     [...TEMPLATE_GUIDE_HEADERS],
     ...columns.map((column) => [
       column.header,
-      column.required ? "Required" : "Optional",
+      guideRequiredLabel(column),
       column.allowed,
       column.example,
     ]),

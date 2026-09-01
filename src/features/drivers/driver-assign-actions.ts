@@ -7,6 +7,7 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { pickDriverAvatarKey } from "@/lib/storage/driver-avatar-key";
 import { resolveDriverAvatarUrl } from "@/lib/storage/driver-avatar-url";
 import { restaurantSyncPlan } from "./restaurant-sync-plan";
+import { loadChangeLabels, logDriverChange } from "./driver-change-log";
 import type {
   AssignDriverRow,
   DriverAssignMutationResult,
@@ -471,6 +472,27 @@ export async function assignDriverToRestaurant(input: {
     },
   });
 
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    const [beforeLabels, afterLabels] = await Promise.all([
+      loadChangeLabels(supabase, {
+        zoneId: beforeZoneId,
+        restaurantIds: beforeRestaurantIds,
+      }),
+      loadChangeLabels(supabase, {
+        zoneId: nextZoneId,
+        restaurantIds: nextRestaurantIds,
+      }),
+    ]);
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: "assignment",
+      before: { zone: beforeLabels.zone, restaurants: beforeLabels.restaurants },
+      after: { zone: afterLabels.zone, restaurants: afterLabels.restaurants },
+    });
+  }
+
   return {
     success: true,
     ...(hasActive ? { warning: "driver_has_active_delivery" as const } : {}),
@@ -532,6 +554,21 @@ export async function assignDriverToZone(input: {
     routeName: "assignDriverToZone",
     after: { zone_id: zoneId },
   });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    const [beforeLabels, afterLabels] = await Promise.all([
+      loadChangeLabels(supabase, { zoneId: beforeZoneId }),
+      loadChangeLabels(supabase, { zoneId }),
+    ]);
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: "assignment",
+      before: { zone: beforeLabels.zone },
+      after: { zone: afterLabels.zone },
+    });
+  }
 
   return {
     success: true,
@@ -596,6 +633,21 @@ export async function unassignDriverFromRestaurant(input: {
     routeName: "unassignDriverFromRestaurant",
     after: { restaurant_id: restaurantId },
   });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    const [beforeLabels, afterLabels] = await Promise.all([
+      loadChangeLabels(supabase, { restaurantIds: beforeRestaurantIds }),
+      loadChangeLabels(supabase, { restaurantIds: nextRestaurantIds }),
+    ]);
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: "assignment",
+      before: { restaurants: beforeLabels.restaurants },
+      after: { restaurants: afterLabels.restaurants },
+    });
+  }
 
   return {
     success: true,

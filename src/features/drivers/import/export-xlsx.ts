@@ -1,4 +1,22 @@
 import * as XLSX from "xlsx";
+import type { DriverImportCredential } from "../types";
+
+const CREDENTIAL_HEADERS = [
+  "Full Name",
+  "Employee ID",
+  "Driver Code",
+  "Passcode",
+  "Phone",
+  "Civil ID",
+  "Partner",
+  "Zone",
+  "Vehicle",
+  "Restaurants",
+  "Nationality",
+  "Rider Category",
+  "Client ID",
+  "Client Name",
+] as const;
 
 export function downloadWorkbookXlsx(
   filename: string,
@@ -51,11 +69,45 @@ export function buildImportErrorAoa(
   return out;
 }
 
+/**
+ * One row per approved import. Login columns stay near the front so the
+ * sheet still works as a credentials handout; the rest is the driver as
+ * saved, so ops do not have to open the panel to see who a passcode belongs to.
+ *
+ * Custom-field columns are the union of keys present on any row, labelled
+ * when the picker knows them, otherwise by key.
+ */
 export function buildCredentialsAoa(
-  credentials: Array<{ employee_id: string; driver_code: string; passcode: string }>,
+  credentials: DriverImportCredential[],
+  customFieldLabels: ReadonlyArray<{ key: string; label: string }> = [],
 ): Array<Array<string | number>> {
+  const labelByKey = new Map(
+    customFieldLabels.map((field) => [field.key, field.label || field.key]),
+  );
+  const customKeys = [
+    ...new Set(credentials.flatMap((row) => Object.keys(row.custom_fields))),
+  ].sort();
   return [
-    ["Employee ID", "Driver Code", "Passcode"],
-    ...credentials.map((row) => [row.employee_id, row.driver_code, row.passcode]),
+    [
+      ...CREDENTIAL_HEADERS,
+      ...customKeys.map((key) => labelByKey.get(key) ?? key),
+    ],
+    ...credentials.map((row) => [
+      row.full_name,
+      row.employee_id,
+      row.driver_code,
+      row.passcode,
+      row.phone ?? "",
+      row.civil_id ?? "",
+      row.partner_name ?? "",
+      row.zone_name ?? "",
+      row.vehicle_label ?? "",
+      row.restaurant_names.join(", "),
+      row.nationality ?? "",
+      row.rider_category,
+      row.client_id ?? "",
+      row.client_name ?? "",
+      ...customKeys.map((key) => row.custom_fields[key] ?? ""),
+    ]),
   ];
 }

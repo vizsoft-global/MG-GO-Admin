@@ -21,6 +21,7 @@ import {
 import { deleteObjects, putObject } from "@/lib/storage/r2-client";
 import { resolveAssetImageUrl } from "@/lib/storage/asset-image-url";
 import { resolvePartnerLogoMeta } from "@/features/partners/partner-logo";
+import { logDriverChange } from "@/features/drivers/driver-change-log";
 
 type DbClient = SupabaseClient<Database>;
 
@@ -732,6 +733,37 @@ export async function syncIntakeAssetAssignments(
       .update({ driver_id: linkedDriverId, updated_at: now })
       .eq("intake_id", intakeId)
       .eq("status", "assigned");
+  }
+
+  if (toReturn.length > 0 || toAssign.length > 0) {
+    const nameIds = [
+      ...toReturn.map((row) => row.catalog_item_id),
+      ...toAssign,
+    ];
+    const { data: named } = await supabase
+      .from("asset_catalog")
+      .select("id, name")
+      .in("id", nameIds);
+    const nameById = new Map((named ?? []).map((row) => [row.id, row.name]));
+    const before: Record<string, string | null> = {};
+    const after: Record<string, string | null> = {};
+    for (const row of toReturn) {
+      const key = `asset.${nameById.get(row.catalog_item_id) ?? row.catalog_item_id}`;
+      before[key] = "1";
+      after[key] = "0";
+    }
+    for (const id of toAssign) {
+      const key = `asset.${nameById.get(id) ?? id}`;
+      before[key] = "0";
+      after[key] = "1";
+    }
+    void logDriverChange({
+      intakeId,
+      driverId: linkedDriverId,
+      source: "asset",
+      before,
+      after,
+    });
   }
 
   return {};

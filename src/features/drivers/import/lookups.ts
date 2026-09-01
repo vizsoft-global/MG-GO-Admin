@@ -37,9 +37,9 @@ export function restaurantsLookupAoa(
       "ID",
       "Partner (paste this)",
       "Partner ID",
-      "Zone (paste this)",
+      "Zone",
       "Zone code",
-      "Zone ID",
+      "Zone ID (paste this)",
       "Importable",
     ],
     ...rows.map((row) => [
@@ -58,7 +58,7 @@ export function restaurantsLookupAoa(
 
 export function zonesLookupAoa(rows: ZoneLookupRow[]): Array<Array<string | number>> {
   return [
-    ["Name", "Code (paste this)", "ID"],
+    ["Name", "Code", "ID (paste this)"],
     ...rows.map((row) => [row.name, row.code ?? "", row.id]),
   ];
 }

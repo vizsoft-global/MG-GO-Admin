@@ -1,4 +1,7 @@
+import { hasOpsAssignment, NONE_ZONE } from "./driver-assignment";
 import { isValidEmployeeId } from "./driver-errors";
+
+export { NONE_ZONE };
 import {
   isValidCivilIdDigits,
   isValidKuwaitPhoneDigits,
@@ -14,7 +17,6 @@ import { ALLOWED_LOGO_EXTENSIONS, MAX_LOGO_BYTES } from "@/lib/branding/constant
 export const NONE_VEHICLE = "__none__";
 
 export const NONE_PARTNER = "__none_partner__";
-export const NONE_ZONE = "__none_zone__";
 
 export type DriverFormField =
   | "fullName"
@@ -22,7 +24,8 @@ export type DriverFormField =
   | "civilId"
   | "employeeId"
   | "partnerId"
-  | "zoneId";
+  | "zoneId"
+  | "restaurants";
 
 export type DriverFormErrors = Partial<
   Record<DriverFormField | `document_${DriverDocumentType}`, DriverErrorKey>
@@ -68,6 +71,7 @@ export type ValidateDriverFormInput = {
   employeeId: string;
   partnerId: string;
   zoneId: string;
+  restaurantIds: readonly string[];
   documents: Record<DriverDocumentType, File | null>;
 };
 
@@ -94,11 +98,18 @@ export function validateDriverForm(
     errors.civilId = "invalid_civil_id";
   }
 
-  const empDigits = restrictDigits(input.employeeId.trim(), 8);
-  if (!empDigits) {
+  const employeeId = input.employeeId.trim();
+  if (!employeeId) {
     errors.employeeId = "missing_fields";
-  } else if (!isValidEmployeeId(empDigits)) {
+  } else if (!isValidEmployeeId(employeeId)) {
     errors.employeeId = "employee_id_format";
+  }
+
+  // Zone-only and restaurant-only fleets are both legal. A driver with
+  // neither has nowhere to work and is refused here rather than at approve.
+  if (!hasOpsAssignment(input.zoneId, input.restaurantIds)) {
+    errors.zoneId = "missing_assignment";
+    errors.restaurants = "missing_assignment";
   }
 
   for (const docType of DOCUMENT_TYPES) {
