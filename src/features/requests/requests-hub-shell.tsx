@@ -17,14 +17,14 @@ type TypeTile = {
 };
 
 const TYPE_TILES: TypeTile[] = [
-  { type: "leave", href: "/requests/overview?type=leave", icon: "/hub/leave.svg", color: "bg-[#0f9d8a]" },
-  { type: "asset", href: "/requests/overview?type=asset", icon: "/hub/asset.svg", color: "bg-[#7c3aed]" },
-  { type: "fuel", href: "/requests/overview?type=fuel", icon: "/hub/fuel.svg", color: "bg-[#ea580c]" },
-  { type: "loan", href: "/requests/overview?type=loan", icon: "/hub/loan.svg", color: "bg-[#2563eb]" },
-  { type: "complaint", href: "/requests/overview?type=complaint", icon: "/hub/complaint.svg", color: "bg-[#db2777]" },
-  { type: "document", href: "/requests/overview?type=document", icon: "/hub/documents.svg", color: "bg-[#4f46e5]" },
-  { type: "salary_justification", href: "/requests/overview?type=salary_justification", icon: "/hub/salary.svg", color: "bg-[#d25335]" },
-  { type: "sick_leave", href: "/requests/overview?type=sick_leave", icon: "/hub/sick.svg", color: "bg-[#d25335]", wash: "sick" },
+  { type: "leave", href: "/requests/overview?type=leave&preset=all", icon: "/hub/leave.svg", color: "bg-[#0f9d8a]" },
+  { type: "asset", href: "/requests/overview?type=asset&preset=all", icon: "/hub/asset.svg", color: "bg-[#7c3aed]" },
+  { type: "fuel", href: "/requests/overview?type=fuel&preset=all", icon: "/hub/fuel.svg", color: "bg-[#ea580c]" },
+  { type: "loan", href: "/requests/overview?type=loan&preset=all", icon: "/hub/loan.svg", color: "bg-[#2563eb]" },
+  { type: "complaint", href: "/requests/overview?type=complaint&preset=all", icon: "/hub/complaint.svg", color: "bg-[#db2777]" },
+  { type: "document", href: "/requests/overview?type=document&preset=all", icon: "/hub/documents.svg", color: "bg-[#4f46e5]" },
+  { type: "salary_justification", href: "/requests/overview?type=salary_justification&preset=all", icon: "/hub/salary.svg", color: "bg-[#d25335]" },
+  { type: "sick_leave", href: "/requests/overview?type=sick_leave&preset=all", icon: "/hub/sick.svg", color: "bg-[#d25335]", wash: "sick" },
 ];
 
 type OpTile = {
@@ -38,7 +38,7 @@ type OpTile = {
 
 const OP_TILES: OpTile[] = [
   { href: "/requests/esign", labelKey: "hub.esign", icon: "/hub/esign.svg", color: "bg-[#0f766e]", wash: "esign", countKey: "esign" },
-  { href: "/requests/overview", labelKey: "hub.all", icon: "/hub/all.svg", color: "bg-[#0f766e]", countKey: "all" },
+  { href: "/requests/overview?preset=all", labelKey: "hub.all", icon: "/hub/all.svg", color: "bg-[#0f766e]", countKey: "all" },
   { href: "/requests/reports", labelKey: "hub.reports", icon: "/hub/reports.svg", color: "bg-[#0891b2]" },
   { href: "/requests/settings/audit", labelKey: "hub.audit", icon: "/hub/audit.svg", color: "bg-[#64748b]" },
   { href: "/requests/settings", labelKey: "hub.settings", icon: "/hub/settings.svg", color: "bg-[#65a30d]" },

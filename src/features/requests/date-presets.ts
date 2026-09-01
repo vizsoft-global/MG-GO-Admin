@@ -2,6 +2,27 @@ import type { RequestDatePreset } from "./types";
 
 const KUWAIT_TZ = "Asia/Kuwait";
 
+export const REQUEST_DATE_PRESETS: RequestDatePreset[] = [
+  "today",
+  "tomorrow",
+  "this_week",
+  "last_week",
+  "this_month",
+  "last_month",
+  "this_year",
+  "last_year",
+  "all",
+];
+
+/** Hub badges count every open request. Unknown / missing URL values must not fall back to This month. */
+export function parseRequestDatePreset(
+  value: string | undefined | null,
+): RequestDatePreset {
+  return REQUEST_DATE_PRESETS.includes(value as RequestDatePreset)
+    ? (value as RequestDatePreset)
+    : "all";
+}
+
 function kuwaitDateParts(d = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: KUWAIT_TZ,
@@ -16,12 +37,15 @@ function kuwaitDateParts(d = new Date()) {
 }
 
 /** Inclusive Kuwait calendar window → UTC bounds for created_at filter. Plan §10. */
-export function datePresetToBounds(preset: RequestDatePreset): {
+export function datePresetToBounds(
+  preset: RequestDatePreset,
+  now = new Date(),
+): {
   from: string | null;
   to: string | null;
 } {
   if (preset === "all") return { from: null, to: null };
-  const { y, m, day } = kuwaitDateParts();
+  const { y, m, day } = kuwaitDateParts(now);
   // Kuwait is UTC+3; store bounds as ISO for timestamptz filters.
   const startOfDay = (yy: number, mm: number, dd: number) =>
     new Date(Date.UTC(yy, mm - 1, dd, 0, 0, 0) - 3 * 3600 * 1000);

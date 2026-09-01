@@ -167,6 +167,14 @@ export type RequestAttachment = {
   created_at: string;
 };
 
+/** File already in `request-attachments` storage, ready for attach_send / attach_breakdown. */
+export type RequestDecisionAttachment = {
+  storage_key: string;
+  file_name: string;
+  content_type: string;
+  byte_size: number;
+};
+
 export type RequestRequester = {
   name: string;
   code: string;

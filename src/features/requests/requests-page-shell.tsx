@@ -65,6 +65,7 @@ import {
   statusFiltersForRequestType,
   type RequestStatusFilter,
 } from "./request-status-utils";
+import { parseRequestDatePreset, REQUEST_DATE_PRESETS } from "./date-presets";
 import { DECISION_TERM_TYPES, type RequestDatePreset, type RequestListRow } from "./types";
 import { useAdminRequestsList, useBulkDecideRequests } from "./use-requests";
 
@@ -109,18 +110,6 @@ function trendCaption(
     </span>
   );
 }
-
-const DATE_PRESETS: RequestDatePreset[] = [
-  "today",
-  "tomorrow",
-  "this_week",
-  "last_week",
-  "this_month",
-  "last_month",
-  "this_year",
-  "last_year",
-  "all",
-];
 
 const TYPE_FILTERS = [
   "all",
@@ -187,12 +176,16 @@ function exportRowsToCsv(rows: RequestListRow[], fileName: string) {
 
 export function RequestsPageShell({
   initialType = "all",
+  initialDatePreset,
 }: {
   initialType?: string;
+  initialDatePreset?: string;
 }) {
   const t = useTranslations("pages.requests");
   const router = useRouter();
-  const [datePreset, setDatePreset] = useState<RequestDatePreset>("this_month");
+  const [datePreset, setDatePreset] = useState<RequestDatePreset>(
+    parseRequestDatePreset(initialDatePreset),
+  );
   const [type, setType] = useState<string>(
     TYPE_FILTERS.includes(initialType as (typeof TYPE_FILTERS)[number])
       ? initialType
@@ -260,8 +253,16 @@ export function RequestsPageShell({
     [statusCounts, t, visibleStatusFilters],
   );
 
+  const filtersNarrow =
+    datePreset !== "all" ||
+    type !== "all" ||
+    status !== "all" ||
+    departmentKey !== "all" ||
+    zoneId !== "all" ||
+    searchApplied !== "";
+
   const selectableRows = rows.filter((row) => canBulkSelectRequest(row.status));
-  const showSelectColumn = canDecide && selectableRows.length > 0;
+  const showSelectColumn = canDecide;
   const selectedRows = rows.filter((row) => selected.has(row.id));
   const approvableRows = selectedRows.filter(canBulkApprove);
 
@@ -502,7 +503,7 @@ export function RequestsPageShell({
           </Select>
 
           <Select
-            items={DATE_PRESETS.map((preset) => ({
+            items={REQUEST_DATE_PRESETS.map((preset) => ({
               value: preset,
               label: t(`datePresets.${preset}`),
             }))}
@@ -516,7 +517,7 @@ export function RequestsPageShell({
               <SelectValue placeholder={t("filters.date")} />
             </SelectTrigger>
             <SelectContent>
-              {DATE_PRESETS.map((preset) => (
+              {REQUEST_DATE_PRESETS.map((preset) => (
                 <SelectItem
                   key={preset}
                   value={preset}
@@ -599,7 +600,12 @@ export function RequestsPageShell({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : rows.length === 0 ? (
-          <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
+          <AppEmptyState
+            title={filtersNarrow ? t("emptyFilteredTitle") : t("emptyTitle")}
+            description={
+              filtersNarrow ? t("emptyFilteredDescription") : t("emptyDescription")
+            }
+          />
         ) : (
           <AppDataTable
             columns={[
@@ -611,7 +617,11 @@ export function RequestsPageShell({
                       label: (
                         <Checkbox
                           aria-label={t("bulk.selectAll")}
-                          checked={selected.size === selectableRows.length}
+                          checked={
+                            selectableRows.length > 0 &&
+                            selected.size === selectableRows.length
+                          }
+                          disabled={selectableRows.length === 0}
                           onCheckedChange={toggleAll}
                         />
                       ),

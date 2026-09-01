@@ -7,11 +7,11 @@ export default async function RequestsOverviewPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; preset?: string }>;
 }) {
   const { locale } = await params;
-  const { type } = await searchParams;
+  const { type, preset } = await searchParams;
   setRequestLocale(locale);
   await requirePermission(locale, "requests.view");
-  return <RequestsPageShell initialType={type ?? "all"} />;
+  return <RequestsPageShell initialType={type ?? "all"} initialDatePreset={preset} />;
 }

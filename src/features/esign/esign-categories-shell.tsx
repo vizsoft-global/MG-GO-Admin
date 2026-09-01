@@ -51,7 +51,6 @@ function slotLabel(row: EsignCategoryRow): string {
 export function EsignCategoriesShell() {
   const t = useTranslations("pages.requests.esign.categories");
   const tCommon = useTranslations("pages.requests.esign");
-  const tSettings = useTranslations("pages.requests.settings");
   const [rows, setRows] = useState<EsignCategoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
@@ -181,8 +180,8 @@ export function EsignCategoriesShell() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
+          { label: tCommon("hub.requests"), href: "/requests" },
           { label: tCommon("hub.title"), href: "/requests/esign" },
-          { label: tSettings("title"), href: "/requests/settings" },
           { label: t("title") },
         ]}
         actions={

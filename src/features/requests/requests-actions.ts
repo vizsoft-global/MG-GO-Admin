@@ -15,6 +15,7 @@ import type {
   RequestClarification,
   RequestCreateInput,
   RequestCreateOptions,
+  RequestDecisionAttachment,
   RequestDecisionTerms,
   RequestDepartmentOption,
   RequestDetail,
@@ -388,16 +389,64 @@ function buildDecisionMeta(
   return meta;
 }
 
+const ATTACH_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+]);
+const ATTACH_MAX_BYTES = 10 * 1024 * 1024;
+
+function safeAttachmentName(name: string): string {
+  const trimmed = name.trim().replace(/[/\\]/g, "_");
+  return trimmed.slice(0, 180) || "attachment";
+}
+
+export async function uploadStaffRequestAttachments(input: {
+  requestId: string;
+  files: Array<{ name: string; type: string; base64: string }>;
+}): Promise<{ ok: boolean; attachments?: RequestDecisionAttachment[]; error?: string }> {
+  const session = await requireRequestsDecide();
+  if (input.files.length === 0) return { ok: false, error: "attachment_required" };
+
+  const supabase = await createClient();
+  const attachments: RequestDecisionAttachment[] = [];
+
+  for (const file of input.files) {
+    const type = file.type || "application/octet-stream";
+    if (!ATTACH_MIME.has(type)) return { ok: false, error: "invalid_attachment_type" };
+    const bytes = Buffer.from(file.base64, "base64");
+    if (bytes.length === 0 || bytes.length > ATTACH_MAX_BYTES) {
+      return { ok: false, error: "invalid_attachment_size" };
+    }
+    const key = `${session.id}/${input.requestId}/${Date.now()}_${safeAttachmentName(file.name)}`;
+    const { error } = await supabase.storage.from("request-attachments").upload(key, bytes, {
+      contentType: type,
+      upsert: false,
+    });
+    if (error) return { ok: false, error: error.message };
+    attachments.push({
+      storage_key: key,
+      file_name: safeAttachmentName(file.name),
+      content_type: type,
+      byte_size: bytes.length,
+    });
+  }
+
+  return { ok: true, attachments };
+}
+
 export async function decideAdminRequest(input: {
   requestId: string;
   action: string;
   reason?: string;
   terms?: RequestDecisionTerms;
   reschedule?: RequestRescheduleInput;
+  attachments?: RequestDecisionAttachment[];
 }): Promise<{ ok: boolean; error?: string; status?: string }> {
   const session = await requireRequestsDecide();
   const supabase = await createClient();
-  const meta: Record<string, string | number> = buildDecisionMeta(
+  const meta: Record<string, unknown> = buildDecisionMeta(
     input.terms,
     staffDisplayName(session),
   );
@@ -406,6 +455,9 @@ export async function decideAdminRequest(input: {
   }
   if (input.reschedule?.new_end_date) {
     meta.new_end_date = input.reschedule.new_end_date;
+  }
+  if (input.attachments?.length) {
+    meta.attachments = input.attachments;
   }
   const { data, error } = await supabase.rpc("admin_decide_request", {
     p_request_id: input.requestId,
@@ -418,6 +470,9 @@ export async function decideAdminRequest(input: {
     const message = error.message ?? "";
     if (message.includes("fuel_transfer_type_required")) {
       return { ok: false, error: "fuel_transfer_type_required" };
+    }
+    if (message.includes("attachment_required")) {
+      return { ok: false, error: "attachment_required" };
     }
     return { ok: false, error: error.message };
   }
@@ -611,7 +666,6 @@ export async function createRequestOnBehalf(input: RequestCreateInput): Promise<
 }> {
   await requireRequestsManage();
   if (
-    input.type === "loan" &&
     typeof input.payload.needed_by === "string" &&
     isNeededByInPast(input.payload.needed_by, kuwaitTodayYmd())
   ) {

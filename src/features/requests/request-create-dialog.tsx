@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Loader2, Plus, TriangleAlert } from "lucide-react";
@@ -108,6 +108,7 @@ export function RequestCreateDialog({
   const [type, setType] = useState<string>("leave");
   const [draft, setDraft] = useState<Draft>({});
   const [declaration, setDeclaration] = useState(false);
+  const openedAtRef = useRef(0);
 
   const { data: options, isLoading } = useRequestCreateOptions(open);
   const create = useCreateRequestOnBehalf();
@@ -126,6 +127,29 @@ export function RequestCreateDialog({
     const keys = options?.types.map((row) => row.key) ?? [];
     if (keys.length > 0 && !keys.includes(type)) setType(keys[0]);
   }, [options?.types, type]);
+
+  useEffect(() => {
+    if (!open) return;
+    openedAtRef.current = Date.now();
+    const blurNativeDate = () => {
+      const active = document.activeElement;
+      if (
+        Date.now() - openedAtRef.current < 400 &&
+        active instanceof HTMLInputElement &&
+        (active.type === "date" || active.type === "month")
+      ) {
+        active.blur();
+      }
+    };
+    const first = window.setTimeout(blurNativeDate, 0);
+    const second = window.setTimeout(blurNativeDate, 80);
+    const third = window.setTimeout(blurNativeDate, 200);
+    return () => {
+      window.clearTimeout(first);
+      window.clearTimeout(second);
+      window.clearTimeout(third);
+    };
+  }, [open, type]);
 
   const typeItems = useMemo<SearchSelectItem[]>(
     () =>
@@ -244,7 +268,7 @@ export function RequestCreateDialog({
     }
     if (hasDeclaration) payload.declaration_accepted = declaration;
 
-    if (type === "loan" && isNeededByInPast(value("needed_by"), kuwaitTodayYmd())) {
+    if (isNeededByInPast(value("needed_by"), kuwaitTodayYmd())) {
       toast.error(t("create.errors.date_in_past"));
       return;
     }
@@ -303,6 +327,12 @@ export function RequestCreateDialog({
         closeOutside
       >
         <div className="space-y-3 px-5">
+          <button
+            type="button"
+            tabIndex={0}
+            className="sr-only"
+            aria-label={t("create.title")}
+          />
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>
@@ -316,7 +346,6 @@ export function RequestCreateDialog({
                 searchPlaceholder={t("create.riderSearchPlaceholder")}
                 emptyText={t("create.riderEmpty")}
                 recentsKey="requests-create-rider"
-                disabled={isLoading}
               />
             </div>
             <div className="space-y-1">
@@ -336,7 +365,6 @@ export function RequestCreateDialog({
                 searchPlaceholder={t("create.typeSearchPlaceholder")}
                 emptyText={t("create.typeEmpty")}
                 recentsKey="requests-create-type"
-                disabled={isLoading}
                 clearable={false}
               />
             </div>
@@ -358,6 +386,7 @@ export function RequestCreateDialog({
                   </Label>
                   <Input
                     type="date"
+                    autoFocus={false}
                     className="h-9"
                     value={value("start_date")}
                     onChange={(e) => set("start_date", e.target.value)}
@@ -370,6 +399,7 @@ export function RequestCreateDialog({
                   </Label>
                   <Input
                     type="date"
+                    autoFocus={false}
                     className="h-9"
                     min={value("start_date") || undefined}
                     value={value("end_date")}
@@ -640,6 +670,7 @@ export function RequestCreateDialog({
                   </Label>
                   <Input
                     className="h-9"
+                    autoFocus={false}
                     type={
                       NUMBER_KEYS.has(key)
                         ? "number"
@@ -751,6 +782,7 @@ export function RequestCreateDialog({
                       <Label>{label}</Label>
                       <Input
                         className="h-9"
+                        autoFocus={false}
                         type={
                           field.kind === "number"
                             ? "number"

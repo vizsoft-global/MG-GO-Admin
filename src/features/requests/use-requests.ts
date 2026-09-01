@@ -6,6 +6,7 @@ import {
   createRequestOnBehalf,
   decideAdminRequest,
   decideAdminRequestsBulk,
+  uploadStaffRequestAttachments,
   fetchAdminRequestDetail,
   fetchAdminRequestsList,
   fetchRequestCreateOptions,
@@ -16,6 +17,7 @@ import {
 import type {
   FuelTransferType,
   RequestCreateInput,
+  RequestDecisionAttachment,
   RequestDecisionTerms,
   RequestListFilters,
   RequestRescheduleInput,
@@ -71,6 +73,7 @@ export function useDecideRequest(requestId: string) {
       reason?: string;
       terms?: RequestDecisionTerms;
       reschedule?: RequestRescheduleInput;
+      attachments?: RequestDecisionAttachment[];
     }) => decideAdminRequest({ requestId, ...input }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.requests.all() });
@@ -78,6 +81,13 @@ export function useDecideRequest(requestId: string) {
         queryKey: queryKeys.requests.detail(requestId),
       });
     },
+  });
+}
+
+export function useUploadStaffRequestAttachments(requestId: string) {
+  return useMutation({
+    mutationFn: (files: Array<{ name: string; type: string; base64: string }>) =>
+      uploadStaffRequestAttachments({ requestId, files }),
   });
 }
 

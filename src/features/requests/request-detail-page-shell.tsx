@@ -29,6 +29,7 @@ import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { fetchRequestAttachmentUrl } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
+import { fileToDecisionAttachmentPayload, RequestAttachDialog } from "./request-attach-dialog";
 import { RequestDecisionTermsDialog } from "./request-decision-terms-dialog";
 import { RequestFieldRow } from "./request-field-row";
 import { RequestFuelTransferCard } from "./request-fuel-transfer-card";
@@ -46,11 +47,12 @@ import {
   requestStatusLabelKey,
   requestStatusVariant,
 } from "./request-status-utils";
-import { fuelFinalApproveBlocked } from "./request-create-utils";
+import { fuelFinalApproveBlocked, isAttachRequiredAction } from "./request-create-utils";
 import { RequesterHeader } from "./requester-header";
 import { DECISION_TERM_TYPES } from "./types";
 import type {
   RequestApprovalStep,
+  RequestDecisionAttachment,
   RequestDecisionTerms,
   RequestRescheduleInput,
 } from "./types";
@@ -58,6 +60,7 @@ import {
   useAdminRequestDetail,
   useDecideRequest,
   useSaveDecisionTerms,
+  useUploadStaffRequestAttachments,
 } from "./use-requests";
 
 function formatFileSize(bytes: number | null): string {
@@ -140,10 +143,14 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const canDecide = can("requests.approve") || can("requests.manage");
   const { data, isLoading, refetch } = useAdminRequestDetail(requestId);
   const decide = useDecideRequest(requestId);
+  const uploadAttachments = useUploadStaffRequestAttachments(requestId);
   const saveTerms = useSaveDecisionTerms(requestId);
   const [reason, setReason] = useState("");
   const [termsMode, setTermsMode] = useState<"approve" | "edit" | null>(null);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [attachAction, setAttachAction] = useState<"attach_send" | "attach_breakdown" | null>(
+    null,
+  );
 
   const request = data?.request;
   const steps = data?.steps ?? [];
@@ -183,12 +190,25 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
       ? request.payload.driver_ack_note.trim()
       : "";
 
+  const decidePending = decide.isPending || uploadAttachments.isPending;
+
+  const decideErrorMessage = (error: string | undefined) => {
+    if (error === "fuel_transfer_type_required") {
+      return t("detail.fuelTransfer.requiredBeforeApprove");
+    }
+    if (error === "attachment_required") return t("detail.attach.required");
+    if (error === "invalid_attachment_type") return t("detail.attach.invalidType");
+    if (error === "invalid_attachment_size") return t("detail.attach.invalidSize");
+    return error ?? t("detail.actionFailed");
+  };
+
   const runAction = async (
     action: string,
     options?: {
       terms?: RequestDecisionTerms;
       reschedule?: RequestRescheduleInput;
       reasonOverride?: string;
+      attachments?: RequestDecisionAttachment[];
     },
   ) => {
     const note = (options?.reasonOverride ?? reason).trim();
@@ -200,24 +220,26 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
       toast.error(t("detail.reasonRequired"));
       return;
     }
+    if (isAttachRequiredAction(action) && (options?.attachments?.length ?? 0) < 1) {
+      toast.error(t("detail.attach.required"));
+      return;
+    }
     const result = await decide.mutateAsync({
       action,
       reason: note || undefined,
       terms: options?.terms,
       reschedule: options?.reschedule,
+      attachments: options?.attachments,
     });
     if (!result.ok) {
-      toast.error(
-        result.error === "fuel_transfer_type_required"
-          ? t("detail.fuelTransfer.requiredBeforeApprove")
-          : (result.error ?? t("detail.actionFailed")),
-      );
+      toast.error(decideErrorMessage(result.error));
       return;
     }
     toast.success(t("detail.actionOk"));
     setReason("");
     setTermsMode(null);
     setRescheduleOpen(false);
+    setAttachAction(null);
     await refetch();
   };
 
@@ -429,7 +451,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                         type="button"
                         variant={index === 0 ? "default" : "outline"}
                         className="h-9"
-                        disabled={decide.isPending || (action === "approve" && fuelApproveBlocked)}
+                        disabled={decidePending || (action === "approve" && fuelApproveBlocked)}
                         onClick={() => {
                           if (action === "approve" && fuelApproveBlocked) {
                             toast.error(t("detail.fuelTransfer.requiredBeforeApprove"));
@@ -441,6 +463,10 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                           }
                           if (action === "reschedule") {
                             setRescheduleOpen(true);
+                            return;
+                          }
+                          if (action === "attach_send" || action === "attach_breakdown") {
+                            setAttachAction(action);
                             return;
                           }
                           void runAction(action);
@@ -455,7 +481,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 <Button
                   type="button"
                   className="h-9"
-                  disabled={decide.isPending}
+                  disabled={decidePending}
                   onClick={() => void runAction("solve")}
                 >
                   <Check className="me-1.5 h-3.5 w-3.5" />
@@ -466,7 +492,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 type="button"
                 variant="outline"
                 className="h-9 text-destructive hover:bg-destructive/10"
-                disabled={decide.isPending}
+                disabled={decidePending}
                 onClick={() => void runAction("reject")}
               >
                 <X className="me-1.5 h-3.5 w-3.5" />
@@ -476,7 +502,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 type="button"
                 variant="outline"
                 className="h-9"
-                disabled={decide.isPending}
+                disabled={decidePending}
                 onClick={() => void runAction("clarify")}
               >
                 <MessageCircleQuestion className="me-1.5 h-3.5 w-3.5" />
@@ -498,7 +524,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 variant="outline"
                 size="sm"
                 className="h-9 shrink-0"
-                disabled={decide.isPending}
+                disabled={decidePending}
                 onClick={() => void runAction("close", { reasonOverride: "" })}
               >
                 <Archive className="me-1.5 h-3.5 w-3.5" />
@@ -588,7 +614,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
           requestCode={request.request_code}
           initialTerms={currentTerms}
           mode={termsMode ?? "approve"}
-          submitting={decide.isPending || saveTerms.isPending}
+          submitting={decidePending || saveTerms.isPending}
           onSubmit={(terms) => {
             if (termsMode === "edit") {
               void submitTermsEdit(terms);
@@ -605,10 +631,30 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         requestCode={request.request_code}
         currentStartDate={request.start_date}
         currentEndDate={request.end_date}
-        submitting={decide.isPending}
+        submitting={decidePending}
         onSubmit={(input, note) =>
           void runAction("reschedule", { reschedule: input, reasonOverride: note })
         }
+      />
+
+      <RequestAttachDialog
+        open={attachAction != null}
+        onOpenChange={(next) => setAttachAction(next ? attachAction : null)}
+        action={attachAction}
+        requestCode={request.request_code}
+        submitting={decidePending}
+        onSubmit={(files) => {
+          void (async () => {
+            const payloads = await Promise.all(files.map(fileToDecisionAttachmentPayload));
+            const uploaded = await uploadAttachments.mutateAsync(payloads);
+            if (!uploaded.ok || !uploaded.attachments?.length) {
+              toast.error(decideErrorMessage(uploaded.error));
+              return;
+            }
+            if (!attachAction) return;
+            await runAction(attachAction, { attachments: uploaded.attachments });
+          })();
+        }}
       />
     </AppPage>
   );

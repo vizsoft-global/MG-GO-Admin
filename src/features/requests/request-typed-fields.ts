@@ -19,6 +19,7 @@ export const TYPE_FIELDS: Record<string, TypedField[]> = {
   ],
   sick_leave: [
     { key: "leave_subtype", label: "Leave type" },
+    { key: "leave_subtype_other", label: "Specify leave type" },
     { key: "date_range", label: "Dates", from: "derived" },
     { key: "duration_days", label: "Days", from: "derived" },
     { key: "comment", label: "Comment" },
