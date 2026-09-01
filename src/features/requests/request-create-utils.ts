@@ -22,6 +22,17 @@ export function isAssetRenewal(mode: string): boolean {
   return /^\s*renewal\s*$/i.test(mode);
 }
 
+export function isOtherLeaveSubtype(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "other" || normalized === "أخرى";
+}
+
+export const ATTACH_REQUIRED_ACTIONS = new Set(["attach_send", "attach_breakdown"]);
+
+export function isAttachRequiredAction(action: string): boolean {
+  return ATTACH_REQUIRED_ACTIONS.has(action);
+}
+
 /**
  * Fields that actually gate Create. Comment / justification stay optional
  * unless the type itself requires them (asset justification).
@@ -33,8 +44,11 @@ export function typedRequiredPayloadKeys(
   switch (type) {
     case "leave":
       return ["leave_type"];
-    case "sick_leave":
-      return ["leave_subtype"];
+    case "sick_leave": {
+      const keys = ["leave_subtype"];
+      if (isOtherLeaveSubtype(draft.leave_subtype ?? "")) keys.push("leave_subtype_other");
+      return keys;
+    }
     case "loan":
       return ["tenure_months", "needed_by"];
     case "asset": {
@@ -62,6 +76,9 @@ export function shouldShowCreateField(
   if (isDerivedCreateField(key)) return false;
   if (key === "asset_current_status" && isAssetFirstTime(draft.request_mode ?? "")) {
     return false;
+  }
+  if (key === "leave_subtype_other") {
+    return isOtherLeaveSubtype(draft.leave_subtype ?? "");
   }
   return true;
 }
@@ -141,6 +158,9 @@ export function parseCreateRequestError(error: string | undefined): {
   field?: string;
 } {
   if (!error) return { key: "failed" };
+  if (error === "date_in_past" || error.startsWith("date_in_past:")) {
+    return { key: "date_in_past" };
+  }
   const option = /^invalid_option:(.+)$/.exec(error);
   if (option) return { key: "invalid_option", field: option[1] };
   const required = /^field_required:(.+)$/.exec(error);

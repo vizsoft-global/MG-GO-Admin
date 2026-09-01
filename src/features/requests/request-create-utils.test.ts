@@ -4,7 +4,9 @@ import {
   fuelFinalApproveBlocked,
   inclusiveDurationDays,
   isAssetFirstTime,
+  isAttachRequiredAction,
   isNeededByInPast,
+  isOtherLeaveSubtype,
   parseCreateRequestError,
   shouldShowCreateField,
   staticOptionsForField,
@@ -118,5 +120,33 @@ describe("isNeededByInPast", () => {
     assert.equal(isNeededByInPast("2026-08-20", "2026-08-28"), true);
     assert.equal(isNeededByInPast("2026-08-28", "2026-08-28"), false);
     assert.equal(isNeededByInPast("2026-09-01", "2026-08-28"), false);
+  });
+});
+
+describe("parseCreateRequestError date_in_past", () => {
+  it("treats date_in_past:needed_by as the date_in_past toast", () => {
+    assert.deepEqual(parseCreateRequestError("date_in_past:needed_by"), {
+      key: "date_in_past",
+    });
+  });
+});
+
+describe("sick leave Other", () => {
+  it("requires the extra text only when Other is selected", () => {
+    assert.equal(isOtherLeaveSubtype("Other"), true);
+    assert.equal(isOtherLeaveSubtype("أخرى"), true);
+    assert.equal(isOtherLeaveSubtype("Sick leave"), false);
+    assert.equal(shouldShowCreateField("leave_subtype_other", { leave_subtype: "Other" }), true);
+    assert.equal(shouldShowCreateField("leave_subtype_other", { leave_subtype: "Injury" }), false);
+    assert.ok(typedRequiredPayloadKeys("sick_leave", { leave_subtype: "Other" }).includes("leave_subtype_other"));
+    assert.ok(!typedRequiredPayloadKeys("sick_leave", { leave_subtype: "Injury" }).includes("leave_subtype_other"));
+  });
+});
+
+describe("isAttachRequiredAction", () => {
+  it("locks Attach & Send and Attach breakdown until a file is chosen", () => {
+    assert.equal(isAttachRequiredAction("attach_send"), true);
+    assert.equal(isAttachRequiredAction("attach_breakdown"), true);
+    assert.equal(isAttachRequiredAction("approve"), false);
   });
 });
