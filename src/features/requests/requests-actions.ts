@@ -446,19 +446,16 @@ export async function decideAdminRequest(input: {
 }): Promise<{ ok: boolean; error?: string; status?: string }> {
   const session = await requireRequestsDecide();
   const supabase = await createClient();
-  const meta: Record<string, unknown> = buildDecisionMeta(
-    input.terms,
-    staffDisplayName(session),
-  );
-  if (input.reschedule?.new_start_date) {
-    meta.new_start_date = input.reschedule.new_start_date;
-  }
-  if (input.reschedule?.new_end_date) {
-    meta.new_end_date = input.reschedule.new_end_date;
-  }
-  if (input.attachments?.length) {
-    meta.attachments = input.attachments;
-  }
+  const meta = {
+    ...buildDecisionMeta(input.terms, staffDisplayName(session)),
+    ...(input.reschedule?.new_start_date
+      ? { new_start_date: input.reschedule.new_start_date }
+      : {}),
+    ...(input.reschedule?.new_end_date
+      ? { new_end_date: input.reschedule.new_end_date }
+      : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+  };
   const { data, error } = await supabase.rpc("admin_decide_request", {
     p_request_id: input.requestId,
     p_action: input.action,
