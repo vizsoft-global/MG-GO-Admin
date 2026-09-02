@@ -33,6 +33,34 @@ export function isAttachRequiredAction(action: string): boolean {
   return ATTACH_REQUIRED_ACTIONS.has(action);
 }
 
+/** Sick leave already requires a medical file at submit — do not ask again. */
+export function shouldOfferRequestDocumentsAction(attachmentCount: number): boolean {
+  return attachmentCount < 1;
+}
+
+const ACK_DOCS_PREFIX = "Documents uploaded: ";
+
+/**
+ * Older app builds stuffed storage keys into `payload.driver_ack_note`.
+ * New builds pass `p_attachment_keys` and leave the note as typed text.
+ */
+export function parseDriverAckNote(note: string): { keys: string[]; text: string | null } {
+  const trimmed = note.trim();
+  if (!trimmed) return { keys: [], text: null };
+  if (!trimmed.startsWith(ACK_DOCS_PREFIX)) {
+    return { keys: [], text: trimmed };
+  }
+  const rest = trimmed.slice(ACK_DOCS_PREFIX.length);
+  const sep = rest.indexOf(" · ");
+  const keyPart = (sep === -1 ? rest : rest.slice(0, sep)).trim();
+  const text = sep === -1 ? null : rest.slice(sep + 3).trim() || null;
+  const keys = keyPart
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return { keys, text };
+}
+
 /**
  * Fields that actually gate Create. Comment / justification stay optional
  * unless the type itself requires them (asset justification).

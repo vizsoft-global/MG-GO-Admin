@@ -512,7 +512,7 @@ export function RequestsPageShell({
               if (v) setDatePreset(v as RequestDatePreset);
             }}
           >
-            <SelectTrigger className="h-9 w-[160px]">
+            <SelectTrigger className="h-9 w-[180px]" aria-label={t("filters.date")}>
               <CalendarDays className="me-1.5 h-3.5 w-3.5 text-muted-foreground" />
               <SelectValue placeholder={t("filters.date")} />
             </SelectTrigger>

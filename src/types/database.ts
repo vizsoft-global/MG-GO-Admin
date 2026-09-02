@@ -7610,7 +7610,7 @@ export type Database = {
         Returns: string
       }
       driver_acknowledge_request: {
-        Args: { p_note?: string; p_request_id: string }
+        Args: { p_attachment_keys?: string[]; p_note?: string; p_request_id: string }
         Returns: Json
       }
       driver_app_lookup_by_passcode: {

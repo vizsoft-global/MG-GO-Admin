@@ -32,8 +32,7 @@ import type { EsignCategoryRow } from "./types";
 export function EsignScreenshotSettingsShell() {
   const t = useTranslations("pages.requests.esign.screenshot");
   const tTypes = useTranslations("pages.requests.types");
-  const tSettings = useTranslations("pages.requests.settings");
-  const tRequests = useTranslations("pages.requests");
+  const tCommon = useTranslations("pages.requests.esign");
   const { data: defaultData, isLoading: defaultLoading } = useEsignScreenshotDefault();
   const updateDefault = useUpdateEsignScreenshotDefault();
   const { data: categories, isLoading: categoriesLoading, refetch: refetchCategories } =
@@ -112,8 +111,8 @@ export function EsignScreenshotSettingsShell() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
-          { label: tRequests("title"), href: "/requests" },
-          { label: tSettings("title"), href: "/requests/settings" },
+          { label: tCommon("hub.requests"), href: "/requests" },
+          { label: tCommon("hub.title"), href: "/requests/esign" },
           { label: t("title") },
         ]}
       />

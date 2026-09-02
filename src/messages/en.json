@@ -3315,7 +3315,7 @@
       "emptyTitle": "No requests yet",
       "emptyDescription": "Submitted requests will appear here with approval progress.",
       "emptyFilteredTitle": "No requests in this view",
-      "emptyFilteredDescription": "Hub counts include every open request. Switch the date range to All if This month is empty.",
+      "emptyFilteredDescription": "Hub counts include every open request. Switch the date range to All dates if This month is empty.",
       "colCode": "Request ID",
       "colDriver": "Driver",
       "colType": "Type",
@@ -3345,7 +3345,7 @@
         "last_month": "Last month",
         "this_year": "This year",
         "last_year": "Last year",
-        "all": "All"
+        "all": "All dates"
       },
       "kpi": {
         "total": "Total requests",
