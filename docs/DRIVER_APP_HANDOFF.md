@@ -876,7 +876,7 @@ select driver_app_title,
 - When `driver_app_maintenance_mode = true`: render a full-screen maintenance view using `driver_app_maintenance_message`. Block login and in-app actions; allow retry/poll.
 - **Separate** from `maintenance_mode` on the same row (that flag gates the **admin panel** only).
 - `driver_app_logo_url` / `driver_app_splash_url` / `driver_app_icon_url` are public Supabase Storage URLs under bucket `branding`, paths `driver-app/logo.*`, `driver-app/splash.*`, and `driver-app/icon.*`. Uploads append a `?v=` cache-bust query param.
-- **App icon refresh:** subscribe to `app_settings` realtime (row `id = 1`) or poll `updated_at` / compare `driver_app_icon_url` on app resume. When the URL changes, download the new image and update the launcher icon (Expo: `expo-dynamic-app-icon` or platform-specific APIs).
+- **App icon / settings refresh:** subscribe to `app_settings` realtime (row `id = 1`) and compare `driver_app_icon_url` on app resume. **Do not poll `app_settings` or `drivers` every few seconds.** A 5s fleet-wide poll is what saturated `dpd-production` (Micro) — ~230k settings reads/hour, 55% gateway 503/522. A 15-minute safety poll is the ceiling. When the icon URL changes, download the new image and update the launcher icon.
 - `driver_app_title` is the mobile app display name (defaults to `Musallam Delivery`). Admin subtitle/login hint remain on `app_subtitle` / `driver_app_login_hint` (configured under Settings → Branding).
 - `driver_app_delivery_proximity_meters` (default 500): max meters outside zone boundary or from assigned restaurant to allow Add Delivery. `0` disables the gate. Admin cap is **5,000,000 m** (was 10,000 m / 10 km). Loaded via `driver_get_delivery_proximity_context()` when opening Add Delivery (includes zone geometry + assigned restaurants).
 - `driver_app_sideload_updates_enabled` is **deprecated and forced `false`** — sideload OTA was removed.
@@ -1111,7 +1111,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-08-31 — [admin+app] Employee ID is letters and digits, 1–100 characters, unique case-insensitive. Bulk import matches and updates on this field. Login lookup is `lower(employee_id)` or exact `driver_code`. Migration `20261008100000`. A rider with a new alphanumeric ID cannot sign in until the matching app build is installed.*
+*Last synced: 2026-09-02 — [admin+app] Driver app must not poll `app_settings` / `drivers` on a short timer. Realtime on `app_settings` id=1 plus a 15-minute safety poll; per-driver duty/block use a filtered `drivers` channel. Ship a Play build — installed APKs keep the 5s storm until then. Micro compute cannot absorb that read volume.*
+
+*Prior: 2026-08-31 — [admin+app] Employee ID is letters and digits, 1–100 characters, unique case-insensitive. Bulk import matches and updates on this field. Login lookup is `lower(employee_id)` or exact `driver_code`. Migration `20261008100000`. A rider with a new alphanumeric ID cannot sign in until the matching app build is installed.*
 
 *Prior: 2026-08-22 — [admin+app] Home bumper/quest progress uses `progress_count` (submitted orders); `eligible_count` / payout stay verified. Home `week.deliveries_count` is submitted. Extra earnings adds `progress_count`. App: invalidate Home + Extra Earnings after pickup/finish; raised center Add Delivery FAB on the 5-tab bar (`openDeliveryAction`). [admin only] `admin_bulk_update_deliveries` on `/deliveries`. Migration `20260926100000`.*
 
