@@ -1,6 +1,7 @@
 import createIntlMiddleware from "next-intl/middleware";
 import { type NextRequest, NextResponse } from "next/server";
 import { routing } from "@/i18n/routing";
+import { settledWithin, SUPABASE_DEADLINE_MS } from "@/lib/async/settled-within";
 import { updateSession } from "@/lib/supabase/middleware";
 import { createServerClient } from "@supabase/ssr";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
@@ -59,7 +60,7 @@ function isProtectedPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const intlResponse = intlMiddleware(request);
-  const response = await updateSession(request, intlResponse);
+  const { response, user } = await updateSession(request, intlResponse);
   const { pathname } = request.nextUrl;
   const locale = getLocale(pathname);
   const path = pathWithoutLocale(pathname);
@@ -68,9 +69,18 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+  const loginUrl = new URL(`/${locale}/login`, request.url);
+
+  if (!user) {
+    if (isProtectedPath(pathname)) {
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return response;
+  }
+
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
-
   if (!url || !key) {
     return response;
   }
@@ -91,22 +101,18 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const loginUrl = new URL(`/${locale}/login`, request.url);
-
-  const { data: opsSettings } = await supabase
-    .from("app_settings")
-    .select("super_admin_claimed, maintenance_mode")
-    .eq("id", 1)
-    .maybeSingle();
-
+  const opsResult = await settledWithin(
+    supabase
+      .from("app_settings")
+      .select("super_admin_claimed, maintenance_mode")
+      .eq("id", 1)
+      .maybeSingle(),
+    SUPABASE_DEADLINE_MS,
+  );
+  const opsSettings = opsResult.ok ? opsResult.value.data : null;
   const superAdminClaimed = opsSettings?.super_admin_claimed ?? true;
 
   if (
-    user &&
     !superAdminClaimed &&
     path !== "/setup/claim-super-admin" &&
     !path.startsWith("/api")
@@ -125,20 +131,21 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isProtectedPath(pathname)) {
-    if (!user) {
-      loginUrl.searchParams.set("next", pathname);
-      return NextResponse.redirect(loginUrl);
+    const profileResult = await settledWithin(
+      supabase
+        .from("profiles")
+        .select(
+          "approval_status, admin_role_id, archived_at, role, admin_roles(is_super_admin)",
+        )
+        .eq("id", user.id)
+        .maybeSingle(),
+      SUPABASE_DEADLINE_MS,
+    );
+    if (!profileResult.ok) {
+      return response;
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select(
-        "approval_status, admin_role_id, archived_at, role, admin_roles(is_super_admin)",
-      )
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const profileRow = profile as {
+    const profileRow = profileResult.value.data as {
       approval_status?: string;
       admin_role_id?: string | null;
       archived_at?: string | null;
@@ -177,25 +184,27 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (user && publicAuthPaths.has(path)) {
+  if (publicAuthPaths.has(path)) {
     if (path === "/setup/claim-super-admin") {
-      const { data: settings } = await supabase
-        .from("app_settings")
-        .select("super_admin_claimed")
-        .eq("id", 1)
-        .maybeSingle();
-      if (settings?.super_admin_claimed) {
+      if (superAdminClaimed) {
         return NextResponse.redirect(new URL(`/${locale}/login`, request.url));
       }
       return response;
     }
 
     if (path === "/login" || path === "/signup") {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("approval_status, admin_role_id")
-        .eq("id", user.id)
-        .maybeSingle();
+      const profileResult = await settledWithin(
+        supabase
+          .from("profiles")
+          .select("approval_status, admin_role_id")
+          .eq("id", user.id)
+          .maybeSingle(),
+        SUPABASE_DEADLINE_MS,
+      );
+      if (!profileResult.ok) {
+        return response;
+      }
+      const profile = profileResult.value.data;
 
       if (profile?.approval_status === "pending") {
         return NextResponse.redirect(

@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { settledWithin, SUPABASE_DEADLINE_MS } from "@/lib/async/settled-within";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -100,16 +101,18 @@ function normalizeRow(
 async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("app_themes")
-      .select("id, name, base_preset, light_tokens, dark_tokens")
-      .order("name");
-
-    if (error) {
+    const result = await settledWithin(
+      supabase
+        .from("app_themes")
+        .select("id, name, base_preset, light_tokens, dark_tokens")
+        .order("name"),
+      SUPABASE_DEADLINE_MS,
+    );
+    if (!result.ok || result.value.error) {
       return [];
     }
 
-    return (data ?? []).map((row) => ({
+    return (result.value.data ?? []).map((row) => ({
       id: row.id,
       name: row.name,
       basePreset: row.base_preset,
@@ -145,34 +148,39 @@ async function loadAppSettingsRow(): Promise<{
 } | null> {
   try {
     const supabase = await createClient();
-    let { data, error } = await supabase
-      .from("app_settings")
-      .select(APP_SETTINGS_SELECT)
-      .eq("id", 1)
-      .maybeSingle();
-
-    if (error?.code === "42703") {
-      ({ data, error } = await supabase
-        .from("app_settings")
-        .select("app_name, app_subtitle, font_family, logo_url, logo_type")
-        .eq("id", 1)
-        .maybeSingle());
+    const primary = await settledWithin(
+      supabase.from("app_settings").select(APP_SETTINGS_SELECT).eq("id", 1).maybeSingle(),
+      SUPABASE_DEADLINE_MS,
+    );
+    if (primary.ok && !primary.value.error && primary.value.data) {
+      return primary.value.data;
     }
-
-    if (!error && data) return data;
+    if (primary.ok && primary.value.error?.code === "42703") {
+      const fallback = await settledWithin(
+        supabase
+          .from("app_settings")
+          .select("app_name, app_subtitle, font_family, logo_url, logo_type")
+          .eq("id", 1)
+          .maybeSingle(),
+        SUPABASE_DEADLINE_MS,
+      );
+      if (fallback.ok && !fallback.value.error && fallback.value.data) {
+        return fallback.value.data;
+      }
+    }
   } catch {
     /* fall through to service role */
   }
 
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("app_settings")
-      .select(APP_SETTINGS_SELECT)
-      .eq("id", 1)
-      .maybeSingle();
-
-    if (!error && data) return data;
+    const service = await settledWithin(
+      admin.from("app_settings").select(APP_SETTINGS_SELECT).eq("id", 1).maybeSingle(),
+      SUPABASE_DEADLINE_MS,
+    );
+    if (service.ok && !service.value.error && service.value.data) {
+      return service.value.data;
+    }
   } catch {
     /* use defaults */
   }

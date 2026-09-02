@@ -1,17 +1,19 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import type { User } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { settledWithin, SUPABASE_DEADLINE_MS } from "@/lib/async/settled-within";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 
 export async function updateSession(
   request: NextRequest,
   response: NextResponse = NextResponse.next({ request }),
-) {
+): Promise<{ response: NextResponse; user: User | null }> {
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
 
   if (!url || !key) {
-    return response;
+    return { response, user: null };
   }
 
   const supabase = createServerClient<Database>(url, key, {
@@ -30,10 +32,6 @@ export async function updateSession(
     },
   });
 
-  try {
-    await supabase.auth.getUser();
-  } catch {
-    // Network blip during edge refresh — don't block the request
-  }
-  return response;
+  const auth = await settledWithin(supabase.auth.getUser(), SUPABASE_DEADLINE_MS);
+  return { response, user: auth.ok ? auth.value.data.user : null };
 }
