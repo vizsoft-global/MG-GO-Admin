@@ -214,6 +214,12 @@ function emptyKpi(): RequestKpis {
   };
 }
 
+/** Page-open only. Refetch after decide must not insert a later Read. */
+export async function logAdminRequestDetailOpened(requestId: string): Promise<void> {
+  await requireRequestsView();
+  await logAdminRead("requests", "requests.detail", { requestId });
+}
+
 export async function fetchAdminRequestDetail(requestId: string): Promise<{
   request: RequestDetail | null;
   steps: RequestApprovalStep[];
@@ -250,8 +256,6 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
 
   const r = asRecord(payload.request);
   const requesterRaw = asRecord(payload.requester);
-  await logAdminRead("requests", "requests.detail", { requestId });
-
   return {
     request: {
       id: String(r.id),

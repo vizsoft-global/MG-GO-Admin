@@ -8,6 +8,8 @@ import {
   isNeededByInPast,
   isOtherLeaveSubtype,
   parseCreateRequestError,
+  parseDriverAckNote,
+  shouldOfferRequestDocumentsAction,
   shouldShowCreateField,
   staticOptionsForField,
   typedRequiredPayloadKeys,
@@ -148,5 +150,32 @@ describe("isAttachRequiredAction", () => {
     assert.equal(isAttachRequiredAction("attach_send"), true);
     assert.equal(isAttachRequiredAction("attach_breakdown"), true);
     assert.equal(isAttachRequiredAction("approve"), false);
+  });
+});
+
+describe("shouldOfferRequestDocumentsAction", () => {
+  it("hides Request documents once a file is already on the request", () => {
+    assert.equal(shouldOfferRequestDocumentsAction(0), true);
+    assert.equal(shouldOfferRequestDocumentsAction(1), false);
+    assert.equal(shouldOfferRequestDocumentsAction(3), false);
+  });
+});
+
+describe("parseDriverAckNote", () => {
+  it("splits legacy Documents uploaded notes into keys and leftover text", () => {
+    assert.deepEqual(
+      parseDriverAckNote(
+        "Documents uploaded: abc/123_file.png, def/456_x.jpg · admitted again",
+      ),
+      { keys: ["abc/123_file.png", "def/456_x.jpg"], text: "admitted again" },
+    );
+    assert.deepEqual(parseDriverAckNote("Documents uploaded: abc/123_file.png"), {
+      keys: ["abc/123_file.png"],
+      text: null,
+    });
+    assert.deepEqual(parseDriverAckNote("just a note"), {
+      keys: [],
+      text: "just a note",
+    });
   });
 });

@@ -122,16 +122,29 @@ export async function logAdminPageView(
   });
 }
 
+function adminReadThrottleKey(
+  routeName: string,
+  entityType: string,
+  context?: Record<string, unknown>,
+): string {
+  const requestId = typeof context?.requestId === "string" ? context.requestId : "";
+  return requestId
+    ? `read:${routeName}:${entityType}:${requestId}`
+    : `read:${routeName}:${entityType}`;
+}
+
 export async function logAdminRead(
   entityType: string,
   routeName: string,
   context?: Record<string, unknown>,
 ): Promise<void> {
-  const key = `read:${routeName}:${entityType}`;
+  const requestId = typeof context?.requestId === "string" ? context.requestId : "";
+  const key = adminReadThrottleKey(routeName, entityType, context);
   if (shouldThrottleRead(key)) return;
   await logAdminActivity({
     action: "read",
     entityType,
+    entityId: requestId || undefined,
     routeName,
     context,
   });
@@ -159,6 +172,13 @@ export async function logAdminMutation(input: {
     success: input.success,
     errorMessage: input.errorMessage,
   });
+  if (
+    input.success !== false &&
+    input.entityType === "requests" &&
+    input.entityId
+  ) {
+    readThrottle.set(`read:requests.detail:requests:${input.entityId}`, Date.now());
+  }
 }
 
 export async function logAdminAuthEvent(input: {

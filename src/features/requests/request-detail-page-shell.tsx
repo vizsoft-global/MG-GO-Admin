@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   AlertCircle,
@@ -27,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/auth-context";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
-import { fetchRequestAttachmentUrl } from "./requests-actions";
+import { fetchRequestAttachmentUrl, logAdminRequestDetailOpened } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
 import { fileToDecisionAttachmentPayload, RequestAttachDialog } from "./request-attach-dialog";
 import { RequestDecisionTermsDialog } from "./request-decision-terms-dialog";
@@ -47,7 +47,12 @@ import {
   requestStatusLabelKey,
   requestStatusVariant,
 } from "./request-status-utils";
-import { fuelFinalApproveBlocked, isAttachRequiredAction } from "./request-create-utils";
+import {
+  fuelFinalApproveBlocked,
+  isAttachRequiredAction,
+  parseDriverAckNote,
+  shouldOfferRequestDocumentsAction,
+} from "./request-create-utils";
 import { RequesterHeader } from "./requester-header";
 import { DECISION_TERM_TYPES } from "./types";
 import type {
@@ -152,6 +157,11 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     null,
   );
 
+  useEffect(() => {
+    if (!requestId) return;
+    void logAdminRequestDetailOpened(requestId);
+  }, [requestId]);
+
   const request = data?.request;
   const steps = data?.steps ?? [];
   const clarifications = data?.clarifications ?? [];
@@ -168,7 +178,10 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const decided = request?.completed_at != null;
   const awaitingRider =
     request != null && isAwaitingRescheduleReply(request.status, request.payload);
-  const stepActions = currentStepAllowedActions(steps);
+  const stepActions = currentStepAllowedActions(steps).filter(
+    (action) =>
+      action !== "request_documents" || shouldOfferRequestDocumentsAction(attachments.length),
+  );
   const REASON_REQUIRED_ACTIONS = new Set(["reject", "clarify", "send_response"]);
   const canClose =
     request != null && canDecide && canCloseRequest(request.status, request.completed_at);
@@ -185,10 +198,11 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
       fuelTransferType: request.fuel_transfer_type,
       isFinalStep: isFinalApprovalStep(steps),
     });
-  const ackNote =
+  const parsedAck = parseDriverAckNote(
     typeof request?.payload?.driver_ack_note === "string"
-      ? request.payload.driver_ack_note.trim()
-      : "";
+      ? request.payload.driver_ack_note
+      : "",
+  );
 
   const decidePending = decide.isPending || uploadAttachments.isPending;
 
@@ -593,12 +607,30 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 {t(`status.${requestStatusLabelKey(request.status, request.payload)}` as "status.pending")}
               </StatusPill>
             </div>
-            {acknowledged && ackNote ? (
+            {acknowledged && (parsedAck.text || parsedAck.keys.length > 0) ? (
               <div className="mt-2 rounded-lg border border-border bg-muted/30 px-2.5 py-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("detail.terms.riderNote")}
                 </p>
-                <p className="mt-0.5 whitespace-pre-wrap text-sm">{ackNote}</p>
+                {parsedAck.text ? (
+                  <p className="mt-0.5 whitespace-pre-wrap text-sm">{parsedAck.text}</p>
+                ) : null}
+                {parsedAck.keys.length > 0 ? (
+                  <ul className="mt-1 space-y-1">
+                    {parsedAck.keys.map((key) => (
+                      <li key={key}>
+                        <button
+                          type="button"
+                          onClick={() => void openAttachment(key)}
+                          className="inline-flex items-center gap-1.5 text-sm text-primary hover:bg-primary/10"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          {key.split("/").pop() ?? key}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             ) : null}
           </section>
