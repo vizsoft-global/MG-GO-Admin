@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>DPD Performance — Requirements &amp; QA Test Guide</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 16mm 16mm 18mm 16mm;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Calibri, Arial, sans-serif;
+      color: #1e293b;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      margin: 0;
+    }
+    .cover {
+      border-bottom: 3px solid #0f766e;
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+    .eyebrow {
+      font-size: 9pt;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #0f766e;
+      font-weight: 700;
+      margin: 0 0 6px;
+    }
+    h1 {
+      font-size: 22pt;
+      line-height: 1.15;
+      margin: 0 0 8px;
+      color: #0f172a;
+    }
+    .lede {
+      color: #475569;
+      margin: 0 0 12px;
+      max-width: 640px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      font-size: 9pt;
+      color: #334155;
+    }
+    .meta b { color: #0f172a; }
+    h2 {
+      font-size: 14pt;
+      color: #0f172a;
+      margin: 22px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1.5px solid #cbd5e1;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11.5pt;
+      color: #0f766e;
+      margin: 16px 0 6px;
+      page-break-after: avoid;
+    }
+    h4 {
+      font-size: 10.5pt;
+      margin: 12px 0 4px;
+      color: #0f172a;
+      page-break-after: avoid;
+    }
+    p { margin: 0 0 8px; }
+    ul, ol { margin: 0 0 10px; padding-left: 18px; }
+    li { margin: 0 0 4px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 12px;
+      font-size: 9.5pt;
+      page-break-inside: auto;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 5px 7px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #0f766e;
+      color: #fff;
+      font-weight: 600;
+    }
+    tr:nth-child(even) td { background: #f8fafc; }
+    tr { page-break-inside: avoid; }
+    .check { color: #0f766e; font-weight: 700; }
+    .warn {
+      background: #fffbeb;
+      border: 1px solid #f59e0b;
+      border-left: 4px solid #d97706;
+      padding: 8px 10px;
+      margin: 8px 0 12px;
+      page-break-inside: avoid;
+    }
+    .note {
+      background: #f0fdfa;
+      border: 1px solid #99f6e4;
+      border-left: 4px solid #0f766e;
+      padding: 8px 10px;
+      margin: 8px 0 12px;
+      page-break-inside: avoid;
+    }
+    .footer-note {
+      font-size: 8.5pt;
+      color: #64748b;
+      margin-top: 18px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 8px;
+    }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 9pt;
+      background: #f1f5f9;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .toc { page-break-after: always; }
+    .toc ol { padding-left: 20px; }
+    .toc li { margin-bottom: 6px; }
+    .section { page-break-inside: avoid; }
+    .keep { page-break-inside: avoid; }
+  </style>
+</head>
+<body>
+
+  <header class="cover">
+    <p class="eyebrow">Musallam / DPD · Admin Control Tower</p>
+    <h1>Performance Management — Requirements &amp; QA Test Guide</h1>
+    <p class="lede">
+      Client share pack: what was delivered for attendance-based scoring, operations ratings
+      (behaviour / appearance / others), and management analysis — plus step-by-step tests
+      against production.
+    </p>
+    <div class="meta">
+      <span><b>Environment:</b> https://dpdadmin-prod.vercel.app</span>
+      <span><b>Date:</b> 28 August 2026</span>
+      <span><b>Sign in as:</b> Super admin unless a step says otherwise</span>
+    </div>
+  </header>
+
+  <section class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li>Requirements delivered</li>
+      <li>How to test — Wrong Actions module</li>
+      <li>How to test — Conduct feeding the score</li>
+      <li>How to test — Component breakdown and SLA</li>
+      <li>How to test — Rating criteria</li>
+      <li>How to test — Analysis tab</li>
+      <li>How to test — Rollup and history (next day)</li>
+      <li>Known defect found while writing this guide</li>
+    </ol>
+  </section>
+
+  <h2>1. Requirements delivered</h2>
+  <p>The client asked for three things. This is what each one turned into.</p>
+
+  <h3>1.1 In-depth attendance-based scoring</h3>
+  <p>Shift, overspeed, on-time delivery, and related compliance signals.</p>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:8%">#</th>
+        <th>Requirement</th>
+        <th style="width:38%">Where it lives</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1.1</td>
+        <td>Compliance is no longer one opaque number — it is seven named components: Punctuality, Duty ratio, Within SLA, Speed, Zone &amp; range discipline, GPS, Conduct</td>
+        <td><code>/performance</code> → Period tab → <b>Components</b> toggle</td>
+      </tr>
+      <tr>
+        <td>1.2</td>
+        <td>Each component has an admin-editable weight</td>
+        <td><code>/performance/settings</code> → Compliance components</td>
+      </tr>
+      <tr>
+        <td>1.3</td>
+        <td>On-time delivery = pickup → delivered under a configurable minutes threshold, global with per-zone and per-partner overrides</td>
+        <td><code>/performance/settings</code> → SLA minutes</td>
+      </tr>
+      <tr>
+        <td>1.4</td>
+        <td>A component with no data is dropped and the rest re-weighted — never scored zero</td>
+        <td>Shown as <code>—</code> with a tooltip in the table</td>
+      </tr>
+      <tr>
+        <td>1.5</td>
+        <td>Lateness is no longer a cliff (was: 1 minute late = same score as 90 minutes late) and is no longer penalised twice</td>
+        <td>Punctuality component</td>
+      </tr>
+      <tr>
+        <td>1.6</td>
+        <td>Per-day component breakdown visible per driver per day</td>
+        <td><code>/attendance</code> → expand the Compliance column</td>
+      </tr>
+      <tr>
+        <td>1.7</td>
+        <td>Nightly rollup at 02:00 so historical trends are queryable</td>
+        <td><code>/api/cron/performance-rollup</code></td>
+      </tr>
+      <tr>
+        <td>1.8</td>
+        <td>Every weight change is audit-logged with before/after</td>
+        <td><code>/settings/logs</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>1.2 Operations rating of behaviour, appearance and others</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:8%">#</th>
+        <th>Requirement</th>
+        <th style="width:38%">Where it lives</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>2.1</td>
+        <td>Each team rates multiple named criteria, not one number</td>
+        <td><code>/performance</code> → click a driver → rating panel</td>
+      </tr>
+      <tr>
+        <td>2.2</td>
+        <td>Operations rates Behavior and Appearance separately (plus Overall)</td>
+        <td>Seeded; more can be added</td>
+      </tr>
+      <tr>
+        <td>2.3</td>
+        <td>Admin can add / rename / weight / deactivate criteria per team</td>
+        <td><code>/performance/settings</code> → Rating criteria</td>
+      </tr>
+      <tr>
+        <td>2.4</td>
+        <td>Criterion weights apply within their team only — they never let one team outvote another</td>
+        <td>By design</td>
+      </tr>
+      <tr>
+        <td>2.5</td>
+        <td>One comment per team, independent of the stars</td>
+        <td>Rating panel</td>
+      </tr>
+      <tr>
+        <td>2.6</td>
+        <td>A criterion that already holds ratings cannot be deleted, only deactivated</td>
+        <td>Delete button disappears once used</td>
+      </tr>
+      <tr>
+        <td>2.7</td>
+        <td>Only assigned team members can rate</td>
+        <td><code>/performance/settings</code> → Rating teams</td>
+      </tr>
+      <tr>
+        <td>2.8</td>
+        <td>Export gains one column per active criterion</td>
+        <td>Period tab → Export</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>1.3 Management analysis</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:8%">#</th>
+        <th>Requirement</th>
+        <th style="width:38%">Where it lives</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>3.1</td>
+        <td>Trend over time, not a single snapshot — daily / weekly / monthly</td>
+        <td><code>/performance</code> → <b>Analysis</b> tab</td>
+      </tr>
+      <tr>
+        <td>3.2</td>
+        <td>Period-over-period comparison against the same-length window immediately before</td>
+        <td>Delta chips under each KPI</td>
+      </tr>
+      <tr>
+        <td>3.3</td>
+        <td>Breakdown by zone, by partner, by rating team</td>
+        <td>Three cards at the bottom</td>
+      </tr>
+      <tr>
+        <td>3.4</td>
+        <td>Band migration — how many drivers improved, held, declined</td>
+        <td>Band migration card</td>
+      </tr>
+      <tr>
+        <td>3.5</td>
+        <td>When the two periods measured different components, the score delta is withheld with an explanation rather than shown as a misleading number</td>
+        <td>Amber notice at the top</td>
+      </tr>
+      <tr>
+        <td>3.6</td>
+        <td>New <code>performance.analyze</code> permission, auto-granted to every role that already had <code>performance.view</code></td>
+        <td>Roles matrix</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>1.4 Supporting — Wrong Actions module</h3>
+  <p>
+    <code>/wrong-actions</code> was a non-functional stub; the conduct component had nothing to read.
+    It is now a working module: list with KPIs, severity tabs, record/edit modal, detail page, delete,
+    and a per-driver tab. Severity is weighted (Low 1, Medium 2, High 3), and incidents are scored
+    against the Kuwait day they <b>occurred</b>, not the day they were filed.
+  </p>
+
+  <h2>2. How to test — Wrong Actions module (~10 min)</h2>
+  <ol>
+    <li>Open <b>Wrong Actions</b> from the sidebar. Expect the seven KPI cards (Total Incidents, High Severity, Medium, Low, This Week, Weighted Total, Drivers Involved) and five tabs (All / High / Medium / Low / This week). On a fresh database the list shows “No incidents recorded”.</li>
+    <li>Click <b>Record incident</b>. The modal opens with the title in the footer-left and the close X floating outside the top-right corner.</li>
+    <li>Pick a driver using the search box — type a name, driver ID or employee ID. The dropdown shows the driver’s code, employee ID and zone beneath each name.</li>
+    <li>Set <b>Occurred at</b> to a time yesterday. <span class="check">✓</span> Try setting a <i>future</i> date — the picker should refuse it, and if forced the save returns “An incident cannot be dated in the future.”</li>
+    <li>Pick a type (Delay / Zone breach / Hygiene failed / Uniform / Other) and a severity. <span class="check">✓</span> The selected chip must turn <b>green with a check</b>; the helper text under severity must say “Counts as 3 toward the conduct allowance” for High, 2 for Medium, 1 for Low.</li>
+    <li>Add details and <b>Save</b>. You land on the incident detail page and a success toast appears.</li>
+    <li>Go back to the list. <span class="check">✓</span> Total Incidents = 1, the matching severity KPI = 1, Weighted Total matches the severity weight (High → 3), Drivers Involved = 1.</li>
+    <li>Record a second High-severity incident for the same driver. <span class="check">✓</span> Weighted Total = 6, Drivers Involved stays <b>1</b>, not 2.</li>
+    <li>Click a row. <span class="check">✓</span> It opens the <b>detail page</b>, not a modal. Confirm “Recorded by” shows your name and “Recorded” shows the filing time — separate from the “Occurred” time.</li>
+    <li>From the detail page, click <b>Edit</b>, change the severity to Low, save. <span class="check">✓</span> Weighted Total on the list drops accordingly.</li>
+    <li>Click <b>Delete</b>, read the confirmation (“This removes the incident permanently and it stops counting against the driver”), confirm. <span class="check">✓</span> The KPIs drop.</li>
+    <li><b>Permission check:</b> sign in as a role <i>without</i> <code>wrong_actions.manage</code>. <span class="check">✓</span> The list is fully readable, but <b>Record incident</b> is disabled and rows have no Edit/Delete.</li>
+    <li>Open <b>Settings → Activity logs</b>. <span class="check">✓</span> Your create, edit and delete are all recorded.</li>
+  </ol>
+
+  <h2>3. How to test — Conduct feeding the score (~10 min)</h2>
+  <ol>
+    <li>Record a High-severity incident for a driver <b>who worked yesterday</b> (check <code>/attendance</code> first — a driver who did not work has no denominator and will correctly score nothing).</li>
+    <li>Open <b>Performance → Settings</b>. Under <b>Compliance components</b>, find <b>Conduct</b>. <span class="check">✓</span> It is present and its weight is <b>0</b>.</li>
+    <li>Note the driver’s current Compliance % on the Period tab.</li>
+    <li>Back in Settings, set Conduct’s weight to <b>1</b> and save. Note the three preview numbers side by side (old rule / saved / edited) before you save — they should differ once the weight is non-zero.</li>
+    <li>Return to <b>Performance → Period</b>, set the date range to cover the incident date. Turn on the <b>Components</b> toggle.</li>
+    <li><span class="check">✓</span> A <b>Conduct</b> column appears. The driver with the incident scores below 100%; drivers with no incidents score 100%.</li>
+    <li><span class="check">✓</span> Their <b>Compliance %</b> has moved from step 3.</li>
+    <li><span class="check">✓</span> Same-day check: the incident counts <b>immediately</b>, without waiting for the 02:00 rollup.</li>
+    <li>Adjust <b>Conduct allowance per worked day</b> in Settings and confirm the score moves in the expected direction (a larger allowance is more forgiving).</li>
+    <li><b>Reset Conduct’s weight to 0</b> when you are done, unless the client wants it live.</li>
+  </ol>
+
+  <h2>4. How to test — Component breakdown and SLA (~10 min)</h2>
+  <ol>
+    <li><b>Performance → Period</b>, date range = last 7 days. Turn on <b>Components</b>.</li>
+    <li><span class="check">✓</span> One column per active component with a non-zero weight. Components at weight 0 do not get a column.</li>
+    <li><span class="check">✓</span> Any cell showing <code>—</code> has a tooltip explaining the component was dropped and the rest re-weighted — <b>not</b> scored as zero. This matters: <code>—</code> and <code>0%</code> mean opposite things.</li>
+    <li>Click any driver row. <span class="check">✓</span> The drilldown sheet shows the same component breakdown.</li>
+    <li>Open <b>Performance → Settings</b>, change <b>On-time SLA minutes</b>, save, return to the list. <span class="check">✓</span> The <b>Within SLA</b> component moves for drivers with deliveries in range.</li>
+    <li>Open <b>Attendance</b>, pick a date with activity. <span class="check">✓</span> Each row’s Compliance column expands to the per-day component scores, and they agree with the Performance page for the same day.</li>
+    <li>Open any driver → <b>Performance</b> tab. <span class="check">✓</span> Shows that driver’s band, fleet rank, component trend and rating history. The rank must be their rank across the <b>whole fleet</b>, not “1 of 1”.</li>
+  </ol>
+
+  <h2>5. How to test — Rating criteria (~10 min)</h2>
+  <ol>
+    <li><b>Performance → Settings → Rating criteria</b>. <span class="check">✓</span> Operations shows Overall, Behavior, Appearance. Fleet and HR show Overall.</li>
+    <li>Add a criterion to Operations — e.g. <code>Communication</code>, weight 1. <span class="check">✓</span> It appears immediately.</li>
+    <li><b>Performance → Settings → Rating teams.</b> Add yourself to Operations.</li>
+    <li>Go to <b>Performance → Period</b>, click a driver. <span class="check">✓</span> The rating panel shows team sections, with a <b>star row per criterion</b> and <b>one comment box per team</b>.</li>
+    <li>File a rating on each Operations criterion, then write a team comment. <span class="check">✓</span> Saving a comment does not clear the stars, and changing a star does not clear the comment.</li>
+    <li><span class="check">✓</span> The driver’s Rating column and Overall score both move.</li>
+    <li>Return to <b>Rating criteria</b>. <span class="check">✓</span> The criterion you just rated now shows a rating count and its <b>Delete button is gone</b> — only deactivate is offered. This is deliberate: deleting would erase filed reviews.</li>
+    <li>Deactivate <code>Communication</code>. <span class="check">✓</span> It disappears from the rating panel but the filed rating is preserved.</li>
+    <li><b>Permission check:</b> sign in as someone <i>not</i> on the Operations team. <span class="check">✓</span> They can see Operations ratings but cannot edit them.</li>
+    <li>Back on the Period tab, click <b>Export</b>. <span class="check">✓</span> The workbook has a Rating column, one column per team, and one column per active criterion, with headers reading <code>Operations · Behavior</code>.</li>
+  </ol>
+
+  <h2>6. How to test — Analysis tab (~10 min)</h2>
+  <div class="warn">
+    <b>Read section 8 before running this.</b> The four range buttons currently show raw text keys instead of their labels. Everything else works.
+  </div>
+  <ol>
+    <li><b>Performance → Analysis</b>. The tab only appears for roles holding <code>performance.analyze</code>.</li>
+    <li>Pick a range (the buttons are, left to right: Last 7 days, Last 30 days, This month, Last month) and a bucket (Daily / Weekly / Monthly).</li>
+    <li><span class="check">✓</span> The line chart draws one line per measured component plus a black <b>Overall</b> line. Y-axis is 0–100. Hover shows values to one decimal.</li>
+    <li><span class="check">✓</span> A component with no data anywhere in the window is absent from the legend entirely, rather than drawn as a flat empty line.</li>
+    <li><span class="check">✓</span> Six KPIs: Avg component score, Drivers scored, Deliveries, Within SLA, Absent days, Conduct weight — each with a green/red/grey delta chip against the previous period.</li>
+    <li>Switch to <b>Last month</b>. <span class="check">✓</span> Expect the amber notice “The two periods measured different components”, and the <b>Avg component score</b> delta reads <b>“Not comparable”</b> instead of a number. This is the correct behaviour — July’s fleet events were pruned before retention was extended, so a July-vs-August speed comparison would be measuring the data, not the riders. The other five deltas still show, because they are raw counts that mean the same thing either way.</li>
+    <li><span class="check">✓</span> Band migration card: current vs previous distribution bars, plus Improved / Held / Declined counts. The hint explains that only drivers scored in <i>both</i> periods can move.</li>
+    <li><span class="check">✓</span> By zone / By partner / By rating team cards. Drivers with no zone or partner appear under <b>Unassigned</b> — they must not silently vanish.</li>
+    <li><span class="check">✓</span> By rating team shows the measured score beside the average star that team gave, so you can see whether a team’s opinion tracks the numbers.</li>
+    <li>Switch the bucket from Daily to Monthly. <span class="check">✓</span> Fewer points, same shape.</li>
+    <li><b>Permission check:</b> sign in as a role without <code>performance.analyze</code>. <span class="check">✓</span> The Analysis tab is not rendered at all.</li>
+  </ol>
+
+  <h2>7. How to test — Rollup and history (next day)</h2>
+  <ol>
+    <li>The rollup runs at <b>02:00 Kuwait</b>. The morning after any of the above, re-open the Analysis tab.</li>
+    <li><span class="check">✓</span> Yesterday’s bucket is populated and matches what the Period tab showed for that date live.</li>
+    <li><span class="check">✓</span> The newest bucket of a range ending today is <b>not</b> empty — today is read live rather than waiting for the rollup.</li>
+  </ol>
+
+  <h2>8. Known defect found while writing this guide</h2>
+  <div class="warn">
+    <b>The four range buttons on the Analysis tab render as raw translation keys.</b>
+    <p style="margin:6px 0 0">
+      The panel asks for <code>pages.performance.presets.last7</code>, but the presets are stored one
+      level deeper, under <code>pages.performance.report.presets</code>. With no message fallback,
+      the buttons read the key path instead of “Last 7 days”. This affects both English and Arabic.
+    </p>
+    <p style="margin:6px 0 0">
+      The buttons are <b>fully functional</b> — clicking them changes the range correctly — so this
+      is cosmetic, but it is the first thing visible on the tab.
+    </p>
+    <p style="margin:6px 0 0">
+      Fix (not yet applied): point the call at <code>pages.performance.report.presets</code>, or
+      duplicate the four keys up one level in <code>en.json</code> and <code>ar.json</code>.
+    </p>
+  </div>
+
+  <div class="note">
+    <b>Pass / fail shorthand.</b> A <span class="check">✓</span> marks the expected result for that step.
+    If the screen does not match, stop and note the driver, date range, and screenshot before continuing.
+  </div>
+
+  <p class="footer-note">
+    DPD Control Tower · Performance Management QA pack · 28 August 2026 ·
+    Production: https://dpdadmin-prod.vercel.app · Internal use / client share
+  </p>
+
+</body>
+</html>

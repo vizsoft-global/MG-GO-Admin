@@ -15,7 +15,7 @@ Related: [`DRIVER_APP_HANDOFF.md`](DRIVER_APP_HANDOFF.md) (Live Tracking map + L
 | FGS tick | **15s** — a **watchdog**, not the sampling clock | [`duty_background_service.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/duty_background_service.dart) `ForegroundTaskEventAction.repeat(15000)` |
 | Moving report | **1s fixed** (was 5s; before that 10–15s jittered) | [`adaptive_location_scheduler.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/adaptive_location_scheduler.dart) `movingReportInterval` |
 | Idle heartbeat | **30s fixed** (was 45–60s jittered) | same file, `idleReportInterval` |
-| Edge batch | **2 fixes, or ≤2s** — whichever comes first | [`live_position_publisher.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_position_publisher.dart) `LiveCadence.batchSize` / `maxBufferHold` |
+| Edge batch | **moving:** 2 fixes or ≤2s; **idle:** 30s deadline (batchSize does not apply) | [`live_position_publisher.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_position_publisher.dart) `LiveCadence.batchSize` / `maxBufferHold` |
 | Immediate | first on-duty sample, idle→moving, pickup/finish (`delivery_submit`) | `shouldReportToServer` (`force`, `needsInitialReport`, `movementJustStarted`, `deliverySubmit`) |
 
 Android-only foreground service.
@@ -178,7 +178,7 @@ V2 (`/live-tracking-v2`) does not replace anything above. `driver_report_locatio
 
 ### App → edge
 
-`POST {LIVE_INGEST_URL}/ingest`, driver Supabase JWT as `Authorization: Bearer`, batched **2** fixes or ≤2s ([`live_position_publisher.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_position_publisher.dart)).
+`POST {LIVE_INGEST_URL}/ingest`, driver Supabase JWT as `Authorization: Bearer`. Moving is batched **2** fixes or ≤2s; idle waits for the **30s** deadline ([`live_position_publisher.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/features/duty/live_position_publisher.dart)). `batchSize` must stay moving-only — applying it while idle POSTs a parked phone every ~2s.
 
 | Field | Meaning |
 |---|---|
@@ -215,7 +215,7 @@ It defaults on because absent-means-off was silently catastrophic: Supabase, the
 ### Failure order
 
 1. Edge publish succeeds → the Durable Object flushes to `driver_locations` every **10s**, so the durable row still lands and the watchdog stands down for **25s**.
-2. Edge publish fails → the fix goes straight to `driver_report_location` on the same pass, not on the next tick.
+2. Edge publish fails → `driver_report_location` at the **watchdog cadence** (15s moving / 30s idle) **without** `force`, so the 8s/18m coalesce can drop duplicates. `force` is only for state changes and `delivery_submit`. Do not call `_tick(..., force: true)` on every failed 2s batch — that is the Postgres storm that takes login down with it.
 3. No network at all → the existing `pending_location_reports` queue, replayed with `replay: true` first via the edge and falling back to the RPC per row ([`sync_controller.dart`](C:/Users/Admin/Desktop/Vizsoft/MGgo(DPD)-USER/MG-GO/lib/core/offline/sync_controller.dart)).
 
 ### Admin thresholds (V2 only)
