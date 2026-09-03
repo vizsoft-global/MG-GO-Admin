@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { downsampleForDurability, type PendingPoint } from "./fleet-room";
+import {
+  alarmIntervalMs,
+  downsampleForDurability,
+  IDLE_ALARM_MS,
+  INGEST_HOT_WINDOW_MS,
+  type PendingPoint,
+} from "./fleet-room";
 
 const T0 = Date.parse("2026-08-14T10:00:00.000Z");
 const LAT = 29.37;
@@ -148,5 +154,46 @@ describe("downsampleForDurability", () => {
     for (let i = 1; i < kept.length; i += 1) {
       assert.ok(Date.parse(kept[i]!.clientTs) >= Date.parse(kept[i - 1]!.clientTs));
     }
+  });
+});
+
+describe("alarmIntervalMs", () => {
+  const tickMs = 2_000;
+  const nowMs = T0;
+
+  it("keeps the live tick while an admin is watching", () => {
+    assert.equal(
+      alarmIntervalMs({
+        tickMs,
+        socketCount: 1,
+        lastIngestAt: 0,
+        nowMs,
+      }),
+      tickMs,
+    );
+  });
+
+  it("keeps the live tick while ingest is still hot", () => {
+    assert.equal(
+      alarmIntervalMs({
+        tickMs,
+        socketCount: 0,
+        lastIngestAt: nowMs - 60_000,
+        nowMs,
+      }),
+      tickMs,
+    );
+  });
+
+  it("backs off once the room is quiet", () => {
+    assert.equal(
+      alarmIntervalMs({
+        tickMs,
+        socketCount: 0,
+        lastIngestAt: nowMs - INGEST_HOT_WINDOW_MS - 1,
+        nowMs,
+      }),
+      IDLE_ALARM_MS,
+    );
   });
 });

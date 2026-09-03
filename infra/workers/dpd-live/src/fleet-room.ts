@@ -118,6 +118,29 @@ const COARSE_FIX_ACCURACY_M = 50;
 /** How long an accurate pin outranks an incoming coarse one. */
 const COARSE_FIX_GRACE_MS = 2 * 60_000;
 
+/**
+ * Leftover roster entities used to keep a 2s alarm all night (~43k requests/day)
+ * even with no admin watching and no phone publishing. After this quiet window
+ * the room ticks at [IDLE_ALARM_MS] instead of [TICK_MS].
+ */
+export const INGEST_HOT_WINDOW_MS = 3 * 60_000;
+
+/** Alarm spacing when no admin socket is open and ingest has gone quiet. */
+export const IDLE_ALARM_MS = 30_000;
+
+/** 2s while an admin is watching or phones are publishing; 30s once the room is idle. */
+export function alarmIntervalMs(args: {
+  tickMs: number;
+  socketCount: number;
+  lastIngestAt: number;
+  nowMs: number;
+}): number {
+  const ingestHot =
+    args.lastIngestAt > 0 && args.nowMs - args.lastIngestAt < INGEST_HOT_WINDOW_MS;
+  if (args.socketCount > 0 || ingestHot) return args.tickMs;
+  return IDLE_ALARM_MS;
+}
+
 function isCoarseFix(accuracyM: number | null): boolean {
   return accuracyM != null && accuracyM > COARSE_FIX_ACCURACY_M;
 }
@@ -228,6 +251,7 @@ export class FleetRoom implements DurableObject {
   private lastFrameAt = 0;
   private lastMirrorAt = 0;
   private lastFlushAt = 0;
+  private lastIngestAt = 0;
   private flushSoon = false;
   private alarmSetFor = 0;
 
@@ -281,6 +305,7 @@ export class FleetRoom implements DurableObject {
         return json({ ok: true, drivers: this.entities.size });
       }
       if (url.pathname === "/stats") {
+        const nowMs = Date.now();
         return json({
           ok: true,
           drivers: this.entities.size,
@@ -288,6 +313,13 @@ export class FleetRoom implements DurableObject {
           seq: this.seq,
           rosterLoadedAt: this.rosterLoadedAt,
           zones: this.zones.length,
+          lastIngestAt: this.lastIngestAt,
+          alarmMs: alarmIntervalMs({
+            tickMs: this.tickMs,
+            socketCount: this.sockets.size,
+            lastIngestAt: this.lastIngestAt,
+            nowMs,
+          }),
         });
       }
     } catch (error) {
@@ -665,6 +697,8 @@ export class FleetRoom implements DurableObject {
       entity.posVersion += 1;
       this.refreshDerived(entity, nowMs, true);
     }
+
+    this.lastIngestAt = nowMs;
 
     // Everything periodic is ingest-driven; see Env.TICK_MS.
     await this.pump(nowMs);
@@ -1334,8 +1368,15 @@ export class FleetRoom implements DurableObject {
 
   private async scheduleAlarm(): Promise<void> {
     if (this.entities.size === 0 && this.sockets.size === 0) return;
-    const due = Date.now() + this.tickMs;
-    if (this.alarmSetFor > Date.now() && this.alarmSetFor <= due) return;
+    const nowMs = Date.now();
+    const interval = alarmIntervalMs({
+      tickMs: this.tickMs,
+      socketCount: this.sockets.size,
+      lastIngestAt: this.lastIngestAt,
+      nowMs,
+    });
+    const due = nowMs + interval;
+    if (this.alarmSetFor > nowMs && this.alarmSetFor <= due) return;
     this.alarmSetFor = due;
     await this.state.storage.setAlarm(due);
   }
