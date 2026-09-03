@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withDeadline } from "@/lib/supabase/deadline";
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_DRIVER_APP_SETTINGS,
@@ -97,9 +98,11 @@ function normalizeRow(
   };
 }
 
+const BRANDING_BUDGET_MS = 5_000;
+
 async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient({ timeoutMs: BRANDING_BUDGET_MS });
     const { data, error } = await supabase
       .from("app_themes")
       .select("id, name, base_preset, light_tokens, dark_tokens")
@@ -144,7 +147,7 @@ async function loadAppSettingsRow(): Promise<{
   theme_id?: string | null;
 } | null> {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient({ timeoutMs: BRANDING_BUDGET_MS });
     let { data, error } = await supabase
       .from("app_settings")
       .select(APP_SETTINGS_SELECT)
@@ -165,7 +168,7 @@ async function loadAppSettingsRow(): Promise<{
   }
 
   try {
-    const admin = createAdminClient();
+    const admin = createAdminClient({ timeoutMs: BRANDING_BUDGET_MS });
     const { data, error } = await admin
       .from("app_settings")
       .select(APP_SETTINGS_SELECT)
@@ -180,8 +183,21 @@ async function loadAppSettingsRow(): Promise<{
   return null;
 }
 
+/**
+ * Branding is on the critical path of every rendered page — the locale layout
+ * is force-dynamic — so it may never be the reason a page does not paint.
+ * Falling back to the default logo and name during a backend outage is a
+ * cosmetic regression for the length of the outage; hanging is an outage of
+ * its own, and it is what made every page load take a minute.
+ */
 async function fetchAppSettings(): Promise<AppSettings> {
-  const customThemes = await getCustomThemes();
+  // Independent reads, so they cost one round trip rather than two. The row
+  // read carries its own service-role retry, which shares this budget.
+  const [customThemes, data] = await Promise.all([
+    withDeadline(getCustomThemes(), BRANDING_BUDGET_MS, () => []),
+    withDeadline(loadAppSettingsRow(), BRANDING_BUDGET_MS, () => null),
+  ]);
+
   const customRows: CustomThemeRow[] = customThemes.map((t) => ({
     id: t.id,
     name: t.name,
@@ -189,8 +205,6 @@ async function fetchAppSettings(): Promise<AppSettings> {
     light_tokens: t.lightTokens,
     dark_tokens: t.darkTokens,
   }));
-
-  const data = await loadAppSettingsRow();
 
   if (!data) {
     const themeId = DEFAULT_THEME_ID;

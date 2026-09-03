@@ -1,12 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { getSupabaseUrl } from "@/lib/supabase/env";
+import { createTimeoutFetch } from "@/lib/supabase/deadline";
 
 export function getServiceRoleKey(): string | undefined {
   return process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
-export function createAdminClient() {
+export function createAdminClient(options?: { timeoutMs?: number }) {
   const url = getSupabaseUrl();
   const key = getServiceRoleKey();
   if (!url || !key) {
@@ -16,5 +17,8 @@ export function createAdminClient() {
   }
   return createClient<Database>(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
+    ...(options?.timeoutMs
+      ? { global: { fetch: createTimeoutFetch(options.timeoutMs) } }
+      : {}),
   });
 }

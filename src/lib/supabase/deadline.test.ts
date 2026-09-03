@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import test from "node:test";
-import { guardedRead, withDeadline } from "./deadline";
+import { createTimeoutFetch, guardedRead, withDeadline } from "./deadline";
 import {
   cacheOpsSettings,
   clearOpsSettingsCache,
@@ -69,6 +70,24 @@ test("ops cache never caches an unclaimed super admin", () => {
   clearOpsSettingsCache();
   cacheOpsSettings({ super_admin_claimed: false, maintenance_mode: false }, 0);
   assert.equal(readCachedOpsSettings(1), null);
+});
+
+test("createTimeoutFetch aborts a hung request", async () => {
+  const server = http.createServer(() => {
+    /* never respond */
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const timedFetch = createTimeoutFetch(40);
+  await assert.rejects(
+    () => timedFetch(`http://127.0.0.1:${address.port}/`),
+    (error: unknown) =>
+      error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"),
+  );
+  await new Promise<void>((resolve, reject) =>
+    server.close((err) => (err ? reject(err) : resolve())),
+  );
 });
 
 test("ops cache never caches a failed read", () => {
