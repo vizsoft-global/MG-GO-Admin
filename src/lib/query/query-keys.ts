@@ -110,8 +110,8 @@ export const queryKeys = {
     deliveryLiveLocation: (deliveryId: string) =>
       ["deliveries", "live-location", deliveryId] as const,
     proofDisplay: (objectKey: string) => ["deliveries", "proof-display", objectKey] as const,
-    ordersReport: (from: string, to: string) =>
-      ["deliveries", "orders-report", from, to] as const,
+    ordersReport: (from: string, to: string, fromTime = "", toTime = "") =>
+      ["deliveries", "orders-report", from, to, fromTime, toTime] as const,
   },
   verifications: {
     all: () => ["verifications"] as const,

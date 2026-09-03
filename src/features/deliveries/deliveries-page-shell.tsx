@@ -1045,7 +1045,12 @@ function DeliveriesPageContent() {
         }}
       />
 
-      <OrdersReportDialog open={ordersReportOpen} onOpenChange={setOrdersReportOpen} />
+      <OrdersReportDialog
+        open={ordersReportOpen}
+        onOpenChange={setOrdersReportOpen}
+        initialFrom={dateRange.from}
+        initialTo={dateRange.to}
+      />
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent

@@ -5,7 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import {
+  DEFAULT_ORDERS_REPORT_FROM_TIME,
+  DEFAULT_ORDERS_REPORT_TO_TIME,
   assertDeliveryOrdersReportRange,
+  normalizeOrdersReportTime,
   pivotDeliveryOrdersReport,
   type DeliveryOrdersReportData,
   type DeliveryOrdersReportRpcRow,
@@ -37,17 +40,29 @@ function parseRpcRow(raw: Record<string, unknown>): DeliveryOrdersReportRpcRow {
 export async function fetchDeliveryOrdersReport(input: {
   from: string;
   to: string;
+  fromTime?: string;
+  toTime?: string;
 }): Promise<DeliveryOrdersReportData> {
   await requireDeliveriesView();
 
   const from = input.from?.slice(0, 10) ?? "";
   const to = input.to?.slice(0, 10) ?? "";
-  assertDeliveryOrdersReportRange(from, to);
+  const fromTime = normalizeOrdersReportTime(
+    input.fromTime,
+    DEFAULT_ORDERS_REPORT_FROM_TIME,
+  );
+  const toTime = normalizeOrdersReportTime(
+    input.toTime,
+    DEFAULT_ORDERS_REPORT_TO_TIME,
+  );
+  assertDeliveryOrdersReportRange(from, to, fromTime, toTime);
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("report_delivery_orders", {
     p_from: from,
     p_to: to,
+    p_from_time: `${fromTime}:00`,
+    p_to_time: `${toTime}:00`,
   });
 
   if (error) {
@@ -57,9 +72,11 @@ export async function fetchDeliveryOrdersReport(input: {
   void logAdminRead("delivery_orders_report", "/deliveries", {
     from,
     to,
+    fromTime,
+    toTime,
     rowCount: data?.length ?? 0,
   });
 
   const rpcRows = ((data ?? []) as Record<string, unknown>[]).map(parseRpcRow);
-  return pivotDeliveryOrdersReport(from, to, rpcRows);
+  return pivotDeliveryOrdersReport(from, to, rpcRows, fromTime, toTime);
 }
