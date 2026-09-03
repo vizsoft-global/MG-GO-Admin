@@ -2,8 +2,12 @@ import createIntlMiddleware from "next-intl/middleware";
 import { type NextRequest, NextResponse } from "next/server";
 import { routing } from "@/i18n/routing";
 import { updateSession } from "@/lib/supabase/middleware";
-import { createServerClient } from "@supabase/ssr";
-import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
+import { guardedRead, MIDDLEWARE_QUERY_BUDGET_MS } from "@/lib/supabase/deadline";
+import {
+  cacheOpsSettings,
+  readCachedOpsSettings,
+  type ProxyOpsSettings,
+} from "@/lib/supabase/ops-settings-cache";
 
 const intlMiddleware = createIntlMiddleware(routing);
 
@@ -41,6 +45,17 @@ const publicAuthPaths = new Set([
   "/unauthorized",
 ]);
 
+const PROFILE_SELECT =
+  "approval_status, admin_role_id, archived_at, role, admin_roles(is_super_admin)";
+
+type ProfileRow = {
+  approval_status?: string;
+  admin_role_id?: string | null;
+  archived_at?: string | null;
+  role?: string;
+  admin_roles?: { is_super_admin: boolean } | null;
+} | null;
+
 function pathWithoutLocale(pathname: string): string {
   return pathname.replace(/^\/(en|ar)/, "") || "/";
 }
@@ -59,7 +74,7 @@ function isProtectedPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const intlResponse = intlMiddleware(request);
-  const response = await updateSession(request, intlResponse);
+  const { response, supabase, probe } = await updateSession(request, intlResponse);
   const { pathname } = request.nextUrl;
   const locale = getLocale(pathname);
   const path = pathWithoutLocale(pathname);
@@ -68,45 +83,66 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  const url = getSupabaseUrl();
-  const key = getSupabaseAnonKey();
-
-  if (!url || !key) {
+  if (!supabase) {
     return response;
   }
 
-  const supabase = createServerClient(url, key, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => {
-          request.cookies.set(name, value);
-        });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
-      },
-    },
-  });
+  // The session is unproven rather than absent, so every branch below would be
+  // deciding on a fact we do not have. Signing the admin out here is the one
+  // outcome that is certainly wrong; the page still runs its own auth gate.
+  if (probe.unavailable) {
+    return response;
+  }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = probe;
+  const protectedPath = isProtectedPath(pathname);
 
-  const loginUrl = new URL(`/${locale}/login`, request.url);
+  if (!user) {
+    if (protectedPath) {
+      const loginUrl = new URL(`/${locale}/login`, request.url);
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return response;
+  }
 
-  const { data: opsSettings } = await supabase
-    .from("app_settings")
-    .select("super_admin_claimed, maintenance_mode")
-    .eq("id", 1)
-    .maybeSingle();
+  const wantsProfile = protectedPath || path === "/login" || path === "/signup";
+  const cachedOps = readCachedOpsSettings();
 
+  const [opsResult, profileResult] = await Promise.all([
+    cachedOps
+      ? Promise.resolve({ data: cachedOps, failed: false as const })
+      : guardedRead<ProxyOpsSettings>(
+          supabase
+            .from("app_settings")
+            .select("super_admin_claimed, maintenance_mode")
+            .eq("id", 1)
+            .maybeSingle(),
+          MIDDLEWARE_QUERY_BUDGET_MS,
+        ),
+    wantsProfile
+      ? guardedRead<NonNullable<ProfileRow>>(
+          supabase.from("profiles").select(PROFILE_SELECT).eq("id", user.id).maybeSingle(),
+          MIDDLEWARE_QUERY_BUDGET_MS,
+        )
+      : Promise.resolve({ data: null, failed: false as const }),
+  ]);
+
+  if (!cachedOps && !opsResult.failed) {
+    cacheOpsSettings(opsResult.data);
+  }
+
+  const opsSettings = opsResult.data;
+  const profileRow = profileResult.data as ProfileRow;
+
+  // A read that failed proves nothing about the caller. Every branch below is
+  // skipped in that case so the request falls through to the page, which runs
+  // its own auth gate against a fresh client — the same reasoning the probe
+  // above uses, applied to the profile it could not load.
+  const profileUnknown = profileResult.failed;
   const superAdminClaimed = opsSettings?.super_admin_claimed ?? true;
 
   if (
-    user &&
     !superAdminClaimed &&
     path !== "/setup/claim-super-admin" &&
     !path.startsWith("/api")
@@ -124,28 +160,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (isProtectedPath(pathname)) {
-    if (!user) {
-      loginUrl.searchParams.set("next", pathname);
-      return NextResponse.redirect(loginUrl);
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select(
-        "approval_status, admin_role_id, archived_at, role, admin_roles(is_super_admin)",
-      )
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const profileRow = profile as {
-      approval_status?: string;
-      admin_role_id?: string | null;
-      archived_at?: string | null;
-      role?: string;
-      admin_roles?: { is_super_admin: boolean } | null;
-    } | null;
-
+  if (protectedPath && !profileUnknown) {
     if (!superAdminClaimed) {
       return NextResponse.redirect(
         new URL(`/${locale}/setup/claim-super-admin`, request.url),
@@ -177,32 +192,21 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (user && publicAuthPaths.has(path)) {
+  if (publicAuthPaths.has(path)) {
     if (path === "/setup/claim-super-admin") {
-      const { data: settings } = await supabase
-        .from("app_settings")
-        .select("super_admin_claimed")
-        .eq("id", 1)
-        .maybeSingle();
-      if (settings?.super_admin_claimed) {
+      if (superAdminClaimed) {
         return NextResponse.redirect(new URL(`/${locale}/login`, request.url));
       }
       return response;
     }
 
     if (path === "/login" || path === "/signup") {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("approval_status, admin_role_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profile?.approval_status === "pending") {
+      if (profileRow?.approval_status === "pending") {
         return NextResponse.redirect(
           new URL(`/${locale}/pending-approval`, request.url),
         );
       }
-      if (profile?.approval_status === "approved" && profile.admin_role_id) {
+      if (profileRow?.approval_status === "approved" && profileRow.admin_role_id) {
         return NextResponse.redirect(new URL(`/${locale}/dashboard`, request.url));
       }
     }

@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { probeUser } from "@/lib/supabase/auth-probe";
 import type { Profile } from "@/types/database";
 import { canAccessAdminPanel, type AdminApprovalStatus } from "@/lib/auth/permissions";
 import {
@@ -17,14 +18,18 @@ export type SessionUser = {
   adminRoleSlug: string;
 };
 
-async function loadSessionUser(): Promise<SessionUser | null> {
+export type SessionOutcome = {
+  session: SessionUser | null;
+  /** The auth backend could not be reached — treat as unknown, not signed out. */
+  unavailable: boolean;
+};
+
+async function loadSessionOutcome(): Promise<SessionOutcome> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, unavailable } = await probeUser(supabase);
 
   if (!user) {
-    return null;
+    return { session: null, unavailable };
   }
 
   const { data: profile } = await supabase
@@ -36,7 +41,7 @@ async function loadSessionUser(): Promise<SessionUser | null> {
     .single();
 
   if (!profile) {
-    return null;
+    return { session: null, unavailable: false };
   }
 
   const profileRow = profile as EnrichedProfile &
@@ -50,7 +55,7 @@ async function loadSessionUser(): Promise<SessionUser | null> {
 
   if (!canAccessAdminPanel(authProfile) && enriched.approval_status !== "pending") {
     if (enriched.approval_status === "rejected") {
-      return null;
+      return { session: null, unavailable: false };
     }
   }
 
@@ -61,16 +66,23 @@ async function loadSessionUser(): Promise<SessionUser | null> {
   );
 
   return {
-    id: user.id,
-    email: user.email ?? enriched.email,
-    profile: enriched,
-    permissions,
-    isSuperAdmin,
-    adminRoleSlug: profileRow.admin_roles?.slug ?? "operator",
+    session: {
+      id: user.id,
+      email: user.email ?? enriched.email,
+      profile: enriched,
+      permissions,
+      isSuperAdmin,
+      adminRoleSlug: profileRow.admin_roles?.slug ?? "operator",
+    },
+    unavailable: false,
   };
 }
 
-export const getSessionUser = cache(loadSessionUser);
+export const getSessionOutcome = cache(loadSessionOutcome);
+
+export async function getSessionUser(): Promise<SessionUser | null> {
+  return (await getSessionOutcome()).session;
+}
 
 export async function getProfileForUser(userId: string): Promise<EnrichedProfile | null> {
   const supabase = await createClient();

@@ -1,9 +1,18 @@
 import { redirect } from "@/i18n/navigation";
-import { getSessionUser } from "./get-session";
+import { getSessionOutcome } from "./get-session";
 import { hasPermissionInSet, type Permission } from "./permissions";
 
 export async function requireAuth(locale: string) {
-  const session = await getSessionUser();
+  const { session, unavailable } = await getSessionOutcome();
+
+  // The auth backend did not answer, so the session is unproven rather than
+  // absent. Redirecting to /login here is a logout caused by a backend blip;
+  // throwing hands the request to the locale error boundary, which keeps the
+  // admin signed in and offers a retry.
+  if (!session && unavailable) {
+    throw new Error("auth_backend_unavailable");
+  }
+
   if (!session) {
     redirect({ href: "/login", locale });
     throw new Error("Unauthenticated");
