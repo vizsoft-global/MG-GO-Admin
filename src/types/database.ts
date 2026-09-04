@@ -7276,6 +7276,15 @@ export type Database = {
         Returns: Json
       }
       admin_dpd_live_snapshot: { Args: { p_date?: string }; Returns: Json }
+      admin_driver_app_install_versions: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          driver_id: string
+          app_version_code: number | null
+          app_version_name: string | null
+          last_seen_at: string | null
+        }[]
+      }
       admin_driver_device_overview: {
         Args: { p_driver_id: string; p_history_limit?: number }
         Returns: Json

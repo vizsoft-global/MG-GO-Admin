@@ -9,6 +9,20 @@ const corsHeaders = {
 
 const FLUSH_GRACE_MS = 5 * 60 * 1000;
 
+/// First Play build that understands `426 update_required` and routes to the
+/// Update Required screen (MG-GO `1.1.20+83`). Every build below it maps an
+/// unknown error code to a generic "something went wrong" — but all of them
+/// have handled `403 { error: "driver_blocked", reason }` since the first
+/// commit by opening the Blocked screen with `reason` as its body. So a
+/// pre-gate build is refused in *that* shape, with the update message as the
+/// reason, which is the only way an installed old build can be told why it
+/// cannot log in and what to do about it.
+const FIRST_GATED_VERSION_CODE = 83;
+
+const DEFAULT_UPDATE_MESSAGE =
+  "A new version of the app is required. Please update from Google Play to continue.\n" +
+  "يلزم تحديث التطبيق من Google Play للمتابعة.";
+
 type LookupResult = {
   ok: boolean;
   user_id?: string;
@@ -130,12 +144,31 @@ Deno.serve(async (req) => {
     const belowMinimum =
       reported == null || !Number.isFinite(reported) || reported < minCode;
     if (belowMinimum) {
+      const minName = gateRow.driver_app_min_version_name ?? null;
+      const configured = (gateRow.driver_app_update_message ?? "").trim();
+      const message = configured !== "" ? configured : DEFAULT_UPDATE_MESSAGE;
+      const preGateBuild =
+        reported == null || !Number.isFinite(reported) ||
+        reported < FIRST_GATED_VERSION_CODE;
+      if (preGateBuild) {
+        return json(
+          {
+            error: "driver_blocked",
+            reason: message,
+            message,
+            update_required: true,
+            min_version_code: minCode,
+            min_version_name: minName,
+          },
+          403,
+        );
+      }
       return json(
         {
           error: "update_required",
           min_version_code: minCode,
-          min_version_name: gateRow.driver_app_min_version_name ?? null,
-          message: gateRow.driver_app_update_message ?? null,
+          min_version_name: minName,
+          message,
         },
         426,
       );

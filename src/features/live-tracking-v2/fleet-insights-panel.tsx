@@ -81,8 +81,11 @@ export function FleetInsightsPanel({
   );
 
   if (collapsed) {
+    // Hug the three chips. The canvas column is `items-stretch` when this
+    // panel is open so the feed can fill the map; leaving that stretch on a
+    // collapsed card paints a full-height empty strip beside the zoom stack.
     return (
-      <div className="fleet-overlay pointer-events-auto flex w-12 flex-col items-center gap-2 rounded-xl border p-1.5 shadow-sm">
+      <div className="fleet-overlay pointer-events-auto flex h-auto w-12 shrink-0 flex-col items-center gap-1.5 self-start rounded-xl border p-1.5 shadow-sm">
         <Button
           type="button"
           size="icon"
@@ -93,11 +96,17 @@ export function FleetInsightsPanel({
         >
           <ChevronLeft className="size-4 rtl:rotate-180" aria-hidden />
         </Button>
-        <span className="flex flex-col items-center text-[10px] font-semibold tabular-nums">
+        <span
+          className="flex flex-col items-center gap-0.5 text-[10px] font-semibold tabular-nums"
+          title={t("kpis.online")}
+        >
           <Signal className="size-3.5 text-muted-foreground" aria-hidden />
           {snapshot.kpis.online}
         </span>
-        <span className="flex flex-col items-center text-[10px] font-semibold tabular-nums text-rose-700">
+        <span
+          className="flex flex-col items-center gap-0.5 text-[10px] font-semibold tabular-nums text-rose-700"
+          title={t("kpis.alerts")}
+        >
           <AlertTriangle className="size-3.5" aria-hidden />
           {snapshot.kpis.alerts}
         </span>

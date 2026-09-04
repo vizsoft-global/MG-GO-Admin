@@ -4,6 +4,7 @@ import { getAppSettings } from "@/lib/branding/get-app-settings";
 import { DriverAppSettingsPanel } from "@/features/settings/driver-app-settings-panel";
 import { HomeBannersPanel } from "@/features/settings/home-banners-panel";
 import { listHomeBanners } from "@/features/settings/home-banners-actions";
+import { getDriverAppInstallStats } from "@/features/settings/driver-app-settings-actions";
 
 export default async function DriverAppSettingsPage({
   params,
@@ -14,8 +15,11 @@ export default async function DriverAppSettingsPage({
   setRequestLocale(locale);
   await requirePermission(locale, "settings.manage");
 
-  const settings = await getAppSettings();
-  const homeBanners = await listHomeBanners();
+  const [settings, homeBanners, installStats] = await Promise.all([
+    getAppSettings(),
+    listHomeBanners(),
+    getDriverAppInstallStats(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -34,6 +38,7 @@ export default async function DriverAppSettingsPage({
         driverAppMinVersionCode={settings.driverAppMinVersionCode}
         driverAppMinVersionName={settings.driverAppMinVersionName}
         driverAppUpdateMessage={settings.driverAppUpdateMessage}
+        installStats={installStats}
       />
       <HomeBannersPanel banners={homeBanners.banners} lookups={homeBanners.lookups} />
     </div>

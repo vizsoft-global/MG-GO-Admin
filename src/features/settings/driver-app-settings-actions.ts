@@ -21,6 +21,10 @@ import {
   MIN_DELIVERY_PROXIMITY_METERS,
   resolveLogoUploadMeta,
 } from "@/lib/branding/constants";
+import { sendDirectDriverNotification } from "@/features/notifications/notifications-actions";
+
+const DRIVER_APP_PLAY_URL =
+  "https://play.google.com/store/apps/details?id=com.musallam_delivery.app";
 
 type PgLikeError = {
   code?: string | null;
@@ -530,6 +534,127 @@ export async function updateDriverAppForceUpdate(
     after: patch,
   });
   return { success: true };
+}
+
+export type DriverAppInstallVersion = {
+  versionCode: number | null;
+  versionName: string | null;
+  installs: number;
+  /** Installs whose device logged in within the last 14 days. */
+  recent: number;
+};
+
+export type DriverAppInstallStats = {
+  total: number;
+  versions: DriverAppInstallVersion[];
+  loadFailed: boolean;
+};
+
+type InstallVersionRow = {
+  driver_id: string;
+  app_version_code: number | null;
+  app_version_name: string | null;
+  last_seen_at: string | null;
+};
+
+const RECENT_INSTALL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * Which build every active driver is running, read from the device session their
+ * current phone logged in with. Lets the operator see how many installs a
+ * minimum versionCode will lock out before the toggle is flipped.
+ */
+export async function getDriverAppInstallStats(): Promise<DriverAppInstallStats> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_driver_app_install_versions");
+  if (error) {
+    logPgError("getDriverAppInstallStats", error);
+    return { total: 0, versions: [], loadFailed: true };
+  }
+  const rows = (data ?? []) as InstallVersionRow[];
+  const cutoff = Date.now() - RECENT_INSTALL_WINDOW_MS;
+  const byCode = new Map<number | null, DriverAppInstallVersion>();
+  for (const row of rows) {
+    const code = row.app_version_code;
+    const entry = byCode.get(code) ?? {
+      versionCode: code,
+      versionName: row.app_version_name,
+      installs: 0,
+      recent: 0,
+    };
+    entry.installs += 1;
+    if (row.last_seen_at && new Date(row.last_seen_at).getTime() >= cutoff) entry.recent += 1;
+    if (!entry.versionName && row.app_version_name) entry.versionName = row.app_version_name;
+    byCode.set(code, entry);
+  }
+  const versions = [...byCode.values()].sort((a, b) => {
+    // Unknown builds first: they are treated as below any minimum, same as the gate.
+    if (a.versionCode == null) return -1;
+    if (b.versionCode == null) return 1;
+    return a.versionCode - b.versionCode;
+  });
+  return { total: rows.length, versions, loadFailed: false };
+}
+
+export type NotifyOutdatedInstallsResult =
+  | { success: true; recipients: number; pushed: number; skipped: number; failed: number }
+  | { error: string; errorDetail?: string };
+
+/**
+ * Push "please update" with the Play link to every install below the given
+ * versionCode. This is the only lever that reaches a build too old to carry the
+ * Update Required screen — the force-update toggle cannot show them anything.
+ */
+export async function notifyOutdatedInstalls(
+  input: { belowVersionCode: number; title: string; body: string },
+): Promise<NotifyOutdatedInstallsResult> {
+  const auth = await requireSettingsManager();
+  if (auth.error) return { error: auth.error };
+
+  const below = Math.trunc(input.belowVersionCode);
+  if (!Number.isFinite(below) || below <= 0) return { error: "invalid_version_code" };
+  const title = input.title.trim();
+  const body = input.body.trim();
+  if (!title || !body) return { error: "missing_fields" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_driver_app_install_versions");
+  if (error) {
+    logPgError("notifyOutdatedInstalls", error);
+    return { error: "load_failed", errorDetail: formatPgErrorDetail(error) };
+  }
+  const driverIds = ((data ?? []) as InstallVersionRow[])
+    .filter((row) => row.app_version_code == null || row.app_version_code < below)
+    .map((row) => row.driver_id);
+  if (driverIds.length === 0) return { error: "no_outdated_installs" };
+
+  const result = await sendDirectDriverNotification({
+    driverIds,
+    title,
+    body,
+    url: DRIVER_APP_PLAY_URL,
+    category: "system_alert",
+    routeName: "notifyOutdatedInstalls",
+  });
+  if ("error" in result) {
+    return { error: result.error === "not_authorized" ? "notifications_send_required" : result.error };
+  }
+
+  void logAdminMutation({
+    action: "create",
+    entityType: "app_settings",
+    entityId: "1",
+    routeName: "notifyOutdatedInstalls",
+    after: { below_version_code: below, recipients: driverIds.length, pushed: result.sent },
+  });
+
+  return {
+    success: true,
+    recipients: driverIds.length,
+    pushed: result.sent,
+    skipped: result.skipped,
+    failed: result.failed,
+  };
 }
 
 export async function setDriverAppLoginVerificationExemptAll(

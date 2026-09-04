@@ -1,10 +1,13 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { BellRing, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import {
+  type DriverAppInstallStats,
+  notifyOutdatedInstalls,
   resetDriverAppSettings,
   setDriverAppLoginVerificationExemptAll,
   setDriverAppMaintenanceMode,
@@ -17,11 +20,13 @@ import {
   uploadDriverAppSplash,
 } from "@/features/settings/driver-app-settings-actions";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { AppFormSection } from "@/components/app";
+import { AppModalFooter } from "@/components/app/app-modal-footer";
 import {
   MAX_DELIVERY_PROXIMITY_METERS,
   MIN_DELIVERY_PROXIMITY_METERS,
@@ -42,6 +47,7 @@ type DriverAppSettingsPanelProps = {
   driverAppMinVersionCode: number | null;
   driverAppMinVersionName: string | null;
   driverAppUpdateMessage: string | null;
+  installStats: DriverAppInstallStats;
 };
 
 const PLAY_LISTING_URL =
@@ -133,6 +139,7 @@ export function DriverAppSettingsPanel({
   driverAppMinVersionCode,
   driverAppMinVersionName,
   driverAppUpdateMessage,
+  installStats,
 }: DriverAppSettingsPanelProps) {
   const t = useTranslations("pages.settings.driverApp");
   const locale = useLocale();
@@ -160,6 +167,68 @@ export function DriverAppSettingsPanel({
   const [isPending, startTransition] = useTransition();
 
   const forceUpdateArmed = forceUpdate && minVersionCode.trim() !== "";
+
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyTitle, setNotifyTitle] = useState("");
+  const [notifyBody, setNotifyBody] = useState("");
+  const [notifyPending, startNotify] = useTransition();
+
+  // Installs the typed minimum would lock out. Unknown builds count as outdated,
+  // mirroring the gate: a phone that cannot report its versionCode is refused.
+  const parsedMinCode = Number(minVersionCode.trim());
+  const thresholdCode =
+    minVersionCode.trim() !== "" && Number.isFinite(parsedMinCode) && parsedMinCode > 0
+      ? Math.trunc(parsedMinCode)
+      : null;
+  const outdatedInstalls = useMemo(() => {
+    if (thresholdCode == null) return null;
+    return installStats.versions
+      .filter((v) => v.versionCode == null || v.versionCode < thresholdCode)
+      .reduce((sum, v) => sum + v.installs, 0);
+  }, [installStats.versions, thresholdCode]);
+
+  const openNotify = () => {
+    setNotifyTitle(t("notifyOutdatedDefaultTitle"));
+    setNotifyBody(
+      updateMessage.trim() ||
+        t("notifyOutdatedDefaultBody", { version: minVersionName.trim() || minVersionCode.trim() }),
+    );
+    setNotifyOpen(true);
+  };
+
+  const submitNotify = () => {
+    if (thresholdCode == null) return;
+    startNotify(async () => {
+      const result = await notifyOutdatedInstalls({
+        belowVersionCode: thresholdCode,
+        title: notifyTitle,
+        body: notifyBody,
+      });
+      if ("error" in result) {
+        toast.error(
+          result.error === "no_outdated_installs"
+            ? t("errors.noOutdatedInstalls")
+            : result.error === "notifications_send_required"
+              ? t("errors.notificationsSendRequired")
+              : result.error === "missing_fields"
+                ? t("errors.missingFields")
+                : t("errors.notifyFailed"),
+          { description: result.errorDetail },
+        );
+        return;
+      }
+      setNotifyOpen(false);
+      toast.success(
+        t("notifyOutdatedSent", { pushed: result.pushed, recipients: result.recipients }),
+        {
+          description:
+            result.skipped > 0 || result.failed > 0
+              ? t("notifyOutdatedSentDetail", { skipped: result.skipped, failed: result.failed })
+              : undefined,
+        },
+      );
+    });
+  };
 
   const saveForceUpdate = (enabled: boolean) => {
     const trimmedCode = minVersionCode.trim();
@@ -675,6 +744,77 @@ export function DriverAppSettingsPanel({
                     className="min-h-[56px] resize-none"
                   />
                 </div>
+                <div className="rounded-lg border border-border bg-muted/10 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Smartphone className="size-4 text-muted-foreground" aria-hidden />
+                      <span className="font-medium">
+                        {installStats.loadFailed
+                          ? t("installsUnavailable")
+                          : t("installsTotal", { count: installStats.total })}
+                      </span>
+                      {thresholdCode != null && outdatedInstalls != null ? (
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium tabular-nums",
+                            outdatedInstalls > 0
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-emerald-100 text-emerald-800",
+                          )}
+                        >
+                          {t("installsOutdated", { count: outdatedInstalls, code: thresholdCode })}
+                        </span>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 cursor-pointer rounded-lg"
+                      disabled={
+                        isPending ||
+                        installStats.loadFailed ||
+                        thresholdCode == null ||
+                        !outdatedInstalls
+                      }
+                      onClick={openNotify}
+                    >
+                      <BellRing className="size-4" aria-hidden />
+                      {t("notifyOutdated")}
+                    </Button>
+                  </div>
+                  {installStats.versions.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {installStats.versions.map((v) => {
+                        const outdated =
+                          thresholdCode != null &&
+                          (v.versionCode == null || v.versionCode < thresholdCode);
+                        return (
+                          <span
+                            key={v.versionCode ?? "unknown"}
+                            title={
+                              v.versionName
+                                ? `${v.versionName} · ${t("installsRecent", { count: v.recent })}`
+                                : t("installsRecent", { count: v.recent })
+                            }
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] tabular-nums",
+                              outdated
+                                ? "border-amber-200 bg-amber-50 text-amber-800"
+                                : "border-border bg-card text-muted-foreground",
+                            )}
+                          >
+                            <span className="font-medium">
+                              {v.versionCode == null ? t("installsUnknownBuild") : `#${v.versionCode}`}
+                            </span>
+                            <span>×{v.installs}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  <p className="mt-2 text-[10px] text-muted-foreground">{t("installsHint")}</p>
+                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <a
                     href={PLAY_LISTING_URL}
@@ -696,6 +836,77 @@ export function DriverAppSettingsPanel({
               </form>
             </div>
           </AppFormSection>
+
+          <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
+            <DialogContent
+              showCloseButton
+              closeOutside
+              className="w-[min(560px,96vw)] overflow-visible px-5 py-4"
+            >
+              <form
+                className="space-y-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitNotify();
+                }}
+              >
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="notifyOutdatedTitle">
+                      {t("notifyOutdatedTitleLabel")}
+                      <span className="text-destructive"> *</span>
+                    </Label>
+                    <Input
+                      id="notifyOutdatedTitle"
+                      value={notifyTitle}
+                      onChange={(e) => setNotifyTitle(e.target.value)}
+                      maxLength={120}
+                      required
+                      disabled={notifyPending}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="notifyOutdatedBody">
+                      {t("notifyOutdatedBodyLabel")}
+                      <span className="text-destructive"> *</span>
+                    </Label>
+                    <Textarea
+                      id="notifyOutdatedBody"
+                      value={notifyBody}
+                      onChange={(e) => setNotifyBody(e.target.value)}
+                      rows={3}
+                      maxLength={500}
+                      required
+                      disabled={notifyPending}
+                      className="min-h-[72px] resize-none"
+                    />
+                    <p className="text-[10px] text-muted-foreground">{t("notifyOutdatedBodyHint")}</p>
+                  </div>
+                </div>
+                <AppModalFooter
+                  title={t("notifyOutdated")}
+                  subtitle={
+                    thresholdCode != null && outdatedInstalls != null
+                      ? t("notifyOutdatedSubtitle", { count: outdatedInstalls, code: thresholdCode })
+                      : ""
+                  }
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    disabled={notifyPending}
+                    onClick={() => setNotifyOpen(false)}
+                  >
+                    {t("cancel")}
+                  </Button>
+                  <Button type="submit" className="h-9" disabled={notifyPending}>
+                    {notifyPending ? t("sending") : t("notifyOutdatedConfirm")}
+                  </Button>
+                </AppModalFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
