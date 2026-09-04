@@ -185,6 +185,8 @@ export type DrawHexGridArgs = {
   project: HexProjector;
   /** Hide the background grid but still draw the selection. */
   gridVisible?: boolean;
+  /** Style for selected cells; defaults to the emerald fallback. */
+  selectedStyle?: HexStyle;
 };
 
 export function drawHexGrid({
@@ -195,6 +197,7 @@ export function drawHexGrid({
   selected,
   project,
   gridVisible = true,
+  selectedStyle = ZONE_BLOCK_HEX_STYLE.selected,
 }: DrawHexGridArgs): void {
   ctx.clearRect(0, 0, width, height);
   if (cells.length === 0) return;
@@ -215,14 +218,7 @@ export function drawHexGrid({
     width,
     height,
   );
-  drawBatched(
-    ctx,
-    selection,
-    ZONE_BLOCK_HEX_STYLE.selected,
-    project,
-    width,
-    height,
-  );
+  drawBatched(ctx, selection, selectedStyle, project, width, height);
 
   ctx.globalAlpha = 1;
 }

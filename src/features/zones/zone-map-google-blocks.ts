@@ -8,6 +8,11 @@ import type {
   GoogleOverlayViewInstance,
 } from "@/lib/google-maps/load";
 import { createProjector, drawHexGrid, prepareCanvas } from "./hex-grid-canvas";
+import {
+  ZONE_BLOCK_HEX_STYLE,
+  type ZoneBlockHexStyle,
+  zoneBlockSelectedStyle,
+} from "./zone-blocks-layer";
 import { buildBlocksModeStyles } from "./zone-map-google-styles";
 import { latLngToTuple } from "./zone-map-google-utils";
 
@@ -47,6 +52,7 @@ export function useGoogleZoneBlocks({
   enabled,
   resolution,
   selectedCells,
+  selectedColor,
   onHit,
   onZoomCapped,
 }: {
@@ -55,6 +61,8 @@ export function useGoogleZoneBlocks({
   enabled: boolean;
   resolution: number;
   selectedCells: readonly string[];
+  /** Draft zone colour; painted cells take it so the stroke previews the save. */
+  selectedColor?: string;
   onHit?: BlockHitHandler;
   onZoomCapped?: (capped: boolean) => void;
 }): { zoomCapped: boolean } {
@@ -62,6 +70,7 @@ export function useGoogleZoneBlocks({
   const cellsRef = useRef<string[]>([]);
   const gridVisibleRef = useRef(true);
   const selectedRef = useRef(new Set<string>());
+  const selectedStyleRef = useRef<ZoneBlockHexStyle>(ZONE_BLOCK_HEX_STYLE.selected);
   const onHitRef = useRef(onHit);
   const onZoomCappedRef = useRef(onZoomCapped);
   const resolutionRef = useRef(resolution);
@@ -165,6 +174,7 @@ export function useGoogleZoneBlocks({
           selected: selectedRef.current,
           project: createProjector(zoom, northLat, westLng),
           gridVisible: gridVisibleRef.current,
+          selectedStyle: selectedStyleRef.current,
         });
       }
 
@@ -351,6 +361,15 @@ export function useGoogleZoneBlocks({
     if (needsRebuild) syncViewportRef.current();
     else redrawRef.current();
   }, [enabled, selectedCells]);
+
+  // A colour change is a repaint only; the cells have not moved.
+  useEffect(() => {
+    selectedStyleRef.current = selectedColor
+      ? zoneBlockSelectedStyle(selectedColor)
+      : ZONE_BLOCK_HEX_STYLE.selected;
+    if (!enabled) return;
+    redrawRef.current();
+  }, [enabled, selectedColor]);
 
   return { zoomCapped };
 }

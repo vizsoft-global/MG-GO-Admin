@@ -199,6 +199,7 @@ export function ZoneMapGoogleInner({
     enabled: mapState === "ready" && blocksMode,
     resolution: blockResolution,
     selectedCells: selectedBlockCells,
+    selectedColor: normalizeZoneColor(draftColor),
     onHit: onBlockHit,
     onZoomCapped: onBlocksZoomCapped,
   });

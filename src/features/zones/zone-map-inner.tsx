@@ -732,6 +732,7 @@ export function ZoneMapInner({
         enabled={Boolean(blocksMode)}
         resolution={blockResolution}
         selectedCells={selectedBlockCells}
+        selectedColor={normalizeZoneColor(draftColor)}
         onHit={onBlockHit}
         onZoomCapped={(capped) => {
           onBlocksZoomCapped?.(capped);

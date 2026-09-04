@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Pill } from "@/components/ui/metric-tile";
 import { cn } from "@/lib/utils";
+import { normalizeZoneColor } from "./zone-colors";
 import { ZoneMap } from "./zone-map";
 import { ZonePlaceSearch } from "./zone-place-search";
 import type { ZoneMapAdapter, ZoneMapViewport } from "./zone-map-adapter";
@@ -40,17 +41,12 @@ export function ZoneMapPanel({
     [],
   );
 
+  // Zones paint in the colour the operator picked. Include / exclude is
+  // metadata carried by the pills and the detail page, not by the fill —
+  // driving the fill from kind made every zone teal or red regardless of
+  // the colour chosen on create.
   const visibleZones = useMemo(
-    () =>
-      zones.map((zone) => ({
-        ...zone,
-        color:
-          zone.geofence_kind === "exclusion"
-            ? "#ef4444"
-            : zone.geofence_kind === "inclusion"
-              ? "#14b8a6"
-              : zone.color,
-      })),
+    () => zones.map((zone) => ({ ...zone, color: normalizeZoneColor(zone.color) })),
     [zones],
   );
 
