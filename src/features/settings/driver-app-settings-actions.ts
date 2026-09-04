@@ -461,6 +461,77 @@ export async function setDriverAppMaintenanceMode(
   return { success: true };
 }
 
+export type DriverAppForceUpdateInput = {
+  enabled: boolean;
+  minVersionCode: number | null;
+  minVersionName: string | null;
+  message: string | null;
+};
+
+/**
+ * Force-update controls. One action for the whole block rather than a toggle plus
+ * three field saves: turning the switch on with a stale or missing versionCode is
+ * exactly the state that locks the whole fleet out, so the toggle and the number
+ * are validated together.
+ */
+export async function updateDriverAppForceUpdate(
+  locale: string,
+  input: DriverAppForceUpdateInput,
+): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+  const auth = await requireSettingsManager();
+  if ("error" in auth) return auth;
+
+  const minVersionCode =
+    input.minVersionCode == null || Number.isNaN(input.minVersionCode)
+      ? null
+      : Math.trunc(input.minVersionCode);
+  if (minVersionCode != null && (minVersionCode <= 0 || minVersionCode > 2_100_000_000)) {
+    return { error: "invalid_version_code" };
+  }
+  if (input.enabled && minVersionCode == null) {
+    return { error: "version_code_required" };
+  }
+
+  const minVersionName = input.minVersionName?.trim() || null;
+  if (minVersionName && minVersionName.length > 32) {
+    return { error: "invalid_version_name" };
+  }
+  const message = input.message?.trim() || null;
+  if (message && message.length > 500) {
+    return { error: "invalid_message" };
+  }
+
+  const patch = {
+    driver_app_force_update: input.enabled,
+    driver_app_min_version_code: minVersionCode,
+    driver_app_min_version_name: minVersionName,
+    driver_app_update_message: message,
+  };
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("app_settings")
+    .select(
+      "driver_app_force_update, driver_app_min_version_code, driver_app_min_version_name, driver_app_update_message",
+    )
+    .eq("id", 1)
+    .maybeSingle();
+
+  const result = await patchAppSettings("updateDriverAppForceUpdate", patch, auth.session.id);
+  if (result.error) return result;
+
+  revalidateDriverAppSettings(locale);
+  void logAdminMutation({
+    action: "update",
+    entityType: "app_settings",
+    entityId: "1",
+    routeName: "updateDriverAppForceUpdate",
+    before: before ?? undefined,
+    after: patch,
+  });
+  return { success: true };
+}
+
 export async function setDriverAppLoginVerificationExemptAll(
   enabled: boolean,
 ): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
@@ -505,6 +576,10 @@ export async function resetDriverAppSettings(
         DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
       // Always off — sideload OTA removed for Play Store.
       driver_app_sideload_updates_enabled: false,
+      driver_app_force_update: false,
+      driver_app_min_version_code: null,
+      driver_app_min_version_name: null,
+      driver_app_update_message: null,
     },
     auth.session.id,
   );

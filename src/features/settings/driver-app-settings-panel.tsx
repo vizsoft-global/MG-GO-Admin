@@ -9,6 +9,7 @@ import {
   setDriverAppLoginVerificationExemptAll,
   setDriverAppMaintenanceMode,
   updateDriverAppDeliveryProximity,
+  updateDriverAppForceUpdate,
   updateDriverAppMaintenanceMessage,
   updateDriverAppSettings,
   uploadDriverAppIcon,
@@ -37,7 +38,14 @@ type DriverAppSettingsPanelProps = {
   driverAppMaintenanceMessage: string;
   driverAppLoginVerificationExemptAll: boolean;
   driverAppDeliveryProximityMeters: number;
+  driverAppForceUpdate: boolean;
+  driverAppMinVersionCode: number | null;
+  driverAppMinVersionName: string | null;
+  driverAppUpdateMessage: string | null;
 };
+
+const PLAY_LISTING_URL =
+  "https://play.google.com/store/apps/details?id=com.musallam_delivery.app";
 
 function AssetUploadBlock({
   label,
@@ -121,6 +129,10 @@ export function DriverAppSettingsPanel({
   driverAppMaintenanceMessage,
   driverAppLoginVerificationExemptAll,
   driverAppDeliveryProximityMeters,
+  driverAppForceUpdate,
+  driverAppMinVersionCode,
+  driverAppMinVersionName,
+  driverAppUpdateMessage,
 }: DriverAppSettingsPanelProps) {
   const t = useTranslations("pages.settings.driverApp");
   const locale = useLocale();
@@ -139,7 +151,46 @@ export function DriverAppSettingsPanel({
   const [proximityMeters, setProximityMeters] = useState(
     String(driverAppDeliveryProximityMeters),
   );
+  const [forceUpdate, setForceUpdate] = useState(driverAppForceUpdate);
+  const [minVersionCode, setMinVersionCode] = useState(
+    driverAppMinVersionCode == null ? "" : String(driverAppMinVersionCode),
+  );
+  const [minVersionName, setMinVersionName] = useState(driverAppMinVersionName ?? "");
+  const [updateMessage, setUpdateMessage] = useState(driverAppUpdateMessage ?? "");
   const [isPending, startTransition] = useTransition();
+
+  const forceUpdateArmed = forceUpdate && minVersionCode.trim() !== "";
+
+  const saveForceUpdate = (enabled: boolean) => {
+    const trimmedCode = minVersionCode.trim();
+    const parsedCode = trimmedCode === "" ? null : Number(trimmedCode);
+    startTransition(async () => {
+      setError(null);
+      const result = await updateDriverAppForceUpdate(locale, {
+        enabled,
+        minVersionCode: parsedCode,
+        minVersionName: minVersionName.trim() || null,
+        message: updateMessage.trim() || null,
+      });
+      if (result.error) {
+        setError(result.error);
+        toast.error(
+          result.error === "version_code_required"
+            ? t("errors.versionCodeRequired")
+            : result.error === "invalid_version_code"
+              ? t("errors.invalidVersionCode")
+              : t("errors.saveFailed"),
+          { description: result.errorDetail },
+        );
+        return;
+      }
+      setForceUpdate(enabled);
+      toast.success(
+        enabled ? t("forceUpdateEnabled", { code: trimmedCode }) : t("forceUpdateSaved"),
+      );
+      router.refresh();
+    });
+  };
 
   const logoDisplay = logoPreview ?? driverAppLogoUrl;
   const splashDisplay = splashPreview ?? driverAppSplashUrl;
@@ -160,7 +211,13 @@ export function DriverAppSettingsPanel({
                 ? t("errors.notAuthorized")
                 : error === "invalid_proximity"
                   ? t("errors.invalidProximity")
-                  : null;
+                  : error === "version_code_required"
+                    ? t("errors.versionCodeRequired")
+                    : error === "invalid_version_code"
+                      ? t("errors.invalidVersionCode")
+                      : error === "invalid_version_name" || error === "invalid_message"
+                        ? t("errors.saveFailed")
+                        : null;
 
   return (
     <div className="space-y-4">
@@ -524,6 +581,121 @@ export function DriverAppSettingsPanel({
               </form>
             </div>
           </AppFormSection>
+
+          <AppFormSection title={t("forceUpdateTitle")} description={t("forceUpdateSubtitle")}>
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/10 p-3">
+                <div className="space-y-1">
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+                      forceUpdateArmed
+                        ? "bg-destructive/15 text-destructive"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {forceUpdateArmed
+                      ? t("forceUpdateOn", { code: minVersionCode.trim() })
+                      : t("forceUpdateOff")}
+                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    {forceUpdateArmed ? t("forceUpdateOnHint") : t("forceUpdateOffHint")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="driverAppForceUpdate" className="text-sm">
+                    {t("forceUpdateToggle")}
+                  </Label>
+                  <Switch
+                    id="driverAppForceUpdate"
+                    checked={forceUpdate}
+                    disabled={isPending}
+                    onCheckedChange={(checked) => saveForceUpdate(checked)}
+                  />
+                </div>
+              </div>
+
+              <form
+                className="space-y-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveForceUpdate(forceUpdate);
+                }}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="driverAppMinVersionCode">
+                      {t("forceUpdateMinVersionCode")}
+                      {forceUpdate ? <span className="text-destructive"> *</span> : null}
+                    </Label>
+                    <Input
+                      id="driverAppMinVersionCode"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      value={minVersionCode}
+                      onChange={(e) => setMinVersionCode(e.target.value)}
+                      disabled={isPending}
+                      placeholder="83"
+                      className="tabular-nums"
+                      required={forceUpdate}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      {t("forceUpdateMinVersionCodeHint")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="driverAppMinVersionName">
+                      {t("forceUpdateMinVersionName")}
+                    </Label>
+                    <Input
+                      id="driverAppMinVersionName"
+                      value={minVersionName}
+                      onChange={(e) => setMinVersionName(e.target.value)}
+                      disabled={isPending}
+                      placeholder="1.1.21"
+                      maxLength={32}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      {t("forceUpdateMinVersionNameHint")}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="driverAppUpdateMessage">{t("forceUpdateMessage")}</Label>
+                  <Textarea
+                    id="driverAppUpdateMessage"
+                    value={updateMessage}
+                    onChange={(e) => setUpdateMessage(e.target.value)}
+                    disabled={isPending}
+                    rows={2}
+                    maxLength={500}
+                    placeholder={t("forceUpdateMessagePlaceholder")}
+                    className="min-h-[56px] resize-none"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <a
+                    href={PLAY_LISTING_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-primary underline-offset-2 hover:underline"
+                  >
+                    {t("forceUpdatePlayLink")}
+                  </a>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    disabled={isPending}
+                    className="cursor-pointer rounded-lg"
+                  >
+                    {isPending ? t("saving") : t("saveForceUpdate")}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </AppFormSection>
         </div>
       </div>
 
@@ -547,6 +719,10 @@ export function DriverAppSettingsPanel({
               setSplashPreview(null);
               setIconPreview(null);
               setMaintenanceMode(false);
+              setForceUpdate(false);
+              setMinVersionCode("");
+              setMinVersionName("");
+              setUpdateMessage("");
               setProximityMeters(
                 String(DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters),
               );

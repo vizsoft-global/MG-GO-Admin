@@ -431,16 +431,21 @@ export type Database = {
           attendance_offline_alert_minutes: number
           delivery_ontime_minutes: number
           driver_app_delivery_proximity_meters: number
+          driver_app_force_update: boolean
           driver_app_icon_url: string | null
           driver_app_login_hint: string
           driver_app_login_verification_exempt_all: boolean
           driver_app_logo_url: string | null
           driver_app_maintenance_message: string
           driver_app_maintenance_mode: boolean
+          driver_app_min_version_code: number | null
+          driver_app_min_version_name: string | null
           driver_app_sideload_updates_enabled: boolean
           driver_app_splash_url: string | null
           driver_app_title: string
+          driver_app_update_message: string | null
           driver_location_events_retention_days: number
+          driver_location_rpc_min_interval_seconds: number
           driver_ops_log_retention_days: number
           driver_telemetry_max_events_per_hour: number
           driver_telemetry_retention_days: number
@@ -481,16 +486,21 @@ export type Database = {
           attendance_offline_alert_minutes?: number
           delivery_ontime_minutes?: number
           driver_app_delivery_proximity_meters?: number
+          driver_app_force_update?: boolean
           driver_app_icon_url?: string | null
           driver_app_login_hint?: string
           driver_app_login_verification_exempt_all?: boolean
           driver_app_logo_url?: string | null
           driver_app_maintenance_message?: string
           driver_app_maintenance_mode?: boolean
+          driver_app_min_version_code?: number | null
+          driver_app_min_version_name?: string | null
           driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
+          driver_app_update_message?: string | null
           driver_location_events_retention_days?: number
+          driver_location_rpc_min_interval_seconds?: number
           driver_ops_log_retention_days?: number
           driver_telemetry_max_events_per_hour?: number
           driver_telemetry_retention_days?: number
@@ -531,16 +541,21 @@ export type Database = {
           attendance_offline_alert_minutes?: number
           delivery_ontime_minutes?: number
           driver_app_delivery_proximity_meters?: number
+          driver_app_force_update?: boolean
           driver_app_icon_url?: string | null
           driver_app_login_hint?: string
           driver_app_login_verification_exempt_all?: boolean
           driver_app_logo_url?: string | null
           driver_app_maintenance_message?: string
           driver_app_maintenance_mode?: boolean
+          driver_app_min_version_code?: number | null
+          driver_app_min_version_name?: string | null
           driver_app_sideload_updates_enabled?: boolean
           driver_app_splash_url?: string | null
           driver_app_title?: string
+          driver_app_update_message?: string | null
           driver_location_events_retention_days?: number
+          driver_location_rpc_min_interval_seconds?: number
           driver_ops_log_retention_days?: number
           driver_telemetry_max_events_per_hour?: number
           driver_telemetry_retention_days?: number

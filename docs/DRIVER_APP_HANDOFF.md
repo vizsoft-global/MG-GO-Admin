@@ -867,13 +867,20 @@ select driver_app_title,
        driver_app_maintenance_mode,
        driver_app_maintenance_message,
        driver_app_login_hint,
-       driver_app_delivery_proximity_meters
+       driver_app_delivery_proximity_meters,
+       driver_app_force_update,
+       driver_app_min_version_code,
+       driver_app_min_version_name,
+       driver_app_update_message
   from public.app_settings
  where id = 1;
 ```
 
 - **Anon-readable** via policy `app_settings_public_branding_read` (same row as admin branding).
 - When `driver_app_maintenance_mode = true`: render a full-screen maintenance view using `driver_app_maintenance_message`. Block login and in-app actions; allow retry/poll.
+- **Force update (2026-09-04).** When `driver_app_force_update = true` and the install's Android `versionCode` is `< driver_app_min_version_code`, render a **non-dismissible Update Required** screen (no Close, no login, no Home): title, `driver_app_update_message` (fallback copy if null), optional `driver_app_min_version_name` for display, primary **Update on Play Store** → `market://details?id=com.musallam_delivery.app` with `https://play.google.com/store/apps/details?id=com.musallam_delivery.app` as fallback, secondary **Check again** (re-reads this row). The gate outranks maintenance. Re-check on every `app_settings` refresh so a toggle flipped mid-session traps the running app. An install that cannot report its `versionCode` is treated as below any minimum. Reference build: MG-GO `1.1.20+83` (`lib/core/app_update/`, `/update-required`).
+- **Login hard reject.** `driver-passcode-login` reads the same four columns before validating credentials and returns HTTP **426** `{ "error": "update_required", "min_version_code", "min_version_name", "message" }` when `device_meta.app_version_code` is below the minimum (or missing). No session is minted. The app maps this to the same Update Required screen and holds that verdict for the process lifetime, since the edge function read the authoritative row.
+- **Polling budget.** `app_settings` must be read at most once per refresh (one `select`, no column-fallback cascade on failure) and the polling fallback must be **≥ 60s**; Realtime `UPDATE` on row `id = 1` is the primary signal. The 5s poll with a 5-select fallback cascade was ~2.7M `GET app_settings` / day.
 - **Separate** from `maintenance_mode` on the same row (that flag gates the **admin panel** only).
 - `driver_app_logo_url` / `driver_app_splash_url` / `driver_app_icon_url` are public Supabase Storage URLs under bucket `branding`, paths `driver-app/logo.*`, `driver-app/splash.*`, and `driver-app/icon.*`. Uploads append a `?v=` cache-bust query param.
 - **App icon refresh:** subscribe to `app_settings` realtime (row `id = 1`) or poll `updated_at` / compare `driver_app_icon_url` on app resume. When the URL changes, download the new image and update the launcher icon (Expo: `expo-dynamic-app-icon` or platform-specific APIs).
@@ -1111,7 +1118,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-09-03 — [admin+app] Live GPS stays on Cloudflare (`dpd-live`). Idle phones no longer POST every ~2s (`batchSize` is moving-only). An edge `/ingest` failure falls back to `driver_report_location` at the 15s/30s watchdog cadence **without** `force` — do not re-add `force: true` on every failed flush. FleetRoom alarms back off to 30s when no admin socket is open and ingest has been quiet for 3 minutes. App login is employee ID + passcode (letters and digits, 1–100); ship Play `1.1.16+76`. Workers Paid is required so ingest does not die on free-plan 1027 and dump every fix into Postgres.*
+*Last synced: 2026-09-04 — [admin+app] Force update + old-app storm protection. `app_settings` gains `driver_app_force_update` / `driver_app_min_version_code` / `driver_app_min_version_name` / `driver_app_update_message` (§9) and `driver_location_rpc_min_interval_seconds` (default 15). `driver-passcode-login` returns **426 `update_required`** for a build below the minimum. **`driver_report_location` now ignores `p_force_history` unless `p_tracking_status = 'delivery_submit'`:** a fix within `driver_location_rpc_min_interval_seconds` of the previous one and under 18 m away returns `{ coalesced: true }` before proximity/geofence/upsert/history, whatever the flag says — old installs still doing 2s + `force` get a cheap no-op instead of a full write. Ship Play `1.1.20+83` (gate screen + 60s settings poll + single-select branding). Leave the admin toggle **OFF** until that build is live on Play, then set the minimum to `83` and switch it on. Migrations `20261013100000`, `20261013100100`.*
+
+*Prior: 2026-09-03 — [admin+app] Live GPS stays on Cloudflare (`dpd-live`). Idle phones no longer POST every ~2s (`batchSize` is moving-only). An edge `/ingest` failure falls back to `driver_report_location` at the 15s/30s watchdog cadence **without** `force` — do not re-add `force: true` on every failed flush. FleetRoom alarms back off to 30s when no admin socket is open and ingest has been quiet for 3 minutes. App login is employee ID + passcode (letters and digits, 1–100); ship Play `1.1.16+76`. Workers Paid is required so ingest does not die on free-plan 1027 and dump every fix into Postgres.*
 
 *Prior: 2026-08-31 — [admin+app] Employee ID is letters and digits, 1–100 characters, unique case-insensitive. Bulk import matches and updates on this field. Login lookup is `lower(employee_id)` or exact `driver_code`. Migration `20261008100000`. A rider with a new alphanumeric ID cannot sign in until the matching app build is installed.*
 

@@ -74,6 +74,12 @@ import {
 
 const ROSTER_TTL_MS = 60_000;
 const TOKEN_CACHE_TTL_MS = 10 * 60_000;
+/**
+ * How long a token GoTrue refused stays refused without asking again. Long enough to
+ * absorb a zombie foreground service's 2s cadence, short enough that a token that was
+ * refused for a transient GoTrue outage is retried within the shift.
+ */
+export const TOKEN_NEGATIVE_CACHE_TTL_MS = 5 * 60_000;
 /** Points held per driver between durable flushes. 10s at a 1Hz cadence is 10. */
 const MAX_PENDING_POINTS = 16;
 /** Entities with no report for this long leave the room entirely. */
@@ -242,7 +248,15 @@ export class FleetRoom implements DurableObject {
   private settings: Record<string, number> = {};
 
   private readonly sockets = new Map<WebSocket, SocketRuntime>();
-  private readonly tokenCache = new Map<string, { driverId: string; expiresAt: number }>();
+  /**
+   * `driverId: null` is a negative entry. A foreground service that outlived its
+   * session keeps POSTing the same dead token every few seconds; without remembering
+   * the refusal every one of those became a GoTrue round trip (~1.25M/day on 3 Sep).
+   */
+  private readonly tokenCache = new Map<
+    string,
+    { driverId: string | null; expiresAt: number }
+  >();
 
   private rosterLoadedAt = 0;
   private bootstrapping: Promise<void> | null = null;
@@ -565,23 +579,38 @@ export class FleetRoom implements DurableObject {
     const cached = this.tokenCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.driverId;
 
-    const user = await resolveUserFromToken(this.supabase, token);
-    if (!user) {
+    const resolved = await resolveUserFromToken(this.supabase, token);
+    if (resolved.kind === "unavailable") {
+      // GoTrue itself failed; nothing is learned about the token, so nothing is cached.
       this.tokenCache.delete(key);
+      return null;
+    }
+    if (resolved.kind === "rejected") {
+      // A refused token is refused for the length of the negative TTL; the app
+      // mints a fresh one on re-login, which hashes to a different key.
+      this.tokenCache.set(key, {
+        driverId: null,
+        expiresAt: Date.now() + TOKEN_NEGATIVE_CACHE_TTL_MS,
+      });
+      this.pruneTokenCache();
       return null;
     }
 
     // `drivers.id` is the profile id, which is the auth uid — no extra lookup.
     this.tokenCache.set(key, {
-      driverId: user.id,
+      driverId: resolved.user.id,
       expiresAt: Date.now() + TOKEN_CACHE_TTL_MS,
     });
-    if (this.tokenCache.size > 2000) {
-      for (const [k, v] of this.tokenCache) {
-        if (v.expiresAt <= Date.now()) this.tokenCache.delete(k);
-      }
+    this.pruneTokenCache();
+    return resolved.user.id;
+  }
+
+  private pruneTokenCache(): void {
+    if (this.tokenCache.size <= 2000) return;
+    const now = Date.now();
+    for (const [k, v] of this.tokenCache) {
+      if (v.expiresAt <= now) this.tokenCache.delete(k);
     }
-    return user.id;
   }
 
   private async ingest(request: Request): Promise<Response> {

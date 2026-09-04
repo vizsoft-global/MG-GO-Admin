@@ -30,6 +30,10 @@ export default async function DriverAppSettingsPage({
           settings.driverAppLoginVerificationExemptAll
         }
         driverAppDeliveryProximityMeters={settings.driverAppDeliveryProximityMeters}
+        driverAppForceUpdate={settings.driverAppForceUpdate}
+        driverAppMinVersionCode={settings.driverAppMinVersionCode}
+        driverAppMinVersionName={settings.driverAppMinVersionName}
+        driverAppUpdateMessage={settings.driverAppUpdateMessage}
       />
       <HomeBannersPanel banners={homeBanners.banners} lookups={homeBanners.lookups} />
     </div>

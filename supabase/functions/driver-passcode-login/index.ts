@@ -107,6 +107,41 @@ Deno.serve(async (req) => {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  // Force-update gate. Checked before credentials so a blocked build learns it is
+  // blocked without a passcode being validated for it, and no session is minted.
+  // A build that does not report its versionCode is old enough to predate the
+  // gate entirely and is treated as below any minimum.
+  const { data: gateRow, error: gateError } = await admin
+    .from("app_settings")
+    .select(
+      "driver_app_force_update, driver_app_min_version_code, driver_app_min_version_name, driver_app_update_message",
+    )
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (gateError) {
+    console.error("force-update gate read error", gateError.message);
+  } else if (
+    gateRow?.driver_app_force_update === true &&
+    typeof gateRow.driver_app_min_version_code === "number"
+  ) {
+    const minCode = gateRow.driver_app_min_version_code as number;
+    const reported = deviceMeta.app_version_code;
+    const belowMinimum =
+      reported == null || !Number.isFinite(reported) || reported < minCode;
+    if (belowMinimum) {
+      return json(
+        {
+          error: "update_required",
+          min_version_code: minCode,
+          min_version_name: gateRow.driver_app_min_version_name ?? null,
+          message: gateRow.driver_app_update_message ?? null,
+        },
+        426,
+      );
+    }
+  }
+
   const { data: lookupRaw, error: lookupError } = await admin.rpc(
     "driver_app_lookup_by_passcode",
     { p_driver_code: loginId, p_passcode: passcode },
