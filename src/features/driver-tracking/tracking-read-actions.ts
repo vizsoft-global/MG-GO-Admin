@@ -531,7 +531,7 @@ export async function fetchFleetOpsCounts(): Promise<FleetOpsCounts> {
       .eq("status", "online_unvalidated"),
     supabase
       .from("driver_locations")
-      .select("id", { count: "exact", head: true })
+      .select("driver_id", { count: "exact", head: true })
       .eq("zone_status", "out_of_zone"),
   ]);
 
