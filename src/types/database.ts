@@ -8246,7 +8246,7 @@ export type Database = {
         Returns: Json
       }
       report_delivery_orders: {
-        Args: { p_from: string; p_to: string }
+        Args: { p_from: string; p_from_time?: string; p_to: string; p_to_time?: string }
         Returns: {
           delivery_count: number
           driver_code: string

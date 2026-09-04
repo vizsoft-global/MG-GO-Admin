@@ -21,6 +21,8 @@ export type DeliveryOrdersReportRow = {
 export type DeliveryOrdersReportData = {
   from: string;
   to: string;
+  fromTime: string;
+  toTime: string;
   days: string[];
   dayHeaders: string[];
   rows: DeliveryOrdersReportRow[];
@@ -30,6 +32,12 @@ const POSITION_DEFAULT = "Bike";
 
 /** Inclusive day cap that still covers a leap year. */
 export const ORDERS_REPORT_MAX_DAYS = 366;
+
+export const DEFAULT_ORDERS_REPORT_FROM_TIME = "00:00";
+export const DEFAULT_ORDERS_REPORT_TO_TIME = "23:59";
+
+const KUWAIT_OFFSET = "+03:00";
+const HM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export type OrdersReportShiftWindow = {
   shiftDate: string;
@@ -43,14 +51,40 @@ export function inclusiveDayCount(from: string, to: string): number {
   return enumerateDays(from, to).length;
 }
 
-export function assertDeliveryOrdersReportRange(from: string, to: string): void {
+export function normalizeOrdersReportTime(
+  value: string | undefined,
+  fallback: string,
+): string {
+  const raw = (value ?? "").trim().slice(0, 5);
+  return HM_RE.test(raw) ? raw : fallback;
+}
+
+export function kuwaitDateTimeMs(ymd: string, hm: string): number {
+  const ms = Date.parse(`${ymd}T${hm}:00${KUWAIT_OFFSET}`);
+  if (!Number.isFinite(ms)) {
+    throw new Error("invalid_date_range");
+  }
+  return ms;
+}
+
+export function assertDeliveryOrdersReportRange(
+  from: string,
+  to: string,
+  fromTime = DEFAULT_ORDERS_REPORT_FROM_TIME,
+  toTime = DEFAULT_ORDERS_REPORT_TO_TIME,
+): void {
   const start = from?.slice(0, 10);
   const end = to?.slice(0, 10);
-  if (!start || !end || start > end) {
+  const startHm = normalizeOrdersReportTime(fromTime, "");
+  const endHm = normalizeOrdersReportTime(toTime, "");
+  if (!start || !end || !HM_RE.test(startHm) || !HM_RE.test(endHm)) {
     throw new Error("invalid_date_range");
   }
   if (inclusiveDayCount(start, end) > ORDERS_REPORT_MAX_DAYS) {
     throw new Error("range_too_large");
+  }
+  if (kuwaitDateTimeMs(start, startHm) > kuwaitDateTimeMs(end, endHm)) {
+    throw new Error("invalid_date_range");
   }
 }
 
@@ -111,9 +145,13 @@ export function pivotDeliveryOrdersReport(
   from: string,
   to: string,
   rpcRows: DeliveryOrdersReportRpcRow[],
+  fromTime = DEFAULT_ORDERS_REPORT_FROM_TIME,
+  toTime = DEFAULT_ORDERS_REPORT_TO_TIME,
 ): DeliveryOrdersReportData {
   const days = enumerateDays(from, to);
   const dayHeaders = days.map(formatDayHeader);
+  const startHm = normalizeOrdersReportTime(fromTime, DEFAULT_ORDERS_REPORT_FROM_TIME);
+  const endHm = normalizeOrdersReportTime(toTime, DEFAULT_ORDERS_REPORT_TO_TIME);
 
   const byDriver = new Map<
     string,
@@ -149,5 +187,5 @@ export function pivotDeliveryOrdersReport(
       counts: Object.fromEntries(days.map((day) => [day, entry.counts.get(day) ?? 0])),
     }));
 
-  return { from, to, days, dayHeaders, rows };
+  return { from, to, fromTime: startHm, toTime: endHm, days, dayHeaders, rows };
 }

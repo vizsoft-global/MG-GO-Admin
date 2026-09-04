@@ -165,6 +165,13 @@
       "subtitle": "A new version of the admin panel is available",
       "body": "Refresh the page to load the latest version. Your session will continue after reload.",
       "refresh": "Refresh now"
+    },
+    "error": {
+      "title": "This page could not load",
+      "body": "The server did not answer in time. This is usually temporary — try again in a moment.",
+      "sessionSafe": "You are still signed in.",
+      "retry": "Try again",
+      "reference": "Reference {digest}"
     }
   },
   "pages": {
@@ -2214,12 +2221,14 @@
         "button": "Orders Report",
         "title": "Delivery Orders Report",
         "subtitle": "Per-driver daily delivery counts by shift start day",
-        "hint": "Overnight shifts count toward the day the shift started. Zero days are highlighted in red.",
+        "hint": "Counts deliveries whose delivered time falls in this Kuwait window. Overnight shifts still land on the shift-start day. Zero days are highlighted in red.",
         "from": "From",
+        "fromTime": "From time",
         "to": "To",
+        "toTime": "To time",
         "generate": "Generate report",
         "cancel": "Cancel",
-        "invalidRange": "Choose a valid date range",
+        "invalidRange": "Choose a valid from/to date and time",
         "rangeTooLarge": "Choose a range of 366 days or less",
         "empty": "No deliveries found for this range",
         "failed": "Could not generate report",

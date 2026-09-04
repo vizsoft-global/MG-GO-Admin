@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { withDeadline } from "@/lib/supabase/deadline";
 
 export type AppOpsSettings = {
   maintenanceMode: boolean;
@@ -7,9 +8,11 @@ export type AppOpsSettings = {
   superAdminUserId: string | null;
 };
 
+const OPS_SETTINGS_BUDGET_MS = 5_000;
+
 async function fetchAppOpsSettings(): Promise<AppOpsSettings> {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient({ timeoutMs: OPS_SETTINGS_BUDGET_MS });
     const { data, error } = await supabase
       .from("app_settings")
       .select("maintenance_mode, super_admin_claimed, super_admin_user_id")
@@ -38,4 +41,16 @@ async function fetchAppOpsSettings(): Promise<AppOpsSettings> {
   }
 }
 
-export const getAppOpsSettings = cache(fetchAppOpsSettings);
+/**
+ * Read on every dashboard render, so it cannot be allowed to hang the page.
+ * A timeout yields the same defaults the function already returns for a failed
+ * read, which leave maintenance mode off — the fail-open direction, matching
+ * the proxy.
+ */
+export const getAppOpsSettings = cache(() =>
+  withDeadline(fetchAppOpsSettings(), OPS_SETTINGS_BUDGET_MS, () => ({
+    maintenanceMode: false,
+    superAdminClaimed: false,
+    superAdminUserId: null,
+  })),
+);

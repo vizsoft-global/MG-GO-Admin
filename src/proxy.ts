@@ -3,8 +3,12 @@ import { type NextRequest, NextResponse } from "next/server";
 import { routing } from "@/i18n/routing";
 import { settledWithin, SUPABASE_DEADLINE_MS } from "@/lib/async/settled-within";
 import { updateSession } from "@/lib/supabase/middleware";
-import { createServerClient } from "@supabase/ssr";
-import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
+import { guardedRead, MIDDLEWARE_QUERY_BUDGET_MS } from "@/lib/supabase/deadline";
+import {
+  cacheOpsSettings,
+  readCachedOpsSettings,
+  type ProxyOpsSettings,
+} from "@/lib/supabase/ops-settings-cache";
 
 const intlMiddleware = createIntlMiddleware(routing);
 
@@ -42,6 +46,17 @@ const publicAuthPaths = new Set([
   "/unauthorized",
 ]);
 
+const PROFILE_SELECT =
+  "approval_status, admin_role_id, archived_at, role, admin_roles(is_super_admin)";
+
+type ProfileRow = {
+  approval_status?: string;
+  admin_role_id?: string | null;
+  archived_at?: string | null;
+  role?: string;
+  admin_roles?: { is_super_admin: boolean } | null;
+} | null;
+
 function pathWithoutLocale(pathname: string): string {
   return pathname.replace(/^\/(en|ar)/, "") || "/";
 }
@@ -60,7 +75,11 @@ function isProtectedPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const intlResponse = intlMiddleware(request);
+<<<<<<< HEAD
   const { response, user } = await updateSession(request, intlResponse);
+=======
+  const { response, supabase, probe } = await updateSession(request, intlResponse);
+>>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
   const { pathname } = request.nextUrl;
   const locale = getLocale(pathname);
   const path = pathWithoutLocale(pathname);
@@ -69,6 +88,7 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+<<<<<<< HEAD
   const loginUrl = new URL(`/${locale}/login`, request.url);
 
   if (!user) {
@@ -82,25 +102,20 @@ export async function proxy(request: NextRequest) {
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
   if (!url || !key) {
+=======
+  if (!supabase) {
+>>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
     return response;
   }
 
-  const supabase = createServerClient(url, key, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => {
-          request.cookies.set(name, value);
-        });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
-      },
-    },
-  });
+  // The session is unproven rather than absent, so every branch below would be
+  // deciding on a fact we do not have. Signing the admin out here is the one
+  // outcome that is certainly wrong; the page still runs its own auth gate.
+  if (probe.unavailable) {
+    return response;
+  }
 
+<<<<<<< HEAD
   const opsResult = await settledWithin(
     supabase
       .from("app_settings")
@@ -110,6 +125,54 @@ export async function proxy(request: NextRequest) {
     SUPABASE_DEADLINE_MS,
   );
   const opsSettings = opsResult.ok ? opsResult.value.data : null;
+=======
+  const { user } = probe;
+  const protectedPath = isProtectedPath(pathname);
+
+  if (!user) {
+    if (protectedPath) {
+      const loginUrl = new URL(`/${locale}/login`, request.url);
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return response;
+  }
+
+  const wantsProfile = protectedPath || path === "/login" || path === "/signup";
+  const cachedOps = readCachedOpsSettings();
+
+  const [opsResult, profileResult] = await Promise.all([
+    cachedOps
+      ? Promise.resolve({ data: cachedOps, failed: false as const })
+      : guardedRead<ProxyOpsSettings>(
+          supabase
+            .from("app_settings")
+            .select("super_admin_claimed, maintenance_mode")
+            .eq("id", 1)
+            .maybeSingle(),
+          MIDDLEWARE_QUERY_BUDGET_MS,
+        ),
+    wantsProfile
+      ? guardedRead<NonNullable<ProfileRow>>(
+          supabase.from("profiles").select(PROFILE_SELECT).eq("id", user.id).maybeSingle(),
+          MIDDLEWARE_QUERY_BUDGET_MS,
+        )
+      : Promise.resolve({ data: null, failed: false as const }),
+  ]);
+
+  if (!cachedOps && !opsResult.failed) {
+    cacheOpsSettings(opsResult.data);
+  }
+
+  const opsSettings = opsResult.data;
+  const profileRow = profileResult.data as ProfileRow;
+
+  // A read that failed proves nothing about the caller. Every branch below is
+  // skipped in that case so the request falls through to the page, which runs
+  // its own auth gate against a fresh client — the same reasoning the probe
+  // above uses, applied to the profile it could not load.
+  const profileUnknown = profileResult.failed;
+>>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
   const superAdminClaimed = opsSettings?.super_admin_claimed ?? true;
 
   if (
@@ -130,6 +193,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+<<<<<<< HEAD
   if (isProtectedPath(pathname)) {
     const profileResult = await settledWithin(
       supabase
@@ -153,6 +217,9 @@ export async function proxy(request: NextRequest) {
       admin_roles?: { is_super_admin: boolean } | null;
     } | null;
 
+=======
+  if (protectedPath && !profileUnknown) {
+>>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
     if (!superAdminClaimed) {
       return NextResponse.redirect(
         new URL(`/${locale}/setup/claim-super-admin`, request.url),
@@ -193,6 +260,7 @@ export async function proxy(request: NextRequest) {
     }
 
     if (path === "/login" || path === "/signup") {
+<<<<<<< HEAD
       const profileResult = await settledWithin(
         supabase
           .from("profiles")
@@ -207,11 +275,14 @@ export async function proxy(request: NextRequest) {
       const profile = profileResult.value.data;
 
       if (profile?.approval_status === "pending") {
+=======
+      if (profileRow?.approval_status === "pending") {
+>>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
         return NextResponse.redirect(
           new URL(`/${locale}/pending-approval`, request.url),
         );
       }
-      if (profile?.approval_status === "approved" && profile.admin_role_id) {
+      if (profileRow?.approval_status === "approved" && profileRow.admin_role_id) {
         return NextResponse.redirect(new URL(`/${locale}/dashboard`, request.url));
       }
     }

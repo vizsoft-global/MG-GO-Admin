@@ -101,7 +101,9 @@ export function downloadDeliveryOrdersReportXlsx(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `delivery-orders-${report.from}_${report.to}.xlsx`;
+  const fromStamp = `${report.from}_${report.fromTime.replace(":", "")}`;
+  const toStamp = `${report.to}_${report.toTime.replace(":", "")}`;
+  a.download = `delivery-orders-${fromStamp}-${toStamp}.xlsx`;
   a.click();
   URL.revokeObjectURL(url);
 }

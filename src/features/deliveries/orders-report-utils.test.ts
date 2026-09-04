@@ -40,6 +40,30 @@ describe("assertDeliveryOrdersReportRange", () => {
     assert.throws(() => assertDeliveryOrdersReportRange("", "2026-08-24"), /invalid_date_range/);
   });
 
+  it("allows a same-day clock window", () => {
+    assert.doesNotThrow(() =>
+      assertDeliveryOrdersReportRange("2026-09-03", "2026-09-03", "08:00", "18:00"),
+    );
+  });
+
+  it("rejects a same-day inverted clock", () => {
+    assert.throws(
+      () => assertDeliveryOrdersReportRange("2026-09-03", "2026-09-03", "18:00", "08:00"),
+      /invalid_date_range/,
+    );
+  });
+
+  it("rejects a missing or junk clock", () => {
+    assert.throws(
+      () => assertDeliveryOrdersReportRange("2026-09-03", "2026-09-03", "", "18:00"),
+      /invalid_date_range/,
+    );
+    assert.throws(
+      () => assertDeliveryOrdersReportRange("2026-09-03", "2026-09-03", "8:00", "18:00"),
+      /invalid_date_range/,
+    );
+  });
+
   it("rejects more than 366 inclusive days", () => {
     assert.throws(
       () => assertDeliveryOrdersReportRange("2025-01-01", "2026-01-02"),

@@ -2,6 +2,7 @@ import { cache } from "react";
 import { settledWithin, SUPABASE_DEADLINE_MS } from "@/lib/async/settled-within";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withDeadline } from "@/lib/supabase/deadline";
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_DRIVER_APP_SETTINGS,
@@ -98,8 +99,11 @@ function normalizeRow(
   };
 }
 
+const BRANDING_BUDGET_MS = 5_000;
+
 async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
   try {
+<<<<<<< HEAD
     const supabase = await createClient();
     const result = await settledWithin(
       supabase
@@ -109,6 +113,15 @@ async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
       SUPABASE_DEADLINE_MS,
     );
     if (!result.ok || result.value.error) {
+=======
+    const supabase = await createClient({ timeoutMs: BRANDING_BUDGET_MS });
+    const { data, error } = await supabase
+      .from("app_themes")
+      .select("id, name, base_preset, light_tokens, dark_tokens")
+      .order("name");
+
+    if (error) {
+>>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
       return [];
     }
 
@@ -147,6 +160,7 @@ async function loadAppSettingsRow(): Promise<{
   theme_id?: string | null;
 } | null> {
   try {
+<<<<<<< HEAD
     const supabase = await createClient();
     const primary = await settledWithin(
       supabase.from("app_settings").select(APP_SETTINGS_SELECT).eq("id", 1).maybeSingle(),
@@ -167,12 +181,28 @@ async function loadAppSettingsRow(): Promise<{
       if (fallback.ok && !fallback.value.error && fallback.value.data) {
         return fallback.value.data;
       }
+=======
+    const supabase = await createClient({ timeoutMs: BRANDING_BUDGET_MS });
+    let { data, error } = await supabase
+      .from("app_settings")
+      .select(APP_SETTINGS_SELECT)
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error?.code === "42703") {
+      ({ data, error } = await supabase
+        .from("app_settings")
+        .select("app_name, app_subtitle, font_family, logo_url, logo_type")
+        .eq("id", 1)
+        .maybeSingle());
+>>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
     }
   } catch {
     /* fall through to service role */
   }
 
   try {
+<<<<<<< HEAD
     const admin = createAdminClient();
     const service = await settledWithin(
       admin.from("app_settings").select(APP_SETTINGS_SELECT).eq("id", 1).maybeSingle(),
@@ -181,6 +211,16 @@ async function loadAppSettingsRow(): Promise<{
     if (service.ok && !service.value.error && service.value.data) {
       return service.value.data;
     }
+=======
+    const admin = createAdminClient({ timeoutMs: BRANDING_BUDGET_MS });
+    const { data, error } = await admin
+      .from("app_settings")
+      .select(APP_SETTINGS_SELECT)
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (!error && data) return data;
+>>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
   } catch {
     /* use defaults */
   }
@@ -188,8 +228,21 @@ async function loadAppSettingsRow(): Promise<{
   return null;
 }
 
+/**
+ * Branding is on the critical path of every rendered page — the locale layout
+ * is force-dynamic — so it may never be the reason a page does not paint.
+ * Falling back to the default logo and name during a backend outage is a
+ * cosmetic regression for the length of the outage; hanging is an outage of
+ * its own, and it is what made every page load take a minute.
+ */
 async function fetchAppSettings(): Promise<AppSettings> {
-  const customThemes = await getCustomThemes();
+  // Independent reads, so they cost one round trip rather than two. The row
+  // read carries its own service-role retry, which shares this budget.
+  const [customThemes, data] = await Promise.all([
+    withDeadline(getCustomThemes(), BRANDING_BUDGET_MS, () => []),
+    withDeadline(loadAppSettingsRow(), BRANDING_BUDGET_MS, () => null),
+  ]);
+
   const customRows: CustomThemeRow[] = customThemes.map((t) => ({
     id: t.id,
     name: t.name,
@@ -197,8 +250,6 @@ async function fetchAppSettings(): Promise<AppSettings> {
     light_tokens: t.lightTokens,
     dark_tokens: t.darkTokens,
   }));
-
-  const data = await loadAppSettingsRow();
 
   if (!data) {
     const themeId = DEFAULT_THEME_ID;
