@@ -92,7 +92,8 @@
     "dpdVerification": "تحقق DPD",
     "documentExpiry": "انتهاء المستندات",
     "activityLogs": "سجل النشاط",
-    "performance": "الأداء"
+    "performance": "الأداء",
+    "driverDevices": "أجهزة السائقين"
   },
   "appNavGroups": {
     "overview": "نظرة عامة",
@@ -1411,6 +1412,7 @@
       "backToList": "العودة إلى السائقين",
       "backToLiveTracking": "العودة إلى التتبع المباشر",
       "backToRequest": "العودة إلى الطلب",
+      "backToDriverDevices": "العودة إلى أجهزة السائقين",
       "editDriver": "تعديل السائق",
       "approveAction": "تحقق واعتماد",
       "approveConfirmBody": "إنشاء حساب السائق وتفعيله وإصدار رمز دخول من 6 أرقام؟",
@@ -5998,7 +6000,8 @@
             "saveFailed": "تعذر الحفظ. حاول مرة أخرى.",
             "not_authorized": "ليس لديك صلاحية تغيير اللافتات."
           }
-        }
+        },
+        "openDriverDevices": "فتح قائمة أجهزة السائقين"
       },
       "vehicleTypes": {
         "title": "أنواع المركبات",
@@ -6311,6 +6314,100 @@
           "notAuthorized": "ليست لديك صلاحية تصدير التقارير",
           "failed": "تعذر إنشاء التقرير"
         }
+      }
+    },
+    "driverDevices": {
+      "title": "أجهزة السائقين",
+      "subtitle": "إصدارات الأسطول والهواتف وشدة التحديث الإجباري",
+      "refresh": "تحديث",
+      "export": "تصدير",
+      "kpiTotal": "السائقون",
+      "kpiCritical": "حرج",
+      "kpiHigh": "مرتفع",
+      "kpiOutdated": "قديم",
+      "kpiNoDevice": "بدون جهاز",
+      "kpiErrors": "أخطاء Sentry",
+      "tabAll": "الكل",
+      "tabCritical": "حرج",
+      "tabHigh": "مرتفع",
+      "tabOutdated": "قديم",
+      "tabLatest": "الأحدث",
+      "tabErrors": "أخطاء",
+      "tabNoDevice": "بدون جهاز",
+      "tabForced": "إجباري",
+      "searchPlaceholder": "ابحث بالاسم أو الرقم أو الهاتف أو الجهاز",
+      "buildFilter": "الإصدار #{code}",
+      "loadFailedTitle": "تعذر تحميل الأجهزة",
+      "loadFailedHint": "حدّث الصفحة. إذا استمر، تحقق من RPC.",
+      "emptyTitle": "لا صفوف بعد",
+      "emptyHint": "يظهر السائقون بعد تسجيل الدخول بجهاز.",
+      "emptyFilters": "لا مطابق للفلاتر",
+      "colDriver": "السائق",
+      "colPhone": "الهاتف",
+      "colSeverity": "الشدة",
+      "colBuild": "الإصدار",
+      "colDevice": "الجهاز",
+      "colAndroid": "أندرويد",
+      "colRam": "الذاكرة",
+      "colProcessor": "المعالج",
+      "colBattery": "البطارية",
+      "colLastSeen": "آخر نشاط",
+      "colSentry": "Sentry 7ي",
+      "colForce": "إجبار",
+      "severity": {
+        "critical": "حرج",
+        "high": "مرتفع",
+        "medium": "متوسط",
+        "low": "موافق"
+      },
+      "buildsBehind": "متأخر {count}",
+      "neverSeen": "أبدًا",
+      "seenToday": "اليوم",
+      "seenDaysAgo": "منذ {count}ي",
+      "batteryUnknown": "—",
+      "sentryIssues": "{count} مشاكل",
+      "forcedMin": "حد #{code}",
+      "forcedOn": "إجباري",
+      "bulk": {
+        "selected": "{count} محدد",
+        "selectAll": "تحديد الكل",
+        "selectRow": "تحديد {code}",
+        "notify": "إشعار",
+        "forceUpdate": "تحديث إجباري مرة",
+        "clearForce": "إلغاء الإجبار",
+        "clear": "مسح التحديد"
+      },
+      "notifyDefaultTitle": "يرجى تحديث مسالم",
+      "notifyDefaultBody": "مطلوب إصدار أحدث (بناء {code}+). افتح المتجر ثم سجّل الدخول.",
+      "notifyTitleLabel": "العنوان",
+      "notifyBodyLabel": "الرسالة",
+      "notifyBodyHint": "يُرفق رابط المتجر تلقائيًا.",
+      "notifySubtitle": "{count} سائقًا محددًا",
+      "notifyConfirm": "إرسال",
+      "notifySent": "أُرسل {pushed} من {recipients}",
+      "sending": "جارٍ الإرسال…",
+      "cancel": "إلغاء",
+      "forceSubtitle": "{count} محدد",
+      "forceArmHint": "سيُمنع {count} سائقًا من الدخول حتى يثبت الحد الأدنى.",
+      "forceClearHint": "إلغاء علم الإجبار لـ {count}.",
+      "forceMinCodeLabel": "رقم البناء الأدنى",
+      "forceMinCodeHint": "عادةً versionCode الذي نشرته على المتجر.",
+      "forceConfirm": "فرض التحديث",
+      "forceClearConfirm": "إلغاء الإجبار",
+      "forceArmed": "فُرض التحديث لـ {count} (حد #{code})",
+      "forceCleared": "أُلغي الإجبار لـ {count}",
+      "saving": "جارٍ الحفظ…",
+      "exportDone": "تم تصدير {count}",
+      "errors": {
+        "notificationsSendRequired": "تحتاج صلاحية notifications.send",
+        "missingFields": "العنوان والرسالة مطلوبان",
+        "emptySelection": "حدّد سائقًا واحدًا على الأقل",
+        "notifyFailed": "تعذر الإرسال",
+        "notAuthorized": "غير مصرح",
+        "invalidMinCode": "أدخل رقم بناء صالحًا",
+        "tooManyDrivers": "عدد كبير جدًا (الحد 200)",
+        "saveFailed": "تعذر حفظ العلم",
+        "exportFailed": "فشل التصدير"
       }
     }
   }

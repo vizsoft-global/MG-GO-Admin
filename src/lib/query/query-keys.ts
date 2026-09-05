@@ -30,6 +30,10 @@ export const queryKeys = {
     ) =>
       ["drivers", "login-verifications", driverId, startDate, endDate] as const,
   },
+  driverDevices: {
+    all: () => ["driver-devices"] as const,
+    list: () => ["driver-devices", "list"] as const,
+  },
   liveTracking: {
     all: () => ["live-tracking"] as const,
     history: (driverId: string, date: string) =>

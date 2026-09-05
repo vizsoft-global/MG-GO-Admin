@@ -92,7 +92,8 @@
     "dpdVerification": "DPD Verification",
     "documentExpiry": "Document expiry",
     "activityLogs": "Activity Logs",
-    "performance": "Performance"
+    "performance": "Performance",
+    "driverDevices": "Driver devices"
   },
   "appNavGroups": {
     "overview": "Overview",
@@ -1422,6 +1423,7 @@
       "backToList": "Back to drivers",
       "backToLiveTracking": "Back to live tracking",
       "backToRequest": "Back to request",
+      "backToDriverDevices": "Back to driver devices",
       "editDriver": "Edit driver",
       "approveAction": "Verify & approve",
       "approveConfirmBody": "Create the driver account, activate them, and generate a 6-digit app passcode?",
@@ -6082,7 +6084,8 @@
             "saveFailed": "Could not save. Try again.",
             "not_authorized": "You do not have permission to change banners."
           }
-        }
+        },
+        "openDriverDevices": "Open driver devices inventory"
       },
       "vehicleTypes": {
         "title": "Vehicle types",
@@ -6395,6 +6398,100 @@
           "notAuthorized": "You do not have permission to export reports",
           "failed": "Could not generate the report"
         }
+      }
+    },
+    "driverDevices": {
+      "title": "Driver devices",
+      "subtitle": "Fleet builds, phones and force-update severity",
+      "refresh": "Refresh",
+      "export": "Export",
+      "kpiTotal": "Drivers",
+      "kpiCritical": "Critical",
+      "kpiHigh": "High",
+      "kpiOutdated": "Outdated",
+      "kpiNoDevice": "No device",
+      "kpiErrors": "Sentry errors",
+      "tabAll": "All",
+      "tabCritical": "Critical",
+      "tabHigh": "High",
+      "tabOutdated": "Outdated",
+      "tabLatest": "On latest",
+      "tabErrors": "Errors",
+      "tabNoDevice": "No device",
+      "tabForced": "Forced",
+      "searchPlaceholder": "Search name, ID, phone, device or build",
+      "buildFilter": "Build #{code}",
+      "loadFailedTitle": "Could not load devices",
+      "loadFailedHint": "Refresh the page. If it persists, check admin_list_driver_devices.",
+      "emptyTitle": "No device rows yet",
+      "emptyHint": "Drivers appear here once they log in with a build that reports a device session.",
+      "emptyFilters": "No drivers match these filters",
+      "colDriver": "Driver",
+      "colPhone": "Phone",
+      "colSeverity": "Severity",
+      "colBuild": "Build",
+      "colDevice": "Device",
+      "colAndroid": "Android",
+      "colRam": "RAM",
+      "colProcessor": "Processor",
+      "colBattery": "Battery",
+      "colLastSeen": "Last active",
+      "colSentry": "Sentry 7d",
+      "colForce": "Force",
+      "severity": {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "low": "OK"
+      },
+      "buildsBehind": "{count} behind",
+      "neverSeen": "Never",
+      "seenToday": "Today",
+      "seenDaysAgo": "{count}d ago",
+      "batteryUnknown": "—",
+      "sentryIssues": "{count} issues",
+      "forcedMin": "Min #{code}",
+      "forcedOn": "Forced",
+      "bulk": {
+        "selected": "{count} selected",
+        "selectAll": "Select all visible",
+        "selectRow": "Select {code}",
+        "notify": "Notify",
+        "forceUpdate": "Force update once",
+        "clearForce": "Clear force",
+        "clear": "Clear selection"
+      },
+      "notifyDefaultTitle": "Please update Musallam",
+      "notifyDefaultBody": "A newer version of the app is required ({version}). Open Play Store, update, then sign in again.",
+      "notifyTitleLabel": "Title",
+      "notifyBodyLabel": "Message",
+      "notifyBodyHint": "Includes the Play Store link automatically.",
+      "notifySubtitle": "{count} selected drivers",
+      "notifyConfirm": "Send push",
+      "notifySent": "Pushed {pushed} of {recipients}",
+      "sending": "Sending…",
+      "cancel": "Cancel",
+      "forceSubtitle": "{count} selected",
+      "forceArmHint": "These {count} drivers will be blocked at login until they install the minimum build.",
+      "forceClearHint": "Clear the one-shot force flag on {count} drivers.",
+      "forceMinCodeLabel": "Minimum build number",
+      "forceMinCodeHint": "Usually the versionCode you just published on Play.",
+      "forceConfirm": "Force update",
+      "forceClearConfirm": "Clear force",
+      "forceArmed": "Forced update for {count} (min #{code})",
+      "forceCleared": "Cleared force for {count}",
+      "saving": "Saving…",
+      "exportDone": "Exported {count} rows",
+      "errors": {
+        "notificationsSendRequired": "You need notifications.send to push",
+        "missingFields": "Title and message are required",
+        "emptySelection": "Select at least one driver",
+        "notifyFailed": "Could not send notification",
+        "notAuthorized": "Not authorized",
+        "invalidMinCode": "Enter a valid minimum build number",
+        "tooManyDrivers": "Too many drivers in one batch (max 200)",
+        "saveFailed": "Could not save force flags",
+        "exportFailed": "Export failed"
       }
     }
   }

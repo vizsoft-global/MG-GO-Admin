@@ -103,7 +103,8 @@ type DetailTabId =
   | "deductions"
   | "loan"
   | "complaint"
-  | "wrong-actions";
+  | "wrong-actions"
+  | "driver-devices";
 
 /**
  * Allowlist of pages that may claim the back arrow, keyed by the `from` search param.
@@ -113,10 +114,14 @@ type DetailTabId =
  */
 const DRIVER_BACK_TARGETS: Record<
   string,
-  { href: string; labelKey: "backToList" | "backToLiveTracking" | "backToRequest" }
+  {
+    href: string;
+    labelKey: "backToList" | "backToLiveTracking" | "backToRequest" | "backToDriverDevices";
+  }
 > = {
   "live-tracking-v2": { href: "/live-tracking-v2", labelKey: "backToLiveTracking" },
   "live-tracking": { href: "/live-tracking", labelKey: "backToLiveTracking" },
+  "driver-devices": { href: "/driver-devices", labelKey: "backToDriverDevices" },
 };
 
 const REQUEST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

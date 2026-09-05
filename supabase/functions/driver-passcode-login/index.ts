@@ -38,40 +38,140 @@ type DeviceMeta = {
   android_sdk_int?: number | null;
   app_version_name?: string | null;
   app_version_code?: number | null;
+  /** Full allow-listed profile blob stored on the session row. */
+  raw?: Record<string, unknown>;
 };
 
-function json(body: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+const DEVICE_META_KEYS = new Set([
+  "model",
+  "manufacturer",
+  "brand",
+  "hardware",
+  "board",
+  "soc_model",
+  "soc_manufacturer",
+  "cpu_cores",
+  "ram_total_mb",
+  "ram_free_mb",
+  "is_low_ram",
+  "os_version",
+  "android_sdk_int",
+  "android_security_patch",
+  "supported_abis",
+  "is_physical_device",
+  "battery_pct",
+  "battery_health",
+  "battery_temp_c",
+  "charging_state",
+  "app_version_name",
+  "app_version_code",
+  "locale",
+  "collected_at",
+]);
+
+function asFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function sanitizeDeviceMetaBlob(
+  meta: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (!DEVICE_META_KEYS.has(key) || value == null) continue;
+    if (key === "supported_abis") {
+      if (!Array.isArray(value)) continue;
+      const items = value
+        .filter((v): v is string => typeof v === "string")
+        .map((v) => v.trim().slice(0, 32))
+        .filter(Boolean)
+        .slice(0, 8);
+      if (items.length) out[key] = items;
+      continue;
+    }
+    if (typeof value === "boolean") {
+      out[key] = value;
+      continue;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      out[key] = value;
+      continue;
+    }
+    if (typeof value === "string") {
+      const text = value.trim().slice(0, 120);
+      if (text && text.toLowerCase() !== "unknown" && text.toLowerCase() !== "null") {
+        out[key] = text;
+      }
+    }
+  }
+  return out;
 }
 
 function parseDeviceMeta(raw: unknown): DeviceMeta {
   if (!raw || typeof raw !== "object") return {};
   const meta = raw as Record<string, unknown>;
-  const sdk = meta.android_sdk_int;
-  const versionCode = meta.app_version_code;
+  const sdk = asFiniteNumber(meta.android_sdk_int);
+  const versionCode = asFiniteNumber(meta.app_version_code);
   return {
     model: typeof meta.model === "string" ? meta.model : null,
     manufacturer: typeof meta.manufacturer === "string"
       ? meta.manufacturer
       : null,
     os_version: typeof meta.os_version === "string" ? meta.os_version : null,
-    android_sdk_int: typeof sdk === "number"
-      ? sdk
-      : typeof sdk === "string" && sdk.trim() !== ""
-      ? Number.parseInt(sdk, 10)
-      : null,
+    android_sdk_int: sdk != null ? Math.trunc(sdk) : null,
     app_version_name: typeof meta.app_version_name === "string"
       ? meta.app_version_name
       : null,
-    app_version_code: typeof versionCode === "number"
-      ? versionCode
-      : typeof versionCode === "string" && versionCode.trim() !== ""
-      ? Number.parseInt(versionCode, 10)
-      : null,
+    app_version_code: versionCode != null ? Math.trunc(versionCode) : null,
+    raw: sanitizeDeviceMetaBlob(meta),
   };
+}
+
+function refuseUpdateRequired(opts: {
+  reported: number | null | undefined;
+  minCode: number;
+  minName: string | null;
+  message: string;
+}) {
+  const { reported, minCode, minName, message } = opts;
+  const preGateBuild =
+    reported == null ||
+    !Number.isFinite(reported) ||
+    reported < FIRST_GATED_VERSION_CODE;
+  if (preGateBuild) {
+    return json(
+      {
+        error: "driver_blocked",
+        reason: message,
+        message,
+        update_required: true,
+        min_version_code: minCode,
+        min_version_name: minName,
+      },
+      403,
+    );
+  }
+  return json(
+    {
+      error: "update_required",
+      min_version_code: minCode,
+      min_version_name: minName,
+      message,
+    },
+    426,
+  );
+}
+
+function json(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -144,34 +244,11 @@ Deno.serve(async (req) => {
     const belowMinimum =
       reported == null || !Number.isFinite(reported) || reported < minCode;
     if (belowMinimum) {
-      const minName = gateRow.driver_app_min_version_name ?? null;
+      const minName = (gateRow.driver_app_min_version_name as string | null) ??
+        null;
       const configured = (gateRow.driver_app_update_message ?? "").trim();
       const message = configured !== "" ? configured : DEFAULT_UPDATE_MESSAGE;
-      const preGateBuild =
-        reported == null || !Number.isFinite(reported) ||
-        reported < FIRST_GATED_VERSION_CODE;
-      if (preGateBuild) {
-        return json(
-          {
-            error: "driver_blocked",
-            reason: message,
-            message,
-            update_required: true,
-            min_version_code: minCode,
-            min_version_name: minName,
-          },
-          403,
-        );
-      }
-      return json(
-        {
-          error: "update_required",
-          min_version_code: minCode,
-          min_version_name: minName,
-          message,
-        },
-        426,
-      );
+      return refuseUpdateRequired({ reported, minCode, minName, message });
     }
   }
 
@@ -216,13 +293,51 @@ Deno.serve(async (req) => {
 
   const { data: driverRow, error: driverError } = await admin
     .from("drivers")
-    .select("active_device_id, active_device_session_id")
+    .select(
+      "active_device_id, active_device_session_id, force_app_update_at, force_app_update_min_code",
+    )
     .eq("id", userId)
     .maybeSingle();
 
   if (driverError) {
     console.error("driver lookup error", driverError.message);
     return json({ error: "invalid_credentials" }, 401);
+  }
+
+  // Per-driver force update (admin targeted this rider). Same 426/403 shapes as
+  // the fleet gate so the app reuses the Update Required screen.
+  const perDriverMin = driverRow?.force_app_update_min_code;
+  if (
+    driverRow?.force_app_update_at != null &&
+    typeof perDriverMin === "number"
+  ) {
+    const reported = deviceMeta.app_version_code;
+    const below =
+      reported == null || !Number.isFinite(reported) || reported < perDriverMin;
+    if (below) {
+      const { data: settingsRow } = await admin
+        .from("app_settings")
+        .select("driver_app_update_message, driver_app_min_version_name")
+        .eq("id", 1)
+        .maybeSingle();
+      const configured = (settingsRow?.driver_app_update_message ?? "").trim();
+      return refuseUpdateRequired({
+        reported,
+        minCode: perDriverMin,
+        minName: (settingsRow?.driver_app_min_version_name as string | null) ??
+          null,
+        message: configured !== "" ? configured : DEFAULT_UPDATE_MESSAGE,
+      });
+    }
+    // Build already satisfies the flag — clear it so the admin list stops showing Forced.
+    await admin
+      .from("drivers")
+      .update({
+        force_app_update_at: null,
+        force_app_update_min_code: null,
+        force_app_update_by: null,
+      })
+      .eq("id", userId);
   }
 
   const activeDeviceId = driverRow?.active_device_id as string | null;
@@ -286,6 +401,12 @@ Deno.serve(async (req) => {
     android_sdk_int: deviceMeta.android_sdk_int,
     app_version_name: deviceMeta.app_version_name,
     app_version_code: deviceMeta.app_version_code,
+    device_meta: deviceMeta.raw && Object.keys(deviceMeta.raw).length > 0
+      ? deviceMeta.raw
+      : null,
+    device_meta_at: deviceMeta.raw && Object.keys(deviceMeta.raw).length > 0
+      ? nowIso
+      : null,
     first_seen_at: existingSession?.first_seen_at ?? nowIso,
     last_seen_at: nowIso,
     revoked_at: null,

@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { BellRing, Smartphone } from "lucide-react";
+import { BellRing, ExternalLink, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import {
   type DriverAppInstallStats,
@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { AppFormSection } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { Link } from "@/i18n/navigation";
 import {
   MAX_DELIVERY_PROXIMITY_METERS,
   MIN_DELIVERY_PROXIMITY_METERS,
@@ -789,9 +790,8 @@ export function DriverAppSettingsPanel({
                         const outdated =
                           thresholdCode != null &&
                           (v.versionCode == null || v.versionCode < thresholdCode);
-                        return (
-                          <span
-                            key={v.versionCode ?? "unknown"}
+                        const chip = (
+                            <span
                             title={
                               v.versionName
                                 ? `${v.versionName} · ${t("installsRecent", { count: v.recent })}`
@@ -810,10 +810,28 @@ export function DriverAppSettingsPanel({
                             <span>×{v.installs}</span>
                           </span>
                         );
+                        return v.versionCode == null ? (
+                          <span key="unknown">{chip}</span>
+                        ) : (
+                          <Link
+                            key={v.versionCode}
+                            href={`/driver-devices?build=${v.versionCode}`}
+                            className="hover:opacity-90"
+                          >
+                            {chip}
+                          </Link>
+                        );
                       })}
                     </div>
                   ) : null}
                   <p className="mt-2 text-[10px] text-muted-foreground">{t("installsHint")}</p>
+                  <Link
+                    href="/driver-devices"
+                    className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/10"
+                  >
+                    {t("openDriverDevices")}
+                    <ExternalLink className="size-3" aria-hidden />
+                  </Link>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <a
