@@ -6085,7 +6085,17 @@
             "not_authorized": "You do not have permission to change banners."
           }
         },
-        "openDriverDevices": "Open driver devices inventory"
+        "openDriverDevices": "Open driver devices inventory",
+        "buildsColBuild": "Build",
+        "buildsColInstalls": "Installs",
+        "buildsColRecent": "Active 14d",
+        "buildsColLastSeen": "Last login",
+        "buildsColSentry": "Sentry 7d",
+        "buildsNeverSeen": "Never",
+        "buildsSeenToday": "Today",
+        "buildsSeenDaysAgo": "{count}d ago",
+        "sentryConnected": "Sentry linked",
+        "sentryDisconnected": "Sentry not connected"
       },
       "vehicleTypes": {
         "title": "Vehicle types",

@@ -54,6 +54,29 @@ type DriverAppSettingsPanelProps = {
 const PLAY_LISTING_URL =
   "https://play.google.com/store/apps/details?id=com.musallam_delivery.app";
 
+/**
+ * A build's newest login. Relative for the first fortnight, because "11d ago"
+ * is what decides whether a build is still in the field; older than that the
+ * date is what an operator wants to quote.
+ */
+function formatInstallLastSeen(
+  iso: string | null,
+  locale: string,
+  t: (key: string, values?: Record<string, string | number>) => string,
+): string {
+  if (!iso) return t("buildsNeverSeen");
+  const at = new Date(iso).getTime();
+  if (!Number.isFinite(at)) return t("buildsNeverSeen");
+  const days = Math.floor((Date.now() - at) / 86_400_000);
+  if (days <= 0) return t("buildsSeenToday");
+  if (days <= 14) return t("buildsSeenDaysAgo", { count: days });
+  return new Date(at).toLocaleDateString(locale === "ar" ? "ar-KW" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "2-digit",
+  });
+}
+
 function AssetUploadBlock({
   label,
   hint,
@@ -785,53 +808,115 @@ export function DriverAppSettingsPanel({
                     </Button>
                   </div>
                   {installStats.versions.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {installStats.versions.map((v) => {
-                        const outdated =
-                          thresholdCode != null &&
-                          (v.versionCode == null || v.versionCode < thresholdCode);
-                        const chip = (
-                            <span
-                            title={
-                              v.versionName
-                                ? `${v.versionName} · ${t("installsRecent", { count: v.recent })}`
-                                : t("installsRecent", { count: v.recent })
-                            }
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] tabular-nums",
-                              outdated
-                                ? "border-amber-200 bg-amber-50 text-amber-800"
-                                : "border-border bg-card text-muted-foreground",
-                            )}
-                          >
-                            <span className="font-medium">
-                              {v.versionCode == null ? t("installsUnknownBuild") : `#${v.versionCode}`}
-                            </span>
-                            <span>×{v.installs}</span>
-                          </span>
-                        );
-                        return v.versionCode == null ? (
-                          <span key="unknown">{chip}</span>
-                        ) : (
-                          <Link
-                            key={v.versionCode}
-                            href={`/driver-devices?build=${v.versionCode}`}
-                            className="hover:opacity-90"
-                          >
-                            {chip}
-                          </Link>
-                        );
-                      })}
+                    <div className="mt-2 overflow-hidden rounded-lg border border-border">
+                      <table className="w-full text-[11px] tabular-nums">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/30 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <th className="px-2 py-1 text-start">{t("buildsColBuild")}</th>
+                            <th className="px-2 py-1 text-end">{t("buildsColInstalls")}</th>
+                            <th className="px-2 py-1 text-end">{t("buildsColRecent")}</th>
+                            <th className="px-2 py-1 text-end">{t("buildsColLastSeen")}</th>
+                            <th className="px-2 py-1 text-end">{t("buildsColSentry")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {installStats.versions.map((v) => {
+                            const outdated =
+                              thresholdCode != null &&
+                              (v.versionCode == null || v.versionCode < thresholdCode);
+                            return (
+                              <tr
+                                key={v.versionCode ?? "unknown"}
+                                className="border-b border-border/60 last:border-b-0"
+                              >
+                                <td className="px-2 py-1">
+                                  {v.versionCode == null ? (
+                                    <span
+                                      className={cn(
+                                        "font-medium",
+                                        outdated ? "text-amber-800" : "text-foreground",
+                                      )}
+                                    >
+                                      {t("installsUnknownBuild")}
+                                    </span>
+                                  ) : (
+                                    <Link
+                                      href={`/driver-devices?build=${v.versionCode}`}
+                                      className={cn(
+                                        "inline-flex items-center gap-1 rounded-md px-1 py-0.5 font-medium hover:bg-primary/10",
+                                        outdated ? "text-amber-800" : "text-primary",
+                                      )}
+                                      title={v.versionName ?? undefined}
+                                    >
+                                      #{v.versionCode}
+                                      {v.versionName ? (
+                                        <span className="font-normal text-muted-foreground">
+                                          {v.versionName}
+                                        </span>
+                                      ) : null}
+                                    </Link>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1 text-end font-medium">{v.installs}</td>
+                                <td className="px-2 py-1 text-end text-muted-foreground">
+                                  {v.recent}
+                                </td>
+                                <td className="px-2 py-1 text-end text-muted-foreground">
+                                  {formatInstallLastSeen(v.lastSeenAt, locale, t)}
+                                </td>
+                                <td className="px-2 py-1 text-end">
+                                  {v.sentryEvents == null ? (
+                                    <span className="text-muted-foreground">—</span>
+                                  ) : v.sentryEvents === 0 ? (
+                                    <span className="text-muted-foreground">0</span>
+                                  ) : v.sentryUrl ? (
+                                    <a
+                                      href={v.sentryUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 font-semibold text-primary hover:bg-primary/10"
+                                    >
+                                      {v.sentryEvents}
+                                      <ExternalLink className="size-3" aria-hidden />
+                                    </a>
+                                  ) : (
+                                    <span className="font-semibold">{v.sentryEvents}</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   ) : null}
                   <p className="mt-2 text-[10px] text-muted-foreground">{t("installsHint")}</p>
-                  <Link
-                    href="/driver-devices"
-                    className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/10"
-                  >
-                    {t("openDriverDevices")}
-                    <ExternalLink className="size-3" aria-hidden />
-                  </Link>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <Link
+                      href="/driver-devices"
+                      className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs text-primary hover:bg-primary/10"
+                    >
+                      {t("openDriverDevices")}
+                      <ExternalLink className="size-3" aria-hidden />
+                    </Link>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                        installStats.sentry.connected
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-border bg-muted/30 text-muted-foreground",
+                      )}
+                      title={
+                        installStats.sentry.connected
+                          ? undefined
+                          : (installStats.sentry.reason ?? undefined)
+                      }
+                    >
+                      {installStats.sentry.connected
+                        ? t("sentryConnected")
+                        : t("sentryDisconnected")}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <a

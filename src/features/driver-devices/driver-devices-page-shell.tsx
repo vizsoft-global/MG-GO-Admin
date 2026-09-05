@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
@@ -181,17 +181,9 @@ export function DriverDevicesPageShell() {
 
   const kpis = useMemo(() => driverDevicesKpis(rows), [rows]);
 
-  // Selection is a set of ids, so a filter change would otherwise leave rows
-  // selected that the operator can no longer see — and then act on them.
-  useEffect(() => {
-    setSelected((prev) => {
-      if (prev.size === 0) return prev;
-      const allowed = new Set(visible.map((row) => row.driver_id));
-      const next = new Set([...prev].filter((id) => allowed.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [visible]);
-
+  // Selection is a set of ids and the filters can move under it, so every
+  // consumer reads the intersection with what is on screen rather than the raw
+  // set — a bulk action must never reach a row the operator cannot see.
   const selectedRows = useMemo(
     () => visible.filter((row) => selected.has(row.driver_id)),
     [visible, selected],

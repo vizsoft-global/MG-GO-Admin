@@ -4,7 +4,6 @@ import {
   formatBuild,
   formatDeviceName,
   formatProcessor,
-  formatRam,
   type DriverDeviceListRow,
   type DriverDeviceSeverity,
 } from "./driver-devices-types";

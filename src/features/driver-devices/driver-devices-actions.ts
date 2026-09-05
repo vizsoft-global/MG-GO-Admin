@@ -105,7 +105,7 @@ function toSentryView(
 async function loadDevicesPageData(): Promise<DriverDevicesPageData | { error: string }> {
   const supabase = await createClient();
   const [{ data, error }, overview] = await Promise.all([
-    supabase.rpc("admin_list_driver_devices" as never),
+    supabase.rpc("admin_list_driver_devices"),
     getSentryDeviceOverview(),
   ]);
   if (error) {
@@ -178,11 +178,11 @@ export async function setDriverDevicesForceUpdate(input: {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_set_driver_force_update" as never, {
+  const { data, error } = await supabase.rpc("admin_set_driver_force_update", {
     p_driver_ids: ids,
     p_min_code: minCode ?? 1,
     p_enabled: input.enabled,
-  } as never);
+  });
 
   if (error) {
     console.error("[driver-devices] force update failed", error.message);

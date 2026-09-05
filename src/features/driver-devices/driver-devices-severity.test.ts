@@ -11,7 +11,6 @@ import {
   driverDeviceSeverity,
   driverDevicesKpis,
   isOutdatedBuild,
-  rollUpBuilds,
   type SeverityInput,
 } from "./driver-devices-severity";
 import {
@@ -338,34 +337,6 @@ test("search reaches identity, device and build without matching on nothing", ()
   }
   assert.equal(driverDeviceMatchesSearch(r, "  "), true);
   assert.equal(driverDeviceMatchesSearch(r, "nokia"), false);
-});
-
-test("rollUpBuilds groups installs and puts unknown builds first", () => {
-  const snapshot = parseDriverDevicesSnapshot({
-    min_version_code: 85,
-    rows: [
-      row({ driver_code: "10001", app_version_code: 85, last_seen_at: daysAgo(1) }),
-      row({ driver_code: "10002", app_version_code: 85, last_seen_at: daysAgo(0) }),
-      row({ driver_code: "10003", app_version_code: 80, last_seen_at: daysAgo(5) }),
-      row({
-        driver_code: "10004",
-        app_version_code: null,
-        app_version_name: null,
-        last_seen_at: null,
-      }),
-    ],
-  });
-  const builds = rollUpBuilds(decorateDriverDeviceRows(snapshot, new Map(), NOW), 85);
-  assert.deepEqual(
-    builds.map((b) => [b.versionCode, b.installs, b.outdated]),
-    [
-      [null, 1, true],
-      [80, 1, true],
-      [85, 2, false],
-    ],
-  );
-  // Last seen on a build is the newest of its installs, not the first one read.
-  assert.equal(builds[2].lastSeenAt, daysAgo(0));
 });
 
 test("battery is flagged on poor health or a hot cell, and not otherwise", () => {

@@ -1413,6 +1413,7 @@
       "backToLiveTracking": "العودة إلى التتبع المباشر",
       "backToRequest": "العودة إلى الطلب",
       "backToDriverDevices": "العودة إلى أجهزة السائقين",
+      "comingSoon": "قريباً",
       "editDriver": "تعديل السائق",
       "approveAction": "تحقق واعتماد",
       "approveConfirmBody": "إنشاء حساب السائق وتفعيله وإصدار رمز دخول من 6 أرقام؟",
@@ -1636,7 +1637,12 @@
         "forceSignOutDialogDescription": "سيُسجَّل خروج السائق من جهازه عند نبضة الاتصال التالية (عادة خلال دقيقتين). قد تستمر رفع البيانات غير المتصلة حتى 5 دقائق.",
         "forceSignOutConfirm": "إخراج إجباري",
         "forceSignOutSuccess": "تم إلغاء الجلسة. سيُسجَّل خروج التطبيق عند النبضة التالية.",
-        "forceSignOutFailed": "تعذّر الإخراج الإجباري. حاول مرة أخرى."
+        "forceSignOutFailed": "تعذّر الإخراج الإجباري. حاول مرة أخرى.",
+        "loadError": "تعذّر تحميل جلسات الأجهزة.",
+        "retry": "إعادة المحاولة",
+        "flushDeadline": "الموعد النهائي للإرسال",
+        "graceRemaining": "بقي {time}",
+        "flushUntil": "الإرسال حتى {time}"
       },
       "statDeliveriesToday": "توصيلات اليوم",
       "statDeliveriesWeek": "توصيلات الأسبوع",
@@ -6001,7 +6007,17 @@
             "not_authorized": "ليس لديك صلاحية تغيير اللافتات."
           }
         },
-        "openDriverDevices": "فتح قائمة أجهزة السائقين"
+        "openDriverDevices": "فتح قائمة أجهزة السائقين",
+        "buildsColBuild": "الإصدار",
+        "buildsColInstalls": "التثبيتات",
+        "buildsColRecent": "نشِط ١٤ يومًا",
+        "buildsColLastSeen": "آخر دخول",
+        "buildsColSentry": "Sentry ٧ أيام",
+        "buildsNeverSeen": "أبدًا",
+        "buildsSeenToday": "اليوم",
+        "buildsSeenDaysAgo": "قبل {count} يوم",
+        "sentryConnected": "Sentry متصل",
+        "sentryDisconnected": "Sentry غير متصل"
       },
       "vehicleTypes": {
         "title": "أنواع المركبات",

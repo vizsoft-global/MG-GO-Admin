@@ -7289,6 +7289,14 @@ export type Database = {
         Args: { p_driver_id: string; p_history_limit?: number }
         Returns: Json
       }
+      admin_list_driver_devices: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      admin_set_driver_force_update: {
+        Args: { p_driver_ids: string[]; p_min_code: number; p_enabled: boolean }
+        Returns: Json
+      }
       admin_driver_performance_daily: {
         Args: { p_driver_id: string; p_from: string; p_to: string }
         Returns: Json
