@@ -22,6 +22,12 @@ import {
   resolveLogoUploadMeta,
 } from "@/lib/branding/constants";
 import { sendDirectDriverNotification } from "@/features/notifications/notifications-actions";
+import {
+  getSentryDeviceOverview,
+  sentryBuildIssuesUrl,
+  sentryProjectUrl,
+  type SentryDisconnectedReason,
+} from "@/lib/sentry/sentry-api";
 
 const DRIVER_APP_PLAY_URL =
   "https://play.google.com/store/apps/details?id=com.musallam_delivery.app";
@@ -542,12 +548,22 @@ export type DriverAppInstallVersion = {
   installs: number;
   /** Installs whose device logged in within the last 14 days. */
   recent: number;
+  /** Newest login seen on this build, so a dead build is visible as dead. */
+  lastSeenAt: string | null;
+  /** 7-day Sentry error volume for this build; null when Sentry is unreadable. */
+  sentryEvents: number | null;
+  sentryUrl: string | null;
 };
 
 export type DriverAppInstallStats = {
   total: number;
   versions: DriverAppInstallVersion[];
   loadFailed: boolean;
+  /**
+   * Whether the Sentry column can be believed. A disconnected Sentry has to be
+   * named rather than rendered as zero errors — the two are opposite facts.
+   */
+  sentry: { connected: boolean; reason: SentryDisconnectedReason | null; projectUrl: string };
 };
 
 type InstallVersionRow = {
@@ -566,10 +582,28 @@ const RECENT_INSTALL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
  */
 export async function getDriverAppInstallStats(): Promise<DriverAppInstallStats> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_driver_app_install_versions");
+  const [{ data, error }, overview] = await Promise.all([
+    supabase.rpc("admin_driver_app_install_versions"),
+    getSentryDeviceOverview(),
+  ]);
+  const sentry = {
+    connected: overview.connected,
+    reason: overview.connected ? null : overview.reason,
+    projectUrl: sentryProjectUrl(),
+  };
   if (error) {
     logPgError("getDriverAppInstallStats", error);
-    return { total: 0, versions: [], loadFailed: true };
+    return { total: 0, versions: [], loadFailed: true, sentry };
+  }
+  const sentryEventsByCode = new Map<number, number>();
+  if (overview.connected) {
+    for (const build of overview.builds) {
+      if (build.versionCode == null) continue;
+      sentryEventsByCode.set(
+        build.versionCode,
+        (sentryEventsByCode.get(build.versionCode) ?? 0) + build.events,
+      );
+    }
   }
   const rows = (data ?? []) as InstallVersionRow[];
   const cutoff = Date.now() - RECENT_INSTALL_WINDOW_MS;
@@ -581,9 +615,19 @@ export async function getDriverAppInstallStats(): Promise<DriverAppInstallStats>
       versionName: row.app_version_name,
       installs: 0,
       recent: 0,
+      lastSeenAt: null,
+      sentryEvents:
+        overview.connected && code != null ? (sentryEventsByCode.get(code) ?? 0) : null,
+      sentryUrl: code == null ? null : sentryBuildIssuesUrl(code),
     };
     entry.installs += 1;
     if (row.last_seen_at && new Date(row.last_seen_at).getTime() >= cutoff) entry.recent += 1;
+    if (
+      row.last_seen_at &&
+      (entry.lastSeenAt == null || row.last_seen_at > entry.lastSeenAt)
+    ) {
+      entry.lastSeenAt = row.last_seen_at;
+    }
     if (!entry.versionName && row.app_version_name) entry.versionName = row.app_version_name;
     byCode.set(code, entry);
   }
@@ -593,7 +637,7 @@ export async function getDriverAppInstallStats(): Promise<DriverAppInstallStats>
     if (b.versionCode == null) return 1;
     return a.versionCode - b.versionCode;
   });
-  return { total: rows.length, versions, loadFailed: false };
+  return { total: rows.length, versions, loadFailed: false, sentry };
 }
 
 export type NotifyOutdatedInstallsResult =
