@@ -34,6 +34,7 @@ import {
 } from "@/components/app/app-data-table";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { SortableTableHeadLabel } from "@/components/app/sortable-table-head-label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -58,6 +59,11 @@ import {
   driverDeviceMatchesSearch,
   driverDeviceMatchesTab,
   driverDevicesKpis,
+  driverDevicesSortDirection,
+  nextDriverDevicesSortKey,
+  sortDriverDeviceRows,
+  type DriverDevicesSortColumn,
+  type DriverDevicesSortKey,
 } from "./driver-devices-severity";
 import {
   batteryNeedsAttention,
@@ -134,6 +140,7 @@ export function DriverDevicesPageShell() {
   const buildFilter = buildParam != null && /^\d+$/.test(buildParam) ? Number(buildParam) : null;
 
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<DriverDevicesSortKey>("default");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifyTitle, setNotifyTitle] = useState("");
@@ -168,18 +175,25 @@ export function DriverDevicesPageShell() {
     [sentry],
   );
 
-  const visible = useMemo(
-    () =>
-      rows.filter(
-        (row) =>
-          driverDeviceMatchesTab(row, activeTab) &&
-          driverDeviceMatchesSearch(row, search) &&
-          (buildFilter == null || row.app_version_code === buildFilter),
-      ),
-    [rows, activeTab, search, buildFilter],
-  );
+  const visible = useMemo(() => {
+    const filtered = rows.filter(
+      (row) =>
+        driverDeviceMatchesTab(row, activeTab) &&
+        driverDeviceMatchesSearch(row, search) &&
+        (buildFilter == null || row.app_version_code === buildFilter),
+    );
+    return sortDriverDeviceRows(filtered, sortKey);
+  }, [rows, activeTab, search, buildFilter, sortKey]);
 
   const kpis = useMemo(() => driverDevicesKpis(rows), [rows]);
+
+  const sortColumnHeader = (column: DriverDevicesSortColumn, label: string) => (
+    <SortableTableHeadLabel
+      label={label}
+      direction={driverDevicesSortDirection(sortKey, column)}
+      onSort={() => setSortKey((prev) => nextDriverDevicesSortKey(prev, column))}
+    />
+  );
 
   // Selection is a set of ids and the filters can move under it, so every
   // consumer reads the intersection with what is on screen rather than the raw
@@ -525,18 +539,18 @@ export function DriverDevicesPageShell() {
                     />
                   ),
                 },
-                { id: "driver", label: t("colDriver") },
+                { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
                 { id: "phone", label: t("colPhone") },
-                { id: "severity", label: t("colSeverity") },
-                { id: "build", label: t("colBuild") },
+                { id: "severity", label: sortColumnHeader("severity", t("colSeverity")) },
+                { id: "build", label: sortColumnHeader("build", t("colBuild")) },
                 { id: "device", label: t("colDevice") },
                 { id: "android", label: t("colAndroid") },
                 { id: "ram", label: t("colRam") },
                 { id: "processor", label: t("colProcessor") },
                 { id: "battery", label: t("colBattery") },
-                { id: "lastSeen", label: t("colLastSeen") },
-                { id: "sentry", label: t("colSentry") },
-                { id: "force", label: t("colForce") },
+                { id: "lastSeen", label: sortColumnHeader("lastSeen", t("colLastSeen")) },
+                { id: "sentry", label: sortColumnHeader("sentry", t("colSentry")) },
+                { id: "force", label: sortColumnHeader("force", t("colForce")) },
               ]}
               empty={
                 visible.length === 0 ? (

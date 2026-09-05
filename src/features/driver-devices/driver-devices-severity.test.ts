@@ -10,7 +10,10 @@ import {
   driverDeviceMatchesTab,
   driverDeviceSeverity,
   driverDevicesKpis,
+  driverDevicesSortDirection,
   isOutdatedBuild,
+  nextDriverDevicesSortKey,
+  sortDriverDeviceRows,
   type SeverityInput,
 } from "./driver-devices-severity";
 import {
@@ -376,4 +379,57 @@ test("an all-null device_meta object is read as absent, not as an empty profile"
     rows: [row({ device_meta: { model: null, battery_pct: null } })],
   });
   assert.equal(snapshot.rows[0].device_meta, null);
+});
+
+test("header sort cycles and defaults to the ops-useful direction", () => {
+  assert.equal(nextDriverDevicesSortKey("default", "severity"), "severity_desc");
+  assert.equal(nextDriverDevicesSortKey("severity_desc", "severity"), "severity_asc");
+  assert.equal(nextDriverDevicesSortKey("severity_asc", "severity"), "severity_desc");
+  assert.equal(nextDriverDevicesSortKey("default", "build"), "build_asc");
+  assert.equal(nextDriverDevicesSortKey("build_asc", "build"), "build_desc");
+  assert.equal(driverDevicesSortDirection("build_asc", "build"), "asc");
+  assert.equal(driverDevicesSortDirection("build_asc", "severity"), false);
+});
+
+test("build sort puts unknown and oldest first on asc", () => {
+  const snapshot = parseDriverDevicesSnapshot({
+    min_version_code: 85,
+    rows: [
+      row({ driver_code: "10001", app_version_code: 85 }),
+      row({ driver_code: "10002", app_version_code: 70 }),
+      row({
+        driver_code: "10003",
+        app_version_code: null,
+        app_version_name: null,
+        session_id: null,
+        active_device_id: null,
+        device_model: null,
+        last_seen_at: null,
+      }),
+    ],
+  });
+  const rows = decorateDriverDeviceRows(snapshot, new Map(), NOW);
+  assert.deepEqual(
+    sortDriverDeviceRows(rows, "build_asc").map((r) => r.driver_code),
+    ["10003", "10002", "10001"],
+  );
+  assert.deepEqual(
+    sortDriverDeviceRows(rows, "build_desc").map((r) => r.driver_code),
+    ["10001", "10002", "10003"],
+  );
+});
+
+test("severity sort desc puts critical above low", () => {
+  const snapshot = parseDriverDevicesSnapshot({
+    min_version_code: 85,
+    rows: [
+      row({ driver_code: "10001", app_version_code: 85 }),
+      row({ driver_code: "10002", app_version_code: 60, last_seen_at: daysAgo(30) }),
+    ],
+  });
+  const rows = decorateDriverDeviceRows(snapshot, new Map(), NOW);
+  assert.deepEqual(
+    sortDriverDeviceRows(rows, "severity_desc").map((r) => r.driver_code),
+    ["10002", "10001"],
+  );
 });

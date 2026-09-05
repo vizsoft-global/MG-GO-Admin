@@ -248,3 +248,124 @@ export function driverDevicesKpis(rows: DriverDeviceListRow[]): DriverDevicesKpi
   }
   return kpis;
 }
+
+export type DriverDevicesSortColumn =
+  | "driver"
+  | "severity"
+  | "build"
+  | "lastSeen"
+  | "sentry"
+  | "force";
+
+export type DriverDevicesSortKey =
+  | "default"
+  | `${DriverDevicesSortColumn}_asc`
+  | `${DriverDevicesSortColumn}_desc`;
+
+/** First click picks the direction an operator usually wants for that column. */
+export function defaultDirectionForColumn(
+  column: DriverDevicesSortColumn,
+): "asc" | "desc" {
+  switch (column) {
+    case "driver":
+      return "asc";
+    case "severity":
+      // Critical first.
+      return "desc";
+    case "build":
+      // Oldest / unknown first — the installs to force.
+      return "asc";
+    case "lastSeen":
+      // Never / stalest first.
+      return "asc";
+    case "sentry":
+      return "desc";
+    case "force":
+      return "desc";
+    default: {
+      const _exhaustive: never = column;
+      return _exhaustive;
+    }
+  }
+}
+
+export function nextDriverDevicesSortKey(
+  prev: DriverDevicesSortKey,
+  column: DriverDevicesSortColumn,
+): DriverDevicesSortKey {
+  const asc = `${column}_asc` as const;
+  const desc = `${column}_desc` as const;
+  if (prev === asc) return desc;
+  if (prev === desc) return asc;
+  return defaultDirectionForColumn(column) === "asc" ? asc : desc;
+}
+
+export function driverDevicesSortDirection(
+  key: DriverDevicesSortKey,
+  column: DriverDevicesSortColumn,
+): "asc" | "desc" | false {
+  if (key === `${column}_asc`) return "asc";
+  if (key === `${column}_desc`) return "desc";
+  return false;
+}
+
+function compareNullableNumber(
+  a: number | null,
+  b: number | null,
+  nulls: "first" | "last",
+): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return nulls === "first" ? -1 : 1;
+  if (b == null) return nulls === "first" ? 1 : -1;
+  return a - b;
+}
+
+function compareBySortColumn(
+  a: DriverDeviceListRow,
+  b: DriverDeviceListRow,
+  column: DriverDevicesSortColumn,
+): number {
+  switch (column) {
+    case "driver":
+      return a.full_name.localeCompare(b.full_name) || a.driver_code.localeCompare(b.driver_code);
+    case "severity":
+      return SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+    case "build":
+      // Unknown builds sort as the oldest — same posture as the force-update gate.
+      return compareNullableNumber(a.app_version_code, b.app_version_code, "first");
+    case "lastSeen": {
+      const aSeen = a.last_seen_at ? new Date(a.last_seen_at).getTime() : null;
+      const bSeen = b.last_seen_at ? new Date(b.last_seen_at).getTime() : null;
+      return compareNullableNumber(aSeen, bSeen, "first");
+    }
+    case "sentry":
+      return a.sentryEvents - b.sentryEvents || a.sentryIssues - b.sentryIssues;
+    case "force": {
+      const aForced = a.forced ? 1 : 0;
+      const bForced = b.forced ? 1 : 0;
+      return aForced - bForced;
+    }
+    default: {
+      const _exhaustive: never = column;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * Applies a header sort on top of the filtered list. `default` keeps the
+ * decorate order (severity, then stalest) so the opening view stays urgency-first.
+ */
+export function sortDriverDeviceRows(
+  rows: DriverDeviceListRow[],
+  key: DriverDevicesSortKey,
+): DriverDeviceListRow[] {
+  if (key === "default") return rows;
+  const column = key.replace(/_(asc|desc)$/, "") as DriverDevicesSortColumn;
+  const direction = key.endsWith("_asc") ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const cmp = compareBySortColumn(a, b, column);
+    if (cmp !== 0) return cmp * direction;
+    return a.driver_code.localeCompare(b.driver_code);
+  });
+}
