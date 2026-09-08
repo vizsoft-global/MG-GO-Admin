@@ -1,7 +1,6 @@
 import createIntlMiddleware from "next-intl/middleware";
 import { type NextRequest, NextResponse } from "next/server";
 import { routing } from "@/i18n/routing";
-import { settledWithin, SUPABASE_DEADLINE_MS } from "@/lib/async/settled-within";
 import { updateSession } from "@/lib/supabase/middleware";
 import { guardedRead, MIDDLEWARE_QUERY_BUDGET_MS } from "@/lib/supabase/deadline";
 import {
@@ -75,11 +74,7 @@ function isProtectedPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const intlResponse = intlMiddleware(request);
-<<<<<<< HEAD
-  const { response, user } = await updateSession(request, intlResponse);
-=======
   const { response, supabase, probe } = await updateSession(request, intlResponse);
->>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
   const { pathname } = request.nextUrl;
   const locale = getLocale(pathname);
   const path = pathWithoutLocale(pathname);
@@ -88,23 +83,7 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-<<<<<<< HEAD
-  const loginUrl = new URL(`/${locale}/login`, request.url);
-
-  if (!user) {
-    if (isProtectedPath(pathname)) {
-      loginUrl.searchParams.set("next", pathname);
-      return NextResponse.redirect(loginUrl);
-    }
-    return response;
-  }
-
-  const url = getSupabaseUrl();
-  const key = getSupabaseAnonKey();
-  if (!url || !key) {
-=======
   if (!supabase) {
->>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
     return response;
   }
 
@@ -115,17 +94,6 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-<<<<<<< HEAD
-  const opsResult = await settledWithin(
-    supabase
-      .from("app_settings")
-      .select("super_admin_claimed, maintenance_mode")
-      .eq("id", 1)
-      .maybeSingle(),
-    SUPABASE_DEADLINE_MS,
-  );
-  const opsSettings = opsResult.ok ? opsResult.value.data : null;
-=======
   const { user } = probe;
   const protectedPath = isProtectedPath(pathname);
 
@@ -172,7 +140,6 @@ export async function proxy(request: NextRequest) {
   // its own auth gate against a fresh client — the same reasoning the probe
   // above uses, applied to the profile it could not load.
   const profileUnknown = profileResult.failed;
->>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
   const superAdminClaimed = opsSettings?.super_admin_claimed ?? true;
 
   if (
@@ -193,33 +160,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-<<<<<<< HEAD
-  if (isProtectedPath(pathname)) {
-    const profileResult = await settledWithin(
-      supabase
-        .from("profiles")
-        .select(
-          "approval_status, admin_role_id, archived_at, role, admin_roles(is_super_admin)",
-        )
-        .eq("id", user.id)
-        .maybeSingle(),
-      SUPABASE_DEADLINE_MS,
-    );
-    if (!profileResult.ok) {
-      return response;
-    }
-
-    const profileRow = profileResult.value.data as {
-      approval_status?: string;
-      admin_role_id?: string | null;
-      archived_at?: string | null;
-      role?: string;
-      admin_roles?: { is_super_admin: boolean } | null;
-    } | null;
-
-=======
   if (protectedPath && !profileUnknown) {
->>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
     if (!superAdminClaimed) {
       return NextResponse.redirect(
         new URL(`/${locale}/setup/claim-super-admin`, request.url),
@@ -260,24 +201,7 @@ export async function proxy(request: NextRequest) {
     }
 
     if (path === "/login" || path === "/signup") {
-<<<<<<< HEAD
-      const profileResult = await settledWithin(
-        supabase
-          .from("profiles")
-          .select("approval_status, admin_role_id")
-          .eq("id", user.id)
-          .maybeSingle(),
-        SUPABASE_DEADLINE_MS,
-      );
-      if (!profileResult.ok) {
-        return response;
-      }
-      const profile = profileResult.value.data;
-
-      if (profile?.approval_status === "pending") {
-=======
       if (profileRow?.approval_status === "pending") {
->>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
         return NextResponse.redirect(
           new URL(`/${locale}/pending-approval`, request.url),
         );

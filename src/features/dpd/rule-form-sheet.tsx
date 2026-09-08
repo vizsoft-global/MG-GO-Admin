@@ -22,9 +22,11 @@ import { selectOptionsFrom } from "@/lib/select-items";
 import { isDpdErrorKey, saveDeliveryRule } from "./dpd-actions";
 import { ScopePicker } from "./scope-picker";
 import {
+  INCENTIVE_PERIODS,
   RULE_STATUSES,
   type DeliveryRuleRow,
   type DpdScopeOptions,
+  type IncentivePeriod,
   type RuleScopeType,
   type RuleStatus,
 } from "./types";
@@ -59,6 +61,12 @@ export function RuleFormSheet({
   const [startDate, setStartDate] = useState(rule?.start_date ?? "");
   const [endDate, setEndDate] = useState(rule?.end_date ?? "");
   const [priority, setPriority] = useState(String(rule?.priority ?? ""));
+  const [dpdTarget, setDpdTarget] = useState(
+    rule?.dpd_target != null ? String(rule.dpd_target) : "",
+  );
+  const [dpdPeriod, setDpdPeriod] = useState<IncentivePeriod | "">(
+    rule?.dpd_period ?? "",
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -71,6 +79,8 @@ export function RuleFormSheet({
     setStartDate(rule?.start_date ?? "");
     setEndDate(rule?.end_date ?? "");
     setPriority(String(rule?.priority ?? ""));
+    setDpdTarget(rule?.dpd_target != null ? String(rule.dpd_target) : "");
+    setDpdPeriod(rule?.dpd_period ?? "");
   }, [open, rule]);
 
   const errorToast = (error?: string) => {
@@ -95,6 +105,8 @@ export function RuleFormSheet({
       formData.append("startDate", startDate);
       formData.append("endDate", endDate);
       if (priority) formData.append("priority", priority);
+      formData.append("dpdTarget", dpdTarget);
+      formData.append("dpdPeriod", dpdPeriod);
 
       const result = await saveDeliveryRule(formData);
       if (result.error) {
@@ -188,6 +200,51 @@ export function RuleFormSheet({
                 onChange={(e) => setEndDate(e.target.value)}
                 className="rounded-lg"
               />
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="dpd-target">{t("fields.dpdTarget")}</Label>
+              <Input
+                id="dpd-target"
+                type="number"
+                min={0}
+                value={dpdTarget}
+                onChange={(e) => setDpdTarget(e.target.value)}
+                className="h-9 rounded-lg"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("fields.dpdPeriod")}</Label>
+              <Select
+                items={[
+                  { value: "none", label: "—" },
+                  ...INCENTIVE_PERIODS.map((p) => ({
+                    value: p,
+                    label: t(`period.${p}`),
+                  })),
+                ]}
+                value={dpdPeriod || "none"}
+                onValueChange={(v) =>
+                  setDpdPeriod(
+                    v === "daily" || v === "weekly" || v === "monthly" ? v : "",
+                  )
+                }
+              >
+                <SelectTrigger className="h-9 w-full cursor-pointer rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" label="—">
+                    —
+                  </SelectItem>
+                  {INCENTIVE_PERIODS.map((p) => (
+                    <SelectItem key={p} value={p} label={t(`period.${p}`)}>
+                      {t(`period.${p}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="space-y-1.5">

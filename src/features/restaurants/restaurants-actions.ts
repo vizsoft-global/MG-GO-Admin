@@ -101,7 +101,7 @@ async function requireDeliveriesView() {
 }
 
 const DELIVERY_LIST_SELECT =
-  "id, driver_id, partner_id, restaurant_id, zone_id, external_order_id, order_proof_url, order_proof_urls, status, rejection_reason, delivered_at, delivered_lat, delivered_lng, pickup_at, pickup_lat, pickup_lng, pickup_proof_url, pickup_proof_urls, cancelled_at, cancel_lat, cancel_lng, cancel_reason, cancel_proof_url, cancel_proof_urls, created_at, drivers(driver_code, profiles(full_name, phone)), partners(name, logo_url), restaurants(id, name), zones(name)";
+  "id, driver_id, partner_id, restaurant_id, zone_id, external_order_id, order_proof_url, order_proof_urls, status, rejection_reason, delivered_at, delivered_lat, delivered_lng, pickup_at, pickup_lat, pickup_lng, pickup_proof_url, pickup_proof_urls, cancelled_at, cancel_lat, cancel_lng, cancel_reason, cancel_proof_url, cancel_proof_urls, created_at, drivers(driver_code, profiles!drivers_id_fkey(full_name, phone)), partners(name, logo_url), restaurants(id, name), zones(name)";
 
 async function fetchAssignedDriverIdsForRestaurant(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -158,14 +158,14 @@ async function fetchScopedDeliveryRows(
       supabase
         .from("deliveries")
         .select(
-          "id, driver_id, partner_id, restaurant_id, status, external_order_id, pickup_at, delivered_at, cancelled_at, cancel_reason, created_at, drivers(driver_code, profiles(full_name, phone))",
+          "id, driver_id, partner_id, restaurant_id, status, external_order_id, pickup_at, delivered_at, cancelled_at, cancel_reason, created_at, drivers(driver_code, profiles!drivers_id_fkey(full_name, phone))",
         )
         .eq("restaurant_id", restaurantId),
       assignedDriverIds.size > 0 && restaurantPartnerId
         ? supabase
             .from("deliveries")
             .select(
-              "id, driver_id, partner_id, restaurant_id, status, external_order_id, pickup_at, delivered_at, cancelled_at, cancel_reason, created_at, drivers(driver_code, profiles(full_name, phone))",
+              "id, driver_id, partner_id, restaurant_id, status, external_order_id, pickup_at, delivered_at, cancelled_at, cancel_reason, created_at, drivers(driver_code, profiles!drivers_id_fkey(full_name, phone))",
             )
             .is("restaurant_id", null)
             .in("driver_id", [...assignedDriverIds])
@@ -728,7 +728,7 @@ export async function fetchRestaurantAssignedDrivers(
       supabase
         .from("driver_restaurants")
         .select(
-          "driver_id, drivers(id, driver_code, is_on_duty, is_blocked, profiles(full_name, phone))",
+          "driver_id, drivers(id, driver_code, is_on_duty, is_blocked, profiles!drivers_id_fkey(full_name, phone))",
         )
         .eq("restaurant_id", restaurantId),
       supabase

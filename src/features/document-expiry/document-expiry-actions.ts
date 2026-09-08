@@ -49,7 +49,7 @@ export async function fetchDocumentExpiryDashboard(): Promise<{
     driverIds.length
       ? supabase
           .from("drivers")
-          .select("id, driver_code, archived_at, profiles(full_name, phone)")
+          .select("id, driver_code, archived_at, profiles!drivers_id_fkey(full_name, phone)")
           .in("id", driverIds)
       : Promise.resolve({ data: [] }),
     intakeIds.length

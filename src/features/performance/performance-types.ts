@@ -1,4 +1,4 @@
-export type PerformanceHubTab = "period" | "live" | "analysis";
+export type PerformanceHubTab = "period" | "live" | "analysis" | "dpd";
 
 /**
  * Components blended into the compliance pillar. Keys are locked — SQL keys on
@@ -281,6 +281,7 @@ export type PerformanceDriverRow = {
   partner_name: string | null;
   zone_id: string | null;
   zone_name: string | null;
+  restaurant_name: string | null;
   is_on_duty: boolean;
   worked_days: number;
   leave_days: number;
@@ -322,6 +323,46 @@ export type PerformanceDriverRow = {
   /** Rank across the filtered fleet by score — not the row position. */
   dpd_rank: number;
   score_band: PerformanceScoreBand;
+};
+
+export type DpdEfficiencyRider = {
+  driver_id: string;
+  driver_name: string;
+  employee_id: string | null;
+  driver_code: string;
+  restaurant_id: string | null;
+  restaurant_name: string | null;
+  zone_id: string | null;
+  zone_name: string | null;
+  actual: number;
+  target: number | null;
+  efficiency: number | null;
+  dpd_rider: number | null;
+  worked_days: number;
+};
+
+export type DpdEfficiencyGroup = {
+  id: string | null;
+  name: string | null;
+  zone_id?: string | null;
+  zone_name?: string | null;
+  restaurant_id?: string | null;
+  restaurant_name?: string | null;
+  actual: number;
+  target: number | null;
+  efficiency: number | null;
+  riders: number;
+};
+
+export type DpdEfficiencySnapshot = {
+  from: string;
+  to: string;
+  riders: DpdEfficiencyRider[];
+  restaurants: DpdEfficiencyGroup[];
+  zones: DpdEfficiencyGroup[];
+  zone_restaurants: DpdEfficiencyGroup[];
+  top10: DpdEfficiencyRider[];
+  bottom10: DpdEfficiencyRider[];
 };
 
 export type PerformanceKpis = {

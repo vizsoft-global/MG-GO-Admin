@@ -313,7 +313,7 @@ const DELIVERY_LIST_SELECT = `
   cancel_proof_url,
   cancel_proof_urls,
   created_at,
-  drivers (driver_code, employee_id, profiles (full_name, phone)),
+  drivers (driver_code, employee_id, profiles!drivers_id_fkey (full_name, phone)),
   partners (name, logo_url),
   restaurants (id, name),
   zones (name)
@@ -769,7 +769,7 @@ export async function fetchDeliveriesForExport(
       delivered_at,
       cancelled_at,
       cancel_reason,
-      drivers (driver_code, employee_id, profiles (full_name)),
+      drivers (driver_code, employee_id, profiles!drivers_id_fkey (full_name)),
       restaurants (name),
       zones (name)
     `,

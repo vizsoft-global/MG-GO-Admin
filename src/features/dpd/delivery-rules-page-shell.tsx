@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
@@ -22,6 +22,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import { deleteDeliveryRule, isDpdErrorKey } from "./dpd-actions";
 import { DpdStatusBadge } from "./dpd-status-badge";
+import { DeliveryRuleDpdImportDialog } from "./delivery-rule-dpd-import-dialog";
 import { RuleFormSheet } from "./rule-form-sheet";
 import type { DeliveryRuleRow } from "./types";
 import { useDeliveryRules, useDpdScopeOptions } from "./use-dpd";
@@ -42,6 +43,7 @@ export function DeliveryRulesPageShell() {
     row: null,
   });
   const [deleteTarget, setDeleteTarget] = useState<DeliveryRuleRow | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const handleDelete = () => {
     if (!deleteTarget) return;
@@ -66,15 +68,27 @@ export function DeliveryRulesPageShell() {
         description={tPage("subtitle")}
         actions={
           canManage ? (
-            <Button
-              type="button"
-              size="sm"
-              className="cursor-pointer rounded-lg"
-              onClick={() => setSheet({ open: true, row: null })}
-            >
-              <Plus className="h-4 w-4" />
-              {t("addDeliveryRule")}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload className="h-4 w-4" />
+                {t("bulkDpd")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => setSheet({ open: true, row: null })}
+              >
+                <Plus className="h-4 w-4" />
+                {t("addDeliveryRule")}
+              </Button>
+            </div>
           ) : null
         }
       />
@@ -93,6 +107,8 @@ export function DeliveryRulesPageShell() {
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colScope")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colDates")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colDpdTarget")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colDpdPeriod")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colPriority")}</TableHead>
                 {canManage ? (
                   <TableHead className={cn(TABLE_HEAD_CLASS, "w-24 text-end")}>
@@ -112,6 +128,8 @@ export function DeliveryRulesPageShell() {
                   <TableCell>
                     <DpdStatusBadge status={row.status} />
                   </TableCell>
+                  <TableCell className="tabular-nums">{row.dpd_target ?? "—"}</TableCell>
+                  <TableCell>{row.dpd_period ?? "—"}</TableCell>
                   <TableCell>{row.priority}</TableCell>
                   {canManage ? (
                     <TableCell className="text-end">
@@ -146,6 +164,13 @@ export function DeliveryRulesPageShell() {
         )}
       </AppListCard>
 
+      <DeliveryRuleDpdImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onApplied={() => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.dpd.deliveryRules() });
+        }}
+      />
       <RuleFormSheet
         rule={sheet.row}
         options={scopeOptions}

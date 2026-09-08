@@ -196,7 +196,7 @@ async function enrichAssignDriverRows(
       supabase
         .from("drivers")
         .select(
-          "id, driver_code, partner_id, zone_id, is_on_duty, avatar_object_key, profiles(full_name, phone, avatar_url), partners(name), zones(name)",
+          "id, driver_code, partner_id, zone_id, is_on_duty, avatar_object_key, profiles!drivers_id_fkey(full_name, phone, avatar_url), partners(name), zones(name)",
         )
         .in("id", driverIds),
       supabase.from("driver_restaurants").select("driver_id, restaurant_id").in("driver_id", driverIds),

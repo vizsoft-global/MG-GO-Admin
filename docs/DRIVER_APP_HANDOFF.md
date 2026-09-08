@@ -231,7 +231,7 @@ Configured in admin **Settings → DPD → Restaurants**.
 
 ### `delivery_rules` / `incentive_rules` (admin-managed)
 - Scope: `zone`, `partner`, or `restaurant` (exactly one FK per rule).
-- `delivery_rules`: which verified deliveries count toward incentives (if none active globally, all verified deliveries count).
+- `delivery_rules`: which verified deliveries count toward incentives (if none active globally, all verified deliveries count). Admin-only `dpd_target` / `dpd_period` sit on the same row for the `/performance` DPD tab — **the app does not read them**.
 - `incentive_rules`: `period` (daily/weekly/monthly), `target_deliveries`, `reward_kwd`; matching rules **stack** (sum of rewards).
 - Kuwait calendar for weekly (Mon–Sun) and monthly periods in SQL (`Asia/Kuwait`).
 
@@ -1120,7 +1120,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-09-05 — [admin+app] Driver devices `/driver-devices` + per-driver force + device_meta heartbeat. App `1.1.20+85`. Migration `20261016100000`. Optional `SENTRY_API_TOKEN`. Prior: force-update fleet gate + location coalesce (2026-09-04).*
+*Last synced: 2026-09-08 — [admin only] DPD tab + `dpd_target` / `dpd_period` on `delivery_rules`. App does not read them. Migration `20261017100000`.*
+
+*Prior: 2026-09-05 — [admin+app] Driver devices `/driver-devices` + per-driver force + device_meta heartbeat. App `1.1.20+85`. Migration `20261016100000`. Optional `SENTRY_API_TOKEN`. Prior: force-update fleet gate + location coalesce (2026-09-04).*
 
 *Prior: 2026-09-03 — [admin+app] Live GPS stays on Cloudflare (`dpd-live`). Idle phones no longer POST every ~2s (`batchSize` is moving-only). An edge `/ingest` failure falls back to `driver_report_location` at the 15s/30s watchdog cadence **without** `force` — do not re-add `force: true` on every failed flush. FleetRoom alarms back off to 30s when no admin socket is open and ingest has been quiet for 3 minutes. App login is employee ID + passcode (letters and digits, 1–100); ship Play `1.1.16+76`. Workers Paid is required so ingest does not die on free-plan 1027 and dump every fix into Postgres.*
 

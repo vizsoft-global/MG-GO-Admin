@@ -41,6 +41,7 @@ function row(overrides: Partial<PerformanceDriverRow> = {}): PerformanceDriverRo
     partner_name: null,
     zone_id: null,
     zone_name: null,
+    restaurant_name: null,
     is_on_duty: false,
     worked_days: 5,
     leave_days: 1,
@@ -147,6 +148,12 @@ describe("range presets", () => {
 describe("report rows", () => {
   it("every row has exactly one cell per header", () => {
     assert.equal(performanceReportRow(row()).length, PERFORMANCE_REPORT_HEADERS.length);
+  });
+
+  it("Restaurant sits immediately after Zone", () => {
+    assert.equal(PERFORMANCE_REPORT_HEADERS.indexOf("Restaurant"), PERFORMANCE_REPORT_HEADERS.indexOf("Zone") + 1);
+    const cells = performanceReportRow(row({ restaurant_name: "Crystal" }));
+    assert.equal(cells[PERFORMANCE_REPORT_HEADERS.indexOf("Restaurant")], "Crystal");
   });
 
   it("rank comes from the score rank, not from row order", () => {

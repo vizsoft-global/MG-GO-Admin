@@ -1,7 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { probeUser } from "@/lib/supabase/auth-probe";
-import { withDeadline } from "@/lib/supabase/deadline";
 import type { Profile } from "@/types/database";
 import { canAccessAdminPanel, type AdminApprovalStatus } from "@/lib/auth/permissions";
 import {
@@ -9,6 +8,7 @@ import {
   toAuthProfile,
   type EnrichedProfile,
 } from "@/lib/auth/profile-auth";
+import { userFromLocalJwt } from "@/lib/auth/local-session";
 
 export type SessionUser = {
   id: string;
@@ -37,9 +37,23 @@ async function loadSessionOutcome(): Promise<SessionOutcome> {
 
 async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
   const supabase = await createClient({ timeoutMs: SESSION_BUDGET_MS });
-  const { user, unavailable } = await probeUser(supabase, {
+  let { user, unavailable } = await probeUser(supabase, {
     timeoutMs: SESSION_BUDGET_MS,
   });
+
+  // The probe's wall-clock budget includes event-loop stalls (Turbopack
+  // compiling a first-hit route, a server-action RSC refresh). That is not
+  // evidence GoTrue is down. Recover from the cookie JWT before painting
+  // error.tsx — a signed-in admin navigating or applying an import must not
+  // look like an outage.
+  if (!user && unavailable) {
+    const local = await supabase.auth.getSession();
+    const recovered = userFromLocalJwt(local.data.session);
+    if (recovered && local.data.session?.user) {
+      user = local.data.session.user;
+      unavailable = false;
+    }
+  }
 
   if (!user) {
     return { session: null, unavailable };
@@ -98,17 +112,13 @@ async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
 }
 
 /**
- * The session gate runs on every dashboard render, so it needs a ceiling. A
- * timeout must report `unavailable` rather than a null session: the caller
- * treats an absent session as grounds to redirect to /login, and a slow
- * backend is not evidence that anyone signed out.
+ * Per-request cache only. Do not wrap the whole load in a second wall-clock
+ * race: getUser + profile + permissions routinely exceed the probe budget
+ * when the first hop is slow-but-successful, and that discarded a real
+ * session (error.tsx on every first compile / post-action RSC refresh).
+ * The fetch AbortSignal on createClient still bounds the network.
  */
-export const getSessionOutcome = cache(() =>
-  withDeadline(loadSessionOutcome(), SESSION_BUDGET_MS, () => ({
-    session: null,
-    unavailable: true,
-  })),
-);
+export const getSessionOutcome = cache(loadSessionOutcome);
 
 export async function getSessionUser(): Promise<SessionUser | null> {
   return (await getSessionOutcome()).session;

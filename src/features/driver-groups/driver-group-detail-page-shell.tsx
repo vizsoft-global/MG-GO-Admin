@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowLeft, Loader2, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { Button } from "@/components/ui/button";
@@ -12,30 +12,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import { deleteDriverGroup, updateDriverGroup } from "./driver-groups-actions";
 import { DriverGroupFormDialog } from "./driver-group-form-dialog";
+import { DriverGroupImportDialog } from "./driver-group-import-dialog";
 import { DriverGroupIconBadge, DriverGroupMemberPicker } from "./driver-group-member-picker";
 import { useDriverGroup } from "./use-driver-groups";
-import type { DriverGroupMemberOption } from "./types";
-
-async function loadMemberOptions(
-  memberIds: string[],
-): Promise<DriverGroupMemberOption[]> {
-  if (memberIds.length === 0) return [];
-  const { createClient } = await import("@/lib/supabase/client");
-  const supabase = createClient() as any;
-  const { data } = await supabase
-    .from("drivers")
-    .select("id, driver_code, employee_id, profiles(full_name)")
-    .in("id", memberIds);
-  return (data ?? []).map((d: any) => {
-    const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
-    return {
-      id: d.id,
-      driver_code: d.driver_code,
-      employee_id: d.employee_id ?? "",
-      full_name: profile?.full_name?.trim() || "Driver",
-    };
-  });
-}
+import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
   const t = useTranslations("pages.driverGroups");
@@ -45,14 +33,13 @@ export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
   const canManage = auth.can("driver_groups.manage");
   const { data: group, isLoading, refetch } = useDriverGroup(groupId);
   const [editOpen, setEditOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [memberIds, setMemberIds] = useState<string[]>([]);
-  const [memberOptions, setMemberOptions] = useState<DriverGroupMemberOption[]>([]);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     if (!group) return;
     setMemberIds(group.member_ids);
-    void loadMemberOptions(group.member_ids).then(setMemberOptions);
   }, [group]);
 
   const handleMembersSave = () => {
@@ -103,6 +90,10 @@ export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
         actions={
           canManage ? (
             <div className="flex gap-2">
+              <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setImportOpen(true)}>
+                <Upload className="size-4" />
+                {t("importMembers")}
+              </Button>
               <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setEditOpen(true)}>
                 <Pencil className="size-4" />
                 {t("edit")}
@@ -130,10 +121,13 @@ export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
           </div>
           {canManage ? (
             <>
+              {memberIds.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{t("membersEmptyHint")}</p>
+              ) : null}
               <DriverGroupMemberPicker
                 selectedIds={memberIds}
                 onChange={setMemberIds}
-                initialOptions={memberOptions}
+                initialOptions={group.members}
               />
               <Button className="h-9 cursor-pointer" disabled={pending} onClick={handleMembersSave}>
                 {pending ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -141,7 +135,34 @@ export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
               </Button>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">{t("memberCount", { count: group.member_count })}</p>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colDriver")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colDriverCode")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {group.members.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-sm text-muted-foreground">
+                        {t("membersEmpty")}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    group.members.map((m) => (
+                      <TableRow key={m.id}>
+                        <TableCell className="font-medium">{m.full_name}</TableCell>
+                        <TableCell>{m.employee_id || "—"}</TableCell>
+                        <TableCell>{m.driver_code}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
           <Button render={<Link href="/drivers/groups" />} variant="outline" className="h-9 cursor-pointer">
             <ArrowLeft className="size-4" />
@@ -149,6 +170,15 @@ export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
           </Button>
         </div>
       </AppListCard>
+      <DriverGroupImportDialog
+        groupId={group.id}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onApplied={() => {
+          void refetch();
+          void queryClient.invalidateQueries({ queryKey: queryKeys.driverGroups.list() });
+        }}
+      />
       <DriverGroupFormDialog
         open={editOpen}
         onOpenChange={setEditOpen}

@@ -52,6 +52,12 @@ function importStatusPill(status: string, t: ReturnType<typeof useTranslations>)
       return <StatusPill variant="success">{t("importStatusOk")}</StatusPill>;
     case "blocked":
       return <StatusPill variant="danger">{t("importStatusBlocked")}</StatusPill>;
+    case "archived":
+      return <StatusPill variant="danger">{t("importStatusArchived")}</StatusPill>;
+    case "ambiguous":
+      return <StatusPill variant="warning">{t("importStatusAmbiguous")}</StatusPill>;
+    case "empty":
+      return <StatusPill variant="warning">{t("importStatusEmpty")}</StatusPill>;
     case "duplicate":
       return <StatusPill variant="warning">{t("importStatusDuplicate")}</StatusPill>;
     default:
@@ -73,6 +79,7 @@ export function NotificationImportPanel({
     Array<{
       row_index: number;
       employee_id: string;
+      driver_code?: string;
       driver_name: string | null;
       status: string;
       resolved_title: string;
@@ -80,6 +87,25 @@ export function NotificationImportPanel({
     }>
   >([]);
   const [selectedPreview, setSelectedPreview] = useState(0);
+
+  const rejected = previewRows.filter((row) => row.status !== "ok");
+
+  const exportErrors = () => {
+    const header = "row,employee_id,driver_code,status";
+    const body = rejected
+      .map(
+        (r) =>
+          `${r.row_index + 1},${r.employee_id},${r.driver_code ?? ""},${r.status}`,
+      )
+      .join("\n");
+    const blob = new Blob([`${header}\n${body}\n`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "notification-import-errors.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const variableColumns = useMemo(() => {
     const cols = new Set<string>(importSpec?.variable_columns ?? []);
@@ -89,16 +115,24 @@ export function NotificationImportPanel({
 
   const handleFile = async (file: File) => {
     const parsed = await parseSpreadsheetFile(file);
-    const employeeHeader =
-      parsed.headers.find((h) => /employee\s*id/i.test(h)) ?? parsed.headers[0] ?? "";
+    const employeeHeader = parsed.headers.find((h) => /employee\s*id/i.test(h)) ?? "";
+    const codeHeader =
+      parsed.headers.find((h) => /driver\s*code|mg\s*id/i.test(h)) ?? "";
+    const identityHeaders = new Set([employeeHeader, codeHeader].filter(Boolean));
     const mapping: NotificationImportSpec["column_mapping"] = {
-      employee_id: employeeHeader,
+      employee_id: employeeHeader || parsed.headers[0] || "",
+      driver_code: codeHeader,
     };
-    const variable_columns = parsed.headers.filter((h) => h !== employeeHeader);
+    const variable_columns = parsed.headers.filter((h) => !identityHeaders.has(h));
     const rows: NotificationImportRow[] = parsed.rows.map((cells) => {
       const row: NotificationImportRow = {};
       parsed.headers.forEach((header, idx) => {
-        const key = header === employeeHeader ? "employee_id" : header.replace(/\s+/g, "_").toLowerCase();
+        const key =
+          header === employeeHeader
+            ? "employee_id"
+            : header === codeHeader
+              ? "driver_code"
+              : header.replace(/\s+/g, "_").toLowerCase();
         row[key] = cells[idx] ?? "";
       });
       return row;
@@ -169,6 +203,11 @@ export function NotificationImportPanel({
           <Download className="size-4" />
           {t("importDownloadTemplate")}
         </a>
+        {rejected.length > 0 ? (
+          <Button variant="outline" size="sm" className="h-9 cursor-pointer" onClick={exportErrors}>
+            {t("importExportErrors")}
+          </Button>
+        ) : null}
         {importSpec ? (
           <Button variant="outline" size="sm" className="h-9 cursor-pointer" onClick={refreshPreview} disabled={pending}>
             {pending ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -228,6 +267,7 @@ export function NotificationImportPanel({
                     <TableRow>
                       <TableHead className={TABLE_HEAD_CLASS}>#</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
+                      <TableHead className={TABLE_HEAD_CLASS}>{t("colDriverCode")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colDriver")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("fieldTitle")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("fieldBody")}</TableHead>
@@ -239,6 +279,7 @@ export function NotificationImportPanel({
                       <TableRow key={row.row_index}>
                         <TableCell>{row.row_index + 1}</TableCell>
                         <TableCell>{row.employee_id}</TableCell>
+                        <TableCell>{row.driver_code || "—"}</TableCell>
                         <TableCell>{row.driver_name ?? "—"}</TableCell>
                         <TableCell className="max-w-[160px] truncate">{row.resolved_title}</TableCell>
                         <TableCell className="max-w-[200px] truncate">{row.resolved_body}</TableCell>

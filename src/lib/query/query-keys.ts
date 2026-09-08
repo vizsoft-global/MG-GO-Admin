@@ -188,6 +188,8 @@ export const queryKeys = {
     weights: () => ["performance", "weights"] as const,
     liveSnapshot: (date: string) =>
       ["performance", "dpd-live", date] as const,
+    dpdEfficiency: (filters: Record<string, unknown> = {}) =>
+      ["performance", "dpd-efficiency", filters] as const,
     ratings: (driverId: string, periodMonth: string) =>
       ["performance", "ratings", driverId, periodMonth] as const,
     ratingTeams: () => ["performance", "rating-teams"] as const,

@@ -1,5 +1,4 @@
 import { cache } from "react";
-import { settledWithin, SUPABASE_DEADLINE_MS } from "@/lib/async/settled-within";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withDeadline } from "@/lib/supabase/deadline";
@@ -115,17 +114,6 @@ const BRANDING_BUDGET_MS = 5_000;
 
 async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
   try {
-<<<<<<< HEAD
-    const supabase = await createClient();
-    const result = await settledWithin(
-      supabase
-        .from("app_themes")
-        .select("id, name, base_preset, light_tokens, dark_tokens")
-        .order("name"),
-      SUPABASE_DEADLINE_MS,
-    );
-    if (!result.ok || result.value.error) {
-=======
     const supabase = await createClient({ timeoutMs: BRANDING_BUDGET_MS });
     const { data, error } = await supabase
       .from("app_themes")
@@ -133,11 +121,10 @@ async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
       .order("name");
 
     if (error) {
->>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
       return [];
     }
 
-    return (result.value.data ?? []).map((row) => ({
+    return (data ?? []).map((row) => ({
       id: row.id,
       name: row.name,
       basePreset: row.base_preset,
@@ -176,28 +163,6 @@ async function loadAppSettingsRow(): Promise<{
   theme_id?: string | null;
 } | null> {
   try {
-<<<<<<< HEAD
-    const supabase = await createClient();
-    const primary = await settledWithin(
-      supabase.from("app_settings").select(APP_SETTINGS_SELECT).eq("id", 1).maybeSingle(),
-      SUPABASE_DEADLINE_MS,
-    );
-    if (primary.ok && !primary.value.error && primary.value.data) {
-      return primary.value.data;
-    }
-    if (primary.ok && primary.value.error?.code === "42703") {
-      const fallback = await settledWithin(
-        supabase
-          .from("app_settings")
-          .select("app_name, app_subtitle, font_family, logo_url, logo_type")
-          .eq("id", 1)
-          .maybeSingle(),
-        SUPABASE_DEADLINE_MS,
-      );
-      if (fallback.ok && !fallback.value.error && fallback.value.data) {
-        return fallback.value.data;
-      }
-=======
     const supabase = await createClient({ timeoutMs: BRANDING_BUDGET_MS });
     let { data, error } = await supabase
       .from("app_settings")
@@ -211,23 +176,13 @@ async function loadAppSettingsRow(): Promise<{
         .select("app_name, app_subtitle, font_family, logo_url, logo_type")
         .eq("id", 1)
         .maybeSingle());
->>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
     }
+    if (!error && data) return data;
   } catch {
     /* fall through to service role */
   }
 
   try {
-<<<<<<< HEAD
-    const admin = createAdminClient();
-    const service = await settledWithin(
-      admin.from("app_settings").select(APP_SETTINGS_SELECT).eq("id", 1).maybeSingle(),
-      SUPABASE_DEADLINE_MS,
-    );
-    if (service.ok && !service.value.error && service.value.data) {
-      return service.value.data;
-    }
-=======
     const admin = createAdminClient({ timeoutMs: BRANDING_BUDGET_MS });
     const { data, error } = await admin
       .from("app_settings")
@@ -236,7 +191,6 @@ async function loadAppSettingsRow(): Promise<{
       .maybeSingle();
 
     if (!error && data) return data;
->>>>>>> 8ecba4353e6057c616ca98d9091c2d89e8fa8d5a
   } catch {
     /* use defaults */
   }

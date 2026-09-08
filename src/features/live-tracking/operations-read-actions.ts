@@ -78,7 +78,7 @@ const SELECT_COLUMNS = `
   device_id,
   app_version_code,
   occurred_at,
-  drivers ( driver_code, profiles ( full_name ) )
+  drivers ( driver_code, profiles!drivers_id_fkey ( full_name ) )
 `;
 
 type RawEventRow = {

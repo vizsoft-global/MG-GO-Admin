@@ -8,7 +8,7 @@ export type ResolvedDriverLookup = {
   driver_id: string | null;
   driver_code: string | null;
   full_name: string | null;
-  error: "not_found" | "blocked" | null;
+  error: "not_found" | "blocked" | "archived" | null;
 };
 
 type DriverMatchRow = {
@@ -52,7 +52,7 @@ export async function resolveDriversByLookupIds(
   if (normalized.length === 0) return [];
 
   const select =
-    "id, driver_code, employee_id, is_blocked, archived_at, profiles(full_name)";
+    "id, driver_code, employee_id, is_blocked, archived_at, profiles!drivers_id_fkey(full_name)";
 
   const [byEmployeeResult, byCodeResult] = await Promise.all([
     supabase.from("drivers").select(select).in("employee_id", normalized),
@@ -88,7 +88,17 @@ export async function resolveDriversByLookupIds(
         error: "not_found" as const,
       };
     }
-    if (match.archived_at || match.is_blocked) {
+    if (match.archived_at) {
+      return {
+        lookup_id,
+        employee_id: match.employee_id,
+        driver_id: match.driver_id,
+        driver_code: match.driver_code,
+        full_name: match.full_name,
+        error: "archived" as const,
+      };
+    }
+    if (match.is_blocked) {
       return {
         lookup_id,
         employee_id: match.employee_id,

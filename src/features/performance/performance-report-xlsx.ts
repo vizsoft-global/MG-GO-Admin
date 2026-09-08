@@ -49,6 +49,7 @@ export const PERFORMANCE_REPORT_HEADERS = [
   "Driver",
   "Partner",
   "Zone",
+  "Restaurant",
   "Status",
   "Worked days",
   "Leave days",
@@ -65,7 +66,7 @@ export const PERFORMANCE_REPORT_HEADERS = [
 ] as const;
 
 const COLUMN_WIDTHS = [
-  7, 10, 10, 28, 18, 16, 11, 12, 11, 12, 11, 9, 11, 13, 11, 11, 9, 8, 10,
+  7, 10, 10, 28, 18, 16, 18, 11, 12, 11, 12, 11, 9, 11, 13, 11, 11, 9, 8, 10,
 ];
 
 /** Width of one per-team rating column. */
@@ -112,6 +113,7 @@ export function performanceReportRow(
     row.driver_name,
     row.partner_name ?? "—",
     row.zone_name ?? "—",
+    row.restaurant_name ?? "",
     row.driver_status,
     row.worked_days,
     row.leave_days,
