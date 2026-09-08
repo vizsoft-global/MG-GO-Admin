@@ -64,9 +64,9 @@ export function PerformanceComponentBreakdown({
 }) {
   const t = useTranslations("pages.performance.components");
   const locale = useLocale();
-  const active = components.filter((c) => c.is_active && c.weight > 0);
+  const rows = [...components].sort((a, b) => a.sort_order - b.sort_order);
 
-  if (active.length === 0) return null;
+  if (rows.length === 0) return null;
 
   return (
     <div className={`rounded-lg border border-border ${className ?? ""}`}>
@@ -77,9 +77,10 @@ export function PerformanceComponentBreakdown({
         </span>
       </div>
       <ul className="divide-y divide-border">
-        {active.map((component) => {
+        {rows.map((component) => {
           const Icon = COMPONENT_ICON[component.key];
           const value = componentPct(scores, component.key);
+          const counted = component.is_active && component.weight > 0;
           return (
             <li
               key={component.key}
@@ -89,11 +90,19 @@ export function PerformanceComponentBreakdown({
               <span className="min-w-0 flex-1 truncate text-[11px]">
                 {componentLabel(component, locale)}
               </span>
+              {!counted ? (
+                <span
+                  className="shrink-0 rounded-md border border-border bg-muted/30 px-1.5 text-[10px] text-muted-foreground"
+                  title={t("notCountedHint")}
+                >
+                  {t("notCounted")}
+                </span>
+              ) : null}
               <div className="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-muted">
                 {value == null ? null : (
                   <div
                     className={`h-full rounded-full ${barClass(value)}`}
-                    style={{ width: `${value}%` }}
+                    style={{ width: `${Math.min(value, 100)}%` }}
                   />
                 )}
               </div>

@@ -23,9 +23,10 @@ import { Input } from "@/components/ui/input";
 import {
   addDays,
   componentPct,
+  deliveryPct,
   kuwaitToday,
   pct,
-  rawPct,
+  scorePct,
 } from "./performance-formulas";
 import { componentLabel } from "./performance-component-breakdown";
 import { PerformanceAnalysisPanel } from "./performance-analysis-panel";
@@ -46,7 +47,7 @@ import {
   type PerformanceScoreBand,
   type PerformanceSortKey,
 } from "./performance-types";
-import { useDriverPerformanceList } from "./use-performance";
+import { useDriverPerformanceList, usePerformanceComponents } from "./use-performance";
 
 const PAGE_SIZE = 50;
 
@@ -127,6 +128,7 @@ export function PerformancePageShell() {
 
   const { data, isLoading, isFetching, isError, refetch } =
     useDriverPerformanceList(listFilters, { enabled: tab === "period" });
+  const { data: catalog } = usePerformanceComponents(tab === "period");
 
   const rows = data?.rows ?? [];
   const kpis = data?.kpis;
@@ -134,8 +136,11 @@ export function PerformancePageShell() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const components = useMemo(
-    () => (data?.components ?? []).filter((c) => c.is_active && c.weight > 0),
-    [data?.components],
+    () =>
+      catalog?.components?.length
+        ? catalog.components
+        : (data?.components ?? []),
+    [catalog?.components, data?.components],
   );
 
   const columns = [
@@ -151,7 +156,10 @@ export function PerformancePageShell() {
     ...(showComponents
       ? components.map((c) => ({
           id: `component-${c.key}`,
-          label: componentLabel(c, locale),
+          label:
+            c.is_active && c.weight > 0
+              ? componentLabel(c, locale)
+              : `${componentLabel(c, locale)} (${t("components.notCounted")})`,
           className: "text-end",
         }))
       : []),
@@ -213,7 +221,7 @@ export function PerformancePageShell() {
             items={[
               {
                 label: t("kpiOverall"),
-                value: kpis?.avg_overall ?? "—",
+                value: scorePct(kpis?.avg_overall),
                 accent: "primary",
               },
               {
@@ -240,13 +248,13 @@ export function PerformancePageShell() {
               },
               {
                 label: t("kpiTop"),
-                value: kpis?.top_score ?? "—",
+                value: scorePct(kpis?.top_score),
                 caption: kpis?.top_driver_name ?? undefined,
                 accent: "success",
               },
               {
                 label: t("kpiBottom"),
-                value: kpis?.bottom_score ?? "—",
+                value: scorePct(kpis?.bottom_score),
                 caption: kpis?.bottom_driver_name ?? undefined,
                 accent: "danger",
               },
@@ -379,7 +387,10 @@ export function PerformancePageShell() {
                         {row.actual_deliveries}/{row.target_deliveries}
                       </TableCell>
                       <TableCell className="text-end tabular-nums text-sm">
-                        {rawPct(row.delivery_efficiency_raw, 0)}
+                        {deliveryPct(
+                          row.delivery_efficiency_raw,
+                          row.target_deliveries,
+                        )}
                       </TableCell>
                       <TableCell className="text-end tabular-nums text-sm">
                         {pct(row.utilization, 0)}
@@ -440,7 +451,7 @@ export function PerformancePageShell() {
                           title={t(`bands.${row.score_band}`)}
                         >
                           <Percent className="size-3 opacity-60" />
-                          {row.overall_score}
+                          {scorePct(row.overall_score)}
                         </span>
                       </TableCell>
                     </AppDataTableRow>

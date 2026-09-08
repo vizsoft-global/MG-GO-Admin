@@ -4,8 +4,11 @@ import {
   componentPct,
   computeComponentBlend,
   computeOverallScore,
+  deliveryPct,
   parsePerformanceWeights,
   ratingPeriodMonth,
+  rawPct,
+  scorePct,
 } from "./performance-formulas";
 import {
   manualRatingToScore,
@@ -172,6 +175,18 @@ describe("component blend", () => {
   it("componentPct reports a share, and null for an absent component", () => {
     assert.equal(componentPct({ gps: 0.873 }, "gps"), 87.3);
     assert.equal(componentPct({ gps: 0.873 }, "speed"), null);
+  });
+
+  it("deliveryPct is a dash when the target is missing", () => {
+    assert.equal(deliveryPct(0, 0), "—");
+    assert.equal(deliveryPct(1.2, 50), "120%");
+  });
+
+  it("scorePct and rawPct keep a percent sign, and dash when unknown", () => {
+    assert.equal(scorePct(57.1), "57.1%");
+    assert.equal(scorePct(null), "—");
+    assert.equal(rawPct(Number.NaN), "—");
+    assert.equal(rawPct(0.8), "80%");
   });
 });
 
