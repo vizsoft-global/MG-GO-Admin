@@ -179,16 +179,18 @@ describe("fleetStatus", () => {
     assert.equal(fleetStatusTone("blocked"), "danger");
   });
 
-  it("paints the map marker red when the rider is out of range or out of zone", () => {
+  it("keeps the map marker on the status colour when the rider is out of range or zone", () => {
     const moving = fleetFlags(signals({ speedMps: 9, inAssignedZone: true }), NOW);
     assert.equal(fleetMarkerTone("moving", moving), "success");
     const outOfRange = fleetFlags(
       signals({ speedMps: 9, inAssignedZone: true, rangeStatus: "out_of_zone" }),
       NOW,
     );
-    assert.equal(fleetMarkerTone("moving", outOfRange), "danger");
+    assert.equal(fleetMarkerTone("moving", outOfRange), "success");
     const outOfZone = fleetFlags(signals({ speedMps: 9, inAssignedZone: false }), NOW);
-    assert.equal(fleetMarkerTone("moving", outOfZone), "danger");
+    assert.equal(fleetMarkerTone("moving", outOfZone), "success");
+    assert.equal(fleetMarkerTone("on_delivery", outOfZone), "primary");
+    assert.equal(fleetMarkerTone("idle", outOfRange), "warning");
   });
 
   it("lists Location off with the other filterable / legend statuses", () => {

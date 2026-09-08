@@ -11,10 +11,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  FLEET_BIKE_LOGO_OFFSET,
-  FLEET_BIKE_LOGO_PAD_PX,
+  FLEET_BIKE_ART_PX,
+  FLEET_BIKE_CRATE,
+  FLEET_BIKE_CRATE_PLATE,
+  FLEET_BIKE_LOGO_CRATE_FIT,
   FLEET_BIKE_STAMP_PX,
   FLEET_PIN_SIZE,
+  FLEET_TONE_FILL,
   fleetAtlasSvgForPreview,
   fleetIconMapping,
 } from "../src/features/live-tracking-v2/fleet-marker-atlas.ts";
@@ -30,6 +33,9 @@ const mapping = fleetIconMapping();
 const atlasUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 const bikePng = fileURLToPath(
   new URL("../src/features/live-tracking-v2/assets/fleet-bike-north.png", import.meta.url),
+);
+const crateLogoPng = fileURLToPath(
+  new URL("../src/features/live-tracking-v2/assets/fleet-crate-logo.png", import.meta.url),
 );
 
 const html = `<!doctype html>
@@ -47,15 +53,33 @@ const html = `<!doctype html>
 <script type="module">
 const mapping = ${JSON.stringify(mapping)};
 const stampPx = ${FLEET_BIKE_STAMP_PX};
-const logoPad = ${FLEET_BIKE_LOGO_PAD_PX};
-const logoOffset = ${FLEET_BIKE_LOGO_OFFSET};
 const pinSize = ${FLEET_PIN_SIZE};
+const toneFill = ${JSON.stringify(FLEET_TONE_FILL)};
+const crateArt = ${JSON.stringify({
+  art: FLEET_BIKE_ART_PX,
+  crate: FLEET_BIKE_CRATE,
+  plate: FLEET_BIKE_CRATE_PLATE,
+  fit: FLEET_BIKE_LOGO_CRATE_FIT,
+})};
 const tones = ["success", "primary", "warning", "danger", "neutral"];
-const sampleLogo =
-  "data:image/svg+xml;charset=utf-8," +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#059669"/><text x="16" y="22" text-anchor="middle" font-size="16" font-family="ui-sans-serif,system-ui" font-weight="700" fill="#fff">M</text></svg>',
-  );
+
+function logoBoxFor(cell, logoW, logoH) {
+  const scale = stampPx / crateArt.art;
+  const originX = cell.x + (cell.width - stampPx) / 2;
+  const originY = cell.y + (cell.height - stampPx) / 2;
+  const crateCx = originX + crateArt.plate.cx * scale;
+  const crateCy = originY + crateArt.plate.cy * scale;
+  const maxW = crateArt.crate.width * scale * crateArt.fit;
+  const maxH = crateArt.crate.height * scale * crateArt.fit;
+  const aspect = logoW / Math.max(logoH, 1);
+  let w = maxW;
+  let h = w / aspect;
+  if (h > maxH) {
+    h = maxH;
+    w = h * aspect;
+  }
+  return { x: crateCx - w / 2, y: crateCy - h / 2, w, h };
+}
 
 function load(src) {
   return new Promise((resolve, reject) => {
@@ -82,33 +106,47 @@ function sprite(atlasUrl, name, px, angle = 0) {
 const [svgImage, bikeImage, logoImage] = await Promise.all([
   load(${JSON.stringify(atlasUrl)}),
   load("./fleet-bike-north.png"),
-  load(sampleLogo),
+  load("./fleet-crate-logo.png"),
 ]);
 
 function stampBikes(ctx, withLogo) {
+  const scratch = document.createElement("canvas");
+  scratch.width = 96;
+  scratch.height = 96;
+  const sctx = scratch.getContext("2d", { willReadFrequently: true });
   for (const [name, cell] of Object.entries(mapping)) {
     if (!name.startsWith("pin-bike-")) continue;
-    ctx.save();
-    ctx.globalAlpha = name.endsWith("-stale") ? 0.5 : 1;
-    ctx.drawImage(
-      bikeImage,
-      cell.x + (cell.width - stampPx) / 2,
-      cell.y + (cell.height - stampPx) / 2,
-      stampPx,
-      stampPx,
-    );
-    if (withLogo) {
-      const cx = cell.x + cell.width / 2;
-      const cy = cell.y + cell.height / 2 + stampPx * logoOffset;
-      const x = cx - logoPad / 2;
-      const y = cy - logoPad / 2;
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.roundRect(x, y, logoPad, logoPad, 3);
-      ctx.fill();
-      ctx.drawImage(logoImage, x + 2, y + 2, logoPad - 4, logoPad - 4);
+    const tone = tones.find((t) => name.includes("-" + t)) ?? "neutral";
+    sctx.clearRect(0, 0, 96, 96);
+    sctx.globalAlpha = name.endsWith("-stale") ? 0.5 : 1;
+    sctx.drawImage(bikeImage, (96 - stampPx) / 2, (96 - stampPx) / 2, stampPx, stampPx);
+    sctx.globalAlpha = 1;
+    const hex = toneFill[tone];
+    const tr = parseInt(hex.slice(1, 3), 16);
+    const tg = parseInt(hex.slice(3, 5), 16);
+    const tb = parseInt(hex.slice(5, 7), 16);
+    const image = sctx.getImageData(0, 0, 96, 96);
+    const data = image.data;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 8) continue;
+      const lum = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
+      const t = 0.28 + lum * 0.72;
+      data[i] = tr * t;
+      data[i + 1] = tg * t;
+      data[i + 2] = tb * t;
     }
-    ctx.restore();
+    sctx.putImageData(image, 0, 0);
+    ctx.drawImage(scratch, cell.x, cell.y);
+    if (withLogo) {
+      ctx.save();
+      ctx.globalAlpha = name.endsWith("-stale") ? 0.5 : 1;
+      const box = logoBoxFor(cell, logoImage.naturalWidth || logoImage.width, logoImage.naturalHeight || logoImage.height);
+      ctx.beginPath();
+      ctx.roundRect(box.x, box.y, box.w, box.h, 2);
+      ctx.clip();
+      ctx.drawImage(logoImage, box.x, box.y, box.w, box.h);
+      ctx.restore();
+    }
   }
 }
 
@@ -161,12 +199,10 @@ document.getElementById("root").innerHTML = \`
   <div class="sat">\${tones.map((t) => s(\`pin-bike-\${t}\`, pinSize)).join("")}\${tones.map((t) => s(\`pin-car-\${t}\`, pinSize)).join("")}</div>
 </div>
 
-<h2>Selection ring behind the marker</h2>
+<h2>Selected is 1.2x — no ring</h2>
 <div class="row">
-  <span style="position:relative;display:inline-block;width:72px;height:72px">
-    <span style="position:absolute;inset:0">\${s("ring", 67)}</span>
-    <span style="position:absolute;inset:5px">\${s("pin-bike-success", pinSize)}</span>
-  </span>
+  \${s("pin-bike-success", pinSize)}
+  \${s("pin-bike-success", Math.round(pinSize * 1.2))}
 </div>
 
 <h2>Density check — 60 markers at 30px</h2>
@@ -182,5 +218,6 @@ document.getElementById("root").innerHTML = \`
 
 await mkdir(outDir, { recursive: true });
 await copyFile(bikePng, join(outDir, "fleet-bike-north.png"));
+await copyFile(crateLogoPng, join(outDir, "fleet-crate-logo.png"));
 await writeFile(join(outDir, "index.html"), html, "utf8");
 console.log(`wrote ${join(outDir, "index.html")}`);

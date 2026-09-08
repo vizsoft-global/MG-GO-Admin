@@ -1,10 +1,9 @@
 /**
- * Asserts the deployed bundle carries an intact marker-atlas SVG.
+ * Asserts the deployed bundle carries an intact marker-atlas module.
  *
- * The selection-ring cell was shipped mangled by SWC's folding of `+` between two
- * template literals, which invalidated the whole sheet and left every rider as a bare
- * status puck. This checks the built artifact rather than the source, because that is
- * where the corruption happened.
+ * Next's SWC minifier once folded `+` between two template literals and shipped a
+ * mangled sheet that left every rider as a bare disc. This checks the built
+ * artifact rather than the source, because that is where the corruption happened.
  *
  * Usage: node scripts/verify-atlas.mjs [origin]
  */
@@ -24,8 +23,7 @@ for (const path of chunks) {
   if (!body.includes("fleet marker atlas")) continue;
   checked += 1;
   const checks = [
-    ["ring outer stroke present", body.includes('stroke="#ffffff" stroke-width="5"')],
-    ["ring opacity present", body.includes('stroke-opacity="0.9"')],
+    ["per-cell bike compose present", body.includes("scratch 2d context unavailable")],
     ["ring cell not mangled", !body.includes('cy="24<circle')],
     ["blank-cell guard present", body.includes("blank sprite cells")],
   ];
