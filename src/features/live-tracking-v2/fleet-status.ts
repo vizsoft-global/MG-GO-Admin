@@ -612,11 +612,10 @@ export function fleetStatusTone(status: FleetStatus): FleetTone {
 }
 
 /**
- * Map puck colour. Status keeps its chip colour on the rail (a Moving rider who left
- * range is still Moving); the marker itself goes red so the map matches the alert.
+ * Pin colour follows status only. Flags stay badges — a Moving rider who left
+ * range is still green on the map, same as the rail chip.
  */
-export function fleetMarkerTone(status: FleetStatus, flags: FleetFlagSet): FleetTone {
-  if (flags.out_of_zone || flags.out_of_range) return "danger";
+export function fleetMarkerTone(status: FleetStatus, _flags?: FleetFlagSet): FleetTone {
   return fleetStatusTone(status);
 }
 

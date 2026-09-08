@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 
 import { fleetMarkerTone, isFleetAlert, type FleetTone } from "./fleet-status";
 import {
+  FLEET_ATLAS_REVISION,
   FLEET_PIN_SELECTED_SCALE,
   FLEET_PIN_SIZE,
   fleetIconMapping,
@@ -325,15 +326,15 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         if (!cancelled) setIconAtlas(atlas);
       })
       .catch((error: unknown) => {
-        // The map stays usable on status pucks alone, so this must not throw — but a
-        // silent failure here is indistinguishable from a working map with plain discs,
+        // Atlas failure falls back to the scatterplot discs so the map stays usable.
+        // A silent catch here is indistinguishable from a working map with no vehicles,
         // which is exactly the confusion that cost two release cycles.
         console.error("live-tracking-v2: marker atlas failed to load", error);
       });
     return () => {
       cancelled = true;
     };
-  }, [driverAppLogoUrl]);
+  }, [driverAppLogoUrl, FLEET_ATLAS_REVISION]);
 
   // ---------------------------------------------------------------------------
   // Roster → drawable entities. Structural changes only, never positions.
@@ -738,7 +739,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       );
     }
 
-    if (drawable.length > 0) {
+    if (drawable.length > 0 && !iconAtlas) {
       layers.push(
         new Scatter<FleetEntity>({
           id: "fleet-driver-pucks",
@@ -756,7 +757,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
             getFillColor: revision,
             getRadius: revision,
           },
-          pickable: !iconAtlas,
+          pickable: true,
           onClick: (info) => {
             if (!info.object) return false;
             pickHandledRef.current = true;
@@ -824,24 +825,6 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     }
 
     if (drawable.length > 0 && iconAtlas) {
-      const selected = drawable.filter((entity) => entity.selected);
-      if (selected.length > 0) {
-        layers.push(
-          new Icon<FleetEntity>({
-            id: "fleet-selection-ring",
-            data: selected,
-            iconAtlas: asIconAtlasProp(iconAtlas),
-            iconMapping,
-            getIcon: () => "ring",
-            getPosition: (d) => d.position,
-            getSize: FLEET_PIN_SIZE * FLEET_PIN_SELECTED_SCALE,
-            sizeUnits: "pixels",
-            updateTriggers: { getPosition: revision },
-            pickable: false,
-          }),
-        );
-      }
-
       layers.push(
         new Icon<FleetEntity>({
           id: "fleet-drivers",

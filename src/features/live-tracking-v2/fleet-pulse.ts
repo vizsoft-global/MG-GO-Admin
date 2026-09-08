@@ -36,11 +36,11 @@ export const FLEET_PULSE_DURATION_MS = 900;
  */
 export const FLEET_PULSE_MAX = 50;
 
-/** Ring geometry, in screen pixels — a puck is 8px, so the ring starts at its edge. */
+/** Ring geometry, in screen pixels — starts under the vehicle so one beat reads as a fix, not a pin. */
 export const FLEET_PULSE_MIN_RADIUS_PX = 8;
 export const FLEET_PULSE_MAX_RADIUS_PX = 22;
 
-/** Peak ring alpha (0-255). Deliberately faint: the status puck must stay the loudest thing. */
+/** Peak ring alpha (0-255). Deliberately faint: the vehicle must stay the loudest thing. */
 export const FLEET_PULSE_PEAK_ALPHA = 110;
 
 /**
