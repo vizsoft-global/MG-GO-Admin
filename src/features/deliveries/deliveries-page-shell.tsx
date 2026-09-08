@@ -248,7 +248,11 @@ function DeliveriesPageContent() {
     isFetchingNextPage,
   } = useDeliveriesInfinite(filter);
 
-  const { data: kpiCounts } = useDeliveriesKpis();
+  const {
+    data: kpiCounts,
+    isError: kpiError,
+    refetch: refetchKpis,
+  } = useDeliveriesKpis();
   const { data: filterOptions } = useDeliveryFilterOptions();
 
   const deliveries = useMemo(
@@ -462,44 +466,49 @@ function DeliveriesPageContent() {
   }, [filterOptions, t]);
 
   const kpis = useMemo(() => {
-    const counts = kpiCounts ?? {
-      total: 0,
-      active: 0,
-      verified: 0,
-      pending: 0,
-      rejected: 0,
-      cancelled: 0,
-    };
+    const dash = kpiError || !kpiCounts;
+    const counts = kpiCounts;
+    const valueOf = (n: number | undefined) => (dash ? "—" : (n ?? 0));
     return [
       {
         label: t("kpiTotal"),
-        value: counts.total,
+        value: valueOf(counts?.total),
         icon: Package,
         accent: "primary" as const,
         caption: t("kpiAllTime"),
       },
-      { label: t("kpiActive"), value: counts.active, icon: Activity, accent: "primary" as const },
+      {
+        label: t("kpiActive"),
+        value: valueOf(counts?.active),
+        icon: Activity,
+        accent: "primary" as const,
+      },
       {
         label: t("kpiVerified"),
-        value: counts.verified,
+        value: valueOf(counts?.verified),
         icon: CheckCircle2,
         accent: "success" as const,
       },
       {
         label: t("kpiPending"),
-        value: counts.pending,
+        value: valueOf(counts?.pending),
         icon: Clock,
-        accent: counts.pending > 0 ? ("warning" as const) : ("default" as const),
+        accent: !dash && (counts?.pending ?? 0) > 0 ? ("warning" as const) : ("default" as const),
       },
       {
         label: t("kpiRejected"),
-        value: counts.rejected,
+        value: valueOf(counts?.rejected),
         icon: XCircle,
-        accent: counts.rejected > 0 ? ("danger" as const) : ("default" as const),
+        accent: !dash && (counts?.rejected ?? 0) > 0 ? ("danger" as const) : ("default" as const),
       },
-      { label: t("kpiCancelled"), value: counts.cancelled, icon: Ban, accent: "default" as const },
+      {
+        label: t("kpiCancelled"),
+        value: valueOf(counts?.cancelled),
+        icon: Ban,
+        accent: "default" as const,
+      },
     ];
-  }, [kpiCounts, t]);
+  }, [kpiCounts, kpiError, t]);
 
   const cancelReasonSelectItems = useMemo(
     () => [
@@ -642,7 +651,22 @@ function DeliveriesPageContent() {
 
   return (
     <AppPage>
-      <KpiGrid items={kpis} />
+      <div className="flex flex-col gap-2">
+        <KpiGrid items={kpis} />
+        {kpiError ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[10px] text-muted-foreground">{t("kpiErrorHint")}</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 cursor-pointer"
+              onClick={() => void refetchKpis()}
+            >
+              {t("listRetry")}
+            </Button>
+          </div>
+        ) : null}
+      </div>
 
       <AppListCard
         toolbar={

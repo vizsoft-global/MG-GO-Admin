@@ -26,6 +26,7 @@ import {
   type DeliveryDbRowForList,
 } from "./map-delivery-list-row";
 import { CANCEL_REASON_CODES } from "./parse-cancel-reason";
+import { readExactCount } from "./delivery-kpi-counts";
 
 type DeliveryMutationResult =
   | { ok: true }
@@ -711,8 +712,8 @@ export async function fetchDeliveriesKpis(): Promise<DeliveriesKpiCounts> {
   const countFor = async (status?: DeliveryStatus): Promise<number> => {
     let q = supabase.from("deliveries").select("id", { count: "exact", head: true });
     if (status) q = q.eq("status", status);
-    const { count } = await q;
-    return count ?? 0;
+    const { count, error } = await q;
+    return readExactCount({ count, error });
   };
 
   const [total, active, verified, pending, rejected, cancelled] = await Promise.all([

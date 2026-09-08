@@ -2287,6 +2287,7 @@
       "allLoaded": "All {total} loaded",
       "kpiTotal": "Total Deliveries",
       "kpiAllTime": "All time",
+      "kpiErrorHint": "All-time counters could not be loaded.",
       "listErrorTitle": "Deliveries could not be loaded",
       "listErrorHint": "The counters above are unfiltered. Retry the table, or clear filters if this persists.",
       "listRetry": "Retry",
