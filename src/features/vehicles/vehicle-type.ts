@@ -11,11 +11,13 @@ export function resolveVehicleTypeKey(
   return trimmed && trimmed.length > 0 ? trimmed : DEFAULT_VEHICLE_TYPE_KEY;
 }
 
+const CAR_SPRITE_KEYS = new Set(["car", "van"]);
+
 /** Unmapped catalog keys fall back to bike — rule 12 unknown-vehicle default. */
 export function vehicleSpriteKey(
   key: string | null | undefined,
 ): KnownVehicleTypeKey {
-  return key === "car" ? "car" : DEFAULT_VEHICLE_TYPE_KEY;
+  return key != null && CAR_SPRITE_KEYS.has(key) ? "car" : DEFAULT_VEHICLE_TYPE_KEY;
 }
 
 export function vehicleTypeFromDriverJoin(driver: {
