@@ -532,11 +532,40 @@ export async function fetchDriverPerformanceReport(input: {
     kpis: result.kpis,
     weights: result.weights,
     ratingTeams: await reportRatingTeams(),
-    components: result.components.filter((c) => c.is_active && c.weight > 0),
+    components: await reportComponents(result.components),
     criteria: result.criteria,
     totalCount: result.totalCount,
     truncated: result.totalCount > result.rows.length,
   };
+}
+
+/**
+ * Columns come from the component table, not from the list RPC catalog. The
+ * list drops inactive / zero-weight keys so they would never appear in the
+ * sheet even when component_scores still holds the values.
+ */
+async function reportComponents(
+  fallback: PerformanceComponent[],
+): Promise<PerformanceComponent[]> {
+  try {
+    const catalog = await loadPerformanceComponentCatalog();
+    return catalog.length > 0 ? catalog : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function loadPerformanceComponentCatalog(): Promise<
+  PerformanceComponent[]
+> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "admin_list_performance_components" as never,
+  );
+  if (error) return [];
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  return parseComponents(payload.components);
 }
 
 /**

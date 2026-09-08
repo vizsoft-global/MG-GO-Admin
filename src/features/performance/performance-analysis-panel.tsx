@@ -41,13 +41,14 @@ import {
   trendCoverageDiff,
   trendIsComparable,
   type PerformanceBandCounts,
+  type PerformanceComponent,
   type PerformanceComponentKey,
   type PerformanceScoreBand,
   type PerformanceTrend,
   type PerformanceTrendBucket,
   type PerformanceTrendGroup,
 } from "./performance-types";
-import { usePerformanceTrend } from "./use-performance";
+import { usePerformanceComponents, usePerformanceTrend } from "./use-performance";
 import { cn } from "@/lib/utils";
 
 const BUCKETS: PerformanceTrendBucket[] = ["day", "week", "month"];
@@ -218,6 +219,7 @@ export function PerformanceAnalysisPanel() {
     toDate: range.to,
     bucket,
   });
+  const { data: catalog } = usePerformanceComponents();
 
   if (isLoading) {
     return (
@@ -267,7 +269,10 @@ export function PerformanceAnalysisPanel() {
         ))}
       </div>
 
-      <ComparabilityNotice trend={data} />
+      <ComparabilityNotice
+        trend={data}
+        catalog={catalog?.components ?? []}
+      />
 
       <TrendKpis trend={data} />
 
@@ -275,7 +280,11 @@ export function PerformanceAnalysisPanel() {
         <Card className="rounded-xl border-border shadow-sm lg:col-span-2">
           <CardContent className="flex h-full flex-col p-4">
             <p className="mb-2 text-sm font-semibold">{t("chartTitle")}</p>
-            <TrendChart trend={data} locale={locale} />
+            <TrendChart
+              trend={data}
+              locale={locale}
+              catalog={catalog?.components ?? []}
+            />
           </CardContent>
         </Card>
 
@@ -380,15 +389,22 @@ function MoveStat({
  * are withheld rather than shown with an asterisk — a number on screen gets
  * quoted regardless of the caveat beside it.
  */
-function ComparabilityNotice({ trend }: { trend: PerformanceTrend }) {
+function ComparabilityNotice({
+  trend,
+  catalog,
+}: {
+  trend: PerformanceTrend;
+  catalog: PerformanceComponent[];
+}) {
   const t = useTranslations("pages.performance.analysis");
   const locale = useLocale();
   const comparable = trendIsComparable(trend);
   if (comparable) return null;
 
   const { added, removed } = trendCoverageDiff(trend);
+  const labels = catalog.length > 0 ? catalog : trend.components;
   const name = (key: PerformanceComponentKey) => {
-    const meta = trend.components.find((c) => c.key === key);
+    const meta = labels.find((c) => c.key === key);
     return meta ? componentLabel(meta, locale) : key;
   };
   const parts = [
@@ -482,20 +498,24 @@ function TrendKpis({ trend }: { trend: PerformanceTrend }) {
 function TrendChart({
   trend,
   locale,
+  catalog,
 }: {
   trend: PerformanceTrend;
   locale: string;
+  catalog: PerformanceComponent[];
 }) {
   const t = useTranslations("pages.performance.analysis");
+  const tc = useTranslations("pages.performance.components");
+  const components = catalog.length > 0 ? catalog : trend.components;
 
   // Only components that actually produced a point are drawn. A legend entry
   // whose line is absent reads as a rendering failure rather than as no data.
   const series = useMemo(
     () =>
-      trend.components.filter((component) =>
+      components.filter((component) =>
         trend.series.some((point) => point.components[component.key] != null),
       ),
-    [trend.components, trend.series],
+    [components, trend.series],
   );
 
   const rows = useMemo(
@@ -505,13 +525,13 @@ function TrendChart({
           bucket: point.bucket,
           score: point.score,
         };
-        for (const component of trend.components) {
+        for (const component of components) {
           const value = point.components[component.key];
           row[component.key] = value == null ? null : Math.round(value * 1000) / 10;
         }
         return row;
       }),
-    [trend.components, trend.series],
+    [components, trend.series],
   );
 
   if (rows.length === 0) {
@@ -550,18 +570,24 @@ function TrendChart({
             dot={false}
             connectNulls
           />
-          {series.map((component) => (
-            <Line
-              key={component.key}
-              type="monotone"
-              dataKey={component.key}
-              name={componentLabel(component, locale)}
-              stroke={COMPONENT_COLOR[component.key]}
-              strokeWidth={1.25}
-              dot={false}
-              connectNulls
-            />
-          ))}
+          {series.map((component) => {
+            const counted = component.is_active && component.weight > 0;
+            const label = componentLabel(component, locale);
+            return (
+              <Line
+                key={component.key}
+                type="monotone"
+                dataKey={component.key}
+                name={counted ? label : `${label} (${tc("notCounted")})`}
+                stroke={COMPONENT_COLOR[component.key]}
+                strokeWidth={counted ? 1.25 : 1}
+                strokeDasharray={counted ? undefined : "4 3"}
+                strokeOpacity={counted ? 1 : 0.55}
+                dot={false}
+                connectNulls
+              />
+            );
+          })}
         </LineChart>
       </ResponsiveContainer>
     </div>

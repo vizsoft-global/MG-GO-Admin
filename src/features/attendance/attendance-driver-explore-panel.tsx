@@ -9,7 +9,11 @@ import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { Input } from "@/components/ui/input";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { componentPct } from "@/features/performance/performance-formulas";
-import { useDriverPerformanceDaily } from "@/features/performance/use-performance";
+import { componentLabel } from "@/features/performance/performance-component-breakdown";
+import {
+  useDriverPerformanceDaily,
+  usePerformanceComponents,
+} from "@/features/performance/use-performance";
 import { queryKeys } from "@/lib/query/query-keys";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 import { cn } from "@/lib/utils";
@@ -44,10 +48,14 @@ function AttendanceComplianceBreakdown({
   to: string;
 }) {
   const t = useTranslations("pages.attendance");
+  const tc = useTranslations("pages.performance.components");
   const locale = useLocale();
   const { data, isLoading } = useDriverPerformanceDaily(driverId, from, to);
+  const { data: catalog } = usePerformanceComponents();
 
-  const components = data?.components ?? [];
+  const components = catalog?.components?.length
+    ? catalog.components
+    : (data?.components ?? []);
   const rows = data?.rows ?? [];
 
   if (isLoading) {
@@ -80,7 +88,9 @@ function AttendanceComplianceBreakdown({
                   key={c.key}
                   className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-end")}
                 >
-                  {locale.startsWith("ar") ? c.label_ar : c.label_en}
+                  {c.is_active && c.weight > 0
+                    ? componentLabel(c, locale)
+                    : `${componentLabel(c, locale)} (${tc("notCounted")})`}
                 </th>
               ))}
             </tr>

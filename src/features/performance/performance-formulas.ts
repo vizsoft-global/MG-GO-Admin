@@ -16,8 +16,24 @@ export function pct(ratio: number, digits = 0): string {
 }
 
 export function rawPct(ratio: number, digits = 0): string {
-  if (!Number.isFinite(ratio)) return "0%";
+  if (!Number.isFinite(ratio)) return "—";
   return `${(ratio * 100).toFixed(digits)}%`;
+}
+
+/** Uncapped delivery share. A 0 target is not 0% — there is nothing to hit. */
+export function deliveryPct(
+  ratio: number,
+  target: number,
+  digits = 0,
+): string {
+  if (!(target > 0) || !Number.isFinite(ratio)) return "—";
+  return `${(ratio * 100).toFixed(digits)}%`;
+}
+
+/** Composite / pillar scores are already 0–100. */
+export function scorePct(score: number | null | undefined, digits = 1): string {
+  if (score == null || !Number.isFinite(score)) return "—";
+  return `${score.toFixed(digits)}%`;
 }
 
 /** Parse/normalize weights from app_settings JSON. Equal defaults pending client sign-off. */

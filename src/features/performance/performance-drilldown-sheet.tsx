@@ -6,10 +6,13 @@ import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Link } from "@/i18n/navigation";
-import { pct, rawPct, ratingPeriodMonth } from "./performance-formulas";
+import { deliveryPct, pct, ratingPeriodMonth, scorePct } from "./performance-formulas";
 import { PerformanceComponentBreakdown } from "./performance-component-breakdown";
 import { PerformanceRatingPanel } from "./performance-rating-panel";
-import { useDriverPerformanceDetail } from "./use-performance";
+import {
+  useDriverPerformanceDetail,
+  usePerformanceComponents,
+} from "./use-performance";
 import type {
   PerformanceComponent,
   PerformanceDriverRow,
@@ -54,7 +57,10 @@ function DrilldownBody({
     fromDate,
     toDate,
   );
+  const { data: catalog } = usePerformanceComponents();
   const detail = data ?? row;
+  const breakdownComponents =
+    catalog?.components?.length ? catalog.components : components;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -76,11 +82,14 @@ function DrilldownBody({
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <MetricBlock
                 label={t("kpiOverall")}
-                value={String(detail.overall_score)}
+                value={scorePct(detail.overall_score)}
               />
               <MetricBlock
                 label={t("colDeliveryPct")}
-                value={rawPct(detail.delivery_efficiency_raw, 0)}
+                value={deliveryPct(
+                  detail.delivery_efficiency_raw,
+                  detail.target_deliveries,
+                )}
                 hint={`${detail.actual_deliveries}/${detail.target_deliveries}`}
               />
               <MetricBlock
@@ -106,7 +115,7 @@ function DrilldownBody({
 
             <PerformanceComponentBreakdown
               scores={detail.component_scores}
-              components={components}
+              components={breakdownComponents}
               compliance={detail.compliance_score}
             />
 

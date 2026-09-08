@@ -10,9 +10,11 @@ import { PerformanceComponentBreakdown } from "@/features/performance/performanc
 import { PerformanceRatingPanel } from "@/features/performance/performance-rating-panel";
 import {
   componentPct,
+  deliveryPct,
   kuwaitToday,
   performanceRange,
   ratingPeriodMonth,
+  scorePct,
   PERFORMANCE_RANGE_PRESETS,
   type PerformanceRangePreset,
 } from "@/features/performance/performance-formulas";
@@ -20,6 +22,7 @@ import {
   useDriverPerformanceDaily,
   useDriverPerformanceList,
   useDriverPerformanceRank,
+  usePerformanceComponents,
 } from "@/features/performance/use-performance";
 import type { PerformanceScoreBand } from "@/features/performance/performance-types";
 import { cn } from "@/lib/utils";
@@ -95,8 +98,12 @@ export function DriverPerformanceTab({
     range.to,
   );
 
+  const { data: catalog } = usePerformanceComponents();
   const row = list?.rows[0] ?? null;
-  const components = list?.components ?? daily?.components ?? [];
+  const components =
+    catalog?.components?.length
+      ? catalog.components
+      : (list?.components ?? daily?.components ?? []);
   const dailyRows = daily?.rows ?? [];
 
   if (listLoading) {
@@ -141,7 +148,7 @@ export function DriverPerformanceTab({
               </p>
               <div className="flex items-center gap-2">
                 <p className="text-lg font-semibold tabular-nums">
-                  {row.overall_score}
+                  {scorePct(row.overall_score)}
                 </p>
                 <span
                   className={cn(
@@ -172,7 +179,10 @@ export function DriverPerformanceTab({
             </div>
             <Metric
               label={t("colDeliveryPct")}
-              value={`${Math.round(row.delivery_efficiency * 100)}%`}
+              value={deliveryPct(
+                row.delivery_efficiency_raw,
+                row.target_deliveries,
+              )}
               hint={tDriver("performanceDeliveriesHint", {
                 actual: row.actual_deliveries,
                 target: row.target_deliveries,

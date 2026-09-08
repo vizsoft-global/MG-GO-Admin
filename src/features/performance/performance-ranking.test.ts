@@ -161,6 +161,13 @@ describe("report rows", () => {
     assert.equal(cells[PERFORMANCE_REPORT_HEADERS.indexOf("Rank")], 42);
   });
 
+  it("a zero target is a dash, not a zero percent", () => {
+    const cells = performanceReportRow(
+      row({ target_deliveries: 0, delivery_efficiency_raw: 0 }),
+    );
+    assert.equal(cells[PERFORMANCE_REPORT_HEADERS.indexOf("Delivery %")], "—");
+  });
+
   it("percentages are whole numbers and the band is named", () => {
     const cells = performanceReportRow(
       row({
@@ -193,6 +200,25 @@ describe("report rows", () => {
       row({ exception_count: 9, penalised_exception_count: 2 }),
     );
     assert.equal(cells[PERFORMANCE_REPORT_HEADERS.indexOf("Exceptions")], 2);
+  });
+
+  it("inactive components still get a column", () => {
+    const components = [
+      { ...component("punctuality", "Shift adherence"), is_active: false },
+      component("duty_ratio", "Duty discipline"),
+    ];
+    const headers = performanceReportHeaders([], components);
+    assert.deepEqual(headers.slice(PERFORMANCE_REPORT_HEADERS.length), [
+      "Shift adherence %",
+      "Duty discipline %",
+    ]);
+    const cells = performanceReportRow(
+      row({ component_scores: { punctuality: 0.02, duty_ratio: 1 } }),
+      [],
+      components,
+    );
+    assert.equal(cells[headers.indexOf("Shift adherence %")], 2);
+    assert.equal(cells[headers.indexOf("Duty discipline %")], 100);
   });
 
   it("component columns sit after the fixed ones and before the teams", () => {

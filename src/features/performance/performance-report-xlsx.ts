@@ -120,7 +120,9 @@ export function performanceReportRow(
     row.absent_days,
     row.actual_deliveries,
     row.target_deliveries,
-    Math.round(row.delivery_efficiency_raw * 100),
+    row.target_deliveries > 0 && Number.isFinite(row.delivery_efficiency_raw)
+      ? Math.round(row.delivery_efficiency_raw * 100)
+      : "—",
     Math.round(row.utilization * 100),
     // An em dash, never 0. A component blend with nothing to measure is not a
     // driver who scored zero, and a reader sorting this column must not be told

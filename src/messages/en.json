@@ -6389,7 +6389,9 @@
         "toggleHint": "Show one column per compliance component",
         "unmeasured": "No data",
         "unmeasuredHint": "Nothing to measure in this period — the component is dropped and the rest re-weighted, not scored as zero.",
-        "hint": "Compliance is the weighted average of the components above. A component with no data is dropped and the rest re-weighted."
+        "notCounted": "Off",
+        "notCountedHint": "Inactive or weight 0 — shown for reference, not blended into compliance.",
+        "hint": "Compliance is the weighted average of the counted components. A component with no data is dropped and the rest re-weighted."
       },
       "export": "Export report",
       "settingsLink": "Settings",
@@ -6400,7 +6402,7 @@
       "rating": {
         "title": "Team rating",
         "period": "{month}",
-        "rangeScore": "{score} from {teams} teams",
+        "rangeScore": "{score}% from {teams} teams",
         "notRated": "Not rated",
         "starLabel": "{score} of 5",
         "clear": "Clear rating",
