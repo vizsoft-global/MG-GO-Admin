@@ -9,17 +9,25 @@ import {
   drawHexGrid,
   prepareCanvas,
 } from "./hex-grid-canvas";
+import {
+  ZONE_BLOCK_HEX_STYLE,
+  type ZoneBlockHexStyle,
+  zoneBlockSelectedStyle,
+} from "./zone-blocks-layer";
 
 export function ZoneBlocksLeafletLayer({
   enabled,
   resolution,
   selectedCells,
+  selectedColor,
   onHit,
   onZoomCapped,
 }: {
   enabled: boolean;
   resolution: number;
   selectedCells: readonly string[];
+  /** Draft zone colour; painted cells take it so the stroke previews the save. */
+  selectedColor?: string;
   onHit?: (lat: number, lng: number, gesture: "click" | "drag") => void;
   onZoomCapped?: (capped: boolean) => void;
 }) {
@@ -28,6 +36,7 @@ export function ZoneBlocksLeafletLayer({
   const cellsRef = useRef<string[]>([]);
   const gridVisibleRef = useRef(true);
   const selectedRef = useRef(new Set<string>());
+  const selectedStyleRef = useRef<ZoneBlockHexStyle>(ZONE_BLOCK_HEX_STYLE.selected);
   const onHitRef = useRef(onHit);
   const onZoomCappedRef = useRef(onZoomCapped);
   const resolutionRef = useRef(resolution);
@@ -99,6 +108,7 @@ export function ZoneBlocksLeafletLayer({
         selected: selectedRef.current,
         project: createProjector(map.getZoom(), nw.lat, nw.lng),
         gridVisible: gridVisibleRef.current,
+        selectedStyle: selectedStyleRef.current,
       });
     };
     redrawRef.current = redraw;
@@ -289,6 +299,15 @@ export function ZoneBlocksLeafletLayer({
     if (needsRebuild) syncViewportRef.current();
     else redrawRef.current();
   }, [enabled, selectedCells]);
+
+  // A colour change is a repaint only; the cells have not moved.
+  useEffect(() => {
+    selectedStyleRef.current = selectedColor
+      ? zoneBlockSelectedStyle(selectedColor)
+      : ZONE_BLOCK_HEX_STYLE.selected;
+    if (!enabled) return;
+    redrawRef.current();
+  }, [enabled, selectedColor]);
 
   return null;
 }

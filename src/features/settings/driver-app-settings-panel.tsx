@@ -1,14 +1,18 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { BellRing, ExternalLink, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import {
+  type DriverAppInstallStats,
+  notifyOutdatedInstalls,
   resetDriverAppSettings,
   setDriverAppLoginVerificationExemptAll,
   setDriverAppMaintenanceMode,
   updateDriverAppDeliveryProximity,
+  updateDriverAppForceUpdate,
   updateDriverAppMaintenanceMessage,
   updateDriverAppSettings,
   uploadDriverAppIcon,
@@ -16,11 +20,14 @@ import {
   uploadDriverAppSplash,
 } from "@/features/settings/driver-app-settings-actions";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { AppFormSection } from "@/components/app";
+import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { Link } from "@/i18n/navigation";
 import {
   MAX_DELIVERY_PROXIMITY_METERS,
   MIN_DELIVERY_PROXIMITY_METERS,
@@ -37,7 +44,38 @@ type DriverAppSettingsPanelProps = {
   driverAppMaintenanceMessage: string;
   driverAppLoginVerificationExemptAll: boolean;
   driverAppDeliveryProximityMeters: number;
+  driverAppForceUpdate: boolean;
+  driverAppMinVersionCode: number | null;
+  driverAppMinVersionName: string | null;
+  driverAppUpdateMessage: string | null;
+  installStats: DriverAppInstallStats;
 };
+
+const PLAY_LISTING_URL =
+  "https://play.google.com/store/apps/details?id=com.musallam_delivery.app";
+
+/**
+ * A build's newest login. Relative for the first fortnight, because "11d ago"
+ * is what decides whether a build is still in the field; older than that the
+ * date is what an operator wants to quote.
+ */
+function formatInstallLastSeen(
+  iso: string | null,
+  locale: string,
+  t: (key: string, values?: Record<string, string | number>) => string,
+): string {
+  if (!iso) return t("buildsNeverSeen");
+  const at = new Date(iso).getTime();
+  if (!Number.isFinite(at)) return t("buildsNeverSeen");
+  const days = Math.floor((Date.now() - at) / 86_400_000);
+  if (days <= 0) return t("buildsSeenToday");
+  if (days <= 14) return t("buildsSeenDaysAgo", { count: days });
+  return new Date(at).toLocaleDateString(locale === "ar" ? "ar-KW" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "2-digit",
+  });
+}
 
 function AssetUploadBlock({
   label,
@@ -121,6 +159,11 @@ export function DriverAppSettingsPanel({
   driverAppMaintenanceMessage,
   driverAppLoginVerificationExemptAll,
   driverAppDeliveryProximityMeters,
+  driverAppForceUpdate,
+  driverAppMinVersionCode,
+  driverAppMinVersionName,
+  driverAppUpdateMessage,
+  installStats,
 }: DriverAppSettingsPanelProps) {
   const t = useTranslations("pages.settings.driverApp");
   const locale = useLocale();
@@ -139,7 +182,108 @@ export function DriverAppSettingsPanel({
   const [proximityMeters, setProximityMeters] = useState(
     String(driverAppDeliveryProximityMeters),
   );
+  const [forceUpdate, setForceUpdate] = useState(driverAppForceUpdate);
+  const [minVersionCode, setMinVersionCode] = useState(
+    driverAppMinVersionCode == null ? "" : String(driverAppMinVersionCode),
+  );
+  const [minVersionName, setMinVersionName] = useState(driverAppMinVersionName ?? "");
+  const [updateMessage, setUpdateMessage] = useState(driverAppUpdateMessage ?? "");
   const [isPending, startTransition] = useTransition();
+
+  const forceUpdateArmed = forceUpdate && minVersionCode.trim() !== "";
+
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyTitle, setNotifyTitle] = useState("");
+  const [notifyBody, setNotifyBody] = useState("");
+  const [notifyPending, startNotify] = useTransition();
+
+  // Installs the typed minimum would lock out. Unknown builds count as outdated,
+  // mirroring the gate: a phone that cannot report its versionCode is refused.
+  const parsedMinCode = Number(minVersionCode.trim());
+  const thresholdCode =
+    minVersionCode.trim() !== "" && Number.isFinite(parsedMinCode) && parsedMinCode > 0
+      ? Math.trunc(parsedMinCode)
+      : null;
+  const outdatedInstalls = useMemo(() => {
+    if (thresholdCode == null) return null;
+    return installStats.versions
+      .filter((v) => v.versionCode == null || v.versionCode < thresholdCode)
+      .reduce((sum, v) => sum + v.installs, 0);
+  }, [installStats.versions, thresholdCode]);
+
+  const openNotify = () => {
+    setNotifyTitle(t("notifyOutdatedDefaultTitle"));
+    setNotifyBody(
+      updateMessage.trim() ||
+        t("notifyOutdatedDefaultBody", { version: minVersionName.trim() || minVersionCode.trim() }),
+    );
+    setNotifyOpen(true);
+  };
+
+  const submitNotify = () => {
+    if (thresholdCode == null) return;
+    startNotify(async () => {
+      const result = await notifyOutdatedInstalls({
+        belowVersionCode: thresholdCode,
+        title: notifyTitle,
+        body: notifyBody,
+      });
+      if ("error" in result) {
+        toast.error(
+          result.error === "no_outdated_installs"
+            ? t("errors.noOutdatedInstalls")
+            : result.error === "notifications_send_required"
+              ? t("errors.notificationsSendRequired")
+              : result.error === "missing_fields"
+                ? t("errors.missingFields")
+                : t("errors.notifyFailed"),
+          { description: result.errorDetail },
+        );
+        return;
+      }
+      setNotifyOpen(false);
+      toast.success(
+        t("notifyOutdatedSent", { pushed: result.pushed, recipients: result.recipients }),
+        {
+          description:
+            result.skipped > 0 || result.failed > 0
+              ? t("notifyOutdatedSentDetail", { skipped: result.skipped, failed: result.failed })
+              : undefined,
+        },
+      );
+    });
+  };
+
+  const saveForceUpdate = (enabled: boolean) => {
+    const trimmedCode = minVersionCode.trim();
+    const parsedCode = trimmedCode === "" ? null : Number(trimmedCode);
+    startTransition(async () => {
+      setError(null);
+      const result = await updateDriverAppForceUpdate(locale, {
+        enabled,
+        minVersionCode: parsedCode,
+        minVersionName: minVersionName.trim() || null,
+        message: updateMessage.trim() || null,
+      });
+      if (result.error) {
+        setError(result.error);
+        toast.error(
+          result.error === "version_code_required"
+            ? t("errors.versionCodeRequired")
+            : result.error === "invalid_version_code"
+              ? t("errors.invalidVersionCode")
+              : t("errors.saveFailed"),
+          { description: result.errorDetail },
+        );
+        return;
+      }
+      setForceUpdate(enabled);
+      toast.success(
+        enabled ? t("forceUpdateEnabled", { code: trimmedCode }) : t("forceUpdateSaved"),
+      );
+      router.refresh();
+    });
+  };
 
   const logoDisplay = logoPreview ?? driverAppLogoUrl;
   const splashDisplay = splashPreview ?? driverAppSplashUrl;
@@ -160,7 +304,13 @@ export function DriverAppSettingsPanel({
                 ? t("errors.notAuthorized")
                 : error === "invalid_proximity"
                   ? t("errors.invalidProximity")
-                  : null;
+                  : error === "version_code_required"
+                    ? t("errors.versionCodeRequired")
+                    : error === "invalid_version_code"
+                      ? t("errors.invalidVersionCode")
+                      : error === "invalid_version_name" || error === "invalid_message"
+                        ? t("errors.saveFailed")
+                        : null;
 
   return (
     <div className="space-y-4">
@@ -524,6 +674,342 @@ export function DriverAppSettingsPanel({
               </form>
             </div>
           </AppFormSection>
+
+          <AppFormSection title={t("forceUpdateTitle")} description={t("forceUpdateSubtitle")}>
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/10 p-3">
+                <div className="space-y-1">
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+                      forceUpdateArmed
+                        ? "bg-destructive/15 text-destructive"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {forceUpdateArmed
+                      ? t("forceUpdateOn", { code: minVersionCode.trim() })
+                      : t("forceUpdateOff")}
+                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    {forceUpdateArmed ? t("forceUpdateOnHint") : t("forceUpdateOffHint")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="driverAppForceUpdate" className="text-sm">
+                    {t("forceUpdateToggle")}
+                  </Label>
+                  <Switch
+                    id="driverAppForceUpdate"
+                    checked={forceUpdate}
+                    disabled={isPending}
+                    onCheckedChange={(checked) => saveForceUpdate(checked)}
+                  />
+                </div>
+              </div>
+
+              <form
+                className="space-y-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveForceUpdate(forceUpdate);
+                }}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="driverAppMinVersionCode">
+                      {t("forceUpdateMinVersionCode")}
+                      {forceUpdate ? <span className="text-destructive"> *</span> : null}
+                    </Label>
+                    <Input
+                      id="driverAppMinVersionCode"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      value={minVersionCode}
+                      onChange={(e) => setMinVersionCode(e.target.value)}
+                      disabled={isPending}
+                      placeholder="83"
+                      className="tabular-nums"
+                      required={forceUpdate}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      {t("forceUpdateMinVersionCodeHint")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="driverAppMinVersionName">
+                      {t("forceUpdateMinVersionName")}
+                    </Label>
+                    <Input
+                      id="driverAppMinVersionName"
+                      value={minVersionName}
+                      onChange={(e) => setMinVersionName(e.target.value)}
+                      disabled={isPending}
+                      placeholder="1.1.21"
+                      maxLength={32}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      {t("forceUpdateMinVersionNameHint")}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="driverAppUpdateMessage">{t("forceUpdateMessage")}</Label>
+                  <Textarea
+                    id="driverAppUpdateMessage"
+                    value={updateMessage}
+                    onChange={(e) => setUpdateMessage(e.target.value)}
+                    disabled={isPending}
+                    rows={2}
+                    maxLength={500}
+                    placeholder={t("forceUpdateMessagePlaceholder")}
+                    className="min-h-[56px] resize-none"
+                  />
+                </div>
+                <div className="rounded-lg border border-border bg-muted/10 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Smartphone className="size-4 text-muted-foreground" aria-hidden />
+                      <span className="font-medium">
+                        {installStats.loadFailed
+                          ? t("installsUnavailable")
+                          : t("installsTotal", { count: installStats.total })}
+                      </span>
+                      {thresholdCode != null && outdatedInstalls != null ? (
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium tabular-nums",
+                            outdatedInstalls > 0
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-emerald-100 text-emerald-800",
+                          )}
+                        >
+                          {t("installsOutdated", { count: outdatedInstalls, code: thresholdCode })}
+                        </span>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 cursor-pointer rounded-lg"
+                      disabled={
+                        isPending ||
+                        installStats.loadFailed ||
+                        thresholdCode == null ||
+                        !outdatedInstalls
+                      }
+                      onClick={openNotify}
+                    >
+                      <BellRing className="size-4" aria-hidden />
+                      {t("notifyOutdated")}
+                    </Button>
+                  </div>
+                  {installStats.versions.length > 0 ? (
+                    <div className="mt-2 overflow-hidden rounded-lg border border-border">
+                      <table className="w-full text-[11px] tabular-nums">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/30 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <th className="px-2 py-1 text-start">{t("buildsColBuild")}</th>
+                            <th className="px-2 py-1 text-end">{t("buildsColInstalls")}</th>
+                            <th className="px-2 py-1 text-end">{t("buildsColRecent")}</th>
+                            <th className="px-2 py-1 text-end">{t("buildsColLastSeen")}</th>
+                            <th className="px-2 py-1 text-end">{t("buildsColSentry")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {installStats.versions.map((v) => {
+                            const outdated =
+                              thresholdCode != null &&
+                              (v.versionCode == null || v.versionCode < thresholdCode);
+                            return (
+                              <tr
+                                key={v.versionCode ?? "unknown"}
+                                className="border-b border-border/60 last:border-b-0"
+                              >
+                                <td className="px-2 py-1">
+                                  {v.versionCode == null ? (
+                                    <span
+                                      className={cn(
+                                        "font-medium",
+                                        outdated ? "text-amber-800" : "text-foreground",
+                                      )}
+                                    >
+                                      {t("installsUnknownBuild")}
+                                    </span>
+                                  ) : (
+                                    <Link
+                                      href={`/driver-devices?build=${v.versionCode}`}
+                                      className={cn(
+                                        "inline-flex items-center gap-1 rounded-md px-1 py-0.5 font-medium hover:bg-primary/10",
+                                        outdated ? "text-amber-800" : "text-primary",
+                                      )}
+                                      title={v.versionName ?? undefined}
+                                    >
+                                      #{v.versionCode}
+                                      {v.versionName ? (
+                                        <span className="font-normal text-muted-foreground">
+                                          {v.versionName}
+                                        </span>
+                                      ) : null}
+                                    </Link>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1 text-end font-medium">{v.installs}</td>
+                                <td className="px-2 py-1 text-end text-muted-foreground">
+                                  {v.recent}
+                                </td>
+                                <td className="px-2 py-1 text-end text-muted-foreground">
+                                  {formatInstallLastSeen(v.lastSeenAt, locale, t)}
+                                </td>
+                                <td className="px-2 py-1 text-end">
+                                  {v.sentryEvents == null ? (
+                                    <span className="text-muted-foreground">—</span>
+                                  ) : v.sentryEvents === 0 ? (
+                                    <span className="text-muted-foreground">0</span>
+                                  ) : v.sentryUrl ? (
+                                    <a
+                                      href={v.sentryUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 font-semibold text-primary hover:bg-primary/10"
+                                    >
+                                      {v.sentryEvents}
+                                      <ExternalLink className="size-3" aria-hidden />
+                                    </a>
+                                  ) : (
+                                    <span className="font-semibold">{v.sentryEvents}</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                  <p className="mt-2 text-[10px] text-muted-foreground">{t("installsHint")}</p>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <Link
+                      href="/driver-devices"
+                      className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs text-primary hover:bg-primary/10"
+                    >
+                      {t("openDriverDevices")}
+                      <ExternalLink className="size-3" aria-hidden />
+                    </Link>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                        installStats.sentry.connected
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-border bg-muted/30 text-muted-foreground",
+                      )}
+                      title={
+                        installStats.sentry.connected
+                          ? undefined
+                          : (installStats.sentry.reason ?? undefined)
+                      }
+                    >
+                      {installStats.sentry.connected
+                        ? t("sentryConnected")
+                        : t("sentryDisconnected")}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <a
+                    href={PLAY_LISTING_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-primary underline-offset-2 hover:underline"
+                  >
+                    {t("forceUpdatePlayLink")}
+                  </a>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    disabled={isPending}
+                    className="cursor-pointer rounded-lg"
+                  >
+                    {isPending ? t("saving") : t("saveForceUpdate")}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </AppFormSection>
+
+          <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
+            <DialogContent
+              showCloseButton
+              closeOutside
+              className="w-[min(560px,96vw)] overflow-visible px-5 py-4"
+            >
+              <form
+                className="space-y-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitNotify();
+                }}
+              >
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="notifyOutdatedTitle">
+                      {t("notifyOutdatedTitleLabel")}
+                      <span className="text-destructive"> *</span>
+                    </Label>
+                    <Input
+                      id="notifyOutdatedTitle"
+                      value={notifyTitle}
+                      onChange={(e) => setNotifyTitle(e.target.value)}
+                      maxLength={120}
+                      required
+                      disabled={notifyPending}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="notifyOutdatedBody">
+                      {t("notifyOutdatedBodyLabel")}
+                      <span className="text-destructive"> *</span>
+                    </Label>
+                    <Textarea
+                      id="notifyOutdatedBody"
+                      value={notifyBody}
+                      onChange={(e) => setNotifyBody(e.target.value)}
+                      rows={3}
+                      maxLength={500}
+                      required
+                      disabled={notifyPending}
+                      className="min-h-[72px] resize-none"
+                    />
+                    <p className="text-[10px] text-muted-foreground">{t("notifyOutdatedBodyHint")}</p>
+                  </div>
+                </div>
+                <AppModalFooter
+                  title={t("notifyOutdated")}
+                  subtitle={
+                    thresholdCode != null && outdatedInstalls != null
+                      ? t("notifyOutdatedSubtitle", { count: outdatedInstalls, code: thresholdCode })
+                      : ""
+                  }
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    disabled={notifyPending}
+                    onClick={() => setNotifyOpen(false)}
+                  >
+                    {t("cancel")}
+                  </Button>
+                  <Button type="submit" className="h-9" disabled={notifyPending}>
+                    {notifyPending ? t("sending") : t("notifyOutdatedConfirm")}
+                  </Button>
+                </AppModalFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -547,6 +1033,10 @@ export function DriverAppSettingsPanel({
               setSplashPreview(null);
               setIconPreview(null);
               setMaintenanceMode(false);
+              setForceUpdate(false);
+              setMinVersionCode("");
+              setMinVersionName("");
+              setUpdateMessage("");
               setProximityMeters(
                 String(DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters),
               );

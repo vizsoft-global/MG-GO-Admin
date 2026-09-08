@@ -24,17 +24,21 @@ export const DEFAULT_ZONE_BLOCKS_STATE: ZoneBlocksState = {
 };
 
 /**
- * Emerald selection over a slate honeycomb. The unselected mesh sits at half the
+ * Selection over a slate honeycomb. The unselected mesh sits at half the
  * weight the selection does — it is scaffolding for aiming a paint stroke, not
  * content, and at full strength it reads as a texture printed over the city.
  * It must still stay non-zero: at 0.02 the grid was effectively invisible on the
  * light basemap.
+ *
+ * `selected` is the fallback when no draft colour is known; the paint tool
+ * itself uses `zoneBlockSelectedStyle(draftColor)` so the cells being painted
+ * already show the colour the zone will be saved with.
  */
 export const ZONE_BLOCK_HEX_STYLE = {
   selected: {
     fillColor: "#10b981",
     fillOpacity: 0.52,
-    strokeColor: "#059669",
+    strokeColor: "#10b981",
     strokeOpacity: 1,
     strokeWeight: 2,
   },
@@ -46,6 +50,23 @@ export const ZONE_BLOCK_HEX_STYLE = {
     strokeWeight: 1,
   },
 } as const;
+
+export type ZoneBlockHexStyle = {
+  fillColor: string;
+  fillOpacity: number;
+  strokeColor: string;
+  strokeOpacity: number;
+  strokeWeight: number;
+};
+
+/** Selected-cell style in the zone's own colour; same weights as the default. */
+export function zoneBlockSelectedStyle(color: string): ZoneBlockHexStyle {
+  return {
+    ...ZONE_BLOCK_HEX_STYLE.selected,
+    fillColor: color,
+    strokeColor: color,
+  };
+}
 
 export function resolutionForSize(size: H3BlockSize): number {
   return H3_BLOCK_RESOLUTIONS[size];

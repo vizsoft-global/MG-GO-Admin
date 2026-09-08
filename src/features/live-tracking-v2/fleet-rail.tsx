@@ -97,7 +97,7 @@ export function FleetRail({
 
   if (isCollapsed) {
     return (
-      <div className="fleet-overlay pointer-events-auto flex w-12 flex-col items-center gap-2 rounded-xl border p-1.5 shadow-sm">
+      <div className="fleet-overlay pointer-events-auto flex h-auto w-12 shrink-0 flex-col items-center gap-2 self-start rounded-xl border p-1.5 shadow-sm">
         <Button
           type="button"
           size="icon"

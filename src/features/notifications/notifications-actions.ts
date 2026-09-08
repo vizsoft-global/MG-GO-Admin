@@ -950,6 +950,87 @@ async function executeNotificationDispatch(
   };
 }
 
+/**
+ * Create and immediately dispatch a campaign to an explicit driver list. Used by
+ * /settings/app to reach installs too old to carry the Update Required screen:
+ * a push with the Play link is the only channel that works on those builds.
+ * Requires `notifications.send` — the caller's page permission is not enough to
+ * push to riders' phones.
+ */
+export async function sendDirectDriverNotification(input: {
+  driverIds: string[];
+  title: string;
+  body: string;
+  url: string;
+  category?: NotificationCategory;
+  routeName: string;
+}): Promise<NotificationDispatchResult | { error: NotificationActionError }> {
+  const session = await requireNotificationsSend();
+  if (!session) return { error: "not_authorized" };
+
+  const driverIds = [...new Set(input.driverIds.filter(Boolean))];
+  if (driverIds.length === 0) return { error: "empty_recipients" };
+  const title = input.title.trim();
+  const body = input.body.trim();
+  const url = input.url.trim();
+  if (!title || !body || !/^https?:\/\//.test(url)) return { error: "invalid_input" };
+
+  let service;
+  try {
+    service = notificationsAdminDb();
+  } catch (error) {
+    console.error("[notifications] admin client unavailable:", error);
+    return { error: "dispatch_failed" };
+  }
+
+  const targetSpec: TargetSpec = { mode: "custom", driver_ids: driverIds };
+  const nowIso = new Date().toISOString();
+  const { data, error } = await service
+    .from("notification_campaigns")
+    .insert({
+      title,
+      body,
+      category: input.category ?? "system_alert",
+      priority: "normal",
+      template_id: null,
+      target_spec: targetSpec,
+      exclusion_spec: {},
+      import_spec: {},
+      track_engagement: true,
+      action_type: "open_url",
+      action_params: { url },
+      payload_version: PAYLOAD_VERSION,
+      media: [],
+      schedule_spec: { mode: "now" },
+      timezone: KUWAIT_TZ,
+      requires_approval: false,
+      approved_by: session.id,
+      approved_at: nowIso,
+      estimated_audience_count: driverIds.length,
+      screenshot_restricted_override: false,
+      screenshot_restricted: false,
+      status: "queued",
+      created_by: session.id,
+      updated_by: session.id,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("[notifications] direct campaign insert failed:", error?.message);
+    return { error: "save_failed" };
+  }
+
+  await logAdminMutation({
+    action: "create",
+    entityType: "notification_campaign",
+    entityId: data.id,
+    routeName: input.routeName,
+    context: { campaignId: data.id, recipients: driverIds.length, direct: true },
+  });
+
+  return executeNotificationDispatch(data.id, session.id);
+}
+
 export async function cloneNotificationCampaign(
   campaignId: string,
 ): Promise<{ id: string } | { error: NotificationActionError }> {

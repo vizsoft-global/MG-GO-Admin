@@ -410,7 +410,12 @@ export function FleetCanvas() {
             per side instead of one padding sized for the taller of the two. */}
         <div className="relative z-10 flex min-h-0 min-w-0 flex-1 items-stretch justify-between gap-2">
           <div className="flex min-h-0 flex-col gap-2">
-            <div className="flex min-h-0 flex-1 items-stretch">
+            <div
+              className={cn(
+                "flex min-h-0",
+                railCollapsed ? "shrink-0 items-start" : "flex-1 items-stretch",
+              )}
+            >
               <FleetRail
                 collapsed={railCollapsed}
                 onCollapsedChange={(collapsed) => {
@@ -426,7 +431,14 @@ export function FleetCanvas() {
           </div>
 
           <div className="flex min-h-0 flex-col items-end gap-2">
-            <div className="flex h-full min-h-0 flex-1 items-stretch">
+            <div
+              className={cn(
+                "flex min-h-0",
+                insightsCollapsed
+                  ? "shrink-0 items-start"
+                  : "h-full flex-1 items-stretch",
+              )}
+            >
               <FleetInsightsPanel
                 collapsed={insightsCollapsed}
                 onCollapsedChange={(collapsed) => {

@@ -54,11 +54,8 @@ import {
 import { FleetPulseTracker, pulseEligible, pulseRing, selectPulseDrivers } from "./fleet-pulse";
 import type { FleetRouteGeometry } from "./fleet-route";
 import { fleetZoneRing } from "./fleet-zones";
-import {
-  fleetZoneBlockOutlines,
-  type ZoneBlockOutline,
-} from "./fleet-zone-blocks";
 import { trailSpanMeters, type FleetTrail } from "./fleet-trail";
+import { buildZoneMapStyles } from "@/features/zones/zone-map-google-styles";
 import {
   useFleetFrame,
   useFleetSnapshot,
@@ -453,6 +450,11 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         disableDefaultUI: true,
         clickableIcons: false,
         gestureHandling: "greedy",
+        // Place, road and POI names compete with the pins on a fleet map, so
+        // the basemap carries geometry only. JSON styles are honoured by the
+        // raster basemap; a cloud-styled vector map (`mapId`) ignores them and
+        // must hide labels in its own cloud style.
+        styles: buildZoneMapStyles(true),
         // A vector map lets deck.gl share the map's WebGL context instead of
         // compositing a second canvas on top of raster tiles.
         ...(mapId ? { mapId } : {}),
@@ -554,20 +556,6 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     [snapshot.zones],
   );
 
-  /**
-   * Hex outlines for zones that were painted out of blocks, so a zone reads as
-   * the blocks it is made of rather than one flat shape. Each entry carries the
-   * zoom below which its hexes are too small to be worth drawing — computed from
-   * the zone's own latitude once, so the per-frame test is a comparison.
-   */
-  const zoneBlockData = useMemo(
-    () =>
-      fleetZoneBlockOutlines(snapshot.zones, (color) =>
-        hexToRgb(color, ZONE_FALLBACK_RGB),
-      ),
-    [snapshot.zones],
-  );
-
   const buildLayers = useCallback((): DeckLayer[] => {
     const classes = layersRef.current;
     if (!classes) return [];
@@ -592,34 +580,16 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           stroked: true,
           filled: true,
           getPolygon: (d) => d.ring,
-          // 56/255 ≈ the 0.22 zone fill opacity the rulebook fixes for zone overlays.
-          getFillColor: (d) => [d.rgb[0], d.rgb[1], d.rgb[2], 56],
+          // One flat region per zone. The H3 cells a zone was painted from are
+          // deliberately not redrawn here: on a fleet map the honeycomb competes
+          // with the drivers, and the union ring already is the zone.
+          // 77/255 ≈ 0.30 fill.
+          getFillColor: (d) => [d.rgb[0], d.rgb[1], d.rgb[2], 77],
           getLineColor: (d) => [d.rgb[0], d.rgb[1], d.rgb[2], 200],
           getLineWidth: 2,
           lineWidthUnits: "pixels",
         }),
       );
-
-      // The blocks a zone was painted from, drawn over its fill. Outline only —
-      // a second fill would darken the zone and say nothing extra. Each size
-      // group drops out once its hexes shrink below legibility.
-      const zoom = mapRef.current?.getZoom() ?? DEFAULT_ZOOM;
-      for (const group of zoneBlockData) {
-        if (zoom < group.minZoom || group.data.length === 0) continue;
-        layers.push(
-          new Polygon<ZoneBlockOutline>({
-            id: `fleet-zone-blocks-${group.size}`,
-            data: group.data,
-            pickable: false,
-            stroked: true,
-            filled: false,
-            getPolygon: (d) => d.polygon,
-            getLineColor: (d) => [d.rgb[0], d.rgb[1], d.rgb[2], 120],
-            getLineWidth: 1,
-            lineWidthUnits: "pixels",
-          }),
-        );
-      }
     }
 
     if (routeGeometry && routeGeometry.segments.length > 0) {
@@ -917,7 +887,6 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     showZones,
     store,
     zoneData,
-    zoneBlockData,
   ]);
 
   // ---------------------------------------------------------------------------

@@ -142,6 +142,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "driver_groups.view",
   },
   {
+    id: "driver-devices",
+    defaultLabel: "Driver devices",
+    defaultIcon: "Smartphone",
+    href: "/driver-devices",
+    defaultGroup: "Operations",
+    defaultOrder: 0.7,
+    permission: "driver_devices.view",
+  },
+  {
     id: "live-tracking",
     defaultLabel: "Live tracking",
     defaultIcon: "Radar",
@@ -473,6 +482,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   dashboard: "dashboard",
   drivers: "drivers",
   "driver-groups": "driverGroups",
+  "driver-devices": "driverDevices",
   "live-tracking": "liveTracking",
   "live-tracking-v2": "liveTrackingV2",
   partners: "partners",
