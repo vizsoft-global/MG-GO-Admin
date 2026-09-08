@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,12 @@ export function DriverGroupsPageShell() {
   const auth = useAuth();
   const canManage = auth.can("driver_groups.manage");
   const { data: groups = [], isLoading } = useDriverGroups();
+  const [search, setSearch] = useState("");
+  const visible = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return groups;
+    return groups.filter((g) => g.name.toLowerCase().includes(term));
+  }, [groups, search]);
 
   return (
     <AppPage>
@@ -45,10 +53,20 @@ export function DriverGroupsPageShell() {
         }
       />
       <AppListCard title={t("listTitle")}>
+        <div className="p-4 pb-0">
+          <Input
+            className="h-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("listSearchPlaceholder")}
+          />
+        </div>
         {isLoading ? (
           <p className="p-4 text-sm text-muted-foreground">{t("loading")}</p>
         ) : groups.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
+        ) : visible.length === 0 ? (
+          <AppEmptyState title={t("listSearchEmpty")} description={t("listSearchEmptyHint")} />
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -60,7 +78,7 @@ export function DriverGroupsPageShell() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {groups.map((group) => (
+                {visible.map((group) => (
                   <TableRow key={group.id}>
                     <TableCell>
                       <Link

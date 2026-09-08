@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -98,57 +98,6 @@ export type Database = {
           user_agent?: string | null
         }
         Relationships: []
-      }
-      driver_change_events: {
-        Row: {
-          actor_id: string
-          actor_name: string
-          changes: Json
-          context: Json
-          created_at: string
-          driver_id: string | null
-          id: string
-          intake_id: string
-          source: string
-        }
-        Insert: {
-          actor_id: string
-          actor_name: string
-          changes?: Json
-          context?: Json
-          created_at?: string
-          driver_id?: string | null
-          id?: string
-          intake_id: string
-          source: string
-        }
-        Update: {
-          actor_id?: string
-          actor_name?: string
-          changes?: Json
-          context?: Json
-          created_at?: string
-          driver_id?: string | null
-          id?: string
-          intake_id?: string
-          source?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "driver_change_events_intake_id_fkey"
-            columns: ["intake_id"]
-            isOneToOne: false
-            referencedRelation: "driver_intakes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "driver_change_events_driver_id_fkey"
-            columns: ["driver_id"]
-            isOneToOne: false
-            referencedRelation: "drivers"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       admin_allowlist: {
         Row: {
@@ -1235,6 +1184,8 @@ export type Database = {
       delivery_rules: {
         Row: {
           created_at: string
+          dpd_period: Database["public"]["Enums"]["incentive_period"] | null
+          dpd_target: number | null
           end_date: string
           id: string
           must_match_driver_zone: boolean
@@ -1252,6 +1203,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dpd_period?: Database["public"]["Enums"]["incentive_period"] | null
+          dpd_target?: number | null
           end_date: string
           id?: string
           must_match_driver_zone?: boolean
@@ -1269,6 +1222,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dpd_period?: Database["public"]["Enums"]["incentive_period"] | null
+          dpd_target?: number | null
           end_date?: string
           id?: string
           must_match_driver_zone?: boolean
@@ -1714,6 +1669,64 @@ export type Database = {
           },
         ]
       }
+      driver_change_events: {
+        Row: {
+          actor_id: string
+          actor_name: string
+          changes: Json
+          context: Json
+          created_at: string
+          driver_id: string | null
+          id: string
+          intake_id: string
+          source: string
+        }
+        Insert: {
+          actor_id: string
+          actor_name: string
+          changes?: Json
+          context?: Json
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          intake_id: string
+          source: string
+        }
+        Update: {
+          actor_id?: string
+          actor_name?: string
+          changes?: Json
+          context?: Json
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          intake_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_change_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_change_events_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_change_events_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "driver_intakes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_daily_shifts: {
         Row: {
           created_at: string
@@ -1781,6 +1794,8 @@ export type Database = {
           created_at: string
           device_id: string
           device_manufacturer: string | null
+          device_meta: Json | null
+          device_meta_at: string | null
           device_model: string | null
           driver_id: string
           first_seen_at: string
@@ -1800,6 +1815,8 @@ export type Database = {
           created_at?: string
           device_id: string
           device_manufacturer?: string | null
+          device_meta?: Json | null
+          device_meta_at?: string | null
           device_model?: string | null
           driver_id: string
           first_seen_at?: string
@@ -1819,6 +1836,8 @@ export type Database = {
           created_at?: string
           device_id?: string
           device_manufacturer?: string | null
+          device_meta?: Json | null
+          device_meta_at?: string | null
           device_model?: string | null
           driver_id?: string
           first_seen_at?: string
@@ -3183,6 +3202,9 @@ export type Database = {
           custom_fields: Json
           driver_code: string
           employee_id: string
+          force_app_update_at: string | null
+          force_app_update_by: string | null
+          force_app_update_min_code: number | null
           id: string
           is_blocked: boolean
           is_on_duty: boolean
@@ -3223,6 +3245,9 @@ export type Database = {
           custom_fields?: Json
           driver_code: string
           employee_id: string
+          force_app_update_at?: string | null
+          force_app_update_by?: string | null
+          force_app_update_min_code?: number | null
           id: string
           is_blocked?: boolean
           is_on_duty?: boolean
@@ -3263,6 +3288,9 @@ export type Database = {
           custom_fields?: Json
           driver_code?: string
           employee_id?: string
+          force_app_update_at?: string | null
+          force_app_update_by?: string | null
+          force_app_update_min_code?: number | null
           id?: string
           is_blocked?: boolean
           is_on_duty?: boolean
@@ -3279,6 +3307,13 @@ export type Database = {
           zone_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "drivers_force_app_update_by_fkey"
+            columns: ["force_app_update_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "drivers_id_fkey"
             columns: ["id"]
@@ -6980,6 +7015,7 @@ export type Database = {
         }
         Returns: string
       }
+      _device_meta_sanitize: { Args: { p_meta: Json }; Returns: Json }
       _driver_assert_active_on_duty: {
         Args: { p_uid: string }
         Returns: {
@@ -7007,6 +7043,9 @@ export type Database = {
           custom_fields: Json
           driver_code: string
           employee_id: string
+          force_app_update_at: string | null
+          force_app_update_by: string | null
+          force_app_update_min_code: number | null
           id: string
           is_blocked: boolean
           is_on_duty: boolean
@@ -7275,26 +7314,28 @@ export type Database = {
         Args: { p_id: string }
         Returns: Json
       }
+      admin_dpd_efficiency_snapshot: {
+        Args: {
+          p_from: string
+          p_partner_id?: string
+          p_restaurant_id?: string
+          p_to: string
+          p_zone_id?: string
+        }
+        Returns: Json
+      }
       admin_dpd_live_snapshot: { Args: { p_date?: string }; Returns: Json }
       admin_driver_app_install_versions: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
+          app_version_code: number
+          app_version_name: string
           driver_id: string
-          app_version_code: number | null
-          app_version_name: string | null
-          last_seen_at: string | null
+          last_seen_at: string
         }[]
       }
       admin_driver_device_overview: {
         Args: { p_driver_id: string; p_history_limit?: number }
-        Returns: Json
-      }
-      admin_list_driver_devices: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
-      admin_set_driver_force_update: {
-        Args: { p_driver_ids: string[]; p_min_code: number; p_enabled: boolean }
         Returns: Json
       }
       admin_driver_performance_daily: {
@@ -7324,6 +7365,15 @@ export type Database = {
         Args: { p_date: string; p_driver_id: string }
         Returns: Json
       }
+      admin_incentive_daily_report: {
+        Args: {
+          p_driver_id?: string
+          p_from: string
+          p_restaurant_id?: string
+          p_to: string
+        }
+        Returns: Json
+      }
       admin_ingest_driver_positions: { Args: { p_events: Json }; Returns: Json }
       admin_list_attendance_daily: {
         Args: {
@@ -7351,6 +7401,7 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_list_driver_devices: { Args: never; Returns: Json }
       admin_list_driver_performance: {
         Args: {
           p_driver_id?: string
@@ -7479,6 +7530,10 @@ export type Database = {
         Returns: Json
       }
       admin_run_request_sla_sweep: { Args: never; Returns: number }
+      admin_set_driver_force_update: {
+        Args: { p_driver_ids: string[]; p_enabled: boolean; p_min_code: number }
+        Returns: Json
+      }
       admin_set_driver_performance_rating_note: {
         Args: {
           p_comment: string
@@ -7642,7 +7697,11 @@ export type Database = {
         Returns: string
       }
       driver_acknowledge_request: {
-        Args: { p_attachment_keys?: string[]; p_note?: string; p_request_id: string }
+        Args: {
+          p_attachment_keys?: string[]
+          p_note?: string
+          p_request_id: string
+        }
         Returns: Json
       }
       driver_app_lookup_by_passcode: {
@@ -7999,6 +8058,10 @@ export type Database = {
         Args: { p_device_id: string }
         Returns: undefined
       }
+      driver_report_device_meta: {
+        Args: { p_device_id: string; p_meta: Json }
+        Returns: Json
+      }
       driver_report_location: {
         Args: {
           p_accuracy_meters?: number
@@ -8277,18 +8340,36 @@ export type Database = {
         Args: { p_full_name: string }
         Returns: Json
       }
-      report_delivery_orders: {
-        Args: { p_from: string; p_from_time?: string; p_to: string; p_to_time?: string }
-        Returns: {
-          delivery_count: number
-          driver_code: string
-          driver_id: string
-          employee_id: string
-          full_name: string
-          shift_date: string
-          store_name: string
-        }[]
-      }
+      report_delivery_orders:
+        | {
+            Args: { p_from: string; p_to: string }
+            Returns: {
+              delivery_count: number
+              driver_code: string
+              driver_id: string
+              employee_id: string
+              full_name: string
+              shift_date: string
+              store_name: string
+            }[]
+          }
+        | {
+            Args: {
+              p_from: string
+              p_from_time?: string
+              p_to: string
+              p_to_time?: string
+            }
+            Returns: {
+              delivery_count: number
+              driver_code: string
+              driver_id: string
+              employee_id: string
+              full_name: string
+              shift_date: string
+              store_name: string
+            }[]
+          }
       resolve_delivery_sla_minutes: {
         Args: { p_partner_id: string; p_zone_id: string }
         Returns: number
@@ -8536,12 +8617,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -8565,11 +8646,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -8590,11 +8671,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -8615,11 +8696,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -8632,11 +8713,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

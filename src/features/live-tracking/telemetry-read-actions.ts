@@ -86,7 +86,7 @@ const SELECT_COLUMNS = `
   network_state,
   context,
   context_stripped_keys,
-  drivers ( driver_code, profiles ( full_name ) )
+  drivers ( driver_code, profiles!drivers_id_fkey ( full_name ) )
 `;
 
 type RawTelemetryRow = {

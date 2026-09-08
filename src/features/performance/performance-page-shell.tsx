@@ -29,6 +29,7 @@ import {
 } from "./performance-formulas";
 import { componentLabel } from "./performance-component-breakdown";
 import { PerformanceAnalysisPanel } from "./performance-analysis-panel";
+import { PerformanceDpdPanel } from "./performance-dpd-panel";
 import { PerformanceDrilldownSheet } from "./performance-drilldown-sheet";
 import {
   DEFAULT_PERFORMANCE_FILTERS,
@@ -142,6 +143,7 @@ export function PerformancePageShell() {
     { id: "driver", label: t("colDriver"), className: "min-w-[160px]" },
     { id: "partner", label: t("colPartner") },
     { id: "zone", label: t("colZone") },
+    { id: "restaurant", label: t("colRestaurant") },
     { id: "deliveries", label: t("colDeliveries"), className: "text-end" },
     { id: "deliveryPct", label: t("colDeliveryPct"), className: "text-end" },
     { id: "utilization", label: t("colUtilization"), className: "text-end" },
@@ -189,6 +191,7 @@ export function PerformancePageShell() {
         items={[
           { id: "period", label: t("tabPeriod") },
           { id: "live", label: t("tabLive") },
+          { id: "dpd", label: t("tabDpd") },
           ...(canAnalyze
             ? [{ id: "analysis", label: t("tabAnalysis") }]
             : []),
@@ -202,6 +205,8 @@ export function PerformancePageShell() {
         <PerformanceLivePanel />
       ) : tab === "analysis" ? (
         <PerformanceAnalysisPanel />
+      ) : tab === "dpd" ? (
+        <PerformanceDpdPanel />
       ) : (
         <>
           <KpiGrid
@@ -366,6 +371,9 @@ export function PerformancePageShell() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {row.zone_name ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {row.restaurant_name ?? "—"}
                       </TableCell>
                       <TableCell className="text-end tabular-nums text-sm">
                         {row.actual_deliveries}/{row.target_deliveries}

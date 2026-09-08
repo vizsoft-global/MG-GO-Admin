@@ -45,7 +45,7 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
     supabase.from("vehicle_types").select("key, label_en, label_ar"),
     supabase
       .from("drivers")
-      .select("id, driver_code, vehicle_id, is_on_duty, profiles(full_name)")
+      .select("id, driver_code, vehicle_id, is_on_duty, profiles!drivers_id_fkey(full_name)")
       .not("vehicle_id", "is", null)
       .is("archived_at", null),
   ]);

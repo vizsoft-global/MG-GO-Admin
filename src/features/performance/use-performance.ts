@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import {
   clearDriverPerformanceRating,
   deletePerformanceRatingCriterion,
+  fetchDpdEfficiencySnapshot,
   fetchDpdLiveSnapshot,
   fetchDriverPerformanceDetail,
   fetchDriverPerformanceList,
@@ -64,6 +65,23 @@ export function useRecentDeliveriesFeed(
     queryFn: () => fetchRecentDeliveriesFeed(limit),
     enabled: options?.enabled ?? true,
     refetchInterval: options?.refetchInterval ?? 30_000,
+  });
+}
+
+export function useDpdEfficiencySnapshot(
+  input: {
+    from: string;
+    to: string;
+    restaurantId?: string;
+    zoneId?: string;
+    partnerId?: string;
+  },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.dpdEfficiency(input),
+    queryFn: () => fetchDpdEfficiencySnapshot(input),
+    enabled,
   });
 }
 

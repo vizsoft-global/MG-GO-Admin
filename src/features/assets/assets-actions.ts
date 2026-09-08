@@ -253,7 +253,7 @@ async function hydrateAssignments(
     driverIds.length
       ? supabase
           .from("drivers")
-          .select("id, driver_code, profiles(full_name), partners(name)")
+          .select("id, driver_code, profiles!drivers_id_fkey(full_name), partners(name)")
           .in("id", driverIds)
       : Promise.resolve({ data: [] }),
     staffIds.length

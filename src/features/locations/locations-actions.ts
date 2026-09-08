@@ -129,7 +129,7 @@ export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> 
         is_blocked,
         vehicle_type_key,
         vehicles ( vehicle_type_key ),
-        profiles ( full_name ),
+        profiles!drivers_id_fkey ( full_name ),
         driver_restaurants (
           restaurants ( name )
         )

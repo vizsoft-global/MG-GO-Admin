@@ -5,6 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
+import { searchActiveDrivers } from "@/features/drivers/search-active-drivers";
+import {
+  decideImportRowMatch,
+  lookupToImportMatch,
+} from "@/features/drivers/resolve-import-row";
 import type {
   DriverGroupDetail,
   DriverGroupMemberOption,
@@ -61,9 +66,29 @@ export async function getDriverGroup(id: string): Promise<DriverGroupDetail | nu
     .select("driver_id")
     .eq("group_id", id);
 
+  const member_ids = (members ?? []).map((m: any) => m.driver_id as string);
+  const memberRows =
+    member_ids.length === 0
+      ? []
+      : (
+          await supabase
+            .from("drivers")
+            .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name)")
+            .in("id", member_ids)
+        ).data ?? [];
+
   return {
     ...(group as DriverGroupRow),
-    member_ids: (members ?? []).map((m: any) => m.driver_id),
+    member_ids,
+    members: memberRows.map((d: any) => {
+      const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
+      return {
+        id: d.id,
+        driver_code: d.driver_code,
+        employee_id: d.employee_id ?? "",
+        full_name: profile?.full_name?.trim() || "Driver",
+      };
+    }),
   };
 }
 
@@ -91,33 +116,7 @@ export async function searchDriversForGroup(
 ): Promise<DriverGroupMemberOption[]> {
   await requireDriverGroupsView();
   const supabase = (await createClient()) as any;
-  const term = query.trim();
-  if (!term) return [];
-
-  let q = supabase
-    .from("drivers")
-    .select("id, driver_code, employee_id, profiles(full_name)")
-    .is("archived_at", null)
-    .limit(limit);
-
-  if (/^\d+$/.test(term)) {
-    q = q.or(`employee_id.eq.${term},driver_code.ilike.%${term}%`);
-  } else {
-    q = q.or(`driver_code.ilike.%${term}%,employee_id.ilike.%${term}%`);
-  }
-
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-
-  return (data ?? []).map((d: any) => {
-    const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
-    return {
-      id: d.id,
-      driver_code: d.driver_code,
-      employee_id: d.employee_id ?? "",
-      full_name: profile?.full_name?.trim() || "Driver",
-    };
-  });
+  return searchActiveDrivers(supabase, query, limit);
 }
 
 export async function resolveDriversByEmployeeIds(
@@ -128,7 +127,7 @@ export async function resolveDriversByEmployeeIds(
     driver_id: string | null;
     driver_code: string | null;
     full_name: string | null;
-    error: "not_found" | "blocked" | null;
+    error: "not_found" | "blocked" | "archived" | null;
   }>
 > {
   await requireDriverGroupsView();
@@ -245,4 +244,127 @@ async function syncGroupMembers(
   await supabase.from("driver_group_members").insert(
     unique.map((driver_id) => ({ group_id: groupId, driver_id })),
   );
+}
+
+export type GroupImportPreviewRow = {
+  row_number: number;
+  employee_id: string;
+  driver_code: string;
+  full_name: string | null;
+  status: "ok" | "unknown_id" | "blocked" | "archived" | "ambiguous" | "empty" | "already_in_group" | "duplicate";
+};
+
+export async function previewGroupMemberImport(
+  groupId: string,
+  rows: Array<{ employee_id?: string; driver_code?: string }>,
+): Promise<GroupImportPreviewRow[]> {
+  await requireDriverGroupsView();
+  const supabase = (await createClient()) as any;
+  const { data: existing } = await supabase
+    .from("driver_group_members")
+    .select("driver_id")
+    .eq("group_id", groupId);
+  const existingIds = new Set((existing ?? []).map((m: { driver_id: string }) => m.driver_id));
+
+  const lookups = [
+    ...new Set(
+      rows.flatMap((row) =>
+        [row.employee_id, row.driver_code].map((v) => v?.trim()).filter(Boolean),
+      ),
+    ),
+  ] as string[];
+  const resolved = await resolveDriversByLookupIds(supabase, lookups);
+  const byLookup = new Map(resolved.map((r) => [r.lookup_id, r]));
+  const seenDrivers = new Set<string>();
+
+  return rows.map((row, index) => {
+    const employee_id = row.employee_id?.trim() ?? "";
+    const driver_code = row.driver_code?.trim() ?? "";
+    const toMatch = (r: (typeof resolved)[number] | undefined) =>
+      r ? lookupToImportMatch(r) : null;
+    const decided = decideImportRowMatch({
+      employeeId: employee_id,
+      driverCode: driver_code,
+      byEmployee: toMatch(byLookup.get(employee_id)),
+      byCode: toMatch(byLookup.get(driver_code)),
+    });
+    let status: GroupImportPreviewRow["status"] = decided.status;
+    if (status === "ok" && decided.driver) {
+      if (existingIds.has(decided.driver.driver_id)) status = "already_in_group";
+      else if (seenDrivers.has(decided.driver.driver_id)) status = "duplicate";
+      else seenDrivers.add(decided.driver.driver_id);
+    }
+    return {
+      row_number: index + 1,
+      employee_id,
+      driver_code,
+      full_name: decided.driver?.full_name ?? null,
+      status,
+    };
+  });
+}
+
+export async function applyGroupMemberImport(
+  groupId: string,
+  rows: Array<{ employee_id?: string; driver_code?: string }>,
+): Promise<{ added: number; rejected: number } | { error: string }> {
+  const session = await requireDriverGroupsManage();
+  if (!session) return { error: "not_authorized" };
+
+  const preview = await previewGroupMemberImport(groupId, rows);
+  const supabase = (await createClient()) as any;
+  const { data: existing } = await supabase
+    .from("driver_group_members")
+    .select("driver_id")
+    .eq("group_id", groupId);
+  const existingIds = new Set((existing ?? []).map((m: { driver_id: string }) => m.driver_id));
+
+  const lookups = [
+    ...new Set(
+      rows.flatMap((row) =>
+        [row.employee_id, row.driver_code].map((v) => v?.trim()).filter(Boolean),
+      ),
+    ),
+  ] as string[];
+  const resolved = await resolveDriversByLookupIds(supabase, lookups);
+  const byLookup = new Map(resolved.map((r) => [r.lookup_id, r]));
+  const toAdd: string[] = [];
+  for (const row of rows) {
+    const decided = decideImportRowMatch({
+      employeeId: row.employee_id,
+      driverCode: row.driver_code,
+      byEmployee: (() => {
+        const r = byLookup.get(row.employee_id?.trim() ?? "");
+        return r ? lookupToImportMatch(r) : null;
+      })(),
+      byCode: (() => {
+        const r = byLookup.get(row.driver_code?.trim() ?? "");
+        return r ? lookupToImportMatch(r) : null;
+      })(),
+    });
+    if (decided.status !== "ok" || !decided.driver) continue;
+    if (existingIds.has(decided.driver.driver_id)) continue;
+    if (toAdd.includes(decided.driver.driver_id)) continue;
+    toAdd.push(decided.driver.driver_id);
+  }
+
+  if (toAdd.length > 0) {
+    const { error } = await supabase.from("driver_group_members").insert(
+      toAdd.map((driver_id) => ({ group_id: groupId, driver_id })),
+    );
+    if (error) return { error: "save_failed" };
+  }
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "driver_group",
+    entityId: groupId,
+    routeName: "drivers/groups",
+    context: { added: toAdd.length, previewed: preview.length },
+  });
+
+  return {
+    added: toAdd.length,
+    rejected: preview.filter((r) => r.status !== "ok").length,
+  };
 }

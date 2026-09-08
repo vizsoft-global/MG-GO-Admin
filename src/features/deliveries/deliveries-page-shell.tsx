@@ -241,13 +241,18 @@ function DeliveriesPageContent() {
   const {
     data,
     isLoading,
+    isError,
     refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useDeliveriesInfinite(filter);
 
-  const { data: kpiCounts } = useDeliveriesKpis();
+  const {
+    data: kpiCounts,
+    isError: kpiError,
+    refetch: refetchKpis,
+  } = useDeliveriesKpis();
   const { data: filterOptions } = useDeliveryFilterOptions();
 
   const deliveries = useMemo(
@@ -461,38 +466,49 @@ function DeliveriesPageContent() {
   }, [filterOptions, t]);
 
   const kpis = useMemo(() => {
-    const counts = kpiCounts ?? {
-      total: 0,
-      active: 0,
-      verified: 0,
-      pending: 0,
-      rejected: 0,
-      cancelled: 0,
-    };
+    const dash = kpiError || !kpiCounts;
+    const counts = kpiCounts;
+    const valueOf = (n: number | undefined) => (dash ? "—" : (n ?? 0));
     return [
-      { label: t("kpiTotal"), value: counts.total, icon: Package, accent: "primary" as const },
-      { label: t("kpiActive"), value: counts.active, icon: Activity, accent: "primary" as const },
+      {
+        label: t("kpiTotal"),
+        value: valueOf(counts?.total),
+        icon: Package,
+        accent: "primary" as const,
+        caption: t("kpiAllTime"),
+      },
+      {
+        label: t("kpiActive"),
+        value: valueOf(counts?.active),
+        icon: Activity,
+        accent: "primary" as const,
+      },
       {
         label: t("kpiVerified"),
-        value: counts.verified,
+        value: valueOf(counts?.verified),
         icon: CheckCircle2,
         accent: "success" as const,
       },
       {
         label: t("kpiPending"),
-        value: counts.pending,
+        value: valueOf(counts?.pending),
         icon: Clock,
-        accent: counts.pending > 0 ? ("warning" as const) : ("default" as const),
+        accent: !dash && (counts?.pending ?? 0) > 0 ? ("warning" as const) : ("default" as const),
       },
       {
         label: t("kpiRejected"),
-        value: counts.rejected,
+        value: valueOf(counts?.rejected),
         icon: XCircle,
-        accent: counts.rejected > 0 ? ("danger" as const) : ("default" as const),
+        accent: !dash && (counts?.rejected ?? 0) > 0 ? ("danger" as const) : ("default" as const),
       },
-      { label: t("kpiCancelled"), value: counts.cancelled, icon: Ban, accent: "default" as const },
+      {
+        label: t("kpiCancelled"),
+        value: valueOf(counts?.cancelled),
+        icon: Ban,
+        accent: "default" as const,
+      },
     ];
-  }, [kpiCounts, t]);
+  }, [kpiCounts, kpiError, t]);
 
   const cancelReasonSelectItems = useMemo(
     () => [
@@ -556,8 +572,8 @@ function DeliveriesPageContent() {
     debouncedSearch.length > 0;
 
   const showEmptySearch =
-    !isLoading && visible.length === 0 && hasFiltersOrSearch;
-  const showEmptyAll = !isLoading && visible.length === 0 && !hasFiltersOrSearch;
+    !isLoading && !isError && visible.length === 0 && hasFiltersOrSearch;
+  const showEmptyAll = !isLoading && !isError && visible.length === 0 && !hasFiltersOrSearch;
 
   const columnVisibilityOptions = useMemo(
     () => [
@@ -635,7 +651,22 @@ function DeliveriesPageContent() {
 
   return (
     <AppPage>
-      <KpiGrid items={kpis} />
+      <div className="flex flex-col gap-2">
+        <KpiGrid items={kpis} />
+        {kpiError ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[10px] text-muted-foreground">{t("kpiErrorHint")}</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 cursor-pointer"
+              onClick={() => void refetchKpis()}
+            >
+              {t("listRetry")}
+            </Button>
+          </div>
+        ) : null}
+      </div>
 
       <AppListCard
         toolbar={
@@ -839,6 +870,19 @@ function DeliveriesPageContent() {
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : isError ? (
+          <div className="px-6 py-12 text-center">
+            <p className="text-sm font-medium text-foreground">{t("listErrorTitle")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("listErrorHint")}</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 h-9 cursor-pointer"
+              onClick={() => void refetch()}
+            >
+              {t("listRetry")}
+            </Button>
           </div>
         ) : showEmptyAll ? (
           <div className="px-6 py-12 text-center">

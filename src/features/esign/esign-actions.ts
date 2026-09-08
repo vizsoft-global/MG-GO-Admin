@@ -134,7 +134,7 @@ export async function fetchEsignRequestDetail(
     .select(
       `
       *,
-      drivers ( driver_code, profiles ( full_name ) ),
+      drivers ( driver_code, profiles!drivers_id_fkey ( full_name ) ),
       esign_categories ( label_en )
     `,
     )
@@ -469,7 +469,7 @@ export async function fetchEsignDriverOptions(): Promise<{
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("drivers")
-    .select("id, driver_code, employee_id, profiles(full_name)")
+    .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name)")
     .eq("status", "active")
     .is("archived_at", null)
     .order("driver_code");

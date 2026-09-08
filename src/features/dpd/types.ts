@@ -47,6 +47,8 @@ export type DeliveryRuleRow = {
   start_date: string;
   end_date: string;
   priority: number;
+  dpd_target: number | null;
+  dpd_period: IncentivePeriod | null;
 };
 
 export type IncentiveRuleTierRow = {

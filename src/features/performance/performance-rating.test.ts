@@ -41,6 +41,7 @@ function row(overrides: Partial<PerformanceDriverRow> = {}): PerformanceDriverRo
     partner_name: null,
     zone_id: null,
     zone_name: null,
+    restaurant_name: null,
     is_on_duty: false,
     worked_days: 5,
     leave_days: 1,

@@ -177,7 +177,6 @@ async function loadAppSettingsRow(): Promise<{
         .eq("id", 1)
         .maybeSingle());
     }
-
     if (!error && data) return data;
   } catch {
     /* fall through to service role */

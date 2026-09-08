@@ -43,6 +43,9 @@ import {
   type PerformanceTrendGroup,
   type PerformanceTrendTotals,
   type RecentDeliveryFeedItem,
+  type DpdEfficiencyGroup,
+  type DpdEfficiencyRider,
+  type DpdEfficiencySnapshot,
 } from "./performance-types";
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -180,6 +183,8 @@ function parseRow(raw: Record<string, unknown>): PerformanceDriverRow {
     partner_name: raw.partner_name != null ? String(raw.partner_name) : null,
     zone_id: raw.zone_id != null ? String(raw.zone_id) : null,
     zone_name: raw.zone_name != null ? String(raw.zone_name) : null,
+    restaurant_name:
+      raw.restaurant_name != null ? String(raw.restaurant_name) : null,
     is_on_duty: Boolean(raw.is_on_duty),
     worked_days: Number(raw.worked_days ?? 0),
     leave_days: Number(raw.leave_days ?? 0),
@@ -263,6 +268,36 @@ function parseKpis(raw: unknown): PerformanceKpis {
   };
 }
 
+async function loadDriverRestaurantNames(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  driverIds: string[],
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (driverIds.length === 0) return names;
+  const { data } = await supabase
+    .from("driver_restaurants")
+    .select("driver_id, restaurants(name)")
+    .in("driver_id", driverIds);
+  const buckets = new Map<string, string[]>();
+  for (const row of data ?? []) {
+    const restaurant = Array.isArray(row.restaurants)
+      ? row.restaurants[0]
+      : row.restaurants;
+    const name =
+      restaurant && typeof restaurant === "object" && "name" in restaurant
+        ? String((restaurant as { name?: string }).name ?? "").trim()
+        : "";
+    if (!name) continue;
+    const list = buckets.get(row.driver_id) ?? [];
+    if (!list.includes(name)) list.push(name);
+    buckets.set(row.driver_id, list);
+  }
+  for (const [id, list] of buckets) {
+    names.set(id, list.join(", "));
+  }
+  return names;
+}
+
 /** Ungated read. Every caller must have gated on its own permission first. */
 async function runPerformanceList(
   filters: PerformanceListFilters,
@@ -302,9 +337,17 @@ async function runPerformanceList(
   const payload =
     data && typeof data === "object" ? (data as Record<string, unknown>) : {};
   const rowsRaw = Array.isArray(payload.rows) ? payload.rows : [];
+  const rows = rowsRaw.map((r) => parseRow(r as Record<string, unknown>));
+  const restaurantNames = await loadDriverRestaurantNames(
+    supabase,
+    rows.map((r) => r.driver_id),
+  );
 
   return {
-    rows: rowsRaw.map((r) => parseRow(r as Record<string, unknown>)),
+    rows: rows.map((row) => ({
+      ...row,
+      restaurant_name: restaurantNames.get(row.driver_id) ?? row.restaurant_name,
+    })),
     totalCount: Number(payload.totalCount ?? 0),
     kpis: parseKpis(payload.kpis),
     weights: parsePerformanceWeights(payload.weights),
@@ -329,6 +372,122 @@ export async function fetchDriverPerformanceList(
   });
 
   return runPerformanceList(filters);
+}
+
+function parseDpdRider(raw: unknown): DpdEfficiencyRider | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const n = (k: string) => {
+    const v = o[k];
+    if (v == null) return null;
+    const num = Number(v);
+    return Number.isFinite(num) ? num : null;
+  };
+  const s = (k: string) => {
+    const v = o[k];
+    return v == null || String(v).trim() === "" ? null : String(v);
+  };
+  const driverId = s("driver_id");
+  if (!driverId) return null;
+  return {
+    driver_id: driverId,
+    driver_name: String(o.driver_name ?? "—"),
+    employee_id: s("employee_id"),
+    driver_code: String(o.driver_code ?? ""),
+    restaurant_id: s("restaurant_id"),
+    restaurant_name: s("restaurant_name"),
+    zone_id: s("zone_id"),
+    zone_name: s("zone_name"),
+    actual: Number(o.actual ?? 0),
+    target: n("target"),
+    efficiency: n("efficiency"),
+    dpd_rider: n("dpd_rider"),
+    worked_days: Number(o.worked_days ?? 0),
+  };
+}
+
+function parseDpdGroup(raw: unknown): DpdEfficiencyGroup | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const n = (k: string) => {
+    const v = o[k];
+    if (v == null) return null;
+    const num = Number(v);
+    return Number.isFinite(num) ? num : null;
+  };
+  const s = (k: string) => {
+    const v = o[k];
+    return v == null || String(v).trim() === "" ? null : String(v);
+  };
+  return {
+    id: s("id"),
+    name: s("name"),
+    zone_id: s("zone_id"),
+    zone_name: s("zone_name"),
+    restaurant_id: s("restaurant_id"),
+    restaurant_name: s("restaurant_name"),
+    actual: Number(o.actual ?? 0),
+    target: n("target"),
+    efficiency: n("efficiency"),
+    riders: Number(o.riders ?? 0),
+  };
+}
+
+export async function fetchDpdEfficiencySnapshot(input: {
+  from: string;
+  to: string;
+  restaurantId?: string;
+  zoneId?: string;
+  partnerId?: string;
+}): Promise<DpdEfficiencySnapshot> {
+  await requirePerformanceView();
+  const from = input.from.slice(0, 10);
+  const to = input.to.slice(0, 10);
+  if (!from || !to || to < from) {
+    throw new Error("invalid_date_range");
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc(
+    "admin_dpd_efficiency_snapshot" as never,
+    {
+      p_from: from,
+      p_to: to,
+      p_restaurant_id: input.restaurantId || undefined,
+      p_zone_id: input.zoneId || undefined,
+      p_partner_id: input.partnerId || undefined,
+    } as never,
+  );
+  if (error) throw new Error(error.message);
+
+  const payload =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const list = (key: string, parse: (raw: unknown) => DpdEfficiencyRider | null) =>
+    (Array.isArray(payload[key]) ? payload[key] : [])
+      .map(parse)
+      .filter((row): row is DpdEfficiencyRider => row != null);
+  const groups = (key: string) =>
+    (Array.isArray(payload[key]) ? payload[key] : [])
+      .map(parseDpdGroup)
+      .filter((row): row is DpdEfficiencyGroup => row != null);
+
+  void logAdminRead("performance", "fetchDpdEfficiencySnapshot", {
+    from,
+    to,
+    restaurantId: input.restaurantId,
+    zoneId: input.zoneId,
+  });
+
+  return {
+    from: String(payload.from ?? from),
+    to: String(payload.to ?? to),
+    riders: list("riders", parseDpdRider),
+    restaurants: groups("restaurants"),
+    zones: groups("zones"),
+    zone_restaurants: groups("zone_restaurants"),
+    top10: list("top10", parseDpdRider),
+    bottom10: list("bottom10", parseDpdRider),
+  };
 }
 
 /**
@@ -1399,7 +1558,7 @@ export async function fetchRecentDeliveriesFeed(
       status,
       delivered_at,
       created_at,
-      drivers (driver_code, profiles (full_name)),
+      drivers (driver_code, profiles!drivers_id_fkey (full_name)),
       partners (name),
       zones (name)
     `,

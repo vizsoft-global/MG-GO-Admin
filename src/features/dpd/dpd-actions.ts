@@ -335,6 +335,7 @@ export async function fetchDeliveryRulesForAdmin(): Promise<DeliveryRuleRow[]> {
     .from("delivery_rules")
     .select(
       `id, name, status, scope_type, zone_id, partner_id, restaurant_id, start_date, end_date, priority,
+       dpd_target, dpd_period,
        delivery_rule_scopes (zone_id, partner_id, restaurant_id)`,
     )
     .order("priority", { ascending: false })
@@ -369,6 +370,12 @@ export async function fetchDeliveryRulesForAdmin(): Promise<DeliveryRuleRow[]> {
       start_date: row.start_date,
       end_date: row.end_date,
       priority: row.priority,
+      dpd_target:
+        (row as { dpd_target?: number | string | null }).dpd_target != null
+          ? Number((row as { dpd_target?: number | string | null }).dpd_target)
+          : null,
+      dpd_period:
+        ((row as { dpd_period?: IncentivePeriod | null }).dpd_period ?? null),
     };
   });
 }
@@ -642,6 +649,19 @@ export async function saveDeliveryRule(formData: FormData): Promise<DpdMutationR
     priority,
     require_verified: true,
     updated_at: new Date().toISOString(),
+    dpd_target: (() => {
+      const raw = String(formData.get("dpdTarget") ?? "").trim();
+      if (!raw) return null;
+      const n = Number(raw);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    })(),
+    dpd_period: (() => {
+      const raw = String(formData.get("dpdPeriod") ?? "").trim();
+      if (raw === "daily" || raw === "weekly" || raw === "monthly") {
+        return raw as IncentivePeriod;
+      }
+      return null;
+    })(),
   };
 
   let ruleId = id;
@@ -1080,6 +1100,145 @@ export async function runValidateDelivery(deliveryId: string) {
   if (auth.error) return { error: auth.error };
   if (!deliveryId) return { error: "missing_fields" as const };
   return validateDeliveryForRules(deliveryId);
+}
+
+export type DpdTargetImportStatus =
+  | "ok"
+  | "unknown_name"
+  | "invalid_target"
+  | "invalid_period"
+  | "no_rule"
+  | "ambiguous_name";
+
+export type DpdTargetImportRow = {
+  row_number: number;
+  scope_type: string;
+  name: string;
+  dpd_target: string;
+  dpd_period: string;
+  status: DpdTargetImportStatus;
+  rule_id: string | null;
+  rule_name: string | null;
+};
+
+function normalizeScopeType(value: string): "restaurant" | "zone" | null {
+  const v = value.trim().toLowerCase();
+  if (v === "restaurant" || v === "restaurants") return "restaurant";
+  if (v === "zone" || v === "zones") return "zone";
+  return null;
+}
+
+export async function previewDpdTargetImport(
+  rows: Array<{
+    scope_type?: string;
+    name?: string;
+    dpd_target?: string;
+    dpd_period?: string;
+  }>,
+): Promise<DpdTargetImportRow[]> {
+  await requireEarningsView();
+  const rules = await fetchDeliveryRulesForAdmin();
+  const scopes = await fetchDpdScopeOptions();
+
+  return rows.map((row, index) => {
+    const scope_type = row.scope_type?.trim() ?? "";
+    const name = row.name?.trim() ?? "";
+    const dpd_target = row.dpd_target?.trim() ?? "";
+    const dpd_period = row.dpd_period?.trim() ?? "";
+    const period = dpd_period.toLowerCase();
+    const target = Number(dpd_target);
+    const scope = normalizeScopeType(scope_type);
+
+    const base = {
+      row_number: index + 1,
+      scope_type,
+      name,
+      dpd_target,
+      dpd_period,
+      rule_id: null as string | null,
+      rule_name: null as string | null,
+    };
+
+    if (!name) return { ...base, status: "unknown_name" as const };
+    if (!Number.isFinite(target) || target <= 0) {
+      return { ...base, status: "invalid_target" as const };
+    }
+    if (period !== "daily" && period !== "weekly" && period !== "monthly") {
+      return { ...base, status: "invalid_period" as const };
+    }
+
+    const inferred = scope ?? "restaurant";
+    const matches =
+      inferred === "restaurant"
+        ? scopes.restaurants.filter((r) => r.name.toLowerCase() === name.toLowerCase())
+        : scopes.zones.filter((z) => z.name.toLowerCase() === name.toLowerCase());
+    if (matches.length === 0) return { ...base, status: "unknown_name" as const };
+    if (matches.length > 1) return { ...base, status: "ambiguous_name" as const };
+
+    const id = matches[0].id;
+    const candidates = rules
+      .filter((rule) =>
+        inferred === "restaurant"
+          ? rule.scope_type === "restaurant" && rule.restaurant_ids.includes(id)
+          : rule.scope_type === "zone" && rule.zone_ids.includes(id),
+      )
+      .sort((a, b) => {
+        if (a.status === "active" && b.status !== "active") return -1;
+        if (b.status === "active" && a.status !== "active") return 1;
+        return b.priority - a.priority;
+      });
+    if (candidates.length === 0) return { ...base, status: "no_rule" as const };
+
+    return {
+      ...base,
+      status: "ok",
+      rule_id: candidates[0].id,
+      rule_name: candidates[0].name,
+    };
+  });
+}
+
+export async function applyDpdTargetImport(
+  rows: Array<{
+    scope_type?: string;
+    name?: string;
+    dpd_target?: string;
+    dpd_period?: string;
+  }>,
+): Promise<{ updated: number; rejected: number } | { error: string }> {
+  const auth = await requireEarningsManage();
+  if (auth.error) return { error: auth.error };
+
+  const preview = await previewDpdTargetImport(rows);
+  const supabase = await createClient();
+  let updated = 0;
+  for (const row of preview) {
+    if (row.status !== "ok" || !row.rule_id) continue;
+    const period = row.dpd_period.trim().toLowerCase();
+    const { error } = await supabase
+      .from("delivery_rules")
+      .update({
+        dpd_target: Number(row.dpd_target),
+        dpd_period: period,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", row.rule_id);
+    if (error) return { error: "save_failed" };
+    updated += 1;
+  }
+
+  void logAdminMutation({
+    action: "update",
+    entityType: "delivery_rule",
+    entityId: "bulk-dpd-targets",
+    routeName: "applyDpdTargetImport",
+    after: { updated },
+  });
+
+  return {
+    updated,
+    rejected: preview.filter((r) => r.status !== "ok").length,
+  };
 }
 
 export { isDpdErrorKey };

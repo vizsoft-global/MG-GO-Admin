@@ -567,7 +567,7 @@ export async function fetchRequestCreateOptions(): Promise<
     await Promise.all([
       supabase
         .from("drivers")
-        .select("id, driver_code, employee_id, profiles(full_name, phone)")
+        .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name, phone)")
         .is("archived_at", null)
         .order("driver_code"),
       supabase

@@ -18,6 +18,12 @@ import { interpolateTemplate } from "./interpolate-template";
 import { pickLatestPushTokenByDriver } from "./push-token-select";
 import { resolveScreenshotRestricted } from "./screenshot-restriction";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
+import { searchActiveDrivers } from "@/features/drivers/search-active-drivers";
+import {
+  decideImportRowMatch,
+  lookupToImportMatch,
+  type ImportLookupMatch,
+} from "@/features/drivers/resolve-import-row";
 import type {
   NotificationActionError,
   NotificationAnalyticsDailyRow,
@@ -359,7 +365,7 @@ export async function getNotificationDispatchItems(
   const { data, error } = await supabase
     .from("notification_dispatch_items")
     .select(
-      "id, driver_id, status, error_code, error_message, sent_at, opened_at, clicked_at, delivered_at, drivers(driver_code, employee_id, profiles(full_name))",
+      "id, driver_id, status, error_code, error_message, sent_at, opened_at, clicked_at, delivered_at, drivers(driver_code, employee_id, profiles!drivers_id_fkey(full_name))",
     )
     .eq("campaign_id", campaignId)
     .order("created_at", { ascending: false });
@@ -696,21 +702,37 @@ async function executeNotificationDispatch(
   const personalizationByDriver = new Map<string, Personalization>();
 
   if (targetSpec.mode === "import" && importSpec.rows?.length) {
-    const employeeIds = importSpec.rows
-      .map((row) => row.employee_id?.trim())
-      .filter(Boolean);
+    const lookups = [
+      ...new Set(
+        importSpec.rows.flatMap((row) =>
+          [row.employee_id, row.driver_code].map((v) => v?.trim()).filter(Boolean),
+        ),
+      ),
+    ] as string[];
     const { data: driverRows } = await service
       .from("drivers")
-      .select("id, employee_id")
-      .in("employee_id", employeeIds)
+      .select("id, employee_id, driver_code")
+      .or(
+        [
+          lookups.length ? `employee_id.in.(${lookups.join(",")})` : "",
+          lookups.length ? `driver_code.in.(${lookups.join(",")})` : "",
+        ]
+          .filter(Boolean)
+          .join(","),
+      )
       .is("archived_at", null);
-    const employeeToDriver = new Map(
-      (driverRows ?? []).map((d: { id: string; employee_id: string }) => [d.employee_id, d.id]),
-    );
+    const lookupToDriver = new Map<string, string>();
+    for (const d of driverRows ?? []) {
+      const row = d as { id: string; employee_id: string | null; driver_code: string };
+      if (row.employee_id) lookupToDriver.set(row.employee_id, row.id);
+      if (row.driver_code) lookupToDriver.set(row.driver_code, row.id);
+    }
     importSpec.rows.forEach((row, index) => {
       const emp = row.employee_id?.trim();
-      if (!emp) return;
-      const driverId = employeeToDriver.get(emp) as string | undefined;
+      const code = row.driver_code?.trim();
+      const driverId =
+        (emp ? lookupToDriver.get(emp) : undefined) ??
+        (code ? lookupToDriver.get(code) : undefined);
       if (!driverId) return;
       personalizationByDriver.set(driverId, {
         title: interpolateTemplate(String(campaign.title), row),
@@ -1149,35 +1171,14 @@ export async function searchDriversForNotification(
 > {
   await requireNotificationsView();
   const supabase = await notificationsDb();
-  const term = query.trim();
-  if (!term) return [];
-
-  let q = supabase
-    .from("drivers")
-    .select("id, driver_code, employee_id, profiles(full_name)")
-    .is("archived_at", null)
-    .limit(limit);
-
-  if (/^\d+$/.test(term)) {
-    q = q.or(`employee_id.eq.${term},driver_code.ilike.%${term}%`);
-  } else {
-    q = q.or(`driver_code.ilike.%${term}%,employee_id.ilike.%${term}%`);
-  }
-
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-
-  return (data ?? []).map((d: any) => {
-    const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
-    const full_name = profile?.full_name?.trim() || "Driver";
-    return {
-      id: d.id,
-      label: `${d.driver_code} · ${full_name}`,
-      employee_id: d.employee_id ?? "",
-      driver_code: d.driver_code,
-      full_name,
-    };
-  });
+  const hits = await searchActiveDrivers(supabase, query, limit);
+  return hits.map((d) => ({
+    id: d.id,
+    label: `${d.driver_code} · ${d.full_name}`,
+    employee_id: d.employee_id,
+    driver_code: d.driver_code,
+    full_name: d.full_name,
+  }));
 }
 
 export async function resolveNotificationDriversByEmployeeIds(employeeIds: string[]) {
@@ -1185,6 +1186,7 @@ export async function resolveNotificationDriversByEmployeeIds(employeeIds: strin
   const supabase = await notificationsDb();
   const resolved = await resolveDriversByLookupIds(supabase, employeeIds);
   return resolved.map((row) => ({
+    lookup_id: row.lookup_id,
     employee_id: row.employee_id,
     driver_id: row.driver_id,
     driver_code: row.driver_code,
@@ -1199,24 +1201,35 @@ export async function previewNotificationImport(input: {
   importSpec: NotificationImportSpec;
 }) {
   await requireNotificationsView();
-  const employeeIds = input.importSpec.rows
-    .map((row) => row.employee_id?.trim())
-    .filter(Boolean);
-  const resolved = await resolveNotificationDriversByEmployeeIds(employeeIds);
-  const byEmployee = new Map(resolved.map((r) => [r.employee_id, r]));
+  const lookups = [
+    ...new Set(
+      input.importSpec.rows.flatMap((row) =>
+        [row.employee_id, row.driver_code].map((v) => v?.trim()).filter(Boolean),
+      ),
+    ),
+  ] as string[];
+  const resolved = await resolveNotificationDriversByEmployeeIds(lookups);
+  const byLookup = new Map(resolved.map((r) => [r.lookup_id, r]));
 
   return input.importSpec.rows.map((row, row_index) => {
     const employee_id = row.employee_id?.trim() ?? "";
-    const match = byEmployee.get(employee_id);
-    let status = "ok";
-    if (!match) status = "unknown_employee_id";
-    else if (match.error === "blocked") status = "blocked";
-    else if (match.error === "not_found") status = "unknown_employee_id";
+    const driver_code = row.driver_code?.trim() ?? "";
+    const toMatch = (r: (typeof resolved)[number] | undefined): ImportLookupMatch | null =>
+      r ? lookupToImportMatch(r) : null;
+    const decided = decideImportRowMatch({
+      employeeId: employee_id,
+      driverCode: driver_code,
+      byEmployee: toMatch(byLookup.get(employee_id)),
+      byCode: toMatch(byLookup.get(driver_code)),
+    });
+    const status =
+      decided.status === "unknown_id" ? "unknown_employee_id" : decided.status;
 
     return {
       row_index,
-      employee_id,
-      driver_name: match?.full_name ?? null,
+      employee_id: employee_id || driver_code,
+      driver_code,
+      driver_name: decided.driver?.full_name ?? null,
       status,
       resolved_title: interpolateTemplate(input.titleTemplate, row),
       resolved_body: interpolateTemplate(input.bodyTemplate, row),
@@ -1604,7 +1617,7 @@ export async function listCampaignScreenshotEvents(
   const driverIds = [...new Set(rows.map((r) => r.driver_id))];
   const { data: drivers } = await supabase
     .from("drivers")
-    .select("id, driver_code, profiles(full_name)")
+    .select("id, driver_code, profiles!drivers_id_fkey(full_name)")
     .in("id", driverIds);
   const byId = new Map(
     (

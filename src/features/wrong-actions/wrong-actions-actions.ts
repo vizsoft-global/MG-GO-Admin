@@ -41,7 +41,7 @@ type DriverJoin = {
 };
 
 const SELECT_COLUMNS =
-  "id, driver_id, action_type, severity, details, occurred_at, source, created_at, created_by, drivers!inner(id, driver_code, profiles(full_name), zones(name))";
+  "id, driver_id, action_type, severity, details, occurred_at, source, created_at, created_by, drivers!inner(id, driver_code, profiles!drivers_id_fkey(full_name), zones(name))";
 
 function mapRow(
   row: Record<string, unknown>,
@@ -156,7 +156,7 @@ export async function listWrongActionDriverOptions(): Promise<WrongActionDriverO
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("drivers")
-    .select("id, driver_code, employee_id, profiles(full_name), zones(name)")
+    .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name), zones(name)")
     .is("archived_at", null)
     .order("driver_code");
   if (error) throw new Error(error.message);

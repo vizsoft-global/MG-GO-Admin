@@ -26,6 +26,7 @@ import {
   type DeliveryDbRowForList,
 } from "./map-delivery-list-row";
 import { CANCEL_REASON_CODES } from "./parse-cancel-reason";
+import { readExactCount } from "./delivery-kpi-counts";
 
 type DeliveryMutationResult =
   | { ok: true }
@@ -313,7 +314,7 @@ const DELIVERY_LIST_SELECT = `
   cancel_proof_url,
   cancel_proof_urls,
   created_at,
-  drivers (driver_code, employee_id, profiles (full_name, phone)),
+  drivers (driver_code, employee_id, profiles!drivers_id_fkey (full_name, phone)),
   partners (name, logo_url),
   restaurants (id, name),
   zones (name)
@@ -711,8 +712,8 @@ export async function fetchDeliveriesKpis(): Promise<DeliveriesKpiCounts> {
   const countFor = async (status?: DeliveryStatus): Promise<number> => {
     let q = supabase.from("deliveries").select("id", { count: "exact", head: true });
     if (status) q = q.eq("status", status);
-    const { count } = await q;
-    return count ?? 0;
+    const { count, error } = await q;
+    return readExactCount({ count, error });
   };
 
   const [total, active, verified, pending, rejected, cancelled] = await Promise.all([
@@ -769,7 +770,7 @@ export async function fetchDeliveriesForExport(
       delivered_at,
       cancelled_at,
       cancel_reason,
-      drivers (driver_code, employee_id, profiles (full_name)),
+      drivers (driver_code, employee_id, profiles!drivers_id_fkey (full_name)),
       restaurants (name),
       zones (name)
     `,

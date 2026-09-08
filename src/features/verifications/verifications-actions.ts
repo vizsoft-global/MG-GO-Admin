@@ -334,7 +334,7 @@ export async function listVerifications(params: {
       drivers (
         driver_code,
         employee_id,
-        profiles (full_name)
+        profiles!drivers_id_fkey (full_name)
       ),
       restaurants (name),
       partners (name)
@@ -389,7 +389,7 @@ export async function fetchVerificationDetail(
       drivers (
         driver_code,
         employee_id,
-        profiles (full_name)
+        profiles!drivers_id_fkey (full_name)
       ),
       restaurants (name),
       partners (name)
@@ -458,7 +458,7 @@ export async function fetchVerificationDriverOptions(
       driver_code,
       employee_id,
       partner_id,
-      profiles (full_name)
+      profiles!drivers_id_fkey (full_name)
     `,
     )
     .order("driver_code")
@@ -798,7 +798,7 @@ export async function resolveImportPreview(
   const [{ data: drivers }, { data: restaurants }] = await Promise.all([
     supabase
       .from("drivers")
-      .select("id, driver_code, employee_id, partner_id, profiles(full_name)"),
+      .select("id, driver_code, employee_id, partner_id, profiles!drivers_id_fkey(full_name)"),
     supabase.from("restaurants").select("id, name, partner_id, external_merchant_id, partners(name)"),
   ]);
 

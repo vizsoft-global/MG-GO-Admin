@@ -10,6 +10,7 @@ export type DriverGroupRow = {
 
 export type DriverGroupDetail = DriverGroupRow & {
   member_ids: string[];
+  members: DriverGroupMemberOption[];
 };
 
 export type DriverGroupMemberOption = {
