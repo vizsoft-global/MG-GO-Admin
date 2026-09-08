@@ -37,6 +37,9 @@ const SCALE = 2;
 const CELL = 48;
 
 export const FLEET_ICON_SIZE = { width: CELL, height: CELL };
+/** Screen pixels. Atlas cell stays 48; the layer draws larger so the bike reads. */
+export const FLEET_PIN_SIZE = 56;
+export const FLEET_PIN_SELECTED_SCALE = 1.2;
 
 const TONE_ORDER: readonly FleetTone[] = [
   "success",
@@ -256,11 +259,16 @@ function assertAtlasCells(ctx: CanvasRenderingContext2D): void {
 let atlasUrl: string | null = null;
 let atlasImage: FleetIconAtlas | null = null;
 let atlasPromise: Promise<FleetIconAtlas> | null = null;
+let atlasCacheKey: string | null = null;
 
 const FLEET_BIKE_SPRITE_URL = new URL("./assets/fleet-bike-north.png", import.meta.url).href;
 
-/** Device-pixel stamp inside the ~69px disc (17.2r × 2× scale). */
-export const FLEET_BIKE_STAMP_PX = 64;
+/** Device-pixel stamp. Slightly larger than the disc so the bike, not the ring, dominates. */
+export const FLEET_BIKE_STAMP_PX = 72;
+/** White pad on the rear crate, device pixels. */
+export const FLEET_BIKE_LOGO_PAD_PX = 16;
+/** Below cell centre, as a fraction of the stamp — the box sits at the tail. */
+export const FLEET_BIKE_LOGO_OFFSET = 0.28;
 
 function loadAtlasImage(
   src: string,
@@ -276,6 +284,18 @@ function loadAtlasImage(
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`fleet marker atlas: ${label} decode failed`));
     image.src = src;
+  });
+}
+
+function tryLoadLogo(src: string | null): Promise<HTMLImageElement | null> {
+  const url = src?.trim();
+  if (!url) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = url;
   });
 }
 
@@ -295,6 +315,31 @@ export function stampFleetBikeSprites(
       size,
       size,
     );
+    ctx.restore();
+  }
+}
+
+export function stampFleetBikeLogos(
+  ctx: CanvasRenderingContext2D,
+  logo: CanvasImageSource,
+): void {
+  const stamp = FLEET_BIKE_STAMP_PX;
+  const pad = FLEET_BIKE_LOGO_PAD_PX;
+  const inset = 2;
+  const radius = 3;
+  for (const [name, cell] of Object.entries(fleetIconMapping())) {
+    if (!name.startsWith("pin-bike-")) continue;
+    const cx = cell.x + cell.width / 2;
+    const cy = cell.y + cell.height / 2 + stamp * FLEET_BIKE_LOGO_OFFSET;
+    const x = cx - pad / 2;
+    const y = cy - pad / 2;
+    ctx.save();
+    ctx.globalAlpha = name.endsWith("-stale") ? 0.5 : 1;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.roundRect(x, y, pad, pad, radius);
+    ctx.fill();
+    ctx.drawImage(logo, x + inset, y + inset, pad - inset * 2, pad - inset * 2);
     ctx.restore();
   }
 }
@@ -328,17 +373,21 @@ export function fleetIconAtlasUrl(): string {
  * `device.createTexture`, which takes any `ExternalImage`. No fetch, no base64
  * round-trip, no loader registry, and `updateState` sees a usable atlas on first pass.
  */
-export function loadFleetIconAtlas(): Promise<FleetIconAtlas> {
-  if (atlasImage) return Promise.resolve(atlasImage);
-  if (atlasPromise) return atlasPromise;
+export function loadFleetIconAtlas(logoUrl?: string | null): Promise<FleetIconAtlas> {
+  const key = logoUrl?.trim() ?? "";
+  if (atlasImage && atlasCacheKey === key) return Promise.resolve(atlasImage);
+  if (atlasPromise && atlasCacheKey === key) return atlasPromise;
 
+  atlasCacheKey = key;
+  atlasImage = null;
   atlasPromise = Promise.all([
     loadAtlasImage(fleetIconAtlasUrl(), "svg", {
       width: ATLAS_PIXEL_WIDTH,
       height: ATLAS_PIXEL_HEIGHT,
     }),
     loadAtlasImage(FLEET_BIKE_SPRITE_URL, "bike png"),
-  ]).then(async ([svgImage, bikeImage]) => {
+    tryLoadLogo(key || null),
+  ]).then(async ([svgImage, bikeImage, logoImage]) => {
     const canvas = document.createElement("canvas");
     canvas.width = ATLAS_PIXEL_WIDTH;
     canvas.height = ATLAS_PIXEL_HEIGHT;
@@ -350,7 +399,19 @@ export function loadFleetIconAtlas(): Promise<FleetIconAtlas> {
     }
     ctx.drawImage(svgImage, 0, 0, ATLAS_PIXEL_WIDTH, ATLAS_PIXEL_HEIGHT);
     stampFleetBikeSprites(ctx, bikeImage);
-    assertAtlasCells(ctx);
+    if (logoImage) {
+      stampFleetBikeLogos(ctx, logoImage);
+      try {
+        assertAtlasCells(ctx);
+      } catch {
+        ctx.clearRect(0, 0, ATLAS_PIXEL_WIDTH, ATLAS_PIXEL_HEIGHT);
+        ctx.drawImage(svgImage, 0, 0, ATLAS_PIXEL_WIDTH, ATLAS_PIXEL_HEIGHT);
+        stampFleetBikeSprites(ctx, bikeImage);
+        assertAtlasCells(ctx);
+      }
+    } else {
+      assertAtlasCells(ctx);
+    }
     if (typeof createImageBitmap !== "function") {
       return canvas;
     }
@@ -360,8 +421,14 @@ export function loadFleetIconAtlas(): Promise<FleetIconAtlas> {
       return canvas;
     }
   }).then((image) => {
-    atlasImage = image;
+    if (atlasCacheKey === key) atlasImage = image;
     return image;
+  }).catch((error: unknown) => {
+    if (atlasCacheKey === key) {
+      atlasPromise = null;
+      atlasCacheKey = null;
+    }
+    throw error;
   });
 
   return atlasPromise;

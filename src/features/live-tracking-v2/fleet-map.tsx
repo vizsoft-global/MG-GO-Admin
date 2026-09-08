@@ -33,13 +33,15 @@ import type {
   ScatterplotLayer,
 } from "deck.gl";
 
+import { useBrandingOptional } from "@/contexts/branding-context";
 import { loadGoogleMaps } from "@/lib/google-maps/load";
 import { GoogleMapsStatusBanner } from "@/features/restaurants/google-maps-status-banner";
 import { cn } from "@/lib/utils";
 
 import { fleetMarkerTone, isFleetAlert, type FleetTone } from "./fleet-status";
 import {
-  FLEET_ICON_SIZE,
+  FLEET_PIN_SELECTED_SCALE,
+  FLEET_PIN_SIZE,
   fleetIconMapping,
   fleetPinIcon,
   loadFleetIconAtlas,
@@ -253,6 +255,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
   const store = useFleetStore();
   const transport = useFleetTransport();
   const snapshot = useFleetSnapshot();
+  const driverAppLogoUrl = useBrandingOptional()?.driverAppLogoUrl ?? null;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -317,7 +320,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
 
   useEffect(() => {
     let cancelled = false;
-    void loadFleetIconAtlas()
+    void loadFleetIconAtlas(driverAppLogoUrl)
       .then((atlas) => {
         if (!cancelled) setIconAtlas(atlas);
       })
@@ -330,7 +333,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [driverAppLogoUrl]);
 
   // ---------------------------------------------------------------------------
   // Roster → drawable entities. Structural changes only, never positions.
@@ -831,7 +834,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
             iconMapping,
             getIcon: () => "ring",
             getPosition: (d) => d.position,
-            getSize: FLEET_ICON_SIZE.height,
+            getSize: FLEET_PIN_SIZE * FLEET_PIN_SELECTED_SCALE,
             sizeUnits: "pixels",
             updateTriggers: { getPosition: revision },
             pickable: false,
@@ -848,7 +851,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
           getIcon: (d) => d.icon,
           getPosition: (d) => d.position,
           getSize: (d) =>
-            d.selected ? FLEET_ICON_SIZE.height * 1.15 : FLEET_ICON_SIZE.height,
+            d.selected ? FLEET_PIN_SIZE * FLEET_PIN_SELECTED_SCALE : FLEET_PIN_SIZE,
           sizeUnits: "pixels",
           // The marker is a vehicle now, so the bearing rotates the sprite itself
           // rather than a chevron beside it. deck.gl rotates counter-clockwise;

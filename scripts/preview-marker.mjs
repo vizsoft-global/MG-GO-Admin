@@ -11,7 +11,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  FLEET_BIKE_LOGO_OFFSET,
+  FLEET_BIKE_LOGO_PAD_PX,
   FLEET_BIKE_STAMP_PX,
+  FLEET_PIN_SIZE,
   fleetAtlasSvgForPreview,
   fleetIconMapping,
 } from "../src/features/live-tracking-v2/fleet-marker-atlas.ts";
@@ -44,7 +47,15 @@ const html = `<!doctype html>
 <script type="module">
 const mapping = ${JSON.stringify(mapping)};
 const stampPx = ${FLEET_BIKE_STAMP_PX};
+const logoPad = ${FLEET_BIKE_LOGO_PAD_PX};
+const logoOffset = ${FLEET_BIKE_LOGO_OFFSET};
+const pinSize = ${FLEET_PIN_SIZE};
 const tones = ["success", "primary", "warning", "danger", "neutral"];
+const sampleLogo =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#059669"/><text x="16" y="22" text-anchor="middle" font-size="16" font-family="ui-sans-serif,system-ui" font-weight="700" fill="#fff">M</text></svg>',
+  );
 
 function load(src) {
   return new Promise((resolve, reject) => {
@@ -68,48 +79,76 @@ function sprite(atlasUrl, name, px, angle = 0) {
   "></span>\`;
 }
 
-const [svgImage, bikeImage] = await Promise.all([
+const [svgImage, bikeImage, logoImage] = await Promise.all([
   load(${JSON.stringify(atlasUrl)}),
   load("./fleet-bike-north.png"),
+  load(sampleLogo),
 ]);
-const canvas = document.createElement("canvas");
-canvas.width = svgImage.naturalWidth || svgImage.width;
-canvas.height = svgImage.naturalHeight || svgImage.height;
-const ctx = canvas.getContext("2d");
-ctx.drawImage(svgImage, 0, 0, canvas.width, canvas.height);
-for (const [name, cell] of Object.entries(mapping)) {
-  if (!name.startsWith("pin-bike-")) continue;
-  ctx.save();
-  ctx.globalAlpha = name.endsWith("-stale") ? 0.5 : 1;
-  ctx.drawImage(
-    bikeImage,
-    cell.x + (cell.width - stampPx) / 2,
-    cell.y + (cell.height - stampPx) / 2,
-    stampPx,
-    stampPx,
-  );
-  ctx.restore();
+
+function stampBikes(ctx, withLogo) {
+  for (const [name, cell] of Object.entries(mapping)) {
+    if (!name.startsWith("pin-bike-")) continue;
+    ctx.save();
+    ctx.globalAlpha = name.endsWith("-stale") ? 0.5 : 1;
+    ctx.drawImage(
+      bikeImage,
+      cell.x + (cell.width - stampPx) / 2,
+      cell.y + (cell.height - stampPx) / 2,
+      stampPx,
+      stampPx,
+    );
+    if (withLogo) {
+      const cx = cell.x + cell.width / 2;
+      const cy = cell.y + cell.height / 2 + stampPx * logoOffset;
+      const x = cx - logoPad / 2;
+      const y = cy - logoPad / 2;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.roundRect(x, y, logoPad, logoPad, 3);
+      ctx.fill();
+      ctx.drawImage(logoImage, x + 2, y + 2, logoPad - 4, logoPad - 4);
+    }
+    ctx.restore();
+  }
 }
-const composed = canvas.toDataURL("image/png");
+
+function compose(withLogo) {
+  const canvas = document.createElement("canvas");
+  canvas.width = svgImage.naturalWidth || svgImage.width;
+  canvas.height = svgImage.naturalHeight || svgImage.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(svgImage, 0, 0, canvas.width, canvas.height);
+  stampBikes(ctx, withLogo);
+  return canvas.toDataURL("image/png");
+}
+
+const composed = compose(true);
+const composedBare = compose(false);
 const s = (name, px, angle) => sprite(composed, name, px, angle);
+const bare = (name, px, angle) => sprite(composedBare, name, px, angle);
 
 document.getElementById("root").innerHTML = \`
-<h2>Ships at these sizes (48 / 36 / 28 px)</h2>
+<h2>Ships at \${pinSize}px (plus 36 / 28 for zoom-out)</h2>
 <div class="row">
-  \${[48, 36, 28].map((px) => tones.map((t) => s(\`pin-bike-\${t}\`, px)).join("")).join('<span style="width:14px"></span>')}
+  \${[pinSize, 36, 28].map((px) => tones.map((t) => s(\`pin-bike-\${t}\`, px)).join("")).join('<span style="width:14px"></span>')}
 </div>
 
-<h2>Car sprites (48 / 36 / 28 px) — van uses these cells</h2>
+<h2>No logo — fail-open (same sizes)</h2>
 <div class="row">
-  \${[48, 36, 28].map((px) => tones.map((t) => s(\`pin-car-\${t}\`, px)).join("")).join('<span style="width:14px"></span>')}
+  \${[pinSize, 36, 28].map((px) => tones.map((t) => bare(\`pin-bike-\${t}\`, px)).join("")).join('<span style="width:14px"></span>')}
 </div>
 
-<h2>Rotation — 0 / 90 / 180 / 270 (plus 45s)</h2>
+<h2>Car sprites (\${pinSize} / 36 / 28 px) — van uses these cells, no logo</h2>
 <div class="row">
-  \${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => s("pin-bike-success", 40, a)).join("")}
+  \${[pinSize, 36, 28].map((px) => tones.map((t) => s(\`pin-car-\${t}\`, px)).join("")).join('<span style="width:14px"></span>')}
+</div>
+
+<h2>Rotation — box stays on the rear crate</h2>
+<div class="row">
+  \${[0, 90, 180, 270].map((a) => s("pin-bike-success", pinSize, a)).join("")}
 </div>
 <div class="row" style="margin-top:8px">
-  \${[0, 90, 180, 270].map((a) => s("pin-bike-danger", 48, a)).join("")}
+  \${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => s("pin-bike-danger", 40, a)).join("")}
 </div>
 
 <h2>Stale variants (36px)</h2>
@@ -118,15 +157,15 @@ document.getElementById("root").innerHTML = \`
 
 <h2>Over a dark basemap / satellite</h2>
 <div class="row">
-  <div class="dark">\${tones.map((t) => s(\`pin-bike-\${t}\`, 36)).join("")}\${tones.map((t) => s(\`pin-car-\${t}\`, 36)).join("")}</div>
-  <div class="sat">\${tones.map((t) => s(\`pin-bike-\${t}\`, 36)).join("")}\${tones.map((t) => s(\`pin-car-\${t}\`, 36)).join("")}</div>
+  <div class="dark">\${tones.map((t) => s(\`pin-bike-\${t}\`, pinSize)).join("")}\${tones.map((t) => s(\`pin-car-\${t}\`, pinSize)).join("")}</div>
+  <div class="sat">\${tones.map((t) => s(\`pin-bike-\${t}\`, pinSize)).join("")}\${tones.map((t) => s(\`pin-car-\${t}\`, pinSize)).join("")}</div>
 </div>
 
-<h2>Selection ring behind the marker (40px)</h2>
+<h2>Selection ring behind the marker</h2>
 <div class="row">
-  <span style="position:relative;display:inline-block;width:48px;height:48px">
-    <span style="position:absolute;inset:0">\${s("ring", 48)}</span>
-    <span style="position:absolute;inset:4px">\${s("pin-bike-success", 40)}</span>
+  <span style="position:relative;display:inline-block;width:72px;height:72px">
+    <span style="position:absolute;inset:0">\${s("ring", 67)}</span>
+    <span style="position:absolute;inset:5px">\${s("pin-bike-success", pinSize)}</span>
   </span>
 </div>
 
