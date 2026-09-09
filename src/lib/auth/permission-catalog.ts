@@ -187,6 +187,11 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     label: "Permanent data cleanup (super admin)",
     category: "admin",
   },
+  {
+    slug: "assistant.view",
+    label: "View AI staff assistant",
+    category: "assistant",
+  },
   // releases.manage removed — App Releases / sideload OTA decommissioned (Play Store only).
 ] as const;
 
