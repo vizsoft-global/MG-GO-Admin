@@ -4782,7 +4782,7 @@
       "colWallet": "المحفظة (د.ك)",
       "emptyTitle": "لا توجد أرباح في هذا النطاق",
       "incentiveDailyTitle": "الحوافز اليومية",
-      "incentiveDailyHint": "يوم التقويم الكويتي (earn_date). القواعد النشطة المتداخلة تُنهى ثم يُدرج صف الرفع — لا دمج للشرائح.",
+      "incentiveDailyHint": "كل صف هو يوم عمل حسب تقويم الكويت (earn_date). لا يُستخدم وقت اليوم ولا وردية تتجاوز منتصف الليل.",
       "incentiveDailyExport": "تصدير Excel",
       "filterDriverAll": "كل السائقين",
       "filterRestaurantAll": "كل المطاعم",

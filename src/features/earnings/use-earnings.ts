@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
+  fetchIncentiveDailyDrivers,
+  fetchIncentiveDailyReport,
   runGetEarningsOverview,
   runListDriverEarningsDaily,
   runListEarningsGrouped,
@@ -57,5 +59,30 @@ export function useEarningsGrouped(
       if ("error" in result) throw new Error(result.error);
       return result.rows;
     },
+  });
+}
+
+export function useIncentiveDailyReport(input: {
+  from: string;
+  to: string;
+  driverId?: string;
+  restaurantId?: string;
+}) {
+  return useQuery({
+    queryKey: queryKeys.earnings.incentiveDaily(
+      input.from,
+      input.to,
+      input.driverId ?? null,
+      input.restaurantId ?? null,
+    ),
+    queryFn: () => fetchIncentiveDailyReport(input),
+    enabled: Boolean(input.from && input.to && input.to >= input.from),
+  });
+}
+
+export function useIncentiveDailyDrivers() {
+  return useQuery({
+    queryKey: queryKeys.earnings.incentiveDailyDrivers(),
+    queryFn: fetchIncentiveDailyDrivers,
   });
 }

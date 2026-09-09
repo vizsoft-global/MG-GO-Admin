@@ -232,8 +232,8 @@ Configured in admin **Settings → DPD → Restaurants**.
 ### `delivery_rules` / `incentive_rules` (admin-managed)
 - Scope: `zone`, `partner`, or `restaurant` (exactly one FK per rule).
 - `delivery_rules`: which verified deliveries count toward incentives (if none active globally, all verified deliveries count). Admin-only `dpd_target` / `dpd_period` sit on the same row for the `/performance` DPD tab — **the app does not read them**.
-- `incentive_rules`: `period` (daily/weekly/monthly), `target_deliveries`, `reward_kwd`; matching rules **stack** (sum of rewards).
-- Kuwait calendar for weekly (Mon–Sun) and monthly periods in SQL (`Asia/Kuwait`).
+- `incentive_rules`: `period` (daily/weekly/monthly), `target_deliveries`, `reward_kwd`; matching rules **stack** (sum of rewards). Admin XLSX import that overlaps an **active** restaurant window **ends** those active rules and inserts the new row (tiers never merged). App matching is unchanged — it still reads whatever is `active`.
+- Kuwait calendar for weekly (Mon–Sun) and monthly periods in SQL (`Asia/Kuwait`). Daily incentive admin report uses `driver_earnings_daily.earn_date` as the Kuwait working day (no shift/midnight window). App does not read that report.
 
 Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settings/dpd` redirects to `/dpd`.
 
@@ -1120,7 +1120,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-09-08 — [admin only] DPD tab + `dpd_target` / `dpd_period` on `delivery_rules`. App does not read them. Migration `20261017100000`.*
+*Last synced: 2026-09-09 — [admin only] incentive import replace-on-overlap + daily incentive report `admin_incentive_daily_report` on `/earnings` Reports (Kuwait `earn_date` working day). App does not read the report. Migration `20261018100000`.*
 
 *Prior: 2026-09-05 — [admin+app] Driver devices `/driver-devices` + per-driver force + device_meta heartbeat. App `1.1.20+85`. Migration `20261016100000`. Optional `SENTRY_API_TOKEN`. Prior: force-update fleet gate + location coalesce (2026-09-04).*
 
