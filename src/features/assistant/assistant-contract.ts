@@ -1,7 +1,8 @@
 /**
  * Wave 3 AI — design only.
- * Do not add `/assistant`, a chat UI, or `assistant.view` to the catalog
- * until the client locks the allowlist. No generateText call lives in src/.
+ * `assistant.view` is seeded with zero role grants. Do not add `/assistant`,
+ * a chat UI, or a menu entry until client allowlist sign-off and Gateway
+ * confirm. No generateText call lives in src/.
  */
 
 export const ASSISTANT_V1_LANGUAGE = "en" as const;
