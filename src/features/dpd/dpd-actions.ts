@@ -37,6 +37,12 @@ import type {
   RuleStatus,
 } from "./types";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
+import {
+  applyableIncentiveImportRows,
+  parseIsoDate,
+  previewIncentiveRuleRows,
+  uniqueRestaurantIds,
+} from "./incentive-rule-import";
 
 type PgLikeError = {
   code?: string | null;
@@ -452,12 +458,16 @@ export async function fetchIncentiveRulesForAdmin(): Promise<IncentiveRuleRow[]>
       (row as IncentiveRuleDbRow & { incentive_rule_scopes?: RuleScopeRow[] })
         .incentive_rule_scopes,
     );
+    const restaurant_ids = uniqueRestaurantIds([
+      ...scopes.restaurant_ids,
+      row.restaurant_id,
+    ]);
     const activeIds =
       row.scope_type === "zone"
         ? scopes.zone_ids
         : row.scope_type === "partner"
           ? scopes.partner_ids
-          : scopes.restaurant_ids;
+          : restaurant_ids;
     const tiers = (row.incentive_rule_tiers ?? [])
       .map(mapIncentiveTierRow)
       .sort((a, b) => a.sort_order - b.sort_order || a.threshold_deliveries - b.threshold_deliveries);
@@ -471,7 +481,7 @@ export async function fetchIncentiveRulesForAdmin(): Promise<IncentiveRuleRow[]>
       restaurant_id: null,
       zone_ids: scopes.zone_ids,
       partner_ids: scopes.partner_ids,
-      restaurant_ids: scopes.restaurant_ids,
+      restaurant_ids,
       scope_label: scopeLabelMulti(row.scope_type, activeIds, maps),
       period: row.period,
       target_mode: row.target_mode ?? "single",
@@ -1239,6 +1249,165 @@ export async function applyDpdTargetImport(
     updated,
     rejected: preview.filter((r) => r.status !== "ok").length,
   };
+}
+
+async function previewIncentiveRuleImportRows(
+  rows: Array<{
+    restaurant?: string;
+    start?: string;
+    end?: string;
+    tiers?: string;
+  }>,
+) {
+  const [scopes, rules] = await Promise.all([
+    fetchDpdScopeOptions(),
+    fetchIncentiveRulesForAdmin(),
+  ]);
+  return previewIncentiveRuleRows({
+    rows,
+    restaurants: scopes.restaurants.map((r) => ({ id: r.id, name: r.name })),
+    existing: rules.map((rule) => ({
+      id: rule.id,
+      name: rule.name,
+      status: rule.status,
+      restaurant_ids: uniqueRestaurantIds([
+        ...rule.restaurant_ids,
+        rule.restaurant_id,
+      ]),
+      start_date: rule.start_date,
+      end_date: rule.end_date,
+    })),
+  });
+}
+
+export async function previewIncentiveRuleImport(
+  rows: Array<{
+    restaurant?: string;
+    start?: string;
+    end?: string;
+    tiers?: string;
+  }>,
+) {
+  const auth = await requireEarningsView();
+  if (auth.error) return [];
+  return previewIncentiveRuleImportRows(rows);
+}
+
+export async function applyIncentiveRuleImport(
+  rows: Array<{
+    restaurant?: string;
+    start?: string;
+    end?: string;
+    tiers?: string;
+  }>,
+): Promise<{ applied: number; replaced: number; rejected: number } | { error: string }> {
+  const auth = await requireEarningsManage();
+  if (auth.error) return { error: auth.error };
+
+  const preview = await previewIncentiveRuleImportRows(rows);
+  const ready = applyableIncentiveImportRows(preview);
+  if (ready.length === 0) return { applied: 0, replaced: 0, rejected: preview.length };
+
+  const supabase = await createClient();
+  const ended = new Set<string>();
+  let applied = 0;
+  let replaced = 0;
+
+  for (const row of ready) {
+    if (!row.restaurant_id || row.parsed_tiers.length === 0) continue;
+    const start = parseIsoDate(row.start);
+    const end = parseIsoDate(row.end);
+    if (!start || !end) continue;
+
+    for (const replaceId of row.replace_rule_ids) {
+      if (ended.has(replaceId)) continue;
+      const { error: endErr } = await supabase
+        .from("incentive_rules")
+        .update({ status: "ended", updated_at: new Date().toISOString() })
+        .eq("id", replaceId);
+      if (endErr) {
+        const retry = await createAdminClient()
+          .from("incentive_rules")
+          .update({ status: "ended", updated_at: new Date().toISOString() })
+          .eq("id", replaceId);
+        if (retry.error) {
+          logPgError("incentive_rules:admin-end", retry.error);
+          return { error: "save_failed" };
+        }
+      }
+      ended.add(replaceId);
+      replaced += 1;
+    }
+
+    const payload = {
+      name: `${row.restaurant} ${start}`,
+      status: "active" as const,
+      scope_type: "restaurant" as const,
+      zone_id: null,
+      partner_id: null,
+      restaurant_id: row.restaurant_id,
+      period: "daily" as const,
+      target_mode: "tiered" as const,
+      base_minimum_deliveries: 0,
+      target_deliveries: null,
+      reward_mode: "fixed" as const,
+      reward_kwd: 0,
+      reward_per_delivery_kwd: null,
+      payout_mode: "milestone" as const,
+      overrides_others: false,
+      start_date: start,
+      end_date: end,
+      priority: defaultPriority("restaurant"),
+      updated_at: new Date().toISOString(),
+    };
+
+    let insert = await supabase.from("incentive_rules").insert(payload).select("id").single();
+    if (insert.error || !insert.data) {
+      insert = await createAdminClient()
+        .from("incentive_rules")
+        .insert(payload)
+        .select("id")
+        .single();
+    }
+    if (insert.error || !insert.data) {
+      logPgError("incentive_rules:admin-insert", insert.error);
+      return { error: "save_failed" };
+    }
+
+    const ruleId = insert.data.id;
+    const tierRows = row.parsed_tiers.map((tier, index) => ({
+      incentive_rule_id: ruleId,
+      sort_order: index,
+      threshold_deliveries: tier.threshold_deliveries,
+      reward_mode: tier.reward_mode,
+      reward_kwd: tier.reward_mode === "fixed" ? tier.amount : null,
+      reward_per_delivery_kwd: tier.reward_mode === "per_delivery" ? tier.amount : null,
+    }));
+    const { error: tierErr } = await supabase.from("incentive_rule_tiers").insert(tierRows);
+    if (tierErr) {
+      const retry = await createAdminClient().from("incentive_rule_tiers").insert(tierRows);
+      if (retry.error) return { error: "save_failed" };
+    }
+
+    const scopeErr = await replaceIncentiveRuleScopes(
+      supabase,
+      ruleId,
+      "restaurant",
+      [row.restaurant_id],
+    );
+    if (scopeErr) return { error: "save_failed" };
+    applied += 1;
+  }
+
+  void logAdminMutation({
+    action: "create",
+    entityType: "incentive_rule",
+    entityId: "bulk-incentive-import",
+    routeName: "applyIncentiveRuleImport",
+    after: { applied, replaced, rejected: preview.length - ready.length },
+  });
+
+  return { applied, replaced, rejected: preview.length - ready.length };
 }
 
 export { isDpdErrorKey };

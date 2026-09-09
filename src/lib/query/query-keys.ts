@@ -239,6 +239,14 @@ export const queryKeys = {
       groupBy: string,
       filters: Record<string, unknown> = {},
     ) => ["earnings", "grouped", startDate, endDate, groupBy, filters] as const,
+    incentiveDaily: (
+      from: string,
+      to: string,
+      driverId: string | null,
+      restaurantId: string | null,
+    ) =>
+      ["earnings", "incentive-daily", from, to, driverId ?? "all", restaurantId ?? "all"] as const,
+    incentiveDailyDrivers: () => ["earnings", "incentive-daily-drivers"] as const,
   },
   payouts: {
     all: () => ["payouts"] as const,

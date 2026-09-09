@@ -43,6 +43,7 @@ import {
 } from "./earnings-actions";
 import { useEarningsDaily, useEarningsGrouped, useEarningsOverview } from "./use-earnings";
 import { EarningsDetailDialog } from "./earnings-detail-dialog";
+import { IncentiveDailyPanel } from "./incentive-daily-panel";
 
 type EarningsTab = "daily" | "driver" | "reports" | "tools";
 
@@ -264,6 +265,7 @@ export function EarningsPageShell() {
             onSelect={(id) => setTab(id as EarningsTab)}
           />
 
+          {tab !== "reports" ? (
           <div className="flex flex-wrap items-end gap-3 border-b border-border pb-4">
             <div className="space-y-1.5">
               <Label htmlFor="earn-start">{t("startDate")}</Label>
@@ -314,6 +316,7 @@ export function EarningsPageShell() {
               />
             </div>
           </div>
+          ) : null}
 
           {tab === "daily" ? (
             <Table>
@@ -391,6 +394,7 @@ export function EarningsPageShell() {
 
           {tab === "reports" ? (
             <div className="space-y-4">
+              <IncentiveDailyPanel />
               <div className="flex items-end gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="report-group">Group by</Label>

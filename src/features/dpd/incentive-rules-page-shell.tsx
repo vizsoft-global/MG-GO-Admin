@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Download, Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 import { deleteIncentiveRule, isDpdErrorKey } from "./dpd-actions";
 import { DpdStatusBadge } from "./dpd-status-badge";
 import { IncentiveRuleFormSheet } from "./incentive-rule-form-sheet";
+import { IncentiveRuleImportDialog } from "./incentive-rule-import-dialog";
+import { buildIncentiveRulesWorkbook } from "./incentive-rule-xlsx";
 import {
   formatIncentiveRewardSummary,
   formatIncentiveTargetSummary,
@@ -46,6 +48,8 @@ export function IncentiveRulesPageShell() {
     row: null,
   });
   const [deleteTarget, setDeleteTarget] = useState<IncentiveRuleRow | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const handleDelete = () => {
     if (!deleteTarget) return;
@@ -69,17 +73,62 @@ export function IncentiveRulesPageShell() {
         title={tPage("title")}
         description={tPage("subtitle")}
         actions={
-          canManage ? (
+          <div className="flex gap-2">
             <Button
               type="button"
+              variant="outline"
               size="sm"
-              className="cursor-pointer rounded-lg"
-              onClick={() => setSheet({ open: true, row: null })}
+              className="h-9 cursor-pointer rounded-lg"
+              disabled={exporting || (incentiveRules?.length ?? 0) === 0}
+              onClick={async () => {
+                if (!incentiveRules?.length) {
+                  toast.error(t("incentiveExportEmpty"));
+                  return;
+                }
+                setExporting(true);
+                try {
+                  const buf = await buildIncentiveRulesWorkbook(incentiveRules);
+                  const blob = new Blob([buf], {
+                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "incentive-rules.xlsx";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } finally {
+                  setExporting(false);
+                }
+              }}
             >
-              <Plus className="h-4 w-4" />
-              {t("addIncentiveRule")}
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {t("incentiveExport")}
             </Button>
-          ) : null
+            {canManage ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload className="h-4 w-4" />
+                {t("incentivePreview")}
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => setSheet({ open: true, row: null })}
+              >
+                <Plus className="h-4 w-4" />
+                {t("addIncentiveRule")}
+              </Button>
+            ) : null}
+          </div>
         }
       />
       <p className="text-sm text-muted-foreground">{t("stackingHint")}</p>
@@ -159,6 +208,14 @@ export function IncentiveRulesPageShell() {
           </Table>
         )}
       </AppListCard>
+
+      <IncentiveRuleImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onApplied={() => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.dpd.incentiveRules() });
+        }}
+      />
 
       <IncentiveRuleFormSheet
         rule={sheet.row}

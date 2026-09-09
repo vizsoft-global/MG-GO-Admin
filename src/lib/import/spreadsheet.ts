@@ -129,7 +129,64 @@ export function saveStoredMapping<T extends string>(
   }
 }
 
-export async function parseSpreadsheetFile(file: File): Promise<ParsedSheet> {
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "," && !inQuotes) {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+export function parseCsvText(text: string): ParsedSheet {
+  const lines = text
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0);
+  if (lines.length < 2) {
+    return { headers: [], rows: [], headerSignature: "" };
+  }
+  const parsed = lines.map(parseCsvLine);
+  const headers = (parsed[0] ?? []).map((c) => cleanCell(c));
+  const rows = parsed.slice(1).map((r) => r.map((c) => cleanCell(c)));
+  return {
+    headers,
+    rows,
+    headerSignature: headerSignature(headers),
+  };
+}
+
+function isCsvFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith(".csv") ||
+    file.type === "text/csv" ||
+    file.type === "text/plain"
+  );
+}
+
+export async function parseSpreadsheetFile(
+  file: File,
+  options?: { raw?: boolean },
+): Promise<ParsedSheet> {
+  if (isCsvFile(file)) {
+    return parseCsvText(await file.text());
+  }
   const XLSX = await import("xlsx");
   const buffer = await file.arrayBuffer();
   const wb = XLSX.read(buffer, { type: "array", cellDates: false });
@@ -138,7 +195,7 @@ export async function parseSpreadsheetFile(file: File): Promise<ParsedSheet> {
   const matrix = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, {
     header: 1,
     defval: null,
-    raw: false,
+    raw: options?.raw ?? false,
   }) as (string | number | null)[][];
 
   if (matrix.length < 2) {

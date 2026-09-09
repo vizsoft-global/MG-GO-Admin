@@ -4857,7 +4857,7 @@
       "colWallet": "Wallet (KWD)",
       "emptyTitle": "No earnings in this range",
       "incentiveDailyTitle": "Daily incentives",
-      "incentiveDailyHint": "Kuwait calendar day (earn_date). Overlapping active rules are ended, then the upload row is inserted — tiers are never merged.",
+      "incentiveDailyHint": "Each row is one Kuwait calendar working day (earn_date). Time of day and shifts that cross midnight are not used.",
       "incentiveDailyExport": "Export Excel",
       "filterDriverAll": "All drivers",
       "filterRestaurantAll": "All restaurants",
