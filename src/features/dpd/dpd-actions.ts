@@ -37,8 +37,10 @@ import type {
   RuleStatus,
 } from "./types";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import {
   applyableIncentiveImportRows,
+  effectiveIncentiveImportStart,
   parseIsoDate,
   previewIncentiveRuleRows,
   uniqueRestaurantIds,
@@ -1277,6 +1279,7 @@ async function previewIncentiveRuleImportRows(
       start_date: rule.start_date,
       end_date: rule.end_date,
     })),
+    kuwaitToday: kuwaitTodayYmd(),
   });
 }
 
@@ -1339,8 +1342,18 @@ export async function applyIncentiveRuleImport(
       replaced += 1;
     }
 
+    const uploadedStart = start;
+    const effectiveStart = effectiveIncentiveImportStart({
+      uploadedStart,
+      kuwaitToday: kuwaitTodayYmd(),
+      replaces: row.replace_rule_ids.length > 0,
+    });
+    if (effectiveStart > end) {
+      return { error: "invalid_range" };
+    }
+
     const payload = {
-      name: `${row.restaurant} ${start}`,
+      name: `${row.restaurant} ${uploadedStart}`,
       status: "active" as const,
       scope_type: "restaurant" as const,
       zone_id: null,
@@ -1355,7 +1368,7 @@ export async function applyIncentiveRuleImport(
       reward_per_delivery_kwd: null,
       payout_mode: "milestone" as const,
       overrides_others: false,
-      start_date: start,
+      start_date: effectiveStart,
       end_date: end,
       priority: defaultPriority("restaurant"),
       updated_at: new Date().toISOString(),
