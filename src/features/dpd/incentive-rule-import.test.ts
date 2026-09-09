@@ -3,7 +3,9 @@ import { test } from "node:test";
 import { parseCsvText } from "@/lib/import/spreadsheet";
 import {
   applyableIncentiveImportRows,
+  clampIncentiveImportStart,
   datesOverlap,
+  effectiveIncentiveImportStart,
   guessIncentiveImportColumns,
   mapIncentiveImportSheet,
   parseIncentiveTiers,
@@ -164,6 +166,46 @@ test("export headers do not map Name onto Restaurant", () => {
     [["Old name", "Talabat HQ", "2026-09-01", "2026-09-30", "50=5"]],
   );
   assert.equal(mapped[0]?.restaurant, "Talabat HQ");
+});
+
+test("clamp is a no-op when uploaded start is today or later", () => {
+  assert.equal(clampIncentiveImportStart("2026-09-09", "2026-09-09"), "2026-09-09");
+  assert.equal(clampIncentiveImportStart("2026-09-10", "2026-09-09"), "2026-09-10");
+});
+
+test("clamp pulls a past uploaded start up to Kuwait today", () => {
+  assert.equal(clampIncentiveImportStart("2026-01-01", "2026-09-09"), "2026-09-09");
+});
+
+test("effective start clamps only when the row replaces an active rule", () => {
+  assert.equal(
+    effectiveIncentiveImportStart({
+      uploadedStart: "2026-01-01",
+      kuwaitToday: "2026-09-09",
+      replaces: false,
+    }),
+    "2026-01-01",
+  );
+  assert.equal(
+    effectiveIncentiveImportStart({
+      uploadedStart: "2026-01-01",
+      kuwaitToday: "2026-09-09",
+      replaces: true,
+    }),
+    "2026-09-09",
+  );
+});
+
+test("replace whose clamped start is after uploaded end is invalid_range", () => {
+  const rows = previewIncentiveRuleRows({
+    restaurants,
+    existing,
+    kuwaitToday: "2026-10-01",
+    rows: [
+      { restaurant: "Talabat HQ", start: "2026-09-15", end: "2026-09-30", tiers: "50=5" },
+    ],
+  });
+  assert.equal(rows[0].status, "invalid_range");
 });
 
 test("applyable rows are ok and would_replace only", () => {

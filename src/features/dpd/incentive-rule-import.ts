@@ -123,6 +123,23 @@ export function datesOverlap(
   return aStart <= bEnd && bStart <= aEnd;
 }
 
+/** Matching start when a replace overlaps an active rule: never earlier than Kuwait today. */
+export function clampIncentiveImportStart(
+  uploadedStart: string,
+  kuwaitToday: string,
+): string {
+  return uploadedStart >= kuwaitToday ? uploadedStart : kuwaitToday;
+}
+
+export function effectiveIncentiveImportStart(input: {
+  uploadedStart: string;
+  kuwaitToday: string;
+  replaces: boolean;
+}): string {
+  if (!input.replaces) return input.uploadedStart;
+  return clampIncentiveImportStart(input.uploadedStart, input.kuwaitToday);
+}
+
 export function parseIncentiveTiers(raw: string): IncentiveImportTier[] | null {
   const text = raw.trim();
   if (!text) return null;
@@ -170,6 +187,7 @@ export function previewIncentiveRuleRows(input: {
   rows: IncentiveImportInputRow[];
   restaurants: IncentiveImportRestaurant[];
   existing: IncentiveImportExistingRule[];
+  kuwaitToday?: string;
 }): IncentiveImportPreviewRow[] {
   const firstPass = input.rows.map((row, index): IncentiveImportPreviewRow => {
     const restaurant = row.restaurant?.trim() ?? "";
@@ -237,6 +255,12 @@ export function previewIncentiveRuleRows(input: {
         datesOverlap(row.start, row.end, rule.start_date, rule.end_date),
     );
     if (conflicts.length > 0) {
+      if (input.kuwaitToday) {
+        const effectiveStart = clampIncentiveImportStart(row.start, input.kuwaitToday);
+        if (effectiveStart > row.end) {
+          return { ...row, status: "invalid_range" };
+        }
+      }
       return {
         ...row,
         status: "would_replace",

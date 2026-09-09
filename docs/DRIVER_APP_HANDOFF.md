@@ -1120,7 +1120,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-09-09 — [admin only] incentive import replace-on-overlap + daily incentive report `admin_incentive_daily_report` on `/earnings` Reports (Kuwait `earn_date` working day). App does not read the report. Migration `20261018100000`.*
+*Last synced: 2026-09-09 — [admin only] incentive overlap replace clamps `start_date` to Kuwait today; ended rules still resolve for their original days until the replacement starts. Daily report unchanged. Period/DPD score still resolves once at `p_to` (display-only). App does not read the report. Migration `20260909052508`.*
 
 *Prior: 2026-09-05 — [admin+app] Driver devices `/driver-devices` + per-driver force + device_meta heartbeat. App `1.1.20+85`. Migration `20261016100000`. Optional `SENTRY_API_TOKEN`. Prior: force-update fleet gate + location coalesce (2026-09-04).*
 
