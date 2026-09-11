@@ -101,8 +101,22 @@ function useItemLabel() {
   };
 }
 
+const GROUP_I18N_KEY: Record<string, "overview" | "fleet" | "operations" | "wip" | "unorganised"> = {
+  Overview: "overview",
+  Fleet: "fleet",
+  Operations: "operations",
+  WIP: "wip",
+  "Work in Progress": "wip",
+  Unorganised: "unorganised",
+  Unorganized: "unorganised",
+};
+
 function useGroupLabel() {
-  return (label: string) => label;
+  const t = useTranslations("appNavGroups");
+  return (label: string) => {
+    const key = GROUP_I18N_KEY[label];
+    return key ? t(key) : label;
+  };
 }
 
 function SidebarCollapseTrigger({ className }: { className?: string }) {

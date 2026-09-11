@@ -80,6 +80,8 @@ export function useDecideRequest(requestId: string) {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.requests.detail(requestId),
       });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.fuel.all() });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.assets.all() });
     },
   });
 }
@@ -114,6 +116,7 @@ export function useSetFuelTransferType(requestId: string) {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.requests.detail(requestId),
       });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.fuel.all() });
     },
   });
 }

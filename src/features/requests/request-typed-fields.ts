@@ -39,12 +39,19 @@ export const TYPE_FIELDS: Record<string, TypedField[]> = {
     { key: "request_mode", label: "Renewal / First Time" },
     { key: "asset_current_status", label: "Current status" },
     { key: "justification", label: "Justification" },
+    { key: "handover_by", label: "Handover by" },
+    { key: "handover_at", label: "Handover at" },
     { key: "declaration_accepted", label: "Declaration" },
   ],
   fuel: [
     { key: "amount_kwd", label: "Amount", from: "column", format: "currency" },
     { key: "period_month", label: "Period" },
     { key: "distance_km", label: "Distance (km)" },
+    { key: "fuel_transfer_type", label: "Transfer type", from: "column" },
+  ],
+  fuel_refund: [
+    { key: "amount_kwd", label: "Amount", from: "column", format: "currency" },
+    { key: "reason", label: "Reason" },
     { key: "fuel_transfer_type", label: "Transfer type", from: "column" },
   ],
   document: [
@@ -98,6 +105,11 @@ export function formatFieldValue(value: unknown): string {
   if (typeof value === "object") return JSON.stringify(value);
   const str = String(value);
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return DATE_FORMAT.format(new Date(`${str}T00:00:00`));
+  if (/^\d{4}-\d{2}$/.test(str)) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = months[Number(str.slice(5, 7)) - 1];
+    return month ? `${month} ${str.slice(0, 4)}` : str;
+  }
   return humanizeToken(str);
 }
 
@@ -175,6 +187,7 @@ export function getTypedFieldRows(request: RequestDetail): TypedFieldRow[] {
 /** Workflow bookkeeping the admin already sees as status/badges — never a "detail" row. */
 const INTERNAL_PAYLOAD_KEYS = new Set([
   "demo_qa",
+  "qa_tag",
   "awaiting_driver_ack",
   "driver_ack_at",
   "driver_ack_note",

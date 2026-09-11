@@ -47,3 +47,28 @@ export function defaultFirstOfMonthYmd(): string {
   const today = kuwaitTodayYmd();
   return `${today.slice(0, 7)}-01`;
 }
+
+export function addKuwaitDays(ymd: string, deltaDays: number): string {
+  return shiftKuwaitYmd(ymd, deltaDays);
+}
+
+/** Saturday–Friday week that contains `ymd` (default: Kuwait today). */
+export function kuwaitSatFriWeek(ymd = kuwaitTodayYmd()): {
+  start: string;
+  end: string;
+  days: string[];
+} {
+  const dow = parseYmd(ymd).getUTCDay();
+  const daysFromSaturday = (dow + 1) % 7;
+  const start = shiftKuwaitYmd(ymd, -daysFromSaturday);
+  const days = Array.from({ length: 7 }, (_, index) => shiftKuwaitYmd(start, index));
+  return { start, end: days[6] ?? start, days };
+}
+
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+export function formatKuwaitDayLabel(ymd: string): string {
+  const [, month, day] = ymd.split("-").map(Number);
+  const monthLabel = MONTH_SHORT[(month ?? 1) - 1] ?? "Jan";
+  return `${String(day ?? 1).padStart(2, "0")} ${monthLabel}`;
+}

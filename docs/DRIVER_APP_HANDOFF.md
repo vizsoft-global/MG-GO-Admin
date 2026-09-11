@@ -256,10 +256,77 @@ Admin UI: **DPD** (`/dpd`, `earnings.view` / `earnings.manage`). Legacy `/settin
 | sla_due_at | timestamptz | Deadline of the open step; NULL when the step has no SLA |
 | closed_at / closed_by | timestamptz / uuid | Archive stamp (manual or auto-close) |
 | fuel_transfer_type | text | `cash` \| `salary` — approver's payout choice, not rider input |
+| vehicle_id | uuid | FK → `vehicles`. Stamped at create for `fuel` / `fuel_refund` / `asset` from `drivers.vehicle_id`. App does not send this. |
 
 Related tables: `request_approval_steps`, `request_clarifications`, `request_attachments`.  
 Config: `loan_tenure_options` (6 rows: 3/6/9/12/18/24 months) and `complaint_categories` (9 rows) were seeded 2026-08-12, so neither gate fires any more. Both remain admin-editable, so keep handling an empty list.  
 **Driver RPCs (live):** `driver_create_request`, `driver_list_my_requests` (includes `payload`), `driver_get_request`, `driver_submit_clarification`, `driver_acknowledge_request` (clears `payload.awaiting_driver_ack`, sets `driver_ack_at`, raises Admin `needs_attention`; optional `p_attachment_keys` inserts `request_attachments` — do not stuff storage keys into `p_note`). Final admin approve on `loan` / `asset` / `sick_leave` sets `payload.awaiting_driver_ack=true`.
+
+**Vehicle snapshot on create (2026-09-11):** for `fuel`, `fuel_refund`, and `asset`, `driver_create_request` / `admin_create_request` stamp `requests.vehicle_id` from `driver_assigned_vehicle_id` — the same `drivers.vehicle_id` join as `driver_get_assigned_vehicle`. The app must not send `vehicle_id` in payload; a missing assignment writes NULL and still creates the request. Admin Fuel/Asset Vehicle cards read that stamp first, then the live assignment, then the latest `fuel_fills.vehicle_id`.
+
+#### `driver_get_assigned_vehicle()` return shape
+
+Returns one object or `null` (no assignment). App does not send arguments. Fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `vehicle_id` | uuid | `vehicles.id` |
+| `plate` | text | Display plate (`reg_number` / bike plate) |
+| `kind` | text | `bike` \| `car` from `vehicle_type_key` |
+| `fuel_type` | text | `chip` \| `card` |
+| `chip_no` | text \| null | Fuel chip number |
+| `fuel_monthly_limit_kwd` | numeric \| null | Monthly cap |
+| `model` | text \| null | Vehicle model |
+
+#### `driver_report_fuel_fill` payload
+
+App does **not** send `vehicle_id`. RPC reads `drivers.vehicle_id`. Requires on-duty + assigned vehicle + GPS + all three stills.
+
+| Param | Type | Required |
+|---|---|---|
+| `p_litres` | numeric | yes |
+| `p_cost_kwd` | numeric | yes |
+| `p_station_name` | text | yes |
+| `p_lat` | float | yes (device GPS, high accuracy) |
+| `p_lng` | float | yes |
+| `p_attachments` | jsonb array | yes — exactly the three kinds below |
+| `p_filled_at` | timestamptz | optional; server now if omitted |
+
+Each `p_attachments[]` element uses the **create-attachment object** below. Required kinds (rear camera, `source = mobile_camera`): `fuel_receipt`, `fuel_pump`, `odometer`. Upload bucket `fuel-fills` under `{driver_id}/…`. Writes `fuel_fills` + `fuel_fill_attachments`. Flutter route `/vehicle/fuel-fill` is a `rootNavigatorKey` full screen (not a tab branch). Existing force-update redirect covers it — do not add a bypass.
+
+#### Create-attachment object (`p_attachments[]`)
+
+Used by `driver_create_request` and `driver_report_fuel_fill`. Every element:
+
+```
+{
+  storage_key: string,
+  file_name: string,
+  content_type: string,
+  byte_size: number,
+  title: string,
+  kind: string,
+  captured_at: string,   // device ISO timestamp
+  source: "mobile_camera" | "gallery"
+}
+```
+
+Required kinds, rear camera only (`captureOrderProof`, `source = mobile_camera`):
+
+| Type | kinds | titles (en) |
+|---|---|---|
+| `fuel` | `clear_fuel_invoice`, `vehicle_plate` | Clear fuel invoice, Vehicle plate photo |
+| `fuel_refund` | `rejected_fuel_invoice`, `cash_invoice`, `vehicle_photo`, `odometer` | Rejected fuel invoice, Cash invoice, Vehicle photo, Odometer reading |
+| `asset` | `handover_form`, `signed_acknowledgment` | Handover form, Signed acknowledgment |
+| fuel fill | `fuel_receipt`, `fuel_pump`, `odometer` | Fuel receipt, Fuel pump, Odometer reading |
+
+#### `fuel_refund` type
+
+System type `request_type_definitions.key = fuel_refund`, code prefix `RFR-`. Hub tile + ARB (`supportRequestTypeFuelRefund` / `supportFormTitleFuelRefund`). Payload/columns: `amount_kwd`, `reason` (why the fill was rejected / refunded). Detail reuses fuel amount + `fuelTransferTypeLabel` (cash/salary is admin-set, not rider input). Vehicle stamp same as fuel/asset. Built-in hub fallback includes this type so an offline tile fetch still shows it.
+
+#### Clarify / ack attachments stay keys-only (not a bug)
+
+`driver_submit_clarification` / `driver_acknowledge_request` take `p_attachment_keys: string[]` only. Admin paints **filename + server upload time (`request_attachments.created_at`)**. Those rows have no `title` and no device `captured_at`. Do not extend those RPCs to the create-attachment object.
 
 The **Admin response** card (loan / asset / sick_leave decision terms) stays visible after acknowledgement while the request is `approved` or `closed`. Deduction start date is always listed for an approved loan — from the latest completed step `meta`, then payload, otherwise "Not specified". New admin approvals default that date to Kuwait today and refuse Save without it.  
 Loan submit requires rows in `loan_tenure_options`; complaint submit requires `complaint_categories` rows. Both are seeded as of 2026-08-12; the `tenure_options_not_configured` and `complaint_categories_not_configured` errors now only appear if an admin deactivates every option.

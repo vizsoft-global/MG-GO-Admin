@@ -436,7 +436,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
           </section>
         ) : null}
 
-        {request.request_type === "fuel" ? (
+        {request.request_type === "fuel" || request.request_type === "fuel_refund" ? (
           <RequestFuelTransferCard
             requestId={request.id}
             value={request.fuel_transfer_type}

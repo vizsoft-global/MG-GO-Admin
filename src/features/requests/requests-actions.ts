@@ -165,6 +165,8 @@ export async function fetchAdminRequestsList(filters: RequestListFilters): Promi
         driver_id: String(r.driver_id ?? ""),
         driver_name: String(r.driver_name ?? "—"),
         driver_code: String(r.driver_code ?? ""),
+        employee_id: r.employee_id != null ? String(r.employee_id) : null,
+        project_key: r.project_key != null ? String(r.project_key) : null,
         driver_zone: r.driver_zone != null ? String(r.driver_zone) : null,
         amount_kwd: r.amount_kwd != null ? Number(r.amount_kwd) : null,
         needs_attention: Boolean(r.needs_attention),
@@ -343,6 +345,10 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
         content_type: row.content_type != null ? String(row.content_type) : null,
         byte_size: row.byte_size != null ? Number(row.byte_size) : null,
         created_at: String(row.created_at ?? ""),
+        title: row.title != null ? String(row.title) : null,
+        kind: row.kind != null ? String(row.kind) : null,
+        captured_at: row.captured_at != null ? String(row.captured_at) : null,
+        source: row.source != null ? String(row.source) : null,
       };
     }),
   };

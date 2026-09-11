@@ -126,7 +126,7 @@ export function fuelFinalApproveBlocked(input: {
   isFinalStep: boolean;
 }): boolean {
   return (
-    input.requestType === "fuel" &&
+    (input.requestType === "fuel" || input.requestType === "fuel_refund") &&
     input.isFinalStep &&
     (input.fuelTransferType == null || input.fuelTransferType === "")
   );

@@ -83,6 +83,8 @@ export const queryKeys = {
   assets: {
     all: () => ["assets"] as const,
     list: () => ["assets", "list"] as const,
+    assignments: () => ["assets", "assignments"] as const,
+    requests: () => ["assets", "requests"] as const,
     detail: (id: string) => ["assets", "detail", id] as const,
     catalogForDriver: (intakeId: string | null) =>
       ["assets", "catalog-for-driver", intakeId ?? "new"] as const,
@@ -138,6 +140,11 @@ export const queryKeys = {
     all: () => ["vehicles"] as const,
     list: (filters: Record<string, unknown> = {}) => ["vehicles", "list", filters] as const,
     detail: (id: string) => ["vehicles", "detail", id] as const,
+  },
+  fuel: {
+    all: () => ["fuel"] as const,
+    list: (filters: Record<string, unknown> = {}) => ["fuel", "list", filters] as const,
+    requests: (type: string) => ["fuel", "requests", type] as const,
   },
   requests: {
     all: () => ["requests"] as const,

@@ -7,6 +7,7 @@ import {
   Ban,
   Bike,
   CircleDot,
+  ExternalLink,
   Loader2,
   Plus,
   Search,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useRouter } from "@/i18n/navigation";
+import { Link } from "@/i18n/navigation";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -24,29 +26,37 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import { AppEmptyState } from "@/components/app/app-empty-state";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
+import {
+  CarTypeBadge,
+  ConditionBadge,
+  FuelCompanyBadge,
+  FuelTypeBadge,
+  KindBadge,
+  ReplacementBadge,
+  VehicleStatusBadge,
+} from "@/features/fleet/fleet-badges";
+import { formatReplacementSince } from "@/features/fleet/fleet-labels";
 import { VehicleFormDialog } from "./vehicle-form-dialog";
+import { VehicleRecordDialog } from "./vehicle-record-dialog";
 import { useVehicleTypes, useVehiclesList } from "./use-vehicles";
-import type { VehicleListRow, VehicleStatus } from "./types";
+import type { VehicleListRow } from "./types";
 import {
   parseVehicleListTab,
+  parseVehicleProjectFilter,
   vehicleListKpis,
+  vehicleMatchesProject,
   vehicleMatchesSearch,
   vehicleMatchesTab,
   type VehicleListTab,
+  type VehicleProjectFilter,
 } from "./vehicles-list-utils";
-
-function statusTone(status: VehicleStatus): "default" | "secondary" | "destructive" {
-  if (status === "active") return "default";
-  if (status === "maintenance") return "secondary";
-  return "destructive";
-}
 
 export function VehiclesPageShell({
   addOpen,
@@ -63,6 +73,9 @@ export function VehiclesPageShell({
   const { data: vehicles = [], isLoading } = useVehiclesList();
   const { data: types = [] } = useVehicleTypes();
   const [search, setSearch] = useState("");
+  const [projectFilter, setProjectFilter] = useState<VehicleProjectFilter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const activeTab = parseVehicleListTab(tab);
 
   const replaceQuery = (next: { add?: boolean; tab?: VehicleListTab }) => {
@@ -78,19 +91,24 @@ export function VehiclesPageShell({
   const visible = useMemo(
     () =>
       vehicles.filter(
-        (row) => vehicleMatchesTab(row, activeTab) && vehicleMatchesSearch(row, search),
+        (row) =>
+          vehicleMatchesTab(row, activeTab) &&
+          vehicleMatchesProject(row, projectFilter) &&
+          vehicleMatchesSearch(row, search),
       ),
-    [activeTab, search, vehicles],
+    [activeTab, projectFilter, search, vehicles],
   );
 
   const counts = useMemo(() => vehicleListKpis(vehicles), [vehicles]);
+  const selected = vehicles.find((row) => row.id === selectedId) ?? null;
+  const editing = vehicles.find((row) => row.id === editId) ?? null;
   const kpis = [
     { label: t("kpiTotal"), value: isLoading ? "—" : String(counts.total), icon: Bike, accent: "primary" as const },
     { label: t("kpiOnDuty"), value: isLoading ? "—" : String(counts.onDuty), icon: CircleDot, accent: "success" as const },
     { label: t("kpiSuspended"), value: isLoading ? "—" : String(counts.suspended), icon: Ban, accent: "danger" as const },
-    { label: t("kpiGroup"), value: isLoading ? "—" : String(counts.group), icon: Users },
+    { label: t("kpiCompany"), value: isLoading ? "—" : String(counts.company), icon: Users },
     { label: t("kpiRent"), value: isLoading ? "—" : String(counts.rent), icon: Wallet },
-    { label: t("kpiMaintenance"), value: isLoading ? "—" : String(counts.maintenance), icon: Wrench, accent: "warning" as const },
+    { label: t("kpiUnderRepair"), value: isLoading ? "—" : String(counts.underRepair), icon: Wrench, accent: "warning" as const },
   ];
 
   return (
@@ -125,23 +143,49 @@ export function VehiclesPageShell({
       <KpiGrid items={kpis} compact />
       <AppListCard
         toolbar={
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={t("searchPlaceholder")}
-              className="h-9 rounded-lg bg-background ps-9 pe-9"
-            />
-            {search ? (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={t("searchPlaceholder")}
+                className="h-9 rounded-lg bg-background ps-9 pe-9"
+              />
+              {search ? (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+            </div>
+            <Select
+              items={[
+                { value: "all", label: t("projectAll") },
+                { value: "keeta", label: t("projectKeeta") },
+                { value: "americana", label: t("projectAmericana") },
+              ]}
+              value={projectFilter}
+              onValueChange={(value) => setProjectFilter(parseVehicleProjectFilter(value))}
+            >
+              <SelectTrigger className="h-9 w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" label={t("projectAll")}>
+                  {t("projectAll")}
+                </SelectItem>
+                <SelectItem value="keeta" label={t("projectKeeta")}>
+                  {t("projectKeeta")}
+                </SelectItem>
+                <SelectItem value="americana" label={t("projectAmericana")}>
+                  {t("projectAmericana")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         }
       >
@@ -154,34 +198,61 @@ export function VehiclesPageShell({
         ) : (
           <AppDataTable
             columns={[
-              { id: "bike", label: t("colBikeId") },
-              { id: "reg", label: t("colReg") },
-              { id: "type", label: t("colType") },
+              { id: "plate", label: t("colPlate") },
+              { id: "chassis", label: t("colChassis") },
+              { id: "kind", label: t("colKind") },
+              { id: "model", label: t("colModel") },
+              { id: "year", label: t("colYear") },
+              { id: "condition", label: t("colCondition") },
+              { id: "chip", label: t("colChip") },
+              { id: "fuelType", label: t("colFuelType") },
+              { id: "fuelCompany", label: t("colFuelCompany") },
+              { id: "carsCompany", label: t("colCarsCompany") },
+              { id: "typeOfUse", label: t("colTypeOfUse") },
+              { id: "location", label: t("colLocation") },
               { id: "driver", label: t("colDriver") },
-              { id: "status", label: t("colStatus") },
+              { id: "empCompany", label: t("colEmpCompany") },
+              { id: "carType", label: t("colCarType") },
+              { id: "replacement", label: t("colReplacement") },
+              { id: "repPlate", label: t("colRepPlate") },
+              { id: "since", label: t("colSince") },
             ]}
             empty={visible.length === 0 ? <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty> : null}
           >
             {visible.map((row) => (
-              <VehicleRow
-                key={row.id}
-                row={row}
-                onOpen={() => router.push(`/vehicles/${row.id}`)}
-              />
+              <VehicleRow key={row.id} row={row} onOpen={() => setSelectedId(row.id)} />
             ))}
           </AppDataTable>
         )}
       </AppListCard>
-      <VehicleFormDialog
-        open={addOpen && canManage}
-        vehicle={null}
-        types={types}
+      <VehicleRecordDialog
+        open={Boolean(selected)}
+        vehicle={selected}
+        canManage={canManage}
         onOpenChange={(open) => {
-          if (!open) replaceQuery({ add: false });
+          if (!open) setSelectedId(null);
+        }}
+        onEdit={() => {
+          if (!selected) return;
+          setEditId(selected.id);
+          setSelectedId(null);
+        }}
+      />
+      <VehicleFormDialog
+        open={(addOpen || Boolean(editing)) && canManage}
+        vehicle={editing}
+        types={types}
+        vehicles={vehicles}
+        onOpenChange={(open) => {
+          if (open) return;
+          setEditId(null);
+          if (addOpen) replaceQuery({ add: false });
         }}
         onSaved={(id) => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all() });
-          router.replace(`/vehicles/${id}`);
+          setEditId(null);
+          if (addOpen) replaceQuery({ add: false });
+          setSelectedId(id);
         }}
       />
     </AppPage>
@@ -196,27 +267,62 @@ function VehicleRow({
   onOpen: () => void;
 }) {
   const t = useTranslations("pages.vehicles");
-  const statusLabel =
-    row.status === "active"
-      ? t("statusActive")
-      : row.status === "maintenance"
-        ? t("statusMaintenance")
-        : t("statusSuspended");
   return (
     <AppDataTableRow className="cursor-pointer" onClick={onOpen}>
-      <TableCell>
-        <p className="font-medium">{row.bike_id}</p>
-        <p className="text-[11px] text-primary">{t("viewDetails")}</p>
+      <TableCell className="whitespace-nowrap">
+        <p className="font-medium">{row.reg_number || row.bike_id}</p>
+        {row.status !== "active" ? (
+          <div className="mt-0.5">
+            <VehicleStatusBadge status={row.status} />
+          </div>
+        ) : null}
+        <Link
+          href={`/vehicles/${row.id}`}
+          className="inline-flex items-center gap-1 text-[11px] text-primary hover:bg-primary/10"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <ExternalLink className="h-3 w-3" />
+          {t("viewDetails")}
+        </Link>
       </TableCell>
-      <TableCell>{row.reg_number ?? "—"}</TableCell>
-      <TableCell>{row.vehicle_type_label}</TableCell>
+      <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+        {row.chassis_no ?? "—"}
+      </TableCell>
       <TableCell>
+        <KindBadge value={row.vehicle_type_key} />
+      </TableCell>
+      <TableCell className="whitespace-nowrap">{row.model ?? "—"}</TableCell>
+      <TableCell>{row.model_year ?? "—"}</TableCell>
+      <TableCell>
+        <ConditionBadge value={row.condition} />
+      </TableCell>
+      <TableCell className="font-mono text-[11px]">{row.chip_no ?? "—"}</TableCell>
+      <TableCell>
+        <FuelTypeBadge value={row.fuel_type} />
+      </TableCell>
+      <TableCell>
+        <FuelCompanyBadge value={row.fuel_company} />
+      </TableCell>
+      <TableCell className="whitespace-nowrap">{row.owner_partner_name ?? "—"}</TableCell>
+      <TableCell className="whitespace-nowrap">
+        {row.type_of_use ? t(`typeOfUse.${row.type_of_use}`) : "—"}
+      </TableCell>
+      <TableCell className="whitespace-nowrap">{row.location_text ?? "—"}</TableCell>
+      <TableCell className="whitespace-nowrap">
         {row.assigned_driver_name
-          ? `${row.assigned_driver_name}${row.assigned_driver_code ? ` · ${row.assigned_driver_code}` : ""}`
+          ? `${row.assigned_driver_name}${row.assigned_employee_id ? ` · ${row.assigned_employee_id}` : ""}`
           : "—"}
       </TableCell>
+      <TableCell className="whitespace-nowrap">{row.assigned_partner_name ?? "—"}</TableCell>
       <TableCell>
-        <Badge variant={statusTone(row.status)}>{statusLabel}</Badge>
+        <CarTypeBadge value={row.car_type} />
+      </TableCell>
+      <TableCell>
+        <ReplacementBadge active={Boolean(row.replaces_vehicle_id)} />
+      </TableCell>
+      <TableCell className="whitespace-nowrap">{row.replaces_plate ?? "—"}</TableCell>
+      <TableCell className="whitespace-nowrap">
+        {formatReplacementSince(row.replacement_started_at) ?? "—"}
       </TableCell>
     </AppDataTableRow>
   );

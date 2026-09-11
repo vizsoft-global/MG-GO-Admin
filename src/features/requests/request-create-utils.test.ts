@@ -69,6 +69,14 @@ describe("fuelFinalApproveBlocked", () => {
       }),
       false,
     );
+    assert.equal(
+      fuelFinalApproveBlocked({
+        requestType: "fuel_refund",
+        fuelTransferType: null,
+        isFinalStep: true,
+      }),
+      true,
+    );
   });
 });
 

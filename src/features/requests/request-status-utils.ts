@@ -49,7 +49,7 @@ const UNUSED_ACTION_STATUS_FILTERS = new Set<RequestStatusFilter>([
 export function statusFiltersForRequestType(
   type: string,
 ): readonly RequestStatusFilter[] {
-  if (type === "fuel" || type === "asset") {
+  if (type === "fuel" || type === "fuel_refund" || type === "asset") {
     return REQUEST_STATUS_FILTERS.filter((key) => !UNUSED_ACTION_STATUS_FILTERS.has(key));
   }
   return REQUEST_STATUS_FILTERS;
