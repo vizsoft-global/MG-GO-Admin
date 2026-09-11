@@ -3121,6 +3121,7 @@
       "colQty": "الكمية",
       "colHadBefore": "سبق له",
       "colEmpCompany": "شركة السائق",
+      "colEmployeeCompany": "شركة الموظف",
       "colVehicleCompany": "شركة المركبة",
       "colFuelCompany": "شركة الوقود",
       "colProject": "المشروع",

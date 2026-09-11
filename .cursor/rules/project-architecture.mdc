@@ -231,6 +231,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-09-11` — **Fleet prototype badge tokens.** Project / Replacement = purple `#EDE9FE`/`#5B21B6`; Car Type = solid `#065F46`/`#92400E`/`#7C2D12` + white; Kind = indigo Car / pink Bike; Department = blue pill; Had-before = amber Yes / grey No. `/assets/requests` column + modal use `Employee Company`. MG-GO `attachVehiclePlate` AR is `صورة لوحة المركبة`. No Vercel deploy.
+
 - `[admin+app] 2026-09-11` — **Fleet handoff + ar labels.** `DRIVER_APP_HANDOFF.md` now documents `driver_get_assigned_vehicle` return shape, `driver_report_fuel_fill` params, create-attachment object, `fuel_refund` type, and keys-only clarify/ack (filename + upload `created_at`). Admin `deptFleet`/`deptAccounts` + Project badge i18n. No Vercel deploy.
 
 - `[admin+app] 2026-09-11` — **MG-GO fleet create attachments, Vehicle tab / Log fuel, fuel_refund hub.** Create `p_attachments` now sends `title`/`kind`/`captured_at`/`source`; fuel / refund / asset use rear-camera kind slots. Clarify/ack stay `p_attachment_keys`. Vehicle tab reads `driver_get_assigned_vehicle`; `/vehicle/fuel-fill` (root navigator) logs three stills + GPS via `driver_report_fuel_fill`. Hub fallback includes `fuel_refund`. Force-update still redirects that route. No Vercel deploy in this pass.

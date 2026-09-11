@@ -15,7 +15,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusPill } from "@/components/dashboard/status-pill";
-import { FuelCompanyBadge, ProjectBadge } from "@/features/fleet/fleet-badges";
+import {
+  DepartmentBadge,
+  FuelCompanyBadge,
+  HadBeforeBadge,
+  ProjectBadge,
+} from "@/features/fleet/fleet-badges";
 import { isDriverProjectKey, toKuwaitYmd } from "@/features/fleet/fleet-labels";
 import { Link } from "@/i18n/navigation";
 import { formatKuwaitDayLabel } from "@/lib/date/kuwait-dates";
@@ -119,7 +124,7 @@ export function FleetRequestPageShell({ type }: { type: FleetQueueRequestType })
                 ? [
                     { id: "code", label: t("colRequestId") },
                     { id: "driver", label: t("colEmployee") },
-                    { id: "empCompany", label: t("colEmpCompany") },
+                    { id: "empCompany", label: t("colEmployeeCompany") },
                     { id: "plate", label: t("colPlate") },
                     { id: "vehCompany", label: t("colVehicleCompany") },
                     { id: "project", label: t("colProject") },
@@ -221,18 +226,14 @@ function FleetRequestRow({
         <>
           <TableCell className="whitespace-nowrap">{row.item ?? "—"}</TableCell>
           <TableCell className="whitespace-nowrap">{row.quantity ?? "—"}</TableCell>
-          <TableCell className="whitespace-nowrap">
-            {row.had_before == null ? "—" : row.had_before ? t("hadYes") : t("hadNo")}
+          <TableCell>
+            <HadBeforeBadge value={row.had_before} />
           </TableCell>
         </>
       ) : (
         <>
           <TableCell>
-            {row.department === "Fleet"
-              ? t("deptFleet")
-              : row.department === "Accounts"
-                ? t("deptAccounts")
-                : (row.department ?? "—")}
+            <DepartmentBadge value={row.department} />
           </TableCell>
           <TableCell className="whitespace-nowrap">
             {type === "fuel" ? row.request_no_this_month : `${formatKwd(row.amount_kwd ?? 0)} KWD`}

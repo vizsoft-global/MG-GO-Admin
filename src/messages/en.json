@@ -3133,6 +3133,7 @@
       "colQty": "Qty",
       "colHadBefore": "Had before",
       "colEmpCompany": "Driver company",
+      "colEmployeeCompany": "Employee Company",
       "colVehicleCompany": "Vehicle company",
       "colFuelCompany": "Fuel company",
       "colProject": "Project",

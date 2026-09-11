@@ -49,6 +49,23 @@ html[data-theme="shopify"] {
   --sidebar-accent-foreground: oklch(0.97 0 0);
   --sidebar-border: oklch(0.32 0.025 255);
   --sidebar-ring: oklch(0.45 0.14 155);
+
+  /* Fleet prototype pills — exact hex from fleet-management-prototype */
+  --fleet-purple: #ede9fe;
+  --fleet-purple-fg: #5b21b6;
+  --fleet-blue: #dbeafe;
+  --fleet-blue-fg: #1e40af;
+  --fleet-amber: #fef3c7;
+  --fleet-amber-fg: #92400e;
+  --fleet-gray: #f3f4f6;
+  --fleet-gray-fg: #374151;
+  --fleet-car-company: #065f46;
+  --fleet-car-rent: #92400e;
+  --fleet-car-maintenance: #7c2d12;
+  --fleet-kind-car: #e0e7ff;
+  --fleet-kind-car-fg: #3730a3;
+  --fleet-kind-bike: #fce7f3;
+  --fleet-kind-bike-fg: #9f1239;
 }
 
 html.dark,

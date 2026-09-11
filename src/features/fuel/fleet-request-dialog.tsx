@@ -239,7 +239,10 @@ export function FleetRequestDialog({
                         <div className="mt-1">
                           <DetailRow label={t("colDriver")} value={row.driver_name} />
                           <DetailRow label={t("fieldEmployeeId")} value={row.employee_id ?? "—"} />
-                          <DetailRow label={t("colEmpCompany")} value={row.employee_company ?? "—"} />
+                          <DetailRow
+                            label={type === "asset" ? t("colEmployeeCompany") : t("colEmpCompany")}
+                            value={row.employee_company ?? "—"}
+                          />
                           <DetailRow label={t("fieldPhone")} value={row.phone ?? "—"} />
                           <DetailRow label={t("colProject")} value={<ProjectBadge value={row.project_key} />} />
                           <DetailRow label={t("colZone")} value={row.zone ?? "—"} />

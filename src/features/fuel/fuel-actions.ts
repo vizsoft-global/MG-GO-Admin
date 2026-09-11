@@ -28,9 +28,8 @@ export async function listFuelFills(input: {
   const { data, error } = await supabase.rpc("admin_list_fuel_fills", {
     p_from: input.from,
     p_to: input.to,
-    p_search: input.search?.trim() || null,
-    p_project_key: input.projectKey || null,
-    p_vehicle_type_key: null,
+    p_search: input.search?.trim() || undefined,
+    p_project_key: input.projectKey || undefined,
     p_limit: 2000,
     p_offset: 0,
   });
