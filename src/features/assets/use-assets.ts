@@ -11,6 +11,21 @@ import {
   returnAssetAssignment,
   updateAssetCatalogItem,
 } from "./assets-actions";
+import { listFleetAssetAssignments, listFleetAssetKpis } from "./assets-fleet-actions";
+
+export function useFleetAssetAssignments() {
+  return useQuery({
+    queryKey: queryKeys.assets.assignments(),
+    queryFn: listFleetAssetAssignments,
+  });
+}
+
+export function useFleetAssetKpis() {
+  return useQuery({
+    queryKey: [...queryKeys.assets.list(), "fleet-kpi"],
+    queryFn: listFleetAssetKpis,
+  });
+}
 
 export function useAssetsCatalog() {
   return useQuery({

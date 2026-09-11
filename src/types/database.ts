@@ -678,8 +678,53 @@ export type Database = {
           },
         ]
       }
+      asset_assignment_attachments: {
+        Row: {
+          assignment_id: string
+          captured_at: string | null
+          created_at: string
+          file_name: string | null
+          id: string
+          kind: string
+          source: string | null
+          storage_key: string
+          title: string | null
+        }
+        Insert: {
+          assignment_id: string
+          captured_at?: string | null
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          kind: string
+          source?: string | null
+          storage_key: string
+          title?: string | null
+        }
+        Update: {
+          assignment_id?: string
+          captured_at?: string | null
+          created_at?: string
+          file_name?: string | null
+          id?: string
+          kind?: string
+          source?: string | null
+          storage_key?: string
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_assignment_attachments_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "asset_assignments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       asset_assignments: {
         Row: {
+          asset_code: string | null
           assigned_at: string
           assigned_by: string | null
           catalog_item_id: string
@@ -689,11 +734,16 @@ export type Database = {
           intake_id: string | null
           notes: string | null
           quantity: number
+          received_at_place: string | null
+          received_by_name: string | null
+          return_reason: string | null
           returned_at: string | null
+          returned_by_name: string | null
           status: Database["public"]["Enums"]["asset_assignment_status"]
           updated_at: string
         }
         Insert: {
+          asset_code?: string | null
           assigned_at?: string
           assigned_by?: string | null
           catalog_item_id: string
@@ -703,11 +753,16 @@ export type Database = {
           intake_id?: string | null
           notes?: string | null
           quantity?: number
+          received_at_place?: string | null
+          received_by_name?: string | null
+          return_reason?: string | null
           returned_at?: string | null
+          returned_by_name?: string | null
           status?: Database["public"]["Enums"]["asset_assignment_status"]
           updated_at?: string
         }
         Update: {
+          asset_code?: string | null
           assigned_at?: string
           assigned_by?: string | null
           catalog_item_id?: string
@@ -717,7 +772,11 @@ export type Database = {
           intake_id?: string | null
           notes?: string | null
           quantity?: number
+          received_at_place?: string | null
+          received_by_name?: string | null
+          return_reason?: string | null
           returned_at?: string | null
+          returned_by_name?: string | null
           status?: Database["public"]["Enums"]["asset_assignment_status"]
           updated_at?: string
         }
@@ -2200,6 +2259,7 @@ export type Database = {
       }
       driver_intakes: {
         Row: {
+          accommodation: string | null
           archived_at: string | null
           assets_issued: Json
           avatar_url: string | null
@@ -2218,6 +2278,7 @@ export type Database = {
           otp_code: string | null
           partner_id: string | null
           phone: string | null
+          project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
           status: Database["public"]["Enums"]["driver_intake_status"]
@@ -2228,6 +2289,7 @@ export type Database = {
           zone_id: string | null
         }
         Insert: {
+          accommodation?: string | null
           archived_at?: string | null
           assets_issued?: Json
           avatar_url?: string | null
@@ -2246,6 +2308,7 @@ export type Database = {
           otp_code?: string | null
           partner_id?: string | null
           phone?: string | null
+          project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
           status?: Database["public"]["Enums"]["driver_intake_status"]
@@ -2256,6 +2319,7 @@ export type Database = {
           zone_id?: string | null
         }
         Update: {
+          accommodation?: string | null
           archived_at?: string | null
           assets_issued?: Json
           avatar_url?: string | null
@@ -2274,6 +2338,7 @@ export type Database = {
           otp_code?: string | null
           partner_id?: string | null
           phone?: string | null
+          project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
           status?: Database["public"]["Enums"]["driver_intake_status"]
@@ -3178,6 +3243,7 @@ export type Database = {
       }
       drivers: {
         Row: {
+          accommodation: string | null
           active_device_id: string | null
           active_device_session_id: string | null
           app_passcode: string | null
@@ -3212,6 +3278,7 @@ export type Database = {
           login_verification_exempt: boolean
           nationality: string | null
           partner_id: string | null
+          project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
           status: Database["public"]["Enums"]["driver_status"]
@@ -3221,6 +3288,7 @@ export type Database = {
           zone_id: string | null
         }
         Insert: {
+          accommodation?: string | null
           active_device_id?: string | null
           active_device_session_id?: string | null
           app_passcode?: string | null
@@ -3255,6 +3323,7 @@ export type Database = {
           login_verification_exempt?: boolean
           nationality?: string | null
           partner_id?: string | null
+          project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
           status?: Database["public"]["Enums"]["driver_status"]
@@ -3264,6 +3333,7 @@ export type Database = {
           zone_id?: string | null
         }
         Update: {
+          accommodation?: string | null
           active_device_id?: string | null
           active_device_session_id?: string | null
           app_passcode?: string | null
@@ -3298,6 +3368,7 @@ export type Database = {
           login_verification_exempt?: boolean
           nationality?: string | null
           partner_id?: string | null
+          project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
           status?: Database["public"]["Enums"]["driver_status"]
@@ -3559,6 +3630,104 @@ export type Database = {
             columns: ["zone_id"]
             isOneToOne: false
             referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fuel_fill_attachments: {
+        Row: {
+          captured_at: string
+          created_at: string
+          file_name: string | null
+          fill_id: string
+          id: string
+          kind: string
+          source: string
+          storage_key: string
+          title: string
+        }
+        Insert: {
+          captured_at: string
+          created_at?: string
+          file_name?: string | null
+          fill_id: string
+          id?: string
+          kind: string
+          source?: string
+          storage_key: string
+          title: string
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          file_name?: string | null
+          fill_id?: string
+          id?: string
+          kind?: string
+          source?: string
+          storage_key?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fuel_fill_attachments_fill_id_fkey"
+            columns: ["fill_id"]
+            isOneToOne: false
+            referencedRelation: "fuel_fills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fuel_fills: {
+        Row: {
+          cost_kwd: number
+          created_at: string
+          driver_id: string
+          filled_at: string
+          id: string
+          lat: number
+          litres: number
+          lng: number
+          station_name: string
+          vehicle_id: string
+        }
+        Insert: {
+          cost_kwd: number
+          created_at?: string
+          driver_id: string
+          filled_at?: string
+          id?: string
+          lat: number
+          litres: number
+          lng: number
+          station_name: string
+          vehicle_id: string
+        }
+        Update: {
+          cost_kwd?: number
+          created_at?: string
+          driver_id?: string
+          filled_at?: string
+          id?: string
+          lat?: number
+          litres?: number
+          lng?: number
+          station_name?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fuel_fills_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fuel_fills_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
         ]
@@ -5365,32 +5534,44 @@ export type Database = {
       request_attachments: {
         Row: {
           byte_size: number | null
+          captured_at: string | null
           content_type: string | null
           created_at: string
           file_name: string | null
           id: string
+          kind: string | null
           request_id: string
+          source: string | null
           storage_key: string
+          title: string | null
           uploaded_by: string | null
         }
         Insert: {
           byte_size?: number | null
+          captured_at?: string | null
           content_type?: string | null
           created_at?: string
           file_name?: string | null
           id?: string
+          kind?: string | null
           request_id: string
+          source?: string | null
           storage_key: string
+          title?: string | null
           uploaded_by?: string | null
         }
         Update: {
           byte_size?: number | null
+          captured_at?: string | null
           content_type?: string | null
           created_at?: string
           file_name?: string | null
           id?: string
+          kind?: string | null
           request_id?: string
+          source?: string | null
           storage_key?: string
+          title?: string | null
           uploaded_by?: string | null
         }
         Relationships: [
@@ -5752,6 +5933,7 @@ export type Database = {
           start_date: string | null
           status: Database["public"]["Enums"]["request_status"]
           updated_at: string
+          vehicle_id: string | null
         }
         Insert: {
           acknowledged_at?: string | null
@@ -5786,6 +5968,7 @@ export type Database = {
           start_date?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           updated_at?: string
+          vehicle_id?: string | null
         }
         Update: {
           acknowledged_at?: string | null
@@ -5820,6 +6003,7 @@ export type Database = {
           start_date?: string | null
           status?: Database["public"]["Enums"]["request_status"]
           updated_at?: string
+          vehicle_id?: string | null
         }
         Relationships: [
           {
@@ -5848,6 +6032,13 @@ export type Database = {
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "requests_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
           {
@@ -6172,43 +6363,82 @@ export type Database = {
       vehicles: {
         Row: {
           bike_id: string
+          car_type: string | null
+          chassis_no: string | null
+          chip_no: string | null
+          condition: string | null
           created_at: string
           created_by: string | null
           current_driver_id: string | null
+          fuel_company: string | null
+          fuel_monthly_limit_kwd: number | null
+          fuel_type: string | null
           id: string
+          location_text: string | null
           make: string | null
           model: string | null
+          model_year: number | null
+          owner_partner_id: string | null
           project_type: Database["public"]["Enums"]["project_type"]
           reg_number: string | null
+          replacement_started_at: string | null
+          replaces_vehicle_id: string | null
           status: Database["public"]["Enums"]["vehicle_status"]
+          type_of_use: string | null
           updated_at: string
           vehicle_type_key: string
         }
         Insert: {
           bike_id: string
+          car_type?: string | null
+          chassis_no?: string | null
+          chip_no?: string | null
+          condition?: string | null
           created_at?: string
           created_by?: string | null
           current_driver_id?: string | null
+          fuel_company?: string | null
+          fuel_monthly_limit_kwd?: number | null
+          fuel_type?: string | null
           id?: string
+          location_text?: string | null
           make?: string | null
           model?: string | null
+          model_year?: number | null
+          owner_partner_id?: string | null
           project_type?: Database["public"]["Enums"]["project_type"]
           reg_number?: string | null
+          replacement_started_at?: string | null
+          replaces_vehicle_id?: string | null
           status?: Database["public"]["Enums"]["vehicle_status"]
+          type_of_use?: string | null
           updated_at?: string
           vehicle_type_key?: string
         }
         Update: {
           bike_id?: string
+          car_type?: string | null
+          chassis_no?: string | null
+          chip_no?: string | null
+          condition?: string | null
           created_at?: string
           created_by?: string | null
           current_driver_id?: string | null
+          fuel_company?: string | null
+          fuel_monthly_limit_kwd?: number | null
+          fuel_type?: string | null
           id?: string
+          location_text?: string | null
           make?: string | null
           model?: string | null
+          model_year?: number | null
+          owner_partner_id?: string | null
           project_type?: Database["public"]["Enums"]["project_type"]
           reg_number?: string | null
+          replacement_started_at?: string | null
+          replaces_vehicle_id?: string | null
           status?: Database["public"]["Enums"]["vehicle_status"]
+          type_of_use?: string | null
           updated_at?: string
           vehicle_type_key?: string
         }
@@ -6225,6 +6455,20 @@ export type Database = {
             columns: ["current_driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_owner_partner_id_fkey"
+            columns: ["owner_partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_replaces_vehicle_id_fkey"
+            columns: ["replaces_vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
           {
@@ -7019,6 +7263,7 @@ export type Database = {
       _driver_assert_active_on_duty: {
         Args: { p_uid: string }
         Returns: {
+          accommodation: string | null
           active_device_id: string | null
           active_device_session_id: string | null
           app_passcode: string | null
@@ -7053,6 +7298,7 @@ export type Database = {
           login_verification_exempt: boolean
           nationality: string | null
           partner_id: string | null
+          project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
           status: Database["public"]["Enums"]["driver_status"]
@@ -7360,6 +7606,7 @@ export type Database = {
         Args: { p_date?: string; p_driver_id: string; p_tolerance_m?: number }
         Returns: Json
       }
+      admin_get_fuel_fill: { Args: { p_id: string }; Returns: Json }
       admin_get_request: { Args: { p_request_id: string }; Returns: Json }
       admin_get_shift_adherence: {
         Args: { p_date: string; p_driver_id: string }
@@ -7436,6 +7683,18 @@ export type Database = {
           p_limit?: number
           p_severities?: string[]
           p_to?: string
+        }
+        Returns: Json
+      }
+      admin_list_fuel_fills: {
+        Args: {
+          p_from?: string
+          p_limit?: number
+          p_offset?: number
+          p_project_key?: string
+          p_search?: string
+          p_to?: string
+          p_vehicle_type_key?: string
         }
         Returns: Json
       }
@@ -7609,7 +7868,9 @@ export type Database = {
       allocate_appointment_code: { Args: never; Returns: string }
       allocate_driver_code: { Args: never; Returns: string }
       allocate_esign_code: { Args: never; Returns: string }
-      allocate_request_code: { Args: never; Returns: string }
+      allocate_request_code:
+        | { Args: never; Returns: string }
+        | { Args: { p_type: string }; Returns: string }
       allocate_visit_booking_code: { Args: never; Returns: string }
       approve_payout_run: { Args: { p_run_id: string }; Returns: undefined }
       archive_driver_intake: { Args: { p_intake_id: string }; Returns: Json }
@@ -7965,6 +8226,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      driver_get_assigned_vehicle: { Args: never; Returns: Json }
       driver_get_attendance: {
         Args: { p_month: number; p_year: number }
         Returns: Json
@@ -8060,6 +8322,18 @@ export type Database = {
       }
       driver_report_device_meta: {
         Args: { p_device_id: string; p_meta: Json }
+        Returns: Json
+      }
+      driver_report_fuel_fill: {
+        Args: {
+          p_attachments: Json
+          p_cost_kwd: number
+          p_filled_at?: string
+          p_lat: number
+          p_litres: number
+          p_lng: number
+          p_station_name: string
+        }
         Returns: Json
       }
       driver_report_location: {
@@ -8179,8 +8453,20 @@ export type Database = {
         }
         Returns: boolean
       }
+      incentive_rule_applies_on_date: {
+        Args: { p_on_date: string; p_rule_id: string }
+        Returns: boolean
+      }
       incentive_rule_matches_driver: {
         Args: { p_driver_id: string; p_rule_id: string }
+        Returns: boolean
+      }
+      incentive_rule_restaurant_ids: {
+        Args: { p_rule_id: string }
+        Returns: string[]
+      }
+      incentive_rules_share_restaurant: {
+        Args: { p_a: string; p_b: string }
         Returns: boolean
       }
       intake_has_active_restaurant: {

@@ -18,6 +18,7 @@ describe("statusFiltersForRequestType", () => {
       "closed",
     ];
     assert.deepEqual(statusFiltersForRequestType("fuel"), expected);
+    assert.deepEqual(statusFiltersForRequestType("fuel_refund"), expected);
     assert.deepEqual(statusFiltersForRequestType("asset"), expected);
   });
 

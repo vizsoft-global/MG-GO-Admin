@@ -35,6 +35,8 @@ export type RequestListRow = {
   driver_id: string;
   driver_name: string;
   driver_code: string;
+  employee_id: string | null;
+  project_key: string | null;
   driver_zone: string | null;
   amount_kwd: number | null;
   needs_attention: boolean;
@@ -165,6 +167,10 @@ export type RequestAttachment = {
   content_type: string | null;
   byte_size: number | null;
   created_at: string;
+  title: string | null;
+  kind: string | null;
+  captured_at: string | null;
+  source: string | null;
 };
 
 /** File already in `request-attachments` storage, ready for attach_send / attach_breakdown. */

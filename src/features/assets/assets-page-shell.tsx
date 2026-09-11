@@ -5,9 +5,11 @@ import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ClipboardList,
   Download,
   Filter,
   Loader2,
+  Package,
   Pencil,
   Plus,
   RefreshCw,
@@ -44,8 +46,10 @@ import { useAuth } from "@/contexts/auth-context";
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
+import { TabBar } from "@/components/dashboard/tab-bar";
 import { AssetDetailSheet } from "./asset-detail-sheet";
 import { AssetFormSheet } from "./asset-form-sheet";
+import { AssetsAssignmentsPanel } from "./assets-assignments-panel";
 import { AssetsKpiStrip } from "./assets-kpi-strip";
 import { AssetCatalogIcon } from "./asset-catalog-icon";
 import { useAssetsCatalog } from "./use-assets";
@@ -135,6 +139,7 @@ function AssetsPageContent() {
   const [editingAsset, setEditingAsset] = useState<AssetCatalogRow | null>(null);
   const [detailAsset, setDetailAsset] = useState<AssetCatalogRow | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [tab, setTab] = useState<"assignments" | "catalog">("assignments");
 
   const hasActiveFilters = statusFilter !== "all" || categoryFilter !== "all";
 
@@ -221,48 +226,60 @@ function AssetsPageContent() {
     <AppPage>
       <AppPageHeader
         title={t("title")}
-        description={t("subtitle")}
+        description={tab === "assignments" ? t("assignmentsSubtitle") : t("subtitle")}
         actions={
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 cursor-pointer rounded-lg"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-            >
-              <RefreshCw
-                className={`me-2 h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
-              />
-              {t("refresh")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 cursor-pointer rounded-lg"
-              onClick={() => exportAssetsCsv(visible)}
-              disabled={visible.length === 0}
-            >
-              <Download className="me-2 h-3.5 w-3.5" />
-              {t("export")}
-            </Button>
-            {canManage ? (
+          tab === "catalog" ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button
                 type="button"
+                variant="outline"
                 size="sm"
                 className="h-9 cursor-pointer rounded-lg"
-                onClick={handleAdd}
+                onClick={handleRefresh}
+                disabled={isRefreshing}
               >
-                <Plus className="me-2 h-3.5 w-3.5" />
-                {t("addAsset")}
+                <RefreshCw
+                  className={`me-2 h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+                {t("refresh")}
               </Button>
-            ) : null}
-          </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => exportAssetsCsv(visible)}
+                disabled={visible.length === 0}
+              >
+                <Download className="me-2 h-3.5 w-3.5" />
+                {t("export")}
+              </Button>
+              {canManage ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  onClick={handleAdd}
+                >
+                  <Plus className="me-2 h-3.5 w-3.5" />
+                  {t("addAsset")}
+                </Button>
+              ) : null}
+            </div>
+          ) : null
         }
       />
-
+      <TabBar
+        items={[
+          { id: "assignments", label: t("tabAssignments"), icon: ClipboardList },
+          { id: "catalog", label: t("tabCatalog"), icon: Package },
+        ]}
+        activeId={tab}
+        onSelect={(id) => setTab(id === "catalog" ? "catalog" : "assignments")}
+      />
+      {tab === "assignments" ? <AssetsAssignmentsPanel /> : null}
+      {tab === "catalog" ? (
+      <>
       <div className="space-y-3">
         <AssetsKpiStrip
           kpis={kpis}
@@ -530,6 +547,8 @@ function AssetsPageContent() {
           )}
         </CardContent>
       </AppListCard>
+      </>
+      ) : null}
 
       <AssetFormSheet
         asset={editingAsset}
