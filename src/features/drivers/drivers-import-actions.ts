@@ -40,6 +40,7 @@ import {
 } from "./driver-change-log";
 import type { DriverImportLogEvent } from "./import/import-progress";
 import { parseImportActive, parseRiderCategory } from "./import/parse";
+import { parseSourceCompany } from "@/features/performance/performance-ops-formulas";
 import {
   buildPartnerIndex,
   buildRestaurantIndex,
@@ -353,6 +354,7 @@ export async function resolveDriverImportPreview(
     let restaurant_names: string[] = [];
     let nationality: string | null = null;
     let rider_category: DriverRiderCategory = "in_house";
+    let source_company: string | null = null;
     let client_id: string | null = null;
     let client_name: string | null = null;
     let active: boolean | null = null;
@@ -417,6 +419,12 @@ export async function resolveDriverImportPreview(
       else rider_category = parsedCategory ?? "in_house";
     }
 
+    if (lookupStillOpen()) {
+      const parsedCompany = parseSourceCompany(row.source_company);
+      if (parsedCompany === "invalid") status = "invalid_source_company";
+      else source_company = parsedCompany;
+    }
+
     // Free text, so the only way a cell can be wrong is by being longer than
     // the column. Caught here rather than at insert time, where it would abort
     // the batch with a CHECK violation naming a constraint, not a row.
@@ -457,6 +465,7 @@ export async function resolveDriverImportPreview(
       restaurant_names,
       nationality,
       rider_category,
+      source_company,
       client_id,
       client_name,
       active,
@@ -546,6 +555,7 @@ export async function applyOneImportRow(
           vehicle_id: row.vehicle_id,
           nationality: row.nationality,
           rider_category: row.rider_category,
+          source_company: row.source_company,
           client_id: row.client_id,
           client_name: row.client_name,
           updated_at: new Date().toISOString(),
@@ -573,6 +583,7 @@ export async function applyOneImportRow(
             employee_id: employeeId,
             nationality: row.nationality,
             rider_category: row.rider_category,
+            source_company: row.source_company,
             client_id: row.client_id,
             client_name: row.client_name,
             updated_at: new Date().toISOString(),
@@ -657,6 +668,7 @@ export async function applyOneImportRow(
       vehicle_id: row.vehicle_id,
       nationality: row.nationality,
       rider_category: row.rider_category,
+      source_company: row.source_company,
       client_id: row.client_id,
       client_name: row.client_name,
       status: "awaiting_app_link",
@@ -705,6 +717,7 @@ export async function applyOneImportRow(
         vehicle: row.vehicle_label,
         nationality: row.nationality,
         rider_category: row.rider_category,
+        source_company: row.source_company,
         client_id: row.client_id,
         client_name: row.client_name,
         custom_fields: row.custom_fields ?? {},
@@ -744,6 +757,7 @@ export async function applyOneImportRow(
         restaurant_names: row.restaurant_names,
         nationality: row.nationality,
         rider_category: row.rider_category,
+        source_company: row.source_company,
         client_id: row.client_id,
         client_name: row.client_name,
         custom_fields: row.custom_fields ?? {},

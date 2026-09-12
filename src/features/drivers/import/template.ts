@@ -117,6 +117,12 @@ const STANDARD_COLUMNS: Array<
     example: "in_house",
   },
   {
+    field: "source_company",
+    header: "Source Company",
+    allowed: "mg, kn, rvd, sadeeq, brk, hs, ar, zk. Leave blank if unknown. Do not infer from the ID.",
+    example: "mg",
+  },
+  {
     field: "client_id",
     header: "Client ID",
     allowed: "Any text up to 64 characters. Riders on one contract may share it.",

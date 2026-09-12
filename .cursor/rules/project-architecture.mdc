@@ -231,6 +231,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-09-12` — **MGGO Performance Dashboard replaces `/performance` hub.** Five SOP tabs (Overview, DPD & Efficiency, Riders’ Analysis, Top & Bottom, Outsource). Old Period / Live / Analysis / DPD stay in code but are not mounted. Orders = verified + `delivered_at` Kuwait window; working day = verified orders > 0; Partner = `drivers.project_key`; vehicle = `vehicles.vehicle_type_key` via `vehicle_id` only (missing = —, never Bike). New `drivers.source_company` / `driver_intakes.source_company` + monthly `performance_target_dpd` (default 25). RPCs `admin_performance_ops_bounds` / `admin_performance_ops_snapshot`. All Time refused above 400 days. Vehicle / Zone-Vehicle charts empty until real `vehicle_id` assignments. Migrations `20261023100000`, `20261023100010` (`rider_category` enum vs `text[]`), `20261023100020` (`MIN(uuid)`). No Vercel deploy.
+
 - `[admin+app] 2026-09-11` — **Fleet prototype badge tokens.** Project / Replacement = purple `#EDE9FE`/`#5B21B6`; Car Type = solid `#065F46`/`#92400E`/`#7C2D12` + white; Kind = indigo Car / pink Bike; Department = blue pill; Had-before = amber Yes / grey No. `/assets/requests` column + modal use `Employee Company`. MG-GO `attachVehiclePlate` AR is `صورة لوحة المركبة`. No Vercel deploy.
 
 - `[admin+app] 2026-09-11` — **Fleet handoff + ar labels.** `DRIVER_APP_HANDOFF.md` now documents `driver_get_assigned_vehicle` return shape, `driver_report_fuel_fill` params, create-attachment object, `fuel_refund` type, and keys-only clarify/ack (filename + upload `created_at`). Admin `deptFleet`/`deptAccounts` + Project badge i18n. No Vercel deploy.

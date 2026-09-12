@@ -14,6 +14,7 @@ const CREDENTIAL_HEADERS = [
   "Restaurants",
   "Nationality",
   "Rider Category",
+  "Source Company",
   "Client ID",
   "Client Name",
 ] as const;
@@ -105,6 +106,7 @@ export function buildCredentialsAoa(
       row.restaurant_names.join(", "),
       row.nationality ?? "",
       row.rider_category,
+      row.source_company ?? "",
       row.client_id ?? "",
       row.client_name ?? "",
       ...customKeys.map((key) => row.custom_fields[key] ?? ""),

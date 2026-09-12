@@ -171,6 +171,7 @@ export type DriverListRow = {
   rider_category: DriverRiderCategory;
   client_id: string | null;
   client_name: string | null;
+  source_company: string | null;
   custom_fields: Record<string, string | number | boolean | string[] | null>;
 };
 
@@ -198,6 +199,7 @@ export type DriverDetailModel = {
   rider_category: DriverRiderCategory;
   client_id: string | null;
   client_name: string | null;
+  source_company: string | null;
   avatar_url: string | null;
   partner_name: string;
   zone_label: string;
@@ -240,6 +242,7 @@ export const DRIVER_IMPORT_FIELDS = [
   "vehicle_label",
   "nationality",
   "rider_category",
+  "source_company",
   "client_id",
   "client_name",
   "active",
@@ -273,6 +276,7 @@ export type DriverImportPreviewStatus =
   | "invalid_employee_id"
   | "invalid_nationality"
   | "invalid_rider_category"
+  | "invalid_source_company"
   | "invalid_client_id"
   | "invalid_client_name"
   | "invalid_active"
@@ -302,6 +306,7 @@ export type DriverImportMappedRow = {
   restaurant_ids: string | null;
   nationality: string | null;
   rider_category: string | null;
+  source_company: string | null;
   client_id: string | null;
   client_name: string | null;
   /** Raw "yes"/"no" cell asking for this driver to be approved on import. */
@@ -322,6 +327,7 @@ export type DriverImportPreviewRow = Omit<
   zone_name: string | null;
   nationality: string | null;
   rider_category: DriverRiderCategory;
+  source_company: string | null;
   /**
    * Parsed Active cell. `null` means the sheet said nothing, in which case the
    * dialog's own approve toggle decides — so an unmapped column behaves exactly
@@ -348,6 +354,7 @@ export type DriverImportCredential = {
   restaurant_names: string[];
   nationality: string | null;
   rider_category: DriverRiderCategory;
+  source_company: string | null;
   client_id: string | null;
   client_name: string | null;
   custom_fields: Record<string, string | null>;

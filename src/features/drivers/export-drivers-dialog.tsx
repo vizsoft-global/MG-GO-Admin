@@ -18,6 +18,7 @@ import {
   Store,
   User,
   Users,
+  Flag,
 } from "lucide-react";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -46,6 +47,7 @@ const COLUMN_ICONS = {
   zone: MapPin,
   restaurants: Store,
   rider_category: Users,
+  source_company: Flag,
   client_id: Briefcase,
   client_name: Building2,
   account_status: Shield,

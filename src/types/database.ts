@@ -2281,6 +2281,7 @@ export type Database = {
           project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
+          source_company: string | null
           status: Database["public"]["Enums"]["driver_intake_status"]
           updated_at: string
           vehicle_id: string | null
@@ -2311,6 +2312,7 @@ export type Database = {
           project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
+          source_company?: string | null
           status?: Database["public"]["Enums"]["driver_intake_status"]
           updated_at?: string
           vehicle_id?: string | null
@@ -2341,6 +2343,7 @@ export type Database = {
           project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
+          source_company?: string | null
           status?: Database["public"]["Enums"]["driver_intake_status"]
           updated_at?: string
           vehicle_id?: string | null
@@ -3281,6 +3284,7 @@ export type Database = {
           project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
+          source_company: string | null
           status: Database["public"]["Enums"]["driver_status"]
           updated_at: string
           vehicle_id: string | null
@@ -3326,6 +3330,7 @@ export type Database = {
           project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
+          source_company?: string | null
           status?: Database["public"]["Enums"]["driver_status"]
           updated_at?: string
           vehicle_id?: string | null
@@ -3371,6 +3376,7 @@ export type Database = {
           project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
+          source_company?: string | null
           status?: Database["public"]["Enums"]["driver_status"]
           updated_at?: string
           vehicle_id?: string | null
@@ -5320,6 +5326,44 @@ export type Database = {
         }
         Relationships: []
       }
+      performance_target_dpd: {
+        Row: {
+          created_at: string
+          id: string
+          month: string
+          target: number
+          team_key: string | null
+          updated_at: string
+          zone_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          month: string
+          target: number
+          team_key?: string | null
+          updated_at?: string
+          zone_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          month?: string
+          target?: number
+          team_key?: string | null
+          updated_at?: string
+          zone_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_target_dpd_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           admin_role_id: string | null
@@ -6035,18 +6079,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "requests_vehicle_id_fkey"
-            columns: ["vehicle_id"]
-            isOneToOne: false
-            referencedRelation: "vehicles"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "requests_request_type_fkey"
             columns: ["request_type"]
             isOneToOne: false
             referencedRelation: "request_type_definitions"
             referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "requests_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -7301,6 +7345,7 @@ export type Database = {
           project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
+          source_company: string | null
           status: Database["public"]["Enums"]["driver_status"]
           updated_at: string
           vehicle_id: string | null
@@ -7700,6 +7745,7 @@ export type Database = {
       }
       admin_list_performance_components: { Args: never; Returns: Json }
       admin_list_performance_rating_teams: { Args: never; Returns: Json }
+      admin_list_performance_target_dpd: { Args: never; Returns: Json }
       admin_list_requests: {
         Args: {
           p_date_from?: string
@@ -7734,6 +7780,23 @@ export type Database = {
       }
       admin_live_fleet_snapshot: {
         Args: { p_seen_within_minutes?: number }
+        Returns: Json
+      }
+      admin_performance_ops_bounds: { Args: never; Returns: Json }
+      admin_performance_ops_snapshot: {
+        Args: {
+          p_from: string
+          p_granularity?: string
+          p_nationalities?: string[]
+          p_outsource_only?: boolean
+          p_project_keys?: string[]
+          p_restaurant_ids?: string[]
+          p_source_companies?: string[]
+          p_source_types?: string[]
+          p_to: string
+          p_vehicle_keys?: string[]
+          p_zone_ids?: string[]
+        }
         Returns: Json
       }
       admin_performance_trend: {
@@ -7861,6 +7924,10 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_upsert_performance_target_dpd: {
+        Args: { p_month: string; p_target: number }
+        Returns: Json
+      }
       admin_upsert_step_template: {
         Args: { p_request_type: string; p_steps: Json }
         Returns: Json
@@ -7968,6 +8035,10 @@ export type Database = {
       driver_app_lookup_by_passcode: {
         Args: { p_driver_code: string; p_passcode: string }
         Returns: Json
+      }
+      driver_assigned_vehicle_id: {
+        Args: { p_driver_id: string }
+        Returns: string
       }
       driver_book_visit: {
         Args: {

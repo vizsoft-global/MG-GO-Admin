@@ -13,7 +13,11 @@ import {
   fetchDriverPerformanceRank,
   fetchDriverPerformanceRatings,
   fetchPerformanceComponents,
+  fetchPerformanceOpsBounds,
+  fetchPerformanceOpsSnapshot,
+  fetchPerformanceTargetDpd,
   fetchPerformanceTrend,
+  savePerformanceTargetDpd,
   fetchPerformanceRatingTeams,
   fetchRatingEligibleStaff,
   fetchRecentDeliveriesFeed,
@@ -30,6 +34,7 @@ import type {
   PerformanceScoreWeights,
   PerformanceTrendBucket,
 } from "./performance-types";
+import type { OpsQueryInput } from "./performance-ops-types";
 
 export function useDriverPerformanceList(
   filters: PerformanceListFilters,
@@ -279,6 +284,49 @@ export function useRatingEligibleStaff(enabled = true) {
     queryKey: queryKeys.performance.ratingStaff(),
     queryFn: fetchRatingEligibleStaff,
     enabled,
+  });
+}
+
+export function usePerformanceOpsBounds(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.performance.opsBounds(),
+    queryFn: fetchPerformanceOpsBounds,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function usePerformanceOpsSnapshot(
+  input: OpsQueryInput,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.opsSnapshot(input),
+    queryFn: () => fetchPerformanceOpsSnapshot(input),
+    enabled,
+  });
+}
+
+export function usePerformanceTargetDpd(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.performance.targetDpd(),
+    queryFn: fetchPerformanceTargetDpd,
+    enabled,
+  });
+}
+
+export function useSavePerformanceTargetDpd() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: savePerformanceTargetDpd,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.targetDpd(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.performance.opsSnapshot(),
+      });
+    },
   });
 }
 

@@ -59,6 +59,7 @@ export function flattenProfileSnapshot(input: {
   vehicle?: unknown;
   nationality?: unknown;
   rider_category?: unknown;
+  source_company?: unknown;
   client_id?: unknown;
   client_name?: unknown;
   workflow_status?: unknown;
@@ -77,6 +78,7 @@ export function flattenProfileSnapshot(input: {
     vehicle: displayChangeValue(input.vehicle),
     nationality: displayChangeValue(input.nationality),
     rider_category: displayChangeValue(input.rider_category),
+    source_company: displayChangeValue(input.source_company),
     client_id: displayChangeValue(input.client_id),
     client_name: displayChangeValue(input.client_name),
     workflow_status: displayChangeValue(input.workflow_status),

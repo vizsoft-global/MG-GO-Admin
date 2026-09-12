@@ -80,6 +80,7 @@ export function mapRowsFromSheet(
         restaurant_ids: get("restaurant_ids"),
         nationality: get("nationality"),
         rider_category: get("rider_category"),
+        source_company: get("source_company"),
         client_id: get("client_id"),
         client_name: get("client_name"),
         active: get("active"),
@@ -97,6 +98,7 @@ export function mapRowsFromSheet(
         r.zone_id ||
         r.nationality ||
         r.rider_category ||
+        r.source_company ||
         r.client_id ||
         r.client_name ||
         Object.values(r.custom_fields).some(Boolean),
@@ -133,6 +135,7 @@ export function guessColumnMapping(
     ),
     nationality: find("nationality", "country"),
     rider_category: find("rider category", "category", "outsourced", "in house"),
+    source_company: find("source company", "source_company"),
     // Deliberately not a bare "client" needle: `find` returns the first header
     // matching any needle, so "client" would let a sheet carrying only Client ID
     // fill Client name with the same column.
