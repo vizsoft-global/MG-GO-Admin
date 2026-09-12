@@ -31,7 +31,12 @@ export function OpsTopBottomTab({ data }: { data: OpsSnapshot }) {
     return rows.map((r) => ({
       key: r.name,
       value: r[key],
-      tip: r,
+      id: r.display_id,
+      nationality: r.nationality_label,
+      store: r.store_label,
+      vehicle: r.vehicle_label,
+      zone: r.zone ?? "—",
+      source: r.source,
     }));
   }
 

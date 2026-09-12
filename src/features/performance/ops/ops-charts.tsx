@@ -16,6 +16,8 @@ import {
 import { AppEmptyState } from "@/components/app";
 import { cn } from "@/lib/utils";
 
+const TIP_KEYS = ["id", "nationality", "store", "vehicle", "zone", "source"] as const;
+
 export function OpsChartCard({
   title,
   onExport,
@@ -150,7 +152,38 @@ export function OpsBarChart({
             <YAxis tick={{ fontSize: 10 }} width={36} />
           </>
         )}
-        <Tooltip content={<OpsTooltip />} />
+        <Tooltip
+          content={(props) => {
+            const row = props.payload?.[0]?.payload as
+              | Record<string, string | number | null>
+              | undefined;
+            const extra = row
+              ? TIP_KEYS.filter((k) => row[k] != null && String(row[k]).trim() !== "").map(
+                  (k) => (
+                    <p key={k} className="text-muted-foreground">
+                      {k}: {String(row[k])}
+                    </p>
+                  ),
+                )
+              : null;
+            return (
+              <OpsTooltip
+                active={props.active}
+                payload={props.payload?.map((p) => {
+                  const raw = Array.isArray(p.value) ? p.value[0] : p.value;
+                  return {
+                    name: p.name == null ? undefined : String(p.name),
+                    value:
+                      typeof raw === "number" || typeof raw === "string" ? raw : undefined,
+                    color: p.color,
+                  };
+                })}
+                label={typeof props.label === "string" || typeof props.label === "number" ? String(props.label) : undefined}
+                extra={extra}
+              />
+            );
+          }}
+        />
         {series.map((s) => (
           <Bar
             key={s.key}

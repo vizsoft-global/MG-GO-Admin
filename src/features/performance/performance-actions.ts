@@ -1635,8 +1635,8 @@ export async function fetchRecentDeliveriesFeed(
   });
 }
 
-function emptyToNull<T>(arr: T[] | undefined): T[] | null {
-  return arr && arr.length > 0 ? arr : null;
+function emptyToUndef<T>(arr: T[] | undefined): T[] | undefined {
+  return arr && arr.length > 0 ? arr : undefined;
 }
 
 function rpcErrorCode(error: { message?: string; code?: string }): string {
@@ -1809,15 +1809,15 @@ export async function fetchPerformanceOpsSnapshot(
   const { data, error } = await supabase.rpc("admin_performance_ops_snapshot", {
     p_from: input.from,
     p_to: input.to,
-    p_project_keys: emptyToNull(slicers.projectKeys),
-    p_zone_ids: emptyToNull(slicers.zoneIds),
-    p_vehicle_keys: emptyToNull(slicers.vehicleKeys),
-    p_nationalities: emptyToNull(slicers.nationalities),
+    p_project_keys: emptyToUndef(slicers.projectKeys),
+    p_zone_ids: emptyToUndef(slicers.zoneIds),
+    p_vehicle_keys: emptyToUndef(slicers.vehicleKeys),
+    p_nationalities: emptyToUndef(slicers.nationalities),
     p_source_types: input.outsourceOnly
-      ? null
-      : emptyToNull(slicers.sourceTypes),
-    p_source_companies: emptyToNull(slicers.sourceCompanies),
-    p_restaurant_ids: emptyToNull(slicers.restaurantIds),
+      ? undefined
+      : emptyToUndef(slicers.sourceTypes),
+    p_source_companies: emptyToUndef(slicers.sourceCompanies),
+    p_restaurant_ids: emptyToUndef(slicers.restaurantIds),
     p_outsource_only: input.outsourceOnly,
     p_granularity: input.granularity,
   });
