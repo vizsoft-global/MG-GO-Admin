@@ -37,6 +37,7 @@ function row(overrides: Partial<DriverListRow> = {}): DriverListRow {
     avatar_url: null,
     avatar_display_url: null,
     rider_category: "in_house",
+    source_company: null,
     client_id: "CLI-1",
     client_name: "Gulf Retail",
     custom_fields: { helmet_size: "M" },

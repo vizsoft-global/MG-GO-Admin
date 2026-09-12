@@ -40,6 +40,7 @@ function credential(
     restaurant_names: ["Crystal Tower"],
     nationality: "IN",
     rider_category: "in_house",
+    source_company: "mg",
     client_id: "CLI-204",
     client_name: "Gulf Retail Group",
     custom_fields: {},
@@ -63,6 +64,7 @@ describe("buildCredentialsAoa", () => {
       "Restaurants",
       "Nationality",
       "Rider Category",
+      "Source Company",
       "Client ID",
       "Client Name",
     ]);
@@ -79,6 +81,7 @@ describe("buildCredentialsAoa", () => {
       "Crystal Tower",
       "IN",
       "in_house",
+      "mg",
       "CLI-204",
       "Gulf Retail Group",
     ]);
@@ -94,12 +97,13 @@ describe("buildCredentialsAoa", () => {
         vehicle_label: null,
         restaurant_names: [],
         nationality: null,
+        source_company: null,
         client_id: null,
         client_name: null,
       }),
     ]);
     assert.deepEqual(aoa[1]?.slice(4, 11), ["", "", "", "", "", "", ""]);
-    assert.deepEqual(aoa[1]?.slice(12), ["", ""]);
+    assert.deepEqual(aoa[1]?.slice(12), ["", "", ""]);
   });
 
   it("adds custom-field columns, labelled when the picker knows them", () => {

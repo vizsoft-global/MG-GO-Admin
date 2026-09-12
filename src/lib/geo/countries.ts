@@ -291,3 +291,9 @@ export function countrySearchSelectItems() {
     keywords: [country.code, country.name],
   }));
 }
+
+export function countryLabel(code: string | null | undefined): string {
+  if (!code || code === "—") return "—";
+  const iso = code.trim().toUpperCase();
+  return COUNTRIES.find((country) => country.code === iso)?.name ?? iso;
+}

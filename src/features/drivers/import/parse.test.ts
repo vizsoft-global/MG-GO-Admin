@@ -22,12 +22,14 @@ describe("guessColumnMapping", () => {
       "Restaurant IDs (name, RST code, or UUID)",
       "Nationality",
       "Rider Category",
+      "Source Company",
     ]);
     assert.equal(mapping.partner_id, "Partner");
     assert.equal(mapping.zone_id, "Zone");
     assert.equal(mapping.restaurant_ids, "Restaurant IDs (name, RST code, or UUID)");
     assert.equal(mapping.nationality, "Nationality");
     assert.equal(mapping.rider_category, "Rider Category");
+    assert.equal(mapping.source_company, "Source Company");
   });
 
   it("maps required identity columns from the sample template", () => {

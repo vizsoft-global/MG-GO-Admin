@@ -1,4 +1,4 @@
-export type PerformanceHubTab = "period" | "live" | "analysis" | "dpd";
+export type { PerformanceHubTab } from "./performance-ops-types";
 
 /**
  * Components blended into the compliance pillar. Keys are locked — SQL keys on

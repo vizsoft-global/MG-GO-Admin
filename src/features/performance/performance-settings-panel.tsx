@@ -36,8 +36,11 @@ import {
   useSavePerformanceRatingCriterion,
   useSetPerformanceTeamMember,
   useUpdatePerformanceComponents,
+  usePerformanceTargetDpd,
+  useSavePerformanceTargetDpd,
   useUpdatePerformanceScoreWeights,
 } from "./use-performance";
+import { DEFAULT_TARGET_DPD, monthStart } from "./performance-ops-formulas";
 import type {
   PerformanceComponent,
   PerformanceCriterionConfig,
@@ -862,6 +865,88 @@ function CriteriaSection() {
   );
 }
 
+function TargetDpdSection() {
+  const t = useTranslations("pages.performance.settings");
+  const { data: rows, isLoading } = usePerformanceTargetDpd();
+  const { mutateAsync: save } = useSavePerformanceTargetDpd();
+  const [pending, startTransition] = useTransition();
+  const today = kuwaitToday();
+  const [month, setMonth] = useState(monthStart(today).slice(0, 7));
+  const [target, setTarget] = useState(String(DEFAULT_TARGET_DPD));
+
+  useEffect(() => {
+    if (!rows?.length) return;
+    const current = rows.find((r) => r.month.startsWith(month)) ?? rows[0];
+    if (current) setTarget(String(current.target));
+  }, [rows, month]);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <AppFormSection title={t("targetDpdTitle")} description={t("targetDpdHint")}>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">{t("targetDpdMonth")}</Label>
+          <Input
+            type="month"
+            className="h-9"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">{t("targetDpdValue")}</Label>
+          <Input
+            type="number"
+            min={1}
+            step="0.1"
+            className="h-9"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+          />
+        </div>
+        <div className="flex items-end">
+          <Button
+            type="button"
+            className="h-9"
+            disabled={pending || !(Number(target) > 0)}
+            onClick={() => {
+              startTransition(async () => {
+                const result = await save({
+                  month: `${month}-01`,
+                  target: Number(target),
+                });
+                if (!result.success) {
+                  toast.error(result.error ?? t("targetDpdFailed"));
+                  return;
+                }
+                toast.success(t("targetDpdSaved"));
+              });
+            }}
+          >
+            {pending ? t("saving") : t("targetDpdSave")}
+          </Button>
+        </div>
+      </div>
+      {rows && rows.length > 0 ? (
+        <ul className="mt-3 grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-3">
+          {rows.slice(0, 6).map((r) => (
+            <li key={r.id}>
+              {r.month.slice(0, 7)} · {r.target}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </AppFormSection>
+  );
+}
+
 export function PerformanceSettingsPanel() {
   const t = useTranslations("pages.performance.settings");
 
@@ -880,6 +965,7 @@ export function PerformanceSettingsPanel() {
           </Link>
         }
       />
+      <TargetDpdSection />
       <WeightsSection />
       <ComponentsSection />
       <TeamsSection />

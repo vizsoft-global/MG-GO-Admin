@@ -5,6 +5,11 @@ import { User } from "lucide-react";
 import { SegmentOption } from "@/components/app/toggle-chip";
 import { Input } from "@/components/ui/input";
 import type { DriverRiderCategory } from "../types";
+import {
+  SOURCE_COMPANY_KEYS,
+  SOURCE_COMPANY_LABEL,
+  type SourceCompanyKey,
+} from "@/features/performance/performance-ops-formulas";
 import { countrySearchSelectItems } from "@/lib/geo/countries";
 import { DriverAvatarUpload } from "../driver-avatar-upload";
 import { CIVIL_ID_DIGIT_COUNT, restrictDigits } from "../driver-phone";
@@ -32,6 +37,8 @@ export function DriverFormIdentitySection({
   onNationalityChange,
   riderCategory,
   onRiderCategoryChange,
+  sourceCompany,
+  onSourceCompanyChange,
   driverCode,
   driverCodeHint,
   labels,
@@ -58,6 +65,8 @@ export function DriverFormIdentitySection({
   onNationalityChange: (next: string) => void;
   riderCategory: DriverRiderCategory;
   onRiderCategoryChange: (next: DriverRiderCategory) => void;
+  sourceCompany: string;
+  onSourceCompanyChange: (next: string) => void;
   driverCode: string;
   driverCodeHint: string;
   labels: {
@@ -68,6 +77,7 @@ export function DriverFormIdentitySection({
     employeeId: string;
     nationality: string;
     riderCategory: string;
+    sourceCompany: string;
     driverCode: string;
   };
   riderCategoryLabels: {
@@ -81,6 +91,8 @@ export function DriverFormIdentitySection({
     employeeIdHelp?: string;
     nationality: string;
     searchNationality: string;
+    sourceCompany?: string;
+    searchSourceCompany?: string;
   };
   uploadLabel: string;
   removeLabel: string;
@@ -96,6 +108,21 @@ export function DriverFormIdentitySection({
   };
 }) {
   const countryItems = useMemo(() => countrySearchSelectItems(), []);
+  const companyItems = useMemo(
+    () => [
+      {
+        value: "none",
+        label: placeholders.sourceCompany ?? "—",
+        keywords: ["none"],
+      },
+      ...SOURCE_COMPANY_KEYS.map((key: SourceCompanyKey) => ({
+        value: key,
+        label: SOURCE_COMPANY_LABEL[key],
+        keywords: [key, SOURCE_COMPANY_LABEL[key]],
+      })),
+    ],
+    [placeholders.sourceCompany],
+  );
 
   return (
     <section className="space-y-2.5 rounded-lg border border-border bg-card p-4">
@@ -163,7 +190,7 @@ export function DriverFormIdentitySection({
         </FieldBlock>
       </div>
 
-      <div className="grid grid-cols-[10rem_minmax(0,1fr)_19rem_11rem] items-end gap-2.5">
+      <div className="grid grid-cols-[8.5rem_minmax(0,1fr)_11rem_10rem_8.5rem] items-end gap-2.5">
         <FieldBlock>
           <FieldLabel htmlFor="driver-employee-id">
             {labels.employeeId}
@@ -227,6 +254,19 @@ export function DriverFormIdentitySection({
               {riderCategoryLabels.outsourced}
             </SegmentOption>
           </div>
+        </FieldBlock>
+
+        <FieldBlock>
+          <FieldLabel htmlFor="driver-source-company">{labels.sourceCompany}</FieldLabel>
+          <SearchableSelect
+            value={sourceCompany || "none"}
+            onValueChange={(next) => onSourceCompanyChange(next === "none" ? "" : next)}
+            items={companyItems}
+            placeholder={placeholders.sourceCompany ?? "—"}
+            searchPlaceholder={placeholders.searchSourceCompany ?? ""}
+            recentsKey="driver-source-company"
+            disabled={disabled}
+          />
         </FieldBlock>
 
         <FieldBlock>

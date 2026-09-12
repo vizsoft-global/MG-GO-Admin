@@ -47,6 +47,19 @@ import {
   type DpdEfficiencyRider,
   type DpdEfficiencySnapshot,
 } from "./performance-types";
+import { asInt, asStr, isoDate, numOrNull } from "./performance-ops-format";
+import type {
+  OpsBounds,
+  OpsDimRow,
+  OpsKpis,
+  OpsOptions,
+  OpsQueryInput,
+  OpsRiderRow,
+  OpsSnapshot,
+  OpsStoreRow,
+  OpsTrendPoint,
+  TargetDpdRow,
+} from "./performance-ops-types";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -1620,4 +1633,241 @@ export async function fetchRecentDeliveriesFeed(
       created_at: String(r.created_at),
     };
   });
+}
+
+function emptyToNull<T>(arr: T[] | undefined): T[] | null {
+  return arr && arr.length > 0 ? arr : null;
+}
+
+function rpcErrorCode(error: { message?: string; code?: string }): string {
+  const message = String(error.message ?? "");
+  if (message.includes("range_too_large")) return "range_too_large";
+  if (message.includes("invalid_date_range")) return "invalid_date_range";
+  if (message.includes("not_authorized")) return "not_authorized";
+  return message || "rpc_failed";
+}
+
+function parseOpsKpis(raw: unknown): OpsKpis {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    orders: asInt(o.orders),
+    orders_prev: asInt(o.orders_prev),
+    overall_dpd: numOrNull(o.overall_dpd),
+    overall_dpd_prev: numOrNull(o.overall_dpd_prev),
+    avg_dpd_eff: numOrNull(o.avg_dpd_eff),
+    avg_dpd_eff_prev: numOrNull(o.avg_dpd_eff_prev),
+    avg_tgt_eff: numOrNull(o.avg_tgt_eff),
+    avg_tgt_eff_prev: numOrNull(o.avg_tgt_eff_prev),
+    riders: asInt(o.riders),
+    riders_prev: asInt(o.riders_prev),
+    active: asInt(o.active),
+    active_prev: asInt(o.active_prev),
+    working_days: asInt(o.working_days),
+    stores_above: asInt(o.stores_above),
+    stores_below: asInt(o.stores_below),
+  };
+}
+
+function parseDim(raw: unknown): OpsDimRow {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    key: String(o.key ?? "—"),
+    id: o.id != null ? String(o.id) : null,
+    orders: asInt(o.orders),
+    working_days: asInt(o.working_days),
+    dpd: numOrNull(o.dpd),
+    dpd_eff: numOrNull(o.dpd_eff),
+    tgt_eff: numOrNull(o.tgt_eff),
+    riders: asInt(o.riders),
+    active_riders: o.active_riders == null ? undefined : asInt(o.active_riders),
+    bikes: o.bikes == null ? undefined : asInt(o.bikes),
+    cars: o.cars == null ? undefined : asInt(o.cars),
+  };
+}
+
+function parseOpsSnapshot(raw: unknown): OpsSnapshot {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const optionsRaw = (o.options ?? {}) as Record<string, unknown>;
+  const options: OpsOptions = {
+    zones: Array.isArray(optionsRaw.zones)
+      ? optionsRaw.zones.map((z) => {
+          const row = (z ?? {}) as Record<string, unknown>;
+          return { id: String(row.id ?? ""), name: String(row.name ?? "—") };
+        })
+      : [],
+    restaurants: Array.isArray(optionsRaw.restaurants)
+      ? optionsRaw.restaurants.map((r) => {
+          const row = (r ?? {}) as Record<string, unknown>;
+          return { id: String(row.id ?? ""), name: String(row.name ?? "—") };
+        })
+      : [],
+    nationalities: Array.isArray(optionsRaw.nationalities)
+      ? optionsRaw.nationalities.map((n) => String(n))
+      : [],
+  };
+
+  return {
+    from: isoDate(o.from),
+    to: isoDate(o.to),
+    prev_from: isoDate(o.prev_from),
+    prev_to: isoDate(o.prev_to),
+    target_dpd: numOrNull(o.target_dpd) ?? 25,
+    partner_mode:
+      o.partner_mode === "americana" || o.partner_mode === "keeta"
+        ? o.partner_mode
+        : "all",
+    kpis: parseOpsKpis(o.kpis),
+    trend: Array.isArray(o.trend)
+      ? o.trend.map((p): OpsTrendPoint => {
+          const row = (p ?? {}) as Record<string, unknown>;
+          return {
+            bucket: isoDate(row.bucket),
+            orders: asInt(row.orders),
+            working_days: asInt(row.working_days),
+            dpd: numOrNull(row.dpd),
+            dpd_eff: numOrNull(row.dpd_eff),
+            tgt_eff: numOrNull(row.tgt_eff),
+          };
+        })
+      : [],
+    by_vehicle: Array.isArray(o.by_vehicle) ? o.by_vehicle.map(parseDim) : [],
+    by_zone: Array.isArray(o.by_zone) ? o.by_zone.map(parseDim) : [],
+    by_partner: Array.isArray(o.by_partner) ? o.by_partner.map(parseDim) : [],
+    by_nationality: Array.isArray(o.by_nationality)
+      ? o.by_nationality.map(parseDim)
+      : [],
+    by_company: Array.isArray(o.by_company) ? o.by_company.map(parseDim) : [],
+    stores: Array.isArray(o.stores)
+      ? o.stores.map((s): OpsStoreRow => {
+          const row = (s ?? {}) as Record<string, unknown>;
+          return {
+            store_id: asStr(row.store_id),
+            store_name: asStr(row.store_name),
+            zone_id: asStr(row.zone_id),
+            zone_name: asStr(row.zone_name),
+            orders: asInt(row.orders),
+            working_days: asInt(row.working_days),
+            riders: asInt(row.riders),
+            active_riders: asInt(row.active_riders),
+            store_dpd: numOrNull(row.store_dpd),
+          };
+        })
+      : [],
+    riders: Array.isArray(o.riders)
+      ? o.riders.map((r): OpsRiderRow => {
+          const row = (r ?? {}) as Record<string, unknown>;
+          return {
+            driver_id: String(row.driver_id ?? ""),
+            name: String(row.name ?? "—"),
+            employee_id: asStr(row.employee_id),
+            driver_code: asStr(row.driver_code),
+            zone_id: asStr(row.zone_id),
+            zone: asStr(row.zone),
+            vehicle_key: asStr(row.vehicle_key),
+            nationality: asStr(row.nationality),
+            project_key: asStr(row.project_key),
+            store_id: asStr(row.store_id),
+            store: asStr(row.store),
+            source_type: asStr(row.source_type),
+            source_company: asStr(row.source_company),
+            orders: asInt(row.orders),
+            working_days: asInt(row.working_days),
+            dpd: numOrNull(row.dpd),
+            target_dpd: numOrNull(row.target_dpd) ?? 25,
+            store_dpd: numOrNull(row.store_dpd),
+            veh_zone_dpd: numOrNull(row.veh_zone_dpd),
+            dpd_eff: numOrNull(row.dpd_eff),
+            tgt_eff: numOrNull(row.tgt_eff),
+            status: row.status === "Active" ? "Active" : "Inactive",
+          };
+        })
+      : [],
+    options,
+  };
+}
+
+export async function fetchPerformanceOpsBounds(): Promise<OpsBounds> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_performance_ops_bounds");
+  if (error) throw new Error(rpcErrorCode(error));
+  const o = (data ?? {}) as Record<string, unknown>;
+  return {
+    today: isoDate(o.today),
+    first_delivery_date: o.first_delivery_date ? isoDate(o.first_delivery_date) : null,
+    span_days: asInt(o.span_days),
+    over_cap: Boolean(o.over_cap),
+  };
+}
+
+export async function fetchPerformanceOpsSnapshot(
+  input: OpsQueryInput,
+): Promise<OpsSnapshot> {
+  await requirePerformanceView();
+  const supabase = await createClient();
+  const { slicers } = input;
+  const { data, error } = await supabase.rpc("admin_performance_ops_snapshot", {
+    p_from: input.from,
+    p_to: input.to,
+    p_project_keys: emptyToNull(slicers.projectKeys),
+    p_zone_ids: emptyToNull(slicers.zoneIds),
+    p_vehicle_keys: emptyToNull(slicers.vehicleKeys),
+    p_nationalities: emptyToNull(slicers.nationalities),
+    p_source_types: input.outsourceOnly
+      ? null
+      : emptyToNull(slicers.sourceTypes),
+    p_source_companies: emptyToNull(slicers.sourceCompanies),
+    p_restaurant_ids: emptyToNull(slicers.restaurantIds),
+    p_outsource_only: input.outsourceOnly,
+    p_granularity: input.granularity,
+  });
+  if (error) throw new Error(rpcErrorCode(error));
+  return parseOpsSnapshot(data);
+}
+
+export async function fetchPerformanceTargetDpd(): Promise<TargetDpdRow[]> {
+  await requireSettingsManage();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_list_performance_target_dpd");
+  if (error) throw new Error(rpcErrorCode(error));
+  if (!Array.isArray(data)) return [];
+  return data.map((row) => {
+    const o = (row ?? {}) as Record<string, unknown>;
+    return {
+      id: String(o.id ?? ""),
+      month: isoDate(o.month),
+      target: numOrNull(o.target) ?? 25,
+    };
+  });
+}
+
+export async function savePerformanceTargetDpd(input: {
+  month: string;
+  target: number;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await requireSettingsManage();
+    const supabase = await createClient();
+    const previous = await fetchPerformanceTargetDpd().catch(() => []);
+    const { data, error } = await supabase.rpc(
+      "admin_upsert_performance_target_dpd",
+      { p_month: input.month, p_target: input.target },
+    );
+    if (error) return { success: false, error: rpcErrorCode(error) };
+    void session;
+    void logAdminMutation({
+      action: "update",
+      entityType: "performance_target_dpd",
+      entityId: input.month,
+      routeName: "savePerformanceTargetDpd",
+      before: { rows: previous },
+      after: { month: input.month, target: input.target, result: data },
+    });
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "update_failed",
+    };
+  }
 }

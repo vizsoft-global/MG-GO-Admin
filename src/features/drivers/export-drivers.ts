@@ -9,6 +9,7 @@ export const DRIVER_EXPORT_COLUMNS = [
   { id: "zone", pinned: false },
   { id: "restaurants", pinned: false },
   { id: "rider_category", pinned: false },
+  { id: "source_company", pinned: false },
   { id: "client_id", pinned: false },
   { id: "client_name", pinned: false },
   { id: "account_status", pinned: false },
@@ -81,6 +82,8 @@ function cellValue(
       return row.restaurant_names.join(", ");
     case "rider_category":
       return row.rider_category;
+    case "source_company":
+      return row.source_company ?? "";
     case "client_id":
       return row.client_id ?? "";
     case "client_name":

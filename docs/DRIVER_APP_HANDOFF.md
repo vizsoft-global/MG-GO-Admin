@@ -82,6 +82,8 @@ Staff use **Verify & approve** on `/drivers/[id]` (or bulk import with **Approve
 
 `rider_category` on intakes/drivers: **`in_house`** (direct workforce) or **`outsourced`** (third-party). Required on admin create/edit; defaults to `in_house`; copied to `drivers` on approve. Admin list + detail show the label; mobile app may read from `drivers.rider_category` when needed for reporting/UI.
 
+`source_company` on intakes/drivers: optional catalog **`mg` / `kn` / `rvd` / `sadeeq` / `brk` / `hs` / `ar` / `zk`**. Stored, never inferred from employee ID or `client_name`. Copied on approve. Admin Performance Outsource tab and display-ID prefixes (`KN`, `RVD`, `SD`, `BRK`, `HS`, `AR`, `ZK`) read this column only. App may ignore it.
+
 ### 2c. Legacy OTP bootstrap (old intakes only)
 
 For intakes still `linked = false` from before admin-first approval, the driver may OTP once to bind phone to `auth.users`.

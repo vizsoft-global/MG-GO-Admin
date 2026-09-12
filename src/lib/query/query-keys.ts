@@ -208,6 +208,10 @@ export const queryKeys = {
       ["performance", "rank", driverId, from, to] as const,
     trend: (filters: Record<string, unknown> = {}) =>
       ["performance", "trend", filters] as const,
+    opsSnapshot: (filters: Record<string, unknown> = {}) =>
+      ["performance", "ops-snapshot", filters] as const,
+    opsBounds: () => ["performance", "ops-bounds"] as const,
+    targetDpd: () => ["performance", "target-dpd"] as const,
   },
   wrongActions: {
     all: () => ["wrong-actions"] as const,
