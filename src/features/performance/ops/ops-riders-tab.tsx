@@ -13,6 +13,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  SOURCE_COMPANY_LABEL,
+  sortOpsRidersByOrdersDesc,
+  toggleOpsMultiSelect,
+} from "../performance-ops-formulas";
+import {
   applyColumnFilters,
   columnFilterValues,
   downloadCsv,
@@ -41,7 +46,10 @@ const FILTER_KEYS = [
 
 export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
   const t = useTranslations("pages.performance.ops");
-  const riders = useMemo(() => data.riders.map(enrichOpsRider), [data.riders]);
+  const riders = useMemo(
+    () => sortOpsRidersByOrdersDesc(data.riders.map(enrichOpsRider)),
+    [data.riders],
+  );
   const [filters, setFilters] = useState<OpsColumnFilter>({});
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -57,35 +65,50 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
     overscan: 12,
   });
 
-  const cols: Array<{ id: keyof OpsRiderView | "display_id"; label: string; align?: "end" }> = [
-    { id: "name", label: t("col.name") },
+  const cols: Array<{ id: string; label: string; align?: "end" }> = [
     { id: "display_id", label: t("col.id") },
+    { id: "name", label: t("col.name") },
     { id: "partner_label", label: t("col.partner") },
     { id: "store_label", label: t("col.store") },
     { id: "zone", label: t("col.zone") },
     { id: "vehicle_label", label: t("col.vehicle") },
+    { id: "nationality_label", label: t("col.nationality") },
+    { id: "source_type", label: t("col.sourceType") },
+    { id: "source_company", label: t("col.companySource") },
     { id: "orders", label: t("col.orders"), align: "end" },
     { id: "working_days", label: t("col.days"), align: "end" },
     { id: "dpd", label: t("col.dpd"), align: "end" },
-    { id: "tgt_eff", label: t("col.tgtEff"), align: "end" },
+    { id: "target_dpd", label: t("col.targetDpd"), align: "end" },
+    { id: "store_dpd", label: t("col.storeDpd"), align: "end" },
+    { id: "veh_zone_dpd", label: t("col.vehZoneDpd"), align: "end" },
     { id: "dpd_eff", label: t("col.dpdEff"), align: "end" },
+    { id: "tgt_eff", label: t("col.tgtEff"), align: "end" },
     { id: "status", label: t("col.status") },
   ];
 
   function cell(row: OpsRiderView, id: string): string {
     switch (id) {
       case "orders":
-        return formatInt(row.orders);
       case "working_days":
-        return formatInt(row.working_days);
+        return formatInt(row[id]);
       case "dpd":
-        return formatDpd(row.dpd);
+      case "target_dpd":
+      case "store_dpd":
+      case "veh_zone_dpd":
+        return formatDpd(row[id]);
       case "tgt_eff":
-        return formatPct(row.tgt_eff);
       case "dpd_eff":
-        return formatPct(row.dpd_eff);
+        return formatPct(row[id]);
       case "zone":
         return row.zone ?? "—";
+      case "source_type":
+        return row.source_type === "in_house" || row.source_type === "outsourced"
+          ? t(`sourceType.${row.source_type}`)
+          : "—";
+      case "source_company":
+        return row.source_company && row.source_company in SOURCE_COMPANY_LABEL
+          ? SOURCE_COMPANY_LABEL[row.source_company as keyof typeof SOURCE_COMPANY_LABEL]
+          : (row.source_company ?? "—");
       default:
         return String((row as Record<string, unknown>)[id] ?? "—");
     }
@@ -97,9 +120,11 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
         compact
         items={[
           { label: t("kpi.orders"), value: formatInt(data.kpis.orders) },
+          { label: t("kpi.workingDays"), value: formatInt(data.kpis.working_days) },
           { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
+          { label: t("kpi.avgDpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
           { label: t("kpi.avgTgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
-          { label: t("kpi.active"), value: formatInt(data.kpis.active) },
+          { label: t("kpi.ridersInView"), value: formatInt(filtered.length) },
         ]}
       />
       <p className="text-[10px] text-muted-foreground">{t("tableFiltersHint")}</p>
@@ -125,7 +150,7 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
                   </button>
                   <div className="max-h-48 overflow-y-auto">
                     {values.map((v) => {
-                      const on = selected.length === 0 || selected.includes(v);
+                      const on = selected.includes(v);
                       return (
                         <label
                           key={v || "(empty)"}
@@ -136,13 +161,7 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
                             onCheckedChange={() => {
                               setFilters((prev) => {
                                 const cur = prev[key] ?? [];
-                                if (cur.length === 0) {
-                                  return { ...prev, [key]: values.filter((x) => x !== v) };
-                                }
-                                const next = cur.includes(v)
-                                  ? cur.filter((x) => x !== v)
-                                  : [...cur, v];
-                                return { ...prev, [key]: next.length === values.length ? [] : next };
+                                return { ...prev, [key]: toggleOpsMultiSelect(values, cur, v) };
                               });
                             }}
                           />
@@ -163,7 +182,7 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
                 "ops-riders",
                 toCsv(
                   cols.map((c) => c.label),
-                  filtered.map((r) => cols.map((c) => cell(r, String(c.id)))),
+                  filtered.map((r) => cols.map((c) => cell(r, c.id))),
                 ),
               )
             }
@@ -171,38 +190,40 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
             {t("exportTab")}
           </button>
         </div>
-        <div className="grid grid-cols-[minmax(120px,1.4fr)_repeat(11,minmax(64px,1fr))] gap-0 border-b border-border bg-muted/30 px-3 py-1.5 text-[11px] font-semibold text-accent">
-          {cols.map((c) => (
-            <span key={String(c.id)} className={c.align === "end" ? "text-end" : ""}>
-              {c.label}
-            </span>
-          ))}
-        </div>
-        <div ref={parentRef} className="h-[min(420px,48dvh)] overflow-auto">
-          <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-            {virtualizer.getVirtualItems().map((item) => {
-              const row = filtered[item.index];
-              return (
-                <div
-                  key={row.driver_id}
-                  className="absolute inset-x-0 grid grid-cols-[minmax(120px,1.4fr)_repeat(11,minmax(64px,1fr))] items-center gap-0 border-b border-border/60 px-3 text-xs"
-                  style={{ height: item.size, transform: `translateY(${item.start}px)` }}
-                >
-                  {cols.map((c) => (
-                    <span
-                      key={String(c.id)}
-                      className={cn(
-                        "truncate tabular-nums",
-                        c.align === "end" && "text-end",
-                        c.id === "name" && "font-medium",
-                      )}
-                    >
-                      {cell(row, String(c.id))}
-                    </span>
-                  ))}
-                </div>
-              );
-            })}
+        <div className="overflow-x-auto">
+          <div className="grid min-w-[1280px] grid-cols-[repeat(18,minmax(64px,1fr))] gap-0 border-b border-border bg-muted/30 px-3 py-1.5 text-[11px] font-semibold text-accent">
+            {cols.map((c) => (
+              <span key={c.id} className={c.align === "end" ? "text-end" : ""}>
+                {c.label}
+              </span>
+            ))}
+          </div>
+          <div ref={parentRef} className="h-[min(420px,48dvh)] overflow-auto">
+            <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+              {virtualizer.getVirtualItems().map((item) => {
+                const row = filtered[item.index];
+                return (
+                  <div
+                    key={row.driver_id}
+                    className="absolute inset-x-0 grid min-w-[1280px] grid-cols-[repeat(18,minmax(64px,1fr))] items-center gap-0 border-b border-border/60 px-3 text-xs"
+                    style={{ height: item.size, transform: `translateY(${item.start}px)` }}
+                  >
+                    {cols.map((c) => (
+                      <span
+                        key={c.id}
+                        className={cn(
+                          "truncate tabular-nums",
+                          c.align === "end" && "text-end",
+                          c.id === "name" && "font-medium",
+                        )}
+                      >
+                        {cell(row, c.id)}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

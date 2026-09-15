@@ -9,21 +9,38 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
-import { EFFICIENCY_BUCKETS } from "../performance-ops-formulas";
+import {
+  dimMetricValue,
+  EFFICIENCY_BUCKETS,
+  formatOpsBucketLabel,
+  isChartableDimKey,
+  OPS_METRIC_COLOR,
+  type OpsChartMetric,
+} from "../performance-ops-formulas";
 import { downloadCsv, toCsv } from "../performance-ops-table";
 import {
   enrichOpsRider,
   formatDpd,
   formatInt,
   formatPct,
+  vehicleLabel,
 } from "../performance-ops-format";
+import { countryLabel } from "@/lib/geo/countries";
 import type { OpsSnapshot } from "../performance-ops-types";
-import { OpsBarChart, OpsChartCard } from "./ops-charts";
+import { OpsBarChart, OpsChartCard, OpsLineChart } from "./ops-charts";
 import { cn } from "@/lib/utils";
 
-export function OpsDpdTab({ data }: { data: OpsSnapshot }) {
+export function OpsDpdTab({
+  data,
+  metric,
+}: {
+  data: OpsSnapshot;
+  metric: OpsChartMetric;
+}) {
   const t = useTranslations("pages.performance.ops");
   const riders = useMemo(() => data.riders.map(enrichOpsRider), [data.riders]);
+  const seriesName = t(`viewBy.${metric}`);
+  const series = [{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }];
 
   const counts = useMemo(() => {
     const out = Object.fromEntries(EFFICIENCY_BUCKETS.map((b) => [b, 0])) as Record<
@@ -39,6 +56,11 @@ export function OpsDpdTab({ data }: { data: OpsSnapshot }) {
   const dist = EFFICIENCY_BUCKETS.map((b) => ({
     key: t(`bucket.${b}`),
     riders: counts[b],
+  }));
+
+  const trend = data.trend.map((p) => ({
+    bucket: formatOpsBucketLabel(p.bucket),
+    value: dimMetricValue(p, metric),
   }));
 
   function exportBucket(bucket: (typeof EFFICIENCY_BUCKETS)[number]) {
@@ -66,12 +88,31 @@ export function OpsDpdTab({ data }: { data: OpsSnapshot }) {
       <KpiGrid
         compact
         items={[
+          { label: t("kpi.orders"), value: formatInt(data.kpis.orders) },
           { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
           { label: t("kpi.avgDpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
           { label: t("kpi.avgTgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
           { label: t("kpi.targetDpd"), value: formatDpd(data.target_dpd) },
+          { label: t("kpi.storesAbove"), value: formatInt(data.kpis.stores_above), accent: "success" },
+          { label: t("kpi.storesBelow"), value: formatInt(data.kpis.stores_below), accent: "danger" },
         ]}
       />
+      <OpsChartCard
+        title={t("chart.trend")}
+        onExport={() =>
+          downloadCsv(
+            "ops-dpd-trend",
+            toCsv(
+              ["bucket", metric],
+              data.trend.map((p) => [p.bucket, dimMetricValue(p, metric)]),
+            ),
+          )
+        }
+        empty={trend.length === 0}
+        emptyTitle={t("emptyChart")}
+      >
+        <OpsLineChart data={trend} xKey="bucket" series={series} />
+      </OpsChartCard>
       <OpsChartCard
         title={t("chart.distribution")}
         onExport={() => {
@@ -117,6 +158,81 @@ export function OpsDpdTab({ data }: { data: OpsSnapshot }) {
             <p className="text-[10px] text-primary">{t("exportBucket")}</p>
           </button>
         ))}
+      </div>
+      <div className="grid gap-2 lg:grid-cols-3 lg:items-stretch">
+        <OpsChartCard
+          title={t("chart.nationality")}
+          onExport={() =>
+            downloadCsv(
+              "ops-dpd-nationality",
+              toCsv(
+                ["nationality", metric],
+                data.by_nationality
+                  .filter((r) => isChartableDimKey(r.key))
+                  .map((r) => [countryLabel(r.key), dimMetricValue(r, metric)]),
+              ),
+            )
+          }
+          empty={data.by_nationality.length === 0}
+          emptyTitle={t("emptyChart")}
+        >
+          <OpsBarChart
+            data={data.by_nationality
+              .filter((r) => isChartableDimKey(r.key))
+              .map((r) => ({ key: countryLabel(r.key), value: dimMetricValue(r, metric) }))}
+            xKey="key"
+            series={series}
+            layout="horizontal"
+          />
+        </OpsChartCard>
+        <OpsChartCard
+          title={t("chart.zone")}
+          onExport={() =>
+            downloadCsv(
+              "ops-dpd-zone",
+              toCsv(
+                ["zone", metric],
+                data.by_zone
+                  .filter((r) => isChartableDimKey(r.key))
+                  .map((r) => [r.key, dimMetricValue(r, metric)]),
+              ),
+            )
+          }
+          empty={data.by_zone.length === 0}
+          emptyTitle={t("emptyChart")}
+        >
+          <OpsBarChart
+            data={data.by_zone
+              .filter((r) => isChartableDimKey(r.key))
+              .map((r) => ({ key: r.key, value: dimMetricValue(r, metric) }))}
+            xKey="key"
+            series={series}
+            layout="horizontal"
+          />
+        </OpsChartCard>
+        <OpsChartCard
+          title={t("chart.vehicle")}
+          onExport={() =>
+            downloadCsv(
+              "ops-dpd-vehicle",
+              toCsv(
+                ["vehicle", metric],
+                data.by_vehicle.map((r) => [vehicleLabel(r.key), dimMetricValue(r, metric)]),
+              ),
+            )
+          }
+          empty={data.by_vehicle.length === 0}
+          emptyTitle={t("emptyVehicle")}
+        >
+          <OpsBarChart
+            data={data.by_vehicle.map((r) => ({
+              key: vehicleLabel(r.key),
+              value: dimMetricValue(r, metric),
+            }))}
+            xKey="key"
+            series={series}
+          />
+        </OpsChartCard>
       </div>
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-2 text-sm font-semibold">{t("storesTitle")}</h3>

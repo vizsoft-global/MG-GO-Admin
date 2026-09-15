@@ -21,14 +21,17 @@ import { DRIVER_PROJECT_KEYS } from "@/features/fleet/fleet-labels";
 import {
   OPS_GRANULARITIES,
   OPS_RANGE_PRESETS,
+  OPS_VIEW_BY,
   SOURCE_COMPANY_KEYS,
   SOURCE_COMPANY_LABEL,
   storesVisibleForPartners,
+  type OpsChartMetric,
   type OpsGranularity,
   type OpsRangePreset,
 } from "../performance-ops-formulas";
-import type { OpsOptions, OpsSlicers } from "../performance-ops-types";
+import type { OpsOptions, OpsSlicers, PerformanceHubTab } from "../performance-ops-types";
 import { partnerLabel, vehicleLabel } from "../performance-ops-format";
+import { OpsCustomRangePopover } from "./ops-custom-range";
 import { OpsMultiSelect } from "./ops-multi-select";
 import { cn } from "@/lib/utils";
 
@@ -39,15 +42,23 @@ export function OpsRangePills({
   preset,
   onPreset,
   allDisabled,
+  today,
+  customFrom,
+  customTo,
+  onApplyCustom,
 }: {
   preset: OpsRangePreset;
   onPreset: (next: OpsRangePreset) => void;
   allDisabled?: boolean;
+  today: string;
+  customFrom: string | null;
+  customTo: string | null;
+  onApplyCustom: (from: string, to: string) => void;
 }) {
   const t = useTranslations("pages.performance.ops");
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {OPS_RANGE_PRESETS.map((id) => (
+      {OPS_RANGE_PRESETS.filter((id) => id !== "custom").map((id) => (
         <ToggleChip
           key={id}
           selected={preset === id}
@@ -56,6 +67,39 @@ export function OpsRangePills({
           onClick={() => onPreset(id)}
         >
           {t(`range.${id}`)}
+        </ToggleChip>
+      ))}
+      <OpsCustomRangePopover
+        selected={preset === "custom"}
+        today={today}
+        appliedFrom={customFrom}
+        appliedTo={customTo}
+        onApply={onApplyCustom}
+      />
+    </div>
+  );
+}
+
+export function OpsViewByPills({
+  tab,
+  value,
+  onChange,
+}: {
+  tab: PerformanceHubTab;
+  value: OpsChartMetric;
+  onChange: (next: OpsChartMetric) => void;
+}) {
+  const t = useTranslations("pages.performance.ops");
+  const options = OPS_VIEW_BY[tab];
+  if (options.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {t("viewBy.label")}
+      </span>
+      {options.map((id) => (
+        <ToggleChip key={id} selected={value === id} onClick={() => onChange(id)}>
+          {t(`viewBy.${id}`)}
         </ToggleChip>
       ))}
     </div>
@@ -138,6 +182,7 @@ export function OpsSlicerBar({
           label={t("slicer.partner")}
           icon={OPS_SLICER_ICONS.partner}
           allLabel={t("slicer.allPartners")}
+          countNoun={t("slicer.nounPartners")}
           searchPlaceholder={t("slicer.searchPartner")}
           value={slicers.projectKeys}
           onChange={(projectKeys) => patch({ projectKeys })}
@@ -150,6 +195,7 @@ export function OpsSlicerBar({
           label={t("slicer.zone")}
           icon={OPS_SLICER_ICONS.zone}
           allLabel={t("slicer.allZones")}
+          countNoun={t("slicer.nounZones")}
           searchPlaceholder={t("slicer.searchZone")}
           value={slicers.zoneIds}
           onChange={(zoneIds) => patch({ zoneIds })}
@@ -159,6 +205,7 @@ export function OpsSlicerBar({
           label={t("slicer.vehicle")}
           icon={OPS_SLICER_ICONS.vehicle}
           allLabel={t("slicer.allVehicles")}
+          countNoun={t("slicer.nounVehicles")}
           searchPlaceholder={t("slicer.searchVehicle")}
           value={slicers.vehicleKeys}
           onChange={(vehicleKeys) => patch({ vehicleKeys })}
@@ -171,6 +218,7 @@ export function OpsSlicerBar({
           label={t("slicer.nationality")}
           icon={OPS_SLICER_ICONS.nationality}
           allLabel={t("slicer.allNationalities")}
+          countNoun={t("slicer.nounNationalities")}
           searchPlaceholder={t("slicer.searchNationality")}
           value={slicers.nationalities}
           onChange={(nationalities) => patch({ nationalities })}
@@ -180,8 +228,9 @@ export function OpsSlicerBar({
           <OpsMultiSelect
             label={t("slicer.sourceType")}
             icon={OPS_SLICER_ICONS.sourceType}
-            allLabel={t("slicer.allSourceTypes")}
-            searchPlaceholder={t("slicer.searchSourceType")}
+          allLabel={t("slicer.allSourceTypes")}
+          countNoun={t("slicer.nounSourceTypes")}
+          searchPlaceholder={t("slicer.searchSourceType")}
             value={slicers.sourceTypes}
             onChange={(sourceTypes) => patch({ sourceTypes })}
             options={SOURCE_TYPES.map((k) => ({
@@ -194,6 +243,7 @@ export function OpsSlicerBar({
           label={t("slicer.company")}
           icon={OPS_SLICER_ICONS.company}
           allLabel={t("slicer.allCompanies")}
+          countNoun={t("slicer.nounCompanies")}
           searchPlaceholder={t("slicer.searchCompany")}
           value={slicers.sourceCompanies}
           onChange={(sourceCompanies) => patch({ sourceCompanies })}
@@ -206,6 +256,7 @@ export function OpsSlicerBar({
           label={t("slicer.store")}
           icon={OPS_SLICER_ICONS.store}
           allLabel={t("slicer.allStores")}
+          countNoun={t("slicer.nounStores")}
           searchPlaceholder={t("slicer.searchStore")}
           emptyLabel={showStores ? undefined : t("slicer.noStores")}
           disabled={!showStores}

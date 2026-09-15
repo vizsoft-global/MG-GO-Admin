@@ -6416,7 +6416,32 @@
           "last7": "آخر 7 أيام",
           "thisMonth": "هذا الشهر",
           "lastMonth": "الشهر الماضي",
-          "all": "كل الفترة"
+          "all": "كل الفترة",
+          "custom": "مخصص"
+        },
+        "customTitle": "اختر نطاق تاريخ",
+        "customFrom": "من",
+        "customTo": "إلى",
+        "customApply": "تطبيق",
+        "customCancel": "إلغاء",
+        "customPreset": {
+          "14": "آخر 14 يوماً",
+          "30": "آخر 30 يوماً",
+          "90": "آخر 90 يوماً",
+          "quarter": "هذا الربع"
+        },
+        "customErr": {
+          "custom_range_incomplete": "اختر تاريخ البداية والنهاية.",
+          "custom_range_order": "يجب أن يكون تاريخ البداية قبل النهاية.",
+          "custom_range_too_large": "الحد الأقصى 366 يوماً.",
+          "custom_range_future": "لا يمكن اختيار تواريخ مستقبلية."
+        },
+        "viewBy": {
+          "label": "عرض الرسوم حسب",
+          "orders": "الطلبات",
+          "dpd": "DPD",
+          "dpd_eff": "كفاءة DPD",
+          "tgt_eff": "كفاءة الهدف"
         },
         "granularity": {
           "daily": "يومي",
@@ -6444,6 +6469,13 @@
           "allSourceTypes": "كل الأنواع",
           "allCompanies": "كل الشركات",
           "allStores": "كل المتاجر",
+          "nounPartners": "شركاء",
+          "nounZones": "مناطق",
+          "nounVehicles": "مركبات",
+          "nounNationalities": "جنسيات",
+          "nounSourceTypes": "أنواع",
+          "nounCompanies": "شركات",
+          "nounStores": "متاجر",
           "noStores": "لا متاجر للشريك المحدد",
           "searchPartner": "بحث الشريك",
           "searchZone": "بحث المنطقة",
@@ -6466,7 +6498,9 @@
           "riders": "إجمالي السائقين",
           "storesAbove": "متاجر فوق الهدف",
           "storesBelow": "متاجر تحت الهدف",
-          "targetDpd": "هدف DPD"
+          "targetDpd": "هدف DPD",
+          "workingDays": "إجمالي أيام العمل",
+          "ridersInView": "السائقون في العرض"
         },
         "chart": {
           "trend": "الاتجاه",
@@ -6479,7 +6513,13 @@
           "topTgt": "أعلى {n} · كفاءة الهدف",
           "bottomTgt": "أدنى {n} · كفاءة الهدف",
           "topDpd": "أعلى {n} · DPD",
-          "bottomDpd": "أدنى {n} · DPD"
+          "bottomDpd": "أدنى {n} · DPD",
+          "topMetric": "أعلى {n} · {metric}",
+          "bottomMetric": "أدنى {n} · {metric}",
+          "topStores": "أعلى {n} متاجر · {metric}",
+          "bottomStores": "أدنى {n} متاجر · {metric}",
+          "topZones": "أعلى {n} مناطق · {metric}",
+          "bottomZones": "أدنى {n} مناطق · {metric}"
         },
         "bucket": {
           "well_above": "أعلى بكثير (>120%)",
@@ -6502,7 +6542,14 @@
           "dpdEff": "كفاءة DPD",
           "status": "الحالة",
           "riders": "السائقون",
-          "company": "الشركة"
+          "company": "الشركة",
+          "nationality": "الجنسية",
+          "sourceType": "نوع المصدر",
+          "companySource": "مصدر الشركة",
+          "targetDpd": "هدف DPD",
+          "storeDpd": "DPD المتجر",
+          "vehZoneDpd": "DPD المنطقة-المركبة",
+          "activeRiders": "سائقون نشطون"
         },
         "filterCol": {
           "status": "الحالة",
@@ -6524,6 +6571,8 @@
         "outsourceBanner": "شركات التعهيد تعمل في أمريكانا فقط. هذا التبويب يتجاهل عامل نوع المصدر.",
         "tableFiltersHint": "عوامل أعمدة الجدول تؤثر على الجدول فقط — مؤشرات KPI تبقى على المجموعة الكاملة.",
         "topBottomHint": "N = {n} (10% من السائقين النشطين، بين 2 و10).",
+        "topBottomStoresHint": "N = {n} (10% من المتاجر المعروضة، بين 2 و10).",
+        "topBottomZonesHint": "N = {n} (10% من المناطق المعروضة، بين 2 و10).",
         "topBottomTooltip": "مرّر على العمود للاسم والقيمة والمعرّف والجنسية والمتجر والمركبة والمنطقة والمصدر.",
         "errorTitle": "تعذّر تحميل اللوحة",
         "errorHint": "حدّث الصفحة أو اختر نطاقاً أقصر.",

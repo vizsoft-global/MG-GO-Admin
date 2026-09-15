@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  assertCustomOpsRange,
   assertOpsRange,
   DEFAULT_TARGET_DPD,
   displayRiderId,
   dpdEfficiencyPct,
   efficiencyBucket,
+  fillCustomPreset,
+  formatOpsBucketLabel,
+  formatOpsCustomPill,
   inclusiveDayCount,
+  isChartableDimKey,
   kpiDeltaPct,
   meanFinite,
   overallDpd,
@@ -15,11 +20,14 @@ import {
   previousWindow,
   resolveBenchmark,
   resolveOpsRange,
+  resolveViewByMetric,
   riderDpd,
+  sortOpsRidersByOrdersDesc,
   sourceLabel,
   storeDisplayName,
   storesVisibleForPartners,
   targetEfficiencyPct,
+  toggleOpsMultiSelect,
   topBottomN,
 } from "./performance-ops-formulas";
 
@@ -206,6 +214,61 @@ describe("kpiDelta + windows", () => {
       to: "2026-09-12",
     });
     assert.throws(() => assertOpsRange("2025-01-01", "2026-09-12"), /range_too_large/);
+  });
+
+  it("Custom range validates empty, order, 366, and future", () => {
+    assert.throws(() => assertCustomOpsRange("", "2026-09-12", "2026-09-12"), /custom_range_incomplete/);
+    assert.throws(() => assertCustomOpsRange("2026-09-12", "2026-09-01", "2026-09-12"), /custom_range_order/);
+    assert.throws(() => assertCustomOpsRange("2025-01-01", "2026-09-12", "2026-09-12"), /custom_range_too_large/);
+    assert.throws(() => assertCustomOpsRange("2026-09-01", "2026-09-20", "2026-09-12"), /custom_range_future/);
+    assert.doesNotThrow(() => assertCustomOpsRange("2026-08-30", "2026-09-12", "2026-09-12"));
+    assert.deepEqual(resolveOpsRange("custom", "2026-09-12", null, {
+      from: "2026-08-30",
+      to: "2026-09-12",
+    }), { from: "2026-08-30", to: "2026-09-12" });
+    assert.deepEqual(fillCustomPreset("14", "2026-09-12"), { from: "2026-08-30", to: "2026-09-12" });
+    assert.deepEqual(fillCustomPreset("quarter", "2026-09-12"), { from: "2026-07-01", to: "2026-09-12" });
+  });
+});
+
+describe("chart labels + dim keys + multi-select + rider sort", () => {
+  it("formats buckets as 1 Sep", () => {
+    assert.equal(formatOpsBucketLabel("2026-09-01"), "1 Sep");
+    assert.equal(formatOpsBucketLabel("2026-09-12"), "12 Sep");
+    assert.equal(formatOpsCustomPill("2026-09-01", "2026-09-12"), "1 Sep – 12 Sep");
+  });
+
+  it("drops empty and mojibake dim keys", () => {
+    assert.equal(isChartableDimKey(null), false);
+    assert.equal(isChartableDimKey(""), false);
+    assert.equal(isChartableDimKey("—"), false);
+    assert.equal(isChartableDimKey("(none)"), false);
+    assert.equal(isChartableDimKey("â€”"), false);
+    assert.equal(isChartableDimKey("Jahra"), true);
+  });
+
+  it("multi-select starts from All and ticks only chosen values", () => {
+    const opts = ["a", "b", "c", "d"];
+    assert.deepEqual(toggleOpsMultiSelect(opts, [], "b"), ["b"]);
+    assert.deepEqual(toggleOpsMultiSelect(opts, ["b"], "c"), ["b", "c"]);
+    assert.deepEqual(toggleOpsMultiSelect(opts, ["b", "c"], "b"), ["c"]);
+    assert.deepEqual(toggleOpsMultiSelect(opts, ["c"], "c"), []);
+    assert.deepEqual(toggleOpsMultiSelect(opts, ["a", "b", "c"], "d"), []);
+  });
+
+  it("default rider sort is Orders desc then name", () => {
+    const rows = [
+      { name: "Ann", orders: 0 },
+      { name: "Zed", orders: 12 },
+      { name: "Bo", orders: 12 },
+    ];
+    assert.deepEqual(sortOpsRidersByOrdersDesc(rows).map((r) => r.name), ["Bo", "Zed", "Ann"]);
+  });
+
+  it("View charts by falls back when the tab does not have the metric", () => {
+    assert.equal(resolveViewByMetric("dpd", "orders"), "dpd");
+    assert.equal(resolveViewByMetric("overview", "dpd"), "dpd");
+    assert.equal(resolveViewByMetric("riders", "orders"), "orders");
   });
 });
 
