@@ -14,13 +14,35 @@ import {
   vehicleLabel,
 } from "../performance-ops-format";
 import { countryLabel } from "@/lib/geo/countries";
-import type { OpsSnapshot } from "../performance-ops-types";
+import {
+  dimMetricValue,
+  formatOpsBucketLabel,
+  isChartableDimKey,
+  OPS_METRIC_COLOR,
+  type OpsChartMetric,
+} from "../performance-ops-formulas";
+import type { OpsDimRow, OpsSnapshot } from "../performance-ops-types";
 import { OpsBarChart, OpsChartCard, OpsKpiDelta, OpsLineChart } from "./ops-charts";
 import { cn } from "@/lib/utils";
 
-export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
+function dimRows(rows: OpsDimRow[], labelOf: (row: OpsDimRow) => string, metric: OpsChartMetric) {
+  return rows
+    .filter((r) => isChartableDimKey(r.key))
+    .map((r) => ({ key: labelOf(r), value: dimMetricValue(r, metric) }));
+}
+
+export function OpsOverviewTab({
+  data,
+  metric,
+}: {
+  data: OpsSnapshot;
+  metric: OpsChartMetric;
+}) {
   const t = useTranslations("pages.performance.ops");
   const k = data.kpis;
+  const seriesName = t(`viewBy.${metric}`);
+  const color = OPS_METRIC_COLOR[metric];
+  const series = [{ key: "value", name: seriesName, color }];
 
   const items = [
     {
@@ -46,32 +68,20 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
       accent: "success" as const,
     },
     {
-      label: t("kpi.active"),
-      value: formatInt(k.active),
-      caption: <OpsKpiDelta {...formatDelta(k.active, k.active_prev)} />,
-    },
-    {
       label: t("kpi.riders"),
       value: formatInt(k.riders),
       caption: <OpsKpiDelta {...formatDelta(k.riders, k.riders_prev)} />,
     },
     {
-      label: t("kpi.storesAbove"),
-      value: formatInt(k.stores_above),
-      accent: "success" as const,
-    },
-    {
-      label: t("kpi.storesBelow"),
-      value: formatInt(k.stores_below),
-      accent: "danger" as const,
+      label: t("kpi.active"),
+      value: formatInt(k.active),
+      caption: <OpsKpiDelta {...formatDelta(k.active, k.active_prev)} />,
     },
   ];
 
   const trend = data.trend.map((p) => ({
-    bucket: p.bucket.slice(5),
-    orders: p.orders,
-    dpd: p.dpd,
-    tgt_eff: p.tgt_eff,
+    bucket: formatOpsBucketLabel(p.bucket),
+    value: dimMetricValue(p, metric),
   }));
 
   return (
@@ -89,22 +99,15 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
             downloadCsv(
               "ops-trend",
               toCsv(
-                ["bucket", "orders", "dpd", "tgt_eff"],
-                data.trend.map((p) => [p.bucket, p.orders, p.dpd, p.tgt_eff]),
+                ["bucket", metric],
+                data.trend.map((p) => [p.bucket, dimMetricValue(p, metric)]),
               ),
             )
           }
           empty={trend.length === 0}
           emptyTitle={t("emptyChart")}
         >
-          <OpsLineChart
-            data={trend}
-            xKey="bucket"
-            series={[
-              { key: "orders", name: t("kpi.orders"), color: "#2563eb" },
-              { key: "dpd", name: t("kpi.overallDpd"), color: "#059669" },
-            ]}
-          />
+          <OpsLineChart data={trend} xKey="bucket" series={series} />
         </OpsChartCard>
         <OpsChartCard
           title={t("chart.vehicle")}
@@ -112,8 +115,8 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
             downloadCsv(
               "ops-vehicle",
               toCsv(
-                ["vehicle", "orders", "dpd"],
-                data.by_vehicle.map((r) => [vehicleLabel(r.key), r.orders, r.dpd]),
+                ["vehicle", metric],
+                data.by_vehicle.map((r) => [vehicleLabel(r.key), dimMetricValue(r, metric)]),
               ),
             )
           }
@@ -121,13 +124,9 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
           emptyTitle={t("emptyVehicle")}
         >
           <OpsBarChart
-            data={data.by_vehicle.map((r) => ({
-              key: vehicleLabel(r.key),
-              orders: r.orders,
-              dpd: r.dpd,
-            }))}
+            data={dimRows(data.by_vehicle, (r) => vehicleLabel(r.key), metric)}
             xKey="key"
-            series={[{ key: "orders", name: t("kpi.orders"), color: "#059669" }]}
+            series={series}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -136,8 +135,8 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
             downloadCsv(
               "ops-zone",
               toCsv(
-                ["zone", "orders", "dpd", "active"],
-                data.by_zone.map((r) => [r.key, r.orders, r.dpd, r.active_riders ?? r.riders]),
+                ["zone", metric],
+                data.by_zone.filter((r) => isChartableDimKey(r.key)).map((r) => [r.key, dimMetricValue(r, metric)]),
               ),
             )
           }
@@ -145,9 +144,9 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
           emptyTitle={t("emptyChart")}
         >
           <OpsBarChart
-            data={data.by_zone.map((r) => ({ key: r.key, dpd: r.dpd }))}
+            data={dimRows(data.by_zone, (r) => r.key, metric)}
             xKey="key"
-            series={[{ key: "dpd", name: t("kpi.overallDpd"), color: "#2563eb" }]}
+            series={series}
             layout="horizontal"
           />
         </OpsChartCard>
@@ -157,8 +156,11 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
             downloadCsv(
               "ops-partner",
               toCsv(
-                ["partner", "orders", "dpd"],
-                data.by_partner.map((r) => [partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key), r.orders, r.dpd]),
+                ["partner", metric],
+                data.by_partner.map((r) => [
+                  partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key),
+                  dimMetricValue(r, metric),
+                ]),
               ),
             )
           }
@@ -166,12 +168,13 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
           emptyTitle={t("emptyChart")}
         >
           <OpsBarChart
-            data={data.by_partner.map((r) => ({
-              key: partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key),
-              orders: r.orders,
-            }))}
+            data={dimRows(
+              data.by_partner,
+              (r) => (partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key)),
+              metric,
+            )}
             xKey="key"
-            series={[{ key: "orders", name: t("kpi.orders"), color: "#7c3aed" }]}
+            series={series}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -180,8 +183,8 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
             downloadCsv(
               "ops-nationality",
               toCsv(
-                ["nationality", "orders", "dpd"],
-                data.by_nationality.map((r) => [countryLabel(r.key), r.orders, r.dpd]),
+                ["nationality", metric],
+                data.by_nationality.map((r) => [countryLabel(r.key), dimMetricValue(r, metric)]),
               ),
             )
           }
@@ -189,12 +192,9 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
           emptyTitle={t("emptyChart")}
         >
           <OpsBarChart
-            data={data.by_nationality.map((r) => ({
-              key: countryLabel(r.key),
-              orders: r.orders,
-            }))}
+            data={dimRows(data.by_nationality, (r) => countryLabel(r.key), metric)}
             xKey="key"
-            series={[{ key: "orders", name: t("kpi.orders"), color: "#d97706" }]}
+            series={series}
             layout="horizontal"
           />
         </OpsChartCard>
@@ -204,8 +204,8 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
             downloadCsv(
               "ops-company",
               toCsv(
-                ["company", "orders", "dpd"],
-                data.by_company.map((r) => [companyLabel(r.key), r.orders, r.dpd]),
+                ["company", metric],
+                data.by_company.map((r) => [companyLabel(r.key), dimMetricValue(r, metric)]),
               ),
             )
           }
@@ -213,12 +213,9 @@ export function OpsOverviewTab({ data }: { data: OpsSnapshot }) {
           emptyTitle={t("emptyChart")}
         >
           <OpsBarChart
-            data={data.by_company.map((r) => ({
-              key: companyLabel(r.key),
-              orders: r.orders,
-            }))}
+            data={dimRows(data.by_company, (r) => companyLabel(r.key), metric)}
             xKey="key"
-            series={[{ key: "orders", name: t("kpi.orders"), color: "#0891b2" }]}
+            series={series}
           />
         </OpsChartCard>
       </div>

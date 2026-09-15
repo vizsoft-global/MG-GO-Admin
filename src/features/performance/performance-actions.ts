@@ -47,6 +47,7 @@ import {
   type DpdEfficiencyRider,
   type DpdEfficiencySnapshot,
 } from "./performance-types";
+import { isChartableDimKey } from "./performance-ops-formulas";
 import { asInt, asStr, isoDate, numOrNull } from "./performance-ops-format";
 import type {
   OpsBounds,
@@ -1730,13 +1731,21 @@ function parseOpsSnapshot(raw: unknown): OpsSnapshot {
           };
         })
       : [],
-    by_vehicle: Array.isArray(o.by_vehicle) ? o.by_vehicle.map(parseDim) : [],
-    by_zone: Array.isArray(o.by_zone) ? o.by_zone.map(parseDim) : [],
-    by_partner: Array.isArray(o.by_partner) ? o.by_partner.map(parseDim) : [],
-    by_nationality: Array.isArray(o.by_nationality)
-      ? o.by_nationality.map(parseDim)
+    by_vehicle: Array.isArray(o.by_vehicle)
+      ? o.by_vehicle.map(parseDim).filter((r) => isChartableDimKey(r.key))
       : [],
-    by_company: Array.isArray(o.by_company) ? o.by_company.map(parseDim) : [],
+    by_zone: Array.isArray(o.by_zone)
+      ? o.by_zone.map(parseDim).filter((r) => isChartableDimKey(r.key))
+      : [],
+    by_partner: Array.isArray(o.by_partner)
+      ? o.by_partner.map(parseDim).filter((r) => isChartableDimKey(r.key))
+      : [],
+    by_nationality: Array.isArray(o.by_nationality)
+      ? o.by_nationality.map(parseDim).filter((r) => isChartableDimKey(r.key))
+      : [],
+    by_company: Array.isArray(o.by_company)
+      ? o.by_company.map(parseDim).filter((r) => isChartableDimKey(r.key))
+      : [],
     stores: Array.isArray(o.stores)
       ? o.stores.map((s): OpsStoreRow => {
           const row = (s ?? {}) as Record<string, unknown>;

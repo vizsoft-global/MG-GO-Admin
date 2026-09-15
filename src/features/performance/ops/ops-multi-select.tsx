@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { toggleOpsMultiSelect } from "../performance-ops-formulas";
 import { cn } from "@/lib/utils";
 
 export type OpsSelectOption = {
@@ -25,6 +26,7 @@ export function OpsMultiSelect({
   allLabel,
   searchPlaceholder,
   emptyLabel,
+  countNoun,
   disabled,
   icon: Icon,
 }: {
@@ -35,6 +37,7 @@ export function OpsMultiSelect({
   allLabel: string;
   searchPlaceholder: string;
   emptyLabel?: string;
+  countNoun: string;
   disabled?: boolean;
   icon?: LucideIcon;
 }) {
@@ -57,21 +60,10 @@ export function OpsMultiSelect({
     ? allLabel
     : value.length === 1
       ? (options.find((o) => o.value === value[0])?.label ?? value[0])
-      : `${value.length}`;
+      : `${value.length} ${countNoun}`;
 
   function toggle(id: string) {
-    if (allOn) {
-      onChange(options.map((o) => o.value).filter((v) => v !== id));
-      return;
-    }
-    const next = selected.has(id)
-      ? value.filter((v) => v !== id)
-      : [...value, id];
-    if (next.length === 0 || next.length === options.length) {
-      onChange([]);
-      return;
-    }
-    onChange(next);
+    onChange(toggleOpsMultiSelect(options.map((o) => o.value), value, id));
   }
 
   return (
@@ -119,7 +111,7 @@ export function OpsMultiSelect({
           </label>
           <div className="max-h-52 overflow-y-auto">
             {filtered.map((o) => {
-              const on = allOn || selected.has(o.value);
+              const on = selected.has(o.value);
               return (
                 <label
                   key={o.value}

@@ -38,12 +38,50 @@ export const SOURCE_COMPANY_PREFIX: Record<SourceCompanyKey, string> = {
 
 export const DEFAULT_TARGET_DPD = 25;
 export const OPS_RANGE_MAX_DAYS = 400;
+export const OPS_CUSTOM_RANGE_MAX_DAYS = 366;
 
 export const OPS_RANGE_PRESETS = [
   "all",
   "last7",
   "thisMonth",
   "lastMonth",
+  "custom",
+] as const;
+
+export const OPS_CHART_METRICS = ["orders", "dpd", "dpd_eff", "tgt_eff"] as const;
+export type OpsChartMetric = (typeof OPS_CHART_METRICS)[number];
+
+export const OPS_VIEW_BY: Record<
+  "overview" | "dpd" | "riders" | "topbottom" | "outsource",
+  readonly OpsChartMetric[]
+> = {
+  overview: ["orders", "dpd"],
+  dpd: ["dpd", "dpd_eff", "tgt_eff"],
+  riders: [],
+  topbottom: ["orders", "dpd", "dpd_eff", "tgt_eff"],
+  outsource: ["orders", "dpd", "dpd_eff", "tgt_eff"],
+};
+
+export const OPS_METRIC_COLOR: Record<OpsChartMetric, string> = {
+  orders: "#2563eb",
+  dpd: "#059669",
+  dpd_eff: "#7c3aed",
+  tgt_eff: "#d97706",
+};
+
+const MONTH_ABBR = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ] as const;
 
 export type OpsRangePreset = (typeof OPS_RANGE_PRESETS)[number];
@@ -231,10 +269,20 @@ export function monthStart(isoDate: string): string {
   return `${isoDate.slice(0, 7)}-01`;
 }
 
+export function assertCustomOpsRange(from: string, to: string, today: string): void {
+  if (!from || !to) throw new Error("custom_range_incomplete");
+  if (from > to) throw new Error("custom_range_order");
+  if (from > today || to > today) throw new Error("custom_range_future");
+  if (rangeSpanDays(from, to) > OPS_CUSTOM_RANGE_MAX_DAYS) {
+    throw new Error("custom_range_too_large");
+  }
+}
+
 export function resolveOpsRange(
   preset: OpsRangePreset,
   today: string,
   firstDeliveryDate: string | null,
+  custom?: { from: string; to: string } | null,
 ): { from: string; to: string } {
   const [y, m] = today.split("-").map(Number);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -255,8 +303,137 @@ export function resolveOpsRange(
       assertOpsRange(next.from, next.to);
       return next;
     }
+    case "custom": {
+      if (!custom?.from || !custom?.to) throw new Error("custom_range_incomplete");
+      assertCustomOpsRange(custom.from, custom.to, today);
+      return { from: custom.from, to: custom.to };
+    }
     default: {
       const _never: never = preset;
+      return _never;
+    }
+  }
+}
+
+export function formatOpsBucketLabel(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d || m < 1 || m > 12) return iso;
+  return `${d} ${MONTH_ABBR[m - 1]}`;
+}
+
+export function formatOpsCustomPill(from: string, to: string): string {
+  return `${formatOpsBucketLabel(from)} – ${formatOpsBucketLabel(to)}`;
+}
+
+export function isChartableDimKey(key: string | null | undefined): boolean {
+  if (key == null) return false;
+  const s = key.trim();
+  if (!s) return false;
+  if (s === "—" || s === "–" || s === "-" || s === "(none)") return false;
+  if (s.includes("â€")) return false;
+  return true;
+}
+
+export function toggleOpsMultiSelect(
+  optionValues: readonly string[],
+  selected: readonly string[],
+  id: string,
+): string[] {
+  if (selected.length === 0) return [id];
+  const next = selected.includes(id)
+    ? selected.filter((v) => v !== id)
+    : [...selected, id];
+  if (next.length === 0 || next.length === optionValues.length) return [];
+  return next;
+}
+
+export function sortOpsRidersByOrdersDesc<T extends { orders: number; name?: string }>(
+  rows: readonly T[],
+): T[] {
+  return [...rows].sort((a, b) => {
+    if (b.orders !== a.orders) return b.orders - a.orders;
+    return (a.name ?? "").localeCompare(b.name ?? "");
+  });
+}
+
+export function storeChartValue(
+  store: { orders: number; store_dpd: number | null },
+  metric: OpsChartMetric,
+  overallDpd: number | null,
+  targetDpd: number,
+): number | null {
+  switch (metric) {
+    case "orders":
+      return store.orders;
+    case "dpd":
+      return store.store_dpd;
+    case "dpd_eff":
+      if (store.store_dpd == null || overallDpd == null || overallDpd <= 0) return null;
+      return (store.store_dpd / overallDpd) * 100;
+    case "tgt_eff":
+      if (store.store_dpd == null || !Number.isFinite(targetDpd) || targetDpd <= 0) return null;
+      return (store.store_dpd / targetDpd) * 100;
+    default: {
+      const _never: never = metric;
+      return _never;
+    }
+  }
+}
+
+export function dimMetricValue(
+  row: { orders: number; dpd: number | null; dpd_eff: number | null; tgt_eff: number | null },
+  metric: OpsChartMetric,
+): number | null {
+  switch (metric) {
+    case "orders":
+      return row.orders;
+    case "dpd":
+      return row.dpd;
+    case "dpd_eff":
+      return row.dpd_eff;
+    case "tgt_eff":
+      return row.tgt_eff;
+    default: {
+      const _never: never = metric;
+      return _never;
+    }
+  }
+}
+
+export function resolveViewByMetric(
+  tab: keyof typeof OPS_VIEW_BY,
+  current: OpsChartMetric,
+): OpsChartMetric {
+  const allowed = OPS_VIEW_BY[tab];
+  if (allowed.length === 0) return current;
+  return allowed.includes(current) ? current : allowed[0];
+}
+
+export function customRangeDraft(today: string): { from: string; to: string } {
+  return { from: addDays(today, -13), to: today };
+}
+
+export function quarterStart(today: string): string {
+  const [y, m] = today.split("-").map(Number);
+  const qStartMonth = Math.floor((m - 1) / 3) * 3 + 1;
+  return `${y}-${String(qStartMonth).padStart(2, "0")}-01`;
+}
+
+export function fillCustomPreset(
+  kind: "14" | "30" | "90" | "quarter",
+  today: string,
+): { from: string; to: string } {
+  switch (kind) {
+    case "14":
+      return { from: addDays(today, -13), to: today };
+    case "30":
+      return { from: addDays(today, -29), to: today };
+    case "90":
+      return { from: addDays(today, -89), to: today };
+    case "quarter":
+      return { from: quarterStart(today), to: today };
+    default: {
+      const _never: never = kind;
       return _never;
     }
   }

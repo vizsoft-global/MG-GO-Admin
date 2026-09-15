@@ -9,8 +9,11 @@ import { TabBar } from "@/components/dashboard/tab-bar";
 import { Link } from "@/i18n/navigation";
 import { kuwaitToday } from "./performance-formulas";
 import {
+  assertCustomOpsRange,
   assertOpsRange,
   resolveOpsRange,
+  resolveViewByMetric,
+  type OpsChartMetric,
   type OpsGranularity,
   type OpsRangePreset,
 } from "./performance-ops-formulas";
@@ -22,7 +25,7 @@ import {
 } from "./performance-ops-types";
 import { enrichOpsRider } from "./performance-ops-format";
 import { usePerformanceOpsBounds, usePerformanceOpsSnapshot } from "./use-performance";
-import { OpsGranularityPills, OpsRangePills, OpsSlicerBar } from "./ops/ops-chrome";
+import { OpsGranularityPills, OpsRangePills, OpsSlicerBar, OpsViewByPills } from "./ops/ops-chrome";
 import { OpsOverviewTab } from "./ops/ops-overview-tab";
 import { OpsDpdTab } from "./ops/ops-dpd-tab";
 import { OpsRidersTab } from "./ops/ops-riders-tab";
@@ -36,30 +39,45 @@ export function PerformancePageShell() {
 
   const [tab, setTab] = useState<PerformanceHubTab>("overview");
   const [preset, setPreset] = useState<OpsRangePreset>("last7");
+  const [customFrom, setCustomFrom] = useState<string | null>(null);
+  const [customTo, setCustomTo] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<OpsGranularity>("daily");
   const [slicers, setSlicers] = useState<OpsSlicers>(EMPTY_OPS_SLICERS);
+  const [metric, setMetric] = useState<OpsChartMetric>("orders");
 
   const boundsQuery = usePerformanceOpsBounds();
   const today = boundsQuery.data?.today ?? todayFallback;
   const firstDelivery = boundsQuery.data?.first_delivery_date ?? null;
   const overCap = Boolean(boundsQuery.data?.over_cap);
+  const viewMetric = resolveViewByMetric(tab, metric);
 
   const range = useMemo(() => {
     try {
-      return resolveOpsRange(preset, today, firstDelivery);
+      return resolveOpsRange(
+        preset,
+        today,
+        firstDelivery,
+        preset === "custom" && customFrom && customTo
+          ? { from: customFrom, to: customTo }
+          : null,
+      );
     } catch {
       return resolveOpsRange("last7", today, firstDelivery);
     }
-  }, [preset, today, firstDelivery]);
+  }, [preset, today, firstDelivery, customFrom, customTo]);
 
   const rangeError = useMemo(() => {
     try {
+      if (preset === "custom") {
+        if (!customFrom || !customTo) return "custom_range_incomplete";
+        assertCustomOpsRange(customFrom, customTo, today);
+      }
       assertOpsRange(range.from, range.to);
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : "invalid_date_range";
     }
-  }, [range]);
+  }, [preset, customFrom, customTo, today, range]);
 
   const snapshotQuery = usePerformanceOpsSnapshot(
     {
@@ -116,6 +134,21 @@ export function PerformancePageShell() {
     );
   }
 
+  function rangeErrorCopy(code: string | null): string {
+    if (code === "range_too_large" || errorMessage === "range_too_large") {
+      return t("ops.rangeTooLarge");
+    }
+    if (
+      code === "custom_range_incomplete" ||
+      code === "custom_range_order" ||
+      code === "custom_range_too_large" ||
+      code === "custom_range_future"
+    ) {
+      return t(`ops.customErr.${code}`);
+    }
+    return t("ops.errorHint");
+  }
+
   return (
     <AppPage>
       <AppPageHeader
@@ -151,7 +184,11 @@ export function PerformancePageShell() {
           { id: "outsource", label: t("ops.tabOutsource") },
         ]}
         activeId={tab}
-        onSelect={(id) => setTab(id as PerformanceHubTab)}
+        onSelect={(id) => {
+          const next = id as PerformanceHubTab;
+          setTab(next);
+          setMetric(resolveViewByMetric(next, metric));
+        }}
         className="mb-2"
       />
 
@@ -160,6 +197,14 @@ export function PerformancePageShell() {
           <OpsRangePills
             preset={preset}
             allDisabled={overCap}
+            today={today}
+            customFrom={customFrom}
+            customTo={customTo}
+            onApplyCustom={(from, to) => {
+              setCustomFrom(from);
+              setCustomTo(to);
+              setPreset("custom");
+            }}
             onPreset={(next) => {
               if (next === "all" && overCap) return;
               setPreset(next);
@@ -181,6 +226,8 @@ export function PerformancePageShell() {
           exportLabel={t("ops.exportTab")}
         />
 
+        <OpsViewByPills tab={tab} value={viewMetric} onChange={setMetric} />
+
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -188,24 +235,20 @@ export function PerformancePageShell() {
         ) : isError || rangeError ? (
           <AppEmptyState
             title={t("ops.errorTitle")}
-            description={
-              rangeError === "range_too_large" || errorMessage === "range_too_large"
-                ? t("ops.rangeTooLarge")
-                : t("ops.errorHint")
-            }
+            description={rangeErrorCopy(rangeError ?? errorMessage)}
           />
         ) : !data ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
         ) : tab === "overview" ? (
-          <OpsOverviewTab data={data} />
+          <OpsOverviewTab data={data} metric={viewMetric} />
         ) : tab === "dpd" ? (
-          <OpsDpdTab data={data} />
+          <OpsDpdTab data={data} metric={viewMetric} />
         ) : tab === "riders" ? (
           <OpsRidersTab data={data} />
         ) : tab === "topbottom" ? (
-          <OpsTopBottomTab data={data} />
+          <OpsTopBottomTab data={data} metric={viewMetric} />
         ) : (
-          <OpsOutsourceTab data={data} />
+          <OpsOutsourceTab data={data} metric={viewMetric} />
         )}
       </div>
     </AppPage>

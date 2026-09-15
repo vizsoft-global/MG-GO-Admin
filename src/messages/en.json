@@ -6494,7 +6494,32 @@
           "last7": "Last 7 days",
           "thisMonth": "This month",
           "lastMonth": "Last month",
-          "all": "All time"
+          "all": "All time",
+          "custom": "Custom"
+        },
+        "customTitle": "Select a date range",
+        "customFrom": "FROM",
+        "customTo": "TO",
+        "customApply": "Apply",
+        "customCancel": "Cancel",
+        "customPreset": {
+          "14": "Last 14 days",
+          "30": "Last 30 days",
+          "90": "Last 90 days",
+          "quarter": "This quarter"
+        },
+        "customErr": {
+          "custom_range_incomplete": "Pick both a start and an end date.",
+          "custom_range_order": "The start date must be before the end date.",
+          "custom_range_too_large": "Maximum range is 366 days.",
+          "custom_range_future": "Dates cannot be in the future."
+        },
+        "viewBy": {
+          "label": "View charts by",
+          "orders": "Orders",
+          "dpd": "DPD",
+          "dpd_eff": "DPD Efficiency",
+          "tgt_eff": "Target Efficiency"
         },
         "granularity": {
           "daily": "Daily",
@@ -6522,6 +6547,13 @@
           "allSourceTypes": "All source types",
           "allCompanies": "All companies",
           "allStores": "All stores",
+          "nounPartners": "Partners",
+          "nounZones": "Zones",
+          "nounVehicles": "Vehicles",
+          "nounNationalities": "Nationalities",
+          "nounSourceTypes": "Source types",
+          "nounCompanies": "Companies",
+          "nounStores": "Stores",
           "noStores": "No stores for the selected partner",
           "searchPartner": "Search partner",
           "searchZone": "Search zone",
@@ -6544,7 +6576,9 @@
           "riders": "Total riders",
           "storesAbove": "Stores above target",
           "storesBelow": "Stores below target",
-          "targetDpd": "Target DPD"
+          "targetDpd": "Target DPD",
+          "workingDays": "Total working days",
+          "ridersInView": "Riders in view"
         },
         "chart": {
           "trend": "Trend",
@@ -6557,7 +6591,13 @@
           "topTgt": "Top {n} · target efficiency",
           "bottomTgt": "Bottom {n} · target efficiency",
           "topDpd": "Top {n} · DPD",
-          "bottomDpd": "Bottom {n} · DPD"
+          "bottomDpd": "Bottom {n} · DPD",
+          "topMetric": "Top {n} · {metric}",
+          "bottomMetric": "Bottom {n} · {metric}",
+          "topStores": "Top {n} stores · {metric}",
+          "bottomStores": "Bottom {n} stores · {metric}",
+          "topZones": "Top {n} zones · {metric}",
+          "bottomZones": "Bottom {n} zones · {metric}"
         },
         "bucket": {
           "well_above": "Well above (>120%)",
@@ -6580,7 +6620,14 @@
           "dpdEff": "DPD eff.",
           "status": "Status",
           "riders": "Riders",
-          "company": "Company"
+          "company": "Company",
+          "nationality": "Nationality",
+          "sourceType": "Source type",
+          "companySource": "Company source",
+          "targetDpd": "Target DPD",
+          "storeDpd": "Store DPD",
+          "vehZoneDpd": "Vehicle-Zone DPD",
+          "activeRiders": "Active riders"
         },
         "filterCol": {
           "status": "Status",
@@ -6602,6 +6649,8 @@
         "outsourceBanner": "Outsource companies operate only in Americana. This tab ignores the Source type slicer.",
         "tableFiltersHint": "Column filters apply to the table only — KPIs stay on the full slicer-scoped set.",
         "topBottomHint": "N = {n} (10% of active riders, clamped 2–10).",
+        "topBottomStoresHint": "N = {n} (10% of stores in view, clamped 2–10).",
+        "topBottomZonesHint": "N = {n} (10% of zones in view, clamped 2–10).",
         "topBottomTooltip": "Hover a bar for name, value, ID, nationality, store, vehicle, zone and source.",
         "errorTitle": "Dashboard could not load",
         "errorHint": "Refresh, or pick a shorter range.",
