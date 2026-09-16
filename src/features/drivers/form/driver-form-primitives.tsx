@@ -43,14 +43,20 @@ export function FieldLabel({
   children,
   required,
   className,
+  icon: Icon,
 }: {
   htmlFor?: string;
   children: ReactNode;
   required?: boolean;
   className?: string;
+  icon?: LucideIcon;
 }) {
   return (
-    <Label htmlFor={htmlFor} className={cn("text-xs font-medium", className)}>
+    <Label
+      htmlFor={htmlFor}
+      className={cn("inline-flex items-center gap-1 text-xs font-medium", className)}
+    >
+      {Icon ? <Icon className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden /> : null}
       {children}
       {required ? <span className="text-destructive"> *</span> : null}
     </Label>

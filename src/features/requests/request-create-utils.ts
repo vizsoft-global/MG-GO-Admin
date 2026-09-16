@@ -1,3 +1,8 @@
+import { createKindSpecs } from "./request-create-kinds";
+import { REQUEST_TYPE_SLUGS } from "./settings-types";
+
+const SYSTEM_CREATE_TYPES = new Set<string>(REQUEST_TYPE_SLUGS);
+
 /** Payload keys that are derived columns or the declaration checkbox — not free-text inputs. */
 const DERIVED_CREATE_KEYS = new Set(["date_range", "duration_days", "declaration_accepted"]);
 
@@ -86,6 +91,8 @@ export function typedRequiredPayloadKeys(
     }
     case "fuel":
       return ["period_month"];
+    case "fuel_refund":
+      return ["reason"];
     case "document":
       return ["document_type"];
     case "complaint":
@@ -120,14 +127,12 @@ export function inclusiveDurationDays(startYmd: string, endYmd: string): number 
   return Math.round((end - start) / 86_400_000) + 1;
 }
 
-export function fuelFinalApproveBlocked(input: {
+export function fuelApproveBlocked(input: {
   requestType: string;
   fuelTransferType: string | null | undefined;
-  isFinalStep: boolean;
 }): boolean {
   return (
     (input.requestType === "fuel" || input.requestType === "fuel_refund") &&
-    input.isFinalStep &&
     (input.fuelTransferType == null || input.fuelTransferType === "")
   );
 }
@@ -194,4 +199,32 @@ export function parseCreateRequestError(error: string | undefined): {
   const required = /^field_required:(.+)$/.exec(error);
   if (required) return { key: "field_required", field: required[1] };
   return { key: error };
+}
+
+/**
+ * Custom types with min_attachments stay rider-only. Fuel / fuel_refund have
+ * admin kind slots, so they must not hit that generic gate — fuel_refund is
+ * not in REQUEST_TYPE_SLUGS and its min_attachments is now 3.
+ */
+export function createFormBlocked(
+  type: string,
+  options:
+    | {
+        types: Array<{ key: string; min_attachments: number }>;
+        loanTenures: unknown[];
+        complaintCategories: unknown[];
+      }
+    | undefined,
+): "tenure" | "category" | "sickDocs" | "attachments" | null {
+  if (type === "sick_leave") return "sickDocs";
+  if (type === "loan" && (options?.loanTenures.length ?? 0) === 0) return "tenure";
+  if (type === "complaint" && (options?.complaintCategories.length ?? 0) === 0) {
+    return "category";
+  }
+  if (createKindSpecs(type).length > 0) return null;
+  const def = options?.types.find((row) => row.key === type);
+  if (def && !SYSTEM_CREATE_TYPES.has(type) && def.min_attachments > 0) {
+    return "attachments";
+  }
+  return null;
 }

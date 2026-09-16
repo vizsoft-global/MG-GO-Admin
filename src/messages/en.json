@@ -1358,6 +1358,10 @@
       "assignedTo": "Assigned to",
       "close": "Close",
       "notReturned": "Not returned",
+      "fieldEvidence": "Evidence",
+      "statusAssigned": "Assigned",
+      "statusReturned": "Returned",
+      "attachmentOpenFailed": "Could not open the file",
       "assignmentAttachment": {
         "handover_form": "Handover form",
         "handover_photo": "Handover photo",
@@ -1911,6 +1915,7 @@
         "nationality": "Nationality (optional)",
         "riderCategory": "Category",
         "sourceCompany": "Source company",
+        "project": "Project",
         "driverCode": "Driver ID",
         "partner": "Partner (optional)",
         "zone": "Zone",
@@ -1954,6 +1959,11 @@
       "status": {
         "active": "Active",
         "inactive": "Inactive"
+      },
+      "project": {
+        "keeta": "Keeta",
+        "americana": "Americana",
+        "unset": "Unset"
       },
       "riderCategory": {
         "inHouse": "In-house",
@@ -3029,6 +3039,8 @@
       "projectAll": "All projects",
       "projectKeeta": "Keeta",
       "projectAmericana": "Americana",
+      "projectUnset": "Unset",
+      "projectFromRiderHint": "Project comes from the assigned rider.",
       "statusActive": "Active",
       "statusSuspended": "Suspended",
       "statusMaintenance": "Under Repair",
@@ -3174,6 +3186,8 @@
       "fieldPlate": "Plate",
       "fieldModel": "Model",
       "fieldCarType": "Car type",
+      "fieldTransfer": "Transfer",
+      "fieldEvidence": "Evidence",
       "attachment": {
         "clear_fuel_invoice": "Clear fuel invoice",
         "vehicle_plate": "Vehicle plate photo",
@@ -3569,6 +3583,8 @@
         "assetHint": "Gear, SIM, bike, and replacements",
         "fuel": "Fuel",
         "fuelHint": "Fuel reimbursement claims",
+        "fuel_refund": "Fuel refund",
+        "fuel_refundHint": "Rejected-fill refund queue",
         "loan": "Loan",
         "loanHint": "Advance salary requests",
         "complaint": "Complaint",
@@ -4464,6 +4480,11 @@
             "salary_justification": "Justification & payslip view"
           }
         },
+        "settings": {
+          "title": "E-Signature settings",
+          "subtitle": "Signature categories, icons and screenshot policy",
+          "manageCategories": "Manage categories"
+        },
         "assets": {
           "title": "Asset catalog",
           "subtitle": "Items riders can request from the app",
@@ -4602,6 +4623,8 @@
           "quantity": "Quantity",
           "request_mode": "Renewal / First Time",
           "asset_current_status": "Current status",
+          "handover_by": "Handover by",
+          "handover_at": "Handover at",
           "period_month": "Period",
           "distance_km": "Distance (km)",
           "document_type": "Document type",
@@ -4631,6 +4654,18 @@
           "request_mode": "Renewal or first time",
           "asset_current_status": "Lost or damaged",
           "leave_type": "Select leave type"
+        },
+        "kinds": {
+          "heading": "Attachments",
+          "choose": "Choose file",
+          "remove": "Remove",
+          "optional": "Optional",
+          "clear_fuel_invoice": "Clear fuel invoice",
+          "vehicle_plate": "Vehicle plate photo",
+          "rejected_fuel_invoice": "Rejected fuel invoice",
+          "cash_invoice": "Cash invoice",
+          "vehicle_photo": "Vehicle photo",
+          "odometer": "Odometer reading"
         },
         "daysCount": "{count} days",
         "assetModes": {
@@ -4667,7 +4702,11 @@
           "medical_documents_required": "Medical documents are required for sick / accident requests",
           "invalid_option": "Choose a valid {field}",
           "field_required": "{field} is required",
-          "date_in_past": "Needed-by cannot be earlier than today"
+          "date_in_past": "Needed-by cannot be earlier than today",
+          "kind_required": "Please upload the required attachment.",
+          "invalid_attachment_type": "Use a JPEG, PNG, WebP, or PDF attachment",
+          "invalid_attachment_size": "Each attachment must be 10 MB or smaller",
+          "invalid_attachment_kind": "That attachment kind is not valid for this request type"
         }
       }
     },
@@ -5161,7 +5200,13 @@
     },
     "incentiveRules": {
       "title": "Incentive rules",
-      "subtitle": "Target deliveries and reward amounts by zone, partner, or restaurant"
+      "subtitle": "Target deliveries and reward amounts by zone, partner, or restaurant",
+      "searchPlaceholder": "Search name or restaurant",
+      "filterStatus": "Status",
+      "filterPeriod": "Period",
+      "statusAll": "All statuses",
+      "periodAll": "All periods",
+      "emptyFiltered": "No rules match these filters"
     },
     "earningsCalculation": {
       "title": "Earnings calculation",
@@ -5750,7 +5795,8 @@
         "estimate_required": "Click Estimate audience to confirm how many drivers will receive this notification.",
         "import_no_rows": "Upload a spreadsheet with at least one row before continuing.",
         "import_preview_pending": "Import preview is loading. Wait a moment, then try again.",
-        "import_no_valid_ids": "No valid employee IDs were found in your import. Use employee IDs that exist in the system, or fix the Unknown ID rows in the preview table."
+        "import_no_valid_ids": "No valid employee IDs were found in your import. Use employee IDs that exist in the system, or fix the Unknown ID rows in the preview table.",
+        "empty_group": "Selected groups have no members. Choose a group with at least one driver."
       },
       "fieldCategory": "Category",
       "fieldPriority": "Priority",

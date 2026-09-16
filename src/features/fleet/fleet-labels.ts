@@ -40,6 +40,12 @@ export function isDriverProjectKey(value: string | null | undefined): value is D
   return DRIVER_PROJECT_KEYS.includes(value as DriverProjectKey);
 }
 
+export function parseDriverProjectKey(value: unknown): DriverProjectKey | null {
+  if (typeof value !== "string") return null;
+  const key = value.trim();
+  return isDriverProjectKey(key) ? key : null;
+}
+
 export function carTypeToProjectType(carType: VehicleCarType | null): "group" | "rent" {
   return carType === "rent" ? "rent" : "group";
 }

@@ -20,6 +20,7 @@ const TYPE_TILES: TypeTile[] = [
   { type: "leave", href: "/requests/overview?type=leave&preset=all", icon: "/hub/leave.svg", color: "bg-[#0f9d8a]" },
   { type: "asset", href: "/requests/overview?type=asset&preset=all", icon: "/hub/asset.svg", color: "bg-[#7c3aed]" },
   { type: "fuel", href: "/requests/overview?type=fuel&preset=all", icon: "/hub/fuel.svg", color: "bg-[#ea580c]" },
+  { type: "fuel_refund", href: "/requests/overview?type=fuel_refund&preset=all", icon: "/hub/fuel.svg", color: "bg-[#ca8a04]" },
   { type: "loan", href: "/requests/overview?type=loan&preset=all", icon: "/hub/loan.svg", color: "bg-[#2563eb]" },
   { type: "complaint", href: "/requests/overview?type=complaint&preset=all", icon: "/hub/complaint.svg", color: "bg-[#db2777]" },
   { type: "document", href: "/requests/overview?type=document&preset=all", icon: "/hub/documents.svg", color: "bg-[#4f46e5]" },

@@ -15,6 +15,7 @@ import {
   isVehicleTypeOfUse,
   kuwaitYmdToIso,
 } from "@/features/fleet/fleet-labels";
+import { assignedDriverProjectWrite } from "./vehicles-list-utils";
 import type {
   VehicleCarType,
   VehicleCondition,
@@ -310,6 +311,29 @@ export async function saveVehicle(
   if (id) {
     const { error } = await supabase.from("vehicles").update(payload).eq("id", id);
     if (error) return { error: formatError(error) };
+    const projectWrite = assignedDriverProjectWrite(
+      emptyText(formData.get("assignedDriverId")),
+      formData.get("projectKey"),
+    );
+    if (projectWrite) {
+      const { error: driverError } = await supabase
+        .from("drivers")
+        .update({
+          project_key: projectWrite.project_key,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", projectWrite.driverId);
+      if (driverError) return { error: formatError(driverError) };
+      const { error: intakeError } = await supabase
+        .from("driver_intakes")
+        .update({
+          project_key: projectWrite.project_key,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("linked_profile_id", projectWrite.driverId)
+        .is("archived_at", null);
+      if (intakeError) return { error: formatError(intakeError) };
+    }
     void logAdminMutation({
       action: "update",
       entityType: "vehicle",

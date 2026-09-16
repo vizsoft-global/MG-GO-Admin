@@ -5,6 +5,7 @@ import {
   defaultFuelMonthlyLimit,
   formatReplacementSince,
   kuwaitYmdToIso,
+  parseDriverProjectKey,
 } from "./fleet-labels";
 
 describe("fleet labels", () => {
@@ -30,5 +31,14 @@ describe("fleet labels", () => {
   it("stores a Kuwait calendar date as +03:00 midnight", () => {
     assert.equal(kuwaitYmdToIso("2026-09-01"), "2026-09-01T00:00:00+03:00");
     assert.equal(kuwaitYmdToIso("nope"), null);
+  });
+
+  it("persists only keeta or americana as project_key", () => {
+    assert.equal(parseDriverProjectKey("keeta"), "keeta");
+    assert.equal(parseDriverProjectKey("americana"), "americana");
+    assert.equal(parseDriverProjectKey(""), null);
+    assert.equal(parseDriverProjectKey("unset"), null);
+    assert.equal(parseDriverProjectKey("Keeta"), null);
+    assert.equal(parseDriverProjectKey(null), null);
   });
 });

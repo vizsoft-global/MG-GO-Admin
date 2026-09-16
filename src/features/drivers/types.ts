@@ -1,3 +1,5 @@
+import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
+
 export const DOCUMENT_TYPES = [
   "license",
   "civil_id",
@@ -200,6 +202,7 @@ export type DriverDetailModel = {
   client_id: string | null;
   client_name: string | null;
   source_company: string | null;
+  project_key: DriverProjectKey | null;
   avatar_url: string | null;
   partner_name: string;
   zone_label: string;

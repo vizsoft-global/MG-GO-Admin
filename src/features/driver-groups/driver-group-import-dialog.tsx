@@ -66,6 +66,18 @@ export function DriverGroupImportDialog({
   const [pending, startTransition] = useTransition();
   const [rows, setRows] = useState<GroupImportInputRow[]>([]);
   const [preview, setPreview] = useState<GroupImportPreviewRow[]>([]);
+  const [fileNonce, setFileNonce] = useState(0);
+
+  const resetImport = () => {
+    setRows([]);
+    setPreview([]);
+    setFileNonce((n) => n + 1);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) resetImport();
+    onOpenChange(next);
+  };
 
   const handleFile = async (file: File) => {
     const parsed = await parseSpreadsheetFile(file);
@@ -105,13 +117,14 @@ export function DriverGroupImportDialog({
         return;
       }
       toast.success(t("importApplied", { count: result.added }));
+      resetImport();
       onApplied();
       onOpenChange(false);
     });
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         showCloseButton
         closeOutside
@@ -123,6 +136,7 @@ export function DriverGroupImportDialog({
               <Upload className="size-4" />
               {t("importUpload")}
               <input
+                key={fileNonce}
                 type="file"
                 accept=".csv,.xlsx,.xls"
                 className="hidden"
@@ -179,7 +193,7 @@ export function DriverGroupImportDialog({
           title={t("importTitle")}
           subtitle={t("importSubtitle", { ok: okCount, total: preview.length })}
         >
-          <Button variant="outline" className="h-9 cursor-pointer" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" className="h-9 cursor-pointer" onClick={() => handleOpenChange(false)}>
             {t("cancel")}
           </Button>
           <Button

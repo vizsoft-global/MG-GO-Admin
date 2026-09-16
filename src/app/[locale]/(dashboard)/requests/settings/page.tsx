@@ -17,7 +17,7 @@ import { Link } from "@/i18n/navigation";
 import { fetchSettingsHubCounts } from "@/features/requests/requests-settings-actions";
 import type { SettingsHubCounts } from "@/features/requests/settings-types";
 
-const LINKS: { href: string; key: string; icon: LucideIcon }[] = [
+const LINKS = [
   { href: "/requests/settings/workflows", key: "workflows", icon: Workflow },
   { href: "/requests/settings/types", key: "types", icon: Tags },
   { href: "/requests/settings/assets", key: "assets", icon: Package },
@@ -26,8 +26,10 @@ const LINKS: { href: string; key: string; icon: LucideIcon }[] = [
   { href: "/requests/import-export", key: "importExport", icon: ArrowUpDown },
   { href: "/requests/settings/roles", key: "roles", icon: ShieldCheck },
   { href: "/requests/settings/screenshot", key: "screenshot", icon: ArrowUpDown },
-  { href: "/requests/esign/categories", key: "esign", icon: FileSignature },
-];
+  { href: "/requests/esign/settings", key: "esign", icon: FileSignature },
+] as const satisfies { href: string; key: string; icon: LucideIcon }[];
+
+type SettingsLinkKey = (typeof LINKS)[number]["key"];
 
 export default async function RequestsSettingsPage({
   params,
@@ -47,7 +49,7 @@ export default async function RequestsSettingsPage({
     counts = null;
   }
 
-  function meta(key: string): string | null {
+  function meta(key: SettingsLinkKey): string | null {
     switch (key) {
       case "workflows":
         return counts ? t("linksMeta.workflows", { count: counts.workflows }) : null;
@@ -67,8 +69,10 @@ export default async function RequestsSettingsPage({
         return t("linksMeta.importExport");
       case "screenshot":
         return t("linksMeta.screenshot");
-      default:
-        return null;
+      default: {
+        const _exhaustive: never = key;
+        return _exhaustive;
+      }
     }
   }
 

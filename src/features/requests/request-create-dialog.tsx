@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Loader2, Plus, TriangleAlert } from "lucide-react";
+import { Loader2, Paperclip, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,8 +19,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { fileToDecisionAttachmentPayload } from "./request-attach-dialog";
 import {
+  createKindSpecs,
+  missingRequiredCreateKind,
+  typedRequiresAmount,
+} from "./request-create-kinds";
+import {
+  createFormBlocked,
   inclusiveDurationDays,
   isNeededByInPast,
   parseCreateRequestError,
@@ -30,15 +38,8 @@ import {
   typeUsesDateRange,
 } from "./request-create-utils";
 import { TYPE_FIELDS } from "./request-typed-fields";
-import { REQUEST_TYPE_SLUGS } from "./settings-types";
-import type {
-  RequestCreateFieldOption,
-  RequestCreateOptions,
-  RequestCreateTypeOption,
-} from "./types";
+import type { RequestCreateFieldOption, RequestCreateTypeOption } from "./types";
 import { useCreateRequestOnBehalf, useRequestCreateOptions } from "./use-requests";
-
-const SYSTEM_TYPES = new Set<string>(REQUEST_TYPE_SLUGS);
 
 const SEVERITIES = ["low", "medium", "high"] as const;
 
@@ -67,7 +68,8 @@ function typeLabel(
   locale: string,
   row: RequestCreateTypeOption,
 ): string {
-  if (SYSTEM_TYPES.has(row.key)) return t(`types.${row.key}` as "types.leave");
+  const typedPath = `types.${row.key}` as "types.leave";
+  if (t.has(typedPath)) return t(typedPath);
   if (locale.startsWith("ar") && row.label_ar) return row.label_ar;
   return row.label_en || row.key;
 }
@@ -79,20 +81,6 @@ function fieldLabelFor(
 ): string {
   if (locale.startsWith("ar") && field.label_ar) return field.label_ar;
   return field.label_en || field.field_key;
-}
-
-function isBlocked(
-  type: string,
-  options: RequestCreateOptions | undefined,
-): "tenure" | "category" | "sickDocs" | "attachments" | null {
-  if (type === "sick_leave") return "sickDocs";
-  if (type === "loan" && (options?.loanTenures.length ?? 0) === 0) return "tenure";
-  if (type === "complaint" && (options?.complaintCategories.length ?? 0) === 0) {
-    return "category";
-  }
-  const def = options?.types.find((row) => row.key === type);
-  if (def && !SYSTEM_TYPES.has(type) && def.min_attachments > 0) return "attachments";
-  return null;
 }
 
 export function RequestCreateDialog({
@@ -108,6 +96,7 @@ export function RequestCreateDialog({
   const [type, setType] = useState<string>("leave");
   const [draft, setDraft] = useState<Draft>({});
   const [declaration, setDeclaration] = useState(false);
+  const [kindDraft, setKindDraft] = useState<Record<string, File>>({});
   const openedAtRef = useRef(0);
 
   const { data: options, isLoading } = useRequestCreateOptions(open);
@@ -196,7 +185,9 @@ export function RequestCreateDialog({
   const hasSeverity = isTyped
     ? fields.some((field) => field.key === "severity")
     : dynamicFields.some((field) => field.target === "severity");
-  const blocked = isBlocked(type, options);
+  const blocked = createFormBlocked(type, options);
+  const kindSpecs = createKindSpecs(type);
+  const missingKind = missingRequiredCreateKind(type, Object.keys(kindDraft));
 
   const value = (key: string) => draft[key] ?? "";
   const set = (key: string, next: string) =>
@@ -207,6 +198,7 @@ export function RequestCreateDialog({
     setType("leave");
     setDraft({});
     setDeclaration(false);
+    setKindDraft({});
   };
 
   const extraDynamic = dynamicFields.filter(
@@ -227,6 +219,8 @@ export function RequestCreateDialog({
     (hasDates && (!value("start_date") || !value("end_date"))) ||
     (hasDeclaration && !declaration) ||
     typedRequired.some((key) => !value(key).trim()) ||
+    (typedRequiresAmount(type) && !value("amount_kwd").trim()) ||
+    Boolean(missingKind) ||
     extraDynamic.some(
       (field) =>
         field.is_required &&
@@ -274,6 +268,34 @@ export function RequestCreateDialog({
     }
 
     const amount = value("amount_kwd").trim();
+    let kindFiles: Array<{
+      name: string;
+      type: string;
+      base64: string;
+      kind: string;
+      title: string;
+    }> = [];
+    if (kindSpecs.length > 0) {
+      try {
+        kindFiles = await Promise.all(
+          kindSpecs
+            .filter((spec) => kindDraft[spec.kind])
+            .map(async (spec) => {
+              const file = kindDraft[spec.kind];
+              if (!file) throw new Error("missing_kind");
+              const payloadFile = await fileToDecisionAttachmentPayload(file);
+              return {
+                ...payloadFile,
+                kind: spec.kind,
+                title: t(`create.kinds.${spec.kind}` as "create.kinds.cash_invoice"),
+              };
+            }),
+        );
+      } catch {
+        toast.error(t("create.errors.failed"));
+        return;
+      }
+    }
     const result = await create.mutateAsync({
       driverId,
       type,
@@ -283,6 +305,7 @@ export function RequestCreateDialog({
       endDate: hasDates ? value("end_date") || null : null,
       severity: hasSeverity ? value("severity") || null : null,
       details,
+      kindFiles,
     });
 
     if (!result.ok) {
@@ -360,6 +383,7 @@ export function RequestCreateDialog({
                   setType(next);
                   setDraft({});
                   setDeclaration(false);
+                  setKindDraft({});
                 }}
                 placeholder={isLoading ? t("create.loading") : t("create.fieldType")}
                 searchPlaceholder={t("create.typeSearchPlaceholder")}
@@ -422,7 +446,12 @@ export function RequestCreateDialog({
 
             {hasAmount ? (
               <div className="space-y-1">
-                <Label>{fieldLabel("amount_kwd")}</Label>
+                <Label>
+                  {fieldLabel("amount_kwd")}
+                  {typedRequiresAmount(type) ? (
+                    <span className="text-destructive"> *</span>
+                  ) : null}
+                </Label>
                 <Input
                   type="number"
                   min={0}
@@ -805,6 +834,79 @@ export function RequestCreateDialog({
                   );
                 })
               : null}
+
+            {kindSpecs.length > 0 ? (
+              <div className="space-y-2 sm:col-span-2">
+                <p className="text-[11px] font-semibold text-foreground">
+                  {t("create.kinds.heading")}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {kindSpecs.map((spec) => {
+                    const file = kindDraft[spec.kind];
+                    return (
+                      <div key={spec.kind} className="space-y-1">
+                        <Label>
+                          {t(`create.kinds.${spec.kind}` as "create.kinds.cash_invoice")}
+                          {spec.required ? (
+                            <span className="text-destructive"> *</span>
+                          ) : (
+                            <span className="ms-1 text-[10px] font-normal text-muted-foreground">
+                              {t("create.kinds.optional")}
+                            </span>
+                          )}
+                        </Label>
+                        {file ? (
+                          <div className="flex h-9 items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-sm text-emerald-700">
+                            <span className="min-w-0 truncate">{file.name}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="h-8 w-8 shrink-0 text-destructive hover:bg-destructive/10"
+                              onClick={() =>
+                                setKindDraft((current) => {
+                                  const next = { ...current };
+                                  delete next[spec.kind];
+                                  return next;
+                                })
+                              }
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span className="sr-only">{t("create.kinds.remove")}</span>
+                            </Button>
+                          </div>
+                        ) : (
+                          <label
+                            className={cn(
+                              "flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed px-2 text-xs",
+                              "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                            )}
+                          >
+                            <Paperclip className="h-3.5 w-3.5" />
+                            {t("create.kinds.choose")}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,application/pdf"
+                              className="sr-only"
+                              onChange={(event) => {
+                                const next = event.target.files?.[0];
+                                if (next) {
+                                  setKindDraft((current) => ({
+                                    ...current,
+                                    [spec.kind]: next,
+                                  }));
+                                }
+                                event.target.value = "";
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
 
             {hasDeclaration ? (
               <label className="flex items-start gap-2 sm:col-span-2">

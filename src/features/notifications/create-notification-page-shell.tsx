@@ -40,7 +40,7 @@ import {
   scheduleNotificationCampaign,
   submitNotificationForApproval,
 } from "./notifications-actions";
-import { useNotificationTemplates } from "./use-notifications";
+import { useNotificationTemplates, useNotificationTargetingOptions } from "./use-notifications";
 import {
   buildActionParams,
   NotificationActionFields,
@@ -116,6 +116,7 @@ export function CreateNotificationPageShell() {
   const [screenshotOverride, setScreenshotOverride] = useState<boolean | null>(null);
 
   const { data: templates } = useNotificationTemplates();
+  const { data: targeting } = useNotificationTargetingOptions();
   const selectedTemplate = useMemo(
     () => templates?.find((tpl) => tpl.id === templateId) ?? null,
     [templates, templateId],
@@ -176,6 +177,7 @@ export function CreateNotificationPageShell() {
       importSpec,
       audienceCount,
       importOkCount,
+      groups: targeting?.groups ?? [],
     }),
     [
       targetMode,
@@ -187,6 +189,7 @@ export function CreateNotificationPageShell() {
       importSpec,
       audienceCount,
       importOkCount,
+      targeting?.groups,
     ],
   );
 

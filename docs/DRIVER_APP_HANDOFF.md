@@ -313,14 +313,16 @@ Used by `driver_create_request` and `driver_report_fuel_fill`. Every element:
 }
 ```
 
-Required kinds, rear camera only (`captureOrderProof`, `source = mobile_camera`):
+Create-kind slots (`fuel`, `fuel_refund`, `asset`) use `showProofSourceSheet`: camera → `captureOrderProof` (`source = mobile_camera`); gallery → `ImagePicker.gallery` (`source = gallery`). Fuel fill stays rear-camera only (`captureOrderProof`, `source = mobile_camera`).
 
 | Type | kinds | titles (en) |
 |---|---|---|
-| `fuel` | `clear_fuel_invoice`, `vehicle_plate` | Clear fuel invoice, Vehicle plate photo |
-| `fuel_refund` | `rejected_fuel_invoice`, `cash_invoice`, `vehicle_photo`, `odometer` | Rejected fuel invoice, Cash invoice, Vehicle photo, Odometer reading |
-| `asset` | `handover_form`, `signed_acknowledgment` | Handover form, Signed acknowledgment |
+| `fuel` | `clear_fuel_invoice`, `vehicle_plate` (both required) | Clear fuel invoice, Vehicle plate photo |
+| `fuel_refund` | `cash_invoice`, `vehicle_photo`, `odometer` required; `rejected_fuel_invoice` optional | Rejected fuel invoice, Cash invoice, Vehicle photo, Odometer reading |
+| `asset` | `handover_form`, `signed_acknowledgment` (both required) | Handover form, Signed acknowledgment |
 | fuel fill | `fuel_receipt`, `fuel_pump`, `odometer` | Fuel receipt, Fuel pump, Odometer reading |
+
+`request_type_definitions.min_attachments` for `fuel_refund` is **3** (cash + vehicle + odometer). `rcm_validate_request_input` counts array length before `driver_create_request` checks kinds, so a 3-kind submit without the rejected invoice must not be blocked by a leftover 4. `driver_create_request` `v_required` is the same three kinds. Missing a required kind still returns `fuel_refund_attachments_required`. App snackbar is `Please upload {label}.` not the kind slug.
 
 #### `fuel_refund` type
 

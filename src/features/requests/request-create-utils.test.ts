@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  fuelFinalApproveBlocked,
+  fuelApproveBlocked,
   inclusiveDurationDays,
   isAssetFirstTime,
   isAttachRequiredAction,
@@ -43,39 +43,42 @@ describe("inclusiveDurationDays", () => {
   });
 });
 
-describe("fuelFinalApproveBlocked", () => {
-  it("blocks only the last fuel approve when transfer type is missing", () => {
+describe("fuelApproveBlocked", () => {
+  it("blocks any fuel or refund approve when transfer type is missing", () => {
     assert.equal(
-      fuelFinalApproveBlocked({
+      fuelApproveBlocked({
         requestType: "fuel",
         fuelTransferType: null,
-        isFinalStep: true,
       }),
       true,
     );
     assert.equal(
-      fuelFinalApproveBlocked({
+      fuelApproveBlocked({
         requestType: "fuel",
         fuelTransferType: "cash",
-        isFinalStep: true,
       }),
       false,
     );
     assert.equal(
-      fuelFinalApproveBlocked({
+      fuelApproveBlocked({
         requestType: "fuel",
-        fuelTransferType: null,
-        isFinalStep: false,
-      }),
-      false,
-    );
-    assert.equal(
-      fuelFinalApproveBlocked({
-        requestType: "fuel_refund",
-        fuelTransferType: null,
-        isFinalStep: true,
+        fuelTransferType: "",
       }),
       true,
+    );
+    assert.equal(
+      fuelApproveBlocked({
+        requestType: "fuel_refund",
+        fuelTransferType: null,
+      }),
+      true,
+    );
+    assert.equal(
+      fuelApproveBlocked({
+        requestType: "leave",
+        fuelTransferType: null,
+      }),
+      false,
     );
   });
 });

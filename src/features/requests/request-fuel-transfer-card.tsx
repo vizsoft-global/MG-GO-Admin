@@ -21,10 +21,12 @@ export function RequestFuelTransferCard({
   requestId,
   value,
   editable,
+  compact = false,
 }: {
   requestId: string;
   value: FuelTransferType | null;
   editable: boolean;
+  compact?: boolean;
 }) {
   const t = useTranslations("pages.requests.detail.fuelTransfer");
   const save = useSetFuelTransferType(requestId);
@@ -38,10 +40,9 @@ export function RequestFuelTransferCard({
     toast.success(t("saved"));
   };
 
-  return (
-    <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <h2 className="text-sm font-semibold">{t("title")}</h2>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5" role="radiogroup">
+  const segments = (
+    <div className={compact ? "px-2.5 pb-2" : undefined}>
+      <div className={compact ? "flex flex-wrap items-center gap-1.5" : "mt-2 flex flex-wrap items-center gap-1.5"} role="radiogroup">
         {FUEL_TRANSFER_TYPES.map((option) => {
           const Icon = OPTION_ICONS[option];
           return (
@@ -57,7 +58,11 @@ export function RequestFuelTransferCard({
           );
         })}
       </div>
-      {value == null ? (
+      {compact ? (
+        value != null ? (
+          <p className="mt-1 text-[10px] text-muted-foreground">{t("hint")}</p>
+        ) : null
+      ) : value == null ? (
         <p className="mt-2 flex items-center gap-1.5 text-[10px] text-warning">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           {t("notSet")}
@@ -65,6 +70,15 @@ export function RequestFuelTransferCard({
       ) : (
         <p className="mt-2 text-[10px] text-muted-foreground">{t("hint")}</p>
       )}
+    </div>
+  );
+
+  if (compact) return segments;
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <h2 className="text-sm font-semibold">{t("title")}</h2>
+      {segments}
     </section>
   );
 }

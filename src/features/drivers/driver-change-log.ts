@@ -96,7 +96,7 @@ export async function loadIntakeProfileSnapshot(
   const { data: intake } = await supabase
     .from("driver_intakes")
     .select(
-      "id, full_name, phone, civil_id, employee_id, driver_code, partner_id, zone_id, vehicle_id, nationality, rider_category, client_id, client_name, workflow_status, linked_profile_id, custom_fields",
+      "id, full_name, phone, civil_id, employee_id, driver_code, partner_id, zone_id, vehicle_id, nationality, rider_category, client_id, client_name, source_company, project_key, workflow_status, linked_profile_id, custom_fields",
     )
     .eq("id", intakeId)
     .maybeSingle();
@@ -144,6 +144,8 @@ export async function loadIntakeProfileSnapshot(
       vehicle: labels.vehicle,
       nationality: intake.nationality,
       rider_category: intake.rider_category,
+      source_company: intake.source_company,
+      project_key: intake.project_key,
       client_id: intake.client_id,
       client_name: intake.client_name,
       workflow_status: intake.workflow_status,

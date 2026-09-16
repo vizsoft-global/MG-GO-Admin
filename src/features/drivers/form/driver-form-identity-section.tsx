@@ -4,13 +4,15 @@ import { useMemo } from "react";
 import { User } from "lucide-react";
 import { SegmentOption } from "@/components/app/toggle-chip";
 import { Input } from "@/components/ui/input";
-import type { DriverRiderCategory } from "../types";
+import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
+import { ProjectKeyField } from "@/features/fleet/project-key-field";
 import {
   SOURCE_COMPANY_KEYS,
   SOURCE_COMPANY_LABEL,
   type SourceCompanyKey,
 } from "@/features/performance/performance-ops-formulas";
 import { countrySearchSelectItems } from "@/lib/geo/countries";
+import type { DriverRiderCategory } from "../types";
 import { DriverAvatarUpload } from "../driver-avatar-upload";
 import { CIVIL_ID_DIGIT_COUNT, restrictDigits } from "../driver-phone";
 import { DriverPhoneField } from "./driver-phone-field";
@@ -39,10 +41,13 @@ export function DriverFormIdentitySection({
   onRiderCategoryChange,
   sourceCompany,
   onSourceCompanyChange,
+  projectKey,
+  onProjectKeyChange,
   driverCode,
   driverCodeHint,
   labels,
   riderCategoryLabels,
+  projectLabels,
   placeholders,
   uploadLabel,
   removeLabel,
@@ -67,6 +72,8 @@ export function DriverFormIdentitySection({
   onRiderCategoryChange: (next: DriverRiderCategory) => void;
   sourceCompany: string;
   onSourceCompanyChange: (next: string) => void;
+  projectKey: DriverProjectKey | "";
+  onProjectKeyChange: (next: DriverProjectKey | "") => void;
   driverCode: string;
   driverCodeHint: string;
   labels: {
@@ -78,11 +85,17 @@ export function DriverFormIdentitySection({
     nationality: string;
     riderCategory: string;
     sourceCompany: string;
+    project: string;
     driverCode: string;
   };
   riderCategoryLabels: {
     inHouse: string;
     outsourced: string;
+  };
+  projectLabels: {
+    keeta: string;
+    americana: string;
+    unset: string;
   };
   placeholders: {
     fullName: string;
@@ -274,6 +287,16 @@ export function DriverFormIdentitySection({
           <MetadataBadge code={driverCode} label={driverCodeHint} />
         </FieldBlock>
       </div>
+
+      <ProjectKeyField
+        value={projectKey}
+        onChange={onProjectKeyChange}
+        label={labels.project}
+        keetaLabel={projectLabels.keeta}
+        americanaLabel={projectLabels.americana}
+        unsetLabel={projectLabels.unset}
+        disabled={disabled}
+      />
     </section>
   );
 }
