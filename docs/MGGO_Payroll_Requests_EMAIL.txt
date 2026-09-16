@@ -1,0 +1,31 @@
+Subject: MGGO Payroll & Requests is live — please verify against your SOP
+
+Dear Team,
+
+The monthly payroll spreadsheet is now a live screen on the Admin panel.
+
+Open: https://dpdadmin-prod.vercel.app/en/payroll
+Sign in with your usual staff account (Payroll & Requests sits under Operations).
+
+Please keep your MGGO Payroll & Requests SOP (v1.0) open while you review. The attached PDF maps every SOP page to a click-through check, and records the three items we did not invent because live data cannot support them yet.
+
+What you will see
+• Payroll tab — one column per calendar day, Fixed Days = days in the month − 2, uncapped attendance efficiency, five KPI cards including riders at/above 100% and riders with unjustified days.
+• Requests tab — the same month and filters, eight request types, Pending-first queue, and the four-step Approval Workflow from SOP p.15.
+• A non-working day (OFF / Sick / Accident) is justified only when an Approved request covers that same date. A request filed in September that covers only August appears in August, not September.
+
+Please walk sections 4.1–4.5 of the attached PDF (about 15 minutes). The sanity-check table in section 5 was taken on 16 September 2026 (Kuwait). September totals will move as riders clock in; the two example request codes will not:
+• RCM-0092 (Sick Leave 25–28 August) → August only
+• RCM-0085 (Leave 15 November–15 January) → neither September nor August
+
+This page does not replace Earnings (KWD) or the existing Requests & E-Signature hub. Riders already submit from the driver app — no app update is required.
+
+Three decisions we need from you (PDF section 6)
+1. Travelled — omitted until a Travel leave option exists on the rider form.
+2. Cancelled / “work order cancelled” — please tell us who marks it, in which system, and whether it needs a request. We will not guess from cancelled deliveries.
+3. Safety & Legal — kept in the SOP workflow wording. Live Accident rows still follow Leave / Sick Leave (Reporting Manager / HR / Payroll). Do you want a dedicated Safety & Legal step for Accident only?
+
+Happy to jump on a short walkthrough if useful.
+
+Kind regards,
+Vizsoft
