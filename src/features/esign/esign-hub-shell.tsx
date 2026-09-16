@@ -19,7 +19,7 @@ const TILES = [
   { href: "/requests/esign/signatures", key: "signatures", icon: ListChecks },
   { href: "/requests/esign/categories", key: "categories", icon: Tags },
   { href: "/visit-bookings/calendar?from=requests-esign", key: "calendar", icon: CalendarDays },
-  { href: "/requests/settings/screenshot", key: "screenshot", icon: ShieldCheck },
+  { href: "/requests/esign/settings", key: "screenshot", icon: ShieldCheck },
 ] as const;
 
 export function EsignHubShell() {
@@ -37,8 +37,10 @@ export function EsignHubShell() {
       case "categories":
       case "screenshot":
         return t("tilesMeta.categories", { count: counts.categories });
-      default:
-        return null;
+      default: {
+        const _exhaustive: never = key;
+        return _exhaustive;
+      }
     }
   }
 

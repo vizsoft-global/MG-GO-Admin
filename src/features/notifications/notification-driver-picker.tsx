@@ -234,24 +234,36 @@ export function NotificationGroupPicker({
         onChange={(e) => setQuery(e.target.value)}
       />
       <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border p-3">
-        {filtered.map((group) => (
-          <label key={group.id} className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={selectedIds.includes(group.id)}
-              onCheckedChange={(checked) =>
-                onChange(
-                  checked
-                    ? [...selectedIds, group.id]
-                    : selectedIds.filter((id) => id !== group.id),
-                )
-              }
-            />
-            <span>
-              {group.name}
-              <span className="text-muted-foreground"> ({group.member_count})</span>
-            </span>
-          </label>
-        ))}
+        {filtered.map((group) => {
+          const empty = group.member_count <= 0;
+          const selected = selectedIds.includes(group.id);
+          return (
+            <label
+              key={group.id}
+              className={cn(
+                "flex items-center gap-2 text-sm",
+                empty && !selected ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+              )}
+            >
+              <Checkbox
+                checked={selected}
+                disabled={empty && !selected}
+                onCheckedChange={(checked) => {
+                  if (checked && empty) return;
+                  onChange(
+                    checked
+                      ? [...selectedIds, group.id]
+                      : selectedIds.filter((id) => id !== group.id),
+                  );
+                }}
+              />
+              <span>
+                {group.name}
+                <span className="text-muted-foreground"> ({group.member_count})</span>
+              </span>
+            </label>
+          );
+        })}
         {filtered.length === 0 ? (
           <p className="text-xs text-muted-foreground">{t("groupSearchEmpty")}</p>
         ) : null}

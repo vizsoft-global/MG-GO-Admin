@@ -6,10 +6,12 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
 import { searchActiveDrivers } from "@/features/drivers/search-active-drivers";
+import { lookupToImportMatch } from "@/features/drivers/resolve-import-row";
 import {
-  decideImportRowMatch,
-  lookupToImportMatch,
-} from "@/features/drivers/resolve-import-row";
+  decideGroupImportRow,
+  groupImportDisplayName,
+  type GroupImportInputRow,
+} from "./driver-group-import";
 import type {
   DriverGroupDetail,
   DriverGroupMemberOption,
@@ -251,12 +253,21 @@ export type GroupImportPreviewRow = {
   employee_id: string;
   driver_code: string;
   full_name: string | null;
-  status: "ok" | "unknown_id" | "blocked" | "archived" | "ambiguous" | "empty" | "already_in_group" | "duplicate";
+  status:
+    | "ok"
+    | "unknown_id"
+    | "blocked"
+    | "archived"
+    | "ambiguous"
+    | "mismatch"
+    | "empty"
+    | "already_in_group"
+    | "duplicate";
 };
 
 export async function previewGroupMemberImport(
   groupId: string,
-  rows: Array<{ employee_id?: string; driver_code?: string }>,
+  rows: GroupImportInputRow[],
 ): Promise<GroupImportPreviewRow[]> {
   await requireDriverGroupsView();
   const supabase = (await createClient()) as any;
@@ -280,11 +291,13 @@ export async function previewGroupMemberImport(
   return rows.map((row, index) => {
     const employee_id = row.employee_id?.trim() ?? "";
     const driver_code = row.driver_code?.trim() ?? "";
+    const name = row.name?.trim() ?? "";
     const toMatch = (r: (typeof resolved)[number] | undefined) =>
       r ? lookupToImportMatch(r) : null;
-    const decided = decideImportRowMatch({
+    const decided = decideGroupImportRow({
       employeeId: employee_id,
       driverCode: driver_code,
+      name,
       byEmployee: toMatch(byLookup.get(employee_id)),
       byCode: toMatch(byLookup.get(driver_code)),
     });
@@ -298,7 +311,7 @@ export async function previewGroupMemberImport(
       row_number: index + 1,
       employee_id,
       driver_code,
-      full_name: decided.driver?.full_name ?? null,
+      full_name: groupImportDisplayName(status, name, decided.driver?.full_name ?? null),
       status,
     };
   });
@@ -306,7 +319,7 @@ export async function previewGroupMemberImport(
 
 export async function applyGroupMemberImport(
   groupId: string,
-  rows: Array<{ employee_id?: string; driver_code?: string }>,
+  rows: GroupImportInputRow[],
 ): Promise<{ added: number; rejected: number } | { error: string }> {
   const session = await requireDriverGroupsManage();
   if (!session) return { error: "not_authorized" };
@@ -330,9 +343,10 @@ export async function applyGroupMemberImport(
   const byLookup = new Map(resolved.map((r) => [r.lookup_id, r]));
   const toAdd: string[] = [];
   for (const row of rows) {
-    const decided = decideImportRowMatch({
+    const decided = decideGroupImportRow({
       employeeId: row.employee_id,
       driverCode: row.driver_code,
+      name: row.name,
       byEmployee: (() => {
         const r = byLookup.get(row.employee_id?.trim() ?? "");
         return r ? lookupToImportMatch(r) : null;

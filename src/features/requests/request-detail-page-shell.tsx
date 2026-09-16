@@ -48,7 +48,7 @@ import {
   requestStatusVariant,
 } from "./request-status-utils";
 import {
-  fuelFinalApproveBlocked,
+  fuelApproveBlocked as isFuelApproveBlocked,
   isAttachRequiredAction,
   parseDriverAckNote,
   shouldOfferRequestDocumentsAction,
@@ -193,10 +193,9 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const termsOnApprove = takesTerms && isFinalApprovalStep(steps);
   const fuelApproveBlocked =
     request != null &&
-    fuelFinalApproveBlocked({
+    isFuelApproveBlocked({
       requestType: request.request_type,
       fuelTransferType: request.fuel_transfer_type,
-      isFinalStep: isFinalApprovalStep(steps),
     });
   const parsedAck = parseDriverAckNote(
     typeof request?.payload?.driver_ack_note === "string"

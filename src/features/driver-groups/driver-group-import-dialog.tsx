@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
+import { mapGroupImportRows, type GroupImportInputRow } from "./driver-group-import";
 import {
   applyGroupMemberImport,
   previewGroupMemberImport,
@@ -40,6 +41,7 @@ function statusPill(
       return <StatusPill variant="danger">{t(`importStatus_${status}`)}</StatusPill>;
     case "unknown_id":
     case "ambiguous":
+    case "mismatch":
     case "empty":
       return <StatusPill variant="warning">{t(`importStatus_${status}`)}</StatusPill>;
     default: {
@@ -62,17 +64,24 @@ export function DriverGroupImportDialog({
 }) {
   const t = useTranslations("pages.driverGroups");
   const [pending, startTransition] = useTransition();
-  const [rows, setRows] = useState<Array<{ employee_id?: string; driver_code?: string }>>([]);
+  const [rows, setRows] = useState<GroupImportInputRow[]>([]);
   const [preview, setPreview] = useState<GroupImportPreviewRow[]>([]);
+  const [fileNonce, setFileNonce] = useState(0);
+
+  const resetImport = () => {
+    setRows([]);
+    setPreview([]);
+    setFileNonce((n) => n + 1);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) resetImport();
+    onOpenChange(next);
+  };
 
   const handleFile = async (file: File) => {
     const parsed = await parseSpreadsheetFile(file);
-    const empIdx = parsed.headers.findIndex((h) => /employee\s*id/i.test(h));
-    const codeIdx = parsed.headers.findIndex((h) => /driver\s*code|mg\s*id/i.test(h));
-    const mapped = parsed.rows.map((cells) => ({
-      employee_id: empIdx >= 0 ? cells[empIdx] : cells[0],
-      driver_code: codeIdx >= 0 ? cells[codeIdx] : "",
-    }));
+    const mapped = mapGroupImportRows(parsed.headers, parsed.rows);
     setRows(mapped);
     startTransition(async () => {
       try {
@@ -87,9 +96,9 @@ export function DriverGroupImportDialog({
   const rejected = preview.filter((r) => r.status !== "ok");
 
   const exportErrors = () => {
-    const header = "row,employee_id,driver_code,status";
+    const header = "row,employee_id,driver_code,name,status";
     const body = rejected
-      .map((r) => `${r.row_number},${r.employee_id},${r.driver_code},${r.status}`)
+      .map((r) => `${r.row_number},${r.employee_id},${r.driver_code},${r.full_name ?? ""},${r.status}`)
       .join("\n");
     const blob = new Blob([`${header}\n${body}\n`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -108,13 +117,14 @@ export function DriverGroupImportDialog({
         return;
       }
       toast.success(t("importApplied", { count: result.added }));
+      resetImport();
       onApplied();
       onOpenChange(false);
     });
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         showCloseButton
         closeOutside
@@ -126,6 +136,7 @@ export function DriverGroupImportDialog({
               <Upload className="size-4" />
               {t("importUpload")}
               <input
+                key={fileNonce}
                 type="file"
                 accept=".csv,.xlsx,.xls"
                 className="hidden"
@@ -136,7 +147,7 @@ export function DriverGroupImportDialog({
               />
             </label>
             <a
-              href="/templates/notification-import-template.csv"
+              href="/templates/driver-group-import-template.csv"
               download
               className="inline-flex h-9 items-center gap-2 rounded-md border border-input px-3 text-sm hover:bg-accent"
             >
@@ -182,7 +193,7 @@ export function DriverGroupImportDialog({
           title={t("importTitle")}
           subtitle={t("importSubtitle", { ok: okCount, total: preview.length })}
         >
-          <Button variant="outline" className="h-9 cursor-pointer" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" className="h-9 cursor-pointer" onClick={() => handleOpenChange(false)}>
             {t("cancel")}
           </Button>
           <Button

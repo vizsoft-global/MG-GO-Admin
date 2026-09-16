@@ -22,8 +22,11 @@ import {
   VEHICLE_FUEL_TYPES,
   VEHICLE_TYPES_OF_USE,
   defaultFuelMonthlyLimit,
+  isDriverProjectKey,
   toKuwaitYmd,
+  type DriverProjectKey,
 } from "@/features/fleet/fleet-labels";
+import { ProjectKeyField } from "@/features/fleet/project-key-field";
 import { saveVehicle } from "./vehicles-actions";
 import { useVehiclePartners } from "./use-vehicles";
 import type { VehicleListRow, VehicleTypeRow } from "./types";
@@ -65,6 +68,7 @@ export function VehicleFormDialog({
   const [ownerPartnerId, setOwnerPartnerId] = useState<string | null>(null);
   const [replacesVehicleId, setReplacesVehicleId] = useState<string | null>(null);
   const [replacementStartedAt, setReplacementStartedAt] = useState("");
+  const [projectKey, setProjectKey] = useState<DriverProjectKey | "">("");
 
   useEffect(() => {
     if (!open) return;
@@ -91,6 +95,7 @@ export function VehicleFormDialog({
     setOwnerPartnerId(vehicle?.owner_partner_id ?? null);
     setReplacesVehicleId(vehicle?.replaces_vehicle_id ?? null);
     setReplacementStartedAt(toKuwaitYmd(vehicle?.replacement_started_at));
+    setProjectKey(isDriverProjectKey(vehicle?.assigned_project_key) ? vehicle.assigned_project_key : "");
   }, [open, vehicle]);
 
   const replacementItems = useMemo(
@@ -148,6 +153,10 @@ export function VehicleFormDialog({
             if (ownerPartnerId) formData.set("ownerPartnerId", ownerPartnerId);
             if (replacesVehicleId) formData.set("replacesVehicleId", replacesVehicleId);
             formData.set("replacementStartedAt", replacementStartedAt);
+            if (vehicle?.assigned_driver_id) {
+              formData.set("assignedDriverId", vehicle.assigned_driver_id);
+            }
+            formData.set("projectKey", projectKey);
             startTransition(async () => {
               const result = await saveVehicle(formData);
               if (result.error || !result.id) {
@@ -219,6 +228,18 @@ export function VehicleFormDialog({
               <FieldLabel>{t("colLocation")}</FieldLabel>
               <Input value={locationText} onChange={(event) => setLocationText(event.target.value)} className="h-9" />
             </FieldBlock>
+            <div className="sm:col-span-2">
+              <ProjectKeyField
+                value={projectKey}
+                onChange={setProjectKey}
+                label={t("fieldProject")}
+                keetaLabel={t("projectKeeta")}
+                americanaLabel={t("projectAmericana")}
+                unsetLabel={t("projectUnset")}
+                disabled={!vehicle?.assigned_driver_id}
+                hint={vehicle?.assigned_driver_id ? undefined : t("projectFromRiderHint")}
+              />
+            </div>
           </div>
 
           <SectionHeading icon={Bike} accent="primary">

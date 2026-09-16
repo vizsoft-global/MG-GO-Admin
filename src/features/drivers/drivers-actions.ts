@@ -22,6 +22,7 @@ import {
 import { normalizeClientValue } from "./driver-client-fields";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import { parseSourceCompany } from "@/features/performance/performance-ops-formulas";
+import { parseDriverProjectKey } from "@/features/fleet/fleet-labels";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
 import {
   accountStatusToRestoreAfterRestaurantSync,
@@ -319,6 +320,7 @@ export async function createDriverIntake(
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
   const parsedCompany = parseSourceCompany(String(formData.get("sourceCompany") ?? ""));
   const sourceCompany = parsedCompany === "invalid" ? null : parsedCompany;
+  const projectKey = parseDriverProjectKey(formData.get("projectKey"));
   const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
   const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
   const partnerId = String(formData.get("partnerId") ?? "").trim();
@@ -435,6 +437,7 @@ export async function createDriverIntake(
       nationality,
       rider_category: riderCategory,
       source_company: sourceCompany,
+      project_key: projectKey,
       client_id: clientId,
       client_name: clientName,
       driver_code: allocatedCode,
@@ -517,6 +520,7 @@ export async function createDriverIntake(
       nationality,
       rider_category: riderCategory,
       source_company: sourceCompany,
+      project_key: projectKey,
       client_id: clientId,
       client_name: clientName,
       workflow_status: normalizeIntakeWorkflowStatus(false, workflowStatus),
@@ -1050,6 +1054,7 @@ async function updateDriverIntakeInner(
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
   const parsedCompany = parseSourceCompany(String(formData.get("sourceCompany") ?? ""));
   const sourceCompany = parsedCompany === "invalid" ? null : parsedCompany;
+  const projectKey = parseDriverProjectKey(formData.get("projectKey"));
   const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
   const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
   const catalogItemIds = parseCatalogItemIds(formData);
@@ -1172,6 +1177,7 @@ async function updateDriverIntakeInner(
       nationality,
       rider_category: riderCategory,
       source_company: sourceCompany,
+      project_key: projectKey,
       client_id: clientId,
       client_name: clientName,
       partner_id: partnerId || null,
@@ -1241,6 +1247,7 @@ async function updateDriverIntakeInner(
           nationality,
           rider_category: riderCategory,
           source_company: sourceCompany,
+          project_key: projectKey,
           client_id: clientId,
           client_name: clientName,
           custom_fields: customParsed.values as unknown as Json,
@@ -1330,6 +1337,7 @@ async function updateDriverIntakeInner(
       nationality,
       rider_category: riderCategory,
       source_company: sourceCompany,
+      project_key: projectKey,
       client_id: clientId,
       client_name: clientName,
       workflow_status: resolvedWorkflowStatus,
@@ -1379,6 +1387,7 @@ async function fetchDriverDetailInner(
       nationality,
       rider_category,
       source_company,
+      project_key,
       client_id,
       client_name,
       driver_code,
@@ -1419,6 +1428,7 @@ async function fetchDriverDetailInner(
       client_id: string | null;
       client_name: string | null;
       source_company: string | null;
+      project_key: string | null;
       is_blocked: boolean;
       blocked_reason: string | null;
       blocked_at: string | null;
@@ -1434,7 +1444,7 @@ async function fetchDriverDetailInner(
           .maybeSingle(),
         supabase
           .from("drivers")
-          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, is_blocked, blocked_reason, blocked_at, login_verification_exempt, avatar_object_key")
+          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, is_blocked, blocked_reason, blocked_at, login_verification_exempt, avatar_object_key")
           .eq("id", linkedId)
           .maybeSingle(),
       ]);
@@ -1449,6 +1459,7 @@ async function fetchDriverDetailInner(
             client_id: drv.client_id ?? null,
             client_name: drv.client_name ?? null,
             source_company: drv.source_company ?? null,
+            project_key: drv.project_key ?? null,
             is_blocked: drv.is_blocked ?? false,
             blocked_reason: drv.blocked_reason ?? null,
             blocked_at: drv.blocked_at ?? null,
@@ -1507,6 +1518,9 @@ async function fetchDriverDetailInner(
         linkedDriver?.source_company ??
         intake.source_company ??
         null,
+      project_key: parseDriverProjectKey(
+        linkedDriver?.project_key ?? intake.project_key ?? null,
+      ),
       avatar_url,
       partner_name: relName(
         intake.partners as { name: string } | { name: string }[] | null,
@@ -1572,6 +1586,7 @@ async function fetchDriverDetailInner(
       client_id,
       client_name,
       source_company,
+      project_key,
       is_blocked,
       blocked_reason,
       blocked_at,
@@ -1643,6 +1658,7 @@ async function fetchDriverDetailInner(
     client_id: driverRow.client_id ?? null,
     client_name: driverRow.client_name ?? null,
     source_company: driverRow.source_company ?? null,
+    project_key: parseDriverProjectKey(driverRow.project_key),
     avatar_url,
     partner_name: relName(driverRow.partners as { name: string } | { name: string }[] | null),
     zone_label: relZone(driverRow.zones),

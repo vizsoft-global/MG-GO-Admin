@@ -5,8 +5,15 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { getPresignedGetUrl } from "@/lib/storage/r2-client";
+import { isR2ObjectKey } from "@/lib/storage/r2-keys";
 import { datePresetToBounds } from "./date-presets";
 import { isNeededByInPast } from "./request-create-utils";
+import {
+  createKindSpecs,
+  isKnownCreateKind,
+  missingRequiredCreateKind,
+} from "./request-create-kinds";
 import { FUEL_TRANSFER_TYPES } from "./types";
 import type {
   FuelTransferType,
@@ -14,6 +21,7 @@ import type {
   RequestAttachment,
   RequestClarification,
   RequestCreateInput,
+  RequestCreateKindFile,
   RequestCreateOptions,
   RequestDecisionAttachment,
   RequestDecisionTerms,
@@ -358,17 +366,43 @@ function isFuelTransferType(value: unknown): value is FuelTransferType {
   return (FUEL_TRANSFER_TYPES as readonly string[]).includes(String(value));
 }
 
+const REQUEST_ATTACHMENTS_PREFIX = "request-attachments/";
+
 export async function fetchRequestAttachmentUrl(
   storageKey: string,
 ): Promise<{ url: string | null; error?: string }> {
-  await requireRequestsView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.storage
-    .from("request-attachments")
-    .createSignedUrl(storageKey, 300);
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !(
+      hasPermissionInSet(session.permissions, "requests.view", session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "assets.view", session.isSuperAdmin)
+    )
+  ) {
+    throw new Error("not_authorized");
+  }
 
-  if (error) return { url: null, error: error.message };
-  return { url: data?.signedUrl ?? null };
+  const normalized = storageKey.trim().replace(/^\/+/, "");
+  if (!normalized) return { url: null };
+
+  if (normalized.startsWith(REQUEST_ATTACHMENTS_PREFIX) || !isR2ObjectKey(normalized)) {
+    const objectKey = normalized.startsWith(REQUEST_ATTACHMENTS_PREFIX)
+      ? normalized.slice(REQUEST_ATTACHMENTS_PREFIX.length)
+      : normalized;
+    const supabase = await createClient();
+    const { data, error } = await supabase.storage
+      .from("request-attachments")
+      .createSignedUrl(objectKey, 300);
+    if (error) return { url: null, error: error.message };
+    return { url: data?.signedUrl ?? null };
+  }
+
+  try {
+    const url = await getPresignedGetUrl(normalized);
+    return { url };
+  } catch (error) {
+    return { url: null, error: error instanceof Error ? error.message : "sign_failed" };
+  }
 }
 
 function staffDisplayName(session: Awaited<ReturnType<typeof requireRequestsDecide>>): string | null {
@@ -440,6 +474,65 @@ export async function uploadStaffRequestAttachments(input: {
       file_name: safeAttachmentName(file.name),
       content_type: type,
       byte_size: bytes.length,
+    });
+  }
+
+  return { ok: true, attachments };
+}
+
+async function uploadOnBehalfCreateKindFiles(
+  staffId: string,
+  files: RequestCreateKindFile[],
+): Promise<{
+  ok: boolean;
+  attachments?: Array<{
+    storage_key: string;
+    file_name: string;
+    content_type: string;
+    byte_size: number;
+    title: string;
+    kind: string;
+    captured_at: string;
+    source: "admin_upload";
+  }>;
+  error?: string;
+}> {
+  if (files.length === 0) return { ok: true, attachments: [] };
+  const supabase = await createClient();
+  const attachments: Array<{
+    storage_key: string;
+    file_name: string;
+    content_type: string;
+    byte_size: number;
+    title: string;
+    kind: string;
+    captured_at: string;
+    source: "admin_upload";
+  }> = [];
+  const capturedAt = new Date().toISOString();
+
+  for (const file of files) {
+    const type = file.type || "application/octet-stream";
+    if (!ATTACH_MIME.has(type)) return { ok: false, error: "invalid_attachment_type" };
+    const bytes = Buffer.from(file.base64, "base64");
+    if (bytes.length === 0 || bytes.length > ATTACH_MAX_BYTES) {
+      return { ok: false, error: "invalid_attachment_size" };
+    }
+    const key = `${staffId}/create/${Date.now()}_${attachments.length}_${safeAttachmentName(file.name)}`;
+    const { error } = await supabase.storage.from("request-attachments").upload(key, bytes, {
+      contentType: type,
+      upsert: false,
+    });
+    if (error) return { ok: false, error: error.message };
+    attachments.push({
+      storage_key: key,
+      file_name: safeAttachmentName(file.name),
+      content_type: type,
+      byte_size: bytes.length,
+      title: file.title.trim() || file.kind,
+      kind: file.kind,
+      captured_at: capturedAt,
+      source: "admin_upload",
     });
   }
 
@@ -671,13 +764,45 @@ export async function createRequestOnBehalf(input: RequestCreateInput): Promise<
   requestCode?: string;
   error?: string;
 }> {
-  await requireRequestsManage();
+  const session = await requireRequestsManage();
   if (
     typeof input.payload.needed_by === "string" &&
     isNeededByInPast(input.payload.needed_by, kuwaitTodayYmd())
   ) {
     return { ok: false, error: "date_in_past" };
   }
+
+  const kindFiles = input.kindFiles ?? [];
+  const kindList = kindFiles.map((file) => file.kind);
+  if (new Set(kindList).size !== kindList.length) {
+    return { ok: false, error: "invalid_attachment_kind" };
+  }
+  if (kindFiles.some((file) => !isKnownCreateKind(input.type, file.kind))) {
+    return { ok: false, error: "invalid_attachment_kind" };
+  }
+  if (createKindSpecs(input.type).length > 0) {
+    const missing = missingRequiredCreateKind(input.type, kindList);
+    if (missing) return { ok: false, error: "kind_required" };
+  }
+
+  let pAttachments:
+    | Array<{
+        storage_key: string;
+        file_name: string;
+        content_type: string;
+        byte_size: number;
+        title: string;
+        kind: string;
+        captured_at: string;
+        source: "admin_upload";
+      }>
+    | undefined;
+  if (kindFiles.length > 0) {
+    const uploaded = await uploadOnBehalfCreateKindFiles(session.id, kindFiles);
+    if (!uploaded.ok) return { ok: false, error: uploaded.error };
+    pAttachments = uploaded.attachments;
+  }
+
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("admin_create_request", {
@@ -689,6 +814,7 @@ export async function createRequestOnBehalf(input: RequestCreateInput): Promise<
     p_end_date: input.endDate ?? undefined,
     p_severity: (input.severity as "low") ?? undefined,
     p_details: input.details ?? undefined,
+    ...(pAttachments ? { p_attachments: pAttachments } : {}),
   });
 
   if (error) return { ok: false, error: error.message };

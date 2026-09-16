@@ -118,6 +118,7 @@ const TYPE_FILTERS = [
   "loan",
   "asset",
   "fuel",
+  "fuel_refund",
   "document",
   "complaint",
   "salary_justification",

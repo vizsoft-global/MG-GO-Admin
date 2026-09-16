@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { ExternalLink, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { Link } from "@/i18n/navigation";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -29,8 +30,15 @@ import {
 import { upsertEsignCategory } from "./esign-actions";
 import type { EsignCategoryRow } from "./types";
 
-export function EsignScreenshotSettingsShell() {
+export type EsignScreenshotSettingsVariant = "screenshot" | "settings";
+
+export function EsignScreenshotSettingsShell({
+  variant = "screenshot",
+}: {
+  variant?: EsignScreenshotSettingsVariant;
+}) {
   const t = useTranslations("pages.requests.esign.screenshot");
+  const tSettings = useTranslations("pages.requests.esign.settings");
   const tTypes = useTranslations("pages.requests.types");
   const tCommon = useTranslations("pages.requests.esign");
   const { data: defaultData, isLoading: defaultLoading } = useEsignScreenshotDefault();
@@ -105,16 +113,44 @@ export function EsignScreenshotSettingsShell() {
     toast.success(t("saved"));
   };
 
+  let title: string;
+  let subtitle: string;
+  switch (variant) {
+    case "settings":
+      title = tSettings("title");
+      subtitle = tSettings("subtitle");
+      break;
+    case "screenshot":
+      title = t("title");
+      subtitle = t("subtitle");
+      break;
+    default: {
+      const _exhaustive: never = variant;
+      throw new Error(`Unhandled screenshot settings variant: ${_exhaustive}`);
+    }
+  }
+
   return (
     <AppPage className="space-y-3">
       <AppPageHeader
-        title={t("title")}
-        description={t("subtitle")}
+        title={title}
+        description={subtitle}
         breadcrumbs={[
           { label: tCommon("hub.requests"), href: "/requests" },
           { label: tCommon("hub.title"), href: "/requests/esign" },
-          { label: t("title") },
+          { label: title },
         ]}
+        actions={
+          variant === "settings" ? (
+            <Link
+              href="/requests/esign/categories"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-primary hover:bg-primary/10"
+            >
+              <ExternalLink className="h-4 w-4" />
+              {tSettings("manageCategories")}
+            </Link>
+          ) : null
+        }
       />
 
       <AppListCard className="flex flex-wrap items-center justify-between gap-3 border-amber-200 bg-amber-50 p-4">

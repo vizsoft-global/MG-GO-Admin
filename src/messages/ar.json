@@ -1347,6 +1347,10 @@
       "assignedTo": "مُسلَّم إلى",
       "close": "إغلاق",
       "notReturned": "لم يُرجع",
+      "fieldEvidence": "الدليل",
+      "statusAssigned": "مُسَلَّم",
+      "statusReturned": "مُرجع",
+      "attachmentOpenFailed": "تعذر فتح الملف",
       "assignmentAttachment": {
         "handover_form": "نموذج التسليم",
         "handover_photo": "صورة التسليم",
@@ -1818,7 +1822,7 @@
       "importSubtitle": "{ok} جاهز من {total} صف — الصفوف غير الصالحة تُرفض ولا تُتخطى.",
       "importUpload": "رفع ملف",
       "importDownloadTemplate": "تنزيل القالب",
-      "importHint": "الأعمدة: رقم الموظف و/أو رمز السائق. المعرّفات غير المعروفة تبقى في المعاينة مع السبب.",
+      "importHint": "الأعمدة: رقم الموظف و/أو رمز السائق، مع الاسم. رمز السائق أو الاسم المعبأ الذي لا يطابق نفس السائق يُرفض.",
       "importPreviewFailed": "تعذر معاينة الملف",
       "importApplyFailed": "تعذر إضافة الأعضاء",
       "importApply": "إضافة {count}",
@@ -1831,6 +1835,7 @@
       "importStatus_blocked": "محظور",
       "importStatus_archived": "مؤرشف",
       "importStatus_ambiguous": "الرقم والرمز لا يتطابقان",
+      "importStatus_mismatch": "الاسم لا يطابق",
       "importStatus_empty": "صف فارغ",
       "searching": "جاري البحث…",
       "removeMember": "إزالة",
@@ -1899,6 +1904,7 @@
         "nationality": "الجنسية (اختياري)",
         "riderCategory": "التصنيف",
         "sourceCompany": "شركة المصدر",
+        "project": "المشروع",
         "driverCode": "رقم السائق",
         "partner": "الشريك (اختياري)",
         "zone": "المنطقة",
@@ -1941,6 +1947,11 @@
       "status": {
         "active": "نشط",
         "inactive": "غير نشط"
+      },
+      "project": {
+        "keeta": "كيتا",
+        "americana": "أمريكانا",
+        "unset": "بدون"
       },
       "riderCategory": {
         "inHouse": "داخلي",
@@ -3016,6 +3027,8 @@
       "projectAll": "كل المشاريع",
       "projectKeeta": "كيتا",
       "projectAmericana": "أمريكانا",
+      "projectUnset": "بدون",
+      "projectFromRiderHint": "المشروع يأتي من السائق المعيَّن.",
       "statusActive": "نشطة",
       "statusSuspended": "موقوفة",
       "statusMaintenance": "تحت الإصلاح",
@@ -3161,6 +3174,8 @@
       "fieldPlate": "اللوحة",
       "fieldModel": "الموديل",
       "fieldCarType": "نوع السيارة",
+      "fieldTransfer": "التحويل",
+      "fieldEvidence": "الدليل",
       "attachment": {
         "clear_fuel_invoice": "فاتورة وقود واضحة",
         "vehicle_plate": "صورة لوحة المركبة",
@@ -3493,6 +3508,8 @@
         "assetHint": "المعدات والشريحة والدراجة والاستبدال",
         "fuel": "وقود",
         "fuelHint": "مطالبات تعويض الوقود",
+        "fuel_refund": "استرداد الوقود",
+        "fuel_refundHint": "طابور استرداد التعبئة المرفوضة",
         "loan": "قرض",
         "loanHint": "طلبات السلفة",
         "complaint": "شكوى",
@@ -4388,6 +4405,11 @@
             "salary_justification": "التبرير وعرض كشف الراتب"
           }
         },
+        "settings": {
+          "title": "إعدادات التوقيع الإلكتروني",
+          "subtitle": "فئات التوقيع والأيقونات وسياسة لقطة الشاشة",
+          "manageCategories": "إدارة الفئات"
+        },
         "assets": {
           "title": "كتالوج الأصول",
           "subtitle": "عناصر يمكن للمندوبين طلبها من التطبيق",
@@ -4526,6 +4548,8 @@
           "quantity": "الكمية",
           "request_mode": "تجديد / أول مرة",
           "asset_current_status": "الحالة الحالية",
+          "handover_by": "تم التسليم بواسطة",
+          "handover_at": "وقت التسليم",
           "period_month": "الفترة",
           "distance_km": "المسافة (كم)",
           "document_type": "نوع المستند",
@@ -4555,6 +4579,18 @@
           "request_mode": "تجديد أو أول مرة",
           "asset_current_status": "مفقود أو تالف",
           "leave_type": "اختر نوع الإجازة"
+        },
+        "kinds": {
+          "heading": "المرفقات",
+          "choose": "اختر ملفاً",
+          "remove": "إزالة",
+          "optional": "اختياري",
+          "clear_fuel_invoice": "فاتورة الوقود الواضحة",
+          "vehicle_plate": "صورة لوحة المركبة",
+          "rejected_fuel_invoice": "فاتورة الوقود المرفوضة",
+          "cash_invoice": "فاتورة نقدية",
+          "vehicle_photo": "صورة المركبة",
+          "odometer": "قراءة العداد"
         },
         "daysCount": "{count} أيام",
         "assetModes": {
@@ -4591,7 +4627,11 @@
           "medical_documents_required": "المستندات الطبية مطلوبة لطلبات المرض / الحادث",
           "invalid_option": "اختر {field} صالحاً",
           "field_required": "{field} مطلوب",
-          "date_in_past": "لا يمكن أن يكون تاريخ الاحتياج أقدم من اليوم"
+          "date_in_past": "لا يمكن أن يكون تاريخ الاحتياج أقدم من اليوم",
+          "kind_required": "يرجى رفع المرفق المطلوب.",
+          "invalid_attachment_type": "استخدم مرفقاً بصيغة JPEG أو PNG أو WebP أو PDF",
+          "invalid_attachment_size": "يجب ألا يتجاوز كل مرفق 10 ميغابايت",
+          "invalid_attachment_kind": "نوع المرفق هذا غير صالح لهذا الطلب"
         }
       }
     },
@@ -5085,7 +5125,13 @@
     },
     "incentiveRules": {
       "title": "قواعد الحوافز",
-      "subtitle": "أهداف التوصيل ومبالغ المكافآت حسب المنطقة أو الشريك أو المطعم"
+      "subtitle": "أهداف التوصيل ومبالغ المكافآت حسب المنطقة أو الشريك أو المطعم",
+      "searchPlaceholder": "ابحث بالاسم أو المطعم",
+      "filterStatus": "الحالة",
+      "filterPeriod": "الفترة",
+      "statusAll": "كل الحالات",
+      "periodAll": "كل الفترات",
+      "emptyFiltered": "لا توجد قواعد تطابق هذه التصفية"
     },
     "earningsCalculation": {
       "title": "حساب الأرباح",
@@ -5674,7 +5720,8 @@
         "estimate_required": "اضغط تقدير الجمهور لتأكيد عدد السائقين الذين سيستلمون هذا الإشعار.",
         "import_no_rows": "ارفع جدول بيانات يحتوي على صف واحد على الأقل قبل المتابعة.",
         "import_preview_pending": "معاينة الاستيراد قيد التحميل. انتظر لحظة ثم حاول مرة أخرى.",
-        "import_no_valid_ids": "لم يتم العثور على معرفات موظفين صالحة في الاستيراد. استخدم معرفات موجودة في النظام أو أصلح صفوف Unknown ID في جدول المعاينة."
+        "import_no_valid_ids": "لم يتم العثور على معرفات موظفين صالحة في الاستيراد. استخدم معرفات موجودة في النظام أو أصلح صفوف Unknown ID في جدول المعاينة.",
+        "empty_group": "المجموعات المحددة لا تحتوي على أعضاء. اختر مجموعة فيها سائق واحد على الأقل."
       },
       "fieldCategory": "الفئة",
       "fieldPriority": "الأولوية",

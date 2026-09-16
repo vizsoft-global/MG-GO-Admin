@@ -1,4 +1,7 @@
-import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
+import {
+  parseDriverProjectKey,
+  type DriverProjectKey,
+} from "@/features/fleet/fleet-labels";
 import type { VehicleListRow } from "./types";
 
 export const VEHICLE_LIST_TABS = ["all", "suspended", "on-duty"] as const;
@@ -72,4 +75,16 @@ export function vehicleListKpis(
 
 export function isProjectKey(value: string | null | undefined): value is DriverProjectKey {
   return value === "keeta" || value === "americana";
+}
+
+export function assignedDriverProjectWrite(
+  assignedDriverId: string | null | undefined,
+  projectKeyRaw: unknown,
+): { driverId: string; project_key: DriverProjectKey | null } | null {
+  const driverId = typeof assignedDriverId === "string" ? assignedDriverId.trim() : "";
+  if (!driverId) return null;
+  return {
+    driverId,
+    project_key: parseDriverProjectKey(projectKeyRaw),
+  };
 }

@@ -1,4 +1,4 @@
-import { Camera, FileText } from "lucide-react";
+import { Camera, ExternalLink, FileText, Trash2 } from "lucide-react";
 import { formatKuwaitDateTime } from "./fleet-labels";
 
 export function FleetAttachmentRow({
@@ -6,11 +6,15 @@ export function FleetAttachmentRow({
   fileName,
   capturedAt,
   source,
+  onOpen,
+  onRemove,
 }: {
   title: string;
   fileName?: string | null;
   capturedAt?: string | null;
   source?: "mobile_camera" | "admin_upload" | string | null;
+  onOpen?: () => void;
+  onRemove?: () => void;
 }) {
   const fromCamera = source === "mobile_camera";
   const captured = capturedAt ? formatKuwaitDateTime(capturedAt) : null;
@@ -21,7 +25,7 @@ export function FleetAttachmentRow({
       ) : (
         <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       )}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-foreground">{title}</p>
         {fileName ? <p className="truncate text-[10px] text-muted-foreground">{fileName}</p> : null}
         {captured ? (
@@ -31,6 +35,30 @@ export function FleetAttachmentRow({
           </p>
         ) : null}
       </div>
+      {onOpen || onRemove ? (
+        <div className="flex shrink-0 items-center gap-0.5">
+          {onOpen ? (
+            <button
+              type="button"
+              onClick={onOpen}
+              className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span className="sr-only">View</span>
+            </button>
+          ) : null}
+          {onRemove ? (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="sr-only">Remove</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

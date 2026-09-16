@@ -27,6 +27,11 @@ export function buildTargetSpec(input: {
   return { mode: input.targetMode };
 }
 
+export type AudienceGroupOption = {
+  id: string;
+  member_count: number;
+};
+
 export type AudienceStepInput = {
   targetMode: TargetSpec["mode"];
   zoneIds: string[];
@@ -37,12 +42,25 @@ export type AudienceStepInput = {
   importSpec: NotificationImportSpec | null;
   audienceCount: number | null;
   importOkCount?: number | null;
+  groups?: AudienceGroupOption[];
 };
+
+function selectedKnownGroups(input: AudienceStepInput): AudienceGroupOption[] {
+  const selected = new Set(input.groupIds);
+  return (input.groups ?? []).filter((group) => selected.has(group.id));
+}
+
+function groupModeHasRecipients(input: AudienceStepInput): boolean {
+  const known = selectedKnownGroups(input);
+  if (known.length === 0) return false;
+  if (input.audienceCount !== null) return input.audienceCount > 0;
+  return known.reduce((sum, group) => sum + group.member_count, 0) > 0;
+}
 
 export function isAudienceStepValid(input: AudienceStepInput): boolean {
   if (input.targetMode === "zone") return input.zoneIds.length > 0;
   if (input.targetMode === "partner") return input.partnerIds.length > 0;
-  if (input.targetMode === "group") return input.groupIds.length > 0;
+  if (input.targetMode === "group") return groupModeHasRecipients(input);
   if (input.targetMode === "custom") return input.driverIds.length > 0;
   if (input.targetMode === "status") return input.statuses.length > 0;
   if (input.targetMode === "import") {
@@ -57,6 +75,7 @@ export function isAudienceStepValid(input: AudienceStepInput): boolean {
 export type AudienceStepBlockReason =
   | "select_target"
   | "estimate_required"
+  | "empty_group"
   | "import_no_rows"
   | "import_preview_pending"
   | "import_no_valid_ids";
@@ -72,6 +91,10 @@ export function getAudienceStepBlockReason(input: AudienceStepInput): AudienceSt
 
   if (input.targetMode === "all" && input.audienceCount === null) {
     return "estimate_required";
+  }
+
+  if (input.targetMode === "group" && input.groupIds.length > 0 && selectedKnownGroups(input).length > 0) {
+    return "empty_group";
   }
 
   return "select_target";
@@ -112,6 +135,7 @@ export function validateCampaignBeforeSubmit(input: {
   importSpec: NotificationImportSpec | null;
   audienceCount: number | null;
   importOkCount?: number | null;
+  groups?: AudienceGroupOption[];
   scheduleMode: "now" | "later";
   scheduledFor: string;
 }): WizardStepId | null {
@@ -126,6 +150,7 @@ export function validateCampaignBeforeSubmit(input: {
       importSpec: input.importSpec,
       audienceCount: input.audienceCount,
       importOkCount: input.importOkCount,
+      groups: input.groups,
     })
   ) {
     return "audience";

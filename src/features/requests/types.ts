@@ -140,6 +140,14 @@ export type RequestCreateOptions = {
   fields: RequestCreateFieldOption[];
 };
 
+export type RequestCreateKindFile = {
+  name: string;
+  type: string;
+  base64: string;
+  kind: string;
+  title: string;
+};
+
 export type RequestCreateInput = {
   driverId: string;
   type: string;
@@ -149,6 +157,7 @@ export type RequestCreateInput = {
   endDate?: string | null;
   severity?: string | null;
   details?: string | null;
+  kindFiles?: RequestCreateKindFile[];
 };
 
 export type RequestClarification = {

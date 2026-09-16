@@ -43,6 +43,12 @@ describe("diffDriverChange", () => {
     assert.equal(changes.find((c) => c.field === "custom.vest_size")?.after, "M");
   });
 
+  it("persists project_key on the profile snapshot", () => {
+    const after = flattenProfileSnapshot({ project_key: "keeta" });
+    assert.equal(after.project_key, "keeta");
+    assert.equal(flattenProfileSnapshot({ project_key: "" }).project_key, null);
+  });
+
   it("keys custom fields as custom.<key>", () => {
     const changes = diffDriverChange(
       flattenProfileSnapshot({ custom_fields: { vest_size: "S" } }),

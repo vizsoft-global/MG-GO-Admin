@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VehicleListRow } from "./types";
 import {
+  assignedDriverProjectWrite,
   parseVehicleListTab,
   parseVehicleProjectFilter,
   vehicleListKpis,
@@ -103,11 +104,34 @@ describe("vehicleMatchesProject", () => {
   it("keeps blank project_key out of Keeta and Americana", () => {
     const blank = row({ id: "1", bike_id: "A", assigned_project_key: null });
     const keeta = row({ id: "2", bike_id: "B", assigned_project_key: "keeta" });
+    const americana = row({ id: "3", bike_id: "C", assigned_project_key: "americana" });
     assert.equal(parseVehicleProjectFilter("keeta"), "keeta");
+    assert.equal(parseVehicleProjectFilter("americana"), "americana");
     assert.equal(vehicleMatchesProject(blank, "all"), true);
     assert.equal(vehicleMatchesProject(blank, "keeta"), false);
     assert.equal(vehicleMatchesProject(keeta, "keeta"), true);
     assert.equal(vehicleMatchesProject(keeta, "americana"), false);
+    assert.equal(vehicleMatchesProject(americana, "americana"), true);
+    assert.equal(vehicleMatchesProject(americana, "keeta"), false);
+  });
+});
+
+describe("assignedDriverProjectWrite", () => {
+  it("writes the assigned rider project_key and skips unassigned vehicles", () => {
+    assert.deepEqual(assignedDriverProjectWrite("drv-1", "keeta"), {
+      driverId: "drv-1",
+      project_key: "keeta",
+    });
+    assert.deepEqual(assignedDriverProjectWrite("drv-1", "americana"), {
+      driverId: "drv-1",
+      project_key: "americana",
+    });
+    assert.deepEqual(assignedDriverProjectWrite("drv-1", ""), {
+      driverId: "drv-1",
+      project_key: null,
+    });
+    assert.equal(assignedDriverProjectWrite(null, "keeta"), null);
+    assert.equal(assignedDriverProjectWrite("", "keeta"), null);
   });
 });
 

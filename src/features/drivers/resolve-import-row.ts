@@ -42,9 +42,21 @@ function token(value: string | null | undefined): string {
   return value?.trim() ?? "";
 }
 
+/** Collapse sheet/DB name noise. Empty uploaded name is not a mismatch. */
+export function namesMatch(
+  uploaded: string | null | undefined,
+  stored: string | null | undefined,
+): boolean {
+  const a = token(uploaded).replace(/\s+/g, " ").toLowerCase();
+  if (!a) return true;
+  const b = token(stored).replace(/\s+/g, " ").toLowerCase();
+  return a === b;
+}
+
 /**
- * Per-row import match. Employee ID and driver code resolve independently.
- * Both filled and pointing at two different live drivers is ambiguous.
+ * Per-row import match. A blank Employee ID or Driver Code is allowed.
+ * A filled column that does not resolve — or two columns that name different
+ * riders — is a reject. Do not fall back to the other column.
  */
 export function decideImportRowMatch(input: {
   employeeId?: string | null;
@@ -60,6 +72,13 @@ export function decideImportRowMatch(input: {
 
   const byEmp = emp ? input.byEmployee : null;
   const byCode = code ? input.byCode : null;
+
+  if (emp && !byEmp) {
+    return { status: "unknown_id", driver: null };
+  }
+  if (code && !byCode) {
+    return { status: "unknown_id", driver: null };
+  }
 
   if (byEmp && byCode && byEmp.driver_id !== byCode.driver_id) {
     return { status: "ambiguous", driver: null };
