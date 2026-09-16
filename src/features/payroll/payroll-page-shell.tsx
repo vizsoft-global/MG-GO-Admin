@@ -9,8 +9,15 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
-import { bucketOf, payrollMonths, type PayrollEffBucketId } from "./payroll-formulas";
-import { PayrollMonthButtons, PayrollSlicerBar } from "./payroll-chrome";
+import {
+  bucketOf,
+  payrollMonthForPreset,
+  payrollMonths,
+  presetForPayrollMonth,
+  type PayrollEffBucketId,
+  type PayrollRangePreset,
+} from "./payroll-formulas";
+import { PayrollRangePills, PayrollSlicerBar } from "./payroll-chrome";
 import { PayrollTab } from "./payroll-tab";
 import { RequestsTab } from "./requests-tab";
 import { exportPayrollViewCsv } from "./payroll-csv";
@@ -24,7 +31,15 @@ export function PayrollPageShell() {
   const today = kuwaitToday();
   const months = useMemo(() => payrollMonths(today), [today]);
   const [tab, setTab] = useState<PayrollHubTab>("payroll");
-  const [monthKey, setMonthKey] = useState(months[0]?.key ?? today.slice(0, 7));
+  const [preset, setPreset] = useState<PayrollRangePreset>("thisMonth");
+  const [customKey, setCustomKey] = useState<string | null>(null);
+  const monthKey = useMemo(() => {
+    try {
+      return payrollMonthForPreset(preset, today, customKey).key;
+    } catch {
+      return months[0]?.key ?? today.slice(0, 7);
+    }
+  }, [preset, today, customKey, months]);
   const [slicers, setSlicers] = useState<PayrollSlicers>(EMPTY_OPS_SLICERS);
   const [drill, setDrill] = useState<PayrollEffBucketId | null>(null);
 
@@ -32,8 +47,14 @@ export function PayrollPageShell() {
   const data = query.data;
   const month = data?.month ?? months.find((m) => m.key === monthKey) ?? months[0];
 
-  function changeMonth(key: string) {
-    setMonthKey(key);
+  function changePreset(next: Exclude<PayrollRangePreset, "custom">) {
+    setPreset(next);
+    setDrill(null);
+  }
+
+  function applyCustomMonth(key: string) {
+    setCustomKey(key);
+    setPreset(presetForPayrollMonth(key, today));
     setDrill(null);
   }
 
@@ -82,7 +103,13 @@ export function PayrollPageShell() {
         activeId={tab}
         onSelect={(id) => setTab(id as PayrollHubTab)}
       />
-      <PayrollMonthButtons months={data?.months ?? months} value={monthKey} onChange={changeMonth} />
+      <PayrollRangePills
+        today={today}
+        preset={preset}
+        customKey={customKey}
+        onPreset={changePreset}
+        onApplyCustom={applyCustomMonth}
+      />
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <PayrollSlicerBar
           slicers={slicers}

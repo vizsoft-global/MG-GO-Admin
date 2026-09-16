@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MGGO Payroll &amp; Requests — What we built and how to verify (SOP v1.0)</title>
+  <style>
+    @page { size: A4; margin: 16mm 16mm 18mm 16mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Calibri, Arial, sans-serif;
+      color: #1e293b;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      margin: 0;
+    }
+    .cover {
+      border-bottom: 3px solid #0f766e;
+      padding-bottom: 14px;
+      margin-bottom: 18px;
+    }
+    .eyebrow {
+      font-size: 9pt;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #0f766e;
+      font-weight: 700;
+      margin: 0 0 6px;
+    }
+    h1 {
+      font-size: 20pt;
+      line-height: 1.15;
+      margin: 0 0 8px;
+      color: #0f172a;
+    }
+    .lede { color: #475569; margin: 0 0 12px; max-width: 680px; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      font-size: 9pt;
+      color: #334155;
+    }
+    .meta b { color: #0f172a; }
+    h2 {
+      font-size: 14pt;
+      color: #0f172a;
+      margin: 22px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1.5px solid #cbd5e1;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11.5pt;
+      color: #0f766e;
+      margin: 16px 0 6px;
+      page-break-after: avoid;
+    }
+    p { margin: 0 0 8px; }
+    ul, ol { margin: 0 0 10px; padding-left: 18px; }
+    li { margin: 0 0 4px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 12px;
+      font-size: 9.5pt;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 5px 7px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: #0f766e; color: #fff; font-weight: 600; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    tr { page-break-inside: avoid; }
+    .pass { color: #047857; font-weight: 700; }
+    .gap { color: #b45309; font-weight: 700; }
+    .warn {
+      background: #fffbeb;
+      border: 1px solid #f59e0b;
+      border-left: 4px solid #d97706;
+      padding: 8px 10px;
+      margin: 8px 0 12px;
+      page-break-inside: avoid;
+    }
+    .note {
+      background: #f0fdfa;
+      border: 1px solid #99f6e4;
+      border-left: 4px solid #0f766e;
+      padding: 8px 10px;
+      margin: 8px 0 12px;
+      page-break-inside: avoid;
+    }
+    .footer-note {
+      font-size: 8.5pt;
+      color: #64748b;
+      margin-top: 18px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 8px;
+    }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 9pt;
+      background: #f1f5f9;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .toc { page-break-after: always; }
+    .keep { page-break-inside: avoid; }
+    .check { margin: 0 0 6px; }
+  </style>
+</head>
+<body>
+
+  <header class="cover">
+    <p class="eyebrow">Musallam / DPD · Admin Control Tower</p>
+    <h1>Payroll &amp; Requests — delivery note and SOP verification guide</h1>
+    <p class="lede">
+      This pack is for the live module built from your <b>MGGO Payroll &amp; Requests SOP v1.0</b>
+      (16 pages) and the HTML prototype. Keep the SOP PDF open while you walk the checklist —
+      every test names the SOP page it proves.
+    </p>
+    <div class="meta">
+      <span><b>Live URL:</b> https://dpdadmin-prod.vercel.app/en/payroll</span>
+      <span><b>Date:</b> 16 September 2026</span>
+      <span><b>SOP:</b> MGGO-Payroll-Requests-SOP.pdf · v1.0</span>
+      <span><b>Sign in:</b> staff account with Payroll access</span>
+    </div>
+  </header>
+
+  <section class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li>What we delivered</li>
+      <li>How a day is decided (SOP formulas, live data)</li>
+      <li>Known differences from the SOP / spreadsheet</li>
+      <li>How to verify — open the SOP beside this list</li>
+      <li>Sanity-check numbers (Kuwait, 16 September 2026)</li>
+      <li>Three questions we need from you</li>
+    </ol>
+    <div class="note">
+      <b>Scope.</b> This is a new Admin page under Operations. It does <b>not</b> replace
+      Earnings (KWD) or the existing Requests &amp; E-Signature hub. Riders already raise
+      leave / sick / fuel / loan from the driver app — no app update is required for this launch.
+    </div>
+  </section>
+
+  <h2>1. What we delivered</h2>
+  <p>
+    The monthly spreadsheet is now a live screen. One month at a time, one column per calendar
+    day, with attendance efficiency and a hard link to the request that justifies every OFF / Sick / Accident day.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:18%">SOP section</th>
+        <th>What you asked for</th>
+        <th style="width:36%">Where it lives</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>p.3 — Shared</td>
+        <td>Clear filters, Export to Excel, month selector, seven multi-select slicers (search + All)</td>
+        <td>Top of both tabs</td>
+      </tr>
+      <tr>
+        <td>p.3 — Month</td>
+        <td>Monthly report only — no date-range picker. Switching the month rebuilds the grid, Fixed Days, day labels and the Requests tab</td>
+        <td>Exactly three buttons: current Kuwait month + the previous two (e.g. Sep / Aug / Jul 2026)</td>
+      </tr>
+      <tr>
+        <td>p.4 — Store</td>
+        <td>Stores exist only for Americana. Other partners show “No stores for the selected partner”. Riders without a store show as <code>(Pool)</code></td>
+        <td>Store slicer + Restaurant column</td>
+      </tr>
+      <tr>
+        <td>p.5–7 — Payroll</td>
+        <td>Five KPI cards, colour-coded day grid, AM ID / MG ID, totals, Fixed Days, uncapped Efficiency %</td>
+        <td>Payroll tab</td>
+      </tr>
+      <tr>
+        <td>p.8 — Efficiency</td>
+        <td>Fixed Days = calendar days − 2. Efficiency = worked days ÷ Fixed Days × 100, not capped. Approval does not change the %</td>
+        <td>Row column + KPI “Avg attendance eff.”</td>
+      </tr>
+      <tr>
+        <td>p.8 — Justification</td>
+        <td>OFF / Sick / Accident is unjustified until a matching request is Approved. Absent needs no request. Pending / Under review do not count</td>
+        <td>KPI “Riders with unjustified days”</td>
+      </tr>
+      <tr>
+        <td>p.9–11 — Chart</td>
+        <td>Five efficiency buckets. Click a bar to filter the table; click again or Show all to clear. Month / filter change resets. Two downloads</td>
+        <td>Chart + “Download this table” + chart CSV</td>
+      </tr>
+      <tr>
+        <td>p.12–15 — Requests</td>
+        <td>Eight type tiles with a red awaiting badge, status chips, Pending-first queue, Approval Workflow panel</td>
+        <td>Requests tab. Row opens the existing request record</td>
+      </tr>
+      <tr>
+        <td>p.16 — Appendix</td>
+        <td>Day columns generated from the selected month (real dates, 28 / 30 / 31). Exports follow the on-screen view</td>
+        <td>Grid headers + CSV files</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. How a day is decided</h2>
+  <p>
+    SOP p.6 names the statuses. SOP p.8 says a non-working day is justified only by an
+    <b>Approved</b> request of the matching type for that rider on that exact date.
+    Live data uses Kuwait calendar days.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Priority (first match wins)</th>
+        <th>Cell</th>
+        <th>Live source</th>
+        <th>Approved request required?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1. Day after Kuwait today</td>
+        <td>blank</td>
+        <td>—</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td>2. Check-in that Kuwait day</td>
+        <td><b>12</b> (grey)</td>
+        <td><code>attendance_logs.check_in_at</code></td>
+        <td>No. A check-in wins over leave on the same day</td>
+      </tr>
+      <tr>
+        <td>3. Accident cover</td>
+        <td>Accident (light green)</td>
+        <td>Leave type Accident, or Sick Leave subtype Accident, covering that date</td>
+        <td>Yes — Approved or awaiting rider acknowledgement</td>
+      </tr>
+      <tr>
+        <td>4. Other sick leave</td>
+        <td>Sick (orange)</td>
+        <td>Sick Leave covering that date</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>5. Other leave</td>
+        <td>OFF (green)</td>
+        <td>Leave covering that date</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>6. Otherwise, day ≤ today</td>
+        <td>Absent (red)</td>
+        <td>No check-in and no covering request</td>
+        <td>No — counts against the rider</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>Which month a request belongs to.</b> SOP p.2 / p.8: the request must match
+    <b>that same date</b>, not the day it was filed. The queue and the day grid both use the
+    request’s start date → end date. A sick leave filed in September that covers 25–28 August
+    appears in <b>August</b>. A leave filed in September that runs 15 November–15 January does
+    <b>not</b> appear in September.
+  </div>
+
+  <div class="keep">
+    <h3>Worked day (status 12)</h3>
+    <p>
+      SOP p.6: “Worked a 12-hour shift.” Total Hours on p.7 / p.16 is
+      <code>count(12) × 12</code> — a standard shift, not clock hours.
+      Live payroll treats <b>12</b> as a Kuwait-day check-in. A rider who clocked in with
+      zero deliveries still shows <b>12</b>. Performance’s “working day = verified orders &gt; 0”
+      is a different report and is not used here.
+    </p>
+  </div>
+
+  <h2>3. Known differences from the SOP / spreadsheet</h2>
+  <p>
+    These are deliberate. They are not defects. Please confirm the three questions in section 6
+    if you want any of them built later.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">SOP / sheet</th>
+        <th>Live behaviour</th>
+        <th style="width:16%">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Travelled (yellow) — p.6, p.8</td>
+        <td>No Travel leave exists in the live request catalogue or the driver app. The classifier never paints Travelled. Those days fall through to OFF / Sick / Absent from real data</td>
+        <td class="gap">Omitted</td>
+      </tr>
+      <tr>
+        <td>Cancelled (dark red) — “work order cancelled” — p.6</td>
+        <td>No ops definition of a cancelled work-order day. Cancelled deliveries are not used (that would steal genuine Absent and corrupt the unjustified KPI). No Cancelled column</td>
+        <td class="gap">Omitted</td>
+      </tr>
+      <tr>
+        <td>Accident reviewing department = Safety &amp; Legal — p.13</td>
+        <td>The Approval Workflow panel keeps the SOP wording (step 3). Live Accident rows follow the existing Leave / Sick Leave chains (Reporting Manager / HR / Payroll). The queue’s <b>Reviewing dept.</b> column shows the live step, never a department that does not exist</td>
+        <td class="gap">SOP copy only</td>
+      </tr>
+      <tr>
+        <td>Leave reviewing department = Operations — p.13</td>
+        <td>Live Leave chain is Reporting Manager → HR → Payroll</td>
+        <td class="gap">Live chain</td>
+      </tr>
+      <tr>
+        <td>Source Company slicer — p.3, p.16</td>
+        <td>Reads the field as filled. Blank companies drop out of a company filter. We do not invent a company from an ID</td>
+        <td class="pass">As filled</td>
+      </tr>
+      <tr>
+        <td>Riders with no check-in this month</td>
+        <td>They stay on the roster (Riders in payroll). Past days are Absent, future days blank. This pulls average efficiency down — correct under SOP p.6 Absent</td>
+        <td class="pass">As specified</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. How to verify — open the SOP beside this list</h2>
+  <p>
+    Sign in → Operations → <b>Payroll &amp; Requests</b>, or open
+    <code>https://dpdadmin-prod.vercel.app/en/payroll</code>.
+    Default tab is Payroll. Default month is the current Kuwait month.
+  </p>
+
+  <h3>4.1 Shared chrome — SOP pages 3–4</h3>
+  <ol>
+    <li class="check">Confirm the page title is <b>Payroll &amp; Requests</b> and the two tabs are <b>Payroll</b> and <b>Requests</b>.</li>
+    <li class="check">Count the month buttons: exactly <b>three</b> (current + previous two). There is no date-range picker and no older archive.</li>
+    <li class="check">Switch to August, then July. The day headers must change (<code>1-Aug</code> … <code>31-Aug</code>, then <code>1-Jul</code> …) and the footer must show Fixed Days = month days − 2 (31 → 29, 30 → 28).</li>
+    <li class="check">Confirm the seven slicers: Zone, Partner, Vehicle, Nationality, Source type, Company, Store. Each has search and All.</li>
+    <li class="check"><b>Store depends on Partner (SOP p.4).</b> Open Partner, pick only <b>Keeta</b>. Store must read “No stores for the selected partner”. Restaurant column must be <code>(Pool)</code>. Clear filters. Pick <b>Americana</b> — Store must list stores again.</li>
+    <li class="check">Click <b>Clear filters</b>. Every slicer returns to All. The efficiency drill-down (if any) also clears.</li>
+  </ol>
+
+  <h3>4.2 Payroll KPIs and grid — SOP pages 5–7</h3>
+  <ol>
+    <li class="check">Five cards, in this order: Riders in payroll · Total active riders · Avg attendance eff. · Riders at / above 100% · Riders with unjustified days.</li>
+    <li class="check">Legend colours: <b>12</b> grey, OFF green, Sick orange, Accident light green, Absent red. No Travelled and no Cancelled chips.</li>
+    <li class="check">Identity columns: AM ID (employee ID), MG ID (driver code), Name, Restaurant, Zone, Partner, Nationality, Status (Active / Inactive).</li>
+    <li class="check">One column per calendar day of the selected month, then Total Days, Total Hours, OFF, Sick, Accident, Absence, Fixed Days, Efficiency%.</li>
+    <li class="check">Pick one rider. Total Days = count of <b>12</b>. Total Hours = Total Days × 12. Efficiency% = Total Days ÷ Fixed Days × 100 (one decimal on screen). Green at 100%+, red below 80%.</li>
+    <li class="check">A future day (after Kuwait today) is blank — not Absent, not in the totals.</li>
+  </ol>
+
+  <h3>4.3 Efficiency and justification — SOP page 8</h3>
+  <ol>
+    <li class="check">September 2026 is a 30-day month → Fixed Days <b>28</b>. August and July are 31-day months → Fixed Days <b>29</b>.</li>
+    <li class="check">Efficiency is <b>not capped</b>. A rider who works more than Fixed Days reads above 100% and is counted in “Riders at / above 100%”.</li>
+    <li class="check">OFF / Sick / Accident without an Approved request increment “Riders with unjustified days”. Absent does <b>not</b>.</li>
+    <li class="check">A request still Pending or Under review does <b>not</b> justify the day (SOP p.15 critical note).</li>
+    <li class="check"><b>Same-date rule.</b> Open August → Requests. <code>RCM-0092</code> (Sick Leave 25–28 August, filed 8 September) must appear in August and must <b>not</b> appear in September. <code>RCM-0085</code> (Leave 15 November–15 January, filed 4 September) must appear in <b>neither</b> September nor August.</li>
+  </ol>
+
+  <h3>4.4 Distribution chart and exports — SOP pages 9–11</h3>
+  <ol>
+    <li class="check">Five bars: ≥100%, 90–100%, 80–90%, 70–80%, &lt;70%. Their counts must add up to “Riders in payroll”.</li>
+    <li class="check">Click the largest bar (usually &lt;70%). A green banner appears: “Showing only riders in the … bucket — N rider(s)” plus <b>Show all</b>. The table footer “Showing X of Y” must match N.</li>
+    <li class="check">Click the same bar again — drill-down clears. Click another bar, then change month — drill-down clears.</li>
+    <li class="check"><b>Download this table</b> (and header <b>Export to Excel</b>) saves the current view, including the drill-down. Filename <code>MGGO-payroll-YYYY-MM.csv</code>. No Travelled / Cancelled columns.</li>
+    <li class="check">Chart <b>CSV</b> downloads every rider in the filtered month, grouped by bucket, with a Bucket column and Unjustified Days. Filename <code>MGGO-efficiency-distribution-YYYY-MM.csv</code>.</li>
+    <li class="check">Apply Partner = Keeta, then export. The file must contain only Keeta riders — never rows you cannot see on screen (SOP p.11).</li>
+  </ol>
+
+  <h3>4.5 Requests tab — SOP pages 12–15</h3>
+  <ol>
+    <li class="check">Eight tiles: Leave, Sick Leave, Accident, Asset, Fuel, Loan, Documents, Salary Justification. Red badge = Pending + Under review for that type.</li>
+    <li class="check">Status chips: All · Pending · Under review · Approved · Rejected. Type AND status combine. Queue sorts Pending first.</li>
+    <li class="check">Click Leave, then Pending. Only that intersection remains. Click the Leave tile again to clear the type.</li>
+    <li class="check">Only Leave / Sick Leave / Accident justify a payroll day. Asset, Fuel, Loan, Documents and Salary Justification do not (SOP p.13).</li>
+    <li class="check">Fuel tile includes Fuel Refunds (same Fleet queue). Accident tile is Leave-Accident <b>or</b> Sick-Leave-Accident — there is no separate Accident request type.</li>
+    <li class="check">Row columns: Request ID, Rider, ID, Type, Day, Zone, Partner, Reviewing dept., Status. Click a row — it opens the existing request record (approve / reject / clarify stay there).</li>
+    <li class="check"><b>Approval Workflow</b> panel (right): four SOP steps, verbatim, including “Safety &amp; Legal” in step 3. Below the steps: <b>Awaiting action</b> and <b>Requests / rider</b> (one decimal). Changing month or a slicer updates both. Tile / status chips do <b>not</b> shrink these two numbers.</li>
+    <li class="check">Reviewing dept. on a live row is the current approval step (Reporting Manager / HR / Payroll / Fleet), not the SOP ideal label.</li>
+  </ol>
+
+  <h2>5. Sanity-check numbers (Kuwait, 16 September 2026)</h2>
+  <p>
+    Captured on production after the live snapshot went in. Use them as a starting point.
+    September figures will move as riders clock in after this date. The <b>same-date</b>
+    request examples (RCM-0092 / RCM-0085) will not move.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>Sep 2026 (30 d / Fixed 28)</th>
+        <th>Aug 2026 (31 d / Fixed 29)</th>
+        <th>Jul 2026 (31 d / Fixed 29)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Riders in payroll / Active</td>
+        <td>861 / 861</td>
+        <td>861 / 861</td>
+        <td>861 / 861</td>
+      </tr>
+      <tr>
+        <td>Avg attendance eff.</td>
+        <td>15.5%</td>
+        <td>4.0%</td>
+        <td>3.2%</td>
+      </tr>
+      <tr>
+        <td>Riders at / above 100%</td>
+        <td>0 (mid-month — max possible is 16 / 28)</td>
+        <td>12</td>
+        <td>19</td>
+      </tr>
+      <tr>
+        <td>Riders with unjustified days</td>
+        <td>2</td>
+        <td>1</td>
+        <td>0</td>
+      </tr>
+      <tr>
+        <td>Efficiency buckets ≥100 / 90–100 / 80–90 / 70–80 / &lt;70</td>
+        <td>— (mid-month; none at 100%)</td>
+        <td>12 + 6 + 2 + 4 + 837 = 861</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td>Requests in month / Awaiting action</td>
+        <td>18 / 10</td>
+        <td>34 / 7</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td>Partner = Keeta</td>
+        <td>861 → 157 riders</td>
+        <td>—</td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    Average efficiency in September looks low because Fixed Days is the <b>full</b> month (28)
+    while only the days up to today can show <b>12</b>, and several hundred rostered riders
+    have never clocked in (they sit as Absent). That is the SOP formula, not a load error.
+  </div>
+
+  <h2>6. Three questions we need from you</h2>
+  <ol>
+    <li>
+      <b>Travelled.</b> The sheet has a yellow Travelled day. There is no Travel option on
+      the rider’s leave form today. When you add one, we will paint Travelled and require
+      an Approved leave on that date. Until then the column stays off. Is that acceptable?
+    </li>
+    <li>
+      <b>Cancelled / “work order cancelled”.</b> Who marks this on the monthly sheet, in
+      which system, and does it need a request? We will not guess from cancelled deliveries.
+    </li>
+    <li>
+      <b>Safety &amp; Legal for Accident.</b> The workflow panel already uses your SOP
+      wording. Live Accident rows still follow Leave / Sick Leave. Do you want a dedicated
+      Safety &amp; Legal step on Accident only?
+    </li>
+  </ol>
+
+  <p class="footer-note">
+    Vizsoft · MGGO Admin · 16 September 2026 · SOP v1.0 ·
+    Production https://dpdadmin-prod.vercel.app/en/payroll ·
+    Existing /earnings and /requests are unchanged.
+  </p>
+</body>
+</html>

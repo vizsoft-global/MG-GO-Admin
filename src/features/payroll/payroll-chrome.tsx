@@ -1,42 +1,161 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Bike, Building2, CalendarRange, Flag, Globe2, MapPin, Store, Users } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { countryLabel } from "@/lib/geo/countries";
 import { DRIVER_PROJECT_KEYS } from "@/features/fleet/fleet-labels";
 import { partnerLabel, vehicleLabel } from "@/features/performance/performance-ops-format";
 import { SOURCE_COMPANY_KEYS, SOURCE_COMPANY_LABEL, storesVisibleForPartners } from "@/features/performance/performance-ops-formulas";
 import { OpsMultiSelect } from "@/features/performance/ops/ops-multi-select";
-import type { PayrollMonthMeta } from "./payroll-formulas";
+import { cn } from "@/lib/utils";
+import {
+  PAYROLL_RANGE_PRESETS,
+  monthMeta,
+  payrollMonths,
+  type PayrollRangePreset,
+} from "./payroll-formulas";
 import type { PayrollOptions, PayrollSlicers } from "./payroll-types";
 
 const VEHICLE_KEYS = ["bike", "car"] as const;
 const SOURCE_TYPES = ["in_house", "outsourced"] as const;
 
-export function PayrollMonthButtons({
-  months,
-  value,
-  onChange,
+export function PayrollRangePills({
+  today,
+  preset,
+  customKey,
+  onPreset,
+  onApplyCustom,
 }: {
-  months: PayrollMonthMeta[];
-  value: string;
-  onChange: (key: string) => void;
+  today: string;
+  preset: PayrollRangePreset;
+  customKey: string | null;
+  onPreset: (next: Exclude<PayrollRangePreset, "custom">) => void;
+  onApplyCustom: (monthKey: string) => void;
 }) {
+  const t = useTranslations("pages.payroll.range");
+  const allowed = useMemo(() => payrollMonths(today), [today]);
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {months.map((m) => (
+      {PAYROLL_RANGE_PRESETS.filter((id) => id !== "custom").map((id) => (
         <ToggleChip
-          key={m.key}
-          selected={value === m.key}
+          key={id}
+          selected={preset === id}
           icon={CalendarRange}
-          onClick={() => onChange(m.key)}
+          onClick={() => onPreset(id)}
         >
-          {m.label}
+          {t(id)}
         </ToggleChip>
       ))}
+      <PayrollCustomMonthPopover
+        selected={preset === "custom"}
+        today={today}
+        allowedKeys={allowed.map((m) => m.key)}
+        appliedKey={customKey}
+        onApply={onApplyCustom}
+      />
     </div>
+  );
+}
+
+function PayrollCustomMonthPopover({
+  selected,
+  today,
+  allowedKeys,
+  appliedKey,
+  onApply,
+}: {
+  selected: boolean;
+  today: string;
+  allowedKeys: string[];
+  appliedKey: string | null;
+  onApply: (monthKey: string) => void;
+}) {
+  const t = useTranslations("pages.payroll.range");
+  const [open, setOpen] = useState(false);
+  const fallback = allowedKeys[allowedKeys.length - 1] ?? today.slice(0, 7);
+  const [draft, setDraft] = useState(appliedKey ?? fallback);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setDraft(appliedKey ?? fallback);
+    setErr(null);
+  }, [open, appliedKey, fallback]);
+
+  const appliedMeta = appliedKey ? monthMeta(appliedKey) : null;
+  const label = selected && appliedMeta ? appliedMeta.label : t("custom");
+  const minKey = allowedKeys[allowedKeys.length - 1] ?? fallback;
+  const maxKey = allowedKeys[0] ?? fallback;
+
+  function apply() {
+    if (!allowedKeys.includes(draft)) {
+      setErr(t("customErr"));
+      return;
+    }
+    setErr(null);
+    onApply(draft);
+    setOpen(false);
+  }
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setErr(null);
+      }}
+    >
+      <PopoverTrigger
+        className={cn(
+          "inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px] font-semibold transition-colors",
+          selected
+            ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm ring-1 ring-emerald-400/50"
+            : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+        )}
+      >
+        <CalendarRange className={cn("h-3 w-3 shrink-0", selected ? "text-emerald-900" : "opacity-50")} />
+        {label}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[min(280px,92vw)] origin-(--transform-origin) p-3">
+        <p className="mb-2 text-xs font-semibold">{t("customTitle")}</p>
+        <label className="min-w-0 text-[10px] font-medium text-muted-foreground">
+          {t("customMonth")}
+          <Input
+            type="month"
+            value={draft}
+            min={minKey}
+            max={maxKey}
+            onChange={(e) => setDraft(e.target.value)}
+            className="mt-1 h-9"
+          />
+        </label>
+        {err ? <p className="mt-2 text-[11px] text-destructive">{err}</p> : null}
+        <div className="mt-3 flex justify-end gap-2">
+          <button
+            type="button"
+            className="inline-flex h-9 items-center rounded-md border border-border px-3 text-xs"
+            onClick={() => setOpen(false)}
+          >
+            {t("customCancel")}
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground"
+            onClick={apply}
+          >
+            {t("customApply")}
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

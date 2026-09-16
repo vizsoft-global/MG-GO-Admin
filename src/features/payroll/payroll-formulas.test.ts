@@ -18,8 +18,10 @@ import {
   isUnjustifiedDay,
   mapLiveStatusToUi,
   monthMeta,
+  payrollMonthForPreset,
   payrollMonths,
   payrollTileFor,
+  presetForPayrollMonth,
   requestCoversDate,
   requestOverlapsMonth,
   restaurantLabel,
@@ -47,6 +49,17 @@ describe("fixedDays / month selector", () => {
     assert.equal(months.length, 3);
     assert.throws(() => assertPayrollMonth("2026-06", "2026-09-16"), /month_out_of_range/);
     assert.equal(assertPayrollMonth("2026-08", "2026-09-16").days, 31);
+  });
+
+  it("maps This month / Last month / Custom like the Performance range pills", () => {
+    assert.equal(payrollMonthForPreset("thisMonth", "2026-09-16", null).key, "2026-09");
+    assert.equal(payrollMonthForPreset("lastMonth", "2026-09-16", null).key, "2026-08");
+    assert.equal(payrollMonthForPreset("custom", "2026-09-16", "2026-07").key, "2026-07");
+    assert.throws(() => payrollMonthForPreset("custom", "2026-09-16", null), /custom_month_required/);
+    assert.throws(() => payrollMonthForPreset("custom", "2026-09-16", "2026-06"), /month_out_of_range/);
+    assert.equal(presetForPayrollMonth("2026-09", "2026-09-16"), "thisMonth");
+    assert.equal(presetForPayrollMonth("2026-08", "2026-09-16"), "lastMonth");
+    assert.equal(presetForPayrollMonth("2026-07", "2026-09-16"), "custom");
   });
 
   it("labels day columns as 1-Sep", () => {

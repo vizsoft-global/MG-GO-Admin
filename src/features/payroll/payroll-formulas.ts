@@ -124,7 +124,10 @@ export function shiftMonthKey(key: string, delta: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-/** Exactly 3 buttons: Kuwait current month + previous 2. */
+export const PAYROLL_RANGE_PRESETS = ["thisMonth", "lastMonth", "custom"] as const;
+export type PayrollRangePreset = (typeof PAYROLL_RANGE_PRESETS)[number];
+
+/** Allowed archive: Kuwait current month + previous 2. */
 export function payrollMonths(todayYmd: string): PayrollMonthMeta[] {
   const currentKey = todayYmd.slice(0, 7);
   return [0, -1, -2].map((delta) => {
@@ -139,6 +142,40 @@ export function assertPayrollMonth(key: string, todayYmd: string): PayrollMonthM
   const found = allowed.find((m) => m.key === key);
   if (!found) throw new Error("month_out_of_range");
   return found;
+}
+
+export function payrollMonthForPreset(
+  preset: PayrollRangePreset,
+  todayYmd: string,
+  customKey: string | null,
+): PayrollMonthMeta {
+  const currentKey = todayYmd.slice(0, 7);
+  switch (preset) {
+    case "thisMonth": {
+      const meta = monthMeta(currentKey);
+      if (!meta) throw new Error("invalid_month");
+      return meta;
+    }
+    case "lastMonth": {
+      const meta = monthMeta(shiftMonthKey(currentKey, -1));
+      if (!meta) throw new Error("invalid_month");
+      return meta;
+    }
+    case "custom":
+      if (!customKey) throw new Error("custom_month_required");
+      return assertPayrollMonth(customKey, todayYmd);
+    default: {
+      const _never: never = preset;
+      return _never;
+    }
+  }
+}
+
+export function presetForPayrollMonth(key: string, todayYmd: string): PayrollRangePreset {
+  const currentKey = todayYmd.slice(0, 7);
+  if (key === currentKey) return "thisMonth";
+  if (key === shiftMonthKey(currentKey, -1)) return "lastMonth";
+  return "custom";
 }
 
 export function dayLabel(monthKey: string, dayNum: number): string {

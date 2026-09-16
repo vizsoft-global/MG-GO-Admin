@@ -6482,6 +6482,16 @@
       "subtitle": "Monthly attendance, efficiency and the request approvals behind them",
       "tabPayroll": "Payroll",
       "tabRequests": "Requests",
+      "range": {
+        "thisMonth": "This month",
+        "lastMonth": "Last month",
+        "custom": "Custom",
+        "customTitle": "Select a payroll month",
+        "customMonth": "Month",
+        "customApply": "Apply",
+        "customCancel": "Cancel",
+        "customErr": "Pick this month or one of the previous two."
+      },
       "clearFilters": "Clear filters",
       "export": "Export to Excel",
       "exportCsv": "CSV",

@@ -6404,6 +6404,16 @@
       "subtitle": "الحضور الشهري والكفاءة وموافقات الطلبات المرتبطة بها",
       "tabPayroll": "الرواتب",
       "tabRequests": "الطلبات",
+      "range": {
+        "thisMonth": "هذا الشهر",
+        "lastMonth": "الشهر الماضي",
+        "custom": "مخصص",
+        "customTitle": "اختر شهر الرواتب",
+        "customMonth": "الشهر",
+        "customApply": "تطبيق",
+        "customCancel": "إلغاء",
+        "customErr": "اختر هذا الشهر أو أحد الشهرين السابقين."
+      },
       "clearFilters": "مسح الفلاتر",
       "export": "تصدير إلى Excel",
       "exportCsv": "CSV",
