@@ -126,7 +126,7 @@ export function mergeMenu(config: MenuNode[]): {
       });
     }
   }
-  return { tree: relocateFleetItems(pruned), unassignedIds: unassigned };
+  return { tree: relocatePayrollItem(relocateFleetItems(pruned)), unassignedIds: unassigned };
 }
 
 const FLEET_GROUP_ID = "group-fleet";
@@ -187,6 +187,54 @@ function relocateFleetItems(tree: MenuNode[]): MenuNode[] {
   const next = [...stripped];
   next.splice(overviewIdx >= 0 ? overviewIdx + 1 : 0, 0, fleetGroup);
   return next.filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
+}
+
+function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
+  const PAYROLL_ID = "payroll";
+  let found: MenuNode | null = null;
+  const strip = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "item") {
+        if (node.id === PAYROLL_ID) {
+          found = { ...node, hidden: false };
+          return [];
+        }
+        return [node];
+      }
+      const children = node.children ? strip(node.children) : [];
+      return [{ ...node, children }];
+    });
+
+  const stripped = strip(tree);
+  const item: MenuNode = found ?? {
+    id: PAYROLL_ID,
+    type: "item",
+    label: "Payroll & Requests",
+    icon: "CalendarClock",
+    hidden: false,
+  };
+
+  const opsIdx = stripped.findIndex((node) => node.id === "group-operations");
+  if (opsIdx < 0) {
+    return [
+      ...stripped,
+      {
+        id: "group-operations",
+        type: "group",
+        label: "Operations",
+        icon: "Folder",
+        children: [item],
+      },
+    ];
+  }
+
+  const ops = stripped[opsIdx];
+  const children = [...(ops.children ?? [])].filter((child) => child.id !== PAYROLL_ID);
+  const perfIdx = children.findIndex((child) => child.id === "performance");
+  children.splice(perfIdx >= 0 ? perfIdx + 1 : children.length, 0, item);
+  const next = [...stripped];
+  next[opsIdx] = { ...ops, children };
+  return next;
 }
 
 export function resolveForSidebar(

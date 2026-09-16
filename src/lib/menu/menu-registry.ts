@@ -287,6 +287,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "performance.view",
   },
   {
+    id: "payroll",
+    defaultLabel: "Payroll & Requests",
+    defaultIcon: "CalendarClock",
+    href: "/payroll",
+    defaultGroup: "Operations",
+    defaultOrder: 9,
+    permission: "payroll.view",
+  },
+  {
     id: "requests",
     defaultLabel: "Request & Complaint",
     defaultIcon: "Inbox",
@@ -543,6 +552,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "fuel-refunds": "fuelRefunds",
   attendance: "attendance",
   performance: "performance",
+  payroll: "payroll",
   "attendance-settings": "attendanceSettings",
   requests: "requests",
   "visit-bookings": "visitBookings",

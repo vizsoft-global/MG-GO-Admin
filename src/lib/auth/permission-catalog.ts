@@ -74,6 +74,16 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { slug: "attendance.view", label: "View attendance", category: "attendance" },
   { slug: "attendance.manage", label: "Manage attendance", category: "attendance" },
   {
+    slug: "payroll.view",
+    label: "View payroll & requests",
+    category: "payroll",
+  },
+  {
+    slug: "payroll.export",
+    label: "Export payroll & requests",
+    category: "payroll",
+  },
+  {
     slug: "performance.view",
     label: "View performance dashboard",
     category: "performance",
