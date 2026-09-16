@@ -37,8 +37,6 @@ export function EsignHubShell() {
       case "categories":
       case "screenshot":
         return t("tilesMeta.categories", { count: counts.categories });
-      case "calendar":
-        return t("tilesMeta.calendar");
       default: {
         const _exhaustive: never = key;
         return _exhaustive;
