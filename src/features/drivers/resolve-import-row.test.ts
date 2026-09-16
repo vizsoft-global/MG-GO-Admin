@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decideImportRowMatch, type ImportLookupMatch } from "./resolve-import-row";
+import {
+  decideImportRowMatch,
+  namesMatch,
+  type ImportLookupMatch,
+} from "./resolve-import-row";
 
 function match(overrides: Partial<ImportLookupMatch> = {}): ImportLookupMatch {
   return {
@@ -97,5 +101,67 @@ describe("decideImportRowMatch", () => {
       }).status,
       "empty",
     );
+  });
+
+  it("rejects a filled unknown driver code even when employee ID matches", () => {
+    const decided = decideImportRowMatch({
+      employeeId: "4001",
+      driverCode: "99999",
+      byEmployee: match(),
+      byCode: null,
+    });
+    assert.equal(decided.status, "unknown_id");
+    assert.equal(decided.driver, null);
+  });
+
+  it("rejects a filled unknown employee ID even when driver code matches", () => {
+    const decided = decideImportRowMatch({
+      employeeId: "99999",
+      driverCode: "10001",
+      byEmployee: null,
+      byCode: match(),
+    });
+    assert.equal(decided.status, "unknown_id");
+    assert.equal(decided.driver, null);
+  });
+});
+
+describe("namesMatch", () => {
+  const storedCaps = "MOHAMED ALAMEN ABDALWHAB ALAGEP OSMAN";
+  const storedTitle = "Ahmed Eljack";
+  const storedSuffix = "Ahmed Ali H";
+  const storedParen = "ZABIULLA DADAPEER SHIKALGAR (Car)";
+
+  it("matches an exact name", () => {
+    assert.equal(namesMatch(storedTitle, storedTitle), true);
+    assert.equal(namesMatch(storedCaps, storedCaps), true);
+  });
+
+  it("is case-insensitive against live ALL CAPS and title-case riders", () => {
+    assert.equal(namesMatch("mohamed alamen abdalwhab alagep osman", storedCaps), true);
+    assert.equal(namesMatch("AHMED ELJACK", storedTitle), true);
+  });
+
+  it("collapses extra whitespace after trim", () => {
+    assert.equal(namesMatch("  Ahmed   Eljack  ", storedTitle), true);
+    assert.equal(
+      namesMatch("  MOHAMED  ALAMEN ABDALWHAB   ALAGEP OSMAN ", storedCaps),
+      true,
+    );
+    assert.equal(namesMatch("ahmed  ali  h", storedSuffix), true);
+  });
+
+  it("rejects genuinely different names", () => {
+    assert.equal(namesMatch("test", storedTitle), false);
+    assert.equal(namesMatch("Ahmed Ibrahim", storedTitle), false);
+    assert.equal(namesMatch("Ahmed Ali", storedSuffix), false);
+    assert.equal(namesMatch("ZABIULLA DADAPEER SHIKALGAR", storedParen), false);
+  });
+
+  it("does not reject when the uploaded name is empty", () => {
+    assert.equal(namesMatch("", storedTitle), true);
+    assert.equal(namesMatch("   ", storedCaps), true);
+    assert.equal(namesMatch(null, storedTitle), true);
+    assert.equal(namesMatch(undefined, storedTitle), true);
   });
 });
