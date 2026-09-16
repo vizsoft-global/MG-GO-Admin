@@ -30,3 +30,27 @@ describe("relocateFleetItems", () => {
     assert.equal(fleet?.children?.find((child) => child.id === "assets")?.hidden, false);
   });
 });
+
+describe("relocatePayrollItem", () => {
+  it("pins Payroll after Performance in Operations even when a saved menu omitted it", () => {
+    const { tree } = mergeMenu([
+      {
+        id: "group-operations",
+        type: "group",
+        label: "Operations",
+        icon: "Folder",
+        children: [
+          { id: "attendance", type: "item", label: "Attendance", icon: "ClipboardCheck" },
+          { id: "performance", type: "item", label: "Performance", icon: "Gauge" },
+        ],
+      },
+    ]);
+    const ops = tree.find((node) => node.id === "group-operations");
+    const ids = (ops?.children ?? []).map((child) => child.id);
+    const payrollIdx = ids.indexOf("payroll");
+    const perfIdx = ids.indexOf("performance");
+    assert.ok(payrollIdx >= 0);
+    assert.equal(payrollIdx, perfIdx + 1);
+    assert.equal(ops?.children?.find((child) => child.id === "payroll")?.hidden, false);
+  });
+});

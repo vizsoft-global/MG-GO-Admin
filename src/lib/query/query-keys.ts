@@ -213,6 +213,11 @@ export const queryKeys = {
     opsBounds: () => ["performance", "ops-bounds"] as const,
     targetDpd: () => ["performance", "target-dpd"] as const,
   },
+  payroll: {
+    all: () => ["payroll"] as const,
+    snapshot: (filters: Record<string, unknown> = {}) =>
+      ["payroll", "snapshot", filters] as const,
+  },
   wrongActions: {
     all: () => ["wrong-actions"] as const,
     list: (filters: Record<string, unknown> = {}) => ["wrong-actions", "list", filters] as const,

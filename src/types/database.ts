@@ -7782,6 +7782,19 @@ export type Database = {
         Args: { p_seen_within_minutes?: number }
         Returns: Json
       }
+      admin_payroll_month_snapshot: {
+        Args: {
+          p_month: string
+          p_nationalities?: string[]
+          p_project_keys?: string[]
+          p_restaurant_ids?: string[]
+          p_source_companies?: string[]
+          p_source_types?: string[]
+          p_vehicle_keys?: string[]
+          p_zone_ids?: string[]
+        }
+        Returns: Json
+      }
       admin_performance_ops_bounds: { Args: never; Returns: Json }
       admin_performance_ops_snapshot: {
         Args: {
