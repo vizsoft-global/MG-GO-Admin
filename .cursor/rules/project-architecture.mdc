@@ -234,6 +234,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-09-17` — **DPD Efficiency chart tooltip rounds to one decimal.** View-by `dpd_eff` / `tgt_eff` hover no longer prints raw `241.7147483506631`; same `formatPct` as the KPI (`241.7%`). No migration.
+
 - `[admin+app] 2026-09-17` — **QA batch: request amount/distance messages, detail wrap, accommodation write, request-type context.** App Amount/Distance filter empty vs invalid (`filterDistanceKm` 7 integer digits); request details start-align + unwrap; sick-leave Other `*`. Admin Performance Store→Restaurant; Overview empty delta is blank; type list breadcrumb + New Request `initialType` for all 9 types; Driver Add/Edit writes `accommodation` (approve RPC already copies intake); RequestFieldRow `break-normal` + asset modal overflow; handover `t.has` + `handover_at` date. No migration.
 
 - `[admin+app] 2026-09-17` — **QA batch: vehicle validation, request attachments, sick-leave Approve, fuel log, loan terms.** Add/Edit Vehicle shares `validateVehicleForm` (no DB CHECK, no backfill). Riders Analysis header uses `TABLE_HEAD_CLASS`. Admin attach uploads `{driver_id}/{request_id}/…`; storage SELECT adds owned-request folder[2] without dropping own-folder write or staff ALL. Sick leave step 3 template gains `approve` (`admin_get_request` joins templates — live steps have no `allowed_actions` column). `decideAdminRequest` auto-completes in-progress step 4 when attachments exist. Fuel log uses `FleetRecordDialog` + `fuel-fills` signed open. Loan terms hydrate-once + `decidedTerms` skips empty later steps; dates use Kuwait calendar labels. App: attachments list + PopScope back + Log Fuel formatters. Migrations `20261026400000`, `20261026500000` (local until Approve, deploy).

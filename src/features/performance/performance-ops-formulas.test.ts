@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatDelta } from "./performance-ops-format";
+import { formatDelta, formatOpsMetricValue } from "./performance-ops-format";
 import {
   assertCustomOpsRange,
   assertOpsRange,
@@ -182,6 +182,15 @@ describe("kpiDelta + windows", () => {
     assert.equal(kpiDeltaPct(null, 10), null);
     assert.deepEqual(formatDelta(120, null), { text: "", tone: "flat" });
     assert.deepEqual(formatDelta(120, 100), { text: "+20.0%", tone: "up" });
+  });
+
+  it("chart tooltip rounds DPD Efficiency to one decimal percent", () => {
+    assert.equal(formatOpsMetricValue("dpd_eff", 241.7147483506631), "241.7%");
+    assert.equal(formatOpsMetricValue("tgt_eff", 99.94), "99.9%");
+    assert.equal(formatOpsMetricValue("dpd", 12.345), "12.3");
+    assert.equal(formatOpsMetricValue("orders", 1500), "1,500");
+    assert.equal(formatOpsMetricValue("riders", 8), "8");
+    assert.equal(formatOpsMetricValue("dpd_eff", null), "—");
   });
 
   it("previous window is the N days immediately before from", () => {
