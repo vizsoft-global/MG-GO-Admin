@@ -47,7 +47,7 @@ export function formatDelta(current: number | null, previous: number | null): {
   tone: "up" | "down" | "flat";
 } {
   const delta = kpiDeltaPct(current, previous);
-  if (delta == null) return { text: "—", tone: "flat" };
+  if (delta == null) return { text: "", tone: "flat" };
   const sign = delta > 0 ? "+" : "";
   return {
     text: `${sign}${delta.toFixed(1)}%`,

@@ -202,6 +202,7 @@ export type DriverDetailModel = {
   client_id: string | null;
   client_name: string | null;
   source_company: string | null;
+  accommodation: string | null;
   project_key: DriverProjectKey | null;
   avatar_url: string | null;
   partner_name: string;

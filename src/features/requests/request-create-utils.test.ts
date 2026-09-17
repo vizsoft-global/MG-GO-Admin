@@ -9,12 +9,36 @@ import {
   isOtherLeaveSubtype,
   parseCreateRequestError,
   parseDriverAckNote,
+  REQUEST_CREATE_TYPE_SEEDS,
+  seedCreateRequestType,
   shouldOfferRequestDocumentsAction,
   shouldShowCreateField,
   staticOptionsForField,
   typedRequiredPayloadKeys,
   typeUsesDateRange,
 } from "./request-create-utils";
+
+describe("seedCreateRequestType", () => {
+  it("seeds every list type and falls back from all", () => {
+    assert.deepEqual([...REQUEST_CREATE_TYPE_SEEDS], [
+      "leave",
+      "sick_leave",
+      "loan",
+      "asset",
+      "fuel",
+      "fuel_refund",
+      "document",
+      "complaint",
+      "salary_justification",
+    ]);
+    for (const key of REQUEST_CREATE_TYPE_SEEDS) {
+      assert.equal(seedCreateRequestType(key), key);
+    }
+    assert.equal(seedCreateRequestType("all"), "leave");
+    assert.equal(seedCreateRequestType(undefined), "leave");
+    assert.equal(seedCreateRequestType("unknown"), "leave");
+  });
+});
 
 describe("typeUsesDateRange", () => {
   it("shows a date picker for leave even when the field key is date_range", () => {

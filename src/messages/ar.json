@@ -1911,7 +1911,8 @@
         "vehicle": "تعيين مركبة",
         "vehicleType": "نوع المركبة",
         "clientId": "معرّف العميل (اختياري)",
-        "clientName": "اسم العميل (اختياري)"
+        "clientName": "اسم العميل (اختياري)",
+        "accommodation": "السكن (اختياري)"
       },
       "placeholders": {
         "fullName": "أدخل الاسم الكامل",
@@ -1926,7 +1927,8 @@
         "zone": "اختر المنطقة",
         "vehicle": "اختر المركبة",
         "clientId": "مثال: CLI-204",
-        "clientName": "مثال: مجموعة الخليج للتجزئة"
+        "clientName": "مثال: مجموعة الخليج للتجزئة",
+        "accommodation": "المبنى / المنطقة"
       },
       "assets": {
         "gps": "جهاز GPS",
@@ -6645,7 +6647,7 @@
           "nationality": "الجنسية",
           "sourceType": "نوع المصدر",
           "company": "الشركة",
-          "store": "المتجر",
+          "store": "المطعم",
           "all": "الكل",
           "allPartners": "كل الشركاء",
           "allZones": "كل المناطق",
@@ -6717,7 +6719,7 @@
           "name": "الاسم",
           "id": "المعرّف",
           "partner": "الشريك",
-          "store": "المتجر",
+          "store": "المطعم",
           "zone": "المنطقة",
           "vehicle": "المركبة",
           "orders": "الطلبات",
@@ -6732,14 +6734,14 @@
           "sourceType": "نوع المصدر",
           "companySource": "مصدر الشركة",
           "targetDpd": "هدف DPD",
-          "storeDpd": "DPD المتجر",
+          "storeDpd": "DPD المطعم",
           "vehZoneDpd": "DPD المنطقة-المركبة",
           "activeRiders": "سائقون نشطون"
         },
         "filterCol": {
           "status": "الحالة",
           "partner_label": "الشريك",
-          "store_label": "المتجر",
+          "store_label": "المطعم",
           "zone": "المنطقة",
           "vehicle_label": "المركبة",
           "nationality_label": "الجنسية",
