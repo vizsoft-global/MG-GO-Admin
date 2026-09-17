@@ -30,6 +30,18 @@ import { ProjectKeyField } from "@/features/fleet/project-key-field";
 import { saveVehicle } from "./vehicles-actions";
 import { useVehiclePartners } from "./use-vehicles";
 import type { VehicleListRow, VehicleTypeRow } from "./types";
+import {
+  filterChassis,
+  filterChip,
+  filterFuelLimit,
+  filterLocation,
+  filterMakeModel,
+  filterPlate,
+  filterVehicleId,
+  filterYear,
+  validateVehicleForm,
+  type VehicleFieldError,
+} from "./vehicle-form-validation";
 
 export function VehicleFormDialog({
   open,
@@ -69,6 +81,7 @@ export function VehicleFormDialog({
   const [replacesVehicleId, setReplacesVehicleId] = useState<string | null>(null);
   const [replacementStartedAt, setReplacementStartedAt] = useState("");
   const [projectKey, setProjectKey] = useState<DriverProjectKey | "">("");
+  const [fieldError, setFieldError] = useState<VehicleFieldError | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -96,6 +109,7 @@ export function VehicleFormDialog({
     setReplacesVehicleId(vehicle?.replaces_vehicle_id ?? null);
     setReplacementStartedAt(toKuwaitYmd(vehicle?.replacement_started_at));
     setProjectKey(isDriverProjectKey(vehicle?.assigned_project_key) ? vehicle.assigned_project_key : "");
+    setFieldError(null);
   }, [open, vehicle]);
 
   const replacementItems = useMemo(
@@ -132,6 +146,23 @@ export function VehicleFormDialog({
           className="space-y-3 pt-4"
           onSubmit={(event) => {
             event.preventDefault();
+            const error = validateVehicleForm({
+              bikeId,
+              regNumber,
+              chassisNo,
+              make,
+              model,
+              locationText,
+              modelYear,
+              chipNo,
+              fuelMonthlyLimitKwd: fuelLimit,
+            });
+            if (error) {
+              setFieldError(error);
+              toast.error(t(`errors.${error}` as "errors.missing_fields"));
+              return;
+            }
+            setFieldError(null);
             const formData = new FormData();
             if (vehicle?.id) formData.set("id", vehicle.id);
             formData.set("bikeId", bikeId);
@@ -174,15 +205,40 @@ export function VehicleFormDialog({
           <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             <FieldBlock>
               <FieldLabel required>{t("fieldVehicleId")}</FieldLabel>
-              <Input value={bikeId} onChange={(event) => setBikeId(event.target.value)} className="h-9" required />
+              <Input
+                value={bikeId}
+                onChange={(event) => setBikeId(filterVehicleId(event.target.value))}
+                className="h-9"
+                required
+                maxLength={32}
+              />
+              {fieldError === "invalid_vehicle_id" || fieldError === "missing_fields" ? (
+                <p className="text-[10px] text-destructive">{t(`errors.${fieldError}`)}</p>
+              ) : null}
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("colPlate")}</FieldLabel>
-              <Input value={regNumber} onChange={(event) => setRegNumber(event.target.value)} className="h-9" />
+              <Input
+                value={regNumber}
+                onChange={(event) => setRegNumber(filterPlate(event.target.value))}
+                className="h-9"
+                inputMode="numeric"
+              />
+              {fieldError === "invalid_plate" ? (
+                <p className="text-[10px] text-destructive">{t("errors.invalid_plate")}</p>
+              ) : null}
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("colChassis")}</FieldLabel>
-              <Input value={chassisNo} onChange={(event) => setChassisNo(event.target.value)} className="h-9 font-mono" />
+              <Input
+                value={chassisNo}
+                onChange={(event) => setChassisNo(filterChassis(event.target.value))}
+                className="h-9 font-mono"
+                maxLength={17}
+              />
+              {fieldError === "invalid_chassis" ? (
+                <p className="text-[10px] text-destructive">{t("errors.invalid_chassis")}</p>
+              ) : null}
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("colKind")}</FieldLabel>
@@ -209,24 +265,52 @@ export function VehicleFormDialog({
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("fieldMake")}</FieldLabel>
-              <Input value={make} onChange={(event) => setMake(event.target.value)} className="h-9" />
+              <Input
+                value={make}
+                onChange={(event) => setMake(filterMakeModel(event.target.value))}
+                className="h-9"
+                maxLength={40}
+              />
+              {fieldError === "invalid_make" ? (
+                <p className="text-[10px] text-destructive">{t("errors.invalid_make")}</p>
+              ) : null}
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("fieldModel")}</FieldLabel>
-              <Input value={model} onChange={(event) => setModel(event.target.value)} className="h-9" />
+              <Input
+                value={model}
+                onChange={(event) => setModel(filterMakeModel(event.target.value))}
+                className="h-9"
+                maxLength={40}
+              />
+              {fieldError === "invalid_model" ? (
+                <p className="text-[10px] text-destructive">{t("errors.invalid_model")}</p>
+              ) : null}
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("colYear")}</FieldLabel>
               <Input
                 value={modelYear}
-                onChange={(event) => setModelYear(event.target.value)}
+                onChange={(event) => setModelYear(filterYear(event.target.value))}
                 className="h-9"
                 inputMode="numeric"
+                maxLength={4}
               />
+              {fieldError === "invalid_year" ? (
+                <p className="text-[10px] text-destructive">{t("errors.invalid_year")}</p>
+              ) : null}
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("colLocation")}</FieldLabel>
-              <Input value={locationText} onChange={(event) => setLocationText(event.target.value)} className="h-9" />
+              <Input
+                value={locationText}
+                onChange={(event) => setLocationText(filterLocation(event.target.value))}
+                className="h-9"
+                maxLength={80}
+              />
+              {fieldError === "invalid_location" ? (
+                <p className="text-[10px] text-destructive">{t("errors.invalid_location")}</p>
+              ) : null}
             </FieldBlock>
             <div className="sm:col-span-2">
               <ProjectKeyField
@@ -376,16 +460,27 @@ export function VehicleFormDialog({
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("colChip")}</FieldLabel>
-              <Input value={chipNo} onChange={(event) => setChipNo(event.target.value)} className="h-9 font-mono" />
+              <Input
+                value={chipNo}
+                onChange={(event) => setChipNo(filterChip(event.target.value))}
+                className="h-9 font-mono"
+                maxLength={32}
+              />
+              {fieldError === "invalid_chip" ? (
+                <p className="text-[10px] text-destructive">{t("errors.invalid_chip")}</p>
+              ) : null}
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("fieldFuelLimit")}</FieldLabel>
               <Input
                 value={fuelLimit}
-                onChange={(event) => setFuelLimit(event.target.value)}
+                onChange={(event) => setFuelLimit(filterFuelLimit(event.target.value))}
                 className="h-9"
                 inputMode="decimal"
               />
+              {fieldError === "invalid_fuel_limit" ? (
+                <p className="text-[10px] text-destructive">{t("errors.invalid_fuel_limit")}</p>
+              ) : null}
             </FieldBlock>
           </div>
 

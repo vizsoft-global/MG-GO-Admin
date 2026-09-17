@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -78,9 +78,15 @@ export function RequestDecisionTermsDialog({
 }) {
   const t = useTranslations("pages.requests.detail.terms");
   const [draft, setDraft] = useState<Draft>(() => toDraft(initialTerms));
+  const hydratedOpen = useRef(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      hydratedOpen.current = false;
+      return;
+    }
+    if (hydratedOpen.current) return;
+    hydratedOpen.current = true;
     const next = toDraft(initialTerms);
     if (requestType === "loan" && !next.deduction_start_date) {
       next.deduction_start_date = kuwaitTodayYmd();

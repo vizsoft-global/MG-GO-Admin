@@ -27,6 +27,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/auth-context";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { attachmentDisplayName } from "./attachment-display-name";
+import { decidedTerms, overlayDecisionTerms } from "./decided-terms";
 import { fetchRequestAttachmentUrl, logAdminRequestDetailOpened } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
 import { fileToDecisionAttachmentPayload, RequestAttachDialog } from "./request-attach-dialog";
@@ -101,21 +103,6 @@ function isFinalApprovalStep(steps: RequestApprovalStep[]): boolean {
   return !steps.some((s) => s.step_order > active.step_order && s.status === "pending");
 }
 
-function decidedTerms(steps: RequestApprovalStep[]): RequestDecisionTerms | null {
-  const completed = steps
-    .filter((s) => s.status === "completed")
-    .sort((a, b) => b.step_order - a.step_order)[0];
-  const meta = completed?.meta;
-  if (!meta) return null;
-  const number = (value: unknown) => (value != null ? Number(value) : null);
-  return {
-    approved_amount: number(meta.approved_amount),
-    approved_tenure_months: number(meta.approved_tenure_months),
-    deduction_start_date: meta.deduction_start_date != null ? String(meta.deduction_start_date) : null,
-    penalty_amount: number(meta.penalty_amount),
-    required_document: meta.required_document != null ? String(meta.required_document) : null,
-  };
-}
 
 function termRowsFor(
   requestType: string,
@@ -156,10 +143,15 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const [attachAction, setAttachAction] = useState<"attach_send" | "attach_breakdown" | null>(
     null,
   );
+  const [heldTerms, setHeldTerms] = useState<RequestDecisionTerms | null>(null);
 
   useEffect(() => {
     if (!requestId) return;
     void logAdminRequestDetailOpened(requestId);
+  }, [requestId]);
+
+  useEffect(() => {
+    setHeldTerms(null);
   }, [requestId]);
 
   const request = data?.request;
@@ -188,7 +180,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const takesTerms =
     request != null &&
     (DECISION_TERM_TYPES as readonly string[]).includes(request.request_type);
-  const currentTerms = decidedTerms(steps);
+  const currentTerms = overlayDecisionTerms(decidedTerms(steps), heldTerms);
   const acknowledged = request != null && isDriverAcknowledged(request.status, request.payload);
   const termsOnApprove = takesTerms && isFinalApprovalStep(steps);
   const fuelApproveBlocked =
@@ -237,6 +229,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
       toast.error(t("detail.attach.required"));
       return;
     }
+    if (options?.terms) setHeldTerms(options.terms);
     const result = await decide.mutateAsync({
       action,
       reason: note || undefined,
@@ -257,6 +250,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   };
 
   const submitTermsEdit = async (terms: RequestDecisionTerms) => {
+    setHeldTerms(terms);
     const result = await saveTerms.mutateAsync(terms);
     if (!result.ok) {
       toast.error(result.error ?? t("detail.actionFailed"));
@@ -381,16 +375,18 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             ) : (
               <ul className="space-y-1">
                 {attachments.map((a) => (
-                  <li key={a.id}>
+                  <li key={a.id} className="min-w-0">
                     <button
                       type="button"
                       onClick={() => void openAttachment(a.storage_key)}
-                      className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                      className="flex w-full min-w-0 items-center gap-1.5 text-start text-sm text-primary hover:bg-primary/10"
                     >
-                      <Download className="h-3.5 w-3.5" />
-                      {a.file_name ?? a.storage_key.split("/").pop()}
+                      <Download className="h-3.5 w-3.5 shrink-0" />
+                      <span className="min-w-0 truncate">
+                        {attachmentDisplayName(a.file_name, a.storage_key)}
+                      </span>
                       {a.byte_size != null ? (
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
                           {formatFileSize(a.byte_size)}
                         </span>
                       ) : null}

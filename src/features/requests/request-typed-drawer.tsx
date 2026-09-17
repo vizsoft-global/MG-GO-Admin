@@ -7,6 +7,7 @@ import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { attachmentDisplayName } from "./attachment-display-name";
 import { fetchRequestAttachmentUrl } from "./requests-actions";
 import { RequestApprovalTimeline } from "./request-approval-timeline";
 import { RequestFieldRow } from "./request-field-row";
@@ -129,7 +130,7 @@ export function RequestTypedDrawer({
                       <Download className="h-3.5 w-3.5 shrink-0 text-primary" />
                       <div className="min-w-0">
                         <p className="truncate text-[11px] font-medium">
-                          {a.file_name ?? a.storage_key.split("/").pop()}
+                          {attachmentDisplayName(a.file_name, a.storage_key)}
                         </p>
                         {a.byte_size != null ? (
                           <p className="text-[10px] text-muted-foreground">

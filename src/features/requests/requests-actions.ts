@@ -7,6 +7,7 @@ import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { getPresignedGetUrl } from "@/lib/storage/r2-client";
 import { isR2ObjectKey } from "@/lib/storage/r2-keys";
+import { attachmentDisplayName } from "./attachment-display-name";
 import { datePresetToBounds } from "./date-presets";
 import { isNeededByInPast } from "./request-create-utils";
 import {
@@ -442,18 +443,27 @@ const ATTACH_MIME = new Set([
 const ATTACH_MAX_BYTES = 10 * 1024 * 1024;
 
 function safeAttachmentName(name: string): string {
-  const trimmed = name.trim().replace(/[/\\]/g, "_");
-  return trimmed.slice(0, 180) || "attachment";
+  return attachmentDisplayName(name).slice(0, 180) || "attachment";
 }
 
 export async function uploadStaffRequestAttachments(input: {
   requestId: string;
   files: Array<{ name: string; type: string; base64: string }>;
 }): Promise<{ ok: boolean; attachments?: RequestDecisionAttachment[]; error?: string }> {
-  const session = await requireRequestsDecide();
+  await requireRequestsDecide();
   if (input.files.length === 0) return { ok: false, error: "attachment_required" };
 
   const supabase = await createClient();
+  const { data: request, error: requestError } = await supabase
+    .from("requests")
+    .select("driver_id")
+    .eq("id", input.requestId)
+    .maybeSingle();
+  const driverId = request?.driver_id != null ? String(request.driver_id) : "";
+  if (requestError || !driverId) {
+    return { ok: false, error: requestError?.message ?? "not_found" };
+  }
+
   const attachments: RequestDecisionAttachment[] = [];
 
   for (const file of input.files) {
@@ -463,7 +473,7 @@ export async function uploadStaffRequestAttachments(input: {
     if (bytes.length === 0 || bytes.length > ATTACH_MAX_BYTES) {
       return { ok: false, error: "invalid_attachment_size" };
     }
-    const key = `${session.id}/${input.requestId}/${Date.now()}_${safeAttachmentName(file.name)}`;
+    const key = `${driverId}/${input.requestId}/${Date.now()}_${safeAttachmentName(file.name)}`;
     const { error } = await supabase.storage.from("request-attachments").upload(key, bytes, {
       contentType: type,
       upsert: false,
@@ -581,14 +591,66 @@ export async function decideAdminRequest(input: {
     return { ok: false, error: String(payload.error ?? "failed") };
   }
 
+  const followUp = await maybeAutoCompleteSickLeaveDocumentsStep(
+    supabase,
+    input.requestId,
+    input.action,
+    staffDisplayName(session),
+  );
+  const status = followUp?.status ?? payload.status;
+
   await logAdminMutation({
     action: "update",
     entityType: "requests",
     entityId: input.requestId,
     routeName: "requests.decide",
-    context: { decideAction: input.action, status: payload.status },
+    context: { decideAction: input.action, status },
   });
 
+  if (followUp && !followUp.ok) {
+    return { ok: false, error: followUp.error, status: status != null ? String(status) : undefined };
+  }
+
+  return { ok: true, status: status != null ? String(status) : undefined };
+}
+
+async function maybeAutoCompleteSickLeaveDocumentsStep(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  requestId: string,
+  action: string,
+  staffName: string | null,
+): Promise<{ ok: boolean; error?: string; status?: string } | null> {
+  if (action !== "approve") return null;
+
+  const { data: request } = await supabase
+    .from("requests")
+    .select("request_type")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (request?.request_type !== "sick_leave") return null;
+
+  const { count } = await supabase
+    .from("request_attachments")
+    .select("id", { count: "exact", head: true })
+    .eq("request_id", requestId);
+  if (!count) return null;
+
+  const { data: steps } = await supabase
+    .from("request_approval_steps")
+    .select("step_order, status")
+    .eq("request_id", requestId);
+  const active = (steps ?? []).find((row) => row.status === "in_progress");
+  if (Number(active?.step_order) !== 4) return null;
+
+  const { data, error } = await supabase.rpc("admin_decide_request", {
+    p_request_id: requestId,
+    p_action: "approve",
+    p_reason: undefined,
+    p_meta: buildDecisionMeta(undefined, staffName),
+  });
+  if (error) return { ok: false, error: error.message };
+  const payload = asRecord(data);
+  if (payload.ok === false) return { ok: false, error: String(payload.error ?? "failed") };
   return { ok: true, status: payload.status != null ? String(payload.status) : undefined };
 }
 
@@ -633,6 +695,12 @@ export async function decideAdminRequestsBulk(input: {
       failed.push({ requestId, error: String(payload.error ?? "failed") });
     } else {
       succeeded.push(requestId);
+      await maybeAutoCompleteSickLeaveDocumentsStep(
+        supabase,
+        requestId,
+        input.action,
+        staffDisplayName(session),
+      );
     }
   }
 

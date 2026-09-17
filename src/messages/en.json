@@ -3076,6 +3076,15 @@
         "missing_fields": "Vehicle ID is required.",
         "duplicate_bike_id": "That Vehicle ID is already in use.",
         "invalid_replacement": "A vehicle cannot replace itself.",
+        "invalid_vehicle_id": "Vehicle ID may only use letters, numbers, hyphen, or underscore.",
+        "invalid_plate": "Plate must be digits/slash, e.g. 5/6767.",
+        "invalid_chassis": "Chassis must be 6–17 letters or numbers.",
+        "invalid_make": "Make may only use letters, numbers, spaces, or hyphen.",
+        "invalid_model": "Model may only use letters, numbers, spaces, or hyphen.",
+        "invalid_location": "Location may only use letters, numbers, spaces, comma, or hyphen.",
+        "invalid_year": "Year must be 1990–2100.",
+        "invalid_chip": "Chip No. may only use letters, numbers, or hyphen.",
+        "invalid_fuel_limit": "Monthly fuel limit must be a number greater than 0.",
         "save_failed": "Could not save the vehicle.",
         "not_authorized": "You do not have permission to manage vehicles."
       }

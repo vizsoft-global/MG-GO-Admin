@@ -1,3 +1,4 @@
+import { formatKuwaitDateLabel } from "@/lib/date/kuwait-dates";
 import type { RequestDetail } from "./types";
 
 export type TypedField = {
@@ -104,7 +105,7 @@ export function formatFieldValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "object") return JSON.stringify(value);
   const str = String(value);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return DATE_FORMAT.format(new Date(`${str}T00:00:00`));
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return formatKuwaitDateLabel(str);
   if (/^\d{4}-\d{2}$/.test(str)) {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const month = months[Number(str.slice(5, 7)) - 1];
