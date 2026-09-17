@@ -76,7 +76,7 @@ export function OpsOutsourceTab({
         empty={trend.length === 0}
         emptyTitle={t("emptyChart")}
       >
-        <OpsLineChart data={trend} xKey="bucket" series={series} />
+        <OpsLineChart data={trend} xKey="bucket" series={series} metric={metric} />
       </OpsChartCard>
       <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
         <OpsChartCard
@@ -100,6 +100,7 @@ export function OpsOutsourceTab({
             }))}
             xKey="key"
             series={series}
+            metric={metric}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -121,6 +122,7 @@ export function OpsOutsourceTab({
             xKey="key"
             series={series}
             layout="horizontal"
+            metric={metric}
           />
         </OpsChartCard>
       </div>

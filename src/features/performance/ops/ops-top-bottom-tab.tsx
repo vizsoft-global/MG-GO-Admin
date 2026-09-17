@@ -114,6 +114,7 @@ export function OpsTopBottomTab({
                 xKey="key"
                 series={[{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }]}
                 layout="horizontal"
+                metric={metric}
               />
             </OpsChartCard>
             <OpsChartCard
@@ -133,6 +134,7 @@ export function OpsTopBottomTab({
                 xKey="key"
                 series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
                 layout="horizontal"
+                metric={metric}
               />
             </OpsChartCard>
           </div>
@@ -162,6 +164,7 @@ export function OpsTopBottomTab({
                 xKey="key"
                 series={[{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }]}
                 layout="horizontal"
+                metric={metric}
               />
             </OpsChartCard>
             <OpsChartCard
@@ -181,6 +184,7 @@ export function OpsTopBottomTab({
                 xKey="key"
                 series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
                 layout="horizontal"
+                metric={metric}
               />
             </OpsChartCard>
           </div>
@@ -210,6 +214,7 @@ export function OpsTopBottomTab({
                 xKey="key"
                 series={[{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }]}
                 layout="horizontal"
+                metric={metric}
               />
             </OpsChartCard>
             <OpsChartCard
@@ -229,6 +234,7 @@ export function OpsTopBottomTab({
                 xKey="key"
                 series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
                 layout="horizontal"
+                metric={metric}
               />
             </OpsChartCard>
           </div>

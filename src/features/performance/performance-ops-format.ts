@@ -6,6 +6,7 @@ import {
   SOURCE_COMPANY_LABEL,
   sourceLabel,
   storeDisplayName,
+  type OpsChartMetric,
   type SourceCompanyKey,
 } from "./performance-ops-formulas";
 import type { OpsRiderRow, OpsRiderView } from "./performance-ops-types";
@@ -40,6 +41,23 @@ export function formatDpd(value: number | null | undefined): string {
 export function formatPct(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
   return `${value.toFixed(1)}%`;
+}
+
+export type OpsTooltipMetric = OpsChartMetric | "riders";
+
+export function formatOpsMetricValue(
+  metric: OpsTooltipMetric,
+  value: number | string | null | undefined,
+): string {
+  if (typeof value === "string" && value !== "" && !Number.isFinite(Number(value))) {
+    return value;
+  }
+  const n =
+    typeof value === "number" ? value : value == null || value === "" ? NaN : Number(value);
+  const finite = Number.isFinite(n) ? n : null;
+  if (metric === "orders" || metric === "riders") return formatInt(finite);
+  if (metric === "dpd") return formatDpd(finite);
+  return formatPct(finite);
 }
 
 export function formatDelta(current: number | null, previous: number | null): {

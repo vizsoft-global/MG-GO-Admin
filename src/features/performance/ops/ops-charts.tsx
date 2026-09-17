@@ -14,7 +14,25 @@ import {
   YAxis,
 } from "recharts";
 import { AppEmptyState } from "@/components/app";
+import {
+  formatInt,
+  formatOpsMetricValue,
+  type OpsTooltipMetric,
+} from "../performance-ops-format";
 import { cn } from "@/lib/utils";
+
+function formatOpsTooltipNumber(
+  value: number | string | null | undefined,
+  metric?: OpsTooltipMetric,
+): string {
+  if (metric) return formatOpsMetricValue(metric, value);
+  if (value == null || value === "") return "—";
+  if (typeof value === "string" && !Number.isFinite(Number(value))) return value;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "—";
+  if (Number.isInteger(n)) return formatInt(n);
+  return n.toFixed(1);
+}
 
 const TIP_KEYS = ["id", "nationality", "store", "vehicle", "zone", "source"] as const;
 
@@ -69,11 +87,13 @@ export function OpsTooltip({
   payload,
   label,
   extra,
+  metric,
 }: {
   active?: boolean;
   payload?: Array<{ name?: string; value?: number | string; color?: string }>;
   label?: string;
   extra?: ReactNode;
+  metric?: OpsTooltipMetric;
 }) {
   if (!active || !payload?.length) return null;
   return (
@@ -81,7 +101,7 @@ export function OpsTooltip({
       <p className="mb-1 font-semibold">{label}</p>
       {payload.map((p) => (
         <p key={String(p.name)} style={{ color: p.color }}>
-          {p.name}: {p.value ?? "—"}
+          {p.name}: {formatOpsTooltipNumber(p.value, metric)}
         </p>
       ))}
       {extra}
@@ -93,10 +113,12 @@ export function OpsLineChart({
   data,
   xKey,
   series,
+  metric,
 }: {
   data: Array<Record<string, string | number | null>>;
   xKey: string;
   series: Array<{ key: string; color: string; name: string }>;
+  metric?: OpsTooltipMetric;
 }) {
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -104,7 +126,7 @@ export function OpsLineChart({
         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
         <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
         <YAxis tick={{ fontSize: 10 }} width={36} />
-        <Tooltip content={<OpsTooltip />} />
+        <Tooltip content={<OpsTooltip metric={metric} />} />
         {series.map((s) => (
           <Line
             key={s.key}
@@ -127,11 +149,13 @@ export function OpsBarChart({
   xKey,
   series,
   layout = "vertical",
+  metric,
 }: {
   data: Array<Record<string, string | number | null>>;
   xKey: string;
   series: Array<{ key: string; color: string; name: string }>;
   layout?: "vertical" | "horizontal";
+  metric?: OpsTooltipMetric;
 }) {
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -180,6 +204,7 @@ export function OpsBarChart({
                 })}
                 label={typeof props.label === "string" || typeof props.label === "number" ? String(props.label) : undefined}
                 extra={extra}
+                metric={metric}
               />
             );
           }}

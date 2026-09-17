@@ -107,7 +107,7 @@ export function OpsOverviewTab({
           empty={trend.length === 0}
           emptyTitle={t("emptyChart")}
         >
-          <OpsLineChart data={trend} xKey="bucket" series={series} />
+          <OpsLineChart data={trend} xKey="bucket" series={series} metric={metric} />
         </OpsChartCard>
         <OpsChartCard
           title={t("chart.vehicle")}
@@ -127,6 +127,7 @@ export function OpsOverviewTab({
             data={dimRows(data.by_vehicle, (r) => vehicleLabel(r.key), metric)}
             xKey="key"
             series={series}
+            metric={metric}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -148,6 +149,7 @@ export function OpsOverviewTab({
             xKey="key"
             series={series}
             layout="horizontal"
+            metric={metric}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -175,6 +177,7 @@ export function OpsOverviewTab({
             )}
             xKey="key"
             series={series}
+            metric={metric}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -196,6 +199,7 @@ export function OpsOverviewTab({
             xKey="key"
             series={series}
             layout="horizontal"
+            metric={metric}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -216,6 +220,7 @@ export function OpsOverviewTab({
             data={dimRows(data.by_company, (r) => companyLabel(r.key), metric)}
             xKey="key"
             series={series}
+            metric={metric}
           />
         </OpsChartCard>
       </div>

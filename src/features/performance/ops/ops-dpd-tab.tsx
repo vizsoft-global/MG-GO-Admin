@@ -111,7 +111,7 @@ export function OpsDpdTab({
         empty={trend.length === 0}
         emptyTitle={t("emptyChart")}
       >
-        <OpsLineChart data={trend} xKey="bucket" series={series} />
+        <OpsLineChart data={trend} xKey="bucket" series={series} metric={metric} />
       </OpsChartCard>
       <OpsChartCard
         title={t("chart.distribution")}
@@ -141,6 +141,7 @@ export function OpsDpdTab({
           data={dist}
           xKey="key"
           series={[{ key: "riders", name: t("kpi.riders"), color: "#059669" }]}
+          metric="riders"
         />
       </OpsChartCard>
       <div className="grid gap-2 sm:grid-cols-5">
@@ -183,6 +184,7 @@ export function OpsDpdTab({
             xKey="key"
             series={series}
             layout="horizontal"
+            metric={metric}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -208,6 +210,7 @@ export function OpsDpdTab({
             xKey="key"
             series={series}
             layout="horizontal"
+            metric={metric}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -231,6 +234,7 @@ export function OpsDpdTab({
             }))}
             xKey="key"
             series={series}
+            metric={metric}
           />
         </OpsChartCard>
       </div>
