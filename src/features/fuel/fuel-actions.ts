@@ -15,6 +15,24 @@ async function requireFuelView() {
   return { session };
 }
 
+export async function fetchFuelFillAttachmentUrl(
+  storageKey: string,
+): Promise<{ url: string | null; error?: string }> {
+  const auth = await requireFuelView();
+  if ("error" in auth) throw new Error(auth.error);
+
+  const normalized = storageKey.trim().replace(/^\/+/, "");
+  if (!normalized) return { url: null };
+  const objectKey = normalized.startsWith("fuel-fills/")
+    ? normalized.slice("fuel-fills/".length)
+    : normalized;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage.from("fuel-fills").createSignedUrl(objectKey, 300);
+  if (error) return { url: null, error: error.message };
+  return { url: data?.signedUrl ?? null };
+}
+
 export async function listFuelFills(input: {
   from: string;
   to: string;

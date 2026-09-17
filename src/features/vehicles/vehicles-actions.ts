@@ -16,6 +16,7 @@ import {
   kuwaitYmdToIso,
 } from "@/features/fleet/fleet-labels";
 import { assignedDriverProjectWrite } from "./vehicles-list-utils";
+import { validateVehicleForm } from "./vehicle-form-validation";
 import type {
   VehicleCarType,
   VehicleCondition,
@@ -253,6 +254,18 @@ export async function saveVehicle(
   const replacementStartedRaw = emptyText(formData.get("replacementStartedAt"));
 
   if (!bikeId) return { error: "missing_fields" };
+  const formError = validateVehicleForm({
+    bikeId,
+    regNumber: emptyText(formData.get("regNumber")),
+    chassisNo: emptyText(formData.get("chassisNo")),
+    make: emptyText(formData.get("make")),
+    model: emptyText(formData.get("model")),
+    locationText: emptyText(formData.get("locationText")),
+    modelYear: modelYearRaw,
+    chipNo: emptyText(formData.get("chipNo")),
+    fuelMonthlyLimitKwd: limitRaw,
+  });
+  if (formError) return { error: formError };
   if (status !== "active" && status !== "suspended" && status !== "maintenance") {
     return { error: "missing_fields" };
   }
@@ -265,17 +278,11 @@ export async function saveVehicle(
     : null;
   const typeOfUse: VehicleTypeOfUse | null = isVehicleTypeOfUse(typeOfUseRaw) ? typeOfUseRaw : null;
 
-  let modelYear: number | null = null;
-  if (modelYearRaw) {
-    const parsed = Number(modelYearRaw);
-    if (!Number.isInteger(parsed) || parsed < 1990 || parsed > 2100) return { error: "missing_fields" };
-    modelYear = parsed;
-  }
+  const modelYear = modelYearRaw ? Number(modelYearRaw) : null;
 
-  let fuelMonthlyLimit = limitRaw ? Number(limitRaw) : defaultFuelMonthlyLimit(vehicleTypeKey);
-  if (!Number.isFinite(fuelMonthlyLimit) || fuelMonthlyLimit <= 0) {
-    fuelMonthlyLimit = defaultFuelMonthlyLimit(vehicleTypeKey);
-  }
+  const fuelMonthlyLimit = limitRaw
+    ? Number(limitRaw)
+    : defaultFuelMonthlyLimit(vehicleTypeKey);
 
   if (replacesVehicleId && replacesVehicleId === id) return { error: "invalid_replacement" };
 

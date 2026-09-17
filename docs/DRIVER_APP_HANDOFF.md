@@ -545,8 +545,13 @@ Legacy Supabase buckets `driver-intakes` and `partner-logos` are deprecated; mig
 | hygiene-photos | Yes | `{driver_id}/{task_id}.jpg` |
 | support-attachments | Yes | `{thread_id}/{uuid}` |
 | request-attachments | Yes (RCM) | `{driver_id}/{request_id}/{file}` — JPEG/PNG/WebP/PDF; metadata in `request_attachments` |
+| fuel-fills | Yes (fleet log) | `{driver_id}/…` — receipt / pump / odometer stills |
 
 RLS: authenticated user can write only under their `driver_id` prefix where applicable.
+
+**request-attachments driver SELECT (2026-09-17):** riders can read (1) objects whose first folder is `auth.uid()` (own camera uploads) **or** (2) objects whose **second** folder is a `requests.id` they own. Admin `attach_send` / `attach_breakdown` now uploads at `{driver_id}/{request_id}/{file}` so new keys match (1). Older staff-prefix keys (`{staff_id}/{request_id}/…`) become readable through (2). Driver INSERT/UPDATE/DELETE stay own-folder only. Staff ALL is unchanged. Existing objects are not rewritten.
+
+**App request detail:** `document` and `salary_justification` (and every other type with rows) must list `request_attachments` and open each via `createSignedUrl` + `url_launcher`. Do not hide admin-attached files behind typed-field emptiness.
 
 ---
 
@@ -1191,7 +1196,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-09-09 — [admin only] incentive overlap replace clamps `start_date` to Kuwait today; ended rules still resolve for their original days until the replacement starts. Daily report unchanged. Period/DPD score still resolves once at `p_to` (display-only). App does not read the report. Migration `20260909052508`.*
+*Last synced: 2026-09-17 — [admin+app] Admin attach files land at `{driver_id}/{request_id}/…`. Driver storage SELECT also allows owned-request folder[2] so older staff-prefix keys stay readable. App request detail lists attachments and opens signed URLs (document + salary breakdown). Sick leave step 3 **template** gains `approve` (`admin_get_request` joins templates; live steps have no `allowed_actions` column). One Approve completes step 4 when docs already exist. Migrations `20261026400000`, `20261026500000`. Flutter: PopScope back on request detail; Log Fuel station needs a letter/digit; litres/cost one `.` max 3 decimals. No Play release in this pass.*
+
+*Prior: 2026-09-09 — [admin only] incentive overlap replace clamps `start_date` to Kuwait today; ended rules still resolve for their original days until the replacement starts. Daily report unchanged. Period/DPD score still resolves once at `p_to` (display-only). App does not read the report. Migration `20260909052508`.*
 
 *Prior: 2026-09-05 — [admin+app] Driver devices `/driver-devices` + per-driver force + device_meta heartbeat. App `1.1.20+85`. Migration `20261016100000`. Optional `SENTRY_API_TOKEN`. Prior: force-update fleet gate + location coalesce (2026-09-04).*
 

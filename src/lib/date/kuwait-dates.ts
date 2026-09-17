@@ -72,3 +72,11 @@ export function formatKuwaitDayLabel(ymd: string): string {
   const monthLabel = MONTH_SHORT[(month ?? 1) - 1] ?? "Jan";
   return `${String(day ?? 1).padStart(2, "0")} ${monthLabel}`;
 }
+
+/** Calendar date only — never shift through the operator's local timezone. */
+export function formatKuwaitDateLabel(ymd: string): string {
+  const [year, month, day] = ymd.split("-").map(Number);
+  if (!year || !month || !day) return ymd;
+  const monthLabel = MONTH_SHORT[month - 1] ?? "Jan";
+  return `${String(day).padStart(2, "0")} ${monthLabel} ${year}`;
+}

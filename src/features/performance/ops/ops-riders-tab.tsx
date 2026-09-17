@@ -5,6 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslations } from "next-intl";
 import { Filter } from "lucide-react";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
+import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -191,7 +192,7 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
           </button>
         </div>
         <div className="overflow-x-auto">
-          <div className="grid min-w-[1280px] grid-cols-[repeat(18,minmax(64px,1fr))] gap-0 border-b border-border bg-muted/30 px-3 py-1.5 text-[11px] font-semibold text-accent">
+          <div className={cn("grid min-w-[1280px] grid-cols-[repeat(18,minmax(64px,1fr))] gap-0 border-b border-border bg-muted/30 px-3 py-1.5", TABLE_HEAD_CLASS)}>
             {cols.map((c) => (
               <span key={c.id} className={c.align === "end" ? "text-end" : ""}>
                 {c.label}
