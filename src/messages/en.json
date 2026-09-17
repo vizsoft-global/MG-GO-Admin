@@ -1922,7 +1922,8 @@
         "vehicle": "Assign Vehicle",
         "vehicleType": "Vehicle type",
         "clientId": "Client ID (optional)",
-        "clientName": "Client name (optional)"
+        "clientName": "Client name (optional)",
+        "accommodation": "Accommodation (optional)"
       },
       "placeholders": {
         "fullName": "Enter full name",
@@ -1938,7 +1939,8 @@
         "searchRestaurants": "Search restaurants...",
         "vehicle": "Select vehicle",
         "clientId": "e.g. CLI-204",
-        "clientName": "e.g. Gulf Retail Group"
+        "clientName": "e.g. Gulf Retail Group",
+        "accommodation": "Building / area"
       },
       "assets": {
         "gps": "GPS Device",
@@ -6723,7 +6725,7 @@
           "nationality": "Nationality",
           "sourceType": "Source type",
           "company": "Company",
-          "store": "Store",
+          "store": "Restaurant",
           "all": "All",
           "allPartners": "All partners",
           "allZones": "All zones",
@@ -6795,7 +6797,7 @@
           "name": "Name",
           "id": "ID",
           "partner": "Partner",
-          "store": "Store",
+          "store": "Restaurant",
           "zone": "Zone",
           "vehicle": "Vehicle",
           "orders": "Orders",
@@ -6810,14 +6812,14 @@
           "sourceType": "Source type",
           "companySource": "Company source",
           "targetDpd": "Target DPD",
-          "storeDpd": "Store DPD",
+          "storeDpd": "Restaurant DPD",
           "vehZoneDpd": "Vehicle-Zone DPD",
           "activeRiders": "Active riders"
         },
         "filterCol": {
           "status": "Status",
           "partner_label": "Partner",
-          "store_label": "Store",
+          "store_label": "Restaurant",
           "zone": "Zone",
           "vehicle_label": "Vehicle",
           "nationality_label": "Nationality",

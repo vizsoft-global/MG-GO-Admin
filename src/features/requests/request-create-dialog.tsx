@@ -32,6 +32,7 @@ import {
   inclusiveDurationDays,
   isNeededByInPast,
   parseCreateRequestError,
+  seedCreateRequestType,
   shouldShowCreateField,
   staticOptionsForField,
   typedRequiredPayloadKeys,
@@ -52,7 +53,7 @@ const NUMBER_KEYS = new Set([
   "received_amount",
 ]);
 const MONTH_KEYS = new Set(["period_month", "salary_month"]);
-const DATE_KEYS = new Set(["needed_by"]);
+const DATE_KEYS = new Set(["needed_by", "handover_at"]);
 const LONG_TEXT_KEYS = new Set([
   "comment",
   "justification",
@@ -86,14 +87,16 @@ function fieldLabelFor(
 export function RequestCreateDialog({
   open,
   onOpenChange,
+  initialType,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialType?: string;
 }) {
   const t = useTranslations("pages.requests");
   const locale = useLocale();
   const [driverId, setDriverId] = useState<string | null>(null);
-  const [type, setType] = useState<string>("leave");
+  const [type, setType] = useState<string>(() => seedCreateRequestType(initialType));
   const [draft, setDraft] = useState<Draft>({});
   const [declaration, setDeclaration] = useState(false);
   const [kindDraft, setKindDraft] = useState<Record<string, File>>({});
@@ -111,6 +114,15 @@ export function RequestCreateDialog({
         .sort((a, b) => a.sort_order - b.sort_order),
     [options?.fields, type],
   );
+
+  useEffect(() => {
+    if (!open) return;
+    setDriverId(null);
+    setType(seedCreateRequestType(initialType));
+    setDraft({});
+    setDeclaration(false);
+    setKindDraft({});
+  }, [open, initialType]);
 
   useEffect(() => {
     const keys = options?.types.map((row) => row.key) ?? [];
@@ -195,7 +207,7 @@ export function RequestCreateDialog({
 
   const reset = () => {
     setDriverId(null);
-    setType("leave");
+    setType(seedCreateRequestType(initialType));
     setDraft({});
     setDeclaration(false);
     setKindDraft({});
@@ -328,7 +340,11 @@ export function RequestCreateDialog({
     onOpenChange(false);
   };
 
-  const fieldLabel = (key: string) => t(`create.fields.${key}` as "create.fields.comment");
+  const fieldLabel = (key: string) => {
+    const path = `create.fields.${key}` as "create.fields.comment";
+    if (t.has(path)) return t(path);
+    return TYPE_FIELDS[type]?.find((field) => field.key === key)?.label ?? key;
+  };
   const fieldPlaceholder = (key: string) => {
     const path = `create.placeholders.${key}` as "create.placeholders.comment";
     return t.has(path) ? t(path) : t("create.asRiderStated");

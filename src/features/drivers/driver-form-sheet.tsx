@@ -157,6 +157,7 @@ export function DriverFormSheet({
   const [projectKey, setProjectKey] = useState<DriverProjectKey | "">("");
   const [clientId, setClientId] = useState("");
   const [clientName, setClientName] = useState("");
+  const [accommodation, setAccommodation] = useState("");
   const [partnerId, setPartnerId] = useState("");
   const [restaurantIds, setRestaurantIds] = useState<string[]>([]);
   const [zoneId, setZoneId] = useState("");
@@ -204,6 +205,7 @@ export function DriverFormSheet({
       setProjectKey(isDriverProjectKey(activeDriver.project_key) ? activeDriver.project_key : "");
       setClientId(activeDriver.client_id ?? "");
       setClientName(activeDriver.client_name ?? "");
+      setAccommodation(activeDriver.accommodation ?? "");
       setPartnerId(activeDriver.partner_id ?? "");
       setRestaurantIds(activeDriver.restaurant_ids);
       setZoneId(activeDriver.zone_id ?? "");
@@ -237,6 +239,7 @@ export function DriverFormSheet({
     setProjectKey("");
     setClientId("");
     setClientName("");
+    setAccommodation("");
     setPartnerId("");
     setRestaurantIds([]);
     setZoneId("");
@@ -304,6 +307,7 @@ export function DriverFormSheet({
       projectKey,
       clientId,
       clientName,
+      accommodation,
       partnerId,
       zoneId,
       vehicleId,
@@ -320,6 +324,7 @@ export function DriverFormSheet({
       projectKey,
       clientId,
       clientName,
+      accommodation,
       fullName,
       partnerId,
       phone,
@@ -350,6 +355,7 @@ export function DriverFormSheet({
       setProjectKey(isDriverProjectKey(parsed.projectKey) ? parsed.projectKey : "");
       setClientId(parsed.clientId ?? "");
       setClientName(parsed.clientName ?? "");
+      setAccommodation(parsed.accommodation ?? "");
       setPartnerId(parsed.partnerId ?? "");
       setZoneId(parsed.zoneId ?? "");
       setVehicleId(parsed.vehicleId ?? NONE_VEHICLE);
@@ -487,6 +493,7 @@ export function DriverFormSheet({
       formData.append("projectKey", projectKey);
       formData.append("clientId", clientId);
       formData.append("clientName", clientName);
+      formData.append("accommodation", accommodation);
       formData.append("partnerId", partnerId);
       formData.append("zoneId", zoneId);
       formData.append("workflowStatus", workflowStatus);
@@ -670,6 +677,8 @@ export function DriverFormSheet({
                 onClientIdChange={setClientId}
                 clientName={clientName}
                 onClientNameChange={setClientName}
+                accommodation={accommodation}
+                onAccommodationChange={setAccommodation}
                 restaurants={allRestaurants}
                 selectedRestaurantIds={restaurantIds}
                 onRestaurantsChange={(ids) => {
@@ -692,6 +701,7 @@ export function DriverFormSheet({
                 placeholderVehicle={tNew("placeholders.vehicle")}
                 placeholderClientId={tNew("placeholders.clientId")}
                 placeholderClientName={tNew("placeholders.clientName")}
+                placeholderAccommodation={tNew("placeholders.accommodation")}
                 assignmentHint={tNew("assignmentHint")}
                 labels={{
                   section: tNew("stepper.assignment"),
@@ -702,6 +712,7 @@ export function DriverFormSheet({
                   restaurants: tNew("sections.restaurants"),
                   clientId: tNew("fields.clientId"),
                   clientName: tNew("fields.clientName"),
+                  accommodation: tNew("fields.accommodation"),
                 }}
               />
 

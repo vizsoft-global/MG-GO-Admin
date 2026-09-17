@@ -179,7 +179,11 @@ export function FleetRequestDialog({
   };
 
   const statusPill = (
-    <StatusPill dot variant={requestStatusVariant(row.status, request?.payload)}>
+    <StatusPill
+      dot
+      className="max-w-full whitespace-normal break-normal"
+      variant={requestStatusVariant(row.status, request?.payload)}
+    >
       {requestT(`status.${requestStatusLabelKey(row.status, request?.payload)}` as "status.pending")}
     </StatusPill>
   );
@@ -236,7 +240,7 @@ export function FleetRequestDialog({
               </div>
               <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <div>
+                  <div className="min-w-0">
                     <SectionHeading icon={User} accent="primary">
                       {t("sectionEmployee")}
                     </SectionHeading>
@@ -255,7 +259,7 @@ export function FleetRequestDialog({
                       <FleetDetailRow label={t("colZone")}>{row.zone ?? "—"}</FleetDetailRow>
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <SectionHeading icon={Car} accent="primary">
                       {t("sectionVehicle")}
                     </SectionHeading>
@@ -300,7 +304,7 @@ export function FleetRequestDialog({
                 </FleetDetailRow>
               </div>
             </div>
-            <div className="flex h-full flex-col gap-2">
+            <div className="flex h-full min-w-0 flex-col gap-2">
               <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
                 <SectionHeading icon={Check} accent="warning">
                   {requestT("detail.approval")}

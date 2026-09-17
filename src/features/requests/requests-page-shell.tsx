@@ -320,7 +320,9 @@ export function RequestsPageShell({
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbPage>{t("overviewTitle")}</BreadcrumbPage>
+            <BreadcrumbPage>
+              {type === "all" ? t("overviewTitle") : t(`types.${type}` as "types.leave")}
+            </BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -750,7 +752,11 @@ export function RequestsPageShell({
         )}
       </AppListCard>
 
-      <RequestCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <RequestCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        initialType={type}
+      />
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent

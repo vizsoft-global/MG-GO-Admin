@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Briefcase, Building, Car, IdCard, MapPinned, Users } from "lucide-react";
+import { Briefcase, Building, Car, Home, IdCard, MapPinned, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +27,8 @@ export function DriverFormAssignmentCard({
   onClientIdChange,
   clientName,
   onClientNameChange,
+  accommodation,
+  onAccommodationChange,
   restaurants,
   selectedRestaurantIds,
   onRestaurantsChange,
@@ -41,6 +43,7 @@ export function DriverFormAssignmentCard({
   placeholderVehicle,
   placeholderClientId,
   placeholderClientName,
+  placeholderAccommodation,
   assignmentHint,
   labels,
 }: {
@@ -56,6 +59,8 @@ export function DriverFormAssignmentCard({
   onClientIdChange: (value: string) => void;
   clientName: string;
   onClientNameChange: (value: string) => void;
+  accommodation: string;
+  onAccommodationChange: (value: string) => void;
   restaurants: RestaurantOption[];
   selectedRestaurantIds: string[];
   onRestaurantsChange: (ids: string[]) => void;
@@ -78,9 +83,11 @@ export function DriverFormAssignmentCard({
     restaurants: string;
     clientId: string;
     clientName: string;
+    accommodation: string;
   };
   placeholderClientId: string;
   placeholderClientName: string;
+  placeholderAccommodation: string;
 }) {
   const tLive = useTranslations("pages.liveTracking");
   return (
@@ -203,6 +210,21 @@ export function DriverFormAssignmentCard({
           />
         </FieldBlock>
       </div>
+      <FieldBlock>
+        <Label htmlFor="driver-accommodation" className="inline-flex items-center gap-1.5">
+          <Home className="h-3.5 w-3.5 text-muted-foreground" />
+          {labels.accommodation}
+        </Label>
+        <Input
+          id="driver-accommodation"
+          value={accommodation}
+          disabled={disabled}
+          maxLength={120}
+          placeholder={placeholderAccommodation}
+          onChange={(event) => onAccommodationChange(event.target.value)}
+          className="h-9 rounded-md text-sm"
+        />
+      </FieldBlock>
       <FieldBlock>
         <Label>{labels.restaurants}</Label>
         <DriverRestaurantPicker

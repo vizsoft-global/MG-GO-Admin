@@ -206,6 +206,7 @@ export function OpsKpiDelta({
   text: string;
   tone: "up" | "down" | "flat";
 }) {
+  if (!text) return null;
   return (
     <span
       className={cn(

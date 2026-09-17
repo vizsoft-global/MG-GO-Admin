@@ -10,6 +10,26 @@ export function isDerivedCreateField(key: string): boolean {
   return DERIVED_CREATE_KEYS.has(key);
 }
 
+export const REQUEST_CREATE_TYPE_SEEDS = [
+  "leave",
+  "sick_leave",
+  "loan",
+  "asset",
+  "fuel",
+  "fuel_refund",
+  "document",
+  "complaint",
+  "salary_justification",
+] as const;
+
+/** New Request type from a list page. `all` and unknown keys fall back to Leave. */
+export function seedCreateRequestType(type: string | undefined): string {
+  if (type && (REQUEST_CREATE_TYPE_SEEDS as readonly string[]).includes(type)) {
+    return type;
+  }
+  return "leave";
+}
+
 /** Leave / sick leave store From–To on columns, not a `start_date` payload key. */
 export function typeUsesDateRange(
   type: string,

@@ -61,7 +61,7 @@ describe("efficiency bucket CSV is riders, not headcounts", () => {
       "ID",
       "Name",
       "Zone",
-      "Store",
+      "Restaurant",
       "Vehicle",
       "Nationality",
       "DPD",

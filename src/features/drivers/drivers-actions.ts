@@ -323,6 +323,7 @@ export async function createDriverIntake(
   const projectKey = parseDriverProjectKey(formData.get("projectKey"));
   const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
   const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
+  const accommodation = normalizeClientValue(String(formData.get("accommodation") ?? ""));
   const partnerId = String(formData.get("partnerId") ?? "").trim();
   const zoneId = String(formData.get("zoneId") ?? "").trim();
   const vehicleId = String(formData.get("vehicleId") ?? "").trim();
@@ -440,6 +441,7 @@ export async function createDriverIntake(
       project_key: projectKey,
       client_id: clientId,
       client_name: clientName,
+      accommodation,
       driver_code: allocatedCode,
       partner_id: partnerId || null,
       zone_id: zoneId || null,
@@ -1057,6 +1059,7 @@ async function updateDriverIntakeInner(
   const projectKey = parseDriverProjectKey(formData.get("projectKey"));
   const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
   const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
+  const accommodation = normalizeClientValue(String(formData.get("accommodation") ?? ""));
   const catalogItemIds = parseCatalogItemIds(formData);
   const workflowStatus = String(formData.get("workflowStatus") ?? "").trim() as DriverWorkflowStatus;
   const avatarFile = formData.get("avatar");
@@ -1180,6 +1183,7 @@ async function updateDriverIntakeInner(
       project_key: projectKey,
       client_id: clientId,
       client_name: clientName,
+      accommodation,
       partner_id: partnerId || null,
       zone_id: zoneId || null,
       vehicle_id: vehicleId || null,
@@ -1250,6 +1254,7 @@ async function updateDriverIntakeInner(
           project_key: projectKey,
           client_id: clientId,
           client_name: clientName,
+          accommodation,
           custom_fields: customParsed.values as unknown as Json,
           updated_at: new Date().toISOString(),
         })
@@ -1390,6 +1395,7 @@ async function fetchDriverDetailInner(
       project_key,
       client_id,
       client_name,
+      accommodation,
       driver_code,
       workflow_status,
       linked,
@@ -1429,6 +1435,7 @@ async function fetchDriverDetailInner(
       client_name: string | null;
       source_company: string | null;
       project_key: string | null;
+      accommodation: string | null;
       is_blocked: boolean;
       blocked_reason: string | null;
       blocked_at: string | null;
@@ -1444,7 +1451,7 @@ async function fetchDriverDetailInner(
           .maybeSingle(),
         supabase
           .from("drivers")
-          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, is_blocked, blocked_reason, blocked_at, login_verification_exempt, avatar_object_key")
+          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, accommodation, is_blocked, blocked_reason, blocked_at, login_verification_exempt, avatar_object_key")
           .eq("id", linkedId)
           .maybeSingle(),
       ]);
@@ -1460,6 +1467,7 @@ async function fetchDriverDetailInner(
             client_name: drv.client_name ?? null,
             source_company: drv.source_company ?? null,
             project_key: drv.project_key ?? null,
+            accommodation: drv.accommodation ?? null,
             is_blocked: drv.is_blocked ?? false,
             blocked_reason: drv.blocked_reason ?? null,
             blocked_at: drv.blocked_at ?? null,
@@ -1514,6 +1522,7 @@ async function fetchDriverDetailInner(
       rider_category: linkedDriver?.rider_category ?? intake.rider_category ?? "in_house",
       client_id: linkedDriver?.client_id ?? intake.client_id ?? null,
       client_name: linkedDriver?.client_name ?? intake.client_name ?? null,
+      accommodation: linkedDriver?.accommodation ?? intake.accommodation ?? null,
       source_company:
         linkedDriver?.source_company ??
         intake.source_company ??
@@ -1587,6 +1596,7 @@ async function fetchDriverDetailInner(
       client_name,
       source_company,
       project_key,
+      accommodation,
       is_blocked,
       blocked_reason,
       blocked_at,
@@ -1622,7 +1632,7 @@ async function fetchDriverDetailInner(
   const { data: intakeForDriver } = await supabase
     .from("driver_intakes")
     .select(
-      "id, assets_issued, workflow_status, linked, partner_id, zone_id, vehicle_id, archived_at, avatar_url",
+      "id, assets_issued, workflow_status, linked, partner_id, zone_id, vehicle_id, archived_at, avatar_url, accommodation",
     )
     .eq("linked_profile_id", id)
     .maybeSingle();
@@ -1658,6 +1668,7 @@ async function fetchDriverDetailInner(
     client_id: driverRow.client_id ?? null,
     client_name: driverRow.client_name ?? null,
     source_company: driverRow.source_company ?? null,
+    accommodation: driverRow.accommodation ?? intakeForDriver?.accommodation ?? null,
     project_key: parseDriverProjectKey(driverRow.project_key),
     avatar_url,
     partner_name: relName(driverRow.partners as { name: string } | { name: string }[] | null),

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { formatDelta } from "./performance-ops-format";
 import {
   assertCustomOpsRange,
   assertOpsRange,
@@ -179,6 +180,8 @@ describe("kpiDelta + windows", () => {
     assert.equal(kpiDeltaPct(25, 20), 25);
     assert.equal(kpiDeltaPct(10, 0), null);
     assert.equal(kpiDeltaPct(null, 10), null);
+    assert.deepEqual(formatDelta(120, null), { text: "", tone: "flat" });
+    assert.deepEqual(formatDelta(120, 100), { text: "+20.0%", tone: "up" });
   });
 
   it("previous window is the N days immediately before from", () => {
