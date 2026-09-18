@@ -377,6 +377,8 @@ Staff can also raise a request for a rider via `admin_create_request`. `p_type` 
 
 **Driver notifications (RCM/Visit/E-Sign):** On admin decide / visit status / e-sign send / appointment create, Postgres `notify_driver_transactional` inserts inbox campaign + dispatch item. Deep links: `musallam:///profile/support/requests/{id}`, `…/action-required`, `…/visits`, `…/sign/{id}`, `…/appointments`. `action_params.record_type` = `request` | `visit` | `esign` | `appointment`. No admin push for RCM attention.
 
+**Visit admin note (`20261026600000`):** `admin_set_visit_note_to_rider(p_booking_id, p_note)` (`visits.operate`) writes `visit_bookings.note_to_rider`. A **new** inbox row is created only when the trimmed note is non-empty **and different** from the previous value — existing bookings and existing notification rows are not rewritten. Inbox `body` is the note; `action_params.note_to_rider` repeats it. Clearing the note nulls the column and does not notify. App: show `note_to_rider` on My Visits; Notifications tab paints `body`, falling back to `action_params.note_to_rider` when body is empty. Status-change notify bodies stay generic.
+
 ### E-Sign + Appointments
 | Piece | Notes |
 |-------|-------|

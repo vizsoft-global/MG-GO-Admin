@@ -45,7 +45,11 @@ export function RequestRescheduleDialog({
 
   const invalidRange =
     startDate !== "" && endDate !== "" && new Date(endDate) < new Date(startDate);
-  const canSubmit = !submitting && !invalidRange && (startDate !== "" || endDate !== "");
+  const canSubmit =
+    !submitting &&
+    !invalidRange &&
+    (startDate !== "" || endDate !== "") &&
+    note.trim() !== "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -60,6 +64,7 @@ export function RequestRescheduleDialog({
             <Input
               type="date"
               className="h-9"
+              openPickerOnFocus={false}
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
@@ -69,12 +74,16 @@ export function RequestRescheduleDialog({
             <Input
               type="date"
               className="h-9"
+              openPickerOnFocus={false}
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
           <div className="space-y-1 sm:col-span-2">
-            <Label>{t("note")}</Label>
+            <Label>
+              {t("note")}
+              <span className="ms-0.5 text-destructive">*</span>
+            </Label>
             <Textarea
               className="min-h-16 text-sm"
               value={note}

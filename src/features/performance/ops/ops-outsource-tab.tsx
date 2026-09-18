@@ -25,7 +25,7 @@ import {
   formatPct,
 } from "../performance-ops-format";
 import type { OpsSnapshot } from "../performance-ops-types";
-import { OpsBarChart, OpsChartCard, OpsLineChart } from "./ops-charts";
+import { OpsBarChart, OpsChartCard, OpsLineChart, opsChartTitle } from "./ops-charts";
 import { cn } from "@/lib/utils";
 
 export function OpsOutsourceTab({
@@ -63,7 +63,7 @@ export function OpsOutsourceTab({
         ]}
       />
       <OpsChartCard
-        title={t("chart.trend")}
+        title={opsChartTitle(t, "trend", seriesName)}
         onExport={() =>
           downloadCsv(
             "ops-outsource-trend",
@@ -80,7 +80,7 @@ export function OpsOutsourceTab({
       </OpsChartCard>
       <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
         <OpsChartCard
-          title={t("chart.company")}
+          title={opsChartTitle(t, "company", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-outsource-companies",
@@ -101,10 +101,11 @@ export function OpsOutsourceTab({
             xKey="key"
             series={series}
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
         <OpsChartCard
-          title={t("chart.zone")}
+          title={opsChartTitle(t, "zone", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-outsource-zones",
@@ -123,6 +124,7 @@ export function OpsOutsourceTab({
             series={series}
             layout="horizontal"
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
       </div>

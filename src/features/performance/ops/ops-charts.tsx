@@ -6,6 +6,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -13,6 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { opsBarColorForKey } from "../performance-ops-formulas";
 import { AppEmptyState } from "@/components/app";
 import {
   formatInt,
@@ -144,18 +146,28 @@ export function OpsLineChart({
   );
 }
 
+export function opsChartTitle(
+  t: (key: string, values?: Record<string, string>) => string,
+  kind: "trend" | "vehicle" | "zone" | "partner" | "nationality" | "company",
+  metricLabel: string,
+): string {
+  return t(`chartTitle.${kind}`, { metric: metricLabel });
+}
+
 export function OpsBarChart({
   data,
   xKey,
   series,
   layout = "vertical",
   metric,
+  colorByCategory = false,
 }: {
   data: Array<Record<string, string | number | null>>;
   xKey: string;
   series: Array<{ key: string; color: string; name: string }>;
   layout?: "vertical" | "horizontal";
   metric?: OpsTooltipMetric;
+  colorByCategory?: boolean;
 }) {
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -217,7 +229,16 @@ export function OpsBarChart({
             fill={s.color}
             radius={[4, 4, 0, 0]}
             maxBarSize={28}
-          />
+          >
+            {colorByCategory
+              ? data.map((row, index) => (
+                  <Cell
+                    key={`${s.key}-${index}`}
+                    fill={opsBarColorForKey(String(row[xKey] ?? index))}
+                  />
+                ))
+              : null}
+          </Bar>
         ))}
       </BarChart>
     </ResponsiveContainer>

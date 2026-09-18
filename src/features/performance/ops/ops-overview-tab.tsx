@@ -22,7 +22,7 @@ import {
   type OpsChartMetric,
 } from "../performance-ops-formulas";
 import type { OpsDimRow, OpsSnapshot } from "../performance-ops-types";
-import { OpsBarChart, OpsChartCard, OpsKpiDelta, OpsLineChart } from "./ops-charts";
+import { OpsBarChart, OpsChartCard, OpsKpiDelta, OpsLineChart, opsChartTitle } from "./ops-charts";
 import { cn } from "@/lib/utils";
 
 function dimRows(rows: OpsDimRow[], labelOf: (row: OpsDimRow) => string, metric: OpsChartMetric) {
@@ -94,7 +94,7 @@ export function OpsOverviewTab({
       <KpiGrid items={items} compact />
       <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
         <OpsChartCard
-          title={t("chart.trend")}
+          title={opsChartTitle(t, "trend", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-trend",
@@ -110,7 +110,7 @@ export function OpsOverviewTab({
           <OpsLineChart data={trend} xKey="bucket" series={series} metric={metric} />
         </OpsChartCard>
         <OpsChartCard
-          title={t("chart.vehicle")}
+          title={opsChartTitle(t, "vehicle", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-vehicle",
@@ -128,10 +128,11 @@ export function OpsOverviewTab({
             xKey="key"
             series={series}
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
         <OpsChartCard
-          title={t("chart.zone")}
+          title={opsChartTitle(t, "zone", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-zone",
@@ -150,10 +151,11 @@ export function OpsOverviewTab({
             series={series}
             layout="horizontal"
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
         <OpsChartCard
-          title={t("chart.partner")}
+          title={opsChartTitle(t, "partner", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-partner",
@@ -178,10 +180,11 @@ export function OpsOverviewTab({
             xKey="key"
             series={series}
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
         <OpsChartCard
-          title={t("chart.nationality")}
+          title={opsChartTitle(t, "nationality", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-nationality",
@@ -200,10 +203,11 @@ export function OpsOverviewTab({
             series={series}
             layout="horizontal"
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
         <OpsChartCard
-          title={t("chart.company")}
+          title={opsChartTitle(t, "company", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-company",
@@ -221,6 +225,7 @@ export function OpsOverviewTab({
             xKey="key"
             series={series}
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
       </div>

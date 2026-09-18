@@ -43,6 +43,7 @@ import {
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { useAuth } from "@/contexts/auth-context";
 import { Link } from "@/i18n/navigation";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { queryKeys } from "@/lib/query/query-keys";
 import { selectOptions, selectOptionsFrom } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,7 @@ import {
   updateAdminVisitStatusBulk,
   type VisitListRow,
 } from "./visits-actions";
+import { upcomingVisitCount } from "./visit-upcoming";
 import {
   avatarTintClass,
   departmentBadgeClass,
@@ -168,7 +170,8 @@ export function VisitsPageShell() {
 
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
   const kpi = data?.kpi;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = kuwaitTodayYmd();
+  const upcomingCount = useMemo(() => upcomingVisitCount(rows, today), [rows, today]);
 
   const tabRows = useMemo(() => {
     if (tab === "today") return rows.filter((r) => r.scheduled_date === today);
@@ -291,7 +294,7 @@ export function VisitsPageShell() {
   const TABS: { id: DataTab; label: string; count?: number }[] = [
     { id: "all", label: t("allVisits.tabAll"), count: rows.length },
     { id: "today", label: t("allVisits.tabToday"), count: kpi?.today },
-    { id: "upcoming", label: t("allVisits.tabUpcoming"), count: kpi?.upcoming },
+    { id: "upcoming", label: t("allVisits.tabUpcoming"), count: upcomingCount },
     { id: "past", label: t("allVisits.tabPast"), count: pastCount },
   ];
 
@@ -383,7 +386,7 @@ export function VisitsPageShell() {
           icon={<Clock className="h-3.5 w-3.5" />}
           iconClass="bg-warning/10 text-warning"
           label={t("kpi.upcoming")}
-          value={kpi?.upcoming ?? "—"}
+          value={upcomingCount}
           sub={t("allVisits.kpiUpcomingSub")}
         />
         <KpiTile
@@ -536,10 +539,12 @@ export function VisitsPageShell() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : visibleRows.length === 0 ? (
-          <AppEmptyState
-            title={t("emptyTitle")}
-            description={t("emptyDescription")}
-          />
+          <div className="flex min-h-48 items-center justify-center p-4">
+            <AppEmptyState
+              title={t("emptyTitle")}
+              description={t("emptyDescription")}
+            />
+          </div>
         ) : (
           <AppDataTable
             columns={[

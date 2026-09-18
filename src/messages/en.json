@@ -3808,6 +3808,12 @@
           "hint": "The approval step stays open. Accepting returns the request to review.",
           "invalidRange": "End date cannot be before the start date",
           "awaitingRider": "Waiting for the rider to accept or decline the proposed dates.",
+          "noteRequired": "Add a note for the rider before sending the new dates.",
+          "summaryTitle": "Reschedule",
+          "statusAwaiting": "Awaiting rider",
+          "statusAccepted": "Accepted",
+          "statusDeclined": "Declined",
+          "riderNote": "Rider reply",
           "cancel": "Cancel",
           "submit": "Send to rider"
         }
@@ -4939,8 +4945,8 @@
         "busiestSlotsEmpty": "No slot bookings in range",
         "colAvgWait": "Avg. wait",
         "pageTitle": "Reports & analytics",
-        "filterBranchAll": "Branch: All branches",
-        "filterBranchValue": "Branch: {name}",
+        "filterBranchAll": "All branches",
+        "filterBranchValue": "{name}",
         "weekBarTitle": "{week} · {count} visits",
         "vsPrevious": "vs {from} – {to}",
         "comparisonNeedsRange": "Pick a date range to compare periods",
@@ -4982,6 +4988,7 @@
         "desks": "Desks",
         "desksValue": "{count, plural, one {# desk} other {# desks}}",
         "desksInvalid": "Desks must be at least 1",
+        "invalidHours": "Closing time must be after opening time",
         "default": "Default",
         "city": "City"
       },
@@ -6755,10 +6762,12 @@
           "outsourced": "Outsourced"
         },
         "kpi": {
-          "orders": "Orders",
+          "orders": "Total Orders",
           "overallDpd": "Overall DPD",
           "avgDpdEff": "AVG DPD efficiency",
           "avgTgtEff": "AVG target efficiency",
+          "dpdEff": "DPD Efficiency",
+          "tgtEff": "Target Efficiency",
           "active": "Active riders",
           "riders": "Total riders",
           "storesAbove": "Stores above target",
@@ -6786,6 +6795,14 @@
           "topZones": "Top {n} zones · {metric}",
           "bottomZones": "Bottom {n} zones · {metric}"
         },
+        "chartTitle": {
+          "trend": "{metric} Trend",
+          "vehicle": "{metric} by Vehicle",
+          "zone": "{metric} by Zone",
+          "partner": "{metric} by Partner",
+          "nationality": "{metric} by Nationality",
+          "company": "{metric} by Company"
+        },
         "bucket": {
           "well_above": "Well above (>120%)",
           "above": "Above (100–120%)",
@@ -6801,7 +6818,7 @@
           "zone": "Zone",
           "vehicle": "Vehicle",
           "orders": "Orders",
-          "days": "Days",
+          "days": "Working Days",
           "dpd": "DPD",
           "tgtEff": "Target eff.",
           "dpdEff": "DPD eff.",

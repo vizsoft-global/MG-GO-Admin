@@ -17,8 +17,9 @@ function Input({
   type,
   onClick,
   onFocus,
+  openPickerOnFocus = true,
   ...props
-}: React.ComponentProps<"input">) {
+}: React.ComponentProps<"input"> & { openPickerOnFocus?: boolean }) {
   const supportsPicker = type !== undefined && PICKER_TYPES.has(type)
 
   const tryShowPicker = (el: HTMLInputElement | null) => {
@@ -43,7 +44,7 @@ function Input({
     ? (event: React.FocusEvent<HTMLInputElement>) => {
         onFocus?.(event)
         if (event.defaultPrevented) return
-        tryShowPicker(event.currentTarget)
+        if (openPickerOnFocus) tryShowPicker(event.currentTarget)
       }
     : onFocus
 

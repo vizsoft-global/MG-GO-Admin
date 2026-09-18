@@ -36,6 +36,7 @@ import { RequestDecisionTermsDialog } from "./request-decision-terms-dialog";
 import { RequestFieldRow } from "./request-field-row";
 import { RequestFuelTransferCard } from "./request-fuel-transfer-card";
 import { RequestRescheduleDialog } from "./request-reschedule-dialog";
+import { RequestRescheduleSummary } from "./request-reschedule-summary";
 import { RequestTypedDrawer } from "./request-typed-drawer";
 import {
   formatFieldValue,
@@ -204,6 +205,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     if (error === "attachment_required") return t("detail.attach.required");
     if (error === "invalid_attachment_type") return t("detail.attach.invalidType");
     if (error === "invalid_attachment_size") return t("detail.attach.invalidSize");
+    if (error === "reschedule_note_required") return t("detail.reschedule.noteRequired");
     return error ?? t("detail.actionFailed");
   };
 
@@ -421,6 +423,8 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
               </div>
             ) : null}
           </section>
+
+        {request ? <RequestRescheduleSummary payload={request.payload} /> : null}
 
         {awaitingRider ? (
           <section className="rounded-xl border border-warning/30 bg-warning-bg p-4">

@@ -27,6 +27,7 @@ import {
   updateVisitBranch,
   type VisitBranchRow,
 } from "./visits-actions";
+import { visitHoursInvalid } from "./visit-hours";
 import { formatWorkingHours } from "./visit-status-utils";
 
 const WEEKDAY_DEFAULT = "0,1,2,3,4"; // Sun-Thu
@@ -102,6 +103,10 @@ export function VisitsBranchesShell() {
       toast.error(t("branches.desksInvalid"));
       return;
     }
+    if (visitHoursInvalid(draft.opening_time, draft.closing_time)) {
+      toast.error(t("branches.invalidHours"));
+      return;
+    }
 
     setBusy(true);
     const result = draft.id
@@ -128,7 +133,11 @@ export function VisitsBranchesShell() {
     setBusy(false);
 
     if (!result.ok) {
-      toast.error(result.error ?? t("catalog.saveFailed"));
+      toast.error(
+        result.error === "invalid_hours"
+          ? t("branches.invalidHours")
+          : (result.error ?? t("catalog.saveFailed")),
+      );
       return;
     }
     toast.success(t("catalog.saved"));
@@ -241,7 +250,7 @@ export function VisitsBranchesShell() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="overflow-visible pt-4" showCloseButton closeOutside>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 px-5 py-4 sm:grid-cols-2">
             {!draft.id ? (
               <div className="space-y-1">
                 <Label>{t("catalog.key")}</Label>

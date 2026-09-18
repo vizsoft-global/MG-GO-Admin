@@ -13,6 +13,7 @@ import {
   formatOpsCustomPill,
   inclusiveDayCount,
   isChartableDimKey,
+  opsBarColorForKey,
   kpiDeltaPct,
   meanFinite,
   overallDpd,
@@ -257,6 +258,11 @@ describe("chart labels + dim keys + multi-select + rider sort", () => {
     assert.equal(isChartableDimKey("(none)"), false);
     assert.equal(isChartableDimKey("â€”"), false);
     assert.equal(isChartableDimKey("Jahra"), true);
+  });
+
+  it("assigns a stable palette color per category key", () => {
+    assert.equal(opsBarColorForKey("Jahra"), opsBarColorForKey("Jahra"));
+    assert.notEqual(opsBarColorForKey("Jahra"), opsBarColorForKey("Hawally"));
   });
 
   it("multi-select starts from All and ticks only chosen values", () => {

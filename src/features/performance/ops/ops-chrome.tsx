@@ -24,6 +24,7 @@ import {
   OPS_VIEW_BY,
   SOURCE_COMPANY_KEYS,
   SOURCE_COMPANY_LABEL,
+  isChartableDimKey,
   storesVisibleForPartners,
   type OpsChartMetric,
   type OpsGranularity,
@@ -159,11 +160,13 @@ export function OpsSlicerBar({
   );
   const natOpts = useMemo(
     () =>
-      options.nationalities.map((code) => ({
-        value: code,
-        label: countryLabel(code),
-        keywords: [code],
-      })),
+      options.nationalities
+        .filter((code) => isChartableDimKey(code))
+        .map((code) => ({
+          value: code,
+          label: countryLabel(code),
+          keywords: [code],
+        })),
     [options.nationalities],
   );
 
