@@ -27,7 +27,7 @@ import {
 } from "../performance-ops-format";
 import { countryLabel } from "@/lib/geo/countries";
 import type { OpsSnapshot } from "../performance-ops-types";
-import { OpsBarChart, OpsChartCard, OpsLineChart } from "./ops-charts";
+import { OpsBarChart, OpsChartCard, OpsLineChart, opsChartTitle } from "./ops-charts";
 import { cn } from "@/lib/utils";
 
 export function OpsDpdTab({
@@ -98,7 +98,7 @@ export function OpsDpdTab({
         ]}
       />
       <OpsChartCard
-        title={t("chart.trend")}
+        title={opsChartTitle(t, "trend", seriesName)}
         onExport={() =>
           downloadCsv(
             "ops-dpd-trend",
@@ -162,7 +162,7 @@ export function OpsDpdTab({
       </div>
       <div className="grid gap-2 lg:grid-cols-3 lg:items-stretch">
         <OpsChartCard
-          title={t("chart.nationality")}
+          title={opsChartTitle(t, "nationality", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-dpd-nationality",
@@ -185,10 +185,11 @@ export function OpsDpdTab({
             series={series}
             layout="horizontal"
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
         <OpsChartCard
-          title={t("chart.zone")}
+          title={opsChartTitle(t, "zone", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-dpd-zone",
@@ -211,10 +212,11 @@ export function OpsDpdTab({
             series={series}
             layout="horizontal"
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
         <OpsChartCard
-          title={t("chart.vehicle")}
+          title={opsChartTitle(t, "vehicle", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-dpd-vehicle",
@@ -235,6 +237,7 @@ export function OpsDpdTab({
             xKey="key"
             series={series}
             metric={metric}
+            colorByCategory
           />
         </OpsChartCard>
       </div>

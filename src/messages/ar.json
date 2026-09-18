@@ -3733,6 +3733,12 @@
           "hint": "تبقى خطوة الموافقة مفتوحة. الموافقة تُعيد الطلب إلى المراجعة.",
           "invalidRange": "لا يمكن أن يكون تاريخ النهاية قبل تاريخ البداية",
           "awaitingRider": "في انتظار موافقة السائق على المواعيد المقترحة أو رفضها.",
+          "noteRequired": "أضف ملاحظة للسائق قبل إرسال المواعيد الجديدة.",
+          "summaryTitle": "إعادة الجدولة",
+          "statusAwaiting": "بانتظار السائق",
+          "statusAccepted": "مقبول",
+          "statusDeclined": "مرفوض",
+          "riderNote": "رد السائق",
           "cancel": "إلغاء",
           "submit": "إرسال إلى السائق"
         }
@@ -4864,8 +4870,8 @@
         "busiestSlotsEmpty": "لا توجد حجوزات مواعيد في النطاق",
         "colAvgWait": "متوسط الانتظار",
         "pageTitle": "التقارير والتحليلات",
-        "filterBranchAll": "الفرع: كل الفروع",
-        "filterBranchValue": "الفرع: {name}",
+        "filterBranchAll": "كل الفروع",
+        "filterBranchValue": "{name}",
         "weekBarTitle": "{week} · {count} زيارة",
         "vsPrevious": "مقابل {from} – {to}",
         "comparisonNeedsRange": "اختر نطاق تاريخ لمقارنة الفترات",
@@ -4907,6 +4913,7 @@
         "desks": "المكاتب",
         "desksValue": "{count, plural, one {مكتب واحد} other {# مكاتب}}",
         "desksInvalid": "يجب أن يكون عدد المكاتب 1 على الأقل",
+        "invalidHours": "يجب أن يكون وقت الإغلاق بعد وقت الافتتاح",
         "default": "افتراضي",
         "city": "المدينة"
       },
@@ -6677,10 +6684,12 @@
           "outsourced": "تعهيد"
         },
         "kpi": {
-          "orders": "الطلبات",
+          "orders": "إجمالي الطلبات",
           "overallDpd": "DPD الإجمالي",
           "avgDpdEff": "متوسط كفاءة DPD",
           "avgTgtEff": "متوسط كفاءة الهدف",
+          "dpdEff": "كفاءة DPD",
+          "tgtEff": "كفاءة الهدف",
           "active": "سائقون نشطون",
           "riders": "إجمالي السائقين",
           "storesAbove": "متاجر فوق الهدف",
@@ -6708,6 +6717,14 @@
           "topZones": "أعلى {n} مناطق · {metric}",
           "bottomZones": "أدنى {n} مناطق · {metric}"
         },
+        "chartTitle": {
+          "trend": "اتجاه {metric}",
+          "vehicle": "{metric} حسب المركبة",
+          "zone": "{metric} حسب المنطقة",
+          "partner": "{metric} حسب الشريك",
+          "nationality": "{metric} حسب الجنسية",
+          "company": "{metric} حسب الشركة"
+        },
         "bucket": {
           "well_above": "أعلى بكثير (>120%)",
           "above": "أعلى (100–120%)",
@@ -6723,7 +6740,7 @@
           "zone": "المنطقة",
           "vehicle": "المركبة",
           "orders": "الطلبات",
-          "days": "الأيام",
+          "days": "أيام العمل",
           "dpd": "DPD",
           "tgtEff": "كفاءة الهدف",
           "dpdEff": "كفاءة DPD",

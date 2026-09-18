@@ -196,6 +196,8 @@ const INTERNAL_PAYLOAD_KEYS = new Set([
   "created_on_behalf_by",
   "created_on_behalf_by_name",
   "created_on_behalf_at",
+  "reschedule",
+  "awaiting_driver_reschedule",
 ]);
 
 /**

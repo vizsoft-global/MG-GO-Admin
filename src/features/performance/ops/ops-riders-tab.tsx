@@ -123,8 +123,8 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
           { label: t("kpi.orders"), value: formatInt(data.kpis.orders) },
           { label: t("kpi.workingDays"), value: formatInt(data.kpis.working_days) },
           { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
-          { label: t("kpi.avgDpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
-          { label: t("kpi.avgTgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
+          { label: t("kpi.dpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
+          { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
           { label: t("kpi.ridersInView"), value: formatInt(filtered.length) },
         ]}
       />
@@ -192,9 +192,13 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
           </button>
         </div>
         <div className="overflow-x-auto">
-          <div className={cn("grid min-w-[1280px] grid-cols-[repeat(18,minmax(64px,1fr))] gap-0 border-b border-border bg-muted/30 px-3 py-1.5", TABLE_HEAD_CLASS)}>
+          <div className={cn("grid min-w-[1680px] grid-cols-[repeat(18,minmax(88px,1fr))] gap-0 border-b border-border bg-muted/30 px-3 py-1.5", TABLE_HEAD_CLASS)}>
             {cols.map((c) => (
-              <span key={c.id} className={c.align === "end" ? "text-end" : ""}>
+              <span
+                key={c.id}
+                title={c.label}
+                className={cn("min-w-0 truncate", c.align === "end" && "text-end")}
+              >
                 {c.label}
               </span>
             ))}
@@ -206,7 +210,7 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
                 return (
                   <div
                     key={row.driver_id}
-                    className="absolute inset-x-0 grid min-w-[1280px] grid-cols-[repeat(18,minmax(64px,1fr))] items-center gap-0 border-b border-border/60 px-3 text-xs"
+                    className="absolute inset-x-0 grid min-w-[1680px] grid-cols-[repeat(18,minmax(88px,1fr))] items-center gap-0 border-b border-border/60 px-3 text-xs"
                     style={{ height: item.size, transform: `translateY(${item.start}px)` }}
                   >
                     {cols.map((c) => (

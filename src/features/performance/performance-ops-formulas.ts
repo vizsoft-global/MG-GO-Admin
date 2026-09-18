@@ -334,6 +334,27 @@ export function isChartableDimKey(key: string | null | undefined): boolean {
   return true;
 }
 
+export const OPS_CATEGORY_PALETTE = [
+  "#2563eb",
+  "#059669",
+  "#7c3aed",
+  "#d97706",
+  "#dc2626",
+  "#0891b2",
+  "#4f46e5",
+  "#ca8a04",
+  "#db2777",
+  "#0f766e",
+] as const;
+
+export function opsBarColorForKey(key: string): string {
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  return OPS_CATEGORY_PALETTE[hash % OPS_CATEGORY_PALETTE.length];
+}
+
 export function toggleOpsMultiSelect(
   optionValues: readonly string[],
   selected: readonly string[],

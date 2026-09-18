@@ -234,6 +234,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-09-18` — **QA visits/requests/performance + A7 visit note notify.** All Visits empty min-h-48; Branch/Blocked Date `px-5 py-4`; branch hours `invalid_hours`; reports drop Branch: prefix; upcoming KPI+tab = `kuwaitTodayYmd()` listed-row count. Leave reschedule: picker not on focus, note required, `RequestRescheduleSummary` for awaiting/accepted/declined. Performance: Total Orders, `{metric} Trend/by X`, riders DPD/Target Efficiency + Working Days, header truncate, nationality `isChartableDimKey`, category-colored bars. App: Decline style, leave justification humanize, reschedule card + driver_note, slot grid + hide past Kuwait today, ReviewRow start-align, My Visits back + `note_to_rider`. **Only new SQL:** `20261026600000` `admin_set_visit_note_to_rider` (additive; no rewrite of live visit/status RPCs). No db push / Vercel / Play.
+
 - `[admin only] 2026-09-17` — **DPD Efficiency chart tooltip rounds to one decimal.** View-by `dpd_eff` / `tgt_eff` hover no longer prints raw `241.7147483506631`; same `formatPct` as the KPI (`241.7%`). No migration.
 
 - `[admin+app] 2026-09-17` — **QA batch: request amount/distance messages, detail wrap, accommodation write, request-type context.** App Amount/Distance filter empty vs invalid (`filterDistanceKm` 7 integer digits); request details start-align + unwrap; sick-leave Other `*`. Admin Performance Store→Restaurant; Overview empty delta is blank; type list breadcrumb + New Request `initialType` for all 9 types; Driver Add/Edit writes `accommodation` (approve RPC already copies intake); RequestFieldRow `break-normal` + asset modal overflow; handover `t.has` + `handover_at` date. No migration.

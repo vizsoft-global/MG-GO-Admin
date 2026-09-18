@@ -663,7 +663,7 @@ export function VisitsSlotsShell() {
 
       <Dialog open={blockedOpen} onOpenChange={setBlockedOpen}>
         <DialogContent className="overflow-visible pt-4" showCloseButton closeOutside>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 px-5 py-4 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className={FIELD_LABEL_CLASS}>{t("slots.blockedDate")}</Label>
               <Input

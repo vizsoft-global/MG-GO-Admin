@@ -558,6 +558,9 @@ export async function decideAdminRequest(input: {
   attachments?: RequestDecisionAttachment[];
 }): Promise<{ ok: boolean; error?: string; status?: string }> {
   const session = await requireRequestsDecide();
+  if (input.action === "reschedule" && !(input.reason ?? "").trim()) {
+    return { ok: false, error: "reschedule_note_required" };
+  }
   const supabase = await createClient();
   const meta = {
     ...buildDecisionMeta(input.terms, staffDisplayName(session)),

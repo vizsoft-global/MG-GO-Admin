@@ -4,6 +4,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendPushBatch } from "@/lib/firebase/fcm-provider";
+import { buildActionPayload, buildFcmDataPayload } from "@/features/notifications/payload-contract";
+import { pickLatestPushTokenByDriver } from "@/features/notifications/push-token-select";
+import { visitHoursInvalid } from "./visit-hours";
 
 /**
  * Columns added by 20260827110000_visit_slot_availability_config.sql and the
@@ -337,17 +342,85 @@ export async function updateVisitNoteToRider(input: {
   note: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireVisitsOperate();
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("visit_bookings")
-    .update({
-      note_to_rider: input.note.trim() || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", input.bookingId);
+  const supabase = await createUntypedClient();
+  const { data, error } = await supabase.rpc("admin_set_visit_note_to_rider", {
+    p_booking_id: input.bookingId,
+    p_note: input.note,
+  });
 
   if (error) return { ok: false, error: error.message };
+  const payload = (data ?? {}) as Record<string, unknown>;
+  if (payload.ok === false) {
+    return { ok: false, error: String(payload.error ?? "save_failed") };
+  }
+  if (payload.notified === true && typeof payload.driver_id === "string") {
+    await sendVisitNotePush({
+      driverId: payload.driver_id,
+      bookingId: input.bookingId,
+      bookingCode: typeof payload.booking_code === "string" ? payload.booking_code : "",
+      note: input.note.trim(),
+      campaignId: typeof payload.campaign_id === "string" ? payload.campaign_id : "",
+      dispatchItemId:
+        typeof payload.dispatch_item_id === "string" ? payload.dispatch_item_id : "",
+    });
+  }
   return { ok: true };
+}
+
+async function sendVisitNotePush(input: {
+  driverId: string;
+  bookingId: string;
+  bookingCode: string;
+  note: string;
+  campaignId: string;
+  dispatchItemId: string;
+}): Promise<void> {
+  if (!input.note || !input.campaignId) return;
+  try {
+    const admin = createAdminClient({ timeoutMs: 5000 });
+    const { data: tokens } = await admin
+      .from("driver_push_tokens")
+      .select("id, driver_id, token, last_seen_at")
+      .eq("driver_id", input.driverId)
+      .eq("is_active", true);
+    const token = pickLatestPushTokenByDriver(
+      (tokens ?? []) as Array<{
+        id: string;
+        driver_id: string;
+        token: string;
+        last_seen_at: string | null;
+      }>,
+    ).get(input.driverId);
+    if (!token) return;
+    const action = buildActionPayload({
+      actionType: "open_record",
+      actionParams: {
+        record_type: "visit",
+        record_id: input.bookingId,
+        route: "/profile/support/visits",
+        booking_code: input.bookingCode,
+        note_to_rider: input.note,
+      },
+      deepLink: "musallam:///profile/support/visits",
+      campaignId: input.campaignId,
+    });
+    await sendPushBatch([
+      {
+        token: token.token,
+        title: `Visit note — ${input.bookingCode}`.trim(),
+        body: input.note,
+        data: buildFcmDataPayload({
+          campaignId: input.campaignId,
+          dispatchItemId: input.dispatchItemId || null,
+          action,
+          category: "operations",
+          priority: "normal",
+        }),
+      },
+    ]);
+  } catch {
+    // Inbox row already exists; a dead FCM path must not fail the save.
+  }
 }
 
 export async function rescheduleAdminVisit(input: {
@@ -586,6 +659,9 @@ export async function createVisitBranch(input: {
   if (!input.key.trim() || !input.name.trim()) {
     return { ok: false, error: "key_and_name_required" };
   }
+  if (visitHoursInvalid(input.opening_time, input.closing_time)) {
+    return { ok: false, error: "invalid_hours" };
+  }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("visit_branches")
@@ -619,6 +695,9 @@ export async function updateVisitBranch(input: {
   is_active?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireVisitsManageCatalog();
+  if (visitHoursInvalid(input.opening_time, input.closing_time)) {
+    return { ok: false, error: "invalid_hours" };
+  }
   const supabase = await createClient();
   const patch = {
     updated_at: new Date().toISOString(),
