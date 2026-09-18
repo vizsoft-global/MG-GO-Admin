@@ -18,8 +18,10 @@ import {
   isUnjustifiedDay,
   mapLiveStatusToUi,
   monthMeta,
+  keepSelectedPayrollOptions,
   payrollMonthForPreset,
   payrollMonths,
+  payrollRiderMatchesSearch,
   payrollTileFor,
   presetForPayrollMonth,
   requestCoversDate,
@@ -49,6 +51,33 @@ describe("fixedDays / month selector", () => {
     assert.equal(months.length, 3);
     assert.throws(() => assertPayrollMonth("2026-06", "2026-09-16"), /month_out_of_range/);
     assert.equal(assertPayrollMonth("2026-08", "2026-09-16").days, 31);
+  });
+
+  it("filters riders by name, zone, restaurant, AM or MG id", () => {
+    const row = {
+      name: "Jenson Doe",
+      zone: "Hawally",
+      restaurant: "Keeta Mall",
+      amId: "AM-12",
+      mgId: "MG-9",
+    };
+    assert.equal(payrollRiderMatchesSearch(row, ""), true);
+    assert.equal(payrollRiderMatchesSearch(row, "jenson"), true);
+    assert.equal(payrollRiderMatchesSearch(row, "hawally"), true);
+    assert.equal(payrollRiderMatchesSearch(row, "keeta"), true);
+    assert.equal(payrollRiderMatchesSearch(row, "am-12"), true);
+    assert.equal(payrollRiderMatchesSearch(row, "mg-9"), true);
+    assert.equal(payrollRiderMatchesSearch(row, "unknown"), false);
+  });
+
+  it("keeps selected slicer ids in option lists during a refetch gap", () => {
+    const next = keepSelectedPayrollOptions(
+      { zones: [], restaurants: [], nationalities: [] },
+      { zoneIds: ["z1"], restaurantIds: ["r1"], nationalities: ["IN"] },
+    );
+    assert.deepEqual(next.zones, [{ id: "z1", name: "z1" }]);
+    assert.deepEqual(next.restaurants, [{ id: "r1", name: "r1" }]);
+    assert.deepEqual(next.nationalities, ["IN"]);
   });
 
   it("maps This month / Last month / Custom like the Performance range pills", () => {

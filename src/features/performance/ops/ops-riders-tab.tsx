@@ -191,8 +191,8 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
             {t("exportTab")}
           </button>
         </div>
-        <div className="overflow-x-auto">
-          <div className={cn("grid min-w-[1680px] grid-cols-[repeat(18,minmax(88px,1fr))] gap-0 border-b border-border bg-muted/30 px-3 py-1.5", TABLE_HEAD_CLASS)}>
+        <div ref={parentRef} className="h-[min(420px,48dvh)] overflow-auto">
+          <div className={cn("sticky top-0 z-10 grid min-w-[1680px] grid-cols-[repeat(18,minmax(88px,1fr))] gap-0 border-b border-border bg-muted/30 px-3 py-1.5", TABLE_HEAD_CLASS)}>
             {cols.map((c) => (
               <span
                 key={c.id}
@@ -203,32 +203,30 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
               </span>
             ))}
           </div>
-          <div ref={parentRef} className="h-[min(420px,48dvh)] overflow-auto">
-            <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-              {virtualizer.getVirtualItems().map((item) => {
-                const row = filtered[item.index];
-                return (
-                  <div
-                    key={row.driver_id}
-                    className="absolute inset-x-0 grid min-w-[1680px] grid-cols-[repeat(18,minmax(88px,1fr))] items-center gap-0 border-b border-border/60 px-3 text-xs"
-                    style={{ height: item.size, transform: `translateY(${item.start}px)` }}
-                  >
-                    {cols.map((c) => (
-                      <span
-                        key={c.id}
-                        className={cn(
-                          "truncate tabular-nums",
-                          c.align === "end" && "text-end",
-                          c.id === "name" && "font-medium",
-                        )}
-                      >
-                        {cell(row, c.id)}
-                      </span>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
+          <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+            {virtualizer.getVirtualItems().map((item) => {
+              const row = filtered[item.index];
+              return (
+                <div
+                  key={row.driver_id}
+                  className="absolute inset-x-0 grid min-w-[1680px] grid-cols-[repeat(18,minmax(88px,1fr))] items-center gap-0 border-b border-border/60 px-3 text-xs"
+                  style={{ height: item.size, transform: `translateY(${item.start}px)` }}
+                >
+                  {cols.map((c) => (
+                    <span
+                      key={c.id}
+                      className={cn(
+                        "truncate tabular-nums",
+                        c.align === "end" && "text-end",
+                        c.id === "name" && "font-medium",
+                      )}
+                    >
+                      {cell(row, c.id)}
+                    </span>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

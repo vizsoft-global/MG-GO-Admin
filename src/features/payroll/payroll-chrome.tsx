@@ -135,6 +135,7 @@ function PayrollCustomMonthPopover({
             max={maxKey}
             onChange={(e) => setDraft(e.target.value)}
             className="mt-1 h-9"
+            openPickerOnFocus={false}
           />
         </label>
         {err ? <p className="mt-2 text-[11px] text-destructive">{err}</p> : null}

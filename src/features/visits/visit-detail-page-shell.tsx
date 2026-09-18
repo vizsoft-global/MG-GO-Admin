@@ -357,7 +357,7 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
     return (
       <AppPage>
         <AppPageHeader title={t("detail.notFound")} />
-        <Button variant="outline" className="h-9" render={<Link href="/visit-bookings" />}>
+        <Button variant="outline" className="h-9" render={<Link href="/visit-bookings/all" />}>
           <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
           {t("detail.back")}
         </Button>
@@ -404,7 +404,7 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
               variant="outline"
               size="sm"
               className="h-9"
-              render={<Link href="/visit-bookings" />}
+              render={<Link href="/visit-bookings/all" />}
             >
               <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
               {t("detail.back")}
@@ -493,7 +493,9 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
                   }}
                 >
                   <Pencil className="me-1 h-3 w-3" />
-                  {t("catalog.edit")}
+                  {visit.note_to_rider?.trim()
+                    ? t("catalog.edit")
+                    : t("detail.addNote")}
                 </Button>
               ) : null}
             </div>

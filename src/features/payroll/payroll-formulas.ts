@@ -127,7 +127,10 @@ export function shiftMonthKey(key: string, delta: number): string {
 export const PAYROLL_RANGE_PRESETS = ["thisMonth", "lastMonth", "custom"] as const;
 export type PayrollRangePreset = (typeof PAYROLL_RANGE_PRESETS)[number];
 
-/** Allowed archive: Kuwait current month + previous 2. */
+/**
+ * Allowed archive: Kuwait current month + previous 2.
+ * Intentional product window — do not expand without a separate client discussion.
+ */
 export function payrollMonths(todayYmd: string): PayrollMonthMeta[] {
   const currentKey = todayYmd.slice(0, 7);
   return [0, -1, -2].map((delta) => {
@@ -641,4 +644,46 @@ export function dayStatusLabel(status: DayStatus): string {
 export function formatPayrollPct(value: number, digits = 1): string {
   if (!Number.isFinite(value)) return "0.0%";
   return `${value.toFixed(digits)}%`;
+}
+
+export function payrollRiderMatchesSearch(
+  row: {
+    name: string;
+    zone: string;
+    restaurant: string;
+    amId: string;
+    mgId: string;
+  },
+  query: string,
+): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return [row.name, row.zone, row.restaurant, row.amId, row.mgId].some((value) =>
+    value.toLowerCase().includes(needle),
+  );
+}
+
+export function keepSelectedPayrollOptions<
+  T extends {
+    zones: Array<{ id: string; name: string }>;
+    restaurants: Array<{ id: string; name: string }>;
+    nationalities: string[];
+  },
+>(
+  options: T,
+  selected: { zoneIds: string[]; restaurantIds: string[]; nationalities: string[] },
+): T {
+  const zones = [...options.zones];
+  for (const id of selected.zoneIds) {
+    if (!zones.some((z) => z.id === id)) zones.push({ id, name: id });
+  }
+  const restaurants = [...options.restaurants];
+  for (const id of selected.restaurantIds) {
+    if (!restaurants.some((r) => r.id === id)) restaurants.push({ id, name: id });
+  }
+  const nationalities = [...options.nationalities];
+  for (const code of selected.nationalities) {
+    if (!nationalities.includes(code)) nationalities.push(code);
+  }
+  return { ...options, zones, restaurants, nationalities };
 }

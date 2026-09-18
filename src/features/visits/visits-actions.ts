@@ -9,6 +9,11 @@ import { sendPushBatch } from "@/lib/firebase/fcm-provider";
 import { buildActionPayload, buildFcmDataPayload } from "@/features/notifications/payload-contract";
 import { pickLatestPushTokenByDriver } from "@/features/notifications/push-token-select";
 import { visitHoursInvalid } from "./visit-hours";
+import {
+  nextDefaultBranchUpdates,
+  planVisitWeekdaySlotCopy,
+  type RecurringVisitSlot,
+} from "./visit-slot-copy";
 
 /**
  * Columns added by 20260827110000_visit_slot_availability_config.sql and the
@@ -714,6 +719,103 @@ export async function updateVisitBranch(input: {
   const { error } = await supabase.from("visit_branches").update(patch).eq("id", input.id);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * One default only — enforced by existing unique index
+ * `visit_branches_single_default_uidx` (migration 20260827103000). No new SQL.
+ */
+export async function setVisitBranchDefault(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireVisitsManageCatalog();
+  const supabase = await createClient();
+  const { data: branches, error: loadError } = await supabase
+    .from("visit_branches")
+    .select("id, is_default, is_active");
+  if (loadError) return { ok: false, error: loadError.message };
+
+  const plan = nextDefaultBranchUpdates(branches ?? [], id);
+  if (!plan.ok) return { ok: false, error: plan.error };
+  if (plan.already) return { ok: true };
+
+  if (plan.clearIds.length > 0) {
+    const { error: clearError } = await supabase
+      .from("visit_branches")
+      .update({ is_default: false, updated_at: new Date().toISOString() })
+      .in("id", plan.clearIds);
+    if (clearError) return { ok: false, error: clearError.message };
+  }
+
+  const { error: setError } = await supabase
+    .from("visit_branches")
+    .update({ is_default: true, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (setError) {
+    if (plan.clearIds.length > 0) {
+      await supabase
+        .from("visit_branches")
+        .update({ is_default: true, updated_at: new Date().toISOString() })
+        .eq("id", plan.clearIds[0]);
+    }
+    return { ok: false, error: setError.message };
+  }
+  return { ok: true };
+}
+
+/**
+ * Copies recurring weekday templates onto every other active branch.
+ * Inserts `visit_slots` only — never reads or writes `visit_bookings`.
+ * A second run is a no-op (skip-if-exists on dept / dow / start / end).
+ */
+export async function copyVisitWeekdaySlotsToAllBranches(): Promise<{
+  ok: boolean;
+  inserted: number;
+  sourceBranchId: string | null;
+  error?: string;
+}> {
+  await requireVisitsManageCatalog();
+  const supabase = await createClient();
+
+  const [branchesRes, slotsRes] = await Promise.all([
+    supabase.from("visit_branches").select("id, is_default, is_active"),
+    supabase
+      .from("visit_slots")
+      .select(
+        "id, branch_id, department_key, slot_date, day_of_week, start_time, end_time, capacity, is_active",
+      )
+      .is("slot_date", null),
+  ]);
+
+  if (branchesRes.error) {
+    return { ok: false, inserted: 0, sourceBranchId: null, error: branchesRes.error.message };
+  }
+  if (slotsRes.error) {
+    return { ok: false, inserted: 0, sourceBranchId: null, error: slotsRes.error.message };
+  }
+
+  const planned = planVisitWeekdaySlotCopy(
+    branchesRes.data ?? [],
+    (slotsRes.data ?? []) as RecurringVisitSlot[],
+  );
+  if (planned.inserts.length === 0) {
+    return { ok: true, inserted: 0, sourceBranchId: planned.sourceBranchId };
+  }
+
+  const { error: insertError } = await supabase.from("visit_slots").insert(planned.inserts);
+  if (insertError) {
+    return {
+      ok: false,
+      inserted: 0,
+      sourceBranchId: planned.sourceBranchId,
+      error: insertError.message,
+    };
+  }
+  return {
+    ok: true,
+    inserted: planned.inserts.length,
+    sourceBranchId: planned.sourceBranchId,
+  };
 }
 
 export type VisitBookingConfigRow = {

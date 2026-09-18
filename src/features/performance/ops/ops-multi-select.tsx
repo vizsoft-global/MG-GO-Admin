@@ -80,10 +80,10 @@ export function OpsMultiSelect({
         }}
       >
         <PopoverTrigger
-          disabled={disabled || options.length === 0}
+          disabled={disabled}
           className={cn(
             "inline-flex h-9 w-full items-center justify-between gap-1 rounded-md border border-border bg-background px-2.5 text-start text-xs",
-            disabled || options.length === 0
+            disabled
               ? "cursor-not-allowed opacity-50"
               : "hover:bg-muted/40",
           )}

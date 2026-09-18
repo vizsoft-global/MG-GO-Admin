@@ -22,7 +22,7 @@
     "test:payroll": "node --import tsx --test src/features/payroll/payroll-formulas.test.ts",
     "test:dpd": "node --import tsx --test src/features/dpd/incentive-rule-import.test.ts src/features/dpd/incentive-rule-filter.test.ts",
     "test:earnings": "node --import tsx --test src/features/earnings/incentive-daily-report.test.ts",
-    "test:visits": "node --import tsx --test src/features/visits/visit-hours.test.ts src/features/visits/visit-upcoming.test.ts",
+    "test:visits": "node --import tsx --test src/features/visits/visit-hours.test.ts src/features/visits/visit-upcoming.test.ts src/features/visits/visit-slot-copy.test.ts src/components/app/date-range-disabled.test.ts",
     "test:requests": "node --import tsx --test src/features/requests/request-status-utils.test.ts src/features/requests/request-create-utils.test.ts src/features/requests/request-create-kinds.test.ts src/features/requests/request-audit-summary.test.ts src/features/requests/date-presets.test.ts src/features/requests/attachment-display-name.test.ts src/features/requests/decided-terms.test.ts src/features/requests/request-typed-fields.test.ts src/features/requests/request-reschedule-payload.test.ts",
     "test:notifications": "node --import tsx --test src/features/notifications/notification-validation.test.ts",
     "test:attendance": "node --import tsx --test src/features/attendance/working-hours.test.ts src/features/attendance/auto-checkout-rules.test.ts src/features/attendance/attendance-sort.test.ts src/features/driver-tracking/shift-adherence.test.ts",

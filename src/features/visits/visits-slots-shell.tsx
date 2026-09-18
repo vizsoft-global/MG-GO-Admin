@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Building2, Loader2, Minus, Plus, X } from "lucide-react";
+import { Building2, Copy, Loader2, Minus, Plus, X } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppPage, AppPageHeader } from "@/components/app";
@@ -25,6 +25,7 @@ import { selectOptionsFrom } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
 import {
   addVisitBlockedDate,
+  copyVisitWeekdaySlotsToAllBranches,
   fetchVisitBlockedDates,
   fetchVisitBookingConfigs,
   fetchVisitDepartments,
@@ -325,6 +326,22 @@ export function VisitsSlotsShell() {
     });
   };
 
+  const copySlots = async () => {
+    setSaving(true);
+    const result = await copyVisitWeekdaySlotsToAllBranches();
+    setSaving(false);
+    if (!result.ok) {
+      toast.error(result.error ?? t("branches.copySlotsFailed"));
+      return;
+    }
+    toast.success(
+      result.inserted > 0
+        ? t("branches.copySlotsOk", { count: result.inserted })
+        : t("branches.copySlotsNone"),
+    );
+    await queryClient.invalidateQueries({ queryKey: queryKeys.visits.all() });
+  };
+
   return (
     <AppPage className="space-y-3">
       <AppPageHeader
@@ -354,6 +371,19 @@ export function VisitsSlotsShell() {
                   ))}
                 </SelectContent>
               </Select>
+            ) : null}
+            {canManage ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                disabled={saving}
+                onClick={() => void copySlots()}
+              >
+                <Copy className="me-1.5 h-3.5 w-3.5" />
+                {t("branches.copySlots")}
+              </Button>
             ) : null}
             <Button
               type="button"

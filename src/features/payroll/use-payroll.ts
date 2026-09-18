@@ -10,5 +10,6 @@ export function usePayrollSnapshot(monthKey: string, slicers: PayrollSlicers) {
     queryKey: queryKeys.payroll.snapshot({ monthKey, ...slicers }),
     queryFn: () => fetchPayrollMonthSnapshot({ monthKey, slicers }),
     staleTime: 30_000,
+    placeholderData: (prev) => prev,
   });
 }

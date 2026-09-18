@@ -11,6 +11,7 @@ import { kuwaitToday } from "@/features/performance/performance-formulas";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
 import {
   bucketOf,
+  keepSelectedPayrollOptions,
   payrollMonthForPreset,
   payrollMonths,
   presetForPayrollMonth,
@@ -114,7 +115,10 @@ export function PayrollPageShell() {
         <PayrollSlicerBar
           slicers={slicers}
           onChange={changeSlicers}
-          options={data?.options ?? { zones: [], restaurants: [], nationalities: [], sourceCompanies: [] }}
+          options={keepSelectedPayrollOptions(
+            data?.options ?? { zones: [], restaurants: [], nationalities: [], sourceCompanies: [] },
+            slicers,
+          )}
         />
       </div>
       {query.isLoading ? (

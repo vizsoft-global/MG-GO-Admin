@@ -5001,7 +5001,14 @@
         "desksInvalid": "Desks must be at least 1",
         "invalidHours": "Closing time must be after opening time",
         "default": "Default",
-        "city": "City"
+        "city": "City",
+        "setDefault": "Set as default",
+        "setDefaultOk": "Default branch updated",
+        "setDefaultFailed": "Could not set the default branch",
+        "copySlots": "Copy weekday slots to all branches",
+        "copySlotsOk": "Copied {count} weekday slots",
+        "copySlotsNone": "Every active branch already has these weekday slots",
+        "copySlotsFailed": "Could not copy weekday slots"
       },
       "slots": {
         "title": "Slot & availability",
@@ -6574,6 +6581,7 @@
       "downloadTable": "Download this table",
       "loading": "Loading month…",
       "loadError": "Could not load this payroll month",
+      "searchPlaceholder": "Search name, zone, restaurant, AM or MG ID",
       "emptyRiders": "No riders match the current filters",
       "emptyRequests": "No requests match this filter",
       "showAll": "Show all",
