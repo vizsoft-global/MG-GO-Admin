@@ -17,6 +17,8 @@ export function KpiCard({
   caption,
   className,
   compact = false,
+  selected = false,
+  onClick,
 }: {
   label: string;
   value: string | number;
@@ -27,16 +29,23 @@ export function KpiCard({
   /** Reads the caption beside the value instead of below it, for KPI strips that
    *  share a viewport with a table or charts. */
   compact?: boolean;
+  selected?: boolean;
+  onClick?: () => void;
 }) {
   const toneStyle = TONE_STYLES[accentToTone(accent)];
+  const Comp = onClick ? "button" : "div";
 
   return (
-    <div
+    <Comp
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
       className={cn(
-        "group relative flex items-start gap-3 overflow-hidden rounded-xl",
+        "group relative flex items-start gap-3 overflow-hidden rounded-xl text-start",
         compact ? "items-center gap-2 px-3 py-1.5" : "p-4",
         NEUTRAL_TILE,
         toneStyle.accentBar,
+        onClick && "cursor-pointer",
+        selected && (accent === "success" ? "ring-1 ring-success" : "ring-1 ring-primary"),
         className,
       )}
     >
@@ -75,6 +84,6 @@ export function KpiCard({
           </>
         )}
       </div>
-    </div>
+    </Comp>
   );
 }

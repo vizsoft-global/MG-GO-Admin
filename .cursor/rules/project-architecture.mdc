@@ -234,6 +234,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-09-18` — **Vehicles condition catalog + list filters.** `vehicles.condition` CHECK widens to running / inventory_assembled / sold / deadstock / stolen / repair_required / standby / police_custody / accident (keeps live `running` rows; no backfill). `/vehicles` adds Status / Car Type / Type of Use / Kind dropdowns and clickable KPI tiles (`applyVehicleKpi`: Company does not clear On Duty). `type_of_use.standby` label is Standby use vs Condition Standby. Migration `20261026700000` pushed to `eoksxkdssptgyqyywdju`. No Play.
+
 - `[admin+app] 2026-09-18` — **QA visits/requests/performance + A7 visit note notify.** All Visits empty min-h-48; Branch/Blocked Date `px-5 py-4`; branch hours `invalid_hours`; reports drop Branch: prefix; upcoming KPI+tab = `kuwaitTodayYmd()` listed-row count. Leave reschedule: picker not on focus, note required, `RequestRescheduleSummary` for awaiting/accepted/declined. Performance: Total Orders, `{metric} Trend/by X`, riders DPD/Target Efficiency + Working Days, header truncate, nationality `isChartableDimKey`, category-colored bars. App: Decline style, leave justification humanize, reschedule card + driver_note, slot grid + hide past Kuwait today, ReviewRow start-align, My Visits back + `note_to_rider`. **Only new SQL:** `20261026600000` `admin_set_visit_note_to_rider` (additive; no rewrite of live visit/status RPCs). No db push / Vercel / Play.
 
 - `[admin only] 2026-09-17` — **DPD Efficiency chart tooltip rounds to one decimal.** View-by `dpd_eff` / `tgt_eff` hover no longer prints raw `241.7147483506631`; same `formatPct` as the KPI (`241.7%`). No migration.

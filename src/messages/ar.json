@@ -3013,12 +3013,18 @@
       "sectionDriver": "السائق والتعيين",
       "carTypeHint": "فئة الملكية — ليست الحالة التشغيلية.",
       "statusHint": "الحالة التشغيلية. الصيانة هنا تعني تحت الإصلاح.",
-      "typeOfUseHint": "كيف تُستخدم المركبة. الاحتياط هنا ليس الحالة الفنية: احتياط.",
+      "typeOfUseHint": "كيف تُستخدم المركبة. استخدام احتياط ليس الحالة الفنية: احتياط.",
       "typeOfUse": {
         "operational": "تشغيلي",
         "trainer": "تدريب",
-        "standby": "احتياط"
+        "standby": "استخدام احتياط"
       },
+      "filterStatusAll": "كل الحالات التشغيلية",
+      "filterCarTypeAll": "كل أنواع السيارات",
+      "filterTypeOfUseAll": "كل الاستخدامات",
+      "filterKindAll": "كل الأنواع",
+      "kindBike": "دراجة",
+      "kindCar": "سيارة",
       "carsCompanyPlaceholder": "اختر شركة السيارات",
       "carsCompanySearch": "ابحث عن شريك",
       "replacesPlaceholder": "اختر اللوحة الأصلية",
@@ -3043,9 +3049,14 @@
       },
       "condition": {
         "running": "تعمل",
+        "inventory_assembled": "مخزون / مجمّعة",
+        "sold": "مباعة",
+        "deadstock": "راكدة",
+        "stolen": "مسروقة",
         "repair_required": "تحتاج إصلاح",
-        "accident": "حادث",
-        "standby": "احتياط"
+        "standby": "احتياط",
+        "police_custody": "حجز الشرطة",
+        "accident": "حادث"
       },
       "fuelType": {
         "chip": "شريحة",

@@ -2,13 +2,20 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VehicleListRow } from "./types";
 import {
+  applyVehicleKpi,
   assignedDriverProjectWrite,
   parseVehicleListTab,
   parseVehicleProjectFilter,
+  vehicleKpiSelected,
   vehicleListKpis,
+  vehicleMatchesCarType,
+  vehicleMatchesKind,
   vehicleMatchesProject,
   vehicleMatchesSearch,
+  vehicleMatchesStatus,
   vehicleMatchesTab,
+  vehicleMatchesTypeOfUse,
+  type VehicleListFilterState,
 } from "./vehicles-list-utils";
 
 function row(
@@ -132,6 +139,93 @@ describe("assignedDriverProjectWrite", () => {
     });
     assert.equal(assignedDriverProjectWrite(null, "keeta"), null);
     assert.equal(assignedDriverProjectWrite("", "keeta"), null);
+  });
+});
+
+describe("vehicle list dimension filters", () => {
+  it("matches status, car type, type of use, and kind independently", () => {
+    const live = row({
+      id: "1",
+      bike_id: "A",
+      status: "active",
+      car_type: "company",
+      type_of_use: "standby",
+      vehicle_type_key: "bike",
+    });
+    assert.equal(vehicleMatchesStatus(live, "all"), true);
+    assert.equal(vehicleMatchesStatus(live, "active"), true);
+    assert.equal(vehicleMatchesStatus(live, "maintenance"), false);
+    assert.equal(vehicleMatchesCarType(live, "company"), true);
+    assert.equal(vehicleMatchesCarType(live, "rent"), false);
+    assert.equal(vehicleMatchesTypeOfUse(live, "standby"), true);
+    assert.equal(vehicleMatchesTypeOfUse(live, "operational"), false);
+    assert.equal(vehicleMatchesKind(live, "bike"), true);
+    assert.equal(vehicleMatchesKind(live, "car"), false);
+  });
+});
+
+describe("applyVehicleKpi", () => {
+  const base: VehicleListFilterState = {
+    tab: "on-duty",
+    status: "all",
+    carType: "all",
+    typeOfUse: "trainer",
+    kind: "car",
+    search: "kwt",
+    project: "keeta",
+  };
+
+  it("resets extras on Total and leaves On Duty when Company is clicked", () => {
+    const company = applyVehicleKpi("company", base);
+    assert.equal(company.tab, "on-duty");
+    assert.equal(company.carType, "company");
+    assert.equal(company.typeOfUse, "trainer");
+    assert.equal(company.search, "kwt");
+
+    const total = applyVehicleKpi("total", company);
+    assert.deepEqual(total, {
+      tab: "all",
+      status: "all",
+      carType: "all",
+      typeOfUse: "all",
+      kind: "all",
+      search: "",
+      project: "all",
+    });
+  });
+
+  it("puts Suspended and Under Repair on the status dropdown, not each other", () => {
+    const suspended = applyVehicleKpi("suspended", base);
+    assert.equal(suspended.tab, "all");
+    assert.equal(suspended.status, "suspended");
+    const repair = applyVehicleKpi("underRepair", suspended);
+    assert.equal(repair.status, "maintenance");
+    assert.equal(repair.tab, "all");
+  });
+
+  it("selects Total only when tab and dropdowns are clear", () => {
+    assert.equal(
+      vehicleKpiSelected("total", {
+        tab: "all",
+        status: "all",
+        carType: "all",
+        typeOfUse: "all",
+        kind: "all",
+      }),
+      true,
+    );
+    assert.equal(
+      vehicleKpiSelected("onDuty", { ...base, tab: "on-duty" }),
+      true,
+    );
+    assert.equal(
+      vehicleKpiSelected("company", { ...base, carType: "company" }),
+      true,
+    );
+    assert.equal(
+      vehicleKpiSelected("total", { ...base, tab: "on-duty" }),
+      false,
+    );
   });
 });
 

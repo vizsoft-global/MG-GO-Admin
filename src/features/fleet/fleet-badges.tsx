@@ -93,16 +93,26 @@ export function VehicleStatusBadge({
 
 const CONDITION_CLASS: Record<VehicleCondition, string> = {
   running: "border-success/30 bg-success-bg text-success",
+  inventory_assembled: "border-border bg-muted/40 text-muted-foreground",
+  sold: "border-border bg-muted/40 text-muted-foreground",
+  deadstock: "border-border bg-muted/40 text-muted-foreground",
+  stolen: "border-destructive/30 bg-destructive/10 text-destructive",
   repair_required: "border-warning/40 bg-warning-bg text-warning",
-  accident: "border-destructive/30 bg-destructive/10 text-destructive",
   standby: "border-border bg-muted/40 text-muted-foreground",
+  police_custody: "border-destructive/30 bg-destructive/10 text-destructive",
+  accident: "border-destructive/30 bg-destructive/10 text-destructive",
 };
 
 const CONDITION_LABEL: Record<VehicleCondition, string> = {
   running: "Running",
-  repair_required: "Repair Required",
-  accident: "Accident",
+  inventory_assembled: "Inventory / Assembled",
+  sold: "Sold",
+  deadstock: "Deadstock",
+  stolen: "Stolen",
+  repair_required: "Repairs Required",
   standby: "Standby",
+  police_custody: "Police Custody",
+  accident: "Accident",
 };
 
 export function ConditionBadge({ value }: { value: VehicleCondition | null | undefined }) {

@@ -9,6 +9,8 @@ export type KpiGridItem = {
   icon?: LucideIcon;
   accent?: KpiAccent;
   caption?: ReactNode;
+  selected?: boolean;
+  onClick?: () => void;
 };
 
 /** Widest row the strip is allowed to form. Fewer KPIs than this must spread across the
@@ -45,6 +47,8 @@ export function KpiGrid({
           accent={kpi.accent}
           caption={kpi.caption}
           compact={compact}
+          selected={kpi.selected}
+          onClick={kpi.onClick}
         />
       ))}
     </div>
