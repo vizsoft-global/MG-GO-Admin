@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Award, Percent, UserCheck, Users } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/kpi-card";
+import { Input } from "@/components/ui/input";
 import {
   bucketOf,
   formatPayrollPct,
+  payrollRiderMatchesSearch,
   type PayrollEffBucketId,
   type PayrollKpis,
   type PayrollMonthMeta,
@@ -36,9 +38,14 @@ export function PayrollTab({
   canExport: boolean;
 }) {
   const t = useTranslations("pages.payroll");
+  const [search, setSearch] = useState("");
   const visible = useMemo(
     () => (drill ? riders.filter((r) => bucketOf(r.efficiency) === drill) : riders),
     [riders, drill],
+  );
+  const searched = useMemo(
+    () => visible.filter((r) => payrollRiderMatchesSearch(r, search)),
+    [visible, search],
   );
 
   return (
@@ -84,7 +91,7 @@ export function PayrollTab({
       />
       {drill ? (
         <div className="flex items-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
-          <span>{t("drillBanner", { bucket: bucketLabel(drill), count: visible.length })}</span>
+          <span>{t("drillBanner", { bucket: bucketLabel(drill), count: searched.length })}</span>
           <button
             type="button"
             onClick={() => onDrill(null)}
@@ -94,17 +101,23 @@ export function PayrollTab({
           </button>
         </div>
       ) : null}
+      <Input
+        className="h-9"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder={t("searchPlaceholder")}
+      />
       <PayrollDayGrid
         monthKey={month.key}
         days={month.days}
-        rows={visible}
+        rows={searched}
         empty={t("emptyRiders")}
         exportLabel={t("downloadTable")}
         onExport={() => {
-          if (canExport) exportPayrollViewCsv(month.key, month.days, visible);
+          if (canExport) exportPayrollViewCsv(month.key, month.days, searched);
         }}
         footer={t("tableFoot", {
-          shown: visible.length,
+          shown: searched.length,
           total: riders.length,
           month: month.label,
           days: month.days,

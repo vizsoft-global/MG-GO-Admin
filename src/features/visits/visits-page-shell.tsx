@@ -443,7 +443,7 @@ export function VisitsPageShell() {
               value={branchFilter}
               onValueChange={(v) => v && setBranchFilter(v)}
             >
-              <SelectTrigger className="h-9 w-[150px]">
+              <SelectTrigger className="h-9 min-w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -459,7 +459,7 @@ export function VisitsPageShell() {
               value={deptFilter}
               onValueChange={(v) => v && setDeptFilter(v)}
             >
-              <SelectTrigger className="h-9 w-[160px]">
+              <SelectTrigger className="h-9 min-w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -475,7 +475,7 @@ export function VisitsPageShell() {
               value={statusFilter}
               onValueChange={(v) => v && setStatusFilter(v)}
             >
-              <SelectTrigger className="h-9 w-[140px]">
+              <SelectTrigger className="h-9 min-w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -486,7 +486,11 @@ export function VisitsPageShell() {
                 ))}
               </SelectContent>
             </Select>
-            <DateRangeFilter value={dateRange} onChange={setDateRange} />
+            <DateRangeFilter
+              value={dateRange}
+              onChange={setDateRange}
+              allowFutureDates
+            />
           </div>
         }
       />
@@ -593,12 +597,13 @@ export function VisitsPageShell() {
                 <AppDataTableRow key={row.id}>
                   {canOperate ? (
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        aria-label={row.booking_code}
-                        checked={selected.has(row.id)}
-                        disabled={!BULK_OPEN_STATUSES.has(row.status)}
-                        onCheckedChange={() => toggleRow(row.id)}
-                      />
+                      {BULK_OPEN_STATUSES.has(row.status) ? (
+                        <Checkbox
+                          aria-label={row.booking_code}
+                          checked={selected.has(row.id)}
+                          onCheckedChange={() => toggleRow(row.id)}
+                        />
+                      ) : null}
                     </TableCell>
                   ) : null}
                   <TableCell className="font-medium tabular-nums">

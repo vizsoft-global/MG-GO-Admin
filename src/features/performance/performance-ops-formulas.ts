@@ -460,6 +460,18 @@ export function fillCustomPreset(
   }
 }
 
+export function matchingCustomPreset(
+  from: string,
+  to: string,
+  today: string,
+): "14" | "30" | "90" | "quarter" | null {
+  for (const kind of ["14", "30", "90", "quarter"] as const) {
+    const next = fillCustomPreset(kind, today);
+    if (next.from === from && next.to === to) return kind;
+  }
+  return null;
+}
+
 /** Store slicer is empty unless All partners or the set includes Americana. */
 export function storesVisibleForPartners(partnerKeys: readonly string[]): boolean {
   return partnerFilterMode(partnerKeys) !== "keeta";

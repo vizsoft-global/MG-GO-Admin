@@ -9,12 +9,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
 import {
   assertCustomOpsRange,
   customRangeDraft,
   fillCustomPreset,
   formatOpsCustomPill,
+  matchingCustomPreset,
 } from "../performance-ops-formulas";
 
 export function OpsCustomRangePopover({
@@ -109,10 +111,9 @@ export function OpsCustomRangePopover({
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {(["14", "30", "90", "quarter"] as const).map((kind) => (
-            <button
+            <ToggleChip
               key={kind}
-              type="button"
-              className="h-8 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:bg-muted/40"
+              selected={matchingCustomPreset(from, to, today) === kind}
               onClick={() => {
                 const next = fillCustomPreset(kind, today);
                 setFrom(next.from);
@@ -121,7 +122,7 @@ export function OpsCustomRangePopover({
               }}
             >
               {t(`customPreset.${kind}`)}
-            </button>
+            </ToggleChip>
           ))}
         </div>
         {err ? <p className="mt-2 text-[11px] text-destructive">{err}</p> : null}

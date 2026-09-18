@@ -9,6 +9,7 @@ import {
   dpdEfficiencyPct,
   efficiencyBucket,
   fillCustomPreset,
+  matchingCustomPreset,
   formatOpsBucketLabel,
   formatOpsCustomPill,
   inclusiveDayCount,
@@ -241,6 +242,11 @@ describe("kpiDelta + windows", () => {
     }), { from: "2026-08-30", to: "2026-09-12" });
     assert.deepEqual(fillCustomPreset("14", "2026-09-12"), { from: "2026-08-30", to: "2026-09-12" });
     assert.deepEqual(fillCustomPreset("quarter", "2026-09-12"), { from: "2026-07-01", to: "2026-09-12" });
+    assert.equal(matchingCustomPreset("2026-08-30", "2026-09-12", "2026-09-12"), "14");
+    assert.equal(matchingCustomPreset("2026-08-14", "2026-09-12", "2026-09-12"), "30");
+    assert.equal(matchingCustomPreset("2026-06-15", "2026-09-12", "2026-09-12"), "90");
+    assert.equal(matchingCustomPreset("2026-07-01", "2026-09-12", "2026-09-12"), "quarter");
+    assert.equal(matchingCustomPreset("2026-09-01", "2026-09-12", "2026-09-12"), null);
   });
 });
 

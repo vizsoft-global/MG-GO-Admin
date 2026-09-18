@@ -402,7 +402,7 @@ Staff can also raise a request for a rider via `admin_create_request`. `p_type` 
 | Table | Notes |
 |-------|-------|
 | `visit_departments` | R — Figma RSup/12 keys (hr_services, legal, …). `20260901100100` adds nullable **`branch_id`**: `NULL` = offered at every branch (how all 11 existing rows behave), non-null = that branch only. `key` stays globally unique because it is the FK target for `visit_slots.department_key` and `visit_bookings.department_key`, and the one-active-booking-per (driver, date, department) index is a locked rule. **App must filter the department list by the branch it is booking at** — `branch_id IS NULL OR branch_id = <branch>` — or it will offer a department the server then rejects. |
-| `visit_branches` | R — Admin catalog; User App shows Central Tower (no branch picker) |
+| `visit_branches` | R — Admin catalog; User App still has **no branch picker**. Booking uses `visit_branches.is_default` (Admin **Set as default**). Admin may **copy weekday slots** onto every active branch; that is catalog-only (`visit_slots` inserts). Existing `visit_bookings` are never rewritten. |
 | `visit_slots` | R — capacity; remaining = capacity − active bookings |
 | `visit_bookings` | **W** own rows; code **VIS-#####**; status confirmed / checked_in / completed / no_show / cancelled |
 | `visit_bookings.note` | Rider-authored **Purpose** of the visit (what the driver types at booking) |

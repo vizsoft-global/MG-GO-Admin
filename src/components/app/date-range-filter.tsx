@@ -14,6 +14,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { dateRangeDisabledAfter } from "./date-range-disabled";
+
+export { dateRangeDisabledAfter };
 
 export type DateRangePreset =
   | "all"
@@ -171,10 +174,12 @@ export function DateRangeFilter({
   value,
   onChange,
   className,
+  allowFutureDates = false,
 }: {
   value: DateRangeValue;
   onChange: (value: DateRangeValue) => void;
   className?: string;
+  allowFutureDates?: boolean;
 }) {
   const t = useTranslations("common.dateRange");
   const [open, setOpen] = useState(false);
@@ -293,7 +298,7 @@ export function DateRangeFilter({
                 selected={draft}
                 onSelect={setDraft}
                 defaultMonth={draft?.from}
-                disabled={{ after: new Date() }}
+                disabled={dateRangeDisabledAfter(allowFutureDates)}
               />
               <div className="grid grid-cols-2 gap-2 border-t border-border px-3 py-2">
                 <div className="space-y-1">

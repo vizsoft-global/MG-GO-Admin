@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
+import { Copy, Loader2, Pencil, Plus, RefreshCw, Star } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
@@ -22,8 +22,10 @@ import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import {
+  copyVisitWeekdaySlotsToAllBranches,
   createVisitBranch,
   fetchVisitBranches,
+  setVisitBranchDefault,
   updateVisitBranch,
   type VisitBranchRow,
 } from "./visits-actions";
@@ -145,6 +147,34 @@ export function VisitsBranchesShell() {
     await queryClient.invalidateQueries({ queryKey: queryKeys.visits.branches() });
   };
 
+  const setDefault = async (id: string) => {
+    setBusy(true);
+    const result = await setVisitBranchDefault(id);
+    setBusy(false);
+    if (!result.ok) {
+      toast.error(result.error ?? t("branches.setDefaultFailed"));
+      return;
+    }
+    toast.success(t("branches.setDefaultOk"));
+    await queryClient.invalidateQueries({ queryKey: queryKeys.visits.branches() });
+  };
+
+  const copySlots = async () => {
+    setBusy(true);
+    const result = await copyVisitWeekdaySlotsToAllBranches();
+    setBusy(false);
+    if (!result.ok) {
+      toast.error(result.error ?? t("branches.copySlotsFailed"));
+      return;
+    }
+    toast.success(
+      result.inserted > 0
+        ? t("branches.copySlotsOk", { count: result.inserted })
+        : t("branches.copySlotsNone"),
+    );
+    await queryClient.invalidateQueries({ queryKey: queryKeys.visits.all() });
+  };
+
   return (
     <AppPage>
       <AppPageHeader
@@ -157,10 +187,23 @@ export function VisitsBranchesShell() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {canManage ? (
-              <Button type="button" size="sm" className="h-9" onClick={openCreate}>
-                <Plus className="me-1.5 h-3.5 w-3.5" />
-                {t("branches.add")}
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9"
+                  disabled={busy}
+                  onClick={() => void copySlots()}
+                >
+                  <Copy className="me-1.5 h-3.5 w-3.5" />
+                  {t("branches.copySlots")}
+                </Button>
+                <Button type="button" size="sm" className="h-9" onClick={openCreate}>
+                  <Plus className="me-1.5 h-3.5 w-3.5" />
+                  {t("branches.add")}
+                </Button>
+              </>
             ) : null}
             <Button
               type="button"
@@ -228,16 +271,31 @@ export function VisitsBranchesShell() {
                 </TableCell>
                 <TableCell>
                   {canManage ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 text-primary hover:bg-primary/10"
-                      onClick={() => openEdit(row)}
-                    >
-                      <Pencil className="me-1 h-3.5 w-3.5" />
-                      {t("catalog.edit")}
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {!row.is_default ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-primary hover:bg-primary/10"
+                          disabled={busy}
+                          onClick={() => void setDefault(row.id)}
+                        >
+                          <Star className="me-1 h-3.5 w-3.5" />
+                          {t("branches.setDefault")}
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-primary hover:bg-primary/10"
+                        onClick={() => openEdit(row)}
+                      >
+                        <Pencil className="me-1 h-3.5 w-3.5" />
+                        {t("catalog.edit")}
+                      </Button>
+                    </div>
                   ) : (
                     <span className="text-[11px] text-muted-foreground">—</span>
                   )}

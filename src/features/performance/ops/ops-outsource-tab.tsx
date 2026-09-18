@@ -58,8 +58,8 @@ export function OpsOutsourceTab({
           { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
           { label: t("kpi.riders"), value: formatInt(data.kpis.riders) },
           { label: t("kpi.active"), value: formatInt(data.kpis.active) },
-          { label: t("kpi.avgDpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
-          { label: t("kpi.avgTgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
+          { label: t("kpi.dpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
+          { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
         ]}
       />
       <OpsChartCard

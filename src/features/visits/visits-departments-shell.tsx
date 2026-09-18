@@ -315,7 +315,7 @@ export function VisitsDepartmentsShell() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="overflow-visible pt-4" showCloseButton closeOutside>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 px-5 py-4 sm:grid-cols-2">
             {!draft.id ? (
               <>
                 <div className="space-y-1">
