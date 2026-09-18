@@ -48,14 +48,29 @@ import { VehicleRecordDialog } from "./vehicle-record-dialog";
 import { useVehicleTypes, useVehiclesList } from "./use-vehicles";
 import type { VehicleListRow } from "./types";
 import {
+  applyVehicleKpi,
+  parseVehicleCarTypeFilter,
+  parseVehicleKindFilter,
   parseVehicleListTab,
   parseVehicleProjectFilter,
+  parseVehicleStatusFilter,
+  parseVehicleTypeOfUseFilter,
+  vehicleKpiSelected,
   vehicleListKpis,
+  vehicleMatchesCarType,
+  vehicleMatchesKind,
   vehicleMatchesProject,
   vehicleMatchesSearch,
+  vehicleMatchesStatus,
   vehicleMatchesTab,
+  vehicleMatchesTypeOfUse,
+  type VehicleCarTypeFilter,
+  type VehicleKindFilter,
+  type VehicleKpiKey,
   type VehicleListTab,
   type VehicleProjectFilter,
+  type VehicleStatusFilter,
+  type VehicleTypeOfUseFilter,
 } from "./vehicles-list-utils";
 
 export function VehiclesPageShell({
@@ -74,9 +89,22 @@ export function VehiclesPageShell({
   const { data: types = [] } = useVehicleTypes();
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState<VehicleProjectFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<VehicleStatusFilter>("all");
+  const [carTypeFilter, setCarTypeFilter] = useState<VehicleCarTypeFilter>("all");
+  const [typeOfUseFilter, setTypeOfUseFilter] = useState<VehicleTypeOfUseFilter>("all");
+  const [kindFilter, setKindFilter] = useState<VehicleKindFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const activeTab = parseVehicleListTab(tab);
+  const filterState = {
+    tab: activeTab,
+    status: statusFilter,
+    carType: carTypeFilter,
+    typeOfUse: typeOfUseFilter,
+    kind: kindFilter,
+    search,
+    project: projectFilter,
+  };
 
   const replaceQuery = (next: { add?: boolean; tab?: VehicleListTab }) => {
     const params = new URLSearchParams();
@@ -93,23 +121,76 @@ export function VehiclesPageShell({
       vehicles.filter(
         (row) =>
           vehicleMatchesTab(row, activeTab) &&
+          vehicleMatchesStatus(row, statusFilter) &&
+          vehicleMatchesCarType(row, carTypeFilter) &&
+          vehicleMatchesTypeOfUse(row, typeOfUseFilter) &&
+          vehicleMatchesKind(row, kindFilter) &&
           vehicleMatchesProject(row, projectFilter) &&
           vehicleMatchesSearch(row, search),
       ),
-    [activeTab, projectFilter, search, vehicles],
+    [activeTab, carTypeFilter, kindFilter, projectFilter, search, statusFilter, typeOfUseFilter, vehicles],
   );
+
+  const applyKpi = (key: VehicleKpiKey) => {
+    const next = applyVehicleKpi(key, filterState);
+    setStatusFilter(next.status);
+    setCarTypeFilter(next.carType);
+    setTypeOfUseFilter(next.typeOfUse);
+    setKindFilter(next.kind);
+    setSearch(next.search);
+    setProjectFilter(next.project);
+    if (next.tab !== activeTab) replaceQuery({ tab: next.tab });
+  };
 
   const counts = useMemo(() => vehicleListKpis(vehicles), [vehicles]);
   const selected = vehicles.find((row) => row.id === selectedId) ?? null;
   const editing = vehicles.find((row) => row.id === editId) ?? null;
   const kpis = [
-    { label: t("kpiTotal"), value: isLoading ? "—" : String(counts.total), icon: Bike, accent: "primary" as const },
-    { label: t("kpiOnDuty"), value: isLoading ? "—" : String(counts.onDuty), icon: CircleDot, accent: "success" as const },
-    { label: t("kpiSuspended"), value: isLoading ? "—" : String(counts.suspended), icon: Ban, accent: "danger" as const },
-    { label: t("kpiCompany"), value: isLoading ? "—" : String(counts.company), icon: Users },
-    { label: t("kpiRent"), value: isLoading ? "—" : String(counts.rent), icon: Wallet },
-    { label: t("kpiUnderRepair"), value: isLoading ? "—" : String(counts.underRepair), icon: Wrench, accent: "warning" as const },
-  ];
+    {
+      key: "total" as const,
+      label: t("kpiTotal"),
+      value: isLoading ? "—" : String(counts.total),
+      icon: Bike,
+      accent: "primary" as const,
+    },
+    {
+      key: "onDuty" as const,
+      label: t("kpiOnDuty"),
+      value: isLoading ? "—" : String(counts.onDuty),
+      icon: CircleDot,
+      accent: "success" as const,
+    },
+    {
+      key: "suspended" as const,
+      label: t("kpiSuspended"),
+      value: isLoading ? "—" : String(counts.suspended),
+      icon: Ban,
+      accent: "danger" as const,
+    },
+    {
+      key: "company" as const,
+      label: t("kpiCompany"),
+      value: isLoading ? "—" : String(counts.company),
+      icon: Users,
+    },
+    {
+      key: "rent" as const,
+      label: t("kpiRent"),
+      value: isLoading ? "—" : String(counts.rent),
+      icon: Wallet,
+    },
+    {
+      key: "underRepair" as const,
+      label: t("kpiUnderRepair"),
+      value: isLoading ? "—" : String(counts.underRepair),
+      icon: Wrench,
+      accent: "warning" as const,
+    },
+  ].map((kpi) => ({
+    ...kpi,
+    selected: vehicleKpiSelected(kpi.key, filterState),
+    onClick: () => applyKpi(kpi.key),
+  }));
 
   return (
     <AppPage>
@@ -183,6 +264,114 @@ export function VehiclesPageShell({
                 </SelectItem>
                 <SelectItem value="americana" label={t("projectAmericana")}>
                   {t("projectAmericana")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              items={[
+                { value: "all", label: t("filterStatusAll") },
+                { value: "active", label: t("statusActive") },
+                { value: "suspended", label: t("statusSuspended") },
+                { value: "maintenance", label: t("statusMaintenance") },
+              ]}
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(parseVehicleStatusFilter(value))}
+            >
+              <SelectTrigger className="h-9 w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" label={t("filterStatusAll")}>
+                  {t("filterStatusAll")}
+                </SelectItem>
+                <SelectItem value="active" label={t("statusActive")}>
+                  {t("statusActive")}
+                </SelectItem>
+                <SelectItem value="suspended" label={t("statusSuspended")}>
+                  {t("statusSuspended")}
+                </SelectItem>
+                <SelectItem value="maintenance" label={t("statusMaintenance")}>
+                  {t("statusMaintenance")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              items={[
+                { value: "all", label: t("filterCarTypeAll") },
+                { value: "company", label: t("carType.company") },
+                { value: "rent", label: t("carType.rent") },
+                { value: "maintenance", label: t("carType.maintenance") },
+              ]}
+              value={carTypeFilter}
+              onValueChange={(value) => setCarTypeFilter(parseVehicleCarTypeFilter(value))}
+            >
+              <SelectTrigger className="h-9 w-[168px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" label={t("filterCarTypeAll")}>
+                  {t("filterCarTypeAll")}
+                </SelectItem>
+                <SelectItem value="company" label={t("carType.company")}>
+                  {t("carType.company")}
+                </SelectItem>
+                <SelectItem value="rent" label={t("carType.rent")}>
+                  {t("carType.rent")}
+                </SelectItem>
+                <SelectItem value="maintenance" label={t("carType.maintenance")}>
+                  {t("carType.maintenance")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              items={[
+                { value: "all", label: t("filterTypeOfUseAll") },
+                { value: "operational", label: t("typeOfUse.operational") },
+                { value: "trainer", label: t("typeOfUse.trainer") },
+                { value: "standby", label: t("typeOfUse.standby") },
+              ]}
+              value={typeOfUseFilter}
+              onValueChange={(value) => setTypeOfUseFilter(parseVehicleTypeOfUseFilter(value))}
+            >
+              <SelectTrigger className="h-9 w-[168px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" label={t("filterTypeOfUseAll")}>
+                  {t("filterTypeOfUseAll")}
+                </SelectItem>
+                <SelectItem value="operational" label={t("typeOfUse.operational")}>
+                  {t("typeOfUse.operational")}
+                </SelectItem>
+                <SelectItem value="trainer" label={t("typeOfUse.trainer")}>
+                  {t("typeOfUse.trainer")}
+                </SelectItem>
+                <SelectItem value="standby" label={t("typeOfUse.standby")}>
+                  {t("typeOfUse.standby")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              items={[
+                { value: "all", label: t("filterKindAll") },
+                { value: "bike", label: t("kindBike") },
+                { value: "car", label: t("kindCar") },
+              ]}
+              value={kindFilter}
+              onValueChange={(value) => setKindFilter(parseVehicleKindFilter(value))}
+            >
+              <SelectTrigger className="h-9 w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" label={t("filterKindAll")}>
+                  {t("filterKindAll")}
+                </SelectItem>
+                <SelectItem value="bike" label={t("kindBike")}>
+                  {t("kindBike")}
+                </SelectItem>
+                <SelectItem value="car" label={t("kindCar")}>
+                  {t("kindCar")}
                 </SelectItem>
               </SelectContent>
             </Select>

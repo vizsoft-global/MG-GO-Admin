@@ -1,7 +1,17 @@
 export const VEHICLE_CAR_TYPES = ["company", "rent", "maintenance"] as const;
 export type VehicleCarType = (typeof VEHICLE_CAR_TYPES)[number];
 
-export const VEHICLE_CONDITIONS = ["running", "repair_required", "accident", "standby"] as const;
+export const VEHICLE_CONDITIONS = [
+  "running",
+  "inventory_assembled",
+  "sold",
+  "deadstock",
+  "stolen",
+  "repair_required",
+  "standby",
+  "police_custody",
+  "accident",
+] as const;
 export type VehicleCondition = (typeof VEHICLE_CONDITIONS)[number];
 
 export const VEHICLE_FUEL_TYPES = ["chip", "card"] as const;

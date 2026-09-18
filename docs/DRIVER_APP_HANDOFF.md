@@ -280,6 +280,8 @@ Returns one object or `null` (no assignment). App does not send arguments. Field
 | `fuel_monthly_limit_kwd` | numeric \| null | Monthly cap |
 | `model` | text \| null | Vehicle model |
 
+Admin fleet condition catalog (2026-09-18) is admin-only (`vehicles.condition`). This RPC still omits it. `type_of_use` is also omitted.
+
 #### `driver_report_fuel_fill` payload
 
 App does **not** send `vehicle_id`. RPC reads `drivers.vehicle_id`. Requires on-duty + assigned vehicle + GPS + all three stills.

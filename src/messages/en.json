@@ -3025,12 +3025,18 @@
       "sectionDriver": "Driver & assignment",
       "carTypeHint": "Ownership category — not the same as operational status.",
       "statusHint": "Operational status. Maintenance here means Under Repair.",
-      "typeOfUseHint": "How the vehicle is used. Standby here is not Condition: Standby.",
+      "typeOfUseHint": "How the vehicle is used. Standby use is not Condition: Standby.",
       "typeOfUse": {
         "operational": "Operational",
         "trainer": "Trainer",
-        "standby": "Standby"
+        "standby": "Standby use"
       },
+      "filterStatusAll": "All statuses",
+      "filterCarTypeAll": "All car types",
+      "filterTypeOfUseAll": "All uses",
+      "filterKindAll": "All kinds",
+      "kindBike": "Bike",
+      "kindCar": "Car",
       "carsCompanyPlaceholder": "Select cars company",
       "carsCompanySearch": "Search partner",
       "replacesPlaceholder": "Select original plate",
@@ -3055,9 +3061,14 @@
       },
       "condition": {
         "running": "Running",
-        "repair_required": "Repair Required",
-        "accident": "Accident",
-        "standby": "Standby"
+        "inventory_assembled": "Inventory / Assembled",
+        "sold": "Sold",
+        "deadstock": "Deadstock",
+        "stolen": "Stolen",
+        "repair_required": "Repairs Required",
+        "standby": "Standby",
+        "police_custody": "Police Custody",
+        "accident": "Accident"
       },
       "fuelType": {
         "chip": "Chip",

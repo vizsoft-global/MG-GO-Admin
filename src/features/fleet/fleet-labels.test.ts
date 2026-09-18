@@ -4,8 +4,10 @@ import {
   carTypeToProjectType,
   defaultFuelMonthlyLimit,
   formatReplacementSince,
+  isVehicleCondition,
   kuwaitYmdToIso,
   parseDriverProjectKey,
+  VEHICLE_CONDITIONS,
 } from "./fleet-labels";
 
 describe("fleet labels", () => {
@@ -31,6 +33,28 @@ describe("fleet labels", () => {
   it("stores a Kuwait calendar date as +03:00 midnight", () => {
     assert.equal(kuwaitYmdToIso("2026-09-01"), "2026-09-01T00:00:00+03:00");
     assert.equal(kuwaitYmdToIso("nope"), null);
+  });
+
+  it("accepts the nine condition keys and keeps accident", () => {
+    assert.deepEqual([...VEHICLE_CONDITIONS], [
+      "running",
+      "inventory_assembled",
+      "sold",
+      "deadstock",
+      "stolen",
+      "repair_required",
+      "standby",
+      "police_custody",
+      "accident",
+    ]);
+    assert.equal(isVehicleCondition("inventory_assembled"), true);
+    assert.equal(isVehicleCondition("sold"), true);
+    assert.equal(isVehicleCondition("deadstock"), true);
+    assert.equal(isVehicleCondition("stolen"), true);
+    assert.equal(isVehicleCondition("police_custody"), true);
+    assert.equal(isVehicleCondition("accident"), true);
+    assert.equal(isVehicleCondition("running"), true);
+    assert.equal(isVehicleCondition("unknown"), false);
   });
 
   it("persists only keeta or americana as project_key", () => {
