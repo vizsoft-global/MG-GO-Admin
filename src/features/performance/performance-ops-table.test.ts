@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyColumnFilters, columnFilterValues, toCsv } from "./performance-ops-table";
+import { applyColumnFilters, columnFilterValues, filterOptionLabel, toCsv } from "./performance-ops-table";
 import { efficiencyBucket } from "./performance-ops-formulas";
 
 describe("column filters do not change KPI inputs", () => {
@@ -29,6 +29,13 @@ describe("column filters do not change KPI inputs", () => {
 
   it("lists unique values from the slicer-scoped rows", () => {
     assert.deepEqual(columnFilterValues(rows, "zone"), ["Hawally", "Jahra"]);
+  });
+
+  it("labels empty values and bucket slugs for the column popover", () => {
+    const t = (key: string) => (key === "bucket.well_above" ? "Well above (>120%)" : key);
+    assert.equal(filterOptionLabel("zone", "", t), "—");
+    assert.equal(filterOptionLabel("zone", "Jahra", t), "Jahra");
+    assert.equal(filterOptionLabel("bucket", "well_above", t), "Well above (>120%)");
   });
 });
 

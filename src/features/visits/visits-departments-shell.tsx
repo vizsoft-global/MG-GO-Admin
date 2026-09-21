@@ -46,6 +46,7 @@ type DeptDraft = {
   label_en: string;
   label_ar: string;
   desk_location: string;
+  desks_count: string;
   assigned_staff_name: string;
   avg_handling_minutes: string;
   branch_id: string;
@@ -58,6 +59,7 @@ function emptyDraft(): DeptDraft {
     label_en: "",
     label_ar: "",
     desk_location: "",
+    desks_count: "1",
     assigned_staff_name: "",
     avg_handling_minutes: "10",
     branch_id: ALL_BRANCHES,
@@ -72,6 +74,7 @@ function draftFromRow(row: VisitDepartmentRow): DeptDraft {
     label_en: row.label_en,
     label_ar: row.label_ar ?? "",
     desk_location: row.desk_location ?? "",
+    desks_count: String(row.desks_count ?? 1),
     assigned_staff_name: row.assigned_staff_name ?? "",
     avg_handling_minutes: row.avg_handling_minutes != null ? String(row.avg_handling_minutes) : "",
     branch_id: row.branch_id ?? ALL_BRANCHES,
@@ -121,6 +124,11 @@ export function VisitsDepartmentsShell() {
       toast.error(t("departments.handlingInvalid"));
       return;
     }
+    const desks = Number(draft.desks_count);
+    if (!Number.isInteger(desks) || desks < 0) {
+      toast.error(t("departments.desksInvalid"));
+      return;
+    }
 
     const branchId = draft.branch_id === ALL_BRANCHES ? null : draft.branch_id;
 
@@ -129,6 +137,7 @@ export function VisitsDepartmentsShell() {
       ? await updateVisitDepartment({
           id: draft.id,
           desk_location: draft.desk_location.trim() || null,
+          desks_count: desks,
           assigned_staff_name: draft.assigned_staff_name.trim() || null,
           avg_handling_minutes: minutes,
           branch_id: branchId,
@@ -139,6 +148,7 @@ export function VisitsDepartmentsShell() {
           label_en: draft.label_en.trim(),
           label_ar: draft.label_ar.trim() || null,
           desk_location: draft.desk_location.trim() || null,
+          desks_count: desks,
           assigned_staff_name: draft.assigned_staff_name.trim() || null,
           avg_handling_minutes: minutes,
           branch_id: branchId,
@@ -146,7 +156,11 @@ export function VisitsDepartmentsShell() {
     setBusy(false);
 
     if (!result.ok) {
-      toast.error(result.error ?? t("catalog.saveFailed"));
+      toast.error(
+        result.error === "invalid_desks_count"
+          ? t("departments.desksInvalid")
+          : (result.error ?? t("catalog.saveFailed")),
+      );
       return;
     }
     toast.success(t("catalog.saved"));
@@ -244,8 +258,13 @@ export function VisitsDepartmentsShell() {
                     <span className="text-muted-foreground">{t("departments.branchAll")}</span>
                   )}
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {row.desk_location ?? "—"}
+                <TableCell className="text-sm">
+                  <span className="tabular-nums text-foreground">
+                    {t("departments.desksValue", { count: row.desks_count })}
+                  </span>
+                  {row.desk_location ? (
+                    <p className="text-[10px] text-muted-foreground">{row.desk_location}</p>
+                  ) : null}
                 </TableCell>
                 <TableCell>
                   {row.assigned_staff_name ? (
@@ -339,6 +358,16 @@ export function VisitsDepartmentsShell() {
             ) : null}
             <div className="space-y-1">
               <Label>{t("departments.deskCounter")}</Label>
+              <Input
+                type="number"
+                min={0}
+                className="h-9"
+                value={draft.desks_count}
+                onChange={(e) => setDraft((d) => ({ ...d, desks_count: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("departments.deskLocation")}</Label>
               <Input
                 className="h-9"
                 value={draft.desk_location}

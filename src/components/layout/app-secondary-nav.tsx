@@ -32,6 +32,9 @@ function useItemLabel() {
   return (node: ResolvedMenuNode) => {
     const navKey = APP_NAV_KEY_BY_ID[node.id];
     if (!navKey) return node.label;
+    if (node.id.startsWith("group-")) {
+      return t(`appNavGroups.${navKey}`);
+    }
     const translated = t(`nav.${navKey}`);
     if (node.label && node.label !== translated && node.label !== navKey) {
       return node.label;
@@ -52,7 +55,7 @@ export function AppSecondaryNav() {
   if (children.length === 0) return null;
 
   const activeLeafId = findActiveLeafId(tree, pathname);
-  const groupLabel = group.label;
+  const groupLabel = tItemLabel(group);
 
   return (
     <Sidebar

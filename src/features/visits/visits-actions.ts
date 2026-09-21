@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushBatch } from "@/lib/firebase/fcm-provider";
 import { buildActionPayload, buildFcmDataPayload } from "@/features/notifications/payload-contract";
 import { pickLatestPushTokenByDriver } from "@/features/notifications/push-token-select";
-import { visitHoursInvalid } from "./visit-hours";
+import { lunchBreakOutsideHours, visitHoursInvalid } from "./visit-hours";
 import {
   nextDefaultBranchUpdates,
   planVisitWeekdaySlotCopy,
@@ -579,11 +579,18 @@ export async function createVisitDepartment(input: {
   desk_location?: string | null;
   assigned_staff_name?: string | null;
   avg_handling_minutes?: number | null;
+  desks_count?: number;
   branch_id?: string | null;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   await requireVisitsManageCatalog();
   if (!input.key.trim() || !input.label_en.trim()) {
     return { ok: false, error: "key_and_label_required" };
+  }
+  if (
+    input.desks_count !== undefined &&
+    (!Number.isInteger(input.desks_count) || input.desks_count < 0)
+  ) {
+    return { ok: false, error: "invalid_desks_count" };
   }
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -595,6 +602,7 @@ export async function createVisitDepartment(input: {
       desk_location: input.desk_location ?? null,
       assigned_staff_name: input.assigned_staff_name ?? null,
       avg_handling_minutes: input.avg_handling_minutes ?? null,
+      desks_count: input.desks_count ?? 1,
       branch_id: input.branch_id ?? null,
       is_active: true,
     })
@@ -611,9 +619,16 @@ export async function updateVisitDepartment(input: {
   desk_location?: string | null;
   assigned_staff_name?: string | null;
   avg_handling_minutes?: number | null;
+  desks_count?: number;
   branch_id?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireVisitsManageCatalog();
+  if (
+    input.desks_count !== undefined &&
+    (!Number.isInteger(input.desks_count) || input.desks_count < 0)
+  ) {
+    return { ok: false, error: "invalid_desks_count" };
+  }
   const supabase = await createClient();
   const patch = {
     updated_at: new Date().toISOString(),
@@ -625,6 +640,7 @@ export async function updateVisitDepartment(input: {
     ...(input.avg_handling_minutes !== undefined
       ? { avg_handling_minutes: input.avg_handling_minutes }
       : {}),
+    ...(input.desks_count !== undefined ? { desks_count: input.desks_count } : {}),
     ...(input.branch_id !== undefined ? { branch_id: input.branch_id } : {}),
   };
   const { error } = await supabase.from("visit_departments").update(patch).eq("id", input.id);
@@ -893,6 +909,16 @@ export async function saveVisitBookingConfig(input: {
   if (input.closing_time <= input.opening_time) return { ok: false, error: "invalid_hours" };
   if (input.lunch_start && input.lunch_end && input.lunch_end <= input.lunch_start) {
     return { ok: false, error: "invalid_lunch_break" };
+  }
+  if (
+    lunchBreakOutsideHours(
+      input.opening_time,
+      input.closing_time,
+      input.lunch_start,
+      input.lunch_end,
+    )
+  ) {
+    return { ok: false, error: "lunch_outside_hours" };
   }
   if (input.slot_length_minutes <= 0) return { ok: false, error: "invalid_slot_length" };
   if (input.default_slot_capacity <= 0) return { ok: false, error: "invalid_capacity" };

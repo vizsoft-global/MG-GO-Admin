@@ -4970,6 +4970,9 @@
         "emptyDescription": "Department catalog is seeded in the database.",
         "add": "Add department",
         "deskCounter": "Desk / counter",
+        "deskLocation": "Location",
+        "desksValue": "{count, plural, one {# desk} other {# desks}}",
+        "desksInvalid": "Desks must be 0 or more",
         "assignedStaff": "Assigned staff",
         "avgHandling": "Avg. handling",
         "minutesValue": "{minutes} min",
@@ -5061,6 +5064,8 @@
         "blockedModalSubtitle": "Visits cannot be booked on this date",
         "blockedDateRequired": "Pick a date to block",
         "hoursRequired": "Set opening and closing time",
+        "invalidHours": "Closing time must be after opening time",
+        "lunchOutsideHours": "Lunch break must fall inside opening and closing time",
         "noBranchesDescription": "Add a branch in Branches before configuring booking hours."
       },
       "catalog": {
@@ -6638,6 +6643,51 @@
         "dept": "Reviewing dept.",
         "status": "Status"
       },
+      "riderCols": {
+        "amId": "AM ID",
+        "mgId": "MG ID",
+        "name": "Name",
+        "restaurant": "Restaurant",
+        "zone": "Zone",
+        "partner": "Partner",
+        "nationality": "Nationality",
+        "status": "Status",
+        "totalDays": "Total Days",
+        "totalHours": "Total Hours",
+        "off": "OFF",
+        "sick": "Sick",
+        "accident": "Accident",
+        "absence": "Absence",
+        "fixedDays": "Fixed Days",
+        "efficiency": "Efficiency%"
+      },
+      "riderStatus": {
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "dayStatus": {
+        "work": "12",
+        "off": "OFF",
+        "sick": "Sick",
+        "accident": "Accident",
+        "absent": "Absent"
+      },
+      "legend": {
+        "work": "12",
+        "off": "OFF",
+        "sick": "Sick",
+        "accident": "Accident",
+        "absent": "Absent"
+      },
+      "tileDept": {
+        "operations": "Operations",
+        "hrClinic": "HR / Clinic",
+        "safetyLegal": "Safety & Legal",
+        "fleet": "Fleet",
+        "finance": "Finance",
+        "hr": "HR",
+        "payroll": "Payroll"
+      },
       "sourceType": {
         "in_house": "In-house",
         "outsourced": "Outsourced"
@@ -6870,6 +6920,7 @@
         "emptyTopBottom": "Not enough active riders for Top & Bottom.",
         "vehicleGap": "Vehicle and Zone-Vehicle DPD stay empty until riders have an assigned vehicle. Missing vehicle is — — never Bike by default.",
         "outsourceBanner": "Outsource companies operate only in Americana. This tab ignores the Source type slicer.",
+        "showingRiders": "Showing {count, plural, one {# rider} other {# riders}}",
         "tableFiltersHint": "Column filters apply to the table only — KPIs stay on the full slicer-scoped set.",
         "topBottomHint": "N = {n} (10% of active riders, clamped 2–10).",
         "topBottomStoresHint": "N = {n} (10% of stores in view, clamped 2–10).",

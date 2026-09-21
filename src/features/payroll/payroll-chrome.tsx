@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Bike, Building2, CalendarRange, Flag, Globe2, MapPin, Store, Users } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
-import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Popover,
   PopoverContent,
@@ -79,6 +79,7 @@ function PayrollCustomMonthPopover({
   onApply: (monthKey: string) => void;
 }) {
   const t = useTranslations("pages.payroll.range");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const fallback = allowedKeys[allowedKeys.length - 1] ?? today.slice(0, 7);
   const [draft, setDraft] = useState(appliedKey ?? fallback);
@@ -90,10 +91,12 @@ function PayrollCustomMonthPopover({
     setErr(null);
   }, [open, appliedKey, fallback]);
 
-  const appliedMeta = appliedKey ? monthMeta(appliedKey) : null;
+  const appliedMeta = appliedKey ? monthMeta(appliedKey, locale) : null;
   const label = selected && appliedMeta ? appliedMeta.label : t("custom");
-  const minKey = allowedKeys[allowedKeys.length - 1] ?? fallback;
-  const maxKey = allowedKeys[0] ?? fallback;
+  const monthItems = allowedKeys.map((key) => ({
+    value: key,
+    label: monthMeta(key, locale)?.label ?? key,
+  }));
 
   function apply() {
     if (!allowedKeys.includes(draft)) {
@@ -128,15 +131,22 @@ function PayrollCustomMonthPopover({
         <p className="mb-2 text-xs font-semibold">{t("customTitle")}</p>
         <label className="min-w-0 text-[10px] font-medium text-muted-foreground">
           {t("customMonth")}
-          <Input
-            type="month"
+          <Select
             value={draft}
-            min={minKey}
-            max={maxKey}
-            onChange={(e) => setDraft(e.target.value)}
-            className="mt-1 h-9"
-            openPickerOnFocus={false}
-          />
+            onValueChange={(value) => setDraft(String(value ?? fallback))}
+            items={monthItems}
+          >
+            <SelectTrigger className="mt-1 h-9 w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
         {err ? <p className="mt-2 text-[11px] text-destructive">{err}</p> : null}
         <div className="mt-3 flex justify-end gap-2">

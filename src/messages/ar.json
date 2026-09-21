@@ -4895,6 +4895,9 @@
         "emptyDescription": "فهرس الأقسام موجود في قاعدة البيانات.",
         "add": "إضافة قسم",
         "deskCounter": "المكتب / الشباك",
+        "deskLocation": "الموقع",
+        "desksValue": "{count, plural, one {مكتب واحد} other {# مكاتب}}",
+        "desksInvalid": "يجب أن يكون عدد المكاتب 0 أو أكثر",
         "assignedStaff": "الموظف المسؤول",
         "avgHandling": "متوسط وقت الخدمة",
         "minutesValue": "{minutes} دقيقة",
@@ -4986,6 +4989,8 @@
         "blockedModalSubtitle": "لا يمكن حجز زيارات في هذا التاريخ",
         "blockedDateRequired": "اختر تاريخاً للحجب",
         "hoursRequired": "اضبط وقت الفتح والإغلاق",
+        "invalidHours": "يجب أن يكون وقت الإغلاق بعد وقت الافتتاح",
+        "lunchOutsideHours": "يجب أن تكون استراحة الغداء داخل ساعات العمل",
         "noBranchesDescription": "أضف فرعاً من صفحة الفروع قبل ضبط ساعات الحجز."
       },
       "catalog": {
@@ -6560,6 +6565,51 @@
         "dept": "القسم المراجع",
         "status": "الحالة"
       },
+      "riderCols": {
+        "amId": "رقم AM",
+        "mgId": "رقم MG",
+        "name": "الاسم",
+        "restaurant": "المطعم",
+        "zone": "المنطقة",
+        "partner": "الشريك",
+        "nationality": "الجنسية",
+        "status": "الحالة",
+        "totalDays": "إجمالي الأيام",
+        "totalHours": "إجمالي الساعات",
+        "off": "إجازة",
+        "sick": "مرض",
+        "accident": "حادث",
+        "absence": "غياب",
+        "fixedDays": "الأيام الثابتة",
+        "efficiency": "الكفاءة٪"
+      },
+      "riderStatus": {
+        "active": "نشط",
+        "inactive": "غير نشط"
+      },
+      "dayStatus": {
+        "work": "12",
+        "off": "إجازة",
+        "sick": "مرض",
+        "accident": "حادث",
+        "absent": "غياب"
+      },
+      "legend": {
+        "work": "12",
+        "off": "إجازة",
+        "sick": "مرض",
+        "accident": "حادث",
+        "absent": "غياب"
+      },
+      "tileDept": {
+        "operations": "العمليات",
+        "hrClinic": "الموارد البشرية / العيادة",
+        "safetyLegal": "السلامة والشؤون القانونية",
+        "fleet": "الأسطول",
+        "finance": "المالية",
+        "hr": "الموارد البشرية",
+        "payroll": "الرواتب"
+      },
       "sourceType": {
         "in_house": "داخلي",
         "outsourced": "خارجي"
@@ -6792,6 +6842,7 @@
         "emptyTopBottom": "لا يكفي سائقون نشطون للأعلى والأدنى.",
         "vehicleGap": "رسوم المركبة وDPD المنطقة-المركبة تبقى فارغة حتى يُعيَّن مركبة. المركبة الناقصة هي — وليست دراجة افتراضياً.",
         "outsourceBanner": "شركات التعهيد تعمل في أمريكانا فقط. هذا التبويب يتجاهل عامل نوع المصدر.",
+        "showingRiders": "عرض {count, plural, one {سائق واحد} other {# سائق}}",
         "tableFiltersHint": "عوامل أعمدة الجدول تؤثر على الجدول فقط — مؤشرات KPI تبقى على المجموعة الكاملة.",
         "topBottomHint": "N = {n} (10% من السائقين النشطين، بين 2 و10).",
         "topBottomStoresHint": "N = {n} (10% من المتاجر المعروضة، بين 2 و10).",

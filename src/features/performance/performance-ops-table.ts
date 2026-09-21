@@ -16,6 +16,19 @@ export function applyColumnFilters<T extends Record<string, unknown>>(
   );
 }
 
+const OPS_BUCKET_KEYS = new Set(["well_above", "above", "near", "below", "well_below"]);
+
+/** Column-popover label: empty → em dash; bucket slug → i18n; else raw value. */
+export function filterOptionLabel(
+  key: string,
+  value: string,
+  translate: (messageKey: string) => string,
+): string {
+  if (!value) return "—";
+  if (key === "bucket" && OPS_BUCKET_KEYS.has(value)) return translate(`bucket.${value}`);
+  return value;
+}
+
 export function columnFilterValues<T extends Record<string, unknown>>(
   rows: T[],
   key: string,

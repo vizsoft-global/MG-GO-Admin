@@ -34,6 +34,7 @@ import {
   updateVisitDepartmentDesks,
   type VisitBookingConfigRow,
 } from "./visits-actions";
+import { lunchBreakOutsideHours } from "./visit-hours";
 import { DAY_OF_WEEK_LABELS } from "./visit-status-utils";
 
 const SLOT_LENGTH_OPTIONS = [15, 20, 30, 45, 60];
@@ -249,6 +250,17 @@ export function VisitsSlotsShell() {
       toast.error(t("slots.hoursRequired"));
       return;
     }
+    if (
+      lunchBreakOutsideHours(
+        draft.opening_time,
+        draft.closing_time,
+        draft.lunch_start || null,
+        draft.lunch_end || null,
+      )
+    ) {
+      toast.error(t("slots.lunchOutsideHours"));
+      return;
+    }
     setSaving(true);
     const result = await saveVisitBookingConfig({
       branch_id: activeConfig.branch_id,
@@ -265,7 +277,13 @@ export function VisitsSlotsShell() {
 
     if (!result.ok) {
       setSaving(false);
-      toast.error(result.error ?? t("catalog.saveFailed"));
+      toast.error(
+        result.error === "lunch_outside_hours"
+          ? t("slots.lunchOutsideHours")
+          : result.error === "invalid_hours"
+            ? t("slots.invalidHours")
+            : (result.error ?? t("catalog.saveFailed")),
+      );
       return;
     }
 
