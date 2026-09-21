@@ -765,7 +765,6 @@ function DriversPageContent() {
                 </Tooltip>
               ) : null}
               {canCreate ? (
-              {canCreate ? (
                 <Button
                   type="button"
                   size="sm"
