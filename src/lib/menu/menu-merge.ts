@@ -126,7 +126,10 @@ export function mergeMenu(config: MenuNode[]): {
       });
     }
   }
-  return { tree: relocatePayrollItem(relocateFleetItems(pruned)), unassignedIds: unassigned };
+  return {
+    tree: relocatePayrollItem(relocateAssistantItem(relocateFleetItems(pruned))),
+    unassignedIds: unassigned,
+  };
 }
 
 const FLEET_GROUP_ID = "group-fleet";
@@ -189,6 +192,54 @@ function relocateFleetItems(tree: MenuNode[]): MenuNode[] {
   return next.filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
 }
 
+function relocateAssistantItem(tree: MenuNode[]): MenuNode[] {
+  const ASSISTANT_ID = "assistant";
+  let found: MenuNode | null = null;
+  const strip = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "item") {
+        if (node.id === ASSISTANT_ID) {
+          found = { ...node, hidden: false };
+          return [];
+        }
+        return [node];
+      }
+      const children = node.children ? strip(node.children) : [];
+      return [{ ...node, children }];
+    });
+
+  const stripped = strip(tree);
+  const item: MenuNode = found ?? {
+    id: ASSISTANT_ID,
+    type: "item",
+    label: "Staff Assistant",
+    icon: "Sparkles",
+    hidden: false,
+  };
+
+  const opsIdx = stripped.findIndex((node) => node.id === "group-operations");
+  if (opsIdx < 0) {
+    return [
+      ...stripped,
+      {
+        id: "group-operations",
+        type: "group",
+        label: "Operations",
+        icon: "Folder",
+        children: [item],
+      },
+    ];
+  }
+
+  const ops = stripped[opsIdx];
+  const children = [...(ops.children ?? [])].filter((child) => child.id !== ASSISTANT_ID);
+  const perfIdx = children.findIndex((child) => child.id === "performance");
+  children.splice(perfIdx >= 0 ? perfIdx + 1 : children.length, 0, item);
+  const next = [...stripped];
+  next[opsIdx] = { ...ops, children };
+  return next;
+}
+
 function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
   const PAYROLL_ID = "payroll";
   let found: MenuNode | null = null;
@@ -230,8 +281,11 @@ function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
 
   const ops = stripped[opsIdx];
   const children = [...(ops.children ?? [])].filter((child) => child.id !== PAYROLL_ID);
+  const assistantIdx = children.findIndex((child) => child.id === "assistant");
   const perfIdx = children.findIndex((child) => child.id === "performance");
-  children.splice(perfIdx >= 0 ? perfIdx + 1 : children.length, 0, item);
+  const insertAt =
+    assistantIdx >= 0 ? assistantIdx + 1 : perfIdx >= 0 ? perfIdx + 1 : children.length;
+  children.splice(insertAt, 0, item);
   const next = [...stripped];
   next[opsIdx] = { ...ops, children };
   return next;

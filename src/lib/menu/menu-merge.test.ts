@@ -32,7 +32,7 @@ describe("relocateFleetItems", () => {
 });
 
 describe("relocatePayrollItem", () => {
-  it("pins Payroll after Performance in Operations even when a saved menu omitted it", () => {
+  it("pins Assistant after Performance and Payroll after Assistant", () => {
     const { tree } = mergeMenu([
       {
         id: "group-operations",
@@ -47,10 +47,13 @@ describe("relocatePayrollItem", () => {
     ]);
     const ops = tree.find((node) => node.id === "group-operations");
     const ids = (ops?.children ?? []).map((child) => child.id);
-    const payrollIdx = ids.indexOf("payroll");
     const perfIdx = ids.indexOf("performance");
-    assert.ok(payrollIdx >= 0);
-    assert.equal(payrollIdx, perfIdx + 1);
+    const assistantIdx = ids.indexOf("assistant");
+    const payrollIdx = ids.indexOf("payroll");
+    assert.ok(perfIdx >= 0);
+    assert.equal(assistantIdx, perfIdx + 1);
+    assert.equal(payrollIdx, assistantIdx + 1);
+    assert.equal(ops?.children?.find((child) => child.id === "assistant")?.hidden, false);
     assert.equal(ops?.children?.find((child) => child.id === "payroll")?.hidden, false);
   });
 });

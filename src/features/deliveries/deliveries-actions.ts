@@ -704,6 +704,88 @@ export async function fetchDeliveriesPage(
   };
 }
 
+export type DeliveryCountsByFilters = {
+  total: number;
+  verified: number;
+  pending: number;
+  rejected: number;
+  cancelled: number;
+  in_transit: number;
+  under_review: number;
+  filters: {
+    dateFrom?: string;
+    dateTo?: string;
+    zoneId?: string;
+    partnerId?: string;
+  };
+};
+
+/**
+ * Same WHERE as fetchDeliveriesPage (created_at, zone, partner) but count/head
+ * only — never select order rows. Used by Staff Assistant v1 (B).
+ */
+export async function countDeliveriesByFilters(params: {
+  dateFrom?: string;
+  dateTo?: string;
+  zoneId?: string;
+  partnerId?: string;
+}): Promise<DeliveryCountsByFilters> {
+  await requireDeliveriesView();
+  void logAdminRead("deliveries", "countDeliveriesByFilters", {
+    dateFrom: params.dateFrom,
+    dateTo: params.dateTo,
+    zoneId: params.zoneId,
+    partnerId: params.partnerId,
+  });
+  const supabase = await createClient();
+
+  const applyWhere = <T extends { eq: Function; gte: Function; lte: Function }>(query: T): T => {
+    let q = query;
+    if (params.zoneId && params.zoneId !== "all") q = q.eq("zone_id", params.zoneId) as T;
+    if (params.partnerId && params.partnerId !== "all") {
+      q = q.eq("partner_id", params.partnerId) as T;
+    }
+    if (params.dateFrom) q = q.gte("created_at", params.dateFrom) as T;
+    if (params.dateTo) q = q.lte("created_at", params.dateTo) as T;
+    return q;
+  };
+
+  const countFor = async (status?: DeliveryStatus): Promise<number> => {
+    let q = supabase.from("deliveries").select("id", { count: "exact", head: true });
+    q = applyWhere(q);
+    if (status) q = q.eq("status", status);
+    const { count, error } = await q;
+    return readExactCount({ count, error });
+  };
+
+  const [total, verified, pending, rejected, cancelled, in_transit, under_review] =
+    await Promise.all([
+      countFor(),
+      countFor("verified"),
+      countFor("pending"),
+      countFor("rejected"),
+      countFor("cancelled"),
+      countFor("in_transit"),
+      countFor("under_review"),
+    ]);
+
+  return {
+    total,
+    verified,
+    pending,
+    rejected,
+    cancelled,
+    in_transit,
+    under_review,
+    filters: {
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
+      zoneId: params.zoneId,
+      partnerId: params.partnerId,
+    },
+  };
+}
+
 /** Global status counts for the KPI strip (independent of list filters). */
 export async function fetchDeliveriesKpis(): Promise<DeliveriesKpiCounts> {
   await requireDeliveriesView();

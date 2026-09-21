@@ -182,6 +182,10 @@
     }
   },
   "pages": {
+    "assistant": {
+      "title": "Staff Assistant",
+      "subtitle": "Read-only answers for DPD efficiency, delivery counts, daily incentives, and performance bands. English only."
+    },
     "liveTrackingV2": {
       "title": "Live tracking V2",
       "subtitle": "Realtime fleet canvas",

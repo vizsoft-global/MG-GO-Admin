@@ -39,6 +39,7 @@ Order allocation is **external** (partner apps). We own: monitoring, compliance,
 | 4 | `/vehicles`, `/vehicles/[id]` | `vehicles.view` | Vehicle |
 | 5 | `/attendance` | `attendance.view` / `attendance.manage` | Auto check-in / geofence |
 | — | `/performance`, `/performance/settings` | `performance.view` / `.export` / `.rate` / `.analyze` | Performance score (delivery + utilization + components + manual); Live workforce; Analysis |
+| — | `/assistant` | `assistant.view` | Staff Assistant v1 (English, read-only A–D). No driver app. |
 | — | `/payroll` | `payroll.view` / `payroll.export` | Monthly attendance payroll + request justifications (not `/earnings`) |
 | 6 | `/requests` | `requests.view` / `requests.manage` | Loan, Leave, Fuel, Complaint |
 | 7 | `/wrong-actions`, `/wrong-actions/[id]` | `wrong_actions.view` / `wrong_actions.manage` | Wrong action details |
@@ -76,6 +77,7 @@ Order allocation is **external** (partner apps). We own: monitoring, compliance,
 | `src/components/app/` | AppPage, AppListCard, AppSettingsLayout, etc. |
 | `docs/DRIVER_APP_HANDOFF.md` | **Mobile app single-file handoff** |
 | `supabase/migrations/` | Schema |
+| `src/features/assistant/` | Staff Assistant v1: locked A–D tools, Kuwait dates, counts/live Excel, chat route |
 | `src/features/payroll/` | Payroll & Requests hub: formulas, month snapshot, day grid, request queue |
 | `src/features/live-tracking-v2/` | Live Tracking V2 engine: `fleet-status` (status + flags, shared with the Worker), `fleet-wire`, `fleet-store`, `fleet-transport`, `fleet-interpolator`, `fleet-map` |
 | `infra/workers/dpd-live/` | Cloudflare Worker + `FleetRoom` Durable Object (driver ingest, admin WebSocket, Class B rules) |
@@ -233,6 +235,8 @@ Change-log format:
 ---
 
 ## Change log
+
+- `[admin only] 2026-09-21` — **Staff Assistant v1 at `/assistant`.** English-only, read-only tools over existing reports: A `dpd_efficiency`, B `deliveries_counts` (same WHERE as the deliveries list — `created_at` / zone / partner — count/head, never order rows, never `report_delivery_orders`), C `incentive_daily` (Kuwait `earn_date`), D `performance_bands` + `performance_live`. Excel is metadata in chat + a server-action download of the same numbers. `assistant.view` granted only to roles that already hold `performance.view` AND `earnings.view` AND `deliveries.view` (`20261026900000`). Operations nav after Performance (`defaultOrder` 8.5); no `APP_NAV_KEY` / no `ar.json`. AI Gateway model `openai/gpt-4o`; `maxSteps` 8; no write tools.
 
 - `[admin+app] 2026-09-21` — **QA 18: desks_count, Riders filters, Payroll Arabic, RTL sidebar, lunch hours, overlapping_visit.** Departments page reads/writes `visit_departments.desks_count` (location stays secondary). Riders column popovers match OpsMultiSelect All+Check; `ridersInView` left the KPI strip (toolbar “Showing N”). Payroll custom month is a locale `Select` (3-month window unchanged); rider grid headers / day status / legend / request tile depts i18n; virtualizer spacer is one `td` per column. Shared `sidebar.tsx` physical left/right → logical start/end. Lunch must sit inside opening–closing (`lunch_outside_hours`). **Only new SQL:** `20261026800000` `driver_book_visit` `overlapping_visit` (same date + overlapping slot time across depts; per-dept unique kept). Handoff snackbar EN/AR drafted. **No db push / Git / Vercel / Play** until Approve, deploy. Until App maps the code, riders may see a raw RPC error.
 
