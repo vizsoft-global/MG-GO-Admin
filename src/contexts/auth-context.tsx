@@ -7,6 +7,7 @@ import {
   type Permission,
   type AdminApprovalStatus,
 } from "@/lib/auth/permissions";
+import type { StaffAccessKind } from "@/lib/auth/staff-access";
 
 type AuthContextValue = {
   userId: string;
@@ -17,6 +18,8 @@ type AuthContextValue = {
   adminRoleId: string | null;
   approvalStatus: AdminApprovalStatus;
   isSuperAdmin: boolean;
+  isManager: boolean;
+  accessKind: StaffAccessKind | null;
   adminRoleSlug: string;
   permissions: string[];
   can: (permission: Permission) => boolean;

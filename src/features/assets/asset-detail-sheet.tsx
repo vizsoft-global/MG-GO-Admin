@@ -69,7 +69,7 @@ export function AssetDetailSheet({
   const locale = useLocale();
   const t = useTranslations("pages.assets");
   const { can } = useAuth();
-  const canManage = can("assets.manage");
+  const canEdit = can("assets.edit");
   const { data: detail, isLoading, refetch } = useAssetDetail(asset?.id ?? null, open);
   const returnMutation = useReturnAssetAssignment();
   const adjustMutation = useAdjustAssetStock();
@@ -203,7 +203,7 @@ export function AssetDetailSheet({
                 <p className="text-sm text-muted-foreground">{display.description}</p>
               ) : null}
 
-              {canManage ? (
+              {canEdit ? (
                 <div className="space-y-2 rounded-lg border border-border p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium">{t("adjustStockTitle")}</p>
@@ -313,7 +313,7 @@ export function AssetDetailSheet({
                                 {formatDate(row.assigned_at, locale)}
                               </TableCell>
                               <TableCell className="text-end">
-                                {canManage ? (
+                                {canEdit ? (
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -365,7 +365,7 @@ export function AssetDetailSheet({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {t("cancel")}
           </Button>
-          {canManage && asset ? (
+          {canEdit && asset ? (
             <Button type="button" onClick={() => onEdit(asset)}>
               {t("editAsset")}
             </Button>

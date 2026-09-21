@@ -245,6 +245,36 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_user_permissions: {
+        Row: {
+          permission_slug: string
+          user_id: string
+        }
+        Insert: {
+          permission_slug: string
+          user_id: string
+        }
+        Update: {
+          permission_slug?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_user_permissions_permission_slug_fkey"
+            columns: ["permission_slug"]
+            isOneToOne: false
+            referencedRelation: "admin_permissions"
+            referencedColumns: ["slug"]
+          },
+          {
+            foreignKeyName: "admin_user_permissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_page_registry: {
         Row: {
           admin_permission: string | null
@@ -5366,6 +5396,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          access_kind: string | null
           admin_role_id: string | null
           approval_status: Database["public"]["Enums"]["admin_approval_status"]
           approved_at: string | null
@@ -5384,6 +5415,7 @@ export type Database = {
           zone_id: string | null
         }
         Insert: {
+          access_kind?: string | null
           admin_role_id?: string | null
           approval_status?: Database["public"]["Enums"]["admin_approval_status"]
           approved_at?: string | null
@@ -5402,6 +5434,7 @@ export type Database = {
           zone_id?: string | null
         }
         Update: {
+          access_kind?: string | null
           admin_role_id?: string | null
           approval_status?: Database["public"]["Enums"]["admin_approval_status"]
           approved_at?: string | null
@@ -7890,6 +7923,10 @@ export type Database = {
         Args: { p_meta: Json; p_request_id: string }
         Returns: Json
       }
+      admin_set_visit_note_to_rider: {
+        Args: { p_booking_id: string; p_note: string }
+        Returns: Json
+      }
       admin_update_performance_components: {
         Args: { p_components: Json; p_settings?: Json }
         Returns: Json
@@ -8108,7 +8145,11 @@ export type Database = {
       }
       driver_cancel_visit: { Args: { p_booking_id: string }; Returns: Json }
       driver_check_order_id_available: {
-        Args: { p_external_order_id: string }
+        Args: {
+          p_external_order_id: string
+          p_pickup_lat?: number
+          p_pickup_lng?: number
+        }
         Returns: boolean
       }
       driver_clear_live_location: { Args: never; Returns: Json }

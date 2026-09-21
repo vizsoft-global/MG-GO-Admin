@@ -4,6 +4,12 @@ import { updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { isAdminAccessRequestProfile } from "./access-request-eligibility";
+import {
+  expandRoleSlugsToUserTicks,
+  isStaffMatrixSlug,
+  parseStaffAccessKind,
+  type StaffAccessKind,
+} from "@/lib/auth/staff-access";
 
 export type PendingStaffAccessRequest = {
   id: string;
@@ -23,6 +29,7 @@ async function requireSuperAdmin() {
 export async function approveUser(
   userId: string,
   roleId: string,
+  accessKind: StaffAccessKind = "user",
 ): Promise<{ error?: string; success?: boolean }> {
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
@@ -62,21 +69,56 @@ export async function approveUser(
     return { error: "user_not_found" };
   }
 
-  const { error } = await supabase
+  const kind = parseStaffAccessKind(accessKind) ?? "user";
+  const approvedAt = new Date().toISOString();
+  const baseUpdate = {
+    admin_role_id: roleId,
+    approval_status: "approved" as const,
+    role: "staff" as const,
+    approved_at: approvedAt,
+    approved_by: auth.session.id,
+    updated_at: approvedAt,
+  };
+
+  let { error } = await supabase
     .from("profiles")
-    .update({
-      admin_role_id: roleId,
-      approval_status: "approved",
-      role: "staff",
-      approved_at: new Date().toISOString(),
-      approved_by: auth.session.id,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ ...baseUpdate, access_kind: kind })
     .eq("id", userId)
     .eq("role", "staff");
 
+  if (error && /access_kind/.test(error.message)) {
+    ({ error } = await supabase
+      .from("profiles")
+      .update(baseUpdate)
+      .eq("id", userId)
+      .eq("role", "staff"));
+  }
+
   if (error) {
     return { error: "save_failed" };
+  }
+
+  if (kind === "user") {
+    const { data: rolePerms } = await supabase
+      .from("admin_role_permissions")
+      .select("permission_slug")
+      .eq("role_id", roleId);
+    const ticks = [...expandRoleSlugsToUserTicks((rolePerms ?? []).map((row) => row.permission_slug))]
+      .filter(isStaffMatrixSlug);
+    const { error: clearTicksError } = await supabase
+      .from("admin_user_permissions")
+      .delete()
+      .eq("user_id", userId);
+    if (clearTicksError && !/admin_user_permissions|42703|PGRST/.test(clearTicksError.message)) {
+      return { error: "save_failed" };
+    }
+    if (ticks.length > 0) {
+      await supabase.from("admin_user_permissions").insert(
+        ticks.map((permission_slug) => ({ user_id: userId, permission_slug })),
+      );
+    }
+  } else {
+    await supabase.from("admin_user_permissions").delete().eq("user_id", userId);
   }
 
   await supabase.from("admin_allowlist").upsert({

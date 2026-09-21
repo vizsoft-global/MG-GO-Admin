@@ -204,7 +204,7 @@ export function RequestsPageShell({
 
   const { can } = useAuth();
   const canDecide = can("requests.approve") || can("requests.manage");
-  const canCreate = can("requests.manage");
+  const canCreate = can("requests.create");
   const bulkDecide = useBulkDecideRequests();
 
   const filters = useMemo(

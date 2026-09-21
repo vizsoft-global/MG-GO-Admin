@@ -118,7 +118,8 @@ function AssetsPageContent() {
   const locale = useLocale();
   const t = useTranslations("pages.assets");
   const { can } = useAuth();
-  const canManage = can("assets.manage");
+  const canCreate = can("assets.create");
+  const canEdit = can("assets.edit");
   const queryClient = useQueryClient();
 
   const { data, isLoading, refetch } = useAssetsCatalog();
@@ -254,7 +255,7 @@ function AssetsPageContent() {
                 <Download className="me-2 h-3.5 w-3.5" />
                 {t("export")}
               </Button>
-              {canManage ? (
+              {canCreate ? (
                 <Button
                   type="button"
                   size="sm"
@@ -403,7 +404,7 @@ function AssetsPageContent() {
                 title={t("emptyTitle")}
                 description={t("emptyDescription")}
               />
-              {canManage ? (
+              {canCreate ? (
                 <Button type="button" className="mt-4" onClick={handleAdd}>
                   <Plus className="me-2 h-4 w-4" />
                   {t("addAsset")}
@@ -524,7 +525,7 @@ function AssetsPageContent() {
                           </TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1">
-                              {canManage ? (
+                              {canEdit ? (
                                 <Button
                                   type="button"
                                   variant="ghost"

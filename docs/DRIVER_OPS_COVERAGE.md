@@ -48,7 +48,7 @@ Shift failures carry the full submitted form (both sessions, the date, the type)
 
 | Operation key | Source RPC | Success | Failures recorded |
 |---|---|---|---|
-| `delivery.pickup_create` | `driver_create_pickup` | yes | `active_pickup_exists`, `delivery_out_of_range`, `duplicate_order_id` (both the same-day check and the unique index), **location_required**, **invalid_order_id** |
+| `delivery.pickup_create` | `driver_create_pickup` | yes | `active_pickup_exists`, `delivery_out_of_range`, `duplicate_order_id` (same restaurant + Kuwait day RPC `EXISTS` only — global unique index dropped in `20261027000000`; concurrent same-store-same-day race window, no DB constraint), **location_required**, **invalid_order_id** |
 | `delivery.complete` | `driver_complete_delivery` | yes | `delivery_not_found`, `invalid_delivery_status`, **delivery_id_required**, **location_required** |
 | `delivery.cancel` | `driver_cancel_delivery` | yes | `delivery_not_found`, `invalid_delivery_status`, **delivery_id_required**, **cancel_reason_required**, **location_required** |
 

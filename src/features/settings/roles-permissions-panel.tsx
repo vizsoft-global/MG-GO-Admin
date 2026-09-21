@@ -48,6 +48,11 @@ import {
 } from "@/features/settings/roles-actions";
 import type { AdminRoleRow } from "@/lib/auth/get-role-permissions";
 import { isValidRoleSlug, slugifyRoleName } from "@/lib/auth/permission-catalog";
+import {
+  isStaffMatrixSlug,
+  roleSlugsForMatrix,
+  roleSlugsForSave,
+} from "@/lib/auth/staff-access";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { AppFormSection } from "@/components/app";
@@ -120,7 +125,7 @@ function setsFromRolePermissions(roles: AdminRoleRow[]): Record<string, Set<stri
   const out: Record<string, Set<string>> = {};
   for (const role of roles) {
     if (role.isSuperAdmin) continue;
-    out[role.id] = new Set(role.permissions);
+    out[role.id] = roleSlugsForMatrix(role.permissions);
   }
   return out;
 }
@@ -547,6 +552,11 @@ export function RolesPermissionsPanel({
     return m;
   }, [usageCounts]);
 
+  const matrixPermissions = useMemo(
+    () => permissions.filter((p) => isStaffMatrixSlug(p.slug)),
+    [permissions],
+  );
+
   const savedByRole = useMemo(() => setsFromRolePermissions(roles), [roles]);
 
   const [permissionsByRole, setPermissionsByRole] = useState<Record<string, Set<string>>>(
@@ -560,13 +570,13 @@ export function RolesPermissionsPanel({
   const [permissionSearch, setPermissionSearch] = useState("");
 
   const byCategory = useMemo(() => {
-    return permissions.reduce<Record<string, PermissionRow[]>>((acc, p) => {
+    return matrixPermissions.reduce<Record<string, PermissionRow[]>>((acc, p) => {
       const list = acc[p.category] ?? [];
       list.push(p);
       acc[p.category] = list;
       return acc;
     }, {});
-  }, [permissions]);
+  }, [matrixPermissions]);
 
   const sortedCategories = useMemo(
     () => Object.keys(byCategory).sort((a, b) => a.localeCompare(b)),
@@ -673,7 +683,7 @@ export function RolesPermissionsPanel({
   const saveAll = useCallback(() => {
     const updates = Array.from(dirtyRoleIds).map((roleId) => ({
       roleId,
-      permissionSlugs: Array.from(permissionsByRole[roleId] ?? []),
+      permissionSlugs: roleSlugsForSave(permissionsByRole[roleId] ?? []),
     }));
     startTransition(async () => {
       const result = await updateMultipleRolePermissions(updates);
@@ -698,7 +708,7 @@ export function RolesPermissionsPanel({
         const current = permissionsByRole[roleId];
         const saved = savedByRole[roleId];
         if (!current || !saved) continue;
-        for (const perm of permissions) {
+        for (const perm of matrixPermissions) {
           const was = saved.has(perm.slug);
           const now = current.has(perm.slug);
           if (was !== now && next.has(perm.category)) {
@@ -710,7 +720,7 @@ export function RolesPermissionsPanel({
       if (changed) saveCollapsedCategories(next);
       return changed ? next : prev;
     });
-  }, [dirtyRoleIds, permissions, permissionsByRole, savedByRole]);
+  }, [dirtyRoleIds, matrixPermissions, permissionsByRole, savedByRole]);
 
   const [newOpen, setNewOpen] = useState(false);
   const [dupOpen, setDupOpen] = useState(false);
@@ -771,6 +781,7 @@ export function RolesPermissionsPanel({
   return (
     <>
       <div className="space-y-3">
+        <p className="text-[10px] text-muted-foreground">{t("templateNote")}</p>
         <RolesActionBar
           roles={editableRoles}
           selectedColumnId={selectedColumnId}

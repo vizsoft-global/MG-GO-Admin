@@ -89,6 +89,7 @@
     "earningsCalculation": "Earnings calculation",
     "storage": "Cloudflare R2",
     "roles": "Roles & Permissions",
+    "staffAccess": "Staff access",
     "accessRequests": "Access Requests",
     "maintenance": "Maintenance",
     "dataCleanup": "Data cleanup",
@@ -182,6 +183,10 @@
     }
   },
   "pages": {
+    "assistant": {
+      "title": "Staff Assistant",
+      "subtitle": "Read-only answers for DPD efficiency, delivery counts, daily incentives, and performance bands. English only."
+    },
     "liveTrackingV2": {
       "title": "Live tracking V2",
       "subtitle": "Realtime fleet canvas",
@@ -5989,6 +5994,9 @@
         "empty": "No pending admin access requests",
         "name": "Name",
         "email": "Email",
+        "kind": "Access",
+        "kindUser": "User",
+        "kindManager": "Manager",
         "role": "Role",
         "actions": "Actions",
         "approve": "Approve",
@@ -5999,9 +6007,43 @@
           "saveFailed": "Could not save. Try again."
         }
       },
+      "staffAccess": {
+        "title": "Staff access",
+        "subtitle": "Manager has the full catalog. User only has the ticks assigned here.",
+        "search": "Search staff…",
+        "empty": "No approved staff accounts.",
+        "name": "Name",
+        "email": "Email",
+        "kind": "Access",
+        "kindManager": "Manager",
+        "kindUser": "User",
+        "kindUnknown": "Not migrated",
+        "kindHint": "Manager = every DPD permission. User = only ticked slugs.",
+        "managerNote": "This person has the full catalog. Ticks are ignored until they become a User.",
+        "roleTemplate": "Role template",
+        "ticks": "Ticks",
+        "fullAccess": "Full catalog",
+        "edit": "Edit ticks",
+        "save": "Save access",
+        "saving": "Saving…",
+        "saved": "Staff access saved",
+        "searchPermission": "Search permissions…",
+        "copyFromRole": "Copy from role template",
+        "applyTemplate": "Apply template",
+        "templateCopied": "Role template copied — save to apply",
+        "downgradeTitle": "Switch to User?",
+        "downgradeDescription": "Ticks must be assigned now. We will seed the full catalog so they keep access; review and untick what they should not have.",
+        "downgradeConfirm": "Assign ticks now",
+        "errors": {
+          "loadFailed": "Could not load staff access.",
+          "saveFailed": "Could not save staff access.",
+          "copyFailed": "Could not copy the role template."
+        }
+      },
       "roles": {
         "title": "Roles & permissions",
-        "subtitle": "Control what each role can access in the panel",
+        "subtitle": "Templates for new Users — saving a role does not change existing user ticks",
+        "templateNote": "Roles are templates copied once when a User is approved. Existing user ticks stay as assigned on Staff access.",
         "selectRole": "Role",
         "systemRoles": "System roles",
         "customRoles": "Custom roles",

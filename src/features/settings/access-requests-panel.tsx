@@ -35,6 +35,7 @@ export function AccessRequestsPanel({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [selectedRoles, setSelectedRoles] = useState<Record<string, string>>({});
+  const [selectedKinds, setSelectedKinds] = useState<Record<string, "manager" | "user">>({});
 
   if (pendingUsers.length === 0) {
     return (
@@ -51,6 +52,7 @@ export function AccessRequestsPanel({
             <TableRow>
               <TableHead>{t("name")}</TableHead>
               <TableHead>{t("email")}</TableHead>
+              <TableHead>{t("kind")}</TableHead>
               <TableHead>{t("role")}</TableHead>
               <TableHead className="text-end">{t("actions")}</TableHead>
             </TableRow>
@@ -60,6 +62,22 @@ export function AccessRequestsPanel({
               <TableRow key={user.id}>
                 <TableCell>{user.full_name ?? "—"}</TableCell>
                 <TableCell>{user.email}</TableCell>
+                <TableCell>
+                  <select
+                    className="h-9 w-full max-w-[140px] rounded-lg border border-input bg-background px-2 text-sm"
+                    value={selectedKinds[user.id] ?? "user"}
+                    onChange={(e) =>
+                      setSelectedKinds((prev) => ({
+                        ...prev,
+                        [user.id]: e.target.value === "manager" ? "manager" : "user",
+                      }))
+                    }
+                    disabled={isPending}
+                  >
+                    <option value="user">{t("kindUser")}</option>
+                    <option value="manager">{t("kindManager")}</option>
+                  </select>
+                </TableCell>
                 <TableCell>
                   <select
                     className="h-9 w-full max-w-[200px] rounded-lg border border-input bg-background px-2 text-sm"
@@ -84,8 +102,9 @@ export function AccessRequestsPanel({
                     onClick={() => {
                       const roleId = selectedRoles[user.id] ?? assignableRoles[0]?.id;
                       if (!roleId) return;
+                      const accessKind = selectedKinds[user.id] ?? "user";
                       startTransition(async () => {
-                        const result = await approveUser(user.id, roleId);
+                        const result = await approveUser(user.id, roleId, accessKind);
                         if (result.error) {
                           toast.error(t("errors.saveFailed"));
                           return;

@@ -44,8 +44,8 @@ function AssetFormBody({
 }) {
   const t = useTranslations("pages.assets");
   const { can } = useAuth();
-  const canManage = can("assets.manage");
   const isEdit = Boolean(asset);
+  const canSave = isEdit ? can("assets.edit") : can("assets.create");
   const createMutation = useCreateAssetCatalogItem();
   const updateMutation = useUpdateAssetCatalogItem();
   const [isPending, startTransition] = useTransition();
@@ -96,7 +96,7 @@ function AssetFormBody({
   };
 
   const handleSave = () => {
-    if (!canManage) return;
+    if (!canSave) return;
     const total = parseInt(totalQuantity, 10);
     const reorder = parseInt(reorderLevel, 10);
     if (!name.trim() || !Number.isFinite(total) || !Number.isFinite(reorder)) {
@@ -155,7 +155,7 @@ function AssetFormBody({
             id="asset-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            disabled={!canManage || isPending}
+            disabled={!canSave || isPending}
             className="rounded-lg bg-background"
           />
           <p className="text-[11px] text-muted-foreground">{t("nameHint")}</p>
@@ -167,7 +167,7 @@ function AssetFormBody({
             id="asset-code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            disabled={!canManage || isPending}
+            disabled={!canSave || isPending}
             placeholder="gps"
             className="rounded-lg bg-background"
           />
@@ -182,7 +182,7 @@ function AssetFormBody({
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
             className="resize-none"
-            disabled={!canManage || isPending}
+            disabled={!canSave || isPending}
           />
         </div>
 
@@ -193,7 +193,7 @@ function AssetFormBody({
               id="asset-category"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              disabled={!canManage || isPending}
+              disabled={!canSave || isPending}
               placeholder={t("categoryPlaceholder")}
               className="rounded-lg bg-background"
             />
@@ -208,7 +208,7 @@ function AssetFormBody({
               step="0.001"
               value={penaltyKwd}
               onChange={(e) => setPenaltyKwd(e.target.value)}
-              disabled={!canManage || isPending}
+              disabled={!canSave || isPending}
               placeholder={t("penaltyPlaceholder")}
               className="rounded-lg bg-background"
             />
@@ -221,7 +221,7 @@ function AssetFormBody({
           <Select
             value={iconKey}
             onValueChange={(value) => setIconKey(value ?? "Package")}
-            disabled={!canManage || isPending}
+            disabled={!canSave || isPending}
           >
             <SelectTrigger className="rounded-lg bg-background">
               <SelectValue />
@@ -261,7 +261,7 @@ function AssetFormBody({
                 variant="outline"
                 size="sm"
                 className="cursor-pointer rounded-lg"
-                disabled={!canManage || isPending}
+                disabled={!canSave || isPending}
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload className="me-2 h-3.5 w-3.5" />
@@ -273,7 +273,7 @@ function AssetFormBody({
                   variant="ghost"
                   size="sm"
                   className="cursor-pointer text-destructive hover:text-destructive"
-                  disabled={!canManage || isPending}
+                  disabled={!canSave || isPending}
                   onClick={() => {
                     if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
                     setImageFile(null);
@@ -298,7 +298,7 @@ function AssetFormBody({
               min={0}
               value={totalQuantity}
               onChange={(e) => setTotalQuantity(e.target.value)}
-              disabled={!canManage || isPending}
+              disabled={!canSave || isPending}
               className="rounded-lg bg-background"
             />
           </div>
@@ -310,7 +310,7 @@ function AssetFormBody({
               min={0}
               value={reorderLevel}
               onChange={(e) => setReorderLevel(e.target.value)}
-              disabled={!canManage || isPending}
+              disabled={!canSave || isPending}
               className="rounded-lg bg-background"
             />
           </div>
@@ -322,7 +322,7 @@ function AssetFormBody({
             id="asset-active"
             checked={isActive}
             onCheckedChange={setIsActive}
-            disabled={!canManage || isPending}
+            disabled={!canSave || isPending}
           />
         </div>
       </div>
@@ -338,7 +338,7 @@ function AssetFormBody({
         >
           {t("cancel")}
         </Button>
-        {canManage ? (
+        {canSave ? (
           <Button
             type="button"
             size="sm"

@@ -31,8 +31,32 @@ describe("relocateFleetItems", () => {
   });
 });
 
+describe("relocateStaffAccessItem", () => {
+  it("pins Staff access after Roles in Settings", () => {
+    const { tree } = mergeMenu([
+      {
+        id: "group-settings",
+        type: "group",
+        label: "Settings",
+        icon: "Settings",
+        children: [
+          { id: "roles", type: "item", label: "Roles", icon: "Shield" },
+          { id: "access-requests", type: "item", label: "Access", icon: "UserCheck" },
+        ],
+      },
+    ]);
+    const settings = tree.find((node) => node.id === "group-settings");
+    const ids = (settings?.children ?? []).map((child) => child.id);
+    const rolesAt = ids.indexOf("roles");
+    const staffAt = ids.indexOf("staff-access");
+    assert.ok(staffAt >= 0);
+    assert.equal(staffAt, rolesAt + 1);
+    assert.equal(settings?.children?.find((child) => child.id === "staff-access")?.hidden, false);
+  });
+});
+
 describe("relocatePayrollItem", () => {
-  it("pins Payroll after Performance in Operations even when a saved menu omitted it", () => {
+  it("pins Assistant after Performance and Payroll after Assistant", () => {
     const { tree } = mergeMenu([
       {
         id: "group-operations",
@@ -47,10 +71,13 @@ describe("relocatePayrollItem", () => {
     ]);
     const ops = tree.find((node) => node.id === "group-operations");
     const ids = (ops?.children ?? []).map((child) => child.id);
-    const payrollIdx = ids.indexOf("payroll");
     const perfIdx = ids.indexOf("performance");
-    assert.ok(payrollIdx >= 0);
-    assert.equal(payrollIdx, perfIdx + 1);
+    const assistantIdx = ids.indexOf("assistant");
+    const payrollIdx = ids.indexOf("payroll");
+    assert.ok(perfIdx >= 0);
+    assert.equal(assistantIdx, perfIdx + 1);
+    assert.equal(payrollIdx, assistantIdx + 1);
+    assert.equal(ops?.children?.find((child) => child.id === "assistant")?.hidden, false);
     assert.equal(ops?.children?.find((child) => child.id === "payroll")?.hidden, false);
   });
 });
