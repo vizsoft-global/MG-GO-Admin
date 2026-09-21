@@ -8108,7 +8108,11 @@ export type Database = {
       }
       driver_cancel_visit: { Args: { p_booking_id: string }; Returns: Json }
       driver_check_order_id_available: {
-        Args: { p_external_order_id: string }
+        Args: {
+          p_external_order_id: string
+          p_pickup_lat?: number
+          p_pickup_lng?: number
+        }
         Returns: boolean
       }
       driver_clear_live_location: { Args: never; Returns: Json }
