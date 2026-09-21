@@ -47,7 +47,12 @@ describe("fixedDays / month selector", () => {
       months.map((m) => m.key),
       ["2026-09", "2026-08", "2026-07"],
     );
-    assert.equal(months[0].label, "Sep 2026");
+    assert.equal(months[0].label, "September 2026");
+    assert.equal(monthMeta("2026-09", "ar")?.label, new Intl.DateTimeFormat("ar", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(Date.UTC(2026, 8, 1))));
     assert.equal(months.length, 3);
     assert.throws(() => assertPayrollMonth("2026-06", "2026-09-16"), /month_out_of_range/);
     assert.equal(assertPayrollMonth("2026-08", "2026-09-16").days, 31);
@@ -94,6 +99,10 @@ describe("fixedDays / month selector", () => {
   it("labels day columns as 1-Sep", () => {
     assert.equal(dayLabel("2026-09", 1), "1-Sep");
     assert.equal(dayLabel("2026-08", 31), "31-Aug");
+    assert.equal(
+      dayLabel("2026-09", 1, "ar"),
+      `1-${new Intl.DateTimeFormat("ar", { month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2026, 8, 1)))}`,
+    );
   });
 });
 

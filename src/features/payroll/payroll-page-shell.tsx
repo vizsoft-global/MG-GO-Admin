@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Download, FilterX, Loader2 } from "lucide-react";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
 import { TabBar } from "@/components/dashboard/tab-bar";
@@ -12,6 +12,7 @@ import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types"
 import {
   bucketOf,
   keepSelectedPayrollOptions,
+  monthMeta,
   payrollMonthForPreset,
   payrollMonths,
   presetForPayrollMonth,
@@ -27,10 +28,11 @@ import type { PayrollHubTab, PayrollSlicers } from "./payroll-types";
 
 export function PayrollPageShell() {
   const t = useTranslations("pages.payroll");
+  const locale = useLocale();
   const { can } = useAuth();
   const canExport = can("payroll.export");
   const today = kuwaitToday();
-  const months = useMemo(() => payrollMonths(today), [today]);
+  const months = useMemo(() => payrollMonths(today, locale), [today, locale]);
   const [tab, setTab] = useState<PayrollHubTab>("payroll");
   const [preset, setPreset] = useState<PayrollRangePreset>("thisMonth");
   const [customKey, setCustomKey] = useState<string | null>(null);
@@ -46,7 +48,12 @@ export function PayrollPageShell() {
 
   const query = usePayrollSnapshot(monthKey, slicers);
   const data = query.data;
-  const month = data?.month ?? months.find((m) => m.key === monthKey) ?? months[0];
+  const month = useMemo(() => {
+    const raw = data?.month ?? months.find((m) => m.key === monthKey) ?? months[0];
+    if (!raw) return raw;
+    const localized = monthMeta(raw.key, locale);
+    return localized ? { ...raw, label: localized.label } : raw;
+  }, [data?.month, months, monthKey, locale]);
 
   function changePreset(next: Exclude<PayrollRangePreset, "custom">) {
     setPreset(next);

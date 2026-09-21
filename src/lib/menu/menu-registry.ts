@@ -534,6 +534,10 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
 
 /** Map menu item id → next-intl nav key (without `nav.` prefix). */
 export const APP_NAV_KEY_BY_ID: Record<string, string> = {
+  "group-overview": "overview",
+  "group-fleet": "fleet",
+  "group-operations": "operations",
+  "group-system": "system",
   dashboard: "dashboard",
   drivers: "drivers",
   "driver-groups": "driverGroups",

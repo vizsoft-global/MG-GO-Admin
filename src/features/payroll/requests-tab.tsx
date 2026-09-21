@@ -32,16 +32,16 @@ import type { PayrollRequestRow } from "./payroll-types";
 const TILES: Array<{
   key: PayrollTileKey;
   icon: typeof CalendarDays;
-  dept: string;
+  deptKey: "operations" | "hrClinic" | "safetyLegal" | "fleet" | "finance" | "hr" | "payroll";
 }> = [
-  { key: "leave", icon: CalendarDays, dept: "Operations" },
-  { key: "sick", icon: Stethoscope, dept: "HR / Clinic" },
-  { key: "accident", icon: Siren, dept: "Safety & Legal" },
-  { key: "asset", icon: Shirt, dept: "Fleet" },
-  { key: "fuel", icon: Fuel, dept: "Fleet" },
-  { key: "loan", icon: Banknote, dept: "Finance" },
-  { key: "document", icon: FileText, dept: "HR" },
-  { key: "salary_justification", icon: CircleDollarSign, dept: "Payroll" },
+  { key: "leave", icon: CalendarDays, deptKey: "operations" },
+  { key: "sick", icon: Stethoscope, deptKey: "hrClinic" },
+  { key: "accident", icon: Siren, deptKey: "safetyLegal" },
+  { key: "asset", icon: Shirt, deptKey: "fleet" },
+  { key: "fuel", icon: Fuel, deptKey: "fleet" },
+  { key: "loan", icon: Banknote, deptKey: "finance" },
+  { key: "document", icon: FileText, deptKey: "hr" },
+  { key: "salary_justification", icon: CircleDollarSign, deptKey: "payroll" },
 ];
 
 const STATUSES: Array<PayrollUiStatus | "all"> = [
@@ -146,7 +146,7 @@ export function RequestsTab({
               </span>
               <p className="text-[12.5px] font-bold">{t(`tiles.${item.key}`)}</p>
               <p className="mt-0.5 text-[10.5px] text-muted-foreground">
-                {item.dept} · {total}
+                {t(`tileDept.${item.deptKey}`)} · {total}
               </p>
             </button>
           );

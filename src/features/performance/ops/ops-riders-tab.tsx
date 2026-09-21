@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslations } from "next-intl";
-import { Filter } from "lucide-react";
+import { Check, Filter } from "lucide-react";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { LAYOUT } from "@/components/app/layout-spacing";
@@ -22,6 +22,7 @@ import {
   applyColumnFilters,
   columnFilterValues,
   downloadCsv,
+  filterOptionLabel,
   toCsv,
   type OpsColumnFilter,
 } from "../performance-ops-table";
@@ -125,15 +126,15 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
           { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
           { label: t("kpi.dpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
           { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
-          { label: t("kpi.ridersInView"), value: formatInt(filtered.length) },
         ]}
       />
       <p className="text-[10px] text-muted-foreground">{t("tableFiltersHint")}</p>
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="flex flex-wrap gap-1.5 border-b border-border px-3 py-2">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
           {FILTER_KEYS.map((key) => {
             const values = columnFilterValues(riders as unknown as Array<Record<string, unknown>>, key);
             const selected = filters[key] ?? [];
+            const allOn = selected.length === 0;
             return (
               <Popover key={key}>
                 <PopoverTrigger className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted/40">
@@ -142,20 +143,21 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
                   {selected.length ? ` (${selected.length})` : ""}
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-52 origin-(--transform-origin) p-2">
-                  <button
-                    type="button"
-                    className="mb-1 text-[11px] text-primary"
-                    onClick={() => setFilters((prev) => ({ ...prev, [key]: [] }))}
-                  >
-                    {t("slicer.all")}
-                  </button>
+                  <label className="mb-1 flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40">
+                    <Checkbox
+                      checked={allOn}
+                      onCheckedChange={() => setFilters((prev) => ({ ...prev, [key]: [] }))}
+                    />
+                    <span className="min-w-0 flex-1 font-medium">{t("slicer.all")}</span>
+                    {allOn ? <Check className="size-3 shrink-0 text-emerald-700" /> : null}
+                  </label>
                   <div className="max-h-48 overflow-y-auto">
                     {values.map((v) => {
                       const on = selected.includes(v);
                       return (
                         <label
                           key={v || "(empty)"}
-                          className="flex h-7 items-center gap-2 text-[11px]"
+                          className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40"
                         >
                           <Checkbox
                             checked={on}
@@ -166,7 +168,9 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
                               });
                             }}
                           />
-                          <span className="truncate">{v || "—"}</span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {filterOptionLabel(key, v, (msg) => t(msg))}
+                          </span>
                         </label>
                       );
                     })}
@@ -175,9 +179,12 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
               </Popover>
             );
           })}
+          <span className="ms-auto text-[11px] text-muted-foreground">
+            {t("showingRiders", { count: filtered.length })}
+          </span>
           <button
             type="button"
-            className="ms-auto h-8 text-[11px] text-primary"
+            className="h-8 text-[11px] text-primary"
             onClick={() =>
               downloadCsv(
                 "ops-riders",

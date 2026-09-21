@@ -103,7 +103,17 @@ export function parseMonthKey(key: string): { year: number; month: number } | nu
   return { year, month };
 }
 
-export function monthMeta(key: string): PayrollMonthMeta | null {
+export function formatPayrollMonthLabel(key: string, locale = "en"): string {
+  const parsed = parseMonthKey(key);
+  if (!parsed) return key;
+  return new Intl.DateTimeFormat(locale, {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(parsed.year, parsed.month - 1, 1)));
+}
+
+export function monthMeta(key: string, locale = "en"): PayrollMonthMeta | null {
   const parsed = parseMonthKey(key);
   if (!parsed) return null;
   const days = daysInCalendarMonth(parsed.year, parsed.month);
@@ -112,7 +122,7 @@ export function monthMeta(key: string): PayrollMonthMeta | null {
     year: parsed.year,
     month: parsed.month,
     days,
-    label: `${MONTH_ABBR[parsed.month - 1]} ${parsed.year}`,
+    label: formatPayrollMonthLabel(key, locale),
     fixedDays: fixedDaysFor(days),
   };
 }
@@ -131,10 +141,10 @@ export type PayrollRangePreset = (typeof PAYROLL_RANGE_PRESETS)[number];
  * Allowed archive: Kuwait current month + previous 2.
  * Intentional product window — do not expand without a separate client discussion.
  */
-export function payrollMonths(todayYmd: string): PayrollMonthMeta[] {
+export function payrollMonths(todayYmd: string, locale = "en"): PayrollMonthMeta[] {
   const currentKey = todayYmd.slice(0, 7);
   return [0, -1, -2].map((delta) => {
-    const meta = monthMeta(shiftMonthKey(currentKey, delta));
+    const meta = monthMeta(shiftMonthKey(currentKey, delta), locale);
     if (!meta) throw new Error("invalid_month");
     return meta;
   });
@@ -181,10 +191,14 @@ export function presetForPayrollMonth(key: string, todayYmd: string): PayrollRan
   return "custom";
 }
 
-export function dayLabel(monthKey: string, dayNum: number): string {
+export function dayLabel(monthKey: string, dayNum: number, locale = "en"): string {
   const parsed = parseMonthKey(monthKey);
   if (!parsed) return String(dayNum);
-  return `${dayNum}-${MONTH_ABBR[parsed.month - 1]}`;
+  const month = new Intl.DateTimeFormat(locale, {
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(parsed.year, parsed.month - 1, 1)));
+  return `${dayNum}-${month}`;
 }
 
 export function isoDateInMonth(monthKey: string, dayNum: number): string {

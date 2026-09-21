@@ -2,12 +2,35 @@
 
 import { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useLocale, useTranslations } from "next-intl";
 import { Download } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { cn } from "@/lib/utils";
-import { dayLabel, dayStatusLabel, type DayStatus } from "./payroll-formulas";
+import { dayLabel, type DayStatus } from "./payroll-formulas";
 import { formatEfficiencyCell } from "./payroll-csv";
 import type { PayrollRiderRow } from "./payroll-types";
+
+const IDENTITY_COLS = [
+  "amId",
+  "mgId",
+  "name",
+  "restaurant",
+  "zone",
+  "partner",
+  "nationality",
+  "status",
+] as const;
+
+const TOTAL_COLS = [
+  "totalDays",
+  "totalHours",
+  "off",
+  "sick",
+  "accident",
+  "absence",
+  "fixedDays",
+  "efficiency",
+] as const;
 
 function dayClass(status: DayStatus): string {
   switch (status) {
@@ -30,6 +53,10 @@ function dayClass(status: DayStatus): string {
   }
 }
 
+function spacerCells(count: number) {
+  return Array.from({ length: count }, (_, i) => <td key={i} className="p-0" />);
+}
+
 export function PayrollDayGrid({
   monthKey,
   days,
@@ -47,6 +74,8 @@ export function PayrollDayGrid({
   onExport: () => void;
   empty: string;
 }) {
+  const t = useTranslations("pages.payroll");
+  const locale = useLocale();
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -55,40 +84,45 @@ export function PayrollDayGrid({
     overscan: 16,
   });
 
-  const dayHeaders = Array.from({ length: days }, (_, i) => dayLabel(monthKey, i + 1));
+  const colCount = 16 + days;
+  const dayHeaders = Array.from({ length: days }, (_, i) => dayLabel(monthKey, i + 1, locale));
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div ref={parentRef} className="max-h-[min(520px,52dvh)] overflow-auto">
         <table className="w-max min-w-full border-collapse text-[12px]">
+          <colgroup>
+            {Array.from({ length: colCount }, (_, i) => (
+              <col
+                key={i}
+                className={i >= 8 && i < 8 + days ? "min-w-[52px]" : undefined}
+              />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 z-10 bg-card">
             <tr>
-              {["AM ID", "MG ID", "Name", "Restaurant", "Zone", "Partner", "Nationality", "Status"].map(
-                (h) => (
-                  <th key={h} className={cn(TABLE_HEAD_CLASS, "whitespace-nowrap px-2 py-2")}>
-                    {h}
-                  </th>
-                ),
-              )}
+              {IDENTITY_COLS.map((id) => (
+                <th key={id} className={cn(TABLE_HEAD_CLASS, "whitespace-nowrap px-2 py-2")}>
+                  {t(`riderCols.${id}`)}
+                </th>
+              ))}
               {dayHeaders.map((h) => (
                 <th key={h} className={cn(TABLE_HEAD_CLASS, "min-w-[52px] px-1 py-2 text-center")}>
                   {h}
                 </th>
               ))}
-              {["Total Days", "Total Hours", "OFF", "Sick", "Accident", "Absence", "Fixed Days", "Efficiency%"].map(
-                (h) => (
-                  <th key={h} className={cn(TABLE_HEAD_CLASS, "whitespace-nowrap px-2 py-2")}>
-                    {h}
-                  </th>
-                ),
-              )}
+              {TOTAL_COLS.map((id) => (
+                <th key={id} className={cn(TABLE_HEAD_CLASS, "whitespace-nowrap px-2 py-2")}>
+                  {t(`riderCols.${id}`)}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={16 + days}
+                  colSpan={colCount}
                   className="px-3 py-8 text-center text-xs text-muted-foreground"
                 >
                   {empty}
@@ -98,12 +132,13 @@ export function PayrollDayGrid({
               <>
                 {virtualizer.getVirtualItems().length > 0 ? (
                   <tr aria-hidden style={{ height: virtualizer.getVirtualItems()[0]?.start ?? 0 }}>
-                    <td colSpan={16 + days} className="p-0" />
+                    {spacerCells(colCount)}
                   </tr>
                 ) : null}
                 {virtualizer.getVirtualItems().map((item) => {
                   const row = rows[item.index];
                   const eff = formatEfficiencyCell(row.efficiency);
+                  const statusKey = row.status === "Active" ? "active" : "inactive";
                   return (
                     <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
                       <td className="whitespace-nowrap px-2 py-1.5">{row.amId}</td>
@@ -122,7 +157,7 @@ export function PayrollDayGrid({
                               : "bg-red-100 text-red-700",
                           )}
                         >
-                          {row.status}
+                          {t(`riderStatus.${statusKey}`)}
                         </span>
                       </td>
                       {row.days.map((st, i) => (
@@ -133,7 +168,7 @@ export function PayrollDayGrid({
                             dayClass(st),
                           )}
                         >
-                          {dayStatusLabel(st)}
+                          {st === "blank" ? "" : t(`dayStatus.${st}`)}
                         </td>
                       ))}
                       <td className="px-2 py-1.5">{row.workDays}</td>
@@ -166,7 +201,7 @@ export function PayrollDayGrid({
                       ),
                     }}
                   >
-                    <td colSpan={16 + days} className="p-0" />
+                    {spacerCells(colCount)}
                   </tr>
                 ) : null}
               </>
@@ -190,22 +225,23 @@ export function PayrollDayGrid({
 }
 
 export function PayrollLegend() {
-  const items: Array<{ label: string; className: string; swatch: string }> = [
-    { label: "12", className: "text-muted-foreground", swatch: "#8d8d97" },
-    { label: "OFF", className: "", swatch: "#33c777" },
-    { label: "Sick", className: "", swatch: "#f0a83c" },
-    { label: "Accident", className: "", swatch: "#9acd32" },
-    { label: "Absent", className: "", swatch: "#ef5b5b" },
+  const t = useTranslations("pages.payroll");
+  const items: Array<{ id: string; className: string; swatch: string }> = [
+    { id: "work", className: "text-muted-foreground", swatch: "#8d8d97" },
+    { id: "off", className: "", swatch: "#33c777" },
+    { id: "sick", className: "", swatch: "#f0a83c" },
+    { id: "accident", className: "", swatch: "#9acd32" },
+    { id: "absent", className: "", swatch: "#ef5b5b" },
   ];
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) => (
         <div
-          key={item.label}
+          key={item.id}
           className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] shadow-sm"
         >
           <span className="size-3.5 rounded-sm" style={{ background: item.swatch }} />
-          <span className="font-semibold">{item.label}</span>
+          <span className="font-semibold">{t(`legend.${item.id}`)}</span>
         </div>
       ))}
     </div>
