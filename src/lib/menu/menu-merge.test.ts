@@ -31,6 +31,30 @@ describe("relocateFleetItems", () => {
   });
 });
 
+describe("relocateStaffAccessItem", () => {
+  it("pins Staff access after Roles in Settings", () => {
+    const { tree } = mergeMenu([
+      {
+        id: "group-settings",
+        type: "group",
+        label: "Settings",
+        icon: "Settings",
+        children: [
+          { id: "roles", type: "item", label: "Roles", icon: "Shield" },
+          { id: "access-requests", type: "item", label: "Access", icon: "UserCheck" },
+        ],
+      },
+    ]);
+    const settings = tree.find((node) => node.id === "group-settings");
+    const ids = (settings?.children ?? []).map((child) => child.id);
+    const rolesAt = ids.indexOf("roles");
+    const staffAt = ids.indexOf("staff-access");
+    assert.ok(staffAt >= 0);
+    assert.equal(staffAt, rolesAt + 1);
+    assert.equal(settings?.children?.find((child) => child.id === "staff-access")?.hidden, false);
+  });
+});
+
 describe("relocatePayrollItem", () => {
   it("pins Assistant after Performance and Payroll after Assistant", () => {
     const { tree } = mergeMenu([

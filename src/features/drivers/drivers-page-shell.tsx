@@ -168,7 +168,8 @@ function DriversPageContent() {
   const t = useTranslations("pages.drivers");
   const tCommon = useTranslations("common");
   const { can } = useAuth();
-  const canManage = can("drivers.manage");
+  const canCreate = can("drivers.create");
+  const canEdit = can("drivers.edit");
   const { data: customFieldDefs = [] } = useCustomFieldDefinitions();
   const activeCustomDefs = useMemo(
     () => customFieldDefs.filter((d) => d.is_active && !d.archived_at),
@@ -743,7 +744,7 @@ function DriversPageContent() {
                 />
                 <TooltipContent>{t("export")}</TooltipContent>
               </Tooltip>
-              {canManage ? (
+              {canCreate ? (
                 <Tooltip>
                   <TooltipTrigger
                     render={
@@ -763,15 +764,18 @@ function DriversPageContent() {
                   <TooltipContent>{t("bulkImport")}</TooltipContent>
                 </Tooltip>
               ) : null}
-              <Button
-                type="button"
-                size="sm"
-                className="h-9 shrink-0 cursor-pointer rounded-lg px-2.5"
-                onClick={() => setAddOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                <span className="ms-1.5 hidden sm:inline">{t("addDriver")}</span>
-              </Button>
+              {canCreate ? (
+              {canCreate ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 shrink-0 cursor-pointer rounded-lg px-2.5"
+                  onClick={() => setAddOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="ms-1.5 hidden sm:inline">{t("addDriver")}</span>
+                </Button>
+              ) : null}
             </div>
           </div>
         }
@@ -786,15 +790,17 @@ function DriversPageContent() {
             <p className="mt-1 text-sm text-muted-foreground">
               {t("emptyDescription")}
             </p>
-            <Button
-              type="button"
-              size="sm"
-              className="mt-4 cursor-pointer rounded-lg"
-              onClick={() => setAddOpen(true)}
-            >
-              <Plus className="me-2 h-3.5 w-3.5" />
-              {t("addDriver")}
-            </Button>
+            {canCreate ? (
+              <Button
+                type="button"
+                size="sm"
+                className="mt-4 cursor-pointer rounded-lg"
+                onClick={() => setAddOpen(true)}
+              >
+                <Plus className="me-2 h-3.5 w-3.5" />
+                {t("addDriver")}
+              </Button>
+            ) : null}
           </div>
         ) : (
           <CardContent className="p-0">
@@ -998,7 +1004,7 @@ function DriversPageContent() {
                               />
                               <TooltipContent>{t("viewDriver")}</TooltipContent>
                             </Tooltip>
-                            {canManage &&
+                            {canEdit &&
                             !driver.linked_profile_id &&
                             !driver.archived_at &&
                             driver.restaurant_names.length > 0 ? (
@@ -1040,7 +1046,7 @@ function DriversPageContent() {
                                 <TooltipContent>{t("approveAction")}</TooltipContent>
                               </Tooltip>
                             ) : null}
-                            {canManage && driver.archived_at ? (
+                            {canEdit && driver.archived_at ? (
                               <Tooltip>
                                 <TooltipTrigger
                                   render={
@@ -1083,7 +1089,7 @@ function DriversPageContent() {
                                 <TooltipContent>{t("restoreDriver")}</TooltipContent>
                               </Tooltip>
                             ) : null}
-                            {!driver.archived_at ? (
+                            {canEdit && !driver.archived_at ? (
                             <Tooltip>
                               <TooltipTrigger
                                 render={
@@ -1149,7 +1155,7 @@ function DriversPageContent() {
         rows={sorted}
         customFields={activeCustomDefs.map((d) => ({ key: d.key, label: d.label }))}
       />
-      {canManage ? (
+      {canCreate ? (
         <DriverBulkImportDialog open={bulkOpen} onOpenChange={setBulkOpen} />
       ) : null}
     </AppPage>

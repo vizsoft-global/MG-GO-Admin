@@ -1,4 +1,5 @@
 import { PERMISSION_CATALOG } from "@/lib/auth/permission-catalog";
+import { permissionGrantedByTicks } from "@/lib/auth/staff-access";
 
 export const PERMISSIONS = Object.fromEntries(
   PERMISSION_CATALOG.map((e) => [e.slug, e.slug]),
@@ -25,7 +26,7 @@ export function hasPermissionInSet(
   isSuperAdmin: boolean,
 ): boolean {
   if (isSuperAdmin) return true;
-  return permissions.has(permission);
+  return permissionGrantedByTicks(permissions, permission);
 }
 
 /** View restaurants on /restaurants or legacy DPD earnings screens. */
@@ -46,7 +47,7 @@ export function hasAnyPermissionInSet(
   isSuperAdmin: boolean,
 ): boolean {
   if (isSuperAdmin) return true;
-  return permissionList.some((p) => permissions.has(p));
+  return permissionList.some((p) => hasPermissionInSet(permissions, p, false));
 }
 
 export function canViewRestaurants(

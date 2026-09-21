@@ -127,7 +127,9 @@ export function mergeMenu(config: MenuNode[]): {
     }
   }
   return {
-    tree: relocatePayrollItem(relocateAssistantItem(relocateFleetItems(pruned))),
+    tree: relocateStaffAccessItem(
+      relocatePayrollItem(relocateAssistantItem(relocateFleetItems(pruned))),
+    ),
     unassignedIds: unassigned,
   };
 }
@@ -288,6 +290,54 @@ function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
   children.splice(insertAt, 0, item);
   const next = [...stripped];
   next[opsIdx] = { ...ops, children };
+  return next;
+}
+
+function relocateStaffAccessItem(tree: MenuNode[]): MenuNode[] {
+  const STAFF_ACCESS_ID = "staff-access";
+  let found: MenuNode | null = null;
+  const strip = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "item") {
+        if (node.id === STAFF_ACCESS_ID) {
+          found = { ...node, hidden: false };
+          return [];
+        }
+        return [node];
+      }
+      const children = node.children ? strip(node.children) : [];
+      return [{ ...node, children }];
+    });
+
+  const stripped = strip(tree);
+  const item: MenuNode = found ?? {
+    id: STAFF_ACCESS_ID,
+    type: "item",
+    label: "Staff access",
+    icon: "KeyRound",
+    hidden: false,
+  };
+
+  const settingsIdx = stripped.findIndex((node) => node.id === "group-settings");
+  if (settingsIdx < 0) {
+    return [
+      ...stripped,
+      {
+        id: "group-settings",
+        type: "group",
+        label: "Settings",
+        icon: "Settings",
+        children: [item],
+      },
+    ];
+  }
+
+  const settings = stripped[settingsIdx];
+  const children = [...(settings.children ?? [])].filter((child) => child.id !== STAFF_ACCESS_ID);
+  const rolesIdx = children.findIndex((child) => child.id === "roles");
+  children.splice(rolesIdx >= 0 ? rolesIdx + 1 : children.length, 0, item);
+  const next = [...stripped];
+  next[settingsIdx] = { ...settings, children };
   return next;
 }
 

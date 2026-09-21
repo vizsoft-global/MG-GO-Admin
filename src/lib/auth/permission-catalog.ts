@@ -1,3 +1,8 @@
+import {
+  RESOURCE_CRUD_LABELS,
+  RESOURCE_CRUD_MODULES,
+} from "@/lib/auth/staff-access";
+
 /**
  * Canonical permission catalog — single source of truth for RBAC.
  *
@@ -15,6 +20,15 @@ export type PermissionCatalogEntry = {
   label: string;
   category: string;
 };
+
+const PERMISSION_CRUD_CATALOG = RESOURCE_CRUD_MODULES.flatMap((module) => {
+  const { noun, category } = RESOURCE_CRUD_LABELS[module];
+  return [
+    { slug: `${module}.create` as const, label: `Create ${noun}`, category },
+    { slug: `${module}.edit` as const, label: `Edit ${noun}`, category },
+    { slug: `${module}.delete` as const, label: `Delete ${noun}`, category },
+  ];
+});
 
 export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { slug: "dashboard.view", label: "View dashboard", category: "dashboard" },
@@ -204,7 +218,8 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     category: "assistant",
   },
   // releases.manage removed — App Releases / sideload OTA decommissioned (Play Store only).
-] as const;
+  ...PERMISSION_CRUD_CATALOG,
+];
 
 export const CATALOG_SLUGS = PERMISSION_CATALOG.map((e) => e.slug);
 

@@ -82,7 +82,8 @@ export function VehiclesPageShell({
 }) {
   const t = useTranslations("pages.vehicles");
   const { can } = useAuth();
-  const canManage = can("vehicles.manage");
+  const canCreate = can("vehicles.create");
+  const canEdit = can("vehicles.edit");
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: vehicles = [], isLoading } = useVehiclesList();
@@ -200,9 +201,9 @@ export function VehiclesPageShell({
         actions={
           <Button
             className="h-9 cursor-pointer rounded-lg"
-            disabled={!canManage}
+            disabled={!canCreate}
             onClick={() => {
-              if (canManage) replaceQuery({ add: true });
+              if (canCreate) replaceQuery({ add: true });
             }}
           >
             <Plus className="me-2 h-3.5 w-3.5" />
@@ -417,7 +418,7 @@ export function VehiclesPageShell({
       <VehicleRecordDialog
         open={Boolean(selected)}
         vehicle={selected}
-        canManage={canManage}
+        canManage={canEdit}
         onOpenChange={(open) => {
           if (!open) setSelectedId(null);
         }}
@@ -428,7 +429,7 @@ export function VehiclesPageShell({
         }}
       />
       <VehicleFormDialog
-        open={(addOpen || Boolean(editing)) && canManage}
+        open={(addOpen && canCreate) || (Boolean(editing) && canEdit)}
         vehicle={editing}
         types={types}
         vehicles={vehicles}

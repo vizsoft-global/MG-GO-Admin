@@ -9,6 +9,7 @@ import {
   type EnrichedProfile,
 } from "@/lib/auth/profile-auth";
 import { userFromLocalJwt } from "@/lib/auth/local-session";
+import { parseStaffAccessKind, type StaffAccessKind } from "@/lib/auth/staff-access";
 
 export type SessionUser = {
   id: string;
@@ -16,6 +17,8 @@ export type SessionUser = {
   profile: EnrichedProfile;
   permissions: Set<string>;
   isSuperAdmin: boolean;
+  isManager: boolean;
+  accessKind: StaffAccessKind | null;
   adminRoleSlug: string;
 };
 
@@ -84,6 +87,10 @@ async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
 
   const enriched = profileRow;
   const isSuperAdmin = profileRow.admin_roles?.is_super_admin === true;
+  const accessKind = parseStaffAccessKind(
+    "access_kind" in profileRow ? profileRow.access_kind : null,
+  );
+  const isManager = isSuperAdmin || accessKind === "manager";
   const authProfile = toAuthProfile(enriched, isSuperAdmin);
 
   if (!canAccessAdminPanel(authProfile) && enriched.approval_status !== "pending") {
@@ -96,6 +103,8 @@ async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
     supabase,
     enriched.admin_role_id,
     isSuperAdmin,
+    accessKind,
+    user.id,
   );
 
   return {
@@ -105,6 +114,8 @@ async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
       profile: enriched,
       permissions,
       isSuperAdmin,
+      isManager,
+      accessKind,
       adminRoleSlug: profileRow.admin_roles?.slug ?? "operator",
     },
     unavailable: false,
