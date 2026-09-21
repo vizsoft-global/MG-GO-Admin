@@ -13,9 +13,9 @@ const dateFields = {
   preset: z
     .enum(["today", "yesterday", "this_week", "this_month"])
     .optional()
-    .describe("Kuwait calendar preset. Defaults to today when from/to omitted."),
-  from: z.string().optional().describe("Inclusive Kuwait date YYYY-MM-DD"),
-  to: z.string().optional().describe("Inclusive Kuwait date YYYY-MM-DD"),
+    .describe("Kuwait calendar preset. Pass only this when the user said today/yesterday/this week/this month — omit from/to."),
+  from: z.string().optional().describe("Inclusive Kuwait date YYYY-MM-DD. Omit when preset is set."),
+  to: z.string().optional().describe("Inclusive Kuwait date YYYY-MM-DD. Omit when preset is set."),
 };
 
 export function createAssistantTools() {
@@ -67,7 +67,7 @@ export function createAssistantTools() {
       description:
         "D: Today’s live roster / on duty / GPS / delivery status buckets. No leaderboard.",
       inputSchema: z.object({
-        date: z.string().optional().describe("Kuwait date YYYY-MM-DD, default today"),
+        date: z.string().optional().describe("Kuwait date YYYY-MM-DD. Omit unless the user named a specific day."),
       }),
       execute: async (input) => runPerformanceLive(input),
     }),

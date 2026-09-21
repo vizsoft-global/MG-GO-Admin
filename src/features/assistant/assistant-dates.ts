@@ -21,27 +21,9 @@ export function kuwaitWeekStartSaturday(ymd: string): string {
   return addDays(ymd, -satOffset);
 }
 
-/**
- * Resolve a preset or explicit from/to to inclusive Kuwait calendar days.
- * "This month" and "this week" end today — do not claim days that have not happened.
- */
-export function resolveAssistantDateRange(
-  input: { preset?: string | null; from?: string | null; to?: string | null },
-  today = kuwaitToday(),
-): { from: string; to: string } {
-  const explicitFrom = input.from?.slice(0, 10) || "";
-  const explicitTo = input.to?.slice(0, 10) || "";
-  if (explicitFrom && explicitTo) {
-    if (explicitTo < explicitFrom) throw new Error("invalid_date_range");
-    return { from: explicitFrom, to: explicitTo };
-  }
-  if (explicitFrom && !explicitTo) return { from: explicitFrom, to: today };
-  if (!explicitFrom && explicitTo) return { from: explicitTo, to: explicitTo };
-
-  const preset = input.preset && isAssistantDatePreset(input.preset) ? input.preset : "today";
+function presetRange(preset: AssistantDatePreset, today: string): { from: string; to: string } {
   const [y, mo] = today.split("-").map(Number);
   const pad = (n: number) => String(n).padStart(2, "0");
-
   switch (preset) {
     case "today":
       return { from: today, to: today };
@@ -54,6 +36,38 @@ export function resolveAssistantDateRange(
     case "this_month":
       return { from: `${y}-${pad(mo)}-01`, to: today };
   }
+}
+
+/**
+ * Resolve a preset or explicit from/to to inclusive Kuwait calendar days.
+ * A valid preset always wins — models often invent a stale from/to beside it.
+ * "This month" and "this week" end today — do not claim days that have not happened.
+ */
+export function resolveAssistantDateRange(
+  input: { preset?: string | null; from?: string | null; to?: string | null },
+  today = kuwaitToday(),
+): { from: string; to: string } {
+  const preset = input.preset && isAssistantDatePreset(input.preset) ? input.preset : null;
+  if (preset) return presetRange(preset, today);
+
+  const explicitFrom = input.from?.slice(0, 10) || "";
+  const explicitTo = input.to?.slice(0, 10) || "";
+  if (explicitFrom && explicitTo) {
+    if (explicitTo < explicitFrom) throw new Error("invalid_date_range");
+    return { from: explicitFrom, to: explicitTo };
+  }
+  if (explicitFrom && !explicitTo) return { from: explicitFrom, to: today };
+  if (!explicitFrom && explicitTo) return { from: explicitTo, to: explicitTo };
+  return presetRange("today", today);
+}
+
+/** Live snapshot date: missing / future / older than 400 days → Kuwait today. */
+export function resolveAssistantLiveDate(date?: string | null, today = kuwaitToday()): string {
+  const ymd = date?.slice(0, 10) ?? "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return today;
+  if (ymd > today) return today;
+  if (ymd < addDays(today, -400)) return today;
+  return ymd;
 }
 
 /** Inclusive created_at bounds matching the deliveries list date filter. */

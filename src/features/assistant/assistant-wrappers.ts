@@ -11,6 +11,7 @@ import { logAdminRead } from "@/lib/audit/log-admin-activity";
 import {
   kuwaitDayCreatedAtBounds,
   resolveAssistantDateRange,
+  resolveAssistantLiveDate,
 } from "./assistant-dates";
 import {
   resolveDriverId,
@@ -321,7 +322,7 @@ export async function runPerformanceLive(input: { date?: string }) {
   const refused = refuseToolArgs(input as Record<string, unknown>);
   if (refused) return fail(refused);
   try {
-    const snap = await fetchDpdLiveSnapshot(input.date);
+    const snap = await fetchDpdLiveSnapshot(resolveAssistantLiveDate(input.date));
     const exportSpec: AssistantExportSpec = {
       kind: "performance_live",
       from: snap.date,

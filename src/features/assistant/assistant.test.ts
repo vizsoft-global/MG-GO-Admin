@@ -13,6 +13,7 @@ import {
   kuwaitDayCreatedAtBounds,
   kuwaitWeekStartSaturday,
   resolveAssistantDateRange,
+  resolveAssistantLiveDate,
 } from "./assistant-dates";
 import { exportSpecFromUnknown } from "./assistant-export-spec";
 import { assistantModuleAllowed } from "./assistant-gates";
@@ -85,6 +86,27 @@ describe("assistant dates", () => {
       () => resolveAssistantDateRange({ from: "2026-09-10", to: "2026-09-01" }, "2026-09-21"),
       /invalid_date_range/,
     );
+  });
+
+  it("lets a preset win over invented from/to", () => {
+    const today = "2026-09-21";
+    assert.deepEqual(
+      resolveAssistantDateRange(
+        { preset: "this_week", from: "2023-10-01", to: "2023-10-07" },
+        today,
+      ),
+      { from: "2026-09-19", to: today },
+    );
+    assert.deepEqual(
+      resolveAssistantDateRange(
+        { preset: "this_month", from: "2023-10-01", to: "2023-10-07" },
+        today,
+      ),
+      { from: "2026-09-01", to: today },
+    );
+    assert.equal(resolveAssistantLiveDate("2023-10-06", today), today);
+    assert.equal(resolveAssistantLiveDate("2026-09-20", today), "2026-09-20");
+    assert.equal(resolveAssistantLiveDate(undefined, today), today);
   });
 });
 
