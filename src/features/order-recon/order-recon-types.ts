@@ -5,6 +5,7 @@ export type OrderReconKpi = {
   mismatches: number;
   unresolved: number;
   app_only: number;
+  not_using_app?: number;
 };
 
 export type OrderReconTableRow = {

@@ -204,6 +204,39 @@ export async function commitOrderRecon(
   };
 }
 
+async function fetchAllReconRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  runId: string,
+) {
+  const pageSize = 1000;
+  const all: {
+    id: string;
+    employee_id: string | null;
+    employee_name: string | null;
+    restaurant_name: string | null;
+    work_date: string;
+    excel_orders: number;
+    app_orders: number;
+    difference: number;
+    status: string;
+  }[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("order_recon_rows")
+      .select(
+        "id, employee_id, employee_name, restaurant_name, work_date, excel_orders, app_orders, difference, status",
+      )
+      .eq("run_id", runId)
+      .order("work_date", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) break;
+    const batch = data ?? [];
+    all.push(...batch);
+    if (batch.length < pageSize) break;
+  }
+  return all;
+}
+
 export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
   const auth = await requireDeliveries("view");
   if ("error" in auth) return null;
@@ -217,11 +250,7 @@ export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
     .maybeSingle();
   if (!run) return null;
 
-  const { data: rows } = await supabase
-    .from("order_recon_rows")
-    .select("id, employee_id, employee_name, restaurant_name, work_date, excel_orders, app_orders, difference, status")
-    .eq("run_id", run.id)
-    .order("work_date", { ascending: true });
+  const rows = await fetchAllReconRows(supabase, run.id);
 
   return {
     id: run.id,
