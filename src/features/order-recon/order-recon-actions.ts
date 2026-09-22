@@ -1,19 +1,21 @@
 "use server";
 
-import { getSessionUser } from "@/lib/auth/get-session";
+import { getSessionUser, type SessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { excelPayloadForRpc, resolveReconRows, type ReconResolvedRow } from "./order-recon-resolve";
 import { parseReconXlsx } from "./parse-recon-xlsx";
 import type { OrderReconKpi, OrderReconRun, OrderReconTableRow, ReconRowStatus } from "./order-recon-types";
 
-async function requireDeliveries(kind: "view" | "manage") {
+async function requireDeliveries(
+  kind: "view" | "manage",
+): Promise<{ error: "not_authorized" } | { session: SessionUser }> {
   const session = await getSessionUser();
   if (
     !session ||
     !hasPermissionInSet(session.permissions, `deliveries.${kind}`, session.isSuperAdmin)
   ) {
-    return { error: "not_authorized" as const };
+    return { error: "not_authorized" };
   }
   return { session };
 }

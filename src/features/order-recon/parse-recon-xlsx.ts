@@ -113,9 +113,10 @@ export function parseReconWorksheet(ws: ExcelJS.Worksheet): ParseReconResult {
   return { ok: true, rows, from, to, dateCount: dateCols.length };
 }
 
-export async function parseReconXlsx(buffer: ArrayBuffer | Buffer): Promise<ParseReconResult> {
+export async function parseReconXlsx(buffer: ArrayBuffer | Uint8Array): Promise<ParseReconResult> {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer as Buffer);
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  await wb.xlsx.load(bytes as never);
   const ws = wb.worksheets[0];
   if (!ws) return { ok: false, error: "invalid_headers" };
   return parseReconWorksheet(ws);
