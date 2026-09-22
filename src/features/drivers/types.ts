@@ -227,6 +227,10 @@ export type DriverDetailModel = {
   is_blocked: boolean;
   blocked_reason: string | null;
   blocked_at: string | null;
+  frozen_from: string | null;
+  frozen_until: string | null;
+  freeze_reason: string | null;
+  frozen_at: string | null;
   login_verification_exempt: boolean;
   archived_at: string | null;
   documents: Partial<Record<DriverDocumentType, DriverRemoteDocument>>;

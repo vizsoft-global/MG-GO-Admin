@@ -100,6 +100,8 @@ describe("DRIVER_CHANGE_SOURCES", () => {
       "status",
       "block",
       "unblock",
+      "freeze",
+      "unfreeze",
       "passcode",
       "document",
       "asset",

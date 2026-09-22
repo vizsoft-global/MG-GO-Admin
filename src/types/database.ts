@@ -3043,6 +3043,33 @@ export type Database = {
           },
         ]
       }
+      driver_restriction_reasons: {
+        Row: {
+          id: string
+          is_active: boolean
+          kind: string
+          label_ar: string
+          label_en: string
+          sort_order: number
+        }
+        Insert: {
+          id?: string
+          is_active?: boolean
+          kind: string
+          label_ar: string
+          label_en: string
+          sort_order?: number
+        }
+        Update: {
+          id?: string
+          is_active?: boolean
+          kind?: string
+          label_ar?: string
+          label_en?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       driver_security_events: {
         Row: {
           context: Json
@@ -3304,6 +3331,11 @@ export type Database = {
           force_app_update_at: string | null
           force_app_update_by: string | null
           force_app_update_min_code: number | null
+          freeze_reason: string | null
+          frozen_at: string | null
+          frozen_by: string | null
+          frozen_from: string | null
+          frozen_until: string | null
           id: string
           is_blocked: boolean
           is_on_duty: boolean
@@ -3350,6 +3382,11 @@ export type Database = {
           force_app_update_at?: string | null
           force_app_update_by?: string | null
           force_app_update_min_code?: number | null
+          freeze_reason?: string | null
+          frozen_at?: string | null
+          frozen_by?: string | null
+          frozen_from?: string | null
+          frozen_until?: string | null
           id: string
           is_blocked?: boolean
           is_on_duty?: boolean
@@ -3396,6 +3433,11 @@ export type Database = {
           force_app_update_at?: string | null
           force_app_update_by?: string | null
           force_app_update_min_code?: number | null
+          freeze_reason?: string | null
+          frozen_at?: string | null
+          frozen_by?: string | null
+          frozen_from?: string | null
+          frozen_until?: string | null
           id?: string
           is_blocked?: boolean
           is_on_duty?: boolean
@@ -3417,6 +3459,13 @@ export type Database = {
           {
             foreignKeyName: "drivers_force_app_update_by_fkey"
             columns: ["force_app_update_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drivers_frozen_by_fkey"
+            columns: ["frozen_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -5100,6 +5149,120 @@ export type Database = {
             columns: ["zone_id"]
             isOneToOne: false
             referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_recon_rows: {
+        Row: {
+          app_orders: number
+          difference: number
+          driver_id: string | null
+          employee_id: string | null
+          employee_name: string | null
+          excel_orders: number
+          id: string
+          restaurant_id: string | null
+          restaurant_name: string | null
+          run_id: string
+          status: string
+          work_date: string
+        }
+        Insert: {
+          app_orders?: number
+          difference?: number
+          driver_id?: string | null
+          employee_id?: string | null
+          employee_name?: string | null
+          excel_orders?: number
+          id?: string
+          restaurant_id?: string | null
+          restaurant_name?: string | null
+          run_id: string
+          status: string
+          work_date: string
+        }
+        Update: {
+          app_orders?: number
+          difference?: number
+          driver_id?: string | null
+          employee_id?: string | null
+          employee_name?: string | null
+          excel_orders?: number
+          id?: string
+          restaurant_id?: string | null
+          restaurant_name?: string | null
+          run_id?: string
+          status?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_recon_rows_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "order_recon_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_recon_runs: {
+        Row: {
+          created_at: string
+          file_name: string
+          from_date: string
+          id: string
+          kpi: Json
+          to_date: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          from_date: string
+          id?: string
+          kpi?: Json
+          to_date: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          from_date?: string
+          id?: string
+          kpi?: Json
+          to_date?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_recon_runs_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_recon_store_aliases: {
+        Row: {
+          alias: string
+          restaurant_id: string
+        }
+        Insert: {
+          alias: string
+          restaurant_id: string
+        }
+        Update: {
+          alias?: string
+          restaurant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_recon_store_aliases_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
             referencedColumns: ["id"]
           },
         ]
@@ -7368,6 +7531,11 @@ export type Database = {
           force_app_update_at: string | null
           force_app_update_by: string | null
           force_app_update_min_code: number | null
+          freeze_reason: string | null
+          frozen_at: string | null
+          frozen_by: string | null
+          frozen_from: string | null
+          frozen_until: string | null
           id: string
           is_blocked: boolean
           is_on_duty: boolean
@@ -7815,6 +7983,10 @@ export type Database = {
         Args: { p_seen_within_minutes?: number }
         Returns: Json
       }
+      admin_order_recon_compare: {
+        Args: { p_excel: Json; p_from: string; p_to: string }
+        Returns: Json
+      }
       admin_payroll_month_snapshot: {
         Args: {
           p_month: string
@@ -7893,6 +8065,7 @@ export type Database = {
         }[]
       }
       admin_run_attendance_auto_checkout: { Args: never; Returns: number }
+      admin_run_freeze_start_checkout: { Args: never; Returns: number }
       admin_run_performance_daily_rollup: {
         Args: { p_lookback_days?: number }
         Returns: Json
@@ -8309,6 +8482,10 @@ export type Database = {
       driver_finalize_reconciliation: {
         Args: { p_device_id: string }
         Returns: undefined
+      }
+      driver_freeze_is_active: {
+        Args: { p_from: string; p_until: string }
+        Returns: boolean
       }
       driver_get_active_app_release: {
         Args: { p_channel?: string; p_platform?: string }
@@ -8801,6 +8978,16 @@ export type Database = {
         Args: { p_blocked: boolean; p_driver_id: string; p_reason?: string }
         Returns: Json
       }
+      set_driver_frozen: {
+        Args: {
+          p_driver_id: string
+          p_from: string
+          p_reason: string
+          p_until: string
+        }
+        Returns: Json
+      }
+      set_driver_unfrozen: { Args: { p_driver_id: string }; Returns: Json }
       shift_session_instant: {
         Args: { p_day_offset?: number; p_shift_date: string; p_time: string }
         Returns: string

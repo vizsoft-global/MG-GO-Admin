@@ -2,14 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { queryKeys } from "@/lib/query/query-keys";
 import {
   Dialog,
   DialogContent,
@@ -20,9 +20,14 @@ import {
 } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { invalidateDriverCaches } from "./invalidate-driver-caches";
-import { setDriverBlocked } from "./drivers-actions";
+import { listRestrictionReasons, setDriverBlocked } from "./drivers-actions";
 import { isDriverErrorKey } from "./driver-errors";
 import { blockActionToastKind } from "./driver-workflow-ui";
+import {
+  OTHER_REASON_VALUE,
+  RestrictionReasonSelect,
+  resolveRestrictionReason,
+} from "./restriction-reason-select";
 
 export function DriverBlockEditor({
   driverId,
@@ -41,10 +46,22 @@ export function DriverBlockEditor({
 }) {
   const t = useTranslations("pages.driverDetail.block");
   const queryClient = useQueryClient();
+  const { data: reasons = [] } = useQuery({
+    queryKey: queryKeys.drivers.restrictionReasons("block"),
+    queryFn: () => listRestrictionReasons("block"),
+  });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [unblockOpen, setUnblockOpen] = useState(false);
-  const [reason, setReason] = useState(blockedReason ?? "");
+  const [selectedValue, setSelectedValue] = useState("");
+  const [otherText, setOtherText] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  const seedReason = () => {
+    const text = (blockedReason ?? "").trim();
+    const hit = reasons.find((row) => row.label_en === text);
+    setSelectedValue(hit ? hit.id : text ? OTHER_REASON_VALUE : "");
+    setOtherText(hit ? "" : text);
+  };
 
   const errorMessage = (error: string | undefined) => {
     const key = isDriverErrorKey(error) ? error : "save_failed";
@@ -52,7 +69,7 @@ export function DriverBlockEditor({
   };
 
   const submitBlock = () => {
-    const trimmed = reason.trim();
+    const trimmed = resolveRestrictionReason(selectedValue, otherText, reasons);
     if (trimmed.length < 3) {
       toast.error(t("reasonRequired"));
       return;
@@ -86,7 +103,8 @@ export function DriverBlockEditor({
       } else {
         toast.warning(t("unblocked"));
       }
-      setReason("");
+      setSelectedValue("");
+      setOtherText("");
       setUnblockOpen(false);
       await invalidateDriverCaches(queryClient, { intakeId, profileId: driverId });
     });
@@ -95,7 +113,7 @@ export function DriverBlockEditor({
   const onToggle = (checked: boolean) => {
     if (!canManage || isPending) return;
     if (checked) {
-      setReason(blockedReason ?? "");
+      seedReason();
       setDialogOpen(true);
       return;
     }
@@ -155,17 +173,15 @@ export function DriverBlockEditor({
             <DialogDescription>{t("dialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2 px-5 py-4">
-            <Label htmlFor="driver-block-reason">{t("reasonField")}</Label>
-            <Textarea
-              id="driver-block-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder={t("reasonPlaceholder")}
-              rows={4}
+            <RestrictionReasonSelect
+              fieldId="driver-block-reason"
+              reasons={reasons}
+              selectedValue={selectedValue}
+              otherText={otherText}
+              onSelectedValueChange={setSelectedValue}
+              onOtherTextChange={setOtherText}
               disabled={isPending}
-              className="min-h-[96px] resize-none"
             />
-            <p className="text-[10px] text-muted-foreground">{t("reasonHint")}</p>
           </div>
           <DialogFooter className="border-t border-border px-5 py-3">
             <Button

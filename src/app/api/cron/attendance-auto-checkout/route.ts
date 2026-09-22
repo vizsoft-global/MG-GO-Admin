@@ -20,7 +20,12 @@ export async function GET(request: Request): Promise<Response> {
         const supabase = createAdminClient();
         const { data, error } = await supabase.rpc("admin_run_attendance_auto_checkout");
         if (error) throw error;
-        return NextResponse.json({ ok: true, checkedOut: data ?? 0 });
+        const freeze = await supabase.rpc("admin_run_freeze_start_checkout");
+        return NextResponse.json({
+          ok: true,
+          checkedOut: data ?? 0,
+          freezeCheckedOut: freeze.error ? 0 : (freeze.data ?? 0),
+        });
       } catch (e) {
         Sentry.captureException(e);
         const message = e instanceof Error ? e.message : "auto_checkout_failed";
