@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { Download, GitCompareArrows, Loader2, Upload } from "lucide-react";
+import { CalendarDays, Download, GitCompareArrows, Loader2, Store, Upload, UserX } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
@@ -15,6 +15,7 @@ import {
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -29,7 +30,9 @@ import {
   type ReconPreview,
 } from "./order-recon-actions";
 import { buildOrderReconWorkbook, downloadOrderReconXlsx } from "./order-recon-xlsx";
-import type { OrderReconTableRow } from "./order-recon-types";
+import { buildReconViews } from "./order-recon-views";
+
+type ReconTab = "daily" | "unused";
 
 export function OrderReconPageShell() {
   const t = useTranslations("pages.orderRecon");
@@ -46,12 +49,17 @@ export function OrderReconPageShell() {
   const [file, setFile] = useState<File | null>(null);
   const [isPending, startTransition] = useTransition();
   const [onlyMismatches, setOnlyMismatches] = useState(true);
+  const [tab, setTab] = useState<ReconTab>("daily");
+  const [byRestaurant, setByRestaurant] = useState(false);
 
   const rows = latest?.rows ?? [];
-  const visible = useMemo(
-    () => (onlyMismatches ? rows.filter((r) => r.status !== "match") : rows),
-    [onlyMismatches, rows],
-  );
+  const views = useMemo(() => buildReconViews(rows), [rows]);
+  const kpi = views.kpi;
+
+  const visibleDaily = useMemo(() => {
+    const source = byRestaurant ? views.store : views.daily;
+    return onlyMismatches ? source.filter((r) => r.status !== "match") : source;
+  }, [byRestaurant, onlyMismatches, views.daily, views.store]);
 
   const onPreview = () => {
     if (!file) {
@@ -93,7 +101,22 @@ export function OrderReconPageShell() {
     });
   };
 
-  const kpi = latest?.kpi;
+  const dailyColumns = byRestaurant
+    ? [
+        { id: "employee", label: t("colEmployee") },
+        { id: "restaurant", label: t("colRestaurant") },
+        { id: "date", label: t("colDate") },
+        { id: "excel", label: t("colExcel") },
+        { id: "app", label: t("colApp") },
+        { id: "diff", label: t("colDiff") },
+      ]
+    : [
+        { id: "employee", label: t("colEmployee") },
+        { id: "date", label: t("colDate") },
+        { id: "excel", label: t("colExcel") },
+        { id: "app", label: t("colApp") },
+        { id: "diff", label: t("colDiff") },
+      ];
 
   return (
     <AppPage>
@@ -124,29 +147,61 @@ export function OrderReconPageShell() {
 
       <KpiGrid
         items={[
-          { label: t("kpiCompared"), value: kpi?.compared ?? 0 },
-          { label: t("kpiMismatches"), value: kpi?.mismatches ?? 0, accent: "danger" },
-          { label: t("kpiUnresolved"), value: kpi?.unresolved ?? 0, accent: "warning" },
-          { label: t("kpiAppOnly"), value: kpi?.app_only ?? 0 },
+          { label: t("kpiCompared"), value: kpi.compared },
+          { label: t("kpiMismatches"), value: kpi.mismatches, accent: "danger" },
+          { label: t("kpiUnresolved"), value: kpi.unresolved, accent: "warning" },
+          { label: t("kpiAppOnly"), value: kpi.app_only },
+          { label: t("kpiUnused"), value: kpi.not_using_app, accent: "warning" },
         ]}
       />
 
+      <div className="flex flex-wrap items-center gap-2">
+        <ToggleChip
+          selected={tab === "daily"}
+          icon={CalendarDays}
+          className="h-9"
+          onClick={() => setTab("daily")}
+        >
+          {t("tabDaily")}
+        </ToggleChip>
+        <ToggleChip
+          selected={tab === "unused"}
+          icon={UserX}
+          className="h-9"
+          onClick={() => setTab("unused")}
+        >
+          {t("tabUnused")}
+        </ToggleChip>
+      </div>
+
       <AppListCard
         toolbar={
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
               {latest
                 ? t("runMeta", { file: latest.file_name, from: latest.from_date, to: latest.to_date })
                 : t("emptyHint")}
             </p>
-            <Button
-              type="button"
-              variant={onlyMismatches ? "default" : "outline"}
-              className="h-9 cursor-pointer"
-              onClick={() => setOnlyMismatches((v) => !v)}
-            >
-              {onlyMismatches ? t("showMismatches") : t("showAll")}
-            </Button>
+            {tab === "daily" ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <ToggleChip
+                  selected={byRestaurant}
+                  icon={Store}
+                  className="h-9"
+                  onClick={() => setByRestaurant((v) => !v)}
+                >
+                  {t("byRestaurant")}
+                </ToggleChip>
+                <Button
+                  type="button"
+                  variant={onlyMismatches ? "default" : "outline"}
+                  className="h-9 cursor-pointer"
+                  onClick={() => setOnlyMismatches((v) => !v)}
+                >
+                  {onlyMismatches ? t("showMismatches") : t("showAll")}
+                </Button>
+              </div>
+            ) : null}
           </div>
         }
       >
@@ -154,27 +209,48 @@ export function OrderReconPageShell() {
           <div className="flex justify-center p-6">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : (
+        ) : tab === "unused" ? (
           <AppDataTable
             columns={[
               { id: "employee", label: t("colEmployee") },
-              { id: "restaurant", label: t("colRestaurant") },
-              { id: "date", label: t("colDate") },
               { id: "excel", label: t("colExcel") },
+              { id: "days", label: t("colDaysWithExcel") },
               { id: "app", label: t("colApp") },
-              { id: "diff", label: t("colDiff") },
             ]}
             empty={
-              visible.length === 0 ? <AppDataTableEmpty>{t("emptyRows")}</AppDataTableEmpty> : undefined
+              views.unused.length === 0 ? (
+                <AppDataTableEmpty>{t("unusedEmpty")}</AppDataTableEmpty>
+              ) : undefined
             }
           >
-            {visible.map((row: OrderReconTableRow) => (
+            {views.unused.map((row) => (
               <AppDataTableRow key={row.id}>
                 <TableCell className="px-3 py-2 text-sm">
                   <div className="font-medium">{row.employee_name || "—"}</div>
                   <div className="text-[10px] text-muted-foreground">{row.employee_id}</div>
                 </TableCell>
-                <TableCell className="px-3 py-2 text-sm">{row.restaurant_name || "—"}</TableCell>
+                <TableCell className="px-3 py-2 text-sm">{row.excel_orders}</TableCell>
+                <TableCell className="px-3 py-2 text-sm">{row.days_with_excel}</TableCell>
+                <TableCell className="px-3 py-2 text-sm">{row.app_orders}</TableCell>
+              </AppDataTableRow>
+            ))}
+          </AppDataTable>
+        ) : (
+          <AppDataTable
+            columns={dailyColumns}
+            empty={
+              visibleDaily.length === 0 ? <AppDataTableEmpty>{t("emptyRows")}</AppDataTableEmpty> : undefined
+            }
+          >
+            {visibleDaily.map((row) => (
+              <AppDataTableRow key={row.id}>
+                <TableCell className="px-3 py-2 text-sm">
+                  <div className="font-medium">{row.employee_name || "—"}</div>
+                  <div className="text-[10px] text-muted-foreground">{row.employee_id}</div>
+                </TableCell>
+                {byRestaurant && "restaurant_name" in row ? (
+                  <TableCell className="px-3 py-2 text-sm">{row.restaurant_name || "—"}</TableCell>
+                ) : null}
                 <TableCell className="px-3 py-2 text-sm">{row.work_date}</TableCell>
                 <TableCell className="px-3 py-2 text-sm">{row.excel_orders}</TableCell>
                 <TableCell className="px-3 py-2 text-sm">{row.app_orders}</TableCell>
@@ -184,6 +260,25 @@ export function OrderReconPageShell() {
           </AppDataTable>
         )}
       </AppListCard>
+
+      {tab === "daily" && views.unresolved.length > 0 ? (
+        <AppListCard
+          toolbar={
+            <div>
+              <p className="text-sm font-semibold">{t("unresolvedTitle")}</p>
+              <p className="text-[10px] text-muted-foreground">{t("unresolvedHint")}</p>
+            </div>
+          }
+        >
+          <ul className="max-h-48 space-y-1 overflow-auto px-3 py-2 text-xs">
+            {views.unresolved.map((row) => (
+              <li key={row.id}>
+                {row.employee_id || "—"} · {row.restaurant_name || "—"} · {row.work_date} · {row.excel_orders}
+              </li>
+            ))}
+          </ul>
+        </AppListCard>
+      ) : null}
 
       <Dialog
         open={open}

@@ -237,6 +237,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-09-22` — **Order recon daily view + Not using the app.** Default table is rider+date (`difference = app − excel`); store grain stays in `order_recon_rows` and a By restaurant toggle / export sheet. Riders with Excel > 0 and app = 0 over the run window leave Daily (and Daily KPIs) for a separate tab + sheet. Unresolved identity rows stay in the upload preview and a Daily-page list — never treated as unused. Logged-status default unchanged. No migration.
+
 - `[admin only] 2026-09-22` — **Bulk DPD upload creates rules when none exist.** Preview `create` vs `ok` (emerald vs primary). In-file duplicate restaurant/zone rejected. Name resolve uses optional Partner / Zone Code because restaurant names are partner-scoped and zone names are not unique (`code` is). Create inserts via `admin_insert_delivery_rule_with_scope` (rule + scope one txn; staff gate `is_admin_panel_user` + `earnings.manage`). Locked defaults match the form (restaurant priority 30, zone 10). Prod range at ship: restaurant 5/20/30, no zone rules — create only when that id has zero rules, so a new 30/10 cannot outrank a manual sibling. Migration `20261027500000`. No Play.
 
 - `[admin only] 2026-09-22` — **Recon count lock provisional: pending + in_transit + verified.** `admin_order_recon_compare` no longer uses Performance’s verified-only rule. cancelled/rejected stay out. Client to confirm the default. Migration `20261027400000`.

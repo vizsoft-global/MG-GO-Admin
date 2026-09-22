@@ -1,12 +1,38 @@
 import ExcelJS from "exceljs";
 import type { OrderReconTableRow } from "./order-recon-types";
+import { buildReconViews, comparedStoreRows } from "./order-recon-views";
 
 export async function buildOrderReconWorkbook(rows: OrderReconTableRow[]) {
+  const views = buildReconViews(rows);
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Reconciliation");
-  ws.addRow(["Employee", "Restaurant", "Date", "Excel Orders", "App Orders", "Difference", "Status"]);
-  for (const row of rows) {
-    ws.addRow([
+
+  const daily = wb.addWorksheet("Daily");
+  daily.addRow(["Rider", "Date", "Excel Order Count", "App Logged Order Count", "Difference"]);
+  for (const row of views.daily) {
+    daily.addRow([
+      row.employee_name || row.employee_id,
+      row.work_date,
+      row.excel_orders,
+      row.app_orders,
+      row.difference,
+    ]);
+  }
+
+  const unused = wb.addWorksheet("Not using the app");
+  unused.addRow(["Rider", "Excel Order Count", "Days with Excel orders", "App Logged Order Count"]);
+  for (const row of views.unused) {
+    unused.addRow([
+      row.employee_name || row.employee_id,
+      row.excel_orders,
+      row.days_with_excel,
+      row.app_orders,
+    ]);
+  }
+
+  const store = wb.addWorksheet("By store");
+  store.addRow(["Employee", "Restaurant", "Date", "Excel Orders", "App Orders", "Difference", "Status"]);
+  for (const row of comparedStoreRows(rows)) {
+    store.addRow([
       row.employee_id,
       row.restaurant_name,
       row.work_date,
@@ -16,6 +42,18 @@ export async function buildOrderReconWorkbook(rows: OrderReconTableRow[]) {
       row.status,
     ]);
   }
+  for (const row of views.unresolved) {
+    store.addRow([
+      row.employee_id,
+      row.restaurant_name,
+      row.work_date,
+      row.excel_orders,
+      row.app_orders,
+      row.difference,
+      row.status,
+    ]);
+  }
+
   return wb.xlsx.writeBuffer();
 }
 
