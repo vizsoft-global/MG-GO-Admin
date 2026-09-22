@@ -45,6 +45,18 @@ import {
   previewIncentiveRuleRows,
   uniqueRestaurantIds,
 } from "./incentive-rule-import";
+import {
+  applyableDpdTargetRows,
+  previewDpdTargetRows,
+  type DpdTargetImportInputRow,
+  type DpdTargetImportPreviewRow,
+} from "./delivery-rule-dpd-import";
+
+export type {
+  DpdTargetImportInputRow,
+  DpdTargetImportPreviewRow as DpdTargetImportRow,
+  DpdTargetImportStatus,
+} from "./delivery-rule-dpd-import";
 
 type PgLikeError = {
   code?: string | null;
@@ -1114,142 +1126,97 @@ export async function runValidateDelivery(deliveryId: string) {
   return validateDeliveryForRules(deliveryId);
 }
 
-export type DpdTargetImportStatus =
-  | "ok"
-  | "unknown_name"
-  | "invalid_target"
-  | "invalid_period"
-  | "no_rule"
-  | "ambiguous_name";
-
-export type DpdTargetImportRow = {
-  row_number: number;
-  scope_type: string;
-  name: string;
-  dpd_target: string;
-  dpd_period: string;
-  status: DpdTargetImportStatus;
-  rule_id: string | null;
-  rule_name: string | null;
-};
-
-function normalizeScopeType(value: string): "restaurant" | "zone" | null {
-  const v = value.trim().toLowerCase();
-  if (v === "restaurant" || v === "restaurants") return "restaurant";
-  if (v === "zone" || v === "zones") return "zone";
-  return null;
-}
-
 export async function previewDpdTargetImport(
-  rows: Array<{
-    scope_type?: string;
-    name?: string;
-    dpd_target?: string;
-    dpd_period?: string;
-  }>,
-): Promise<DpdTargetImportRow[]> {
+  rows: DpdTargetImportInputRow[],
+): Promise<DpdTargetImportPreviewRow[]> {
   await requireEarningsView();
   const rules = await fetchDeliveryRulesForAdmin();
   const scopes = await fetchDpdScopeOptions();
-
-  return rows.map((row, index) => {
-    const scope_type = row.scope_type?.trim() ?? "";
-    const name = row.name?.trim() ?? "";
-    const dpd_target = row.dpd_target?.trim() ?? "";
-    const dpd_period = row.dpd_period?.trim() ?? "";
-    const period = dpd_period.toLowerCase();
-    const target = Number(dpd_target);
-    const scope = normalizeScopeType(scope_type);
-
-    const base = {
-      row_number: index + 1,
-      scope_type,
-      name,
-      dpd_target,
-      dpd_period,
-      rule_id: null as string | null,
-      rule_name: null as string | null,
-    };
-
-    if (!name) return { ...base, status: "unknown_name" as const };
-    if (!Number.isFinite(target) || target <= 0) {
-      return { ...base, status: "invalid_target" as const };
-    }
-    if (period !== "daily" && period !== "weekly" && period !== "monthly") {
-      return { ...base, status: "invalid_period" as const };
-    }
-
-    const inferred = scope ?? "restaurant";
-    const matches =
-      inferred === "restaurant"
-        ? scopes.restaurants.filter((r) => r.name.toLowerCase() === name.toLowerCase())
-        : scopes.zones.filter((z) => z.name.toLowerCase() === name.toLowerCase());
-    if (matches.length === 0) return { ...base, status: "unknown_name" as const };
-    if (matches.length > 1) return { ...base, status: "ambiguous_name" as const };
-
-    const id = matches[0].id;
-    const candidates = rules
-      .filter((rule) =>
-        inferred === "restaurant"
-          ? rule.scope_type === "restaurant" && rule.restaurant_ids.includes(id)
-          : rule.scope_type === "zone" && rule.zone_ids.includes(id),
-      )
-      .sort((a, b) => {
-        if (a.status === "active" && b.status !== "active") return -1;
-        if (b.status === "active" && a.status !== "active") return 1;
-        return b.priority - a.priority;
-      });
-    if (candidates.length === 0) return { ...base, status: "no_rule" as const };
-
-    return {
-      ...base,
-      status: "ok",
-      rule_id: candidates[0].id,
-      rule_name: candidates[0].name,
-    };
+  return previewDpdTargetRows({
+    rows,
+    restaurants: scopes.restaurants.map((r) => ({
+      id: r.id,
+      name: r.name,
+      partner_name: r.partner_name,
+    })),
+    zones: scopes.zones.map((z) => ({
+      id: z.id,
+      name: z.name,
+      code: z.code,
+    })),
+    rules: rules.map((rule) => ({
+      id: rule.id,
+      name: rule.name,
+      status: rule.status,
+      priority: rule.priority,
+      scope_type: rule.scope_type,
+      restaurant_ids: rule.restaurant_ids,
+      zone_ids: rule.zone_ids,
+    })),
   });
 }
 
 export async function applyDpdTargetImport(
-  rows: Array<{
-    scope_type?: string;
-    name?: string;
-    dpd_target?: string;
-    dpd_period?: string;
-  }>,
-): Promise<{ updated: number; rejected: number } | { error: string }> {
+  rows: DpdTargetImportInputRow[],
+): Promise<
+  { updated: number; created: number; rejected: number } | { error: string }
+> {
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
 
   const preview = await previewDpdTargetImport(rows);
   const supabase = await createClient();
   let updated = 0;
-  for (const row of preview) {
-    if (row.status !== "ok" || !row.rule_id) continue;
+  let created = 0;
+  for (const row of applyableDpdTargetRows(preview)) {
     const period = row.dpd_period.trim().toLowerCase();
-    const { error } = await supabase
-      .from("delivery_rules")
-      .update({
-        dpd_target: Number(row.dpd_target),
-        dpd_period: period,
-        updated_at: new Date().toISOString(),
-      } as never)
-      .eq("id", row.rule_id);
-    if (error) return { error: "save_failed" };
-    updated += 1;
+    if (row.status === "ok" && row.rule_id) {
+      const { error } = await supabase
+        .from("delivery_rules")
+        .update({
+          dpd_target: Number(row.dpd_target),
+          dpd_period: period,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", row.rule_id);
+      if (error) return { error: "save_failed" };
+      updated += 1;
+      continue;
+    }
+    if (
+      row.status !== "create" ||
+      !row.scope_id ||
+      !row.resolved_scope
+    ) {
+      continue;
+    }
+    const { error } = await supabase.rpc("admin_insert_delivery_rule_with_scope", {
+      p_name: row.name,
+      p_scope_type: row.resolved_scope,
+      p_scope_id: row.scope_id,
+      p_dpd_target: Number(row.dpd_target),
+      p_dpd_period: period,
+    });
+    if (error) {
+      logPgError("admin_insert_delivery_rule_with_scope", error);
+      return { error: "save_failed" };
+    }
+    created += 1;
   }
 
   void logAdminMutation({
-    action: "update",
+    action: created > 0 && updated === 0 ? "create" : "update",
     entityType: "delivery_rule",
     entityId: "bulk-dpd-targets",
     routeName: "applyDpdTargetImport",
-    after: { updated },
+    after: { updated, created },
   });
 
   return {
     updated,
-    rejected: preview.filter((r) => r.status !== "ok").length,
+    created,
+    rejected: preview.filter((r) => r.status !== "ok" && r.status !== "create")
+      .length,
   };
 }
 

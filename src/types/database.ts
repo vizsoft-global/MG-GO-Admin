@@ -7868,6 +7868,16 @@ export type Database = {
         Returns: Json
       }
       admin_ingest_driver_positions: { Args: { p_events: Json }; Returns: Json }
+      admin_insert_delivery_rule_with_scope: {
+        Args: {
+          p_dpd_period: string
+          p_dpd_target: number
+          p_name: string
+          p_scope_id: string
+          p_scope_type: string
+        }
+        Returns: string
+      }
       admin_list_attendance_daily: {
         Args: {
           p_from: string

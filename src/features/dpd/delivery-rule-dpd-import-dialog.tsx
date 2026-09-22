@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Download, Loader2, Upload } from "lucide-react";
+import { Check, Download, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
@@ -18,30 +18,59 @@ import {
 } from "@/components/ui/table";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
+import { applyDpdTargetImport, previewDpdTargetImport } from "./dpd-actions";
 import {
-  applyDpdTargetImport,
-  previewDpdTargetImport,
-  type DpdTargetImportRow,
-} from "./dpd-actions";
+  applyableDpdTargetRows,
+  mapDpdTargetImportSheet,
+  type DpdTargetImportInputRow,
+  type DpdTargetImportPreviewRow,
+  type DpdTargetImportStatus,
+} from "./delivery-rule-dpd-import";
 
 function statusPill(
-  status: DpdTargetImportRow["status"],
+  status: DpdTargetImportStatus,
   t: ReturnType<typeof useTranslations>,
 ) {
   switch (status) {
     case "ok":
-      return <StatusPill variant="success">{t("importStatus_ok")}</StatusPill>;
+    case "create":
+      return <StatusPill variant="success">{t(`importStatus_${status}`)}</StatusPill>;
     case "unknown_name":
     case "invalid_target":
     case "invalid_period":
-    case "no_rule":
     case "ambiguous_name":
+    case "duplicate":
       return <StatusPill variant="warning">{t(`importStatus_${status}`)}</StatusPill>;
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
     }
   }
+}
+
+function ActionChip({
+  status,
+  t,
+}: {
+  status: DpdTargetImportStatus;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  if (status === "create") {
+    return (
+      <span className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-2 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-400/50">
+        <Check className="size-3.5" />
+        {t("importStatus_create")}
+      </span>
+    );
+  }
+  if (status === "ok") {
+    return (
+      <span className="inline-flex h-7 items-center rounded-md border border-primary bg-primary/15 px-2 text-xs font-semibold text-primary">
+        {t("importStatus_update")}
+      </span>
+    );
+  }
+  return <span className="text-xs text-muted-foreground">—</span>;
 }
 
 export function DeliveryRuleDpdImportDialog({
@@ -55,23 +84,12 @@ export function DeliveryRuleDpdImportDialog({
 }) {
   const t = useTranslations("pages.dpd");
   const [pending, startTransition] = useTransition();
-  const [rows, setRows] = useState<
-    Array<{ scope_type?: string; name?: string; dpd_target?: string; dpd_period?: string }>
-  >([]);
-  const [preview, setPreview] = useState<DpdTargetImportRow[]>([]);
+  const [rows, setRows] = useState<DpdTargetImportInputRow[]>([]);
+  const [preview, setPreview] = useState<DpdTargetImportPreviewRow[]>([]);
 
   const handleFile = async (file: File) => {
     const parsed = await parseSpreadsheetFile(file);
-    const typeIdx = parsed.headers.findIndex((h) => /scope|type/i.test(h));
-    const nameIdx = parsed.headers.findIndex((h) => /name|restaurant|zone/i.test(h) && !/type/i.test(h));
-    const targetIdx = parsed.headers.findIndex((h) => /target/i.test(h));
-    const periodIdx = parsed.headers.findIndex((h) => /period/i.test(h));
-    const mapped = parsed.rows.map((cells) => ({
-      scope_type: typeIdx >= 0 ? cells[typeIdx] : cells[0],
-      name: nameIdx >= 0 ? cells[nameIdx] : cells[1],
-      dpd_target: targetIdx >= 0 ? cells[targetIdx] : cells[2],
-      dpd_period: periodIdx >= 0 ? cells[periodIdx] : cells[3],
-    }));
+    const mapped = mapDpdTargetImportSheet(parsed.headers, parsed.rows);
     setRows(mapped);
     startTransition(async () => {
       try {
@@ -82,15 +100,18 @@ export function DeliveryRuleDpdImportDialog({
     });
   };
 
-  const okCount = preview.filter((r) => r.status === "ok").length;
-  const rejected = preview.filter((r) => r.status !== "ok");
+  const createCount = preview.filter((r) => r.status === "create").length;
+  const updateCount = preview.filter((r) => r.status === "ok").length;
+  const readyCount = applyableDpdTargetRows(preview).length;
+  const rejected = preview.filter((r) => r.status !== "ok" && r.status !== "create");
 
   const exportErrors = () => {
-    const header = "row,scope_type,name,dpd_target,dpd_period,status";
+    const header =
+      "row,scope_type,name,partner,zone_code,dpd_target,dpd_period,status,note";
     const body = rejected
       .map(
         (r) =>
-          `${r.row_number},${r.scope_type},${r.name},${r.dpd_target},${r.dpd_period},${r.status}`,
+          `${r.row_number},${r.scope_type},${r.name},${r.partner},${r.zone_code},${r.dpd_target},${r.dpd_period},${r.status},${r.note ?? ""}`,
       )
       .join("\n");
     const blob = new Blob([`${header}\n${body}\n`], { type: "text/csv;charset=utf-8" });
@@ -109,7 +130,9 @@ export function DeliveryRuleDpdImportDialog({
         toast.error(t("bulkDpdFailed"));
         return;
       }
-      toast.success(t("bulkDpdApplied", { count: result.updated }));
+      toast.success(
+        t("bulkDpdApplied", { updated: result.updated, created: result.created }),
+      );
       onApplied();
       onOpenChange(false);
     });
@@ -161,17 +184,37 @@ export function DeliveryRuleDpdImportDialog({
                     <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
                     <TableHead className={TABLE_HEAD_CLASS}>{t("colDpdTarget")}</TableHead>
                     <TableHead className={TABLE_HEAD_CLASS}>{t("colDpdPeriod")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colAction")}</TableHead>
                     <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {preview.map((row) => (
-                    <TableRow key={row.row_number}>
+                    <TableRow
+                      key={row.row_number}
+                      className={
+                        row.status === "create"
+                          ? "bg-emerald-50"
+                          : row.status === "ok"
+                            ? "bg-primary/[0.04]"
+                            : undefined
+                      }
+                    >
                       <TableCell>{row.row_number}</TableCell>
-                      <TableCell>{row.scope_type || "—"}</TableCell>
-                      <TableCell>{row.name || "—"}</TableCell>
+                      <TableCell>{row.resolved_scope || row.scope_type || "—"}</TableCell>
+                      <TableCell>
+                        {row.name || "—"}
+                        {row.note ? (
+                          <span className="block text-[10px] text-muted-foreground">
+                            {row.note}
+                          </span>
+                        ) : null}
+                      </TableCell>
                       <TableCell>{row.dpd_target || "—"}</TableCell>
                       <TableCell>{row.dpd_period || "—"}</TableCell>
+                      <TableCell>
+                        <ActionChip status={row.status} t={t} />
+                      </TableCell>
                       <TableCell>{statusPill(row.status, t)}</TableCell>
                     </TableRow>
                   ))}
@@ -184,18 +227,23 @@ export function DeliveryRuleDpdImportDialog({
         </div>
         <AppModalFooter
           title={t("bulkDpdTitle")}
-          subtitle={t("bulkDpdSubtitle", { ok: okCount, total: preview.length })}
+          subtitle={t("bulkDpdSubtitle", {
+            create: createCount,
+            update: updateCount,
+            rejected: rejected.length,
+            total: preview.length,
+          })}
         >
           <Button variant="outline" className="h-9 cursor-pointer" onClick={() => onOpenChange(false)}>
             {t("cancel")}
           </Button>
           <Button
             className="h-9 cursor-pointer"
-            disabled={pending || okCount === 0}
+            disabled={pending || readyCount === 0}
             onClick={handleApply}
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-            {t("bulkDpdApply", { count: okCount })}
+            {t("bulkDpdApply", { count: readyCount })}
           </Button>
         </AppModalFooter>
       </DialogContent>
