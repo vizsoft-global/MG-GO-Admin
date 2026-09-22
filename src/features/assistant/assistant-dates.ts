@@ -4,10 +4,14 @@ export const ASSISTANT_DATE_PRESETS = [
   "today",
   "yesterday",
   "this_week",
+  "last_week",
   "this_month",
+  "last_month",
 ] as const;
 
 export type AssistantDatePreset = (typeof ASSISTANT_DATE_PRESETS)[number];
+
+export const ASSISTANT_MAX_RANGE_DAYS = 400;
 
 export function isAssistantDatePreset(value: string): value is AssistantDatePreset {
   return (ASSISTANT_DATE_PRESETS as readonly string[]).includes(value);
@@ -19,6 +23,30 @@ export function kuwaitWeekStartSaturday(ymd: string): string {
   const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   const satOffset = (dow + 1) % 7;
   return addDays(ymd, -satOffset);
+}
+
+export function inclusiveDayCount(from: string, to: string): number {
+  const start = Date.parse(`${from.slice(0, 10)}T00:00:00+03:00`);
+  const end = Date.parse(`${to.slice(0, 10)}T00:00:00+03:00`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.round((end - start) / 86_400_000) + 1;
+}
+
+export function lastMonthRange(today: string): { from: string; to: string } {
+  const [y, mo] = today.split("-").map(Number);
+  const prevMo = mo === 1 ? 12 : mo - 1;
+  const prevY = mo === 1 ? y - 1 : y;
+  const lastDay = new Date(Date.UTC(prevY, prevMo, 0)).getUTCDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    from: `${prevY}-${pad(prevMo)}-01`,
+    to: `${prevY}-${pad(prevMo)}-${pad(lastDay)}`,
+  };
+}
+
+export function lastWeekRange(today: string): { from: string; to: string } {
+  const thisSat = kuwaitWeekStartSaturday(today);
+  return { from: addDays(thisSat, -7), to: addDays(thisSat, -1) };
 }
 
 function presetRange(preset: AssistantDatePreset, today: string): { from: string; to: string } {
@@ -33,8 +61,12 @@ function presetRange(preset: AssistantDatePreset, today: string): { from: string
     }
     case "this_week":
       return { from: kuwaitWeekStartSaturday(today), to: today };
+    case "last_week":
+      return lastWeekRange(today);
     case "this_month":
       return { from: `${y}-${pad(mo)}-01`, to: today };
+    case "last_month":
+      return lastMonthRange(today);
   }
 }
 
@@ -48,8 +80,19 @@ export function resolveAssistantDateRange(
   today = kuwaitToday(),
 ): { from: string; to: string } {
   const preset = input.preset && isAssistantDatePreset(input.preset) ? input.preset : null;
-  if (preset) return presetRange(preset, today);
+  const range = preset
+    ? presetRange(preset, today)
+    : explicitRange(input, today);
+  if (inclusiveDayCount(range.from, range.to) > ASSISTANT_MAX_RANGE_DAYS) {
+    throw new Error("range_too_large");
+  }
+  return range;
+}
 
+function explicitRange(
+  input: { from?: string | null; to?: string | null },
+  today: string,
+): { from: string; to: string } {
   const explicitFrom = input.from?.slice(0, 10) || "";
   const explicitTo = input.to?.slice(0, 10) || "";
   if (explicitFrom && explicitTo) {
@@ -79,4 +122,8 @@ export function kuwaitDayCreatedAtBounds(from: string, to: string): {
     dateFrom: `${from.slice(0, 10)}T00:00:00.000+03:00`,
     dateTo: `${to.slice(0, 10)}T23:59:59.999+03:00`,
   };
+}
+
+export function monthKeyFromYmd(ymd: string): string {
+  return ymd.slice(0, 7);
 }

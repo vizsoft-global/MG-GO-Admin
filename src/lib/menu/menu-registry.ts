@@ -578,6 +578,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "fuel-refunds": "fuelRefunds",
   attendance: "attendance",
   performance: "performance",
+  assistant: "assistant",
   payroll: "payroll",
   "attendance-settings": "attendanceSettings",
   requests: "requests",

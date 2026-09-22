@@ -19,8 +19,14 @@ import {
   resolveRestaurantId,
   resolveZoneId,
 } from "./assistant-lookups";
-import { assertNoOrderRows, refuseToolArgs } from "./assistant-refuse";
+import { compareDriverWindows, compareWindows, runAnalyticsQuery } from "./assistant-analytics";
 import type { AssistantExportSpec } from "./assistant-contract";
+import { isAssistantEntityType } from "./assistant-entity";
+import { requireAssistantModule } from "./assistant-gates";
+import { listRelated, type RelatedRelation } from "./assistant-related";
+import { assertNoOrderRows, refuseToolArgs } from "./assistant-refuse";
+import { buildEntityReport, buildEntitySummary } from "./assistant-report";
+import { resolveEntity } from "./assistant-resolve";
 
 type DateInput = { preset?: string; from?: string; to?: string };
 
@@ -106,6 +112,7 @@ export async function runDpdEfficiency(input: DateInput & {
   const refused = refuseToolArgs(input as Record<string, unknown>);
   if (refused) return fail(refused);
   try {
+    await requireAssistantModule("performance.view");
     const range = resolveAssistantDateRange(input);
     const [restaurant, zone, partner] = await Promise.all([
       resolveRestaurantId(input.restaurant),
@@ -162,6 +169,7 @@ export async function runDeliveriesCounts(input: DateInput & {
   const refused = refuseToolArgs(input as Record<string, unknown>);
   if (refused) return fail(refused);
   try {
+    await requireAssistantModule("deliveries.view");
     const range = resolveAssistantDateRange(input);
     const bounds = kuwaitDayCreatedAtBounds(range.from, range.to);
     const [zone, partner] = await Promise.all([
@@ -207,6 +215,7 @@ export async function runIncentiveDaily(input: DateInput & {
   const refused = refuseToolArgs(input as Record<string, unknown>);
   if (refused) return fail(refused);
   try {
+    await requireAssistantModule("earnings.view");
     const range = resolveAssistantDateRange(input);
     const [driver, restaurant] = await Promise.all([
       resolveDriverId(input.rider),
@@ -249,6 +258,7 @@ export async function runPerformanceBands(input: DateInput & {
   const refused = refuseToolArgs(input as Record<string, unknown>);
   if (refused) return fail(refused);
   try {
+    await requireAssistantModule("performance.view");
     const range = resolveAssistantDateRange(input);
     const [driver, zone, partner, restaurant] = await Promise.all([
       resolveDriverId(input.rider),
@@ -322,6 +332,7 @@ export async function runPerformanceLive(input: { date?: string }) {
   const refused = refuseToolArgs(input as Record<string, unknown>);
   if (refused) return fail(refused);
   try {
+    await requireAssistantModule("performance.view");
     const snap = await fetchDpdLiveSnapshot(resolveAssistantLiveDate(input.date));
     const exportSpec: AssistantExportSpec = {
       kind: "performance_live",
@@ -350,6 +361,11 @@ export async function runPerformanceLive(input: { date?: string }) {
 export async function runExportReport(input: Record<string, unknown>) {
   const refused = refuseToolArgs(input);
   if (refused) return fail(refused);
+  try {
+    await requireAssistantModule("assistant.view");
+  } catch (err) {
+    return fail(asError(err));
+  }
   const kind = String(input.kind ?? "");
   if (kind === "report_delivery_orders") return fail("report_delivery_orders");
   const from = String(input.from ?? "").slice(0, 10);
@@ -361,4 +377,122 @@ export async function runExportReport(input: Record<string, unknown>) {
     to,
     filters: (input.filters as Record<string, string | undefined>) ?? {},
   };
+}
+
+export async function runResolveEntity(input: { entity_type: string; query: string }) {
+  const refused = refuseToolArgs(input as Record<string, unknown>);
+  if (refused) return fail(refused);
+  if (!isAssistantEntityType(input.entity_type)) return fail("unknown_entity");
+  return resolveEntity(input.entity_type, input.query);
+}
+
+export async function runEntitySummary(input: { entity_type: string; id: string }) {
+  const refused = refuseToolArgs(input as Record<string, unknown>);
+  if (refused) return fail(refused);
+  if (!isAssistantEntityType(input.entity_type)) return fail("unknown_entity");
+  try {
+    return await buildEntitySummary(input.entity_type, input.id);
+  } catch (err) {
+    return fail(asError(err));
+  }
+}
+
+export async function runEntityReport(input: DateInput & {
+  entity_type: string;
+  id: string;
+}) {
+  const refused = refuseToolArgs(input as Record<string, unknown>);
+  if (refused) return fail(refused);
+  if (!isAssistantEntityType(input.entity_type)) return fail("unknown_entity");
+  try {
+    return await buildEntityReport({
+      entity_type: input.entity_type,
+      id: input.id,
+      range: input,
+    });
+  } catch (err) {
+    return fail(asError(err));
+  }
+}
+
+export async function runListRelated(input: {
+  from_type: string;
+  id: string;
+  relation: string;
+  status?: string;
+  limit?: number;
+}) {
+  const refused = refuseToolArgs(input as Record<string, unknown>);
+  if (refused) return fail(refused);
+  if (!isAssistantEntityType(input.from_type)) return fail("unknown_entity");
+  try {
+    return await listRelated({
+      from_type: input.from_type,
+      id: input.id,
+      relation: input.relation as RelatedRelation,
+      status: input.status,
+      limit: input.limit,
+    });
+  } catch (err) {
+    return fail(asError(err));
+  }
+}
+
+export async function runCompareWindows(input: DateInput & {
+  previous_preset?: string;
+  previous_from?: string;
+  previous_to?: string;
+  zone_id?: string;
+  restaurant_id?: string;
+  partner_id?: string;
+  zone_b_id?: string;
+}) {
+  const refused = refuseToolArgs(input as Record<string, unknown>);
+  if (refused) return fail(refused);
+  try {
+    return await compareWindows(input);
+  } catch (err) {
+    return fail(asError(err));
+  }
+}
+
+export async function runCompareDriverWindows(input: DateInput & {
+  driver_id: string;
+  previous_preset?: string;
+  previous_from?: string;
+  previous_to?: string;
+}) {
+  const refused = refuseToolArgs(input as Record<string, unknown>);
+  if (refused) return fail(refused);
+  try {
+    return await compareDriverWindows(input);
+  } catch (err) {
+    return fail(asError(err));
+  }
+}
+
+export async function runAnalytics(input: DateInput & {
+  kind:
+    | "attendance_kpis"
+    | "attendance_trend"
+    | "requests_counts"
+    | "payroll_kpis"
+    | "vehicles_counts"
+    | "fleet_ops"
+    | "assets_kpis"
+    | "notifications_history"
+    | "performance_trend"
+    | "rank_complaints_zone"
+    | "rank_complaints_restaurant"
+    | "low_performance_high_absence";
+  zone_id?: string;
+  partner_id?: string;
+}) {
+  const refused = refuseToolArgs(input as Record<string, unknown>);
+  if (refused) return fail(refused);
+  try {
+    return await runAnalyticsQuery(input);
+  } catch (err) {
+    return fail(asError(err));
+  }
 }

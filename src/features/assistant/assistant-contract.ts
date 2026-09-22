@@ -1,6 +1,6 @@
 /**
- * Staff Assistant v1 — locked allowlist (client 9 Sep + 21 Sep Excel).
- * B is list-filter counts, not report_delivery_orders.
+ * Staff Assistant — locked tool catalog.
+ * A–D stay Excel-exportable. Entity/analytics tools are read-only, no Orders Report.
  */
 
 export const ASSISTANT_V1_LANGUAGE = "en" as const;
@@ -28,6 +28,14 @@ export const ASSISTANT_EXPORT_KINDS = [
 ] as const;
 
 export type AssistantExportKind = (typeof ASSISTANT_EXPORT_KINDS)[number];
+
+export const ASSISTANT_V1_TOOL_KEYS = [
+  "dpd_efficiency",
+  "deliveries_counts",
+  "incentive_daily",
+  "performance_bands",
+  "performance_live",
+] as const;
 
 export const ASSISTANT_TOOL_ALLOWLIST = [
   {
@@ -61,12 +69,46 @@ export const ASSISTANT_TOOL_ALLOWLIST = [
     permission: "performance.view",
     excel: "buildPerformanceLiveWorkbook",
   },
+  {
+    key: "resolve_entity",
+    rpc: "resolveEntity",
+    permission: "assistant.view",
+  },
+  {
+    key: "entity_summary",
+    rpc: "buildEntitySummary",
+    permission: "assistant.view",
+  },
+  {
+    key: "entity_report",
+    rpc: "buildEntityReport",
+    permission: "assistant.view",
+  },
+  {
+    key: "list_related",
+    rpc: "listRelated",
+    permission: "assistant.view",
+  },
+  {
+    key: "compare_windows",
+    rpc: "fetchPerformanceOpsSnapshot",
+    permission: "performance.view",
+  },
+  {
+    key: "compare_driver_windows",
+    rpc: "fetchDriverPerformanceDetail",
+    permission: "performance.view",
+  },
+  {
+    key: "analytics_query",
+    rpc: "runAnalyticsQuery",
+    permission: "assistant.view",
+  },
 ] as const;
 
 export type AssistantToolAllowlistKey = (typeof ASSISTANT_TOOL_ALLOWLIST)[number]["key"];
 
 export const ASSISTANT_V1_OUT_OF_SCOPE = [
-  "arabic_ui",
   "freeform_sql",
   "writes",
   "notification_send",

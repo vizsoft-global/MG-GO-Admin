@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Download, Send, Sparkles } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { AppListCard } from "@/components/app/app-list-card";
 import { AppPage } from "@/components/app/app-page";
@@ -28,19 +29,22 @@ function downloadBase64Xlsx(filename: string, base64: string) {
 }
 
 export function AssistantPageShell({ gatewayReady }: { gatewayReady: boolean }) {
+  const t = useTranslations("pages.assistant");
+  const locale = useLocale();
+  const uiLocale = locale === "ar" ? "ar" : "en";
   const [input, setInput] = useState("");
   const [exporting, setExporting] = useState(false);
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
-        api: "/api/assistant/chat",
+        api: `/api/assistant/chat?locale=${uiLocale}`,
       }),
-    [],
+    [uiLocale],
   );
   const { messages, sendMessage, status, error } = useChat({ transport });
   const busy = status === "submitted" || status === "streaming";
   const exportSpec = latestExportSpecFromMessages(messages);
-  const errorCopy = error ? refuseCopy(error.message.replace(/^Error:\s*/, "")) : null;
+  const errorCopy = error ? refuseCopy(error.message.replace(/^Error:\s*/, ""), uiLocale) : null;
 
   async function onDownload() {
     if (!exportSpec) return;
@@ -49,7 +53,7 @@ export function AssistantPageShell({ gatewayReady }: { gatewayReady: boolean }) 
       const file = await downloadAssistantExport(exportSpec);
       downloadBase64Xlsx(file.filename, file.base64);
     } catch (err) {
-      toast.error(err instanceof Error ? refuseCopy(err.message) : "Export failed");
+      toast.error(err instanceof Error ? refuseCopy(err.message, uiLocale) : t("exportFailed"));
     } finally {
       setExporting(false);
     }
@@ -57,23 +61,17 @@ export function AssistantPageShell({ gatewayReady }: { gatewayReady: boolean }) 
 
   return (
     <AppPage>
-      <AppPageHeader
-        title="Staff Assistant"
-        description="English only. Read-only A–D: DPD efficiency, delivery counts, daily incentives, performance bands."
-      />
+      <AppPageHeader title={t("title")} description={t("subtitle")} />
       <AppListCard>
-        <div className="flex min-h-[28rem] flex-col">
+        <div className="flex min-h-[28rem] flex-col" dir={uiLocale === "ar" ? "rtl" : "ltr"}>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
             {messages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Ask for today’s DPD efficiency, verified delivery counts, a rider’s daily
-                incentive, or a performance band. Every answer can download matching Excel.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("empty")}</p>
             ) : null}
             {messages.map((message) => (
               <div key={message.id} className="space-y-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {message.role === "user" ? "You" : "Assistant"}
+                  {message.role === "user" ? t("you") : t("assistant")}
                 </p>
                 <div className="whitespace-pre-wrap text-sm text-foreground">
                   {message.parts.map((part, index) => {
@@ -87,9 +85,7 @@ export function AssistantPageShell({ gatewayReady }: { gatewayReady: boolean }) 
             ))}
             {errorCopy ? <p className="text-sm text-destructive">{errorCopy}</p> : null}
             {!gatewayReady ? (
-              <p className="text-sm text-amber-800">
-                AI Gateway is not configured in this environment.
-              </p>
+              <p className="text-sm text-amber-800">{t("gateway")}</p>
             ) : null}
           </div>
           <form
@@ -107,7 +103,7 @@ export function AssistantPageShell({ gatewayReady }: { gatewayReady: boolean }) 
               className="h-9"
               value={input}
               disabled={busy || !gatewayReady}
-              placeholder="Ask A–D in English…"
+              placeholder={t("placeholder")}
               onChange={(event) => setInput(event.target.value)}
             />
             {exportSpec ? (
@@ -120,12 +116,12 @@ export function AssistantPageShell({ gatewayReady }: { gatewayReady: boolean }) 
                 onClick={() => void onDownload()}
               >
                 <Download data-icon="inline-start" />
-                Excel
+                {t("excel")}
               </Button>
             ) : null}
             <Button type="submit" size="lg" className="h-9" disabled={busy || !gatewayReady}>
               <Send data-icon="inline-start" />
-              Send
+              {t("send")}
             </Button>
           </form>
         </div>

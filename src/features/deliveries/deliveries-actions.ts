@@ -717,6 +717,8 @@ export type DeliveryCountsByFilters = {
     dateTo?: string;
     zoneId?: string;
     partnerId?: string;
+    driverId?: string;
+    restaurantId?: string;
   };
 };
 
@@ -729,6 +731,8 @@ export async function countDeliveriesByFilters(params: {
   dateTo?: string;
   zoneId?: string;
   partnerId?: string;
+  driverId?: string;
+  restaurantId?: string;
 }): Promise<DeliveryCountsByFilters> {
   await requireDeliveriesView();
   void logAdminRead("deliveries", "countDeliveriesByFilters", {
@@ -736,6 +740,8 @@ export async function countDeliveriesByFilters(params: {
     dateTo: params.dateTo,
     zoneId: params.zoneId,
     partnerId: params.partnerId,
+    driverId: params.driverId,
+    restaurantId: params.restaurantId,
   });
   const supabase = await createClient();
 
@@ -745,6 +751,8 @@ export async function countDeliveriesByFilters(params: {
     if (params.partnerId && params.partnerId !== "all") {
       q = q.eq("partner_id", params.partnerId) as T;
     }
+    if (params.driverId) q = q.eq("driver_id", params.driverId) as T;
+    if (params.restaurantId) q = q.eq("restaurant_id", params.restaurantId) as T;
     if (params.dateFrom) q = q.gte("created_at", params.dateFrom) as T;
     if (params.dateTo) q = q.lte("created_at", params.dateTo) as T;
     return q;
@@ -782,6 +790,8 @@ export async function countDeliveriesByFilters(params: {
       dateTo: params.dateTo,
       zoneId: params.zoneId,
       partnerId: params.partnerId,
+      driverId: params.driverId,
+      restaurantId: params.restaurantId,
     },
   };
 }
