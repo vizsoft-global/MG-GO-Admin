@@ -138,7 +138,7 @@ export function OpsOutsourceTab({
               downloadCsv(
                 "ops-outsource-riders",
                 toCsv(
-                  ["name", "id", "company", "store", "dpd", "tgt_eff"],
+                  ["name", "id", "company", "Restaurant", "dpd", "tgt_eff"],
                   riders.map((r) => [
                     r.name,
                     r.display_id,
