@@ -127,6 +127,13 @@ export function isAssistantExportKind(value: string): value is AssistantExportKi
   return (ASSISTANT_EXPORT_KINDS as readonly string[]).includes(value);
 }
 
+function envFlag(name: string): string | undefined {
+  return process.env[name];
+}
+
+/** True when a Gateway key, an OIDC token, or a Vercel runtime (OIDC via request) is present. */
 export function isGatewayConfigured(): boolean {
-  return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
+  return Boolean(
+    envFlag("AI_GATEWAY_API_KEY") || envFlag("VERCEL_OIDC_TOKEN") || envFlag("VERCEL") === "1",
+  );
 }
