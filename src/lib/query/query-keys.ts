@@ -17,6 +17,8 @@ export const queryKeys = {
     assignZone: (zoneId: string) => ["drivers", "assign", "zone", zoneId] as const,
     assignPreview: (driverId: string) => ["drivers", "assign", "preview", driverId] as const,
     assignSearch: (query: string) => ["drivers", "assign", "search", query] as const,
+    restrictionReasons: (kind: string) =>
+      ["drivers", "restriction-reasons", kind] as const,
     history: (intakeId: string, source: string = "all") =>
       ["drivers", "history", intakeId, source] as const,
     documents: (intakeId: string, profileId: string | null) =>
@@ -118,6 +120,9 @@ export const queryKeys = {
     proofDisplay: (objectKey: string) => ["deliveries", "proof-display", objectKey] as const,
     ordersReport: (from: string, to: string, fromTime = "", toTime = "") =>
       ["deliveries", "orders-report", from, to, fromTime, toTime] as const,
+  },
+  orderRecon: {
+    latest: () => ["order-recon", "latest"] as const,
   },
   verifications: {
     all: () => ["verifications"] as const,

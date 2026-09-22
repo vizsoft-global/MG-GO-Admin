@@ -31,6 +31,33 @@ describe("relocateFleetItems", () => {
   });
 });
 
+describe("relocateOrderReconItem", () => {
+  it("pins Order reconciliation after Live Deliveries", () => {
+    const { tree } = mergeMenu([
+      {
+        id: "group-operations",
+        type: "group",
+        label: "Operations",
+        icon: "Folder",
+        children: [
+          { id: "deliveries", type: "item", label: "Live Deliveries", icon: "Package" },
+          { id: "dpd-verification", type: "item", label: "DPD", icon: "ClipboardCheck" },
+        ],
+      },
+    ]);
+    const ops = tree.find((node) => node.id === "group-operations");
+    const ids = (ops?.children ?? []).map((child) => child.id);
+    const deliveriesAt = ids.indexOf("deliveries");
+    const reconAt = ids.indexOf("order-reconciliation");
+    assert.ok(reconAt >= 0);
+    assert.equal(reconAt, deliveriesAt + 1);
+    assert.equal(
+      ops?.children?.find((child) => child.id === "order-reconciliation")?.hidden,
+      false,
+    );
+  });
+});
+
 describe("relocateStaffAccessItem", () => {
   it("pins Staff access after Roles in Settings", () => {
     const { tree } = mergeMenu([

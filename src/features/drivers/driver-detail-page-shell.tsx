@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils";
 import { hasOpsAssignment } from "./driver-assignment";
 import { DriverAccountStatusEditor } from "./driver-account-status-editor";
 import { DriverBlockEditor } from "./driver-block-editor";
+import { DriverFreezeEditor } from "./driver-freeze-editor";
 import { DriverLoginVerificationExemptEditor } from "./driver-login-verification-exempt-editor";
 import { DriverDocumentsTab } from "./driver-documents-tab";
 import { DriverLoginVerificationTab } from "./driver-login-verification-tab";
@@ -278,6 +279,7 @@ function PasscodeCard({
 function DriverDetailContent({ id }: { id: string }) {
   const t = useTranslations("pages.driverDetail");
   const tBlock = useTranslations("pages.driverDetail.block");
+  const tFreeze = useTranslations("pages.driverDetail.freeze");
   const tNew = useTranslations("pages.driverNew");
   const tList = useTranslations("pages.drivers");
   const router = useRouter();
@@ -992,6 +994,24 @@ function DriverDetailContent({ id }: { id: string }) {
                   isBlocked={driver.is_blocked}
                   blockedReason={driver.blocked_reason}
                   blockedAt={driver.blocked_at}
+                  canManage={canManage}
+                />
+              </div>
+            </div>
+          ) : null}
+          {driver.linked_profile_id && !isArchived && canManage ? (
+            <div className="rounded-xl border border-border bg-card shadow-sm">
+              <div className="border-b border-border px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">{tFreeze("title")}</p>
+              </div>
+              <div className="px-4 py-4">
+                <DriverFreezeEditor
+                  driverId={driver.linked_profile_id}
+                  intakeId={driver.intake_id ?? driver.id}
+                  frozenFrom={driver.frozen_from}
+                  frozenUntil={driver.frozen_until}
+                  freezeReason={driver.freeze_reason}
+                  frozenAt={driver.frozen_at}
                   canManage={canManage}
                 />
               </div>

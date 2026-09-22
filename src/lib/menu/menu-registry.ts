@@ -34,6 +34,7 @@ import {
   Download,
   FormInput,
   Gauge,
+  GitCompareArrows,
   ScrollText,
   Sparkles,
   Radar,
@@ -98,6 +99,7 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   Download,
   FormInput,
   Gauge,
+  GitCompareArrows,
 };
 
 export const ICON_NAMES = Object.keys(ICON_MAP);
@@ -225,6 +227,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/deliveries",
     defaultGroup: "Operations",
     defaultOrder: 4,
+    permission: "deliveries.view",
+  },
+  {
+    id: "order-reconciliation",
+    defaultLabel: "Order reconciliation",
+    defaultIcon: "GitCompareArrows",
+    href: "/deliveries/reconciliation",
+    defaultGroup: "Operations",
+    defaultOrder: 4.5,
     permission: "deliveries.view",
   },
   {
@@ -571,6 +582,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "asset-requests": "assetRequests",
   restaurants: "restaurants",
   deliveries: "deliveries",
+  "order-reconciliation": "orderReconciliation",
   "dpd-verification": "dpdVerification",
   vehicles: "vehicles",
   fuel: "fuel",

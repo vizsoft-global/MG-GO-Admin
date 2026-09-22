@@ -35,7 +35,7 @@ Order allocation is **external** (partner apps). We own: monitoring, compliance,
 |---|-------|------------|----------------------|
 | 1 | `/dashboard` | `dashboard.view` | Home |
 | 2 | `/drivers`, `/drivers/[id]`, `/drivers/new` | `drivers.view` / `drivers.manage` | Profile |
-| 3 | `/deliveries`, `/zones` | `deliveries.view`, `zones.view` | Deliveries + zone geofence (map CRUD at `/zones`) |
+| 3 | `/deliveries`, `/deliveries/reconciliation`, `/zones` | `deliveries.view`, `zones.view` | Deliveries + zone geofence (map CRUD at `/zones`); order-count recon is admin-only |
 | 4 | `/vehicles`, `/vehicles/[id]` | `vehicles.view` | Vehicle |
 | 5 | `/attendance` | `attendance.view` / `attendance.manage` | Auto check-in / geofence |
 | — | `/performance`, `/performance/settings` | `performance.view` / `.export` / `.rate` / `.analyze` | Performance score (delivery + utilization + components + manual); Live workforce; Analysis |
@@ -236,6 +236,10 @@ Change-log format:
 ---
 
 ## Change log
+
+- `[admin only] 2026-09-22` — **Recon count lock provisional: pending + in_transit + verified.** `admin_order_recon_compare` no longer uses Performance’s verified-only rule. cancelled/rejected stay out. Client to confirm the default. Migration `20261027400000`.
+
+- `[admin+app] 2026-09-22` — **Driver Freeze + order-count recon.** `frozen_from`/`frozen_until`/`freeze_reason` + `set_driver_frozen`; login reuses `driver_blocked` so old APKs still refuse. In-session freeze needs MG-GO select of freeze columns (Play withheld). Recon at `/deliveries/reconciliation` melts wide Excel vs Kuwait `delivered_at`. Migrations `20261027200000`, `20261027300000` pushed to `eoksxkdssptgyqyywdju`. Admin Vercel. No Play.
 
 - `[admin+app] 2026-09-22` — **QA batch: fleet request layout, Restaurant CSV, shift-end clock-out, e-sign in-app.** Fuel/Asset Request Details: Employee+Vehicle full-width `lg:grid-cols-2`, Evidence heading+chips, Status in body not footer, `break-words`. Attachment row is the open control; `fetchRequestAttachmentUrl` tries request-attachments then R2. Performance ops CSV header `store` → Restaurant. App: clock out from `scheduledEndAt` when today's shift is null; `auto_shift_end` marks fresh clock-in; confirmed e-sign opens pdfrx in-app; Add note submits; sick date RPC errors name From then To; screenshot parse fail-open; e-sign inbox refreshes on resume/FCM. No ADMIN-1 / USER-8 / USER-9. No new SQL. Play required for app tickets.
 

@@ -128,7 +128,9 @@ export function mergeMenu(config: MenuNode[]): {
   }
   return {
     tree: relocateStaffAccessItem(
-      relocatePayrollItem(relocateAssistantItem(relocateFleetItems(pruned))),
+      relocateOrderReconItem(
+        relocatePayrollItem(relocateAssistantItem(relocateFleetItems(pruned))),
+      ),
     ),
     unassignedIds: unassigned,
   };
@@ -288,6 +290,54 @@ function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
   const insertAt =
     assistantIdx >= 0 ? assistantIdx + 1 : perfIdx >= 0 ? perfIdx + 1 : children.length;
   children.splice(insertAt, 0, item);
+  const next = [...stripped];
+  next[opsIdx] = { ...ops, children };
+  return next;
+}
+
+function relocateOrderReconItem(tree: MenuNode[]): MenuNode[] {
+  const RECON_ID = "order-reconciliation";
+  let found: MenuNode | null = null;
+  const strip = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "item") {
+        if (node.id === RECON_ID) {
+          found = { ...node, hidden: false };
+          return [];
+        }
+        return [node];
+      }
+      const children = node.children ? strip(node.children) : [];
+      return [{ ...node, children }];
+    });
+
+  const stripped = strip(tree);
+  const item: MenuNode = found ?? {
+    id: RECON_ID,
+    type: "item",
+    label: "Order reconciliation",
+    icon: "GitCompareArrows",
+    hidden: false,
+  };
+
+  const opsIdx = stripped.findIndex((node) => node.id === "group-operations");
+  if (opsIdx < 0) {
+    return [
+      ...stripped,
+      {
+        id: "group-operations",
+        type: "group",
+        label: "Operations",
+        icon: "Folder",
+        children: [item],
+      },
+    ];
+  }
+
+  const ops = stripped[opsIdx];
+  const children = [...(ops.children ?? [])].filter((child) => child.id !== RECON_ID);
+  const deliveriesIdx = children.findIndex((child) => child.id === "deliveries");
+  children.splice(deliveriesIdx >= 0 ? deliveriesIdx + 1 : children.length, 0, item);
   const next = [...stripped];
   next[opsIdx] = { ...ops, children };
   return next;

@@ -24,6 +24,7 @@ import { parseDriverRiderCategory } from "./driver-rider-category";
 import { parseSourceCompany } from "@/features/performance/performance-ops-formulas";
 import { parseDriverProjectKey } from "@/features/fleet/fleet-labels";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
+import type { RestrictionReason, RestrictionReasonKind } from "./driver-freeze";
 import {
   accountStatusToRestoreAfterRestaurantSync,
   restaurantSyncPlan,
@@ -1363,6 +1364,32 @@ export async function fetchDriverDocuments(
   return listExistingDriverDocuments(intakeId, driverProfileId);
 }
 
+const EMPTY_FREEZE = {
+  frozen_from: null as string | null,
+  frozen_until: null as string | null,
+  freeze_reason: null as string | null,
+  frozen_at: null as string | null,
+};
+
+/** Freeze columns are not on production until `20261027300000` is pushed. */
+async function fetchDriverFreezeRow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  driverId: string,
+) {
+  const { data, error } = await supabase
+    .from("drivers")
+    .select("frozen_from, frozen_until, freeze_reason, frozen_at")
+    .eq("id", driverId)
+    .maybeSingle();
+  if (error || !data) return EMPTY_FREEZE;
+  return {
+    frozen_from: data.frozen_from ?? null,
+    frozen_until: data.frozen_until ?? null,
+    freeze_reason: data.freeze_reason ?? null,
+    frozen_at: data.frozen_at ?? null,
+  };
+}
+
 export async function fetchDriverDetail(
   id: string,
 ): Promise<DriverDetailModel | null> {
@@ -1439,11 +1466,15 @@ async function fetchDriverDetailInner(
       is_blocked: boolean;
       blocked_reason: string | null;
       blocked_at: string | null;
+      frozen_from: string | null;
+      frozen_until: string | null;
+      freeze_reason: string | null;
+      frozen_at: string | null;
       login_verification_exempt: boolean;
       avatar_object_key: string | null;
     } | null = null;
     if (linkedId) {
-      const [{ data: prof }, { data: drv }] = await Promise.all([
+      const [{ data: prof }, { data: drv }, freeze] = await Promise.all([
         supabase
           .from("profiles")
           .select("email, avatar_url, full_name, phone")
@@ -1454,6 +1485,7 @@ async function fetchDriverDetailInner(
           .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, accommodation, is_blocked, blocked_reason, blocked_at, login_verification_exempt, avatar_object_key")
           .eq("id", linkedId)
           .maybeSingle(),
+        fetchDriverFreezeRow(supabase, linkedId),
       ]);
       profile = prof;
       linkedDriver = drv
@@ -1471,6 +1503,10 @@ async function fetchDriverDetailInner(
             is_blocked: drv.is_blocked ?? false,
             blocked_reason: drv.blocked_reason ?? null,
             blocked_at: drv.blocked_at ?? null,
+            frozen_from: freeze.frozen_from,
+            frozen_until: freeze.frozen_until,
+            freeze_reason: freeze.freeze_reason,
+            frozen_at: freeze.frozen_at,
             login_verification_exempt: drv.login_verification_exempt ?? false,
             avatar_object_key: drv.avatar_object_key ?? null,
           }
@@ -1563,6 +1599,10 @@ async function fetchDriverDetailInner(
       is_blocked: linkedDriver?.is_blocked ?? false,
       blocked_reason: linkedDriver?.blocked_reason ?? null,
       blocked_at: linkedDriver?.blocked_at ?? null,
+      frozen_from: linkedDriver?.frozen_from ?? null,
+      frozen_until: linkedDriver?.frozen_until ?? null,
+      freeze_reason: linkedDriver?.freeze_reason ?? null,
+      frozen_at: linkedDriver?.frozen_at ?? null,
       login_verification_exempt:
         linkedDriver?.login_verification_exempt ?? false,
       archived_at: intake.archived_at,
@@ -1613,11 +1653,14 @@ async function fetchDriverDetailInner(
 
   if (!driverRow) return null;
 
-  const { data: prof } = await supabase
-    .from("profiles")
-    .select("email, avatar_url, full_name, phone")
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data: prof }, freeze] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("email, avatar_url, full_name, phone")
+      .eq("id", id)
+      .maybeSingle(),
+    fetchDriverFreezeRow(supabase, id),
+  ]);
 
   let vehicleRow: { bike_id: string; reg_number: string | null } | null = null;
   if (driverRow.vehicle_id) {
@@ -1706,6 +1749,10 @@ async function fetchDriverDetailInner(
     is_blocked: driverRow.is_blocked ?? false,
     blocked_reason: driverRow.blocked_reason ?? null,
     blocked_at: driverRow.blocked_at ?? null,
+    frozen_from: freeze.frozen_from,
+    frozen_until: freeze.frozen_until,
+    freeze_reason: freeze.freeze_reason,
+    frozen_at: freeze.frozen_at,
     login_verification_exempt: driverRow.login_verification_exempt ?? false,
     archived_at: intakeForDriver?.archived_at ?? driverRow.archived_at,
     documents: {},
@@ -1856,6 +1903,120 @@ export async function setDriverBlocked(
         blocked: blocked ? "yes" : "no",
         ...(blocked && reason?.trim() ? { block_reason: reason.trim() } : {}),
       },
+    });
+  }
+
+  return { success: true };
+}
+
+export async function listRestrictionReasons(
+  kind: RestrictionReasonKind,
+): Promise<RestrictionReason[]> {
+  await requireDriversView();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("driver_restriction_reasons")
+    .select("id, kind, label_en, label_ar, sort_order")
+    .eq("is_active", true)
+    .in("kind", [kind, "both"])
+    .order("sort_order", { ascending: true });
+  if (error) return [];
+  return (data ?? []) as RestrictionReason[];
+}
+
+export async function setDriverFrozen(
+  driverId: string,
+  from: string,
+  until: string,
+  reason: string,
+): Promise<{ success: true } | { error: string }> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+  if (!driverId) return { error: "missing_fields" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("set_driver_frozen", {
+    p_driver_id: driverId,
+    p_from: from,
+    p_until: until,
+    p_reason: reason.trim(),
+  });
+  if (error) return { error: "save_failed" };
+
+  const payload = (data ?? {}) as { ok?: boolean; error?: string };
+  if (!payload.ok) {
+    if (
+      payload.error === "missing_freeze_reason" ||
+      payload.error === "missing_freeze_window" ||
+      payload.error === "invalid_freeze_window" ||
+      payload.error === "freeze_ended" ||
+      payload.error === "driver_not_found" ||
+      payload.error === "not_authorized"
+    ) {
+      return { error: payload.error };
+    }
+    return { error: "save_failed" };
+  }
+
+  void logAdminMutation({
+    action: "update",
+    entityType: "driver",
+    entityId: driverId,
+    routeName: "setDriverFrozen",
+    after: { frozen_from: from, frozen_until: until, freeze_reason: reason.trim() },
+  });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: "freeze",
+      before: { frozen: "no" },
+      after: { frozen: "yes", freeze_reason: reason.trim(), frozen_from: from, frozen_until: until },
+    });
+  }
+
+  return { success: true };
+}
+
+export async function setDriverUnfrozen(
+  driverId: string,
+): Promise<{ success: true } | { error: string }> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+  if (!driverId) return { error: "missing_fields" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("set_driver_unfrozen", {
+    p_driver_id: driverId,
+  });
+  if (error) return { error: "save_failed" };
+
+  const payload = (data ?? {}) as { ok?: boolean; error?: string };
+  if (!payload.ok) {
+    if (payload.error === "driver_not_found" || payload.error === "not_authorized") {
+      return { error: payload.error };
+    }
+    return { error: "save_failed" };
+  }
+
+  void logAdminMutation({
+    action: "update",
+    entityType: "driver",
+    entityId: driverId,
+    routeName: "setDriverUnfrozen",
+    after: { frozen_from: null, frozen_until: null },
+  });
+
+  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  if (intakeId) {
+    void logDriverChange({
+      intakeId,
+      driverId,
+      source: "unfreeze",
+      before: { frozen: "yes" },
+      after: { frozen: "no" },
     });
   }
 
