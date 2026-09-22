@@ -109,14 +109,19 @@ File: `Adjusted Order Count.xlsx` (not committed — rider PII). Parser: `parseR
 
 ### App counts + live `admin_order_recon_compare` (2026-09-22)
 
-Verified + Kuwait `delivered_at` on 2026-09-01…18, confirmed independently against `deliveries` **and** the production RPC (staff JWT impersonation):
+Kuwait `delivered_at` on 2026-09-01…18. Performance stays **verified only**. Recon is provisional **`pending` + `in_transit` + `verified`** (`20261027400000`; client to confirm).
 
-- Fleet: **88** verified, **0** missing `restaurant_id`.
-- These 23 employee IDs: **5** verified (`app_sum_sample`).
-- Excel sum on the 414 melted rows: **6,478** (`excel_sum_sample`).
-- `difference = app − excel` on every RPC row: **`bad_diff_sample = 0`**, **`bad_diff_all = 0`**.
-- Sample `diff_sum = 5 − 6478 = −6473`.
-- Sample rows: 414 (56 match, 358 mismatch, 356 excel-only, 0 app-only). Fleet RPC rows: 437.
+Independent `deliveries` count **and** production RPC (staff JWT):
+
+| Lock | 23 IDs | Fleet |
+|---|---|---|
+| verified only (old) | 5 | 88 |
+| logged (pending 2522 + in_transit 0 + verified 5) | **2527** | **58,429** |
+
+- Excel sum on the 414 melted rows: **6,478**.
+- `difference = app − excel`: **`bad_diff_sample = 0`**, **`bad_diff_all = 0`**.
+- Sample `diff_sum = 2527 − 6478 = −3951` (~39% of Excel logged in app). Residual is partner-sheet orders with no app row — not a join/date bug.
+- Sample rows: 414 (22 match, 345 mismatch, 201 excel-only, 9 app-only).
 
 Admin: `npm run test:recon` after the `no_date_columns` parser fix.
 

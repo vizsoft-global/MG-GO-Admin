@@ -2570,7 +2570,7 @@
     },
     "orderRecon": {
       "title": "Order reconciliation",
-      "subtitle": "Compare a wide Excel count grid with verified app orders (Kuwait delivered day).",
+      "subtitle": "Compare a wide Excel count grid with logged app orders (pending, in transit, or verified — Kuwait delivered day). Performance still counts verified only.",
       "upload": "Upload Excel",
       "export": "Export",
       "kpiCompared": "Compared",
@@ -2578,7 +2578,7 @@
       "kpiUnresolved": "Unresolved",
       "kpiAppOnly": "App only",
       "runMeta": "{file} · {from} – {to}",
-      "emptyHint": "Upload a store-count Excel to compare against verified deliveries.",
+      "emptyHint": "Upload a store-count Excel to compare against logged deliveries (not cancelled or rejected).",
       "showMismatches": "Mismatches only",
       "showAll": "Show all",
       "emptyRows": "No rows in this filter.",
