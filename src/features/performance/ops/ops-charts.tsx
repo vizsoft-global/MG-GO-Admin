@@ -197,7 +197,7 @@ export function OpsBarChart({
               ? TIP_KEYS.filter((k) => row[k] != null && String(row[k]).trim() !== "").map(
                   (k) => (
                     <p key={k} className="text-muted-foreground">
-                      {k}: {String(row[k])}
+                      {k === "store" ? "Restaurant" : k}: {String(row[k])}
                     </p>
                   ),
                 )

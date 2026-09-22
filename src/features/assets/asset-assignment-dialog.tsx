@@ -112,25 +112,26 @@ export function AssetAssignmentDialog({
         </div>
       </div>
       <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-        <FleetDetailRow label={t("fieldEvidence")}>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {ASSET_ASSIGNMENT_ATTACHMENT_KINDS.map((kind) => {
-              const found = byKind.get(kind);
-              const receiveKind = kind === "receive_form" || kind === "receive_photo";
-              const storageKey = found?.storage_key?.trim() ?? "";
-              return (
-                <FleetAttachmentRow
-                  key={kind}
-                  title={t(`assignmentAttachment.${kind}`)}
-                  fileName={found?.file_name ?? (receiveKind && !returned ? t("notReturned") : null)}
-                  capturedAt={found?.captured_at ?? null}
-                  source={found?.source ?? null}
-                  onOpen={storageKey ? () => void openAttachment(storageKey) : undefined}
-                />
-              );
-            })}
-          </div>
-        </FleetDetailRow>
+        <SectionHeading icon={Package} accent="success">
+          {t("fieldEvidence")}
+        </SectionHeading>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {ASSET_ASSIGNMENT_ATTACHMENT_KINDS.map((kind) => {
+            const found = byKind.get(kind);
+            const receiveKind = kind === "receive_form" || kind === "receive_photo";
+            const storageKey = found?.storage_key?.trim() ?? "";
+            return (
+              <FleetAttachmentRow
+                key={kind}
+                title={t(`assignmentAttachment.${kind}`)}
+                fileName={found?.file_name ?? (receiveKind && !returned ? t("notReturned") : null)}
+                capturedAt={found?.captured_at ?? null}
+                source={found?.source ?? null}
+                onOpen={storageKey ? () => void openAttachment(storageKey) : undefined}
+              />
+            );
+          })}
+        </div>
       </div>
     </FleetRecordDialog>
   );

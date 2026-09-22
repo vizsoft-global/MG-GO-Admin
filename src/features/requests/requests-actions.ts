@@ -386,24 +386,37 @@ export async function fetchRequestAttachmentUrl(
   const normalized = storageKey.trim().replace(/^\/+/, "");
   if (!normalized) return { url: null };
 
-  if (normalized.startsWith(REQUEST_ATTACHMENTS_PREFIX) || !isR2ObjectKey(normalized)) {
-    const objectKey = normalized.startsWith(REQUEST_ATTACHMENTS_PREFIX)
-      ? normalized.slice(REQUEST_ATTACHMENTS_PREFIX.length)
-      : normalized;
+  const requestObjectKey = normalized.startsWith(REQUEST_ATTACHMENTS_PREFIX)
+    ? normalized.slice(REQUEST_ATTACHMENTS_PREFIX.length)
+    : normalized;
+
+  const signRequestAttachment = async () => {
     const supabase = await createClient();
     const { data, error } = await supabase.storage
       .from("request-attachments")
-      .createSignedUrl(objectKey, 300);
-    if (error) return { url: null, error: error.message };
-    return { url: data?.signedUrl ?? null };
+      .createSignedUrl(requestObjectKey, 300);
+    if (data?.signedUrl) return { url: data.signedUrl };
+    return { url: null as string | null, error: error?.message };
+  };
+
+  const signR2 = async () => {
+    try {
+      return { url: await getPresignedGetUrl(normalized) };
+    } catch (error) {
+      return { url: null as string | null, error: error instanceof Error ? error.message : "sign_failed" };
+    }
+  };
+
+  if (normalized.startsWith(REQUEST_ATTACHMENTS_PREFIX) || !isR2ObjectKey(normalized)) {
+    const signed = await signRequestAttachment();
+    if (signed.url) return signed;
+    if (isR2ObjectKey(normalized)) return signR2();
+    return signed;
   }
 
-  try {
-    const url = await getPresignedGetUrl(normalized);
-    return { url };
-  } catch (error) {
-    return { url: null, error: error instanceof Error ? error.message : "sign_failed" };
-  }
+  const r2 = await signR2();
+  if (r2.url) return r2;
+  return signRequestAttachment();
 }
 
 function staffDisplayName(session: Awaited<ReturnType<typeof requireRequestsDecide>>): string | null {

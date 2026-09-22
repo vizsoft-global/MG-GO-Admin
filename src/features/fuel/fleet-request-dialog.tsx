@@ -181,7 +181,7 @@ export function FleetRequestDialog({
   const statusPill = (
     <StatusPill
       dot
-      className="max-w-full whitespace-normal break-normal"
+      className="max-w-full whitespace-nowrap"
       variant={requestStatusVariant(row.status, request?.payload)}
     >
       {requestT(`status.${requestStatusLabelKey(row.status, request?.payload)}` as "status.pending")}
@@ -196,7 +196,6 @@ export function FleetRequestDialog({
         <AppModalFooter
           title={row.request_code}
           subtitle={`${type === "fuel" ? t("typeFuel") : type === "fuel_refund" ? t("typeRefund") : t("typeAsset")} — ${row.current_step_label ?? "—"}`}
-          meta={statusPill}
         >
           <Button type="button" variant="outline" className="h-9" onClick={() => onOpenChange(false)}>
             {t("close")}
@@ -220,6 +219,49 @@ export function FleetRequestDialog({
           <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs font-medium">
             {summary}
           </div>
+          <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
+            <div className="min-w-0 rounded-xl border border-border bg-card p-3 shadow-sm">
+              <SectionHeading icon={User} accent="primary">
+                {t("sectionEmployee")}
+              </SectionHeading>
+              <div className="mt-1">
+                <FleetDetailRow label={t("colDriver")}>{row.driver_name}</FleetDetailRow>
+                <FleetDetailRow label={t("fieldEmployeeId")}>{row.employee_id ?? "—"}</FleetDetailRow>
+                <FleetDetailRow
+                  label={type === "asset" ? t("colEmployeeCompany") : t("colEmpCompany")}
+                >
+                  {row.employee_company ?? "—"}
+                </FleetDetailRow>
+                <FleetDetailRow label={t("fieldPhone")}>{row.phone ?? "—"}</FleetDetailRow>
+                <FleetDetailRow label={t("colProject")}>
+                  <ProjectBadge value={row.project_key} />
+                </FleetDetailRow>
+                <FleetDetailRow label={t("colZone")}>{row.zone ?? "—"}</FleetDetailRow>
+              </div>
+            </div>
+            <div className="min-w-0 rounded-xl border border-border bg-card p-3 shadow-sm">
+              <SectionHeading icon={Car} accent="primary">
+                {t("sectionVehicle")}
+              </SectionHeading>
+              <div className="mt-1">
+                <FleetDetailRow label={t("fieldPlate")}>{row.plate ?? "—"}</FleetDetailRow>
+                <FleetDetailRow label={t("fieldModel")}>{row.vehicle_model ?? "—"}</FleetDetailRow>
+                <FleetDetailRow label={t("colVehicleCompany")}>
+                  {row.vehicle_company ?? "—"}
+                </FleetDetailRow>
+                {type === "asset" ? null : (
+                  <>
+                    <FleetDetailRow label={t("fieldCarType")}>
+                      <CarTypeBadge value={row.car_type} />
+                    </FleetDetailRow>
+                    <FleetDetailRow label={t("colFuelCompany")}>
+                      <FuelCompanyBadge value={row.fuel_company} />
+                    </FleetDetailRow>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
           <div className="grid gap-2 lg:grid-cols-[1.1fr_0.9fr] lg:items-stretch">
             <div className="flex h-full flex-col gap-2">
               <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
@@ -239,69 +281,25 @@ export function FleetRequestDialog({
                 </div>
               </div>
               <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="min-w-0">
-                    <SectionHeading icon={User} accent="primary">
-                      {t("sectionEmployee")}
-                    </SectionHeading>
-                    <div className="mt-1">
-                      <FleetDetailRow label={t("colDriver")}>{row.driver_name}</FleetDetailRow>
-                      <FleetDetailRow label={t("fieldEmployeeId")}>{row.employee_id ?? "—"}</FleetDetailRow>
-                      <FleetDetailRow
-                        label={type === "asset" ? t("colEmployeeCompany") : t("colEmpCompany")}
-                      >
-                        {row.employee_company ?? "—"}
-                      </FleetDetailRow>
-                      <FleetDetailRow label={t("fieldPhone")}>{row.phone ?? "—"}</FleetDetailRow>
-                      <FleetDetailRow label={t("colProject")}>
-                        <ProjectBadge value={row.project_key} />
-                      </FleetDetailRow>
-                      <FleetDetailRow label={t("colZone")}>{row.zone ?? "—"}</FleetDetailRow>
-                    </div>
-                  </div>
-                  <div className="min-w-0">
-                    <SectionHeading icon={Car} accent="primary">
-                      {t("sectionVehicle")}
-                    </SectionHeading>
-                    <div className="mt-1">
-                      <FleetDetailRow label={t("fieldPlate")}>{row.plate ?? "—"}</FleetDetailRow>
-                      <FleetDetailRow label={t("fieldModel")}>{row.vehicle_model ?? "—"}</FleetDetailRow>
-                      <FleetDetailRow label={t("colVehicleCompany")}>
-                        {row.vehicle_company ?? "—"}
-                      </FleetDetailRow>
-                      {type === "asset" ? null : (
-                        <>
-                          <FleetDetailRow label={t("fieldCarType")}>
-                            <CarTypeBadge value={row.car_type} />
-                          </FleetDetailRow>
-                          <FleetDetailRow label={t("colFuelCompany")}>
-                            <FuelCompanyBadge value={row.fuel_company} />
-                          </FleetDetailRow>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                <SectionHeading icon={FileText} accent="success">
+                  {t("fieldEvidence")}
+                </SectionHeading>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {attachments.map((item) => (
+                    <FleetAttachmentRow
+                      key={item.id}
+                      title={
+                        item.kind && KNOWN_ATTACHMENT_KINDS.has(item.kind)
+                          ? t(`attachment.${item.kind}` as "attachment.odometer")
+                          : item.title
+                      }
+                      fileName={item.file_name}
+                      capturedAt={item.captured_at}
+                      source={item.source}
+                      onOpen={item.storage_key ? () => void openAttachment(item.storage_key) : undefined}
+                    />
+                  ))}
                 </div>
-              </div>
-              <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-                <FleetDetailRow label={t("fieldEvidence")}>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {attachments.map((item) => (
-                      <FleetAttachmentRow
-                        key={item.id}
-                        title={
-                          item.kind && KNOWN_ATTACHMENT_KINDS.has(item.kind)
-                            ? t(`attachment.${item.kind}` as "attachment.odometer")
-                            : item.title
-                        }
-                        fileName={item.file_name}
-                        capturedAt={item.captured_at}
-                        source={item.source}
-                        onOpen={item.storage_key ? () => void openAttachment(item.storage_key) : undefined}
-                      />
-                    ))}
-                  </div>
-                </FleetDetailRow>
               </div>
             </div>
             <div className="flex h-full min-w-0 flex-col gap-2">

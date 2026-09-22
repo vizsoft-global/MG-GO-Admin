@@ -119,7 +119,7 @@ export function PerformancePageShell() {
     downloadCsv(
       `ops-${tab}`,
       toCsv(
-        ["name", "id", "store", "zone", "dpd", "tgt_eff", "dpd_eff", "orders"],
+        ["name", "id", "Restaurant", "zone", "dpd", "tgt_eff", "dpd_eff", "orders"],
         riders.map((r) => [
           r.name,
           r.display_id,

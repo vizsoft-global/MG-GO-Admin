@@ -68,7 +68,7 @@ export function OpsDpdTab({
     downloadCsv(
       `ops-bucket-${bucket}`,
       toCsv(
-        ["name", "id", "store", "zone", "vehicle", "dpd", "tgt_eff", "dpd_eff"],
+        ["name", "id", "Restaurant", "zone", "vehicle", "dpd", "tgt_eff", "dpd_eff"],
         rows.map((r) => [
           r.name,
           r.display_id,
@@ -119,7 +119,7 @@ export function OpsDpdTab({
           downloadCsv(
             "ops-distribution-riders",
             toCsv(
-              ["bucket", "name", "id", "store", "zone", "dpd", "tgt_eff"],
+              ["bucket", "name", "id", "Restaurant", "zone", "dpd", "tgt_eff"],
               riders
                 .filter((r) => r.bucket)
                 .map((r) => [

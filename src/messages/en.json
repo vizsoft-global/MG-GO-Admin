@@ -98,6 +98,7 @@
     "documentExpiry": "Document expiry",
     "activityLogs": "Activity Logs",
     "performance": "Performance",
+    "assistant": "Staff Assistant",
     "payroll": "Payroll & Requests",
     "driverDevices": "Driver devices"
   },
@@ -185,7 +186,15 @@
   "pages": {
     "assistant": {
       "title": "Staff Assistant",
-      "subtitle": "Read-only answers for DPD efficiency, delivery counts, daily incentives, and performance bands. English only."
+      "subtitle": "Read-only answers over authorized dashboard data. Chat history is this tab only.",
+      "empty": "Ask for a driver report, related complaints, last-month comparison, or A–D counts. Every A–D answer can download matching Excel.",
+      "placeholder": "Ask in English or Arabic…",
+      "you": "You",
+      "assistant": "Assistant",
+      "send": "Send",
+      "excel": "Excel",
+      "gateway": "AI Gateway is not configured in this environment.",
+      "exportFailed": "Export failed"
     },
     "liveTrackingV2": {
       "title": "Live tracking V2",

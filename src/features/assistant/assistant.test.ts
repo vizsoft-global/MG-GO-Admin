@@ -32,22 +32,38 @@ import {
 import type { IncentiveDailyReport } from "@/features/earnings/incentive-daily-report";
 
 describe("assistant contract", () => {
-  it("locks A–D tools and refuses Orders Report", () => {
-    assert.deepEqual(
-      ASSISTANT_TOOL_ALLOWLIST.map((tool) => tool.key),
-      [
-        "dpd_efficiency",
-        "deliveries_counts",
-        "incentive_daily",
-        "performance_bands",
-        "performance_live",
-      ],
-    );
+  it("keeps A–D tools, extends the allowlist, and refuses Orders Report", () => {
+    const keys = ASSISTANT_TOOL_ALLOWLIST.map((tool) => tool.key);
+    for (const key of [
+      "dpd_efficiency",
+      "deliveries_counts",
+      "incentive_daily",
+      "performance_bands",
+      "performance_live",
+      "resolve_entity",
+      "entity_summary",
+      "entity_report",
+      "list_related",
+      "compare_windows",
+      "compare_driver_windows",
+      "analytics_query",
+    ]) {
+      assert.ok(keys.includes(key), key);
+    }
+    assert.equal(keys.length, 12);
+    assert.ok(!keys.includes("report_delivery_orders"));
     assert.ok(ASSISTANT_V1_OUT_OF_SCOPE.includes("report_delivery_orders"));
     assert.ok(ASSISTANT_V1_OUT_OF_SCOPE.includes("writes"));
+    assert.ok(!ASSISTANT_V1_OUT_OF_SCOPE.includes("arabic_ui" as never));
     assert.equal(ASSISTANT_V1_MAX_STEPS, 8);
     assert.ok(!isAssistantExportKind("report_delivery_orders"));
-    assert.deepEqual([...ASSISTANT_EXPORT_KINDS], ASSISTANT_TOOL_ALLOWLIST.map((t) => t.key));
+    assert.deepEqual([...ASSISTANT_EXPORT_KINDS], [
+      "dpd_efficiency",
+      "deliveries_counts",
+      "incentive_daily",
+      "performance_bands",
+      "performance_live",
+    ]);
   });
 });
 
@@ -108,15 +124,39 @@ describe("assistant dates", () => {
     assert.equal(resolveAssistantLiveDate("2026-09-20", today), "2026-09-20");
     assert.equal(resolveAssistantLiveDate(undefined, today), today);
   });
+
+  it("resolves last_week and last_month on the Kuwait calendar", () => {
+    const today = "2026-09-21";
+    assert.deepEqual(resolveAssistantDateRange({ preset: "last_week" }, today), {
+      from: "2026-09-12",
+      to: "2026-09-18",
+    });
+    assert.deepEqual(resolveAssistantDateRange({ preset: "last_month" }, today), {
+      from: "2026-08-01",
+      to: "2026-08-31",
+    });
+  });
+
+  it("refuses custom ranges longer than 400 days", () => {
+    assert.throws(
+      () => resolveAssistantDateRange({ from: "2025-01-01", to: "2026-09-21" }, "2026-09-21"),
+      /range_too_large/,
+    );
+  });
 });
 
 describe("assistant refuse", () => {
-  it("refuses Orders Report, SQL, and write-shaped tool args", () => {
+  it("refuses Orders Report and SQL without scanning read JSON blobs", () => {
     assert.equal(refuseToolArgs({ kind: "report_delivery_orders" }), "report_delivery_orders");
     assert.equal(refuseToolArgs({ sql: "select * from deliveries" }), "freeform_sql");
-    assert.equal(refuseToolArgs({ note: "verify this delivery" }), "write_shaped");
+    assert.equal(refuseToolArgs({ query: "select * from deliveries" }), "freeform_sql");
+    assert.equal(refuseToolArgs({ query: "10245" }), null);
+    assert.equal(refuseToolArgs({ status: "rejected" }), null);
+    assert.equal(refuseToolArgs({ note: "verify this delivery" }), null);
     assert.equal(refuseUserText("Please generate the Orders Report"), "report_delivery_orders");
     assert.equal(refuseUserText("run sql select 1 from drivers"), "freeform_sql");
+    assert.equal(refuseUserText("verify this delivery"), "write_shaped");
+    assert.equal(refuseUserText("مرحبا أعطني تفاصيل السائق 10245"), null);
     assert.equal(looksArabic("مرحبا"), true);
     assert.equal(looksArabic("hello"), false);
   });

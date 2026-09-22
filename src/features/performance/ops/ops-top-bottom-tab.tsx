@@ -103,7 +103,7 @@ export function OpsTopBottomTab({
                 downloadCsv(
                   "ops-top-riders",
                   toCsv(
-                    ["name", "id", "value", "store", "zone"],
+                    ["name", "id", "value", "Restaurant", "zone"],
                     byRider.top.map((r) => [r.name, r.display_id, r.value, r.store_label, r.zone]),
                   ),
                 )
@@ -123,7 +123,7 @@ export function OpsTopBottomTab({
                 downloadCsv(
                   "ops-bottom-riders",
                   toCsv(
-                    ["name", "id", "value", "store", "zone"],
+                    ["name", "id", "value", "Restaurant", "zone"],
                     byRider.bottom.map((r) => [r.name, r.display_id, r.value, r.store_label, r.zone]),
                   ),
                 )
@@ -153,7 +153,7 @@ export function OpsTopBottomTab({
                 downloadCsv(
                   "ops-top-stores",
                   toCsv(
-                    ["store", "zone", "value"],
+                    ["Restaurant", "zone", "value"],
                     byStore.top.map((s) => [s.store_name, s.zone_name, s.value]),
                   ),
                 )
@@ -173,7 +173,7 @@ export function OpsTopBottomTab({
                 downloadCsv(
                   "ops-bottom-stores",
                   toCsv(
-                    ["store", "zone", "value"],
+                    ["Restaurant", "zone", "value"],
                     byStore.bottom.map((s) => [s.store_name, s.zone_name, s.value]),
                   ),
                 )

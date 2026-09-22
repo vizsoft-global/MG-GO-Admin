@@ -4,16 +4,23 @@ import {
   streamText,
   type UIMessage,
 } from "ai";
-import { ASSISTANT_V1_MAX_STEPS, ASSISTANT_V1_MODEL, isGatewayConfigured } from "@/features/assistant/assistant-contract";
 import { lastUserText, refuseCopy } from "@/features/assistant/assistant-copy";
-import { ASSISTANT_V1_SYSTEM_PROMPT } from "@/features/assistant/assistant-prompt";
-import { looksArabic, refuseUserText } from "@/features/assistant/assistant-refuse";
+import { ASSISTANT_V1_MAX_STEPS, ASSISTANT_V1_MODEL, isGatewayConfigured } from "@/features/assistant/assistant-contract";
+import { lastEntityFocus } from "@/features/assistant/assistant-focus";
+import { assistantSystemPrompt } from "@/features/assistant/assistant-prompt";
+import { refuseUserText } from "@/features/assistant/assistant-refuse";
 import { createAssistantTools } from "@/features/assistant/assistant-tools";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 
 export const maxDuration = 60;
+
+function localeFromRequest(req: Request, bodyLocale?: string): "en" | "ar" {
+  const url = new URL(req.url);
+  const q = url.searchParams.get("locale") ?? bodyLocale ?? "";
+  return q === "ar" ? "ar" : "en";
+}
 
 export async function POST(req: Request) {
   const session = await getSessionUser();
@@ -28,20 +35,21 @@ export async function POST(req: Request) {
     return Response.json({ error: "gateway_not_configured" }, { status: 503 });
   }
 
-  const body = (await req.json()) as { messages?: UIMessage[] };
+  const body = (await req.json()) as { messages?: UIMessage[]; locale?: string };
+  const locale = localeFromRequest(req, body.locale);
   const messages = body.messages ?? [];
   const userText = lastUserText(messages);
-  const refused =
-    looksArabic(userText) ? "unknown_tool" : refuseUserText(userText);
+  const refused = refuseUserText(userText);
   if (refused) {
-    return Response.json({ error: refused, message: refuseCopy(refused) }, { status: 400 });
+    return Response.json({ error: refused, message: refuseCopy(refused, locale) }, { status: 400 });
   }
 
-  void logAdminRead("assistant", "assistant.chat", { tools: "allowlist" });
+  const focus = lastEntityFocus(messages);
+  void logAdminRead("assistant", "assistant.chat", { tools: "allowlist", locale });
 
   const result = streamText({
     model: ASSISTANT_V1_MODEL,
-    system: ASSISTANT_V1_SYSTEM_PROMPT,
+    system: assistantSystemPrompt(locale, focus),
     messages: await convertToModelMessages(messages),
     tools: createAssistantTools(),
     stopWhen: isStepCount(ASSISTANT_V1_MAX_STEPS),
