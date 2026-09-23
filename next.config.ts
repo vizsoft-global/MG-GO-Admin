@@ -11,6 +11,14 @@ const buildId =
     : resolveBuildId(process.env);
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
+  outputFileTracingIncludes: {
+    "/api/esign/render-bench": [
+      "./src/features/esign/render/fonts/**",
+      "./node_modules/@sparticuz/chromium/bin/**",
+    ],
+    "/*": ["./src/features/esign/render/fonts/**"],
+  },
   env: {
     NEXT_PUBLIC_BUILD_ID: buildId,
   },

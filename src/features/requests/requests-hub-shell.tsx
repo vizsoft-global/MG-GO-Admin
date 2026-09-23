@@ -1,7 +1,10 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
+import { Inbox, Send } from "lucide-react";
+import { ToggleChip } from "@/components/app/toggle-chip";
+import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { useEsignStatusCounts } from "@/features/esign/use-esign";
 import { useRequestTypeCounts } from "./use-requests";
@@ -37,8 +40,28 @@ type OpTile = {
   countKey?: "all" | "esign";
 };
 
+type SenderTile = {
+  href: string;
+  labelKey:
+    | "hub.senderTemplates"
+    | "hub.senderSend"
+    | "hub.senderBulk"
+    | "hub.senderSent"
+    | "hub.senderBatches";
+  icon: string;
+  color: string;
+};
+
+const SENDER_TILES: SenderTile[] = [
+  { href: "/requests/esign/templates", labelKey: "hub.senderTemplates", icon: "/hub/documents.svg", color: "bg-[#4f46e5]" },
+  { href: "/requests/esign/send", labelKey: "hub.senderSend", icon: "/hub/esign.svg", color: "bg-[#0f766e]", },
+  { href: "/requests/esign/bulk", labelKey: "hub.senderBulk", icon: "/hub/all.svg", color: "bg-[#2563eb]" },
+  { href: "/requests/esign/sent", labelKey: "hub.senderSent", icon: "/hub/audit.svg", color: "bg-[#0891b2]" },
+  { href: "/requests/esign/batches", labelKey: "hub.senderBatches", icon: "/hub/reports.svg", color: "bg-[#7c3aed]" },
+];
+
 const OP_TILES: OpTile[] = [
-  { href: "/requests/esign", labelKey: "hub.esign", icon: "/hub/esign.svg", color: "bg-[#0f766e]", wash: "esign", countKey: "esign" },
+  { href: "/requests?view=sender", labelKey: "hub.esign", icon: "/hub/esign.svg", color: "bg-[#0f766e]", wash: "esign", countKey: "esign" },
   { href: "/requests/overview?preset=all", labelKey: "hub.all", icon: "/hub/all.svg", color: "bg-[#0f766e]", countKey: "all" },
   { href: "/requests/reports", labelKey: "hub.reports", icon: "/hub/reports.svg", color: "bg-[#0891b2]" },
   { href: "/requests/settings/audit", labelKey: "hub.audit", icon: "/hub/audit.svg", color: "bg-[#64748b]" },
@@ -106,6 +129,9 @@ function HubTile({
 
 export function RequestsHubShell() {
   const t = useTranslations("pages.requests");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const view = searchParams.get("view") === "sender" ? "sender" : "receiver";
   const { data } = useRequestTypeCounts();
   const { data: esignCounts } = useEsignStatusCounts();
   const counts = data?.counts ?? {};
@@ -115,12 +141,50 @@ export function RequestsHubShell() {
     <div className="-m-3 flex min-h-[calc(100%+1.5rem)] flex-col bg-gradient-to-b from-[#2a2a40] via-[#35354f] via-[55%] to-[#1f1f32]">
       <div className="flex flex-1 flex-col items-center justify-center gap-8 px-12 py-8">
         <header className="flex flex-col items-center gap-2 text-center">
+          <div className="mb-1 flex items-center gap-1.5">
+            <ToggleChip
+              selected={view === "receiver"}
+              onClick={() => router.replace("/requests?view=receiver")}
+              icon={Inbox}
+            >
+              {t("hub.receiver")}
+            </ToggleChip>
+            <ToggleChip
+              selected={view === "sender"}
+              onClick={() => router.replace("/requests?view=sender")}
+              icon={Send}
+            >
+              {t("hub.sender")}
+            </ToggleChip>
+          </div>
           <h1 className="text-[30px] font-semibold leading-none text-white">
-            {t("hub.title")}
+            {view === "sender" ? t("hub.senderTitle") : t("hub.title")}
           </h1>
-          <p className="text-sm text-[#c4c4ce]">{t("hub.subtitle")}</p>
+          <p className="text-sm text-[#c4c4ce]">
+            {view === "sender" ? t("hub.senderSubtitle") : t("hub.subtitle")}
+          </p>
         </header>
 
+        {view === "sender" ? (
+          <section className="flex flex-col items-center gap-[18px]">
+            <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
+              {t("hub.senderHeading")}
+            </h2>
+            <div className="flex w-[min(631px,100%)] flex-wrap content-start items-start justify-center gap-x-5 gap-y-6">
+              {SENDER_TILES.map((tile) => (
+                <HubTile
+                  key={tile.href}
+                  href={tile.href}
+                  icon={tile.icon}
+                  color={tile.color}
+                  wash="esign"
+                  label={t(tile.labelKey)}
+                />
+              ))}
+            </div>
+          </section>
+        ) : (
+          <>
         <section className="flex flex-col items-center gap-[18px]">
           <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
             {t("hub.requestTypesHeading")}
@@ -164,6 +228,8 @@ export function RequestsHubShell() {
             ))}
           </div>
         </section>
+          </>
+        )}
       </div>
     </div>
   );

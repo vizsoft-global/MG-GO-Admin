@@ -3514,6 +3514,142 @@ export type Database = {
           },
         ]
       }
+      esign_batch_rows: {
+        Row: {
+          batch_id: string
+          created_at: string
+          description: string | null
+          driver_id: string | null
+          employee_id: string | null
+          error: string | null
+          esign_request_id: string | null
+          field_values: Json
+          id: string
+          row_index: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          description?: string | null
+          driver_id?: string | null
+          employee_id?: string | null
+          error?: string | null
+          esign_request_id?: string | null
+          field_values?: Json
+          id?: string
+          row_index: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          description?: string | null
+          driver_id?: string | null
+          employee_id?: string | null
+          error?: string | null
+          esign_request_id?: string | null
+          field_values?: Json
+          id?: string
+          row_index?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "esign_batch_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "esign_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_batch_rows_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_batch_rows_esign_request_id_fkey"
+            columns: ["esign_request_id"]
+            isOneToOne: false
+            referencedRelation: "esign_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      esign_batches: {
+        Row: {
+          batch_code: string
+          created_at: string
+          created_by: string | null
+          created_count: number
+          due_at: string | null
+          failed_count: number
+          id: string
+          language: string
+          source_filename: string | null
+          status: string
+          template_id: string
+          template_version: number
+          title: string
+          total_count: number
+          updated_at: string
+        }
+        Insert: {
+          batch_code?: string
+          created_at?: string
+          created_by?: string | null
+          created_count?: number
+          due_at?: string | null
+          failed_count?: number
+          id?: string
+          language?: string
+          source_filename?: string | null
+          status?: string
+          template_id: string
+          template_version: number
+          title: string
+          total_count?: number
+          updated_at?: string
+        }
+        Update: {
+          batch_code?: string
+          created_at?: string
+          created_by?: string | null
+          created_count?: number
+          due_at?: string | null
+          failed_count?: number
+          id?: string
+          language?: string
+          source_filename?: string | null
+          status?: string
+          template_id?: string
+          template_version?: number
+          title?: string
+          total_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "esign_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_batches_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "esign_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       esign_categories: {
         Row: {
           created_at: string
@@ -3555,13 +3691,18 @@ export type Database = {
       }
       esign_requests: {
         Row: {
+          batch_id: string | null
+          batch_row: number | null
           category_key: string | null
           created_at: string
           declaration_accepted_at: string | null
           declined_at: string | null
+          description: string | null
           document_storage_key: string | null
           driver_id: string
           due_at: string | null
+          employee_snapshot: Json
+          field_values: Json
           id: string
           request_code: string
           screenshot_restricted: boolean
@@ -3575,18 +3716,25 @@ export type Database = {
           signer_display_name: string | null
           signer_meta: Json
           status: Database["public"]["Enums"]["esign_request_status"]
+          template_id: string | null
+          template_version: number | null
           title: string
           updated_at: string
           viewed_at: string | null
         }
         Insert: {
+          batch_id?: string | null
+          batch_row?: number | null
           category_key?: string | null
           created_at?: string
           declaration_accepted_at?: string | null
           declined_at?: string | null
+          description?: string | null
           document_storage_key?: string | null
           driver_id: string
           due_at?: string | null
+          employee_snapshot?: Json
+          field_values?: Json
           id?: string
           request_code?: string
           screenshot_restricted?: boolean
@@ -3600,18 +3748,25 @@ export type Database = {
           signer_display_name?: string | null
           signer_meta?: Json
           status?: Database["public"]["Enums"]["esign_request_status"]
+          template_id?: string | null
+          template_version?: number | null
           title: string
           updated_at?: string
           viewed_at?: string | null
         }
         Update: {
+          batch_id?: string | null
+          batch_row?: number | null
           category_key?: string | null
           created_at?: string
           declaration_accepted_at?: string | null
           declined_at?: string | null
+          description?: string | null
           document_storage_key?: string | null
           driver_id?: string
           due_at?: string | null
+          employee_snapshot?: Json
+          field_values?: Json
           id?: string
           request_code?: string
           screenshot_restricted?: boolean
@@ -3625,11 +3780,20 @@ export type Database = {
           signer_display_name?: string | null
           signer_meta?: Json
           status?: Database["public"]["Enums"]["esign_request_status"]
+          template_id?: string | null
+          template_version?: number | null
           title?: string
           updated_at?: string
           viewed_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "esign_requests_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "esign_batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "esign_requests_category_key_fkey"
             columns: ["category_key"]
@@ -3647,6 +3811,135 @@ export type Database = {
           {
             foreignKeyName: "esign_requests_sent_by_fkey"
             columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_requests_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "esign_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      esign_template_fields: {
+        Row: {
+          created_at: string
+          field_key: string
+          field_type: string
+          id: string
+          is_required: boolean
+          label_ar: string | null
+          label_en: string
+          options: Json
+          sort_order: number
+          template_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          field_key: string
+          field_type?: string
+          id?: string
+          is_required?: boolean
+          label_ar?: string | null
+          label_en: string
+          options?: Json
+          sort_order?: number
+          template_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          field_key?: string
+          field_type?: string
+          id?: string
+          is_required?: boolean
+          label_ar?: string | null
+          label_en?: string
+          options?: Json
+          sort_order?: number
+          template_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "esign_template_fields_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "esign_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      esign_templates: {
+        Row: {
+          body_ar: string
+          body_en: string
+          category_key: string
+          created_at: string
+          created_by: string | null
+          declaration_ar: string
+          declaration_en: string
+          default_language: string
+          header_ar: string
+          header_en: string
+          id: string
+          is_active: boolean
+          name_ar: string | null
+          name_en: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          body_ar?: string
+          body_en?: string
+          category_key: string
+          created_at?: string
+          created_by?: string | null
+          declaration_ar?: string
+          declaration_en?: string
+          default_language?: string
+          header_ar?: string
+          header_en?: string
+          id?: string
+          is_active?: boolean
+          name_ar?: string | null
+          name_en: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          body_ar?: string
+          body_en?: string
+          category_key?: string
+          created_at?: string
+          created_by?: string | null
+          declaration_ar?: string
+          declaration_en?: string
+          default_language?: string
+          header_ar?: string
+          header_en?: string
+          id?: string
+          is_active?: boolean
+          name_ar?: string | null
+          name_en?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "esign_templates_category_key_fkey"
+            columns: ["category_key"]
+            isOneToOne: false
+            referencedRelation: "esign_categories"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "esign_templates_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -7724,6 +8017,10 @@ export type Database = {
         Args: { p_ids: string[]; p_reason?: string; p_status: string }
         Returns: Json
       }
+      admin_claim_esign_batch_rows: {
+        Args: { p_batch_id: string; p_limit: number }
+        Returns: Json
+      }
       admin_clear_request_attention: {
         Args: { p_request_id: string }
         Returns: Json
@@ -7760,13 +8057,19 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_create_esign_batch: { Args: { p_batch: Json }; Returns: Json }
       admin_create_esign_request: {
         Args: {
+          p_batch_id?: string
+          p_batch_row?: number
           p_category_key?: string
+          p_description?: string
           p_document_storage_key?: string
           p_driver_id: string
           p_due_at?: string
+          p_field_values?: Json
           p_screenshot_restricted?: boolean
+          p_template_id?: string
           p_title: string
         }
         Returns: Json
@@ -7842,6 +8145,7 @@ export type Database = {
           latest_activity_at: string
         }[]
       }
+      admin_esign_resolve_employees: { Args: { p_rows: Json }; Returns: Json }
       admin_expire_esign_requests: { Args: never; Returns: number }
       admin_expire_stale_pickups: { Args: never; Returns: number }
       admin_force_sign_out_driver: {
@@ -8132,6 +8436,11 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_upsert_esign_template: { Args: { p_template: Json }; Returns: Json }
+      admin_upsert_esign_template_field: {
+        Args: { p_field: Json }
+        Returns: Json
+      }
       admin_upsert_exception_action: {
         Args: {
           p_action?: string
@@ -8167,6 +8476,7 @@ export type Database = {
       }
       allocate_appointment_code: { Args: never; Returns: string }
       allocate_driver_code: { Args: never; Returns: string }
+      allocate_esign_batch_code: { Args: never; Returns: string }
       allocate_esign_code: { Args: never; Returns: string }
       allocate_request_code:
         | { Args: never; Returns: string }
@@ -8730,6 +9040,7 @@ export type Database = {
         }
         Returns: string
       }
+      esign_employee_snapshot: { Args: { p_driver_id: string }; Returns: Json }
       estimate_notification_audience: {
         Args: {
           p_exclusion_spec?: Json

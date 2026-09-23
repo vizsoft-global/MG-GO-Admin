@@ -45,10 +45,12 @@ import { uploadEsignDocument } from "./esign-actions";
 import { EsignKpiStrip } from "./esign-kpi-strip";
 import {
   useCreateEsignRequest,
+  useEsignBatches,
   useEsignCategories,
   useEsignDriverOptions,
   useEsignRequestsList,
   useEsignStatusCounts,
+  useEsignTemplates,
 } from "./use-esign";
 import type { EsignRequestStatus } from "./types";
 
@@ -87,16 +89,24 @@ export function EsignSentShell() {
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [batchId, setBatchId] = useState<string | null>(null);
 
   const listFilters = useMemo(
-    () => ({ status: statusTab === "all" ? null : (statusTab as EsignRequestStatus) }),
-    [statusTab],
+    () => ({
+      status: statusTab === "all" ? null : (statusTab as EsignRequestStatus),
+      template_id: templateId,
+      batch_id: batchId,
+    }),
+    [statusTab, templateId, batchId],
   );
 
   const { data, isLoading, isFetching, refetch } = useEsignRequestsList(listFilters);
   const { data: counts } = useEsignStatusCounts();
   const { data: driversData } = useEsignDriverOptions();
   const { data: categoriesData } = useEsignCategories();
+  const { data: templatesData } = useEsignTemplates();
+  const { data: batchesData } = useEsignBatches();
   const create = useCreateEsignRequest();
 
   const rows = data?.rows ?? [];
@@ -260,6 +270,33 @@ export function EsignSentShell() {
 
       <AppListCard className="p-0">
         <div className="flex flex-wrap items-center gap-1 border-b border-border p-2">
+          <SearchSelect
+            items={(templatesData?.rows ?? []).map((row) => ({
+              value: row.id,
+              label: row.name_en,
+              keywords: [row.name_en, row.category_key, row.id],
+            }))}
+            value={templateId}
+            onChange={setTemplateId}
+            placeholder={t("filterTemplate")}
+            searchPlaceholder={t("filterTemplateSearch")}
+            recentsKey="esign-sent-template"
+            className="w-[200px]"
+          />
+          <SearchSelect
+            items={(batchesData?.rows ?? []).map((row) => ({
+              value: row.id,
+              label: row.batch_code,
+              hint: row.title,
+              keywords: [row.batch_code, row.title, row.id],
+            }))}
+            value={batchId}
+            onChange={setBatchId}
+            placeholder={t("filterBatch")}
+            searchPlaceholder={t("filterBatchSearch")}
+            recentsKey="esign-sent-batch"
+            className="w-[180px]"
+          />
           {STATUS_TABS.map((tab) => {
             const count =
               counts == null ? null : tab === "all" ? counts.all : counts[tab];
@@ -299,6 +336,7 @@ export function EsignSentShell() {
               { id: "driver", label: t("colDriver") },
               { id: "title", label: t("colTitle") },
               { id: "category", label: t("colCategory") },
+              { id: "batch", label: t("colBatch") },
               { id: "status", label: t("colStatus") },
               { id: "sent", label: t("colSent") },
               { id: "due", label: t("colDue") },
@@ -334,6 +372,7 @@ export function EsignSentShell() {
                   {row.title}
                 </TableCell>
                 <TableCell className="text-sm">{row.category_label ?? "—"}</TableCell>
+                <TableCell className="font-mono text-xs">{row.batch_code ?? "—"}</TableCell>
                 <TableCell>
                   <StatusPill variant={statusVariant(row.status)}>
                     {tCommon(`status.${row.status}`)}

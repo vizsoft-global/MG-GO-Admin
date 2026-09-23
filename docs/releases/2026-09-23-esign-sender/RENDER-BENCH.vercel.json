@@ -1,0 +1,48 @@
+{
+  "measuredAt": "2026-09-23T05:38:12.635Z",
+  "environment": "vercel",
+  "vercel": true,
+  "region": "iad1",
+  "deployment": "https://dpdadmin-prod-1x1x6r8zx-chethan-5694s-projects.vercel.app",
+  "planEstimatePerRowMs": 1300,
+  "chunkSize": 25,
+  "batchCap": 500,
+  "coldLaunchMs": 3450,
+  "en": {
+    "pages": 1,
+    "bytes": 59338,
+    "firstMs": 1009,
+    "warmMs": [910, 993, 894],
+    "warmMedianMs": 910
+  },
+  "ar": {
+    "pages": 1,
+    "bytes": 94790,
+    "firstMs": 965,
+    "warmMs": [897, 940, 968],
+    "warmMedianMs": 940,
+    "twoPagePages": 2,
+    "twoPageMs": 939
+  },
+  "compose": {
+    "arabicSignerThrows": true,
+    "guardedFallbackWorks": true,
+    "guardedRecommendation": "guarded_fallback_required"
+  },
+  "derived": {
+    "perRowWithIoMs": 1240,
+    "formulaChunk": 31,
+    "formulaBatchCap": 620
+  },
+  "capChanged": true,
+  "keptChunkSize": 25,
+  "keptBatchCap": 500,
+  "vsLocal": {
+    "localColdLaunchMs": 2865,
+    "localEnWarmMedianMs": 1175,
+    "localArWarmMedianMs": 1287,
+    "localFormulaChunk": 24,
+    "localFormulaBatchCap": 480
+  },
+  "note": "Preview iad1 cold hit. Vercel warm is faster than local Chrome; formula 31/620. Kept 25/500 (more headroom). +300ms I/O allowance not measured."
+}
