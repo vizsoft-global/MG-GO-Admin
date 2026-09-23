@@ -73,7 +73,14 @@ export function OpsTopBottomTab({
   );
 
   if (nRiders === 0 && nStores === 0 && nZones === 0) {
-    return <p className="text-sm text-muted-foreground">{t("emptyTopBottom")}</p>;
+    return (
+      <div className={cn("flex flex-col", LAYOUT.stackGap)}>
+        <p className="text-sm text-muted-foreground">{t("emptyTopBottom")}</p>
+        <OpsChartCard title={t("chart.topZones", { n: 0, metric: seriesName })} empty emptyTitle={t("emptyZones")}>
+          <div />
+        </OpsChartCard>
+      </div>
+    );
   }
 
   function riderChart(rows: Array<OpsRiderView & { value: number }>) {
@@ -191,11 +198,13 @@ export function OpsTopBottomTab({
         </section>
       ) : null}
 
-      {nZones > 0 ? (
-        <section className={cn("flex flex-col", LAYOUT.stackGap)}>
+      <section className={cn("flex flex-col", LAYOUT.stackGap)}>
+        {nZones > 0 ? (
           <p className="text-[11px] text-muted-foreground">
             {t("topBottomZonesHint", { n: nZones })}
           </p>
+        ) : null}
+        {nZones > 0 ? (
           <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
             <OpsChartCard
               title={t("chart.topZones", { n: nZones, metric: seriesName })}
@@ -238,8 +247,12 @@ export function OpsTopBottomTab({
               />
             </OpsChartCard>
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <OpsChartCard title={t("chart.topZones", { n: 0, metric: seriesName })} empty emptyTitle={t("emptyZones")}>
+            <div />
+          </OpsChartCard>
+        )}
+      </section>
       <p className="text-[10px] text-muted-foreground">{t("topBottomTooltip")}</p>
     </div>
   );

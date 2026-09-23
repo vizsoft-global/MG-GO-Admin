@@ -86,8 +86,12 @@ const MONTH_ABBR = [
 
 export type OpsRangePreset = (typeof OPS_RANGE_PRESETS)[number];
 
+export const DEFAULT_OPS_PRESET: OpsRangePreset = "thisMonth";
+
 export const OPS_GRANULARITIES = ["daily", "weekly", "monthly"] as const;
 export type OpsGranularity = (typeof OPS_GRANULARITIES)[number];
+
+export const UNASSIGNED_COMPANY_KEY = "unassigned";
 
 export const EFFICIENCY_BUCKETS = [
   "well_above",
@@ -319,6 +323,221 @@ export function formatOpsBucketLabel(iso: string): string {
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
   if (!y || !m || !d || m < 1 || m > 12) return iso;
   return `${d} ${MONTH_ABBR[m - 1]}`;
+}
+
+export function formatOpsTrendLabel(iso: string, granularity: OpsGranularity): string {
+  if (granularity === "monthly") {
+    const [y, m] = iso.slice(0, 7).split("-").map(Number);
+    if (!y || !m || m < 1 || m > 12) return iso;
+    return `${MONTH_ABBR[m - 1]} ${y}`;
+  }
+  return formatOpsBucketLabel(iso);
+}
+
+export function lastDayOfMonth(isoDate: string): string {
+  const [y, m] = isoDate.slice(0, 7).split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${y}-${String(m).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+}
+
+/** Days 1–7 / 8–14 / 15–21 / 22–end. Week 4 absorbs 29–31. */
+export function opsWeekBucketStart(isoDate: string): string {
+  const [y, m, d] = isoDate.slice(0, 10).split("-").map(Number);
+  const week = Math.min(3, Math.floor((d - 1) / 7));
+  return `${y}-${String(m).padStart(2, "0")}-${String(1 + week * 7).padStart(2, "0")}`;
+}
+
+/** Always four week-starts for the month of `monthIso` (YYYY-MM or YYYY-MM-DD). */
+export function opsWeekStartsForMonth(monthIso: string): string[] {
+  const ym = monthIso.slice(0, 7);
+  return [1, 8, 15, 22].map((day) => `${ym}-${String(day).padStart(2, "0")}`);
+}
+
+export function resolveOpsTrendWindow(
+  granularity: OpsGranularity,
+  range: { from: string; to: string },
+  year: number | null,
+  today: string,
+): { from: string; to: string } {
+  if (granularity === "daily") return { from: range.from, to: range.to };
+  if (granularity === "weekly") {
+    const month = range.to.slice(0, 7);
+    const from = `${month}-01`;
+    const monthEnd = lastDayOfMonth(from);
+    return { from, to: monthEnd > today ? today : monthEnd };
+  }
+  const y = year ?? Number(today.slice(0, 4));
+  const currentYear = Number(today.slice(0, 4));
+  return {
+    from: `${y}-01-01`,
+    to: y < currentYear ? `${y}-12-31` : today,
+  };
+}
+
+export function opsYearOptions(firstDeliveryDate: string | null, today: string): number[] {
+  const end = Number(today.slice(0, 4));
+  const start = firstDeliveryDate ? Number(firstDeliveryDate.slice(0, 4)) : end;
+  const years: number[] = [];
+  for (let y = Math.min(start, end); y <= end; y += 1) years.push(y);
+  return years.length ? years : [end];
+}
+
+export function companyKeyOf(sourceCompany: string | null | undefined): string {
+  const s = String(sourceCompany ?? "").trim();
+  return s || UNASSIGNED_COMPANY_KEY;
+}
+
+export function resetOpsPeriod(): {
+  preset: OpsRangePreset;
+  customFrom: null;
+  customTo: null;
+} {
+  return { preset: DEFAULT_OPS_PRESET, customFrom: null, customTo: null };
+}
+
+export type OpsTrendPointLike = {
+  bucket: string;
+  orders: number;
+  working_days: number;
+  dpd: number | null;
+  dpd_eff: number | null;
+  tgt_eff: number | null;
+};
+
+export function bucketOpsTrend(
+  points: readonly OpsTrendPointLike[],
+  granularity: OpsGranularity,
+  window?: { from: string; to: string },
+): OpsTrendPointLike[] {
+  if (granularity === "daily") {
+    return [...points].sort((a, b) => a.bucket.localeCompare(b.bucket));
+  }
+  const map = new Map<string, { orders: number; working_days: number }>();
+  if (granularity === "weekly") {
+    const monthKey =
+      window?.to?.slice(0, 7) ??
+      points.at(-1)?.bucket.slice(0, 7) ??
+      points[0]?.bucket.slice(0, 7);
+    if (!monthKey) return [];
+    for (const key of opsWeekStartsForMonth(monthKey)) {
+      map.set(key, { orders: 0, working_days: 0 });
+    }
+  }
+  if (granularity === "monthly" && window?.from && window?.to) {
+    let year = Number(window.from.slice(0, 4));
+    let month = Number(window.from.slice(5, 7));
+    const endYear = Number(window.to.slice(0, 4));
+    const endMonth = Number(window.to.slice(5, 7));
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+      map.set(`${year}-${String(month).padStart(2, "0")}-01`, { orders: 0, working_days: 0 });
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+  }
+  const seeded = map.size > 0;
+  for (const p of points) {
+    const key =
+      granularity === "weekly" ? opsWeekBucketStart(p.bucket) : `${p.bucket.slice(0, 7)}-01`;
+    if (seeded && !map.has(key)) continue;
+    const cur = map.get(key) ?? { orders: 0, working_days: 0 };
+    cur.orders += p.orders;
+    cur.working_days += p.working_days;
+    map.set(key, cur);
+  }
+  return [...map.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([bucket, v]) => ({
+      bucket,
+      orders: v.orders,
+      working_days: v.working_days,
+      // Empty SOP buckets stay on the chart as a 0 point.
+      dpd: v.working_days > 0 ? v.orders / v.working_days : 0,
+      dpd_eff: null,
+      tgt_eff: null,
+    }));
+}
+
+/** Match the RPC trend eff: (bucket DPD / overall DPD) × avg DPD eff. */
+export function attachTrendEff(
+  points: readonly OpsTrendPointLike[],
+  overallDpd: number | null,
+  avgDpdEff: number | null,
+  targetDpd: number,
+): OpsTrendPointLike[] {
+  return points.map((p) => ({
+    ...p,
+    dpd_eff:
+      p.dpd != null && overallDpd != null && overallDpd > 0
+        ? (p.dpd / overallDpd) * (avgDpdEff ?? 0)
+        : null,
+    tgt_eff: p.dpd != null && targetDpd > 0 ? (p.dpd / targetDpd) * 100 : null,
+  }));
+}
+
+export function companyRowsFromRiders(
+  riders: readonly {
+    source_company: string | null;
+    orders: number;
+    working_days: number;
+    dpd_eff: number | null;
+    tgt_eff: number | null;
+  }[],
+): Array<{
+  key: string;
+  orders: number;
+  working_days: number;
+  dpd: number | null;
+  dpd_eff: number | null;
+  tgt_eff: number | null;
+  riders: number;
+  active_riders: number;
+}> {
+  const map = new Map<
+    string,
+    {
+      orders: number;
+      working_days: number;
+      riders: number;
+      active: number;
+      dpdEff: number[];
+      tgtEff: number[];
+    }
+  >();
+  for (const r of riders) {
+    const key = companyKeyOf(r.source_company);
+    const cur = map.get(key) ?? {
+      orders: 0,
+      working_days: 0,
+      riders: 0,
+      active: 0,
+      dpdEff: [],
+      tgtEff: [],
+    };
+    cur.orders += r.orders;
+    cur.working_days += r.working_days;
+    cur.riders += 1;
+    if (r.working_days > 0) {
+      cur.active += 1;
+      if (r.dpd_eff != null && Number.isFinite(r.dpd_eff)) cur.dpdEff.push(r.dpd_eff);
+      if (r.tgt_eff != null && Number.isFinite(r.tgt_eff)) cur.tgtEff.push(r.tgt_eff);
+    }
+    map.set(key, cur);
+  }
+  return [...map.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, v]) => ({
+      key,
+      orders: v.orders,
+      working_days: v.working_days,
+      dpd: v.working_days > 0 ? v.orders / v.working_days : null,
+      dpd_eff: meanFinite(v.dpdEff),
+      tgt_eff: meanFinite(v.tgtEff),
+      riders: v.riders,
+      active_riders: v.active,
+    }));
 }
 
 export function formatOpsCustomPill(from: string, to: string): string {

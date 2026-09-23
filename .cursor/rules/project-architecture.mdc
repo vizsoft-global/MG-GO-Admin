@@ -237,6 +237,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-09-23` — **MGGO Performance SOP fixes.** `/performance` default This Month; Clear resets slicers + period; Riders header filters + sort; chart data labels; Top/Bottom Zones always shown; Outsource lists Unassigned company from riders; stores CSV; Weekly = 4 fixed month weeks, Monthly + Year picker (trend only). Client buckets daily RPC points; `20261027700000` adds Unassigned + `p_trend_from`/`p_trend_to` (defaults NULL, 11-arg calls still work). Pushed to `eoksxkdssptgyqyywdju` + Vercel prod after Approve, deploy (low-traffic window). Live sanity: This Month / Last Month / Weekly / Monthly OK.
+
 - `[admin+app] 2026-09-23` — **Sender templates + bulk e-sign.** `/requests?view=` Receiver/Sender; template builder, single send, Excel/CSV bulk (Employee ID only), BAT-#### batches. Composer drops unencodable Arabic captions, keeps SIG-####. Vercel preview iad1 bench: cold 3450 / EN 910 / AR 940 vs local Chrome 2865 / 1175 / 1287; formula 31/620, **kept 25/500**. Migration `20261027600000` on `eoksxkdssptgyqyywdju`. MG-GO viewer details card reads `employee_snapshot` / `field_values_labeled` when present. **No Play.**
 
 - `[admin only] 2026-09-22` — **Order recon daily view + Not using the app.** Default table is rider+date (`difference = app − excel`); store grain stays in `order_recon_rows` and a By restaurant toggle / export sheet. Riders with Excel > 0 and app = 0 over the run window leave Daily (and Daily KPIs) for a separate tab + sheet. Unresolved identity rows stay in the upload preview and a Daily-page list — never treated as unused. Logged-status default unchanged. No migration.

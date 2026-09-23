@@ -10,8 +10,14 @@ import {
   efficiencyBucket,
   fillCustomPreset,
   matchingCustomPreset,
+  attachTrendEff,
+  bucketOpsTrend,
+  companyKeyOf,
+  companyRowsFromRiders,
+  DEFAULT_OPS_PRESET,
   formatOpsBucketLabel,
   formatOpsCustomPill,
+  formatOpsTrendLabel,
   inclusiveDayCount,
   isChartableDimKey,
   opsBarColorForKey,
@@ -22,7 +28,12 @@ import {
   partnerFilterMode,
   previousWindow,
   resolveBenchmark,
+  lastDayOfMonth,
+  opsWeekBucketStart,
+  opsYearOptions,
+  resetOpsPeriod,
   resolveOpsRange,
+  resolveOpsTrendWindow,
   resolveViewByMetric,
   riderDpd,
   sortOpsRidersByOrdersDesc,
@@ -360,6 +371,159 @@ describe("display ID comes from stored source_company", () => {
     );
   });
 
+  it("blank source_company is the Unassigned company key", () => {
+    assert.equal(companyKeyOf(null), "unassigned");
+    assert.equal(companyKeyOf("  "), "unassigned");
+    assert.equal(companyKeyOf("brk"), "brk");
+  });
+});
+
+describe("trend window + 4-week buckets", () => {
+  it("weekly window is the month of the period end, clipped to today", () => {
+    assert.deepEqual(
+      resolveOpsTrendWindow("weekly", { from: "2026-09-17", to: "2026-09-23" }, null, "2026-09-23"),
+      { from: "2026-09-01", to: "2026-09-23" },
+    );
+    assert.deepEqual(
+      resolveOpsTrendWindow("weekly", { from: "2026-08-01", to: "2026-08-31" }, null, "2026-09-23"),
+      { from: "2026-08-01", to: "2026-08-31" },
+    );
+  });
+
+  it("monthly is Jan→today for the current year and Jan–Dec for a past year", () => {
+    assert.deepEqual(
+      resolveOpsTrendWindow("monthly", { from: "2026-09-01", to: "2026-09-23" }, 2026, "2026-09-23"),
+      { from: "2026-01-01", to: "2026-09-23" },
+    );
+    assert.deepEqual(
+      resolveOpsTrendWindow("monthly", { from: "2026-09-01", to: "2026-09-23" }, 2025, "2026-09-23"),
+      { from: "2025-01-01", to: "2025-12-31" },
+    );
+  });
+
+  it("daily trend window equals the period", () => {
+    assert.deepEqual(
+      resolveOpsTrendWindow("daily", { from: "2026-09-01", to: "2026-09-23" }, 2026, "2026-09-23"),
+      { from: "2026-09-01", to: "2026-09-23" },
+    );
+  });
+
+  it("week 4 absorbs days 29–31; This Month stops at the current week", () => {
+    assert.equal(opsWeekBucketStart("2026-08-01"), "2026-08-01");
+    assert.equal(opsWeekBucketStart("2026-08-08"), "2026-08-08");
+    assert.equal(opsWeekBucketStart("2026-08-15"), "2026-08-15");
+    assert.equal(opsWeekBucketStart("2026-08-22"), "2026-08-22");
+    assert.equal(opsWeekBucketStart("2026-08-29"), "2026-08-22");
+    assert.equal(opsWeekBucketStart("2026-08-31"), "2026-08-22");
+    assert.equal(lastDayOfMonth("2026-08-01"), "2026-08-31");
+    const sep = [
+      { bucket: "2026-09-01", orders: 10, working_days: 2, dpd: 5, dpd_eff: null, tgt_eff: null },
+      { bucket: "2026-09-08", orders: 4, working_days: 1, dpd: 4, dpd_eff: null, tgt_eff: null },
+      { bucket: "2026-09-15", orders: 6, working_days: 1, dpd: 6, dpd_eff: null, tgt_eff: null },
+      { bucket: "2026-09-22", orders: 2, working_days: 1, dpd: 2, dpd_eff: null, tgt_eff: null },
+      { bucket: "2026-09-23", orders: 3, working_days: 1, dpd: 3, dpd_eff: null, tgt_eff: null },
+    ];
+    const weeks = bucketOpsTrend(sep, "weekly");
+    assert.deepEqual(
+      weeks.map((w) => w.bucket),
+      ["2026-09-01", "2026-09-08", "2026-09-15", "2026-09-22"],
+    );
+    assert.equal(weeks[3]?.orders, 5);
+  });
+
+  it("weekly always emits 4 month buckets; missing weeks are 0", () => {
+    const sparse = [
+      { bucket: "2026-09-01", orders: 10, working_days: 2, dpd: 5, dpd_eff: null, tgt_eff: null },
+      { bucket: "2026-09-15", orders: 6, working_days: 1, dpd: 6, dpd_eff: null, tgt_eff: null },
+      { bucket: "2026-09-22", orders: 2, working_days: 1, dpd: 2, dpd_eff: null, tgt_eff: null },
+    ];
+    const weeks = bucketOpsTrend(sparse, "weekly", { from: "2026-09-01", to: "2026-09-23" });
+    assert.deepEqual(
+      weeks.map((w) => w.bucket),
+      ["2026-09-01", "2026-09-08", "2026-09-15", "2026-09-22"],
+    );
+    assert.equal(weeks[1]?.orders, 0);
+    assert.equal(weeks[1]?.working_days, 0);
+    assert.equal(weeks[1]?.dpd, 0);
+    const empty = bucketOpsTrend([], "weekly", { from: "2026-09-01", to: "2026-09-23" });
+    assert.deepEqual(
+      empty.map((w) => w.bucket),
+      ["2026-09-01", "2026-09-08", "2026-09-15", "2026-09-22"],
+    );
+    assert.ok(empty.every((w) => w.orders === 0 && w.dpd === 0));
+    assert.deepEqual(bucketOpsTrend([], "weekly"), []);
+  });
+
+  it("monthly buckets a year into calendar months", () => {
+    const points = [
+      { bucket: "2026-01-15", orders: 1, working_days: 1, dpd: 1, dpd_eff: null, tgt_eff: null },
+      { bucket: "2026-09-02", orders: 4, working_days: 2, dpd: 2, dpd_eff: null, tgt_eff: null },
+    ];
+    const months = bucketOpsTrend(points, "monthly");
+    assert.deepEqual(
+      months.map((m) => m.bucket),
+      ["2026-01-01", "2026-09-01"],
+    );
+    const padded = bucketOpsTrend(points, "monthly", { from: "2026-01-01", to: "2026-09-23" });
+    assert.deepEqual(
+      padded.map((m) => m.bucket),
+      [
+        "2026-01-01",
+        "2026-02-01",
+        "2026-03-01",
+        "2026-04-01",
+        "2026-05-01",
+        "2026-06-01",
+        "2026-07-01",
+        "2026-08-01",
+        "2026-09-01",
+      ],
+    );
+    assert.equal(padded[1]?.orders, 0);
+    assert.equal(padded[1]?.dpd, 0);
+    assert.equal(formatOpsTrendLabel("2026-09-01", "monthly"), "Sep 2026");
+    assert.equal(formatOpsTrendLabel("2026-09-22", "weekly"), "22 Sep");
+  });
+
+  it("year options run from first delivery year to today", () => {
+    assert.deepEqual(opsYearOptions("2025-06-01", "2026-09-23"), [2025, 2026]);
+    assert.deepEqual(opsYearOptions(null, "2026-09-23"), [2026]);
+  });
+
+  it("Clear resets the period to This Month", () => {
+    assert.equal(DEFAULT_OPS_PRESET, "thisMonth");
+    assert.deepEqual(resetOpsPeriod(), {
+      preset: "thisMonth",
+      customFrom: null,
+      customTo: null,
+    });
+  });
+
+  it("outsource company rows include Unassigned and 0-order riders", () => {
+    const rows = companyRowsFromRiders([
+      { source_company: null, orders: 0, working_days: 0, dpd_eff: null, tgt_eff: null },
+      { source_company: "", orders: 3, working_days: 1, dpd_eff: 80, tgt_eff: 40 },
+    ]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.key, "unassigned");
+    assert.equal(rows[0]?.riders, 2);
+    assert.equal(rows[0]?.orders, 3);
+    assert.equal(rows[0]?.active_riders, 1);
+  });
+
+  it("attachTrendEff mirrors the RPC tgt_eff formula", () => {
+    const [row] = attachTrendEff(
+      [{ bucket: "2026-09-01", orders: 50, working_days: 2, dpd: 25, dpd_eff: null, tgt_eff: null }],
+      20,
+      80,
+      25,
+    );
+    assert.equal(row?.tgt_eff, 100);
+    assert.equal(row?.dpd_eff, 100);
+  });
+});
+
+describe("display ID leftovers", () => {
   it("Source tooltip uses stored company, not the code", () => {
     assert.equal(
       sourceLabel({ sourceType: "outsourced", sourceCompany: "brk" }),

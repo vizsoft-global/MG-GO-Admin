@@ -1,0 +1,65 @@
+To: Noura; Mohamed; Vijay; Mustafa; Aziz
+Subject: MG GO Performance dashboard — 8 SOP fixes ready for your check
+
+Hi team,
+
+We implemented the 8 items from MGGO-Performance-Fixes-SOP.pdf on the Performance dashboard (/performance).
+
+Please verify with the attached checklist (sender-performance-verify.html). Summary of what changed:
+
+1. Top & Bottom Zones
+   A Top / Bottom Zones pair now always sits under Stores. N = 10% of zones in view, clamped 2–10. If no zone-assigned rider has orders in the period, you see an empty card instead of a missing section.
+
+2. Outsource Companies table
+   The table lists every outsource company that has riders in the current view, including companies with 0 orders. Riders with no Company set appear as “Unassigned company” (this is why the table was empty while Total Riders showed 2).
+
+3. Riders’ Analysis column filters
+   Every column header has a filter icon and a separate sort icon. Text columns: search + checkboxes, then Apply. Number columns (Orders, Working Days, DPD, Target DPD, Restaurant DPD, Vehicle-Zone DPD, DPD Eff., Target Eff.): Min / Max, then Apply. Filters combine with AND. Headers are fully readable; the table scrolls sideways.
+
+4. Data labels on every chart
+   Bar and line charts on all five tabs now print the value on the chart (not only on hover).
+
+5. Default period + Clear
+   The page opens on This Month (1st of the current Kuwait month → today). Last Month is the full previous calendar month. Clear filters resets Partner / Zone / Vehicle / Nationality / Source Type / Company / Restaurant to All, and the period back to This Month.
+
+6. DPD & Efficiency stores CSV
+   The Americana stores table has an Export CSV of the rows currently shown (Restaurant, Zone, Orders, DPD, Riders).
+
+7. Weekly / Monthly / Year (trend charts only)
+   Weekly = four blocks of the active month: 1–7, 8–14, 15–21, 22–end (week 4 takes 29–31). This Month stops at the current week. Monthly = January → the current month of the selected year. A Year picker appears next to Monthly. KPIs and tables stay on the period pills (This Month / Last Month / …).
+
+8. How fresh is the data? (written confirmation)
+
+   Source tables
+   - deliveries — only status = verified, using Kuwait calendar day of delivered_at
+   - drivers, profiles, driver_restaurants, restaurants, zones, vehicles
+   - performance_target_dpd (monthly Target DPD, default 25)
+
+   Caching
+   - No server cache and no materialized view. Each open / filter change / Refresh runs a live query.
+   - The browser keeps the last result for 60 seconds. It does not auto-refresh when you come back to the tab. Use Refresh for the latest numbers.
+
+   Latency
+   - A new order is counted only after it is verified.
+   - After verify, it appears on the next fetch (Refresh, a filter change, or reload) — usually a few seconds.
+
+---
+
+Decision we need from you (same question as Order Reconciliation)
+
+Performance Total Orders / DPD currently count verified orders only.
+
+Order Reconciliation is provisionally counting pending + in transit + verified (cancelled / rejected stay out).
+
+For one consistent rule across Performance and Reconciliation, please confirm one answer:
+
+  A) Keep Performance on verified only (current).
+  B) Count pending + in_transit + verified on both Performance and Reconciliation.
+  C) Something else — please specify.
+
+Also tell us if you want the dashboard to auto-refresh (for example every 60 seconds) or stay manual Refresh only.
+
+We have not pushed the database change or production deploy yet. After you approve, we will apply the RPC in a low-traffic window (the Performance page depends on this one function) and then deploy.
+
+Thank you,
+Vizsoft

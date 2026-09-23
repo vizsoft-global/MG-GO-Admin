@@ -11,7 +11,13 @@ import { kuwaitToday } from "./performance-formulas";
 import {
   assertCustomOpsRange,
   assertOpsRange,
+  attachTrendEff,
+  bucketOpsTrend,
+  DEFAULT_OPS_PRESET,
+  opsYearOptions,
+  resetOpsPeriod,
   resolveOpsRange,
+  resolveOpsTrendWindow,
   resolveViewByMetric,
   type OpsChartMetric,
   type OpsGranularity,
@@ -38,12 +44,14 @@ export function PerformancePageShell() {
   const todayFallback = kuwaitToday();
 
   const [tab, setTab] = useState<PerformanceHubTab>("overview");
-  const [preset, setPreset] = useState<OpsRangePreset>("last7");
+  const [preset, setPreset] = useState<OpsRangePreset>(DEFAULT_OPS_PRESET);
   const [customFrom, setCustomFrom] = useState<string | null>(null);
   const [customTo, setCustomTo] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<OpsGranularity>("daily");
+  const [trendYear, setTrendYear] = useState<number | null>(null);
   const [slicers, setSlicers] = useState<OpsSlicers>(EMPTY_OPS_SLICERS);
   const [metric, setMetric] = useState<OpsChartMetric>("orders");
+  const [filterResetKey, setFilterResetKey] = useState(0);
 
   const boundsQuery = usePerformanceOpsBounds();
   const today = boundsQuery.data?.today ?? todayFallback;
@@ -62,7 +70,7 @@ export function PerformancePageShell() {
           : null,
       );
     } catch {
-      return resolveOpsRange("last7", today, firstDelivery);
+      return resolveOpsRange(DEFAULT_OPS_PRESET, today, firstDelivery);
     }
   }, [preset, today, firstDelivery, customFrom, customTo]);
 
@@ -79,20 +87,57 @@ export function PerformancePageShell() {
     }
   }, [preset, customFrom, customTo, today, range]);
 
+  const year = trendYear ?? Number(today.slice(0, 4));
+  const years = opsYearOptions(firstDelivery, today);
+  const trendWindow = useMemo(
+    () => resolveOpsTrendWindow(granularity, range, year, today),
+    [granularity, range, year, today],
+  );
+  const trendDiffers = trendWindow.from !== range.from || trendWindow.to !== range.to;
+  const enabled = Boolean(boundsQuery.data) && !rangeError;
+
   const snapshotQuery = usePerformanceOpsSnapshot(
     {
       from: range.from,
       to: range.to,
-      granularity,
+      granularity: "daily",
       slicers,
       outsourceOnly: tab === "outsource",
     },
-    Boolean(boundsQuery.data) && !rangeError,
+    enabled,
+  );
+  const trendQuery = usePerformanceOpsSnapshot(
+    {
+      from: trendWindow.from,
+      to: trendWindow.to,
+      granularity: "daily",
+      slicers,
+      outsourceOnly: tab === "outsource",
+    },
+    enabled && trendDiffers,
   );
 
-  const data = snapshotQuery.data;
-  const isLoading = boundsQuery.isLoading || snapshotQuery.isLoading;
-  const isError = boundsQuery.isError || snapshotQuery.isError;
+  const data = useMemo(() => {
+    const base = snapshotQuery.data;
+    if (!base) return base;
+    const source = trendDiffers ? trendQuery.data?.trend : base.trend;
+    if (!source) return { ...base, trend: [] };
+    return {
+      ...base,
+      trend: attachTrendEff(
+        bucketOpsTrend(source, granularity, trendWindow),
+        base.kpis.overall_dpd,
+        base.kpis.avg_dpd_eff,
+        base.target_dpd,
+      ),
+    };
+  }, [snapshotQuery.data, trendQuery.data, trendDiffers, granularity, trendWindow]);
+
+  const isLoading =
+    boundsQuery.isLoading ||
+    snapshotQuery.isLoading ||
+    (trendDiffers && trendQuery.isLoading);
+  const isError = boundsQuery.isError || snapshotQuery.isError || trendQuery.isError;
   const errorMessage =
     snapshotQuery.error instanceof Error ? snapshotQuery.error.message : null;
 
@@ -210,7 +255,13 @@ export function PerformancePageShell() {
               setPreset(next);
             }}
           />
-          <OpsGranularityPills value={granularity} onChange={setGranularity} />
+          <OpsGranularityPills
+            value={granularity}
+            onChange={setGranularity}
+            year={year}
+            years={years}
+            onYear={setTrendYear}
+          />
         </div>
         {overCap && preset !== "all" ? (
           <p className="text-[10px] text-muted-foreground">{t("ops.allTimeCapped")}</p>
@@ -221,7 +272,15 @@ export function PerformancePageShell() {
           options={data?.options ?? { zones: [], restaurants: [], nationalities: [] }}
           hideSourceType={tab === "outsource"}
           onChange={setSlicers}
-          onClear={() => setSlicers(EMPTY_OPS_SLICERS)}
+          onClear={() => {
+            const next = resetOpsPeriod();
+            setSlicers(EMPTY_OPS_SLICERS);
+            setPreset(next.preset);
+            setCustomFrom(next.customFrom);
+            setCustomTo(next.customTo);
+            setTrendYear(null);
+            setFilterResetKey((k) => k + 1);
+          }}
           onExport={data ? exportTab : undefined}
           exportLabel={t("ops.exportTab")}
         />
@@ -240,15 +299,15 @@ export function PerformancePageShell() {
         ) : !data ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
         ) : tab === "overview" ? (
-          <OpsOverviewTab data={data} metric={viewMetric} />
+          <OpsOverviewTab data={data} metric={viewMetric} granularity={granularity} />
         ) : tab === "dpd" ? (
-          <OpsDpdTab data={data} metric={viewMetric} />
+          <OpsDpdTab data={data} metric={viewMetric} granularity={granularity} />
         ) : tab === "riders" ? (
-          <OpsRidersTab data={data} />
+          <OpsRidersTab data={data} resetKey={filterResetKey} />
         ) : tab === "topbottom" ? (
           <OpsTopBottomTab data={data} metric={viewMetric} />
         ) : (
-          <OpsOutsourceTab data={data} metric={viewMetric} />
+          <OpsOutsourceTab data={data} metric={viewMetric} granularity={granularity} />
         )}
       </div>
     </AppPage>

@@ -16,10 +16,11 @@ import {
 import { countryLabel } from "@/lib/geo/countries";
 import {
   dimMetricValue,
-  formatOpsBucketLabel,
+  formatOpsTrendLabel,
   isChartableDimKey,
   OPS_METRIC_COLOR,
   type OpsChartMetric,
+  type OpsGranularity,
 } from "../performance-ops-formulas";
 import type { OpsDimRow, OpsSnapshot } from "../performance-ops-types";
 import { OpsBarChart, OpsChartCard, OpsKpiDelta, OpsLineChart, opsChartTitle } from "./ops-charts";
@@ -34,9 +35,11 @@ function dimRows(rows: OpsDimRow[], labelOf: (row: OpsDimRow) => string, metric:
 export function OpsOverviewTab({
   data,
   metric,
+  granularity,
 }: {
   data: OpsSnapshot;
   metric: OpsChartMetric;
+  granularity: OpsGranularity;
 }) {
   const t = useTranslations("pages.performance.ops");
   const k = data.kpis;
@@ -80,7 +83,7 @@ export function OpsOverviewTab({
   ];
 
   const trend = data.trend.map((p) => ({
-    bucket: formatOpsBucketLabel(p.bucket),
+    bucket: formatOpsTrendLabel(p.bucket, granularity),
     value: dimMetricValue(p, metric),
   }));
 

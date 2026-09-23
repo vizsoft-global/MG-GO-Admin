@@ -1,30 +1,21 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslations } from "next-intl";
-import { Check, Filter } from "lucide-react";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { LAYOUT } from "@/components/app/layout-spacing";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  SOURCE_COMPANY_LABEL,
-  sortOpsRidersByOrdersDesc,
-  toggleOpsMultiSelect,
-} from "../performance-ops-formulas";
+import { SOURCE_COMPANY_LABEL } from "../performance-ops-formulas";
 import {
   applyColumnFilters,
   columnFilterValues,
   downloadCsv,
-  filterOptionLabel,
+  nextOpsSort,
+  sortOpsRiders,
   toCsv,
   type OpsColumnFilter,
+  type OpsSortDir,
 } from "../performance-ops-table";
 import {
   enrichOpsRider,
@@ -33,39 +24,60 @@ import {
   formatPct,
 } from "../performance-ops-format";
 import type { OpsRiderView, OpsSnapshot } from "../performance-ops-types";
+import { OpsHeaderFilter, OpsSortButton } from "./ops-header-filter";
 import { cn } from "@/lib/utils";
 
-const FILTER_KEYS = [
-  "status",
-  "partner_label",
-  "store_label",
-  "zone",
-  "vehicle_label",
-  "nationality_label",
-  "source",
-  "bucket",
-] as const;
+const NUMERIC_COLS = new Set([
+  "orders",
+  "working_days",
+  "dpd",
+  "target_dpd",
+  "store_dpd",
+  "veh_zone_dpd",
+  "dpd_eff",
+  "tgt_eff",
+]);
 
-export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
+const COL_WIDTH: Record<string, string> = {
+  display_id: "w-[88px] min-w-[88px]",
+  name: "w-[140px] min-w-[140px]",
+  partner_label: "w-[100px] min-w-[100px]",
+  store_label: "w-[140px] min-w-[140px]",
+  zone: "w-[110px] min-w-[110px]",
+  vehicle_label: "w-[88px] min-w-[88px]",
+  nationality_label: "w-[120px] min-w-[120px]",
+  source_type: "w-[100px] min-w-[100px]",
+  source_company: "w-[120px] min-w-[120px]",
+  orders: "w-[88px] min-w-[88px]",
+  working_days: "w-[110px] min-w-[110px]",
+  dpd: "w-[80px] min-w-[80px]",
+  target_dpd: "w-[96px] min-w-[96px]",
+  store_dpd: "w-[120px] min-w-[120px]",
+  veh_zone_dpd: "w-[140px] min-w-[140px]",
+  dpd_eff: "w-[96px] min-w-[96px]",
+  tgt_eff: "w-[110px] min-w-[110px]",
+  status: "w-[88px] min-w-[88px]",
+};
+
+export function OpsRidersTab({
+  data,
+  resetKey,
+}: {
+  data: OpsSnapshot;
+  resetKey: number;
+}) {
   const t = useTranslations("pages.performance.ops");
-  const riders = useMemo(
-    () => sortOpsRidersByOrdersDesc(data.riders.map(enrichOpsRider)),
-    [data.riders],
-  );
+  const riders = useMemo(() => data.riders.map(enrichOpsRider), [data.riders]);
   const [filters, setFilters] = useState<OpsColumnFilter>({});
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<OpsSortDir | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
-  const filtered = useMemo(
-    () => applyColumnFilters(riders as unknown as Array<Record<string, unknown>>, filters) as unknown as OpsRiderView[],
-    [riders, filters],
-  );
-
-  const virtualizer = useVirtualizer({
-    count: filtered.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 36,
-    overscan: 12,
-  });
+  useEffect(() => {
+    setFilters({});
+    setSortKey(null);
+    setSortDir(null);
+  }, [resetKey]);
 
   const cols: Array<{ id: string; label: string; align?: "end" }> = [
     { id: "display_id", label: t("col.id") },
@@ -116,6 +128,31 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
     }
   }
 
+  const filtered = useMemo(() => {
+    const rows = riders.map((r) => ({
+      ...r,
+      source_type: cell(r, "source_type"),
+      source_company: cell(r, "source_company"),
+      zone: r.zone ?? "—",
+    }));
+    const narrowed = applyColumnFilters(
+      rows as unknown as Array<Record<string, unknown>>,
+      filters,
+    ) as unknown as OpsRiderView[];
+    return sortOpsRiders(
+      narrowed as unknown as Array<Record<string, unknown>>,
+      sortKey,
+      sortDir,
+    ) as unknown as OpsRiderView[];
+  }, [riders, filters, sortKey, sortDir, t]);
+
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 36,
+    overscan: 12,
+  });
+
   return (
     <div className={cn("flex flex-col", LAYOUT.stackGap)}>
       <KpiGrid
@@ -130,56 +167,8 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
       />
       <p className="text-[10px] text-muted-foreground">{t("tableFiltersHint")}</p>
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
-          {FILTER_KEYS.map((key) => {
-            const values = columnFilterValues(riders as unknown as Array<Record<string, unknown>>, key);
-            const selected = filters[key] ?? [];
-            const allOn = selected.length === 0;
-            return (
-              <Popover key={key}>
-                <PopoverTrigger className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-[11px] hover:bg-muted/40">
-                  <Filter className="size-3" />
-                  {t(`filterCol.${key}`)}
-                  {selected.length ? ` (${selected.length})` : ""}
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-52 origin-(--transform-origin) p-2">
-                  <label className="mb-1 flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40">
-                    <Checkbox
-                      checked={allOn}
-                      onCheckedChange={() => setFilters((prev) => ({ ...prev, [key]: [] }))}
-                    />
-                    <span className="min-w-0 flex-1 font-medium">{t("slicer.all")}</span>
-                    {allOn ? <Check className="size-3 shrink-0 text-emerald-700" /> : null}
-                  </label>
-                  <div className="max-h-48 overflow-y-auto">
-                    {values.map((v) => {
-                      const on = selected.includes(v);
-                      return (
-                        <label
-                          key={v || "(empty)"}
-                          className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40"
-                        >
-                          <Checkbox
-                            checked={on}
-                            onCheckedChange={() => {
-                              setFilters((prev) => {
-                                const cur = prev[key] ?? [];
-                                return { ...prev, [key]: toggleOpsMultiSelect(values, cur, v) };
-                              });
-                            }}
-                          />
-                          <span className="min-w-0 flex-1 truncate">
-                            {filterOptionLabel(key, v, (msg) => t(msg))}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            );
-          })}
-          <span className="ms-auto text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-end gap-2 border-b border-border px-3 py-2">
+          <span className="text-[11px] text-muted-foreground">
             {t("showingRiders", { count: filtered.length })}
           </span>
           <button
@@ -199,15 +188,56 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
           </button>
         </div>
         <div ref={parentRef} className="h-[min(420px,48dvh)] overflow-auto">
-          <div className={cn("sticky top-0 z-10 grid min-w-[1680px] grid-cols-[repeat(18,minmax(88px,1fr))] gap-0 border-b border-border bg-muted/30 px-3 py-1.5", TABLE_HEAD_CLASS)}>
+          <div
+            className={cn(
+              "sticky top-0 z-10 flex min-w-[1960px] border-b border-border bg-muted/30 px-3 py-1.5",
+              TABLE_HEAD_CLASS,
+            )}
+          >
             {cols.map((c) => (
-              <span
+              <div
                 key={c.id}
-                title={c.label}
-                className={cn("min-w-0 truncate", c.align === "end" && "text-end")}
+                className={cn(
+                  "flex flex-col gap-0.5 px-1",
+                  COL_WIDTH[c.id],
+                  c.align === "end" && "items-end",
+                )}
               >
-                {c.label}
-              </span>
+                <span className="whitespace-normal leading-tight">{c.label}</span>
+                <div className="flex items-center gap-0.5">
+                  <OpsHeaderFilter
+                    columnId={c.id}
+                    values={columnFilterValues(
+                      riders.map((r) => ({
+                        ...r,
+                        source_type: cell(r, "source_type"),
+                        source_company: cell(r, "source_company"),
+                        zone: r.zone ?? "—",
+                      })) as unknown as Array<Record<string, unknown>>,
+                      c.id,
+                    )}
+                    filters={filters}
+                    onApply={setFilters}
+                    numeric={NUMERIC_COLS.has(c.id)}
+                    searchPlaceholder={t("filterSearch")}
+                    allLabel={t("slicer.all")}
+                    clearLabel={t("filterClear")}
+                    applyLabel={t("filterApply")}
+                    minLabel={t("filterMin")}
+                    maxLabel={t("filterMax")}
+                  />
+                  <OpsSortButton
+                    active={sortKey === c.id}
+                    dir={sortKey === c.id ? sortDir : null}
+                    label={t("sortColumn", { column: c.label })}
+                    onClick={() => {
+                      const next = nextOpsSort(sortKey, sortDir, c.id);
+                      setSortKey(next.key);
+                      setSortDir(next.dir);
+                    }}
+                  />
+                </div>
+              </div>
             ))}
           </div>
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
@@ -216,14 +246,15 @@ export function OpsRidersTab({ data }: { data: OpsSnapshot }) {
               return (
                 <div
                   key={row.driver_id}
-                  className="absolute inset-x-0 grid min-w-[1680px] grid-cols-[repeat(18,minmax(88px,1fr))] items-center gap-0 border-b border-border/60 px-3 text-xs"
+                  className="absolute inset-x-0 flex min-w-[1960px] items-center border-b border-border/60 px-3 text-xs"
                   style={{ height: item.size, transform: `translateY(${item.start}px)` }}
                 >
                   {cols.map((c) => (
                     <span
                       key={c.id}
                       className={cn(
-                        "truncate tabular-nums",
+                        "truncate px-1 tabular-nums",
+                        COL_WIDTH[c.id],
                         c.align === "end" && "text-end",
                         c.id === "name" && "font-medium",
                       )}

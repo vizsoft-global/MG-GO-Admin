@@ -10,11 +10,14 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import {
+  companyRowsFromRiders,
   dimMetricValue,
-  formatOpsBucketLabel,
+  formatOpsTrendLabel,
   isChartableDimKey,
   OPS_METRIC_COLOR,
+  UNASSIGNED_COMPANY_KEY,
   type OpsChartMetric,
+  type OpsGranularity,
 } from "../performance-ops-formulas";
 import { downloadCsv, toCsv } from "../performance-ops-table";
 import {
@@ -31,20 +34,28 @@ import { cn } from "@/lib/utils";
 export function OpsOutsourceTab({
   data,
   metric,
+  granularity,
 }: {
   data: OpsSnapshot;
   metric: OpsChartMetric;
+  granularity: OpsGranularity;
 }) {
   const t = useTranslations("pages.performance.ops");
   const riders = useMemo(() => data.riders.map(enrichOpsRider), [data.riders]);
   const seriesName = t(`viewBy.${metric}`);
   const series = [{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }];
-  const companies = data.by_company.filter((r) => isChartableDimKey(r.key));
+  const companies = useMemo(
+    () => companyRowsFromRiders(data.riders).filter((r) => isChartableDimKey(r.key)),
+    [data.riders],
+  );
   const zones = data.by_zone.filter((r) => isChartableDimKey(r.key));
   const trend = data.trend.map((p) => ({
-    bucket: formatOpsBucketLabel(p.bucket),
+    bucket: formatOpsTrendLabel(p.bucket, granularity),
     value: dimMetricValue(p, metric),
   }));
+  function labelCompany(key: string) {
+    return key === UNASSIGNED_COMPANY_KEY ? t("unassignedCompany") : companyLabel(key);
+  }
 
   return (
     <div className={cn("flex flex-col", LAYOUT.stackGap)}>
@@ -86,7 +97,7 @@ export function OpsOutsourceTab({
               "ops-outsource-companies",
               toCsv(
                 ["company", metric],
-                companies.map((r) => [companyLabel(r.key), dimMetricValue(r, metric)]),
+                companies.map((r) => [labelCompany(r.key), dimMetricValue(r, metric)]),
               ),
             )
           }
@@ -95,7 +106,7 @@ export function OpsOutsourceTab({
         >
           <OpsBarChart
             data={companies.map((r) => ({
-              key: companyLabel(r.key),
+              key: labelCompany(r.key),
               value: dimMetricValue(r, metric),
             }))}
             xKey="key"
@@ -167,7 +178,7 @@ export function OpsOutsourceTab({
         >
           {companies.map((r) => (
             <AppDataTableRow key={r.key}>
-              <TableCell className="text-sm">{companyLabel(r.key)}</TableCell>
+              <TableCell className="text-sm">{labelCompany(r.key)}</TableCell>
               <TableCell className="text-end tabular-nums text-sm">
                 {formatInt(r.orders)}
               </TableCell>
