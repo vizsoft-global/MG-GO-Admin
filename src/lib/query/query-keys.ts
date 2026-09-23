@@ -164,6 +164,10 @@ export const queryKeys = {
     categories: () => ["esign", "categories"] as const,
     driverOptions: () => ["esign", "driver-options"] as const,
     screenshotDefault: () => ["esign", "screenshot-default"] as const,
+    templates: () => ["esign", "templates"] as const,
+    template: (id: string) => ["esign", "template", id] as const,
+    batches: () => ["esign", "batches"] as const,
+    batch: (id: string) => ["esign", "batch", id] as const,
   },
   visits: {
     all: () => ["visits"] as const,

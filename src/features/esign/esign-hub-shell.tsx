@@ -5,16 +5,24 @@ import {
   CalendarDays,
   ChevronRight,
   FileSignature,
+  Layers,
+  LayoutTemplate,
   ListChecks,
   Plus,
+  Send,
   ShieldCheck,
   Tags,
+  Upload,
 } from "lucide-react";
 import { AppPage, AppPageHeader } from "@/components/app";
 import { Link } from "@/i18n/navigation";
 import { useEsignStatusCounts } from "./use-esign";
 
 const TILES = [
+  { href: "/requests/esign/templates", key: "templates", icon: LayoutTemplate },
+  { href: "/requests/esign/send", key: "send", icon: Send },
+  { href: "/requests/esign/bulk", key: "bulk", icon: Upload },
+  { href: "/requests/esign/batches", key: "batches", icon: Layers },
   { href: "/requests/esign/sent", key: "sent", icon: FileSignature },
   { href: "/requests/esign/signatures", key: "signatures", icon: ListChecks },
   { href: "/requests/esign/categories", key: "categories", icon: Tags },
@@ -37,6 +45,11 @@ export function EsignHubShell() {
       case "categories":
       case "screenshot":
         return t("tilesMeta.categories", { count: counts.categories });
+      case "templates":
+      case "send":
+      case "bulk":
+      case "batches":
+        return null;
       default: {
         const _exhaustive: never = key;
         return _exhaustive;
@@ -56,7 +69,7 @@ export function EsignHubShell() {
       />
 
       <Link
-        href="/requests/esign/sent?add=1"
+        href="/requests/esign/send"
         className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 p-4 shadow-sm transition-colors hover:bg-primary/15"
       >
         <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">

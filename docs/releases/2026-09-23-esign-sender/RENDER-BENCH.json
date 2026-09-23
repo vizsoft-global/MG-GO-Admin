@@ -1,0 +1,66 @@
+{
+  "measuredAt": "2026-09-23T04:51:59.300Z",
+  "environment": "local-chrome",
+  "vercel": false,
+  "planEstimatePerRowMs": 1300,
+  "chunkSize": 25,
+  "batchCap": 500,
+  "coldLaunchMs": 2865,
+  "en": {
+    "pages": 1,
+    "bytes": 63645,
+    "firstMs": 1985,
+    "warmMs": [
+      1244,
+      1175,
+      1131
+    ],
+    "warmMedianMs": 1175
+  },
+  "ar": {
+    "pages": 1,
+    "bytes": 109244,
+    "firstMs": 1267,
+    "warmMs": [
+      1339,
+      1287,
+      1245
+    ],
+    "warmMedianMs": 1287,
+    "twoPagePages": 2,
+    "twoPageMs": 1332
+  },
+  "compose": {
+    "cases": [
+      {
+        "name": "en-1",
+        "pagesBefore": 1,
+        "pagesAfter": 1,
+        "pageCountUnchanged": true
+      },
+      {
+        "name": "ar-1",
+        "pagesBefore": 1,
+        "pagesAfter": 1,
+        "pageCountUnchanged": true
+      },
+      {
+        "name": "ar-2",
+        "pagesBefore": 2,
+        "pagesAfter": 2,
+        "pageCountUnchanged": true
+      }
+    ],
+    "arabicSignerThrows": true,
+    "arabicMessage": "winansi_unencodable:أحمد علي",
+    "guardedFallbackWorks": true,
+    "guardedRecommendation": "guarded_fallback_required"
+  },
+  "derived": {
+    "perRowWithIoMs": 1587,
+    "formulaChunk": 24,
+    "formulaBatchCap": 480
+  },
+  "capChanged": true,
+  "note": "Local Chrome. Vercel preview iad1: cold 3450 / EN 910 / AR 940 / formula 31/620. Kept 25/500. +300ms is upload+RPC allowance, not measured."
+}

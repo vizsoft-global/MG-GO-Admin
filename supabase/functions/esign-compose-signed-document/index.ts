@@ -359,7 +359,15 @@ Deno.serve(async (req) => {
       row.signer_display_name?.trim() || "Signed by driver",
       formatSignedAt(row.signed_at),
       row.request_code ?? "",
-    ].filter((line) => line.length > 0);
+    ].filter((line) => line.length > 0).filter((line) => {
+      try {
+        font.encodeText(line);
+        return true;
+      } catch {
+        // Helvetica is WinAnsi — Arabic signer names throw. Keep SIG-####.
+        return false;
+      }
+    });
 
     const scale = Math.min(
       SIG_MAX_WIDTH / signature.width,

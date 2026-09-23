@@ -56,6 +56,11 @@ function mapListRow(r: Record<string, unknown>): EsignListRow {
     signer_display_name:
       r.signer_display_name != null ? String(r.signer_display_name) : null,
     created_at: String(r.created_at ?? ""),
+    template_id: r.template_id != null ? String(r.template_id) : null,
+    template_name: r.template_name != null ? String(r.template_name) : null,
+    batch_id: r.batch_id != null ? String(r.batch_id) : null,
+    batch_code: r.batch_code != null ? String(r.batch_code) : null,
+    description: r.description != null ? String(r.description) : null,
   };
 }
 
@@ -77,14 +82,49 @@ export async function fetchEsignRequestsList(
   }
 
   const rowsRaw = Array.isArray(payload.rows) ? payload.rows : [];
+  let rows = rowsRaw.map((row) => mapListRow(asRecord(row)));
+
+  const ids = rows.map((r) => r.id);
+  if (ids.length > 0) {
+    const extra = await (supabase as any)
+      .from("esign_requests")
+      .select("id, template_id, batch_id, description, esign_templates(name_en), esign_batches(batch_code)")
+      .in("id", ids);
+    if (!extra.error && Array.isArray(extra.data)) {
+      const byId = new Map<string, Record<string, unknown>>();
+      for (const row of extra.data as Record<string, unknown>[]) {
+        byId.set(String(row.id), row);
+      }
+      rows = rows.map((row) => {
+        const x = byId.get(row.id);
+        if (!x) return row;
+        const tpl = asRecord(x.esign_templates);
+        const batch = asRecord(x.esign_batches);
+        return {
+          ...row,
+          template_id: x.template_id != null ? String(x.template_id) : null,
+          template_name: tpl.name_en != null ? String(tpl.name_en) : null,
+          batch_id: x.batch_id != null ? String(x.batch_id) : null,
+          batch_code: batch.batch_code != null ? String(batch.batch_code) : null,
+          description: x.description != null ? String(x.description) : null,
+        };
+      });
+    }
+  }
+
+  if (filters.template_id) {
+    rows = rows.filter((r) => r.template_id === filters.template_id);
+  }
+  if (filters.batch_id) {
+    rows = rows.filter((r) => r.batch_id === filters.batch_id);
+  }
+
   await logAdminRead("esign_requests", "esign.list", {
     status: filters.status ?? null,
-    count: rowsRaw.length,
+    count: rows.length,
   });
 
-  return {
-    rows: rowsRaw.map((row) => mapListRow(asRecord(row))),
-  };
+  return { rows };
 }
 
 /** KPI + tab counts for the Sent requests / E-signatures lists (Figma ESign 01 & 02). */
