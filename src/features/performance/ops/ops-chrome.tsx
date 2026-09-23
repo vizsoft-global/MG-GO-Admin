@@ -16,6 +16,13 @@ import {
 } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { LAYOUT } from "@/components/app/layout-spacing";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { countryLabel } from "@/lib/geo/countries";
 import { DRIVER_PROJECT_KEYS } from "@/features/fleet/fleet-labels";
 import {
@@ -110,11 +117,18 @@ export function OpsViewByPills({
 export function OpsGranularityPills({
   value,
   onChange,
+  year,
+  years,
+  onYear,
 }: {
   value: OpsGranularity;
   onChange: (next: OpsGranularity) => void;
+  year: number;
+  years: number[];
+  onYear: (year: number) => void;
 }) {
   const t = useTranslations("pages.performance.ops");
+  const yearItems = years.map((y) => ({ value: String(y), label: String(y) }));
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {OPS_GRANULARITIES.map((id) => (
@@ -126,6 +140,24 @@ export function OpsGranularityPills({
           {t(`granularity.${id}`)}
         </ToggleChip>
       ))}
+      {value === "monthly" ? (
+        <Select
+          value={String(year)}
+          onValueChange={(next) => onYear(Number(next))}
+          items={yearItems}
+        >
+          <SelectTrigger className="h-9 w-[96px]" aria-label={t("yearLabel")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {yearItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
     </div>
   );
 }

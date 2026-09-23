@@ -6,6 +6,7 @@ import {
   SOURCE_COMPANY_LABEL,
   sourceLabel,
   storeDisplayName,
+  UNASSIGNED_COMPANY_KEY,
   type OpsChartMetric,
   type SourceCompanyKey,
 } from "./performance-ops-formulas";
@@ -88,6 +89,7 @@ export function partnerLabel(key: string | null | undefined): string {
 
 export function companyLabel(key: string | null | undefined): string {
   if (!key || key === "—") return "—";
+  if (key === UNASSIGNED_COMPANY_KEY) return "Unassigned company";
   return SOURCE_COMPANY_LABEL[key as SourceCompanyKey] ?? key.toUpperCase();
 }
 

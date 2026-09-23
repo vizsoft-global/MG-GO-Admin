@@ -8326,6 +8326,8 @@ export type Database = {
           p_source_companies?: string[]
           p_source_types?: string[]
           p_to: string
+          p_trend_from?: string
+          p_trend_to?: string
           p_vehicle_keys?: string[]
           p_zone_ids?: string[]
         }

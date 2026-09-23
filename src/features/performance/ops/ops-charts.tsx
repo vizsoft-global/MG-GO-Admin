@@ -7,6 +7,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -123,11 +124,11 @@ export function OpsLineChart({
   metric?: OpsTooltipMetric;
 }) {
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={data} margin={{ top: 22, right: 16, left: 0, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-        <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
-        <YAxis tick={{ fontSize: 10 }} width={36} />
+        <XAxis dataKey={xKey} tick={{ fontSize: 10 }} interval={0} />
+        <YAxis tick={{ fontSize: 10 }} width={40} />
         <Tooltip content={<OpsTooltip metric={metric} />} />
         {series.map((s) => (
           <Line
@@ -137,9 +138,18 @@ export function OpsLineChart({
             name={s.name}
             stroke={s.color}
             strokeWidth={2}
-            dot={false}
+            dot={{ r: 3 }}
             connectNulls
-          />
+          >
+            <LabelList
+              dataKey={s.key}
+              position="top"
+              className="fill-foreground text-[10px]"
+              formatter={(value) =>
+                formatOpsTooltipNumber(value as number | string | null, metric)
+              }
+            />
+          </Line>
         ))}
       </LineChart>
     </ResponsiveContainer>
@@ -170,22 +180,27 @@ export function OpsBarChart({
   colorByCategory?: boolean;
 }) {
   return (
-    <ResponsiveContainer width="100%" height={200}>
+    <ResponsiveContainer width="100%" height={220}>
       <BarChart
         data={data}
         layout={layout === "horizontal" ? "vertical" : "horizontal"}
-        margin={{ top: 8, right: 8, left: 8, bottom: 0 }}
+        margin={{
+          top: layout === "horizontal" ? 8 : 22,
+          right: layout === "horizontal" ? 36 : 16,
+          left: 8,
+          bottom: 4,
+        }}
       >
         <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
         {layout === "horizontal" ? (
           <>
             <XAxis type="number" tick={{ fontSize: 10 }} />
-            <YAxis type="category" dataKey={xKey} tick={{ fontSize: 10 }} width={72} />
+            <YAxis type="category" dataKey={xKey} tick={{ fontSize: 10 }} width={88} />
           </>
         ) : (
           <>
-            <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} width={36} />
+            <XAxis dataKey={xKey} tick={{ fontSize: 10 }} interval={0} />
+            <YAxis tick={{ fontSize: 10 }} width={40} />
           </>
         )}
         <Tooltip
@@ -238,6 +253,14 @@ export function OpsBarChart({
                   />
                 ))
               : null}
+            <LabelList
+              dataKey={s.key}
+              position={layout === "horizontal" ? "right" : "top"}
+              className="fill-foreground text-[10px]"
+              formatter={(value) =>
+                formatOpsTooltipNumber(value as number | string | null, metric)
+              }
+            />
           </Bar>
         ))}
       </BarChart>

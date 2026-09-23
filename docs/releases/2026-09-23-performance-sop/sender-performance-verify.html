@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MG GO Performance — how to verify</title>
+  <style>
+    body { font: 14px/1.45 system-ui, sans-serif; color: #111; max-width: 760px; margin: 32px auto; padding: 0 16px; }
+    h1 { font-size: 22px; color: #0f766e; }
+    h2 { font-size: 16px; margin-top: 28px; }
+    .box { border: 1px solid #d6d3d1; border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+    .ask { background: #fff7ed; border-color: #fdba74; }
+    code { background: #f5f5f4; padding: 1px 4px; border-radius: 4px; }
+    ol { padding-left: 1.2em; }
+    li { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <h1>MG GO Performance dashboard — verify the 8 SOP fixes</h1>
+  <p>Open <code>https://dpdadmin-prod.vercel.app/en/performance</code> (after deploy). Kuwait dates.</p>
+
+  <h2>1. Top &amp; Bottom Zones</h2>
+  <div class="box">
+    <ol>
+      <li>Open <strong>Top &amp; Bottom</strong>.</li>
+      <li>On <strong>This Month</strong> you should still see a Zones block under Stores. If no zone has orders, the card says “No zone-assigned riders with orders in this period”.</li>
+      <li>Switch to <strong>Last Month</strong>. If zones had orders, Top / Bottom Zones appear with N between 2 and 10 (10% of zones, clamped).</li>
+    </ol>
+  </div>
+
+  <h2>2. Outsource Companies table</h2>
+  <div class="box">
+    <ol>
+      <li>Open <strong>Outsource</strong>.</li>
+      <li>The Companies table should not be empty when Total Riders &gt; 0.</li>
+      <li>Riders with no Company show as <strong>Unassigned company</strong>, including 0-order riders.</li>
+    </ol>
+  </div>
+
+  <h2>3. Riders’ Analysis filters</h2>
+  <div class="box">
+    <ol>
+      <li>Open <strong>Riders’ Analysis</strong>.</li>
+      <li>Every column header has a filter icon and a sort icon. Headers are fully readable (scroll sideways if needed).</li>
+      <li>Filter a text column: search, tick values, <strong>Apply</strong>. Filter Orders with Min/Max, Apply. Both stay on together (AND).</li>
+      <li>Sort cycles: click once ascending, again descending, again back to default (Orders descending).</li>
+    </ol>
+  </div>
+
+  <h2>4. Chart data labels</h2>
+  <div class="box">
+    <ol>
+      <li>Walk Overview, DPD &amp; Efficiency, Top &amp; Bottom, Outsource.</li>
+      <li>Every bar and line should show its value on the chart, not only on hover. Nothing should be clipped off the edge.</li>
+    </ol>
+  </div>
+
+  <h2>5. Default period and Clear</h2>
+  <div class="box">
+    <ol>
+      <li>Reload the page. <strong>This month</strong> is selected (1st → today, Kuwait).</li>
+      <li>Pick Last 7 days and a Partner. Click <strong>Clear filters</strong>.</li>
+      <li>All slicers return to All, and the period returns to This Month.</li>
+    </ol>
+  </div>
+
+  <h2>6. Stores CSV</h2>
+  <div class="box">
+    <ol>
+      <li>Open <strong>DPD &amp; Efficiency</strong>.</li>
+      <li>On the Americana stores table, click <strong>Export CSV</strong>.</li>
+      <li>The file has Restaurant, Zone, Orders, DPD, Riders for the rows on screen.</li>
+    </ol>
+  </div>
+
+  <h2>7. Weekly / Monthly / Year</h2>
+  <div class="box">
+    <ol>
+      <li>Stay on This Month. Click <strong>Weekly</strong>. Trend charts show up to four weeks: 1–7, 8–14, 15–21, 22–today. KPIs do not change vs Daily.</li>
+      <li>Click <strong>Monthly</strong>. A <strong>Year</strong> picker appears. Trend is Jan → the current month of that year.</li>
+      <li>KPIs, tables and Top &amp; Bottom stay on This Month (or whichever period pill is selected).</li>
+    </ol>
+  </div>
+
+  <h2>8. Data freshness (confirmation)</h2>
+  <div class="box">
+    <p><strong>Sources:</strong> verified deliveries (Kuwait <code>delivered_at</code>), drivers, profiles, restaurants, zones, vehicles, monthly Target DPD.</p>
+    <p><strong>Cache:</strong> live query every time. Browser keeps the last result 60 seconds. No auto-refresh. Use Refresh.</p>
+    <p><strong>Latency:</strong> an order counts only after it is verified, then on the next Refresh / filter / reload.</p>
+  </div>
+
+  <div class="box ask">
+    <h2>Please confirm — same rule as Order Reconciliation</h2>
+    <p>Performance now counts <strong>verified only</strong>. Reconciliation is provisionally <strong>pending + in transit + verified</strong>.</p>
+    <p>Pick one answer for both pages:</p>
+    <ol type="A">
+      <li>Verified only (current Performance).</li>
+      <li>Pending + in transit + verified on both.</li>
+      <li>Other (please specify).</li>
+    </ol>
+    <p>Also: auto-refresh, or keep manual Refresh?</p>
+  </div>
+</body>
+</html>

@@ -12,10 +12,11 @@ import {
 import {
   dimMetricValue,
   EFFICIENCY_BUCKETS,
-  formatOpsBucketLabel,
+  formatOpsTrendLabel,
   isChartableDimKey,
   OPS_METRIC_COLOR,
   type OpsChartMetric,
+  type OpsGranularity,
 } from "../performance-ops-formulas";
 import { downloadCsv, toCsv } from "../performance-ops-table";
 import {
@@ -33,9 +34,11 @@ import { cn } from "@/lib/utils";
 export function OpsDpdTab({
   data,
   metric,
+  granularity,
 }: {
   data: OpsSnapshot;
   metric: OpsChartMetric;
+  granularity: OpsGranularity;
 }) {
   const t = useTranslations("pages.performance.ops");
   const riders = useMemo(() => data.riders.map(enrichOpsRider), [data.riders]);
@@ -59,7 +62,7 @@ export function OpsDpdTab({
   }));
 
   const trend = data.trend.map((p) => ({
-    bucket: formatOpsBucketLabel(p.bucket),
+    bucket: formatOpsTrendLabel(p.bucket, granularity),
     value: dimMetricValue(p, metric),
   }));
 
@@ -242,7 +245,32 @@ export function OpsDpdTab({
         </OpsChartCard>
       </div>
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-        <h3 className="mb-2 text-sm font-semibold">{t("storesTitle")}</h3>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-semibold">{t("storesTitle")}</h3>
+          {data.stores.length ? (
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline"
+              onClick={() =>
+                downloadCsv(
+                  "ops-dpd-stores",
+                  toCsv(
+                    [t("col.store"), t("col.zone"), t("col.orders"), t("col.dpd"), t("col.riders")],
+                    data.stores.map((s) => [
+                      s.store_name,
+                      s.zone_name,
+                      s.orders,
+                      s.store_dpd,
+                      s.active_riders,
+                    ]),
+                  ),
+                )
+              }
+            >
+              {t("exportTab")}
+            </button>
+          ) : null}
+        </div>
         {data.stores.length === 0 ? (
           <p className="text-xs text-muted-foreground">{t("emptyStores")}</p>
         ) : (

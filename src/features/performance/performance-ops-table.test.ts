@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyColumnFilters, columnFilterValues, filterOptionLabel, toCsv } from "./performance-ops-table";
+import {
+  applyColumnFilters,
+  columnFilterValues,
+  filterOptionLabel,
+  nextOpsSort,
+  sortOpsRiders,
+  toCsv,
+} from "./performance-ops-table";
 import { efficiencyBucket } from "./performance-ops-formulas";
 
 describe("column filters do not change KPI inputs", () => {
@@ -25,6 +32,35 @@ describe("column filters do not change KPI inputs", () => {
     assert.equal(slicerRows.length, 3);
     assert.equal(tableRows.length, 2);
     assert.notEqual(tableRows.length, slicerRows.length);
+  });
+
+  it("numeric min/max is AND with other columns", () => {
+    const ranged = applyColumnFilters(rows, {
+      zone: ["Jahra"],
+      tgt_eff: { min: 50, max: 140 },
+    });
+    assert.deepEqual(ranged.map((r) => r.id), ["1"]);
+    const high = applyColumnFilters(rows, { tgt_eff: { min: 100 } });
+    assert.deepEqual(high.map((r) => r.id), ["1"]);
+  });
+
+  it("sort cycles asc → desc → default Orders desc", () => {
+    const sorted = [
+      { name: "Ann", orders: 1, dpd: 10 },
+      { name: "Bo", orders: 4, dpd: 3 },
+      { name: "Zed", orders: 4, dpd: 8 },
+    ];
+    assert.deepEqual(nextOpsSort(null, null, "dpd"), { key: "dpd", dir: "asc" });
+    assert.deepEqual(nextOpsSort("dpd", "asc", "dpd"), { key: "dpd", dir: "desc" });
+    assert.deepEqual(nextOpsSort("dpd", "desc", "dpd"), { key: null, dir: null });
+    assert.deepEqual(
+      sortOpsRiders(sorted, "dpd", "asc").map((r) => r.name),
+      ["Bo", "Zed", "Ann"],
+    );
+    assert.deepEqual(
+      sortOpsRiders(sorted, null, null).map((r) => r.name),
+      ["Bo", "Zed", "Ann"],
+    );
   });
 
   it("lists unique values from the slicer-scoped rows", () => {
