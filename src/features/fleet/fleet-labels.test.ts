@@ -4,6 +4,7 @@ import {
   carTypeToProjectType,
   defaultFuelMonthlyLimit,
   formatReplacementSince,
+  fuelPaymentLabel,
   isVehicleCondition,
   kuwaitYmdToIso,
   parseDriverProjectKey,
@@ -55,6 +56,15 @@ describe("fleet labels", () => {
     assert.equal(isVehicleCondition("accident"), true);
     assert.equal(isVehicleCondition("running"), true);
     assert.equal(isVehicleCondition("unknown"), false);
+  });
+
+  it("derives payment method from fuel type or transfer type", () => {
+    assert.equal(fuelPaymentLabel("card"), "Card");
+    assert.equal(fuelPaymentLabel("chip"), "Chip");
+    assert.equal(fuelPaymentLabel("cash"), "Cash");
+    assert.equal(fuelPaymentLabel("salary"), "Salary");
+    assert.equal(fuelPaymentLabel(null), null);
+    assert.equal(fuelPaymentLabel("other"), null);
   });
 
   it("persists only keeta or americana as project_key", () => {

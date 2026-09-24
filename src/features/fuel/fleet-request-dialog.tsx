@@ -370,7 +370,7 @@ export function FleetRequestDialog({
               <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
                 {requestType === "fuel" || requestType === "fuel_refund" ? (
                   <>
-                    <FleetDetailRow label={t("fieldTransfer")} muted={transferValue == null}>
+                    <FleetDetailRow label={t("paymentMethod")} muted={transferValue == null}>
                       {transferLabel}
                     </FleetDetailRow>
                     <RequestFuelTransferCard

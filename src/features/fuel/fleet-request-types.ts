@@ -1,4 +1,5 @@
 import type { DriverProjectKey, VehicleCarType, VehicleFuelCompany } from "@/features/fleet/fleet-labels";
+import type { FuelTransferType } from "@/features/requests/types";
 import type { FleetQueueRequestType } from "./fleet-request-utils";
 
 export type FleetRequestListRow = {
@@ -31,6 +32,7 @@ export type FleetRequestListRow = {
   request_no_this_month: number;
   monthly_total_kwd: number;
   created_at: string;
+  fuel_transfer_type: FuelTransferType | null;
 };
 
 export type FleetRequestAttachment = {

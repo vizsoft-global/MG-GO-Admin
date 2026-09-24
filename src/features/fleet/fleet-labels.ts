@@ -64,6 +64,14 @@ export function defaultFuelMonthlyLimit(vehicleTypeKey: string): number {
   return vehicleTypeKey === "car" ? 60 : 30;
 }
 
+export function fuelPaymentLabel(value: string | null | undefined): "Card" | "Chip" | "Cash" | "Salary" | null {
+  if (value === "card") return "Card";
+  if (value === "chip") return "Chip";
+  if (value === "cash") return "Cash";
+  if (value === "salary") return "Salary";
+  return null;
+}
+
 export function formatReplacementSince(
   startedAt: string | null | undefined,
   nowMs = Date.now(),

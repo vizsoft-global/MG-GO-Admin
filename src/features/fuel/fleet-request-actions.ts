@@ -9,6 +9,7 @@ import {
 } from "@/features/fleet/fleet-labels";
 import { fetchAdminRequestsList } from "@/features/requests/requests-actions";
 import { createClient } from "@/lib/supabase/server";
+import { FUEL_TRANSFER_TYPES, type FuelTransferType } from "@/features/requests/types";
 import type { FleetRequestListRow } from "./fleet-request-types";
 import { isAssetFirstTime } from "@/features/requests/request-create-utils";
 import {
@@ -62,21 +63,53 @@ function parseAssetFields(payload: Record<string, unknown>) {
   };
 }
 
+function isFuelTransferType(value: unknown): value is FuelTransferType {
+  return (FUEL_TRANSFER_TYPES as readonly string[]).includes(String(value));
+}
+
 export async function listFleetRequests(input: {
   type: FleetQueueRequestType;
+  driverId?: string;
 }): Promise<{ rows: FleetRequestListRow[]; error?: string }> {
+  const supabase = await createClient();
+  let search: string | undefined;
+  if (input.driverId) {
+    const { data: driver } = await supabase
+      .from("drivers")
+      .select("employee_id, driver_code")
+      .eq("id", input.driverId)
+      .maybeSingle();
+    const driverCode = typeof driver?.driver_code === "string" ? driver.driver_code.trim() : "";
+    const employeeId = typeof driver?.employee_id === "string" ? driver.employee_id.trim() : "";
+    // admin_list_requests p_search matches request_code / name / driver_code, not employee_id.
+    search = driverCode || employeeId || undefined;
+  }
+
   const list = await fetchAdminRequestsList({
     datePreset: "all",
     type: input.type,
+    search,
     limit: 200,
     offset: 0,
   });
   if (list.error) return { rows: [], error: list.error };
 
-  const driverIds = [...new Set(list.rows.map((row) => row.driver_id).filter(Boolean))];
-  const supabase = await createClient();
+  let scopedRows = input.driverId
+    ? list.rows.filter((row) => row.driver_id === input.driverId)
+    : list.rows;
+  if (input.driverId && scopedRows.length === 0) {
+    const fallback = await fetchAdminRequestsList({
+      datePreset: "all",
+      type: input.type,
+      limit: 200,
+      offset: 0,
+    });
+    if (fallback.error) return { rows: [], error: fallback.error };
+    scopedRows = fallback.rows.filter((row) => row.driver_id === input.driverId);
+  }
+  const driverIds = [...new Set(scopedRows.map((row) => row.driver_id).filter(Boolean))];
 
-  const requestIds = list.rows.map((row) => row.id);
+  const requestIds = scopedRows.map((row) => row.id);
   const [driversResult, siblingsResult, fillsResult, stampedResult] = await Promise.all([
     driverIds.length === 0
       ? Promise.resolve({ data: [] as Record<string, unknown>[], error: null })
@@ -96,7 +129,7 @@ export async function listFleetRequests(input: {
           .order("filled_at", { ascending: false }),
     requestIds.length === 0
       ? Promise.resolve({ data: [] as Record<string, unknown>[], error: null })
-      : supabase.from("requests").select("id, vehicle_id, payload").in("id", requestIds),
+      : supabase.from("requests").select("id, vehicle_id, payload, fuel_transfer_type").in("id", requestIds),
   ]);
 
   if (driversResult.error) return { rows: [], error: driversResult.error.message };
@@ -121,7 +154,10 @@ export async function listFleetRequests(input: {
     }
   }
 
-  const stampedByRequest = new Map<string, { vehicleId: string | null; payload: Record<string, unknown> }>();
+  const stampedByRequest = new Map<
+    string,
+    { vehicleId: string | null; payload: Record<string, unknown>; fuelTransferType: FuelTransferType | null }
+  >();
   for (const raw of stampedResult.data ?? []) {
     const row = asRecord(raw);
     const id = asId(row.id);
@@ -129,6 +165,7 @@ export async function listFleetRequests(input: {
     stampedByRequest.set(id, {
       vehicleId: asId(row.vehicle_id),
       payload: asRecord(row.payload),
+      fuelTransferType: isFuelTransferType(row.fuel_transfer_type) ? row.fuel_transfer_type : null,
     });
   }
 
@@ -187,7 +224,7 @@ export async function listFleetRequests(input: {
     siblingsByDriver.set(driverId, listForDriver);
   }
 
-  const rows: FleetRequestListRow[] = list.rows.map((row) => {
+  const rows: FleetRequestListRow[] = scopedRows.map((row) => {
     const driver = driverById.get(row.driver_id) ?? {};
     const stamped = stampedByRequest.get(row.id);
     const vehicleId = resolveFleetRequestVehicleId({
@@ -234,6 +271,7 @@ export async function listFleetRequests(input: {
       request_no_this_month: requestNumberThisMonth(row.created_at, createdAts),
       monthly_total_kwd: monthlyAmountTotal(row.created_at, siblings),
       created_at: row.created_at,
+      fuel_transfer_type: stamped?.fuelTransferType ?? null,
     };
   });
 
