@@ -9,7 +9,8 @@ import {
 const EXPORT_READONLY: Array<{ header: string; value: (row: VehicleListRow) => string }> = [
   { header: "Driver", value: (row) => row.assigned_driver_name ?? "" },
   { header: "Employee Company", value: (row) => row.assigned_partner_name ?? "" },
-  { header: "Cars Company", value: (row) => row.assigned_project_key ?? "" },
+  { header: "Vehicle Company", value: (row) => row.owner_partner_name ?? "" },
+  { header: "Project", value: (row) => row.assigned_project_key ?? "" },
   { header: "Replacement", value: (row) => (row.replaces_vehicle_id ? "Yes" : "No") },
   { header: "Rep. Plate", value: (row) => row.replaces_plate ?? "" },
   {

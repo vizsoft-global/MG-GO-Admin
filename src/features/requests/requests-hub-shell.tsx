@@ -2,7 +2,18 @@
 
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Car, Fuel, Inbox, Lock, Package, Send, type LucideIcon } from "lucide-react";
+import {
+  Car,
+  ClipboardList,
+  Fuel,
+  Inbox,
+  Lock,
+  Package,
+  PackageCheck,
+  ReceiptText,
+  Send,
+  type LucideIcon,
+} from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { Permission } from "@/lib/auth/permissions";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -23,9 +34,6 @@ type TypeTile = {
 
 const TYPE_TILES: TypeTile[] = [
   { type: "leave", href: "/requests/overview?type=leave&preset=all", icon: "/hub/leave.svg", color: "bg-[#0f9d8a]" },
-  { type: "asset", href: "/requests/overview?type=asset&preset=all", icon: "/hub/asset.svg", color: "bg-[#7c3aed]" },
-  { type: "fuel", href: "/requests/overview?type=fuel&preset=all", icon: "/hub/fuel.svg", color: "bg-[#ea580c]" },
-  { type: "fuel_refund", href: "/requests/overview?type=fuel_refund&preset=all", icon: "/hub/fuel.svg", color: "bg-[#ca8a04]" },
   { type: "loan", href: "/requests/overview?type=loan&preset=all", icon: "/hub/loan.svg", color: "bg-[#2563eb]" },
   { type: "complaint", href: "/requests/overview?type=complaint&preset=all", icon: "/hub/complaint.svg", color: "bg-[#db2777]" },
   { type: "document", href: "/requests/overview?type=document&preset=all", icon: "/hub/documents.svg", color: "bg-[#4f46e5]" },
@@ -84,25 +92,40 @@ function TileWash({ wash }: { wash: Wash }) {
 
 const FLEET_HUB_TILES: {
   href: string;
-  labelKey: "hub.vehicles" | "hub.fuelLog" | "hub.assets";
+  labelKey:
+    | "hub.vehicles"
+    | "hub.fuelLog"
+    | "hub.fuelRequests"
+    | "hub.fuelRefunds"
+    | "hub.fleetAssets"
+    | "hub.assetRequests";
   icon: LucideIcon;
   color: string;
   permission: Permission;
+  countKey?: "fuel" | "fuel_refund" | "asset";
 }[] = [
   { href: "/vehicles", labelKey: "hub.vehicles", icon: Car, color: "bg-[#0369a1]", permission: "vehicles.view" },
   { href: "/fuel", labelKey: "hub.fuelLog", icon: Fuel, color: "bg-[#ea580c]", permission: "fuel.view" },
-  { href: "/assets", labelKey: "hub.assets", icon: Package, color: "bg-[#6d28d9]", permission: "assets.view" },
+  { href: "/fuel/requests", labelKey: "hub.fuelRequests", icon: ClipboardList, color: "bg-[#ea580c]", permission: "fuel.view", countKey: "fuel" },
+  { href: "/fuel/refunds", labelKey: "hub.fuelRefunds", icon: ReceiptText, color: "bg-[#ca8a04]", permission: "fuel.view", countKey: "fuel_refund" },
+  { href: "/assets", labelKey: "hub.fleetAssets", icon: Package, color: "bg-[#6d28d9]", permission: "assets.view" },
+  { href: "/assets/requests", labelKey: "hub.assetRequests", icon: PackageCheck, color: "bg-[#6d28d9]", permission: "assets.view", countKey: "asset" },
 ];
 
 function FleetHubTiles() {
   const t = useTranslations("pages.requests");
   const { can } = usePermissions();
+  const { data } = useRequestTypeCounts();
+  const counts = data?.counts ?? {};
   return (
     <section className="flex flex-col items-center gap-[18px]">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
-        {t("hub.modulesHeading")}
+      <h2 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
+        <span className="inline-flex size-5 items-center justify-center rounded-md bg-[#0369a1] text-white">
+          <Car className="size-3" />
+        </span>
+        {t("hub.fleetHeading")}
       </h2>
-      <div className="flex w-[min(420px,100%)] flex-wrap content-start items-start justify-center gap-x-5 gap-y-6">
+      <div className="flex w-max max-w-full flex-nowrap items-start justify-center gap-x-5">
         {FLEET_HUB_TILES.map((tile) => (
           <FleetHubTile
             key={tile.href}
@@ -111,6 +134,7 @@ function FleetHubTiles() {
             color={tile.color}
             label={t(tile.labelKey)}
             locked={!can(tile.permission)}
+            count={tile.countKey ? counts[tile.countKey]?.pending : undefined}
           />
         ))}
       </div>
@@ -124,13 +148,21 @@ function FleetHubTile({
   color,
   label,
   locked,
+  count,
 }: {
   href: string;
   icon: LucideIcon;
   color: string;
   label: string;
   locked: boolean;
+  count?: number;
 }) {
+  const badge =
+    count != null && count > 0 ? (
+      <span className="absolute -top-[2.5px] end-2 inline-flex items-center justify-center overflow-hidden rounded-full border border-[#f6e5c3] bg-[#fffaeb] px-[7px] py-0.5 text-xs font-semibold leading-none text-[#b54708]">
+        {count > 999 ? "999+" : count}
+      </span>
+    ) : null;
   const face = (
     <>
       <span
@@ -147,6 +179,7 @@ function FleetHubTile({
       <span className="h-[34px] w-full break-words text-center text-[13px] font-medium leading-[normal] text-[#f4f4f5]">
         {label}
       </span>
+      {badge}
     </>
   );
   if (locked) {
@@ -261,7 +294,7 @@ export function RequestsHubShell() {
             <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
               {t("hub.senderHeading")}
             </h2>
-            <div className="flex w-[min(631px,100%)] flex-wrap content-start items-start justify-center gap-x-5 gap-y-6">
+            <div className="flex w-max max-w-full flex-nowrap items-start justify-center gap-x-5">
               {SENDER_TILES.map((tile) => (
                 <HubTile
                   key={tile.href}
@@ -280,7 +313,7 @@ export function RequestsHubShell() {
           <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
             {t("hub.requestTypesHeading")}
           </h2>
-          <div className="flex w-[min(631px,100%)] flex-wrap content-start items-start justify-center gap-x-5 gap-y-6">
+          <div className="flex w-max max-w-full flex-nowrap items-start justify-center gap-x-5">
             {TYPE_TILES.map((tile) => (
               <HubTile
                 key={tile.type}

@@ -154,6 +154,11 @@ export const queryKeys = {
     list: (filters: Record<string, unknown> = {}) => ["fuel", "list", filters] as const,
     requests: (type: string) => ["fuel", "requests", type] as const,
     withdrawn: (monthKey: string) => ["fuel", "withdrawn", monthKey] as const,
+    driver: (driverId: string, from: string, to: string) =>
+      ["fuel", "driver", driverId, { from, to }] as const,
+    driverRequests: (driverId: string, type: string) =>
+      ["fuel", "driver-requests", driverId, type] as const,
+    driverHeader: (driverId: string) => ["fuel", "driver-header", driverId] as const,
   },
   requests: {
     all: () => ["requests"] as const,

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Calendar, CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Loader2, Pencil, Search, SlidersHorizontal } from "lucide-react";
+import { Calendar, CalendarDays, CalendarRange, ChevronLeft, ChevronRight, ExternalLink, Loader2, Pencil, Search, SlidersHorizontal } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   AppDataTable,
@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FuelCompanyBadge, FuelTypeBadge, ProjectBadge } from "@/features/fleet/fleet-badges";
 import { toKuwaitYmd } from "@/features/fleet/fleet-labels";
+import { Link, useRouter } from "@/i18n/navigation";
 import { formatKuwaitDayLabel, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { FleetRequestDialog } from "./fleet-request-dialog";
 import { FLEET_REQUEST_CHIP_CLASS } from "./fleet-request-utils";
@@ -275,14 +276,8 @@ export function FuelPageShell({ initialAnchor }: { initialAnchor: string }) {
               <FuelRow
                 key={row.key}
                 row={row}
-                onOpen={() => {
-                  if (row.fills.length > 0) {
-                    setSelectedKey(row.key);
-                    return;
-                  }
-                  const mark = row.dayMarks.flat().at(-1);
-                  const request = mark ? requestRows.find((item) => item.id === mark.id) : undefined;
-                  if (request) setSelectedRequest(request);
+                onOpenFill={() => {
+                  if (row.fills.length > 0) setSelectedKey(row.key);
                 }}
                 onOpenRequest={(id) => {
                   const request = requestRows.find((item) => item.id === id);
@@ -324,23 +319,33 @@ export function FuelPageShell({ initialAnchor }: { initialAnchor: string }) {
 
 function FuelRow({
   row,
-  onOpen,
+  onOpenFill,
   onOpenRequest,
   onEditWithdrawn,
 }: {
   row: FuelLogRow;
-  onOpen: () => void;
+  onOpenFill: () => void;
   onOpenRequest: (id: string) => void;
   onEditWithdrawn: () => void;
 }) {
+  const t = useTranslations("pages.fuel");
+  const router = useRouter();
   return (
     <AppDataTableRow
-      className={row.critical ? "bg-destructive/10 hover:bg-destructive/15" : undefined}
-      onClick={onOpen}
+      className={row.critical ? "cursor-pointer bg-destructive/10 hover:bg-destructive/15" : "cursor-pointer"}
+      onClick={() => router.push(`/fuel/drivers/${row.driverId}`)}
     >
       <TableCell className="whitespace-nowrap">
         <p className="font-medium">{row.driverName ?? "—"}</p>
         {row.employeeId ? <p className="text-[11px] text-muted-foreground">{row.employeeId}</p> : null}
+        <Link
+          href={`/fuel/drivers/${row.driverId}`}
+          className="inline-flex items-center gap-1 text-[11px] text-primary hover:bg-primary/10"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <ExternalLink className="h-3 w-3" />
+          {t("viewDetails")}
+        </Link>
       </TableCell>
       <TableCell className="whitespace-nowrap font-medium">{row.plate ?? "—"}</TableCell>
       <TableCell className="font-mono text-[11px]">{row.chip ?? "—"}</TableCell>
@@ -384,9 +389,16 @@ function FuelRow({
           <TableCell key={index} className="whitespace-nowrap">
             <span className="inline-flex flex-col items-start gap-1">
               {cell ? (
-                <span className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800">
+                <button
+                  type="button"
+                  className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenFill();
+                  }}
+                >
                   {formatKwd(cell.costKwd)}
-                </span>
+                </button>
               ) : null}
               {marks.map((mark) => (
                 <button

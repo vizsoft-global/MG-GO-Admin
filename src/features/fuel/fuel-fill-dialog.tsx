@@ -10,6 +10,7 @@ import { SectionHeading } from "@/features/drivers/form/driver-form-primitives";
 import { FleetAttachmentRow } from "@/features/fleet/fleet-attachment-row";
 import { FleetRecordDialog } from "@/features/fleet/fleet-record-dialog";
 import { FuelCompanyBadge, FuelTypeBadge, ProjectBadge } from "@/features/fleet/fleet-badges";
+import { fuelPaymentLabel } from "@/features/fleet/fleet-labels";
 import { formatKuwaitDayLabel } from "@/lib/date/kuwait-dates";
 import { fetchFuelFillAttachmentUrl } from "./fuel-actions";
 import { FuelFillMap } from "./fuel-fill-map";
@@ -110,6 +111,7 @@ export function FuelFillDialog({
             <DetailRow label={t("fieldModel")} value={row.model ?? "—"} />
             <DetailRow label={t("colCarsCompany")} value={row.vehicleCompany ?? "—"} />
             <DetailRow label={t("colFuelType")} value={<FuelTypeBadge value={row.fuelType} />} />
+            <DetailRow label={t("paymentMethod")} value={fuelPaymentLabel(row.fuelType) ?? "—"} />
             <DetailRow label={t("colChip")} value={row.chip ?? "—"} />
             <DetailRow label={t("colFuelCompany")} value={<FuelCompanyBadge value={row.fuelCompany} />} />
             <DetailRow label={t("colProject")} value={<ProjectBadge value={row.projectKey} />} />

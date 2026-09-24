@@ -53,13 +53,8 @@ const CAR_TYPE_CLASS: Record<VehicleCarType, string> = {
   maintenance: "bg-fleet-car-maintenance",
 };
 
-const CAR_TYPE_LABEL: Record<VehicleCarType, string> = {
-  company: "Company Car",
-  rent: "Rent Car",
-  maintenance: "Maintenance Car",
-};
-
 export function CarTypeBadge({ value }: { value: VehicleCarType | null | undefined }) {
+  const t = useTranslations("pages.vehicles");
   if (!value) return <span className="text-muted-foreground">—</span>;
   return (
     <span
@@ -68,7 +63,7 @@ export function CarTypeBadge({ value }: { value: VehicleCarType | null | undefin
         CAR_TYPE_CLASS[value],
       )}
     >
-      <span className="truncate">{CAR_TYPE_LABEL[value]}</span>
+      <span className="truncate">{t(`carType.${value}`)}</span>
     </span>
   );
 }

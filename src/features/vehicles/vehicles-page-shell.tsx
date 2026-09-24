@@ -41,6 +41,7 @@ import {
   FuelCompanyBadge,
   FuelTypeBadge,
   KindBadge,
+  ProjectBadge,
   ReplacementBadge,
   VehicleStatusBadge,
 } from "@/features/fleet/fleet-badges";
@@ -426,6 +427,7 @@ export function VehiclesPageShell({
               { id: "fuelType", label: t("colFuelType") },
               { id: "fuelCompany", label: t("colFuelCompany") },
               { id: "carsCompany", label: t("colCarsCompany") },
+              { id: "project", label: t("colProject") },
               { id: "typeOfUse", label: t("colTypeOfUse") },
               { id: "location", label: t("colLocation") },
               { id: "driver", label: t("colDriver") },
@@ -527,6 +529,9 @@ function VehicleRow({
         <FuelCompanyBadge value={row.fuel_company} />
       </TableCell>
       <TableCell className="whitespace-nowrap">{row.owner_partner_name ?? "—"}</TableCell>
+      <TableCell>
+        <ProjectBadge value={row.assigned_project_key} />
+      </TableCell>
       <TableCell className="whitespace-nowrap">
         {row.type_of_use ? t(`typeOfUse.${row.type_of_use}`) : "—"}
       </TableCell>
