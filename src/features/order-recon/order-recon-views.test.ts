@@ -214,6 +214,9 @@ describe("run employees and dailyForEmployee", () => {
       from_date: "2026-09-01",
       to_date: "2026-09-18",
       created_at: "2026-09-22T00:00:00Z",
+      status: "applied",
+      undo_seq: null,
+      redoable: true,
       kpi: {
         compared: 10,
         mismatches: 2,

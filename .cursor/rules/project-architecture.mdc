@@ -237,6 +237,10 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-09-24` — **Order recon import template, logs, undo/redo.** Upload dialog matches Vehicles: sample `order-recon-template.xlsx` (Data + Guide), column details, Previous imports + View import row log, Undo/Redo on `order_recon_runs.status`. Daily reads the latest applied run. A new Compare clears the redo stack. Migration `20261028100000`. No Play.
+
+- `[admin only] 2026-09-24` — **Fleet returns to the sidebar.** `group-fleet` (Car icon) sits after Overview with Vehicles, Fuel Log, Fuel Request, Fuel Refund, Fleet Assets, Asset requests. `relocateFleetItems()` pins them again; `/requests` no longer shows the Fleet tile row. No migration / no Play.
+
 - `[admin only] 2026-09-24` — **Fleet hub tiles + driver fuel page.** `/requests` Fleet section is six tiles (Vehicles, Fuel Log, Fuel requests, Fuel refunds, Fleet Assets, Asset requests); Request types drops Asset / Fuel / Fuel refund so those queues live only under Fleet. Sidebar still strips `group-fleet`. `/vehicles` labels Vehicle Company / Vehicle Type (Company-Owned / Rental / Maintenance) and adds Project. `/fuel` row opens `/fuel/drivers/[driverId]` (transactions + that rider’s fuel/refund requests); day chips still open the record dialog. Payment method is derived (`fuel_type` Card/Chip, `fuel_transfer_type` Cash/Salary). No migration / no Play.
 
 - `[admin only] 2026-09-24` — **Vehicles bulk import and export.** `/vehicles` header exports the filtered rows (including Vehicle ID) and opens a Drivers-style import dialog for `vehicles.create`. Sample template, column picker, preview (create / update / error; in-file duplicate Vehicle IDs reject both rows). `vehicle_import_batches` / `vehicle_import_rows` store before/after for Undo and Redo. A new Apply clears the redo stack. The driver app does not read these tables. Migration `20261028000000`. No Play.

@@ -5548,7 +5548,11 @@ export type Database = {
           from_date: string
           id: string
           kpi: Json
+          redoable: boolean
+          status: string
           to_date: string
+          undo_seq: number | null
+          undone_at: string | null
           uploaded_by: string | null
         }
         Insert: {
@@ -5557,7 +5561,11 @@ export type Database = {
           from_date: string
           id?: string
           kpi?: Json
+          redoable?: boolean
+          status?: string
           to_date: string
+          undo_seq?: number | null
+          undone_at?: string | null
           uploaded_by?: string | null
         }
         Update: {
@@ -5566,7 +5574,11 @@ export type Database = {
           from_date?: string
           id?: string
           kpi?: Json
+          redoable?: boolean
+          status?: string
           to_date?: string
+          undo_seq?: number | null
+          undone_at?: string | null
           uploaded_by?: string | null
         }
         Relationships: [
