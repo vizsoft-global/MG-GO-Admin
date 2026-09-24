@@ -2,7 +2,9 @@
 
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Inbox, Send } from "lucide-react";
+import { Car, Fuel, Inbox, Lock, Package, Send, type LucideIcon } from "lucide-react";
+import { usePermissions } from "@/hooks/use-permissions";
+import type { Permission } from "@/lib/auth/permissions";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
@@ -77,6 +79,93 @@ function TileWash({ wash }: { wash: Wash }) {
   }
   return (
     <span className="absolute inset-0 bg-[linear-gradient(131deg,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0)_36%,rgba(0,0,0,0.14)_71%)]" />
+  );
+}
+
+const FLEET_HUB_TILES: {
+  href: string;
+  labelKey: "hub.vehicles" | "hub.fuelLog" | "hub.assets";
+  icon: LucideIcon;
+  color: string;
+  permission: Permission;
+}[] = [
+  { href: "/vehicles", labelKey: "hub.vehicles", icon: Car, color: "bg-[#0369a1]", permission: "vehicles.view" },
+  { href: "/fuel", labelKey: "hub.fuelLog", icon: Fuel, color: "bg-[#ea580c]", permission: "fuel.view" },
+  { href: "/assets", labelKey: "hub.assets", icon: Package, color: "bg-[#6d28d9]", permission: "assets.view" },
+];
+
+function FleetHubTiles() {
+  const t = useTranslations("pages.requests");
+  const { can } = usePermissions();
+  return (
+    <section className="flex flex-col items-center gap-[18px]">
+      <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
+        {t("hub.modulesHeading")}
+      </h2>
+      <div className="flex w-[min(420px,100%)] flex-wrap content-start items-start justify-center gap-x-5 gap-y-6">
+        {FLEET_HUB_TILES.map((tile) => (
+          <FleetHubTile
+            key={tile.href}
+            href={tile.href}
+            icon={tile.icon}
+            color={tile.color}
+            label={t(tile.labelKey)}
+            locked={!can(tile.permission)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FleetHubTile({
+  href,
+  icon: Icon,
+  color,
+  label,
+  locked,
+}: {
+  href: string;
+  icon: LucideIcon;
+  color: string;
+  label: string;
+  locked: boolean;
+}) {
+  const face = (
+    <>
+      <span
+        className={cn(
+          "relative size-24 shrink-0 overflow-hidden rounded-[20px] shadow-[0_8px_16px_rgba(0,0,0,0.3)]",
+          color,
+          locked && "opacity-50",
+        )}
+      >
+        <TileWash wash="tile" />
+        <Icon className="absolute left-1/2 top-1/2 size-10 -translate-x-1/2 -translate-y-1/2 text-white" />
+        {locked ? <Lock className="absolute bottom-2 end-2 size-4 text-white" /> : null}
+      </span>
+      <span className="h-[34px] w-full break-words text-center text-[13px] font-medium leading-[normal] text-[#f4f4f5]">
+        {label}
+      </span>
+    </>
+  );
+  if (locked) {
+    return (
+      <div
+        aria-disabled="true"
+        className="relative flex h-[148px] w-[112px] cursor-not-allowed flex-col items-center justify-center gap-3"
+      >
+        {face}
+      </div>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      className="relative flex h-[148px] w-[112px] flex-col items-center justify-center gap-3 transition-opacity duration-150 hover:opacity-90 active:scale-[0.97]"
+    >
+      {face}
+    </Link>
   );
 }
 
@@ -164,6 +253,8 @@ export function RequestsHubShell() {
             {view === "sender" ? t("hub.senderSubtitle") : t("hub.subtitle")}
           </p>
         </header>
+
+        <FleetHubTiles />
 
         {view === "sender" ? (
           <section className="flex flex-col items-center gap-[18px]">

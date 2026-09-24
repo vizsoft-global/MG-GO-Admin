@@ -7,10 +7,12 @@ import {
   Ban,
   Bike,
   CircleDot,
+  Download,
   ExternalLink,
   Loader2,
   Plus,
   Search,
+  Upload,
   Users,
   Wallet,
   Wrench,
@@ -43,6 +45,8 @@ import {
   VehicleStatusBadge,
 } from "@/features/fleet/fleet-badges";
 import { formatReplacementSince } from "@/features/fleet/fleet-labels";
+import { VehicleBulkImportDialog } from "./import/vehicle-bulk-import-dialog";
+import { downloadVehicleListXlsx } from "./import/vehicle-import-sheet";
 import { VehicleFormDialog } from "./vehicle-form-dialog";
 import { VehicleRecordDialog } from "./vehicle-record-dialog";
 import { useVehicleTypes, useVehiclesList } from "./use-vehicles";
@@ -96,6 +100,7 @@ export function VehiclesPageShell({
   const [kindFilter, setKindFilter] = useState<VehicleKindFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const activeTab = parseVehicleListTab(tab);
   const filterState = {
     tab: activeTab,
@@ -199,16 +204,39 @@ export function VehiclesPageShell({
         title={t("title")}
         description={t("subtitle")}
         actions={
-          <Button
-            className="h-9 cursor-pointer rounded-lg"
-            disabled={!canCreate}
-            onClick={() => {
-              if (canCreate) replaceQuery({ add: true });
-            }}
-          >
-            <Plus className="me-2 h-3.5 w-3.5" />
-            {t("addVehicle")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 cursor-pointer rounded-lg"
+              disabled={isLoading || visible.length === 0}
+              onClick={() => downloadVehicleListXlsx(visible)}
+            >
+              <Download className="me-2 h-3.5 w-3.5" />
+              {t("export")}
+            </Button>
+            {canCreate ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload className="me-2 h-3.5 w-3.5" />
+                {t("bulkImport")}
+              </Button>
+            ) : null}
+            <Button
+              className="h-9 cursor-pointer rounded-lg"
+              disabled={!canCreate}
+              onClick={() => {
+                if (canCreate) replaceQuery({ add: true });
+              }}
+            >
+              <Plus className="me-2 h-3.5 w-3.5" />
+              {t("addVehicle")}
+            </Button>
+          </div>
         }
         tabs={
           <TabBar
@@ -444,6 +472,11 @@ export function VehiclesPageShell({
           if (addOpen) replaceQuery({ add: false });
           setSelectedId(id);
         }}
+      />
+      <VehicleBulkImportDialog
+        open={importOpen}
+        vehicles={vehicles}
+        onOpenChange={setImportOpen}
       />
     </AppPage>
   );

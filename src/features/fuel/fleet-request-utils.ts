@@ -1,6 +1,13 @@
 import { toKuwaitYmd } from "@/features/fleet/fleet-labels";
 
 export const FLEET_FUEL_REQUEST_TYPES = ["fuel", "fuel_refund"] as const;
+
+/** Hub tile tones. Fuel request and fuel refund stay these two colors in the log and the popup. */
+export const FLEET_REQUEST_CHIP_CLASS = {
+  fuel: "bg-[#ea580c] text-white",
+  fuel_refund: "bg-[#ca8a04] text-white",
+  asset: "bg-[#7c3aed] text-white",
+} as const;
 export type FleetFuelRequestType = (typeof FLEET_FUEL_REQUEST_TYPES)[number];
 
 export const FLEET_QUEUE_REQUEST_TYPES = ["fuel", "fuel_refund", "asset"] as const;

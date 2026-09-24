@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { kuwaitSatFriWeek } from "../../lib/date/kuwait-dates";
-import { buildFuelWeekRows, isFuelRowCritical, parseFuelFillRow } from "./fuel-week";
+import {
+  applyWithdrawnOverride,
+  buildFuelWeekRows,
+  isFuelRowCritical,
+  parseFuelFillRow,
+  withFuelRequestRows,
+  type FuelLogRequest,
+} from "./fuel-week";
 import type { FuelFillListItem } from "./types";
 
 function fill(partial: Partial<FuelFillListItem> & Pick<FuelFillListItem, "id" | "ymd" | "cost_kwd">): FuelFillListItem {
@@ -97,5 +104,77 @@ describe("fuel week rows", () => {
     assert.equal(parsed?.ymd, "2026-09-06");
     assert.equal(parsed?.attachments.length, 1);
     assert.equal(parseFuelFillRow({ id: "x" }), null);
+  });
+});
+
+function request(partial: Partial<FuelLogRequest> & Pick<FuelLogRequest, "id" | "request_code" | "request_type" | "driver_id" | "created_at">): FuelLogRequest {
+  return {
+    driver_name: null,
+    employee_id: null,
+    employee_company: null,
+    vehicle_id: null,
+    plate: null,
+    vehicle_model: null,
+    vehicle_company: null,
+    fuel_company: null,
+    project_key: null,
+    zone: null,
+    amount_kwd: null,
+    ...partial,
+  };
+}
+
+describe("withFuelRequestRows", () => {
+  const days = ["2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25"];
+
+  it("keeps the fill and adds request-only riders on the Kuwait day", () => {
+    const fills = buildFuelWeekRows(
+      [fill({ id: "f1", ymd: "2026-09-22", cost_kwd: 2.5, driver_name: "Ahmed Ali" })],
+      days,
+      "2026-09",
+    );
+    const rows = withFuelRequestRows(
+      fills,
+      [
+        request({
+          id: "r1",
+          request_code: "RCM-0143",
+          request_type: "fuel",
+          driver_id: "d1",
+          driver_name: "Ahmed Ali",
+          vehicle_id: "v1",
+          amount_kwd: 12.5,
+          created_at: "2026-09-22T08:00:00+03:00",
+        }),
+        request({
+          id: "r2",
+          request_code: "RFR-0012",
+          request_type: "fuel_refund",
+          driver_id: "d2",
+          driver_name: "Jhon Doe",
+          created_at: "2026-09-23T08:00:00+03:00",
+        }),
+        request({
+          id: "r3",
+          request_code: "RFR-0001",
+          request_type: "fuel_refund",
+          driver_id: "d3",
+          created_at: "2026-09-01T08:00:00+03:00",
+        }),
+      ],
+      days,
+    );
+    assert.equal(rows.length, 2);
+    const ahmed = rows.find((row) => row.driverId === "d1");
+    assert.equal(ahmed?.days[3]?.costKwd, 2.5);
+    assert.deepEqual(ahmed?.dayMarks[3], [{ id: "r1", code: "RCM-0143", type: "fuel", amountKwd: 12.5 }]);
+    const jhon = rows.find((row) => row.driverId === "d2");
+    assert.equal(jhon?.fills.length, 0);
+    assert.equal(jhon?.monthlyLimit, 0);
+    assert.deepEqual(jhon?.dayMarks[4], [{ id: "r2", code: "RFR-0012", type: "fuel_refund", amountKwd: null }]);
+    const edited = applyWithdrawnOverride(ahmed!, 40);
+    assert.equal(edited.withdrawn, 40);
+    assert.equal(edited.critical, false);
+    assert.equal(applyWithdrawnOverride(ahmed!, 55).critical, true);
   });
 });

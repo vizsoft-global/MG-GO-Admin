@@ -56,6 +56,10 @@ import {
   parseDriverAckNote,
   shouldOfferRequestDocumentsAction,
 } from "./request-create-utils";
+import { FleetAttachmentRow } from "@/features/fleet/fleet-attachment-row";
+import { CarTypeBadge, FuelCompanyBadge, ProjectBadge } from "@/features/fleet/fleet-badges";
+import { FleetDetailRow } from "@/features/fleet/fleet-record-dialog";
+import { RequestRecordBody } from "./request-record-body";
 import { RequesterHeader } from "./requester-header";
 import { DECISION_TERM_TYPES } from "./types";
 import type {
@@ -70,13 +74,6 @@ import {
   useSaveDecisionTerms,
   useUploadStaffRequestAttachments,
 } from "./use-requests";
-
-function formatFileSize(bytes: number | null): string {
-  if (bytes == null) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 /** Each template action reads as its own outcome — a shared check mark would imply approval. */
 const ACTION_ICONS: Record<string, LucideIcon> = {
@@ -132,6 +129,7 @@ function termRowsFor(
 
 export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const t = useTranslations("pages.requests");
+  const fleetT = useTranslations("pages.fleetFuelQueue");
   const { can } = useAuth();
   const canDecide = can("requests.approve") || can("requests.manage");
   const { data, isLoading, refetch } = useAdminRequestDetail(requestId);
@@ -313,48 +311,55 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         }
       />
 
-      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-        <RequesterHeader
-          driverId={request.driver_id}
-          requestId={request.id}
-          requester={request.requester}
-        />
-      </div>
-
-      <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
-        <section className="h-full rounded-xl border border-border bg-card p-4 shadow-sm">
-          {subjectRow || request.details ? (
-            <div className="mb-3 space-y-1.5">
-              {subjectRow ? (
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {t("detail.subject")}
-                  </p>
-                  <p className="text-sm font-semibold">{subjectRow.value}</p>
-                </div>
-              ) : null}
-              {message ? (
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {t("detail.message")}
-                  </p>
-                  <p className="text-sm whitespace-pre-wrap text-foreground/90">{message}</p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <h2 className="mb-2 text-sm font-semibold">{t("detail.fields")}</h2>
-          {allDetailRows.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("detail.noTypedFields")}</p>
-          ) : (
-            <div className="divide-y divide-border rounded-lg border border-border text-sm">
-              {allDetailRows.map((row) => (
-                <RequestFieldRow
-                  key={row.key}
-                  label={row.label}
-                  muted={row.value === "—" && !row.gatedKey}
-                >
+      <RequestRecordBody
+        summary={request.amount_kwd != null ? `${request.amount_kwd.toFixed(3)} KWD` : undefined}
+        requester={
+          <RequesterHeader
+            driverId={request.driver_id}
+            requestId={request.id}
+            requester={request.requester}
+          />
+        }
+        employee={
+          <>
+            <FleetDetailRow label={fleetT("colDriver")}>{request.requester?.name ?? "—"}</FleetDetailRow>
+            <FleetDetailRow label={fleetT("fieldEmployeeId")}>—</FleetDetailRow>
+            <FleetDetailRow label={fleetT("colEmpCompany")}>—</FleetDetailRow>
+            <FleetDetailRow label={fleetT("fieldPhone")}>{request.requester?.phone ?? "—"}</FleetDetailRow>
+            <FleetDetailRow label={fleetT("colProject")}>
+              <ProjectBadge value={null} />
+            </FleetDetailRow>
+            <FleetDetailRow label={fleetT("colZone")}>{request.requester?.zone ?? "—"}</FleetDetailRow>
+          </>
+        }
+        vehicle={
+          <>
+            <FleetDetailRow label={fleetT("fieldPlate")}>—</FleetDetailRow>
+            <FleetDetailRow label={fleetT("fieldModel")}>—</FleetDetailRow>
+            <FleetDetailRow label={fleetT("colVehicleCompany")}>—</FleetDetailRow>
+            {request.request_type === "fuel" || request.request_type === "fuel_refund" ? (
+              <>
+                <FleetDetailRow label={fleetT("fieldCarType")}>
+                  <CarTypeBadge value={null} />
+                </FleetDetailRow>
+                <FleetDetailRow label={fleetT("colFuelCompany")}>
+                  <FuelCompanyBadge value={null} />
+                </FleetDetailRow>
+              </>
+            ) : null}
+          </>
+        }
+        fields={
+          <>
+            {subjectRow ? (
+              <FleetDetailRow label={t("detail.subject")}>{subjectRow.value}</FleetDetailRow>
+            ) : null}
+            {message ? <FleetDetailRow label={t("detail.message")}>{message}</FleetDetailRow> : null}
+            {allDetailRows.length === 0 && !subjectRow && !message ? (
+              <p className="text-xs text-muted-foreground">{t("detail.noTypedFields")}</p>
+            ) : (
+              allDetailRows.map((row) => (
+                <FleetDetailRow key={row.key} label={row.label} muted={row.value === "—" && !row.gatedKey}>
                   {row.gatedKey ? (
                     <span className="text-[11px] font-normal text-warning">
                       {t(`detail.${row.gatedKey}` as "detail.categoryGated")}
@@ -362,54 +367,35 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                   ) : (
                     row.value
                   )}
-                </RequestFieldRow>
+                </FleetDetailRow>
+              ))
+            )}
+          </>
+        }
+        evidence={
+          attachments.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">{t("detail.noAttachments")}</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {attachments.map((item) => (
+                <FleetAttachmentRow
+                  key={item.id}
+                  title={item.title ?? attachmentDisplayName(item.file_name, item.storage_key)}
+                  fileName={attachmentDisplayName(item.file_name, item.storage_key)}
+                  capturedAt={item.captured_at}
+                  source={item.source}
+                  onOpen={item.storage_key ? () => void openAttachment(item.storage_key) : undefined}
+                />
               ))}
             </div>
-          )}
-
-          <div className="mt-3 border-t border-border pt-3">
-            <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              <Paperclip className="h-3.5 w-3.5" />
-              {t("detail.attachments")}
-            </h3>
-            {attachments.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground">{t("detail.noAttachments")}</p>
-            ) : (
-              <ul className="space-y-1">
-                {attachments.map((a) => (
-                  <li key={a.id} className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => void openAttachment(a.storage_key)}
-                      className="flex w-full min-w-0 items-center gap-1.5 text-start text-sm text-primary hover:bg-primary/10"
-                    >
-                      <Download className="h-3.5 w-3.5 shrink-0" />
-                      <span className="min-w-0 truncate">
-                        {attachmentDisplayName(a.file_name, a.storage_key)}
-                      </span>
-                      {a.byte_size != null ? (
-                        <span className="shrink-0 text-[11px] text-muted-foreground">
-                          {formatFileSize(a.byte_size)}
-                        </span>
-                      ) : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-
-        <div className="flex h-full flex-col gap-2">
-          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <h2 className="mb-2 text-sm font-semibold">{t("detail.approval")}</h2>
+          )
+        }
+        approval={
+          <>
             <RequestApprovalTimeline steps={steps} />
-
             {clarifications.length > 0 ? (
               <div className="mt-3 space-y-2">
-                <h3 className="text-xs font-semibold text-muted-foreground">
-                  {t("detail.clarifications")}
-                </h3>
+                <h3 className="text-xs font-semibold text-muted-foreground">{t("detail.clarifications")}</h3>
                 {clarifications.map((c) => (
                   <div key={c.id} className="rounded-lg border border-border p-2 text-xs">
                     <p className="font-medium">{c.question}</p>
@@ -422,7 +408,32 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 ))}
               </div>
             ) : null}
-          </section>
+          </>
+        }
+        side={
+          <>
+            <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+              {request.request_type === "fuel" || request.request_type === "fuel_refund" ? (
+                <>
+                  <FleetDetailRow label={fleetT("fieldTransfer")} muted={request.fuel_transfer_type == null}>
+                    {request.fuel_transfer_type == null
+                      ? t("detail.fuelTransfer.notSet")
+                      : t(`detail.fuelTransfer.options.${request.fuel_transfer_type}` as "detail.fuelTransfer.options.cash")}
+                  </FleetDetailRow>
+                  <RequestFuelTransferCard
+                    requestId={request.id}
+                    value={request.fuel_transfer_type}
+                    editable={canDecide && request.status !== "closed"}
+                    compact
+                  />
+                </>
+              ) : null}
+              <FleetDetailRow label={fleetT("colStatus")}>
+                <StatusPill dot variant={requestStatusVariant(request.status, request.payload)}>
+                  {t(`status.${requestStatusLabelKey(request.status, request.payload)}` as "status.pending")}
+                </StatusPill>
+              </FleetDetailRow>
+            </div>
 
         {request ? <RequestRescheduleSummary payload={request.payload} /> : null}
 
@@ -433,14 +444,6 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
               {t("detail.reschedule.awaitingRider")}
             </p>
           </section>
-        ) : null}
-
-        {request.request_type === "fuel" || request.request_type === "fuel_refund" ? (
-          <RequestFuelTransferCard
-            requestId={request.id}
-            value={request.fuel_transfer_type}
-            editable={canDecide && request.status !== "closed"}
-          />
         ) : null}
 
         {canDecide && !decided && !awaitingRider ? (
@@ -634,8 +637,9 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             ) : null}
           </section>
         ) : null}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {takesTerms ? (
         <RequestDecisionTermsDialog

@@ -3,11 +3,15 @@ import { describe, it } from "node:test";
 import type { OrderReconTableRow, ReconRowStatus } from "./order-recon-types";
 import {
   buildReconViews,
+  buildRunEmployees,
+  buildRunProgress,
+  dailyForEmployee,
   dailyPreservesComparedTotals,
   rollupDaily,
   unresolvedRows,
   unusedAppRiders,
 } from "./order-recon-views";
+import type { OrderReconRunSummary } from "./order-recon-types";
 
 function row(partial: Partial<OrderReconTableRow> & Pick<OrderReconTableRow, "status">): OrderReconTableRow {
   return {
@@ -20,6 +24,8 @@ function row(partial: Partial<OrderReconTableRow> & Pick<OrderReconTableRow, "st
     app_orders: partial.app_orders ?? 0,
     difference: partial.difference ?? (partial.app_orders ?? 0) - (partial.excel_orders ?? 0),
     status: partial.status,
+    driver_id: partial.driver_id,
+    restaurant_id: partial.restaurant_id,
   };
 }
 
@@ -62,14 +68,14 @@ describe("rollupDaily", () => {
     assert.equal(buildReconViews(rows).kpi.mismatches, 2);
   });
 
-  it("marks excel 0 / app > 0 as app_only", () => {
-    const daily = rollupDaily([
-      row({ excel_orders: 0, app_orders: 2, status: "app_only" }),
-    ]);
-    assert.equal(daily[0]?.status, "app_only");
+  it("hides excel 0 / app > 0 from daily and counts them as app_only kpi", () => {
+    const rows = [row({ excel_orders: 0, app_orders: 2, status: "app_only" })];
+    assert.equal(rollupDaily(rows).length, 0);
+    assert.equal(buildReconViews(rows).kpi.app_only, 1);
+    assert.equal(buildReconViews(rows).kpi.compared, 0);
   });
 
-  it("does not collapse empty employee_id app-only rows into one rider", () => {
+  it("does not put empty employee_id app-only rows on daily", () => {
     const rows: OrderReconTableRow[] = [
       row({
         id: "anon-a",
@@ -91,9 +97,8 @@ describe("rollupDaily", () => {
       }),
     ];
     const daily = rollupDaily(rows);
-    assert.equal(daily.length, 2);
-    assert.equal(daily.reduce((sum, r) => sum + r.app_orders, 0), 8);
-    assert.notEqual(daily[0]?.id, daily[1]?.id);
+    assert.equal(daily.length, 0);
+    assert.equal(buildReconViews(rows).kpi.app_only, 2);
   });
 });
 
@@ -156,6 +161,76 @@ describe("unusedAppRiders", () => {
     assert.equal(rollupDaily(rows).length, 0);
     assert.equal(buildReconViews(rows).kpi.unresolved, 1);
     assert.equal(buildReconViews(rows).kpi.not_using_app, 0);
+  });
+});
+
+describe("run employees and dailyForEmployee", () => {
+  it("puts a resolved rider in app and an unknown id in blank, not unused", () => {
+    const rows: OrderReconTableRow[] = [
+      row({
+        employee_id: "1304",
+        employee_name: "Ada",
+        excel_orders: 4,
+        app_orders: 4,
+        status: "match",
+        driver_id: "drv-1",
+      }),
+      row({
+        id: "u-1",
+        employee_id: "99999",
+        employee_name: "Ghost",
+        restaurant_name: "No Such Place",
+        excel_orders: 8,
+        app_orders: 0,
+        status: "unresolved",
+      }),
+    ];
+    const employees = buildRunEmployees(rows);
+    assert.equal(employees.in_app.length, 1);
+    assert.equal(employees.in_app[0]?.employee_id, "1304");
+    assert.equal(employees.blank.length, 1);
+    assert.equal(employees.blank[0]?.employee_id, "99999");
+    assert.equal(employees.blank[0]?.status, "unresolved");
+    assert.equal(unusedAppRiders(rows).length, 0);
+  });
+
+  it("dailyForEmployee returns only that rider's dates", () => {
+    const rows: OrderReconTableRow[] = [
+      row({ employee_id: "1304", work_date: "2026-09-01", excel_orders: 4, app_orders: 1, status: "mismatch" }),
+      row({ employee_id: "1304", work_date: "2026-09-02", excel_orders: 1, app_orders: 4, status: "mismatch" }),
+      row({ employee_id: "1401", work_date: "2026-09-01", excel_orders: 9, app_orders: 9, status: "match" }),
+    ];
+    const daily = dailyForEmployee(rows, "1304");
+    assert.equal(daily.length, 2);
+    assert.equal(daily.every((r) => r.rider_key === "1304"), true);
+    assert.equal(daily[0]?.difference, -3);
+    assert.equal(daily[1]?.difference, 3);
+  });
+
+  it("run progress card is one upload, not employees", () => {
+    const run: OrderReconRunSummary = {
+      id: "run-1",
+      file_name: "Adjusted.xlsx",
+      from_date: "2026-09-01",
+      to_date: "2026-09-18",
+      created_at: "2026-09-22T00:00:00Z",
+      kpi: {
+        compared: 10,
+        mismatches: 2,
+        unresolved: 1,
+        app_only: 5,
+        not_using_app: 3,
+        matched_days: 8,
+        sheet_days: 13,
+      },
+    };
+    const progress = buildRunProgress(run);
+    assert.equal(progress.id, "run-1");
+    assert.equal(progress.file_name, "Adjusted.xlsx");
+    assert.equal(progress.matched_days, 8);
+    assert.equal(progress.sheet_days, 13);
+    assert.equal(progress.pct, 62);
+    assert.equal(progress.unused, 3);
   });
 });
 

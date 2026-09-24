@@ -6,6 +6,8 @@ export type OrderReconKpi = {
   unresolved: number;
   app_only: number;
   not_using_app?: number;
+  matched_days?: number;
+  sheet_days?: number;
 };
 
 export type OrderReconTableRow = {
@@ -18,14 +20,19 @@ export type OrderReconTableRow = {
   app_orders: number;
   difference: number;
   status: ReconRowStatus;
+  driver_id?: string | null;
+  restaurant_id?: string | null;
 };
 
-export type OrderReconRun = {
+export type OrderReconRunSummary = {
   id: string;
   file_name: string;
   from_date: string;
   to_date: string;
   kpi: OrderReconKpi;
   created_at: string;
+};
+
+export type OrderReconRun = OrderReconRunSummary & {
   rows: OrderReconTableRow[];
 };

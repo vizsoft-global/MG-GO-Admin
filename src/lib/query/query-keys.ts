@@ -123,6 +123,8 @@ export const queryKeys = {
   },
   orderRecon: {
     latest: () => ["order-recon", "latest"] as const,
+    runs: () => ["order-recon", "runs"] as const,
+    detail: (runId: string) => ["order-recon", "detail", runId] as const,
   },
   verifications: {
     all: () => ["verifications"] as const,
@@ -145,11 +147,13 @@ export const queryKeys = {
     all: () => ["vehicles"] as const,
     list: (filters: Record<string, unknown> = {}) => ["vehicles", "list", filters] as const,
     detail: (id: string) => ["vehicles", "detail", id] as const,
+    imports: () => ["vehicles", "imports"] as const,
   },
   fuel: {
     all: () => ["fuel"] as const,
     list: (filters: Record<string, unknown> = {}) => ["fuel", "list", filters] as const,
     requests: (type: string) => ["fuel", "requests", type] as const,
+    withdrawn: (monthKey: string) => ["fuel", "withdrawn", monthKey] as const,
   },
   requests: {
     all: () => ["requests"] as const,

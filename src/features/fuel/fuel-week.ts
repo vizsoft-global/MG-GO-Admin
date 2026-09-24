@@ -3,6 +3,8 @@ import {
   isVehicleFuelCompany,
   isVehicleFuelType,
   toKuwaitYmd,
+  type DriverProjectKey,
+  type VehicleFuelCompany,
 } from "../fleet/fleet-labels";
 import type { FuelDayCell, FuelFillAttachment, FuelFillListItem, FuelWeekRow } from "./types";
 
@@ -139,6 +141,104 @@ export function buildFuelWeekRows(
   }
 
   return rows.sort((a, b) => (a.plate ?? "").localeCompare(b.plate ?? ""));
+}
+
+export type FuelRequestMark = {
+  id: string;
+  code: string;
+  type: "fuel" | "fuel_refund";
+  amountKwd: number | null;
+};
+
+export type FuelLogRequest = {
+  id: string;
+  request_code: string;
+  request_type: "fuel" | "fuel_refund";
+  driver_id: string;
+  driver_name: string | null;
+  employee_id: string | null;
+  employee_company: string | null;
+  vehicle_id: string | null;
+  plate: string | null;
+  vehicle_model: string | null;
+  vehicle_company: string | null;
+  fuel_company: VehicleFuelCompany | null;
+  project_key: DriverProjectKey | null;
+  zone: string | null;
+  amount_kwd: number | null;
+  created_at: string;
+};
+
+export type FuelLogRow = FuelWeekRow & { dayMarks: FuelRequestMark[][] };
+
+/** Fill rows stay. Riders who only filed a request or refund in the window get a row too. */
+export function withFuelRequestRows(
+  fillRows: FuelWeekRow[],
+  requests: FuelLogRequest[],
+  days: string[],
+): FuelLogRow[] {
+  const dayIndex = new Map(days.map((day, index) => [day, index]));
+  const next: FuelLogRow[] = fillRows.map((row) => ({
+    ...row,
+    dayMarks: days.map(() => []),
+  }));
+  const byVehicleDriver = new Map(next.map((row) => [`${row.vehicleId}:${row.driverId}`, row]));
+  const byDriver = new Map<string, FuelLogRow>();
+  for (const row of next) {
+    if (!byDriver.has(row.driverId)) byDriver.set(row.driverId, row);
+  }
+
+  for (const request of requests) {
+    const index = dayIndex.get(toKuwaitYmd(request.created_at));
+    if (index == null) continue;
+    const vehicleKey = `${request.vehicle_id ?? ""}:${request.driver_id}`;
+    let row =
+      (request.vehicle_id ? byVehicleDriver.get(vehicleKey) : undefined) ?? byDriver.get(request.driver_id);
+    if (!row) {
+      row = {
+        key: `request:${request.driver_id}:${request.vehicle_id ?? "none"}`,
+        driverId: request.driver_id,
+        driverName: request.driver_name,
+        employeeId: request.employee_id,
+        employeeCompany: request.employee_company,
+        vehicleId: request.vehicle_id ?? "",
+        plate: request.plate,
+        model: request.vehicle_model,
+        vehicleCompany: request.vehicle_company,
+        chip: null,
+        fuelType: null,
+        fuelCompany: request.fuel_company,
+        projectKey: request.project_key,
+        zone: request.zone,
+        monthlyLimit: 0,
+        withdrawn: 0,
+        critical: false,
+        days: days.map(() => null),
+        fills: [],
+        dayMarks: days.map(() => []),
+      };
+      next.push(row);
+      byDriver.set(request.driver_id, row);
+      if (request.vehicle_id) byVehicleDriver.set(vehicleKey, row);
+    }
+    row.dayMarks[index]?.push({
+      id: request.id,
+      code: request.request_code,
+      type: request.request_type,
+      amountKwd: request.amount_kwd,
+    });
+  }
+
+  return next.sort((a, b) => (a.driverName ?? a.plate ?? "").localeCompare(b.driverName ?? b.plate ?? ""));
+}
+
+/** A saved edit replaces the fill total for that Kuwait month. */
+export function applyWithdrawnOverride<T extends { withdrawn: number; monthlyLimit: number; critical: boolean }>(
+  row: T,
+  override: number | null | undefined,
+): T {
+  if (override == null || !Number.isFinite(override)) return row;
+  return { ...row, withdrawn: override, critical: isFuelRowCritical(override, row.monthlyLimit) };
 }
 
 export function fuelWeekMatchesSearch(row: FuelWeekRow, query: string): boolean {

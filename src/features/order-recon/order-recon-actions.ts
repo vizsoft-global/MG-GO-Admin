@@ -5,7 +5,14 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { excelPayloadForRpc, resolveReconRows, type ReconResolvedRow } from "./order-recon-resolve";
 import { parseReconXlsx } from "./parse-recon-xlsx";
-import type { OrderReconKpi, OrderReconRun, OrderReconTableRow, ReconRowStatus } from "./order-recon-types";
+import type {
+  OrderReconKpi,
+  OrderReconRun,
+  OrderReconRunSummary,
+  OrderReconTableRow,
+  ReconRowStatus,
+} from "./order-recon-types";
+import { persistReconKpi } from "./order-recon-views";
 
 async function requireDeliveries(
   kind: "view" | "manage",
@@ -109,6 +116,31 @@ export async function commitOrderRecon(
       .filter((r) => r.driver_id)
       .map((r) => [r.driver_id!, { employee_id: r.employee_id, employee_name: r.employee_name }]),
   );
+  const missingDriverIds = [
+    ...new Set(
+      compared
+        .map((row) => row.driver_id)
+        .filter((id): id is string => Boolean(id) && !driverMeta.has(id)),
+    ),
+  ];
+  if (missingDriverIds.length > 0) {
+    const { data: extraDrivers } = await supabase
+      .from("drivers")
+      .select("id, employee_id")
+      .in("id", missingDriverIds);
+    const extraIds = (extraDrivers ?? []).map((d) => d.id);
+    const { data: extraProfiles } =
+      extraIds.length > 0
+        ? await supabase.from("profiles").select("id, full_name").in("id", extraIds)
+        : { data: [] as { id: string; full_name: string | null }[] };
+    const extraNames = new Map((extraProfiles ?? []).map((p) => [p.id, p.full_name ?? ""]));
+    for (const driver of extraDrivers ?? []) {
+      driverMeta.set(driver.id, {
+        employee_id: driver.employee_id ?? "",
+        employee_name: extraNames.get(driver.id) ?? "",
+      });
+    }
+  }
 
   const unresolvedRows: OrderReconTableRow[] = preview.resolved
     .filter((r) => r.status === "unresolved")
@@ -121,34 +153,43 @@ export async function commitOrderRecon(
       excel_orders: r.excel_orders,
       app_orders: 0,
       difference: 0 - r.excel_orders,
-      status: "unresolved",
+      status: "unresolved" as const,
+      driver_id: r.driver_id,
+      restaurant_id: r.restaurant_id,
     }));
 
-  const comparedRows: OrderReconTableRow[] = compared.map((row, i) => {
-    const meta = driverMeta.get(row.driver_id);
+  const appOnlyCount = compared.filter((row) => {
     const excel = Number(row.excel_orders) || 0;
     const app = Number(row.app_orders) || 0;
-    const status: ReconRowStatus =
-      excel === 0 && app > 0 ? "app_only" : app === excel ? "match" : "mismatch";
-    return {
-      id: `c-${i}`,
-      employee_id: meta?.employee_id ?? "",
-      employee_name: meta?.employee_name ?? "",
-      restaurant_name: row.restaurant_id ? restaurantNames.get(row.restaurant_id) ?? "" : "",
-      work_date: String(row.work_date).slice(0, 10),
-      excel_orders: excel,
-      app_orders: app,
-      difference: Number(row.difference) || app - excel,
-      status,
-    };
-  });
+    return excel === 0 && app > 0;
+  }).length;
+
+  const comparedRows: OrderReconTableRow[] = compared
+    .filter((row) => (Number(row.excel_orders) || 0) > 0)
+    .map((row, i) => {
+      const meta = driverMeta.get(row.driver_id);
+      const excel = Number(row.excel_orders) || 0;
+      const app = Number(row.app_orders) || 0;
+      const status: ReconRowStatus = app === excel ? "match" : "mismatch";
+      return {
+        id: `c-${i}`,
+        employee_id: meta?.employee_id ?? "",
+        employee_name: meta?.employee_name ?? "",
+        restaurant_name: row.restaurant_id ? restaurantNames.get(row.restaurant_id) ?? "" : "",
+        work_date: String(row.work_date).slice(0, 10),
+        excel_orders: excel,
+        app_orders: app,
+        difference: Number(row.difference) || app - excel,
+        status,
+        driver_id: row.driver_id,
+        restaurant_id: row.restaurant_id,
+      };
+    });
 
   const rows = [...comparedRows, ...unresolvedRows];
   const kpi: OrderReconKpi = {
-    compared: comparedRows.length,
-    mismatches: comparedRows.filter((r) => r.status === "mismatch").length,
-    unresolved: unresolvedRows.length,
-    app_only: comparedRows.filter((r) => r.status === "app_only").length,
+    ...persistReconKpi(rows),
+    app_only: appOnlyCount,
   };
 
   const { data: run, error: runError } = await supabase
@@ -168,9 +209,9 @@ export async function commitOrderRecon(
     run_id: run.id,
     employee_id: row.employee_id,
     employee_name: row.employee_name,
-    restaurant_id: null,
+    restaurant_id: row.restaurant_id ?? null,
     restaurant_name: row.restaurant_name,
-    driver_id: null,
+    driver_id: row.driver_id ?? null,
     work_date: row.work_date,
     excel_orders: row.excel_orders,
     app_orders: row.app_orders,
@@ -214,6 +255,8 @@ async function fetchAllReconRows(
     employee_id: string | null;
     employee_name: string | null;
     restaurant_name: string | null;
+    restaurant_id: string | null;
+    driver_id: string | null;
     work_date: string;
     excel_orders: number;
     app_orders: number;
@@ -224,7 +267,7 @@ async function fetchAllReconRows(
     const { data, error } = await supabase
       .from("order_recon_rows")
       .select(
-        "id, employee_id, employee_name, restaurant_name, work_date, excel_orders, app_orders, difference, status",
+        "id, employee_id, employee_name, restaurant_name, restaurant_id, driver_id, work_date, excel_orders, app_orders, difference, status",
       )
       .eq("run_id", runId)
       .order("work_date", { ascending: true })
@@ -235,6 +278,69 @@ async function fetchAllReconRows(
     if (batch.length < pageSize) break;
   }
   return all;
+}
+
+function mapRunRows(
+  rows: Awaited<ReturnType<typeof fetchAllReconRows>>,
+): OrderReconTableRow[] {
+  return rows.map((row) => ({
+    id: row.id,
+    employee_id: row.employee_id ?? "",
+    employee_name: row.employee_name ?? "",
+    restaurant_name: row.restaurant_name ?? "",
+    restaurant_id: row.restaurant_id,
+    driver_id: row.driver_id,
+    work_date: row.work_date,
+    excel_orders: row.excel_orders,
+    app_orders: row.app_orders,
+    difference: row.difference,
+    status: row.status as ReconRowStatus,
+  }));
+}
+
+export async function listOrderReconRuns(): Promise<OrderReconRunSummary[]> {
+  const auth = await requireDeliveries("view");
+  if ("error" in auth) return [];
+
+  const supabase = await createClient();
+  const { data: runs } = await supabase
+    .from("order_recon_runs")
+    .select("id, file_name, from_date, to_date, kpi, created_at")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  return (runs ?? []).map((run) => ({
+    id: run.id,
+    file_name: run.file_name,
+    from_date: run.from_date,
+    to_date: run.to_date,
+    kpi: run.kpi as OrderReconKpi,
+    created_at: run.created_at,
+  }));
+}
+
+export async function getOrderRecon(runId: string): Promise<OrderReconRun | null> {
+  const auth = await requireDeliveries("view");
+  if ("error" in auth) return null;
+
+  const supabase = await createClient();
+  const { data: run } = await supabase
+    .from("order_recon_runs")
+    .select("id, file_name, from_date, to_date, kpi, created_at")
+    .eq("id", runId)
+    .maybeSingle();
+  if (!run) return null;
+
+  const rows = await fetchAllReconRows(supabase, run.id);
+  return {
+    id: run.id,
+    file_name: run.file_name,
+    from_date: run.from_date,
+    to_date: run.to_date,
+    kpi: run.kpi as OrderReconKpi,
+    created_at: run.created_at,
+    rows: mapRunRows(rows),
+  };
 }
 
 export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
@@ -251,7 +357,6 @@ export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
   if (!run) return null;
 
   const rows = await fetchAllReconRows(supabase, run.id);
-
   return {
     id: run.id,
     file_name: run.file_name,
@@ -259,16 +364,6 @@ export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
     to_date: run.to_date,
     kpi: run.kpi as OrderReconKpi,
     created_at: run.created_at,
-    rows: (rows ?? []).map((row) => ({
-      id: row.id,
-      employee_id: row.employee_id ?? "",
-      employee_name: row.employee_name ?? "",
-      restaurant_name: row.restaurant_name ?? "",
-      work_date: row.work_date,
-      excel_orders: row.excel_orders,
-      app_orders: row.app_orders,
-      difference: row.difference,
-      status: row.status as ReconRowStatus,
-    })),
+    rows: mapRunRows(rows),
   };
 }

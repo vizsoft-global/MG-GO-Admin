@@ -17,7 +17,7 @@
     "test:permissions": "node --import tsx --test src/lib/auth/permission-catalog.test.ts src/lib/auth/staff-access.test.ts",
     "test:assistant": "node --import tsx --test src/features/assistant/*.test.ts",
     "test:recon": "node --import tsx --test src/features/order-recon/parse-recon-xlsx.test.ts src/features/order-recon/order-recon-resolve.test.ts src/features/order-recon/order-recon-views.test.ts",
-    "test:vehicles": "node --import tsx --test src/features/vehicles/vehicles-list-utils.test.ts src/features/vehicles/vehicle-form-validation.test.ts src/features/fleet/fleet-labels.test.ts src/features/fuel/fuel-week.test.ts src/features/fuel/fleet-request-utils.test.ts src/lib/menu/menu-merge.test.ts",
+    "test:vehicles": "node --import tsx --test src/features/vehicles/vehicles-list-utils.test.ts src/features/vehicles/vehicle-form-validation.test.ts src/features/vehicles/import/vehicle-import.test.ts src/features/fleet/fleet-labels.test.ts src/features/fuel/fuel-week.test.ts src/features/fuel/fuel-range.test.ts src/features/fuel/fleet-request-utils.test.ts src/lib/menu/menu-merge.test.ts",
     "test:driver-devices": "node --import tsx --test src/lib/sentry/sentry-api.test.ts src/features/driver-devices/driver-devices-severity.test.ts",
     "test:auth": "node --import tsx --test src/lib/supabase/deadline.test.ts src/lib/auth/local-session.test.ts",
     "test:performance": "node --import tsx --test src/features/performance/performance-ranking.test.ts src/features/performance/performance-rating.test.ts src/features/performance/performance-trend.test.ts src/features/performance/performance-dpd.test.ts src/features/performance/performance-ops-formulas.test.ts src/features/performance/performance-ops-table.test.ts",
