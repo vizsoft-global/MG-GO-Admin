@@ -102,18 +102,21 @@ const FLEET_HUB_TILES: {
   icon: LucideIcon;
   color: string;
   permission: Permission;
+  countKey?: "fuel" | "fuel_refund" | "asset";
 }[] = [
   { href: "/vehicles", labelKey: "hub.vehicles", icon: Car, color: "bg-[#0369a1]", permission: "vehicles.view" },
   { href: "/fuel", labelKey: "hub.fuelLog", icon: Fuel, color: "bg-[#ea580c]", permission: "fuel.view" },
-  { href: "/fuel/requests", labelKey: "hub.fuelRequests", icon: ClipboardList, color: "bg-[#ea580c]", permission: "fuel.view" },
-  { href: "/fuel/refunds", labelKey: "hub.fuelRefunds", icon: ReceiptText, color: "bg-[#ca8a04]", permission: "fuel.view" },
+  { href: "/fuel/requests", labelKey: "hub.fuelRequests", icon: ClipboardList, color: "bg-[#ea580c]", permission: "fuel.view", countKey: "fuel" },
+  { href: "/fuel/refunds", labelKey: "hub.fuelRefunds", icon: ReceiptText, color: "bg-[#ca8a04]", permission: "fuel.view", countKey: "fuel_refund" },
   { href: "/assets", labelKey: "hub.fleetAssets", icon: Package, color: "bg-[#6d28d9]", permission: "assets.view" },
-  { href: "/assets/requests", labelKey: "hub.assetRequests", icon: PackageCheck, color: "bg-[#6d28d9]", permission: "assets.view" },
+  { href: "/assets/requests", labelKey: "hub.assetRequests", icon: PackageCheck, color: "bg-[#6d28d9]", permission: "assets.view", countKey: "asset" },
 ];
 
 function FleetHubTiles() {
   const t = useTranslations("pages.requests");
   const { can } = usePermissions();
+  const { data } = useRequestTypeCounts();
+  const counts = data?.counts ?? {};
   return (
     <section className="flex flex-col items-center gap-[18px]">
       <h2 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
@@ -122,7 +125,7 @@ function FleetHubTiles() {
         </span>
         {t("hub.fleetHeading")}
       </h2>
-      <div className="flex w-[min(640px,100%)] flex-wrap content-start items-start justify-center gap-x-5 gap-y-6">
+      <div className="flex w-max max-w-full flex-nowrap items-start justify-center gap-x-5">
         {FLEET_HUB_TILES.map((tile) => (
           <FleetHubTile
             key={tile.href}
@@ -131,6 +134,7 @@ function FleetHubTiles() {
             color={tile.color}
             label={t(tile.labelKey)}
             locked={!can(tile.permission)}
+            count={tile.countKey ? counts[tile.countKey]?.pending : undefined}
           />
         ))}
       </div>
@@ -144,13 +148,21 @@ function FleetHubTile({
   color,
   label,
   locked,
+  count,
 }: {
   href: string;
   icon: LucideIcon;
   color: string;
   label: string;
   locked: boolean;
+  count?: number;
 }) {
+  const badge =
+    count != null && count > 0 ? (
+      <span className="absolute -top-[2.5px] end-2 inline-flex items-center justify-center overflow-hidden rounded-full border border-[#f6e5c3] bg-[#fffaeb] px-[7px] py-0.5 text-xs font-semibold leading-none text-[#b54708]">
+        {count > 999 ? "999+" : count}
+      </span>
+    ) : null;
   const face = (
     <>
       <span
@@ -167,6 +179,7 @@ function FleetHubTile({
       <span className="h-[34px] w-full break-words text-center text-[13px] font-medium leading-[normal] text-[#f4f4f5]">
         {label}
       </span>
+      {badge}
     </>
   );
   if (locked) {
@@ -281,7 +294,7 @@ export function RequestsHubShell() {
             <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
               {t("hub.senderHeading")}
             </h2>
-            <div className="flex w-[min(631px,100%)] flex-wrap content-start items-start justify-center gap-x-5 gap-y-6">
+            <div className="flex w-max max-w-full flex-nowrap items-start justify-center gap-x-5">
               {SENDER_TILES.map((tile) => (
                 <HubTile
                   key={tile.href}
@@ -300,7 +313,7 @@ export function RequestsHubShell() {
           <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
             {t("hub.requestTypesHeading")}
           </h2>
-          <div className="flex w-[min(631px,100%)] flex-wrap content-start items-start justify-center gap-x-5 gap-y-6">
+          <div className="flex w-max max-w-full flex-nowrap items-start justify-center gap-x-5">
             {TYPE_TILES.map((tile) => (
               <HubTile
                 key={tile.type}
