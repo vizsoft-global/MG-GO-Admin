@@ -98,7 +98,7 @@ export async function saveFuelWithdrawnOverride(input: {
   amountKwd: number;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const auth = await requireFuelView();
-  if ("error" in auth) return { ok: false, error: auth.error };
+  if ("error" in auth) return { ok: false, error: auth.error ?? "not_authorized" };
   if (!UUID.test(input.driverId) || !UUID.test(input.vehicleId) || !MONTH_KEY.test(input.monthKey)) {
     return { ok: false, error: "invalid" };
   }
