@@ -11,8 +11,8 @@ function collectItemIds(nodes: { id: string; type: string; children?: { id: stri
   return ids;
 }
 
-describe("stripFleetSidebar", () => {
-  it("drops the Fleet group and its items from a saved menu", () => {
+describe("relocateFleetItems", () => {
+  it("pins Fleet after Overview with every fleet module unhidden", () => {
     const { tree } = mergeMenu([
       {
         id: "group-overview",
@@ -20,17 +20,6 @@ describe("stripFleetSidebar", () => {
         label: "Overview",
         icon: "Folder",
         children: [{ id: "dashboard", type: "item", label: "Dashboard", icon: "LayoutDashboard" }],
-      },
-      {
-        id: "group-fleet",
-        type: "group",
-        label: "Fleet",
-        icon: "Car",
-        children: [
-          { id: "vehicles", type: "item", label: "Vehicles", icon: "Bike" },
-          { id: "fuel", type: "item", label: "Fuel", icon: "Fuel" },
-          { id: "assets", type: "item", label: "Assets", icon: "Package", hidden: true },
-        ],
       },
       {
         id: "group-operations",
@@ -43,13 +32,28 @@ describe("stripFleetSidebar", () => {
         ],
       },
     ]);
-    const ids = collectItemIds(tree);
-    assert.equal(tree.find((node) => node.id === "group-fleet"), undefined);
-    for (const id of ["vehicles", "fuel", "fuel-requests", "fuel-refunds", "assets", "asset-requests"]) {
-      assert.equal(ids.includes(id), false, id);
-    }
-    assert.ok(ids.includes("dashboard"));
-    assert.ok(ids.includes("drivers"));
+    const overviewAt = tree.findIndex((node) => node.id === "group-overview");
+    const fleet = tree.find((node) => node.id === "group-fleet");
+    assert.ok(fleet);
+    assert.equal(tree[overviewAt + 1]?.id, "group-fleet");
+    assert.equal(fleet?.icon, "Car");
+    const fleetIds = (fleet?.children ?? []).map((child) => child.id);
+    assert.deepEqual(fleetIds, [
+      "vehicles",
+      "fuel",
+      "fuel-requests",
+      "fuel-refunds",
+      "assets",
+      "asset-requests",
+    ]);
+    assert.equal(fleet?.children?.every((child) => child.hidden !== true), true);
+    assert.equal(fleet?.children?.find((child) => child.id === "fuel")?.label, "Fuel Log");
+    assert.equal(fleet?.children?.find((child) => child.id === "assets")?.label, "Fleet Assets");
+    const opsIds = (tree.find((node) => node.id === "group-operations")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.equal(opsIds.includes("fuel-requests"), false);
+    assert.ok(opsIds.includes("drivers"));
   });
 });
 

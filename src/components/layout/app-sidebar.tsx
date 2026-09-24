@@ -254,6 +254,7 @@ function NavGroup({
       <PanelGroupChildren
         groupId={node.id}
         groupLabel={groupLabel}
+        groupIcon={node.icon}
         forceOpen={hasActiveChild}
         children={children}
         tItemLabel={tItemLabel}
@@ -276,12 +277,14 @@ function NavGroup({
 function PanelGroupChildren({
   groupId,
   groupLabel,
+  groupIcon,
   forceOpen,
   children,
   tItemLabel,
 }: {
   groupId: string;
   groupLabel: string;
+  groupIcon: string;
   forceOpen: boolean;
   children: ResolvedMenuNode[];
   tItemLabel: (n: ResolvedMenuNode) => string;
@@ -318,6 +321,7 @@ function PanelGroupChildren({
           className="flex w-full cursor-pointer items-center gap-1 text-start hover:text-foreground"
           aria-expanded={showChildren}
         >
+          <MenuIcon name={groupIcon} className="h-3 w-3 shrink-0 text-muted-foreground" />
           <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
             {groupLabel}
           </span>

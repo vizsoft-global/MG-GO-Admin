@@ -2,20 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import {
-  Car,
-  ClipboardList,
-  Fuel,
-  Inbox,
-  Lock,
-  Package,
-  PackageCheck,
-  ReceiptText,
-  Send,
-  type LucideIcon,
-} from "lucide-react";
-import { usePermissions } from "@/hooks/use-permissions";
-import type { Permission } from "@/lib/auth/permissions";
+import { Inbox, Send } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
@@ -87,118 +74,6 @@ function TileWash({ wash }: { wash: Wash }) {
   }
   return (
     <span className="absolute inset-0 bg-[linear-gradient(131deg,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0)_36%,rgba(0,0,0,0.14)_71%)]" />
-  );
-}
-
-const FLEET_HUB_TILES: {
-  href: string;
-  labelKey:
-    | "hub.vehicles"
-    | "hub.fuelLog"
-    | "hub.fuelRequests"
-    | "hub.fuelRefunds"
-    | "hub.fleetAssets"
-    | "hub.assetRequests";
-  icon: LucideIcon;
-  color: string;
-  permission: Permission;
-  countKey?: "fuel" | "fuel_refund" | "asset";
-}[] = [
-  { href: "/vehicles", labelKey: "hub.vehicles", icon: Car, color: "bg-[#0369a1]", permission: "vehicles.view" },
-  { href: "/fuel", labelKey: "hub.fuelLog", icon: Fuel, color: "bg-[#ea580c]", permission: "fuel.view" },
-  { href: "/fuel/requests", labelKey: "hub.fuelRequests", icon: ClipboardList, color: "bg-[#ea580c]", permission: "fuel.view", countKey: "fuel" },
-  { href: "/fuel/refunds", labelKey: "hub.fuelRefunds", icon: ReceiptText, color: "bg-[#ca8a04]", permission: "fuel.view", countKey: "fuel_refund" },
-  { href: "/assets", labelKey: "hub.fleetAssets", icon: Package, color: "bg-[#6d28d9]", permission: "assets.view" },
-  { href: "/assets/requests", labelKey: "hub.assetRequests", icon: PackageCheck, color: "bg-[#6d28d9]", permission: "assets.view", countKey: "asset" },
-];
-
-function FleetHubTiles() {
-  const t = useTranslations("pages.requests");
-  const { can } = usePermissions();
-  const { data } = useRequestTypeCounts();
-  const counts = data?.counts ?? {};
-  return (
-    <section className="flex flex-col items-center gap-[18px]">
-      <h2 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
-        <span className="inline-flex size-5 items-center justify-center rounded-md bg-[#0369a1] text-white">
-          <Car className="size-3" />
-        </span>
-        {t("hub.fleetHeading")}
-      </h2>
-      <div className="flex w-max max-w-full flex-nowrap items-start justify-center gap-x-5">
-        {FLEET_HUB_TILES.map((tile) => (
-          <FleetHubTile
-            key={tile.href}
-            href={tile.href}
-            icon={tile.icon}
-            color={tile.color}
-            label={t(tile.labelKey)}
-            locked={!can(tile.permission)}
-            count={tile.countKey ? counts[tile.countKey]?.pending : undefined}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function FleetHubTile({
-  href,
-  icon: Icon,
-  color,
-  label,
-  locked,
-  count,
-}: {
-  href: string;
-  icon: LucideIcon;
-  color: string;
-  label: string;
-  locked: boolean;
-  count?: number;
-}) {
-  const badge =
-    count != null && count > 0 ? (
-      <span className="absolute -top-[2.5px] end-2 inline-flex items-center justify-center overflow-hidden rounded-full border border-[#f6e5c3] bg-[#fffaeb] px-[7px] py-0.5 text-xs font-semibold leading-none text-[#b54708]">
-        {count > 999 ? "999+" : count}
-      </span>
-    ) : null;
-  const face = (
-    <>
-      <span
-        className={cn(
-          "relative size-24 shrink-0 overflow-hidden rounded-[20px] shadow-[0_8px_16px_rgba(0,0,0,0.3)]",
-          color,
-          locked && "opacity-50",
-        )}
-      >
-        <TileWash wash="tile" />
-        <Icon className="absolute left-1/2 top-1/2 size-10 -translate-x-1/2 -translate-y-1/2 text-white" />
-        {locked ? <Lock className="absolute bottom-2 end-2 size-4 text-white" /> : null}
-      </span>
-      <span className="h-[34px] w-full break-words text-center text-[13px] font-medium leading-[normal] text-[#f4f4f5]">
-        {label}
-      </span>
-      {badge}
-    </>
-  );
-  if (locked) {
-    return (
-      <div
-        aria-disabled="true"
-        className="relative flex h-[148px] w-[112px] cursor-not-allowed flex-col items-center justify-center gap-3"
-      >
-        {face}
-      </div>
-    );
-  }
-  return (
-    <Link
-      href={href}
-      className="relative flex h-[148px] w-[112px] flex-col items-center justify-center gap-3 transition-opacity duration-150 hover:opacity-90 active:scale-[0.97]"
-    >
-      {face}
-    </Link>
   );
 }
 
@@ -286,8 +161,6 @@ export function RequestsHubShell() {
             {view === "sender" ? t("hub.senderSubtitle") : t("hub.subtitle")}
           </p>
         </header>
-
-        <FleetHubTiles />
 
         {view === "sender" ? (
           <section className="flex flex-col items-center gap-[18px]">

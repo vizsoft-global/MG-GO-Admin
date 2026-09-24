@@ -24,6 +24,8 @@ export type OrderReconTableRow = {
   restaurant_id?: string | null;
 };
 
+export type OrderReconImportStatus = "applied" | "undone";
+
 export type OrderReconRunSummary = {
   id: string;
   file_name: string;
@@ -31,6 +33,9 @@ export type OrderReconRunSummary = {
   to_date: string;
   kpi: OrderReconKpi;
   created_at: string;
+  status: OrderReconImportStatus;
+  undo_seq: number | null;
+  redoable: boolean;
 };
 
 export type OrderReconRun = OrderReconRunSummary & {

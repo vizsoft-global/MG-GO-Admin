@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import {
   CalendarDays,
@@ -13,7 +13,6 @@ import {
   Upload,
   UserX,
 } from "lucide-react";
-import { toast } from "sonner";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
   AppDataTable,
@@ -23,23 +22,14 @@ import {
 } from "@/components/app/app-data-table";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
-import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Link, useRouter } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useAuth } from "@/contexts/auth-context";
-import {
-  commitOrderRecon,
-  getLatestOrderRecon,
-  listOrderReconRuns,
-  previewOrderRecon,
-  type ReconPreview,
-} from "./order-recon-actions";
+import { getLatestOrderRecon, listOrderReconRuns } from "./order-recon-actions";
+import { OrderReconImportDialog } from "./order-recon-import-dialog";
 import { buildOrderReconWorkbook, downloadOrderReconXlsx } from "./order-recon-xlsx";
 import {
   buildReconViews,
@@ -66,7 +56,6 @@ export function OrderReconPageShell() {
   const t = useTranslations("pages.orderRecon");
   const { can } = useAuth();
   const canManage = can("deliveries.manage");
-  const queryClient = useQueryClient();
   const router = useRouter();
   const { data: latest, isLoading } = useQuery({
     queryKey: queryKeys.orderRecon.latest(),
@@ -78,8 +67,6 @@ export function OrderReconPageShell() {
   });
 
   const [open, setOpen] = useState(false);
-  const [preview, setPreview] = useState<ReconPreview | null>(null);
-  const [file, setFile] = useState<File | null>(null);
   const [isPending, startTransition] = useTransition();
   const [onlyMismatches, setOnlyMismatches] = useState(true);
   const [tab, setTab] = useState<ReconTab>("daily");
@@ -94,51 +81,11 @@ export function OrderReconPageShell() {
     return onlyMismatches ? source.filter((r) => r.status !== "match") : source;
   }, [byRestaurant, onlyMismatches, views.daily, views.store]);
 
-  const invalidateRecon = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.orderRecon.latest() }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.orderRecon.runs() }),
-    ]);
-  };
-
   const openRun = (runId: string, employeeKey?: string) => {
     const href = employeeKey
       ? `/deliveries/reconciliation/${runId}?employee=${encodeURIComponent(employeeKey)}`
       : `/deliveries/reconciliation/${runId}`;
     router.push(href);
-  };
-
-  const onPreview = () => {
-    if (!file) {
-      toast.error(t("errors.missing_file"));
-      return;
-    }
-    const fd = new FormData();
-    fd.set("file", file);
-    startTransition(async () => {
-      const result = await previewOrderRecon(fd);
-      if ("error" in result) {
-        toast.error(t(`errors.${result.error}` as "errors.compare_failed"));
-        return;
-      }
-      setPreview(result.preview);
-    });
-  };
-
-  const onCommit = () => {
-    if (!preview) return;
-    startTransition(async () => {
-      const result = await commitOrderRecon(preview);
-      if ("error" in result) {
-        toast.error(t(`errors.${result.error}` as "errors.save_failed"));
-        return;
-      }
-      toast.success(t("committed"));
-      setOpen(false);
-      setPreview(null);
-      setFile(null);
-      await invalidateRecon();
-    });
   };
 
   const onExport = () => {
@@ -264,6 +211,8 @@ export function OrderReconPageShell() {
                         <p className="truncate text-sm font-semibold">{run.file_name}</p>
                         <p className="text-[10px] text-muted-foreground">
                           {run.from_date} – {run.to_date}
+                          {" · "}
+                          {t(`importStatus.${run.status}`)}
                         </p>
                       </div>
                       <span className="inline-flex h-9 shrink-0 items-center gap-1 text-sm font-medium text-primary hover:bg-primary/10">
@@ -423,88 +372,7 @@ export function OrderReconPageShell() {
         </AppListCard>
       ) : null}
 
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) {
-            setPreview(null);
-            setFile(null);
-          }
-        }}
-      >
-        <DialogContent
-          showCloseButton
-          closeOutside
-          className="w-[min(720px,96vw)] overflow-visible p-0 pt-4"
-        >
-          <div className="space-y-3 px-5 py-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="recon-file">{t("fileLabel")}</Label>
-              <Input
-                id="recon-file"
-                type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="h-9"
-                onChange={(e) => {
-                  setFile(e.target.files?.[0] ?? null);
-                  setPreview(null);
-                }}
-              />
-            </div>
-            {preview ? (
-              <div className="space-y-1 text-xs">
-                <p>
-                  {t("previewReady", { ready: preview.readyCount, unresolved: preview.unresolvedCount })}
-                </p>
-                {preview.unresolvedCount > 0 ? (
-                  <ul className="max-h-40 overflow-auto rounded-lg border border-border p-2">
-                    {preview.resolved
-                      .filter((r) => r.status === "unresolved")
-                      .slice(0, 40)
-                      .map((r, i) => (
-                        <li key={`${r.employee_id}-${r.store_name}-${i}`}>
-                          {r.employee_id || "—"} · {r.store_name || "—"} · {r.unresolved_reason}
-                        </li>
-                      ))}
-                  </ul>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          <AppModalFooter title={t("uploadTitle")} subtitle={t("uploadSubtitle")}>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 cursor-pointer"
-              disabled={isPending}
-              onClick={() => setOpen(false)}
-            >
-              {t("cancel")}
-            </Button>
-            {preview ? (
-              <Button
-                type="button"
-                className="h-9 cursor-pointer"
-                disabled={isPending || preview.readyCount === 0}
-                onClick={onCommit}
-              >
-                <GitCompareArrows className="size-4" />
-                {isPending ? t("comparing") : t("commit")}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                className="h-9 cursor-pointer"
-                disabled={isPending || !file}
-                onClick={onPreview}
-              >
-                {isPending ? t("previewing") : t("preview")}
-              </Button>
-            )}
-          </AppModalFooter>
-        </DialogContent>
-      </Dialog>
+      <OrderReconImportDialog open={open} onOpenChange={setOpen} />
     </AppPage>
   );
 }

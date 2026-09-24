@@ -125,6 +125,7 @@ export const queryKeys = {
     latest: () => ["order-recon", "latest"] as const,
     runs: () => ["order-recon", "runs"] as const,
     detail: (runId: string) => ["order-recon", "detail", runId] as const,
+    importRows: (runId: string) => ["order-recon", "import-rows", runId] as const,
   },
   verifications: {
     all: () => ["verifications"] as const,

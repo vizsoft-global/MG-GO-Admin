@@ -10,9 +10,12 @@ import type {
   OrderReconRun,
   OrderReconRunSummary,
   OrderReconTableRow,
+  OrderReconImportStatus,
   ReconRowStatus,
 } from "./order-recon-types";
 import { persistReconKpi } from "./order-recon-views";
+import { logAdminMutation } from "@/lib/audit/log-admin-activity";
+import { nextUndoSeq, redoTargetId, undoTargetId, type ReconImportTip } from "./recon-import-stack";
 
 async function requireDeliveries(
   kind: "view" | "manage",
@@ -25,6 +28,47 @@ async function requireDeliveries(
     return { error: "not_authorized" };
   }
   return { session };
+}
+
+const RUN_SELECT =
+  "id, file_name, from_date, to_date, kpi, created_at, status, undo_seq, redoable";
+
+function asImportStatus(value: string | null | undefined): OrderReconImportStatus {
+  return value === "undone" ? "undone" : "applied";
+}
+
+function mapRunSummary(run: {
+  id: string;
+  file_name: string;
+  from_date: string;
+  to_date: string;
+  kpi: OrderReconKpi | null;
+  created_at: string;
+  status?: string | null;
+  undo_seq?: number | null;
+  redoable?: boolean | null;
+}): OrderReconRunSummary {
+  return {
+    id: run.id,
+    file_name: run.file_name,
+    from_date: run.from_date,
+    to_date: run.to_date,
+    kpi: (run.kpi ?? persistReconKpi([])) as OrderReconKpi,
+    created_at: run.created_at,
+    status: asImportStatus(run.status),
+    undo_seq: run.undo_seq ?? null,
+    redoable: run.redoable !== false,
+  };
+}
+
+function asTips(runs: OrderReconRunSummary[]): ReconImportTip[] {
+  return runs.map((run) => ({
+    id: run.id,
+    status: run.status,
+    createdAt: run.created_at,
+    undoSeq: run.undo_seq,
+    redoable: run.redoable,
+  }));
 }
 
 export type ReconPreview = {
@@ -200,10 +244,26 @@ export async function commitOrderRecon(
       from_date: preview.from,
       to_date: preview.to,
       kpi,
+      status: "applied",
+      redoable: true,
     })
     .select("id, created_at")
     .single();
   if (runError || !run) return { error: "save_failed" };
+
+  await supabase
+    .from("order_recon_runs")
+    .update({ redoable: false })
+    .eq("status", "undone")
+    .neq("id", run.id);
+
+  void logAdminMutation({
+    action: "create",
+    entityType: "order_recon_run",
+    entityId: run.id,
+    routeName: "/deliveries/reconciliation",
+    after: { fileName: preview.fileName, from: preview.from, to: preview.to },
+  });
 
   const insertRows = rows.map((row) => ({
     run_id: run.id,
@@ -240,6 +300,9 @@ export async function commitOrderRecon(
       to_date: preview.to,
       kpi,
       created_at: run.created_at,
+      status: "applied",
+      undo_seq: null,
+      redoable: true,
       rows: rows.map((row, i) => ({ ...row, id: `${run.id}-${i}` })),
     },
   };
@@ -305,18 +368,11 @@ export async function listOrderReconRuns(): Promise<OrderReconRunSummary[]> {
   const supabase = await createClient();
   const { data: runs } = await supabase
     .from("order_recon_runs")
-    .select("id, file_name, from_date, to_date, kpi, created_at")
+    .select(RUN_SELECT)
     .order("created_at", { ascending: false })
     .limit(20);
 
-  return (runs ?? []).map((run) => ({
-    id: run.id,
-    file_name: run.file_name,
-    from_date: run.from_date,
-    to_date: run.to_date,
-    kpi: run.kpi as OrderReconKpi,
-    created_at: run.created_at,
-  }));
+  return (runs ?? []).map((run) => mapRunSummary({ ...run, kpi: run.kpi as OrderReconKpi }));
 }
 
 export async function getOrderRecon(runId: string): Promise<OrderReconRun | null> {
@@ -326,19 +382,14 @@ export async function getOrderRecon(runId: string): Promise<OrderReconRun | null
   const supabase = await createClient();
   const { data: run } = await supabase
     .from("order_recon_runs")
-    .select("id, file_name, from_date, to_date, kpi, created_at")
+    .select(RUN_SELECT)
     .eq("id", runId)
     .maybeSingle();
   if (!run) return null;
 
   const rows = await fetchAllReconRows(supabase, run.id);
   return {
-    id: run.id,
-    file_name: run.file_name,
-    from_date: run.from_date,
-    to_date: run.to_date,
-    kpi: run.kpi as OrderReconKpi,
-    created_at: run.created_at,
+    ...mapRunSummary({ ...run, kpi: run.kpi as OrderReconKpi }),
     rows: mapRunRows(rows),
   };
 }
@@ -350,7 +401,8 @@ export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
   const supabase = await createClient();
   const { data: run } = await supabase
     .from("order_recon_runs")
-    .select("id, file_name, from_date, to_date, kpi, created_at")
+    .select(RUN_SELECT)
+    .eq("status", "applied")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -358,12 +410,56 @@ export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
 
   const rows = await fetchAllReconRows(supabase, run.id);
   return {
-    id: run.id,
-    file_name: run.file_name,
-    from_date: run.from_date,
-    to_date: run.to_date,
-    kpi: run.kpi as OrderReconKpi,
-    created_at: run.created_at,
+    ...mapRunSummary({ ...run, kpi: run.kpi as OrderReconKpi }),
     rows: mapRunRows(rows),
   };
+}
+
+export async function undoOrderReconImport(): Promise<{ error?: string }> {
+  return replayReconImport("undo");
+}
+
+export async function redoOrderReconImport(): Promise<{ error?: string }> {
+  return replayReconImport("redo");
+}
+
+async function replayReconImport(direction: "undo" | "redo"): Promise<{ error?: string }> {
+  const auth = await requireDeliveries("manage");
+  if ("error" in auth) return auth;
+
+  const runs = await listOrderReconRuns();
+  const target = direction === "undo" ? undoTargetId(asTips(runs)) : redoTargetId(asTips(runs));
+  if (!target) return { error: direction === "undo" ? "nothing_to_undo" : "nothing_to_redo" };
+
+  const supabase = await createClient();
+  const seq = nextUndoSeq(asTips(runs));
+  const { error } =
+    direction === "undo"
+      ? await supabase
+          .from("order_recon_runs")
+          .update({
+            status: "undone",
+            undone_at: new Date().toISOString(),
+            undo_seq: seq,
+            redoable: true,
+          })
+          .eq("id", target)
+      : await supabase
+          .from("order_recon_runs")
+          .update({
+            status: "applied",
+            undone_at: null,
+            redoable: true,
+          })
+          .eq("id", target);
+  if (error) return { error: "save_failed" };
+
+  void logAdminMutation({
+    action: "update",
+    entityType: "order_recon_run",
+    entityId: target,
+    routeName: "/deliveries/reconciliation",
+    after: { direction },
+  });
+  return {};
 }
