@@ -4110,6 +4110,48 @@ export type Database = {
           },
         ]
       }
+      fuel_withdrawn_overrides: {
+        Row: {
+          amount_kwd: number
+          driver_id: string
+          month_key: string
+          updated_at: string
+          updated_by: string | null
+          vehicle_id: string
+        }
+        Insert: {
+          amount_kwd: number
+          driver_id: string
+          month_key: string
+          updated_at?: string
+          updated_by?: string | null
+          vehicle_id: string
+        }
+        Update: {
+          amount_kwd?: number
+          driver_id?: string
+          month_key?: string
+          updated_at?: string
+          updated_by?: string | null
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fuel_withdrawn_overrides_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fuel_withdrawn_overrides_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       geofence_events: {
         Row: {
           accuracy_meters: number | null
@@ -6865,6 +6907,92 @@ export type Database = {
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_import_batches: {
+        Row: {
+          applied_rows: number
+          created_at: string
+          failed_rows: number
+          file_name: string
+          id: string
+          redoable: boolean
+          status: string
+          total_rows: number
+          undo_seq: number | null
+          undone_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          applied_rows: number
+          created_at?: string
+          failed_rows: number
+          file_name: string
+          id?: string
+          redoable?: boolean
+          status: string
+          total_rows: number
+          undo_seq?: number | null
+          undone_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          applied_rows?: number
+          created_at?: string
+          failed_rows?: number
+          file_name?: string
+          id?: string
+          redoable?: boolean
+          status?: string
+          total_rows?: number
+          undo_seq?: number | null
+          undone_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
+      vehicle_import_rows: {
+        Row: {
+          after: Json | null
+          batch_id: string
+          before: Json | null
+          bike_id: string
+          id: string
+          message: string | null
+          outcome: string
+          row_index: number
+          vehicle_id: string | null
+        }
+        Insert: {
+          after?: Json | null
+          batch_id: string
+          before?: Json | null
+          bike_id: string
+          id?: string
+          message?: string | null
+          outcome: string
+          row_index: number
+          vehicle_id?: string | null
+        }
+        Update: {
+          after?: Json | null
+          batch_id?: string
+          before?: Json | null
+          bike_id?: string
+          id?: string
+          message?: string | null
+          outcome?: string
+          row_index?: number
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_import_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_import_batches"
             referencedColumns: ["id"]
           },
         ]

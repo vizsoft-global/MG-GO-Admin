@@ -57,6 +57,7 @@ import { useZonesList } from "@/features/zones/use-zones";
 import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { FleetRequestDialog } from "@/features/fuel/fleet-request-dialog";
 import { RequestCreateDialog } from "./request-create-dialog";
 import {
   canBulkSelectRequest,
@@ -201,6 +202,7 @@ export function RequestsPageShell({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [viewRow, setViewRow] = useState<RequestListRow | null>(null);
 
   const { can } = useAuth();
   const canDecide = can("requests.approve") || can("requests.manage");
@@ -740,7 +742,7 @@ export function RequestsPageShell({
                     title={t("viewDetails")}
                     onClick={(e) => {
                       e.stopPropagation();
-                      router.push(`/requests/${row.id}`);
+                      setViewRow(row);
                     }}
                   >
                     <Eye className="h-4 w-4" />
@@ -756,6 +758,14 @@ export function RequestsPageShell({
         open={createOpen}
         onOpenChange={setCreateOpen}
         initialType={type}
+      />
+
+      <FleetRequestDialog
+        open={viewRow != null}
+        preview={viewRow}
+        onOpenChange={(open) => {
+          if (!open) setViewRow(null);
+        }}
       />
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>

@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { mergeMenu } from "./menu-merge";
 
-describe("relocateFleetItems", () => {
-  it("pins every Fleet registry item even when a saved menu hid Assets", () => {
+function collectItemIds(nodes: { id: string; type: string; children?: { id: string; type: string; children?: { id: string; type: string }[] }[] }[]): string[] {
+  const ids: string[] = [];
+  for (const node of nodes) {
+    if (node.type === "item") ids.push(node.id);
+    if (node.children) ids.push(...collectItemIds(node.children));
+  }
+  return ids;
+}
+
+describe("stripFleetSidebar", () => {
+  it("drops the Fleet group and its items from a saved menu", () => {
     const { tree } = mergeMenu([
       {
         id: "group-overview",
@@ -13,21 +22,34 @@ describe("relocateFleetItems", () => {
         children: [{ id: "dashboard", type: "item", label: "Dashboard", icon: "LayoutDashboard" }],
       },
       {
+        id: "group-fleet",
+        type: "group",
+        label: "Fleet",
+        icon: "Car",
+        children: [
+          { id: "vehicles", type: "item", label: "Vehicles", icon: "Bike" },
+          { id: "fuel", type: "item", label: "Fuel", icon: "Fuel" },
+          { id: "assets", type: "item", label: "Assets", icon: "Package", hidden: true },
+        ],
+      },
+      {
         id: "group-operations",
         type: "group",
         label: "Operations",
         icon: "Folder",
         children: [
-          { id: "assets", type: "item", label: "Assets", icon: "Package", hidden: true },
-          { id: "vehicles", type: "item", label: "Vehicles", icon: "Bike" },
+          { id: "drivers", type: "item", label: "Drivers", icon: "Users" },
+          { id: "fuel-requests", type: "item", label: "Fuel requests", icon: "ClipboardList" },
         ],
       },
     ]);
-    const fleet = tree.find((node) => node.id === "group-fleet");
-    const ids = (fleet?.children ?? []).map((child) => child.id);
-    assert.ok(ids.includes("assets"));
-    assert.ok(ids.includes("vehicles"));
-    assert.equal(fleet?.children?.find((child) => child.id === "assets")?.hidden, false);
+    const ids = collectItemIds(tree);
+    assert.equal(tree.find((node) => node.id === "group-fleet"), undefined);
+    for (const id of ["vehicles", "fuel", "fuel-requests", "fuel-refunds", "assets", "asset-requests"]) {
+      assert.equal(ids.includes(id), false, id);
+    }
+    assert.ok(ids.includes("dashboard"));
+    assert.ok(ids.includes("drivers"));
   });
 });
 

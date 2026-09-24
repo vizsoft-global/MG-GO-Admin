@@ -110,7 +110,6 @@ export function resolveIcon(name: string): LucideIcon {
 
 export const DEFAULT_GROUPS = [
   "Overview",
-  "Fleet",
   "Operations",
   "Settings",
   "WIP",
@@ -122,7 +121,6 @@ export const DEFAULT_GROUP_META: Record<
   { icon: string; displayMode?: "inline" | "panel" }
 > = {
   Overview: { icon: "Folder" },
-  Fleet: { icon: "Car", displayMode: "panel" },
   Operations: { icon: "Folder", displayMode: "panel" },
   Settings: { icon: "Settings", displayMode: "inline" },
   WIP: { icon: "AlertTriangle", displayMode: "panel" },
@@ -194,24 +192,6 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "partners.view",
   },
   {
-    id: "assets",
-    defaultLabel: "Assets",
-    defaultIcon: "Package",
-    href: "/assets",
-    defaultGroup: "Fleet",
-    defaultOrder: 5,
-    permission: "assets.view",
-  },
-  {
-    id: "asset-requests",
-    defaultLabel: "Asset requests",
-    defaultIcon: "PackageSearch",
-    href: "/assets/requests",
-    defaultGroup: "Fleet",
-    defaultOrder: 6,
-    permission: "requests.view",
-  },
-  {
     id: "restaurants",
     defaultLabel: "Restaurants",
     defaultIcon: "UtensilsCrossed",
@@ -246,42 +226,6 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Operations",
     defaultOrder: 5,
     permission: "verifications.view",
-  },
-  {
-    id: "vehicles",
-    defaultLabel: "Vehicles",
-    defaultIcon: "Bike",
-    href: "/vehicles",
-    defaultGroup: "Fleet",
-    defaultOrder: 1,
-    permission: "vehicles.view",
-  },
-  {
-    id: "fuel",
-    defaultLabel: "Fuel",
-    defaultIcon: "Fuel",
-    href: "/fuel",
-    defaultGroup: "Fleet",
-    defaultOrder: 2,
-    permission: "fuel.view",
-  },
-  {
-    id: "fuel-requests",
-    defaultLabel: "Fuel requests",
-    defaultIcon: "ClipboardList",
-    href: "/fuel/requests",
-    defaultGroup: "Fleet",
-    defaultOrder: 3,
-    permission: "requests.view",
-  },
-  {
-    id: "fuel-refunds",
-    defaultLabel: "Fuel refunds",
-    defaultIcon: "Banknote",
-    href: "/fuel/refunds",
-    defaultGroup: "Fleet",
-    defaultOrder: 4,
-    permission: "requests.view",
   },
   {
     id: "attendance",
@@ -568,7 +512,6 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
 /** Map menu item id → next-intl nav key (without `nav.` prefix). */
 export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "group-overview": "overview",
-  "group-fleet": "fleet",
   "group-operations": "operations",
   "group-system": "system",
   dashboard: "dashboard",

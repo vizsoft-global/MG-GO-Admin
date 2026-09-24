@@ -297,7 +297,7 @@ App does **not** send `vehicle_id`. RPC reads `drivers.vehicle_id`. Requires on-
 | `p_attachments` | jsonb array | yes — exactly the three kinds below |
 | `p_filled_at` | timestamptz | optional; server now if omitted |
 
-Each `p_attachments[]` element uses the **create-attachment object** below. Required kinds (rear camera, `source = mobile_camera`): `fuel_receipt`, `fuel_pump`, `odometer`. Upload bucket `fuel-fills` under `{driver_id}/…`. Writes `fuel_fills` + `fuel_fill_attachments`. Flutter route `/vehicle/fuel-fill` is a `rootNavigatorKey` full screen (not a tab branch). Existing force-update redirect covers it — do not add a bypass.
+Each `p_attachments[]` element uses the **create-attachment object** below. Required kinds (rear camera, `source = mobile_camera`): `fuel_receipt`, `fuel_pump`, `odometer`. Upload bucket `fuel-fills` under `{driver_id}/…`. Writes `fuel_fills` + `fuel_fill_attachments`. Admin-only `fuel_withdrawn_overrides` replaces the fuel-log Withdrawn total for one rider, vehicle, and Kuwait month — the app does not read or write it. Flutter route `/vehicle/fuel-fill` is a `rootNavigatorKey` full screen (not a tab branch). Existing force-update redirect covers it — do not add a bypass.
 
 #### Create-attachment object (`p_attachments[]`)
 

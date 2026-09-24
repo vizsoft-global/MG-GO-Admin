@@ -1,6 +1,6 @@
 "use server";
 
-import { logAdminRead } from "@/lib/audit/log-admin-activity";
+import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
@@ -62,4 +62,71 @@ export async function listFuelFills(input: {
     const parsed = parseFuelFillRow(row as Record<string, unknown>);
     return parsed ? [parsed] : [];
   });
+}
+
+export type FuelWithdrawnOverride = {
+  driverId: string;
+  vehicleId: string;
+  amountKwd: number;
+};
+
+const MONTH_KEY = /^\d{4}-\d{2}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function listFuelWithdrawnOverrides(monthKey: string): Promise<FuelWithdrawnOverride[]> {
+  const auth = await requireFuelView();
+  if ("error" in auth) throw new Error(auth.error);
+  if (!MONTH_KEY.test(monthKey)) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("fuel_withdrawn_overrides")
+    .select("driver_id, vehicle_id, amount_kwd")
+    .eq("month_key", monthKey);
+  if (error) throw new Error(error.message);
+  return (data ?? []).flatMap((row) => {
+    const amount = Number(row.amount_kwd);
+    if (!row.driver_id || !row.vehicle_id || !Number.isFinite(amount)) return [];
+    return [{ driverId: row.driver_id, vehicleId: row.vehicle_id, amountKwd: amount }];
+  });
+}
+
+export async function saveFuelWithdrawnOverride(input: {
+  driverId: string;
+  vehicleId: string;
+  monthKey: string;
+  amountKwd: number;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await requireFuelView();
+  if ("error" in auth) return { ok: false, error: auth.error };
+  if (!UUID.test(input.driverId) || !UUID.test(input.vehicleId) || !MONTH_KEY.test(input.monthKey)) {
+    return { ok: false, error: "invalid" };
+  }
+  if (!Number.isFinite(input.amountKwd) || input.amountKwd < 0 || input.amountKwd > 999_999) {
+    return { ok: false, error: "invalid_amount" };
+  }
+  const amountKwd = Math.round(input.amountKwd * 1000) / 1000;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("fuel_withdrawn_overrides").upsert(
+    {
+      driver_id: input.driverId,
+      vehicle_id: input.vehicleId,
+      month_key: input.monthKey,
+      amount_kwd: amountKwd,
+      updated_at: new Date().toISOString(),
+      updated_by: auth.session.id,
+    },
+    { onConflict: "driver_id,vehicle_id,month_key" },
+  );
+  if (error) return { ok: false, error: error.message };
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "fuel_withdrawn_overrides",
+    entityId: input.vehicleId,
+    routeName: "/fuel",
+    after: { driverId: input.driverId, monthKey: input.monthKey, amountKwd },
+  });
+  return { ok: true };
 }

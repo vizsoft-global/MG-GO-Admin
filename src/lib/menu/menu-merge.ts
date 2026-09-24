@@ -129,7 +129,7 @@ export function mergeMenu(config: MenuNode[]): {
   return {
     tree: relocateStaffAccessItem(
       relocateOrderReconItem(
-        relocatePayrollItem(relocateAssistantItem(relocateFleetItems(pruned))),
+        relocatePayrollItem(relocateAssistantItem(stripFleetSidebar(pruned))),
       ),
     ),
     unassignedIds: unassigned,
@@ -137,63 +137,27 @@ export function mergeMenu(config: MenuNode[]): {
 }
 
 const FLEET_GROUP_ID = "group-fleet";
+const FLEET_SIDEBAR_IDS = new Set([
+  "vehicles",
+  "fuel",
+  "fuel-requests",
+  "fuel-refunds",
+  "assets",
+  "asset-requests",
+]);
 
-function relocateFleetItems(tree: MenuNode[]): MenuNode[] {
-  const fleetIds = new Set(
-    MENU_REGISTRY.filter((item) => item.defaultGroup === "Fleet").map((item) => item.id),
-  );
-  const collected = new Map<string, MenuNode>();
-
+function stripFleetSidebar(tree: MenuNode[]): MenuNode[] {
   const strip = (nodes: MenuNode[]): MenuNode[] =>
     nodes.flatMap((node) => {
       if (node.type === "item") {
-        if (fleetIds.has(node.id)) {
-          collected.set(node.id, node);
-          return [];
-        }
-        return [node];
+        return FLEET_SIDEBAR_IDS.has(node.id) ? [] : [node];
       }
-      if (node.id === FLEET_GROUP_ID) {
-        for (const child of node.children ?? []) {
-          if (child.type === "item") collected.set(child.id, child);
-        }
-        return [];
-      }
+      if (node.id === FLEET_GROUP_ID) return [];
       const children = node.children ? strip(node.children) : [];
+      if (children.length === 0) return [];
       return [{ ...node, children }];
     });
-
-  const stripped = strip(tree);
-  const children = MENU_REGISTRY.filter((item) => item.defaultGroup === "Fleet")
-    .sort((a, b) => a.defaultOrder - b.defaultOrder)
-    .map((item) => {
-      const existing = collected.get(item.id);
-      return {
-        id: item.id,
-        type: "item" as const,
-        label: existing?.label ?? item.defaultLabel,
-        icon: existing?.icon ?? item.defaultIcon,
-        hidden: false,
-      };
-    });
-
-  if (children.length === 0) {
-    return stripped.filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
-  }
-
-  const fleetGroup: MenuNode = {
-    id: FLEET_GROUP_ID,
-    type: "group",
-    label: "Fleet",
-    icon: DEFAULT_GROUP_META.Fleet?.icon ?? "Car",
-    displayMode: DEFAULT_GROUP_META.Fleet?.displayMode,
-    children,
-  };
-
-  const overviewIdx = stripped.findIndex((node) => node.id === "group-overview");
-  const next = [...stripped];
-  next.splice(overviewIdx >= 0 ? overviewIdx + 1 : 0, 0, fleetGroup);
-  return next.filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
+  return strip(tree);
 }
 
 function relocateAssistantItem(tree: MenuNode[]): MenuNode[] {

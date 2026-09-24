@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import type { OrderReconTableRow } from "./order-recon-types";
-import { buildReconViews, comparedStoreRows } from "./order-recon-views";
+import { buildReconViews, comparedStoreRows, inUpload } from "./order-recon-views";
 
 export async function buildOrderReconWorkbook(rows: OrderReconTableRow[]) {
   const views = buildReconViews(rows);
@@ -31,7 +31,7 @@ export async function buildOrderReconWorkbook(rows: OrderReconTableRow[]) {
 
   const store = wb.addWorksheet("By store");
   store.addRow(["Employee", "Restaurant", "Date", "Excel Orders", "App Orders", "Difference", "Status"]);
-  for (const row of comparedStoreRows(rows)) {
+  for (const row of comparedStoreRows(rows).filter(inUpload)) {
     store.addRow([
       row.employee_id,
       row.restaurant_name,
