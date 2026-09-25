@@ -71,3 +71,15 @@ export function partnersLookupAoa(
     ...rows.map((row) => [row.name, row.id]),
   ];
 }
+
+/** Active companies only — an inactive one is refused by the importer. */
+export function companiesLookupAoa(
+  rows: readonly { name: string; client_code: string | null; is_active: boolean; is_system: boolean }[],
+): Array<Array<string | number>> {
+  return [
+    ["Company Name (paste this)", "Client ID", "Rider Category"],
+    ...rows
+      .filter((row) => row.is_active)
+      .map((row) => [row.name, row.client_code ?? "", row.is_system ? "in_house" : "outsourced"]),
+  ];
+}

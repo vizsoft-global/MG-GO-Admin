@@ -114,12 +114,20 @@ export function guessColumnMapping(
     const hit = lower.find((h) => needles.some((n) => h.key.includes(n)));
     return hit?.raw;
   };
+  const findExcept = (exclude: string[], ...needles: string[]) => {
+    const hit = lower.find(
+      (h) => needles.some((n) => h.key.includes(n)) && !exclude.some((x) => h.key.includes(x)),
+    );
+    return hit?.raw;
+  };
+  const OTHER_NAMES = ["company", "client", "platform", "partner", "restaurant", "zone"];
 
   const mapping: Partial<Record<DriverImportTargetField, string>> = {
-    full_name: find("full name", "name", "driver name"),
+    full_name:
+      find("full name", "driver name") ?? findExcept(OTHER_NAMES, "name"),
     phone: find("phone", "mobile", "tel"),
     civil_id: find("civil", "national id", "nid"),
-    employee_id: find("emp id", "emp_id", "employee"),
+    employee_id: find("mg id", "mg_id", "mgid", "emp id", "emp_id", "employee"),
     partner_id: find("partner id", "partner_id", "partner uuid", "partner"),
     zone_id: find("zone id", "zone_id", "zone uuid", "zone"),
     vehicle_label: find("vehicle", "bike", "plate"),
@@ -135,12 +143,29 @@ export function guessColumnMapping(
     ),
     nationality: find("nationality", "country"),
     rider_category: find("rider category", "category", "outsourced", "in house"),
-    source_company: find("source company", "source_company"),
+    // A company's Client ID is derived, so a "Company Client ID" column is never
+    // the company itself.
+    source_company: findExcept(
+      ["client id", "client_id", "code"],
+      "company name",
+      "company_name",
+      "source company",
+      "source_company",
+      "company",
+    ),
     // Deliberately not a bare "client" needle: `find` returns the first header
     // matching any needle, so "client" would let a sheet carrying only Client ID
-    // fill Client name with the same column.
-    client_id: find("client id", "client_id", "client code"),
-    client_name: find("client name", "client_name"),
+    // fill Client name with the same column. "company" is excluded because the
+    // company's Client ID is not the platform's.
+    client_id: findExcept(["company"], "platform id", "platform_id", "client id", "client_id", "client code"),
+    client_name: findExcept(
+      ["company", " id", "_id"],
+      "platform name",
+      "platform_name",
+      "client name",
+      "client_name",
+      "platform",
+    ),
     // Not "status": the intake already has a workflow status column elsewhere,
     // and guessing that one onto this field would approve drivers nobody asked
     // to approve.

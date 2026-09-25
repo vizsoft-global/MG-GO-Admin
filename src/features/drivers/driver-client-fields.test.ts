@@ -142,7 +142,7 @@ describe("templateGuideAoa", () => {
     assert.deepEqual(aoa[0], ["Column", "Required", "Allowed values", "Example"]);
     assert.equal(aoa.length, columns.length + 1);
 
-    const clientRow = aoa.find((row) => row[0] === "Client ID")!;
+    const clientRow = aoa.find((row) => row[0] === "Platform ID")!;
     assert.equal(clientRow[1], "Optional");
     assert.ok(clientRow[2].length > 0);
 

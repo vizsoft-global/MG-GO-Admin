@@ -83,7 +83,7 @@ Staff use **Verify & approve** on `/drivers/[id]` (or bulk import with **Approve
 
 `rider_category` on intakes/drivers: **`in_house`** (direct workforce) or **`outsourced`** (third-party). Required on admin create/edit; defaults to `in_house`; copied to `drivers` on approve. Admin list + detail show the label; mobile app may read from `drivers.rider_category` when needed for reporting/UI.
 
-`source_company` on intakes/drivers: optional catalog **`mg` / `kn` / `rvd` / `sadeeq` / `brk` / `hs` / `ar` / `zk`**. Stored, never inferred from employee ID or `client_name`. Copied on approve. Admin Performance Outsource tab and display-ID prefixes (`KN`, `RVD`, `SD`, `BRK`, `HS`, `AR`, `ZK`) read this column only. App may ignore it.
+`source_company` on intakes/drivers: optional FK to `source_companies.key` (system company `mg` for in-house; partner companies for outsourced). Stored, never inferred from employee ID or `client_name`. Copied on approve. Admin Drivers list shows that company's Client ID + name (MG = `CL-0001`; a company with no code shows Not set). Performance Outsource still reads the key. App may ignore the table. Staff manage rows at Settings → Companies; deactivating a company that still has active drivers is refused.
 
 ### 2c. Legacy OTP bootstrap (old intakes only)
 
@@ -204,6 +204,7 @@ Two fields the app must send, both of which exist to stop the fast rail from lyi
 | rejection_reason | text | Admin-authored when `status = rejected`. **Required on Delivery Details overlay** — select the column and show it under Status. Do not reuse `cancel_reason` (that is the rider cancel code). |
 | delivered_at | timestamptz | Set on driver submit |
 | delivered_lat, delivered_lng | numeric | GPS at submit time |
+| shift_date | date | Shift day from `delivery_shift_date(driver_id, COALESCE(delivered_at, pickup_at, created_at))`. Same rule as the default Orders Report: in-window `[start, end)` → previous (`start <= at`) → nearest start → Kuwait calendar date. Only `driver_daily_shifts.shift_date` in `[kd-1, kd]`. Exact shift end is not in-window; a next shift that starts then wins. Overlaps pick the earliest `window_start`. **My Deliveries day filter, calendar badges, and Home `week.deliveries_count` use this.** Payroll / `earn_date` / Extra Earnings `progress_count` stay unchanged. **Known limitation:** an admin later editing that rider's shift does **not** restamp existing rows. Select `shift_date` on the deliveries list. If the column is null (old row / old APK), fall back to the Kuwait calendar date of `delivered_at` / `pickup_at`. **Old APKs keep grouping by local midnight until the Play release.** |
 
 When admin sets `status = verified`, Postgres runs `recalculate_driver_earnings(driver_id, earn_date)` which updates `driver_earnings_daily` and syncs an approved `earning_credit` in `driver_wallet_entries`.
 
@@ -1204,7 +1205,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-09-17 — [admin+app] Admin attach files land at `{driver_id}/{request_id}/…`. Driver storage SELECT also allows owned-request folder[2] so older staff-prefix keys stay readable. App request detail lists attachments and opens signed URLs (document + salary breakdown). Sick leave step 3 **template** gains `approve` (`admin_get_request` joins templates; live steps have no `allowed_actions` column). One Approve completes step 4 when docs already exist. Migrations `20261026400000`, `20261026500000`. Flutter: PopScope back on request detail; Log Fuel station needs a letter/digit; litres/cost one `.` max 3 decimals. No Play release in this pass.*
+*Last synced: 2026-09-25 — [admin+app] `source_companies` catalog + `source_company` FK (was CHECK of eight keys). In-house riders resolve to system `mg` / `CL-0001`. App may ignore the table and still read `drivers.source_company` as text. Also: `deliveries.shift_date` + `delivery_shift_date`. My Deliveries / calendar / Home week counts use the shift day, not midnight. Select `shift_date`; null → Kuwait calendar of delivered/pickup. Old APKs stay midnight-based until Play. Home `week.deliveries_count` is `COALESCE(shift_date, Kuwait date)`. Stored `shift_date` is not restamped if an admin later edits a shift. Payroll / `earn_date` / Extra Earnings unchanged. Migrations `20261028300000`, `20261028400000`, `20261028500000`, `20261028600000`. Catalog migrations are on production. Admin Vercel prod. No Play.*
+
+*Prior: 2026-09-17 — [admin+app] Admin attach files land at `{driver_id}/{request_id}/…`. Driver storage SELECT also allows owned-request folder[2] so older staff-prefix keys stay readable. App request detail lists attachments and opens signed URLs (document + salary breakdown). Sick leave step 3 **template** gains `approve` (`admin_get_request` joins templates; live steps have no `allowed_actions` column). One Approve completes step 4 when docs already exist. Migrations `20261026400000`, `20261026500000`. Flutter: PopScope back on request detail; Log Fuel station needs a letter/digit; litres/cost one `.` max 3 decimals. No Play release in this pass.*
 
 *Prior: 2026-09-09 — [admin only] incentive overlap replace clamps `start_date` to Kuwait today; ended rules still resolve for their original days until the replacement starts. Daily report unchanged. Period/DPD score still resolves once at `p_to` (display-only). App does not read the report. Migration `20260909052508`.*
 

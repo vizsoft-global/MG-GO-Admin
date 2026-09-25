@@ -46,7 +46,7 @@ export function isPinnedTemplateField(field: string): boolean {
  *
  * Required columns come first, and Full Name first of all: `guessColumnMapping`
  * returns the first header matching any needle, and "name" would otherwise let
- * Client Name capture the full-name mapping.
+ * Company Name capture the full-name mapping.
  */
 const STANDARD_COLUMNS: Array<
   Omit<DriverImportColumnSpec, "required" | "pinned"> & {
@@ -61,7 +61,7 @@ const STANDARD_COLUMNS: Array<
   },
   {
     field: "employee_id",
-    header: "Employee ID",
+    header: "MG ID",
     allowed: "Letters and digits, 1 to 100 characters. Unique — this is half the app login. Used to match an existing driver on Update.",
     example: "EMP2048",
   },
@@ -118,19 +118,20 @@ const STANDARD_COLUMNS: Array<
   },
   {
     field: "source_company",
-    header: "Source Company",
-    allowed: "mg, kn, rvd, sadeeq, brk, hs, ar, zk. Leave blank if unknown. Do not infer from the ID.",
-    example: "mg",
+    header: "Company Name",
+    allowed:
+      "Company name or its Client ID, from the Companies sheet. In-house riders always belong to the system company; leave blank. Outsourced: blank means Unassigned. The company's Client ID is derived, not entered.",
+    example: "",
   },
   {
     field: "client_id",
-    header: "Client ID",
-    allowed: "Any text up to 64 characters. Riders on one contract may share it.",
+    header: "Platform ID",
+    allowed: "Any text up to 64 characters. Riders on one platform contract may share it.",
     example: "CLI-204",
   },
   {
     field: "client_name",
-    header: "Client Name",
+    header: "Platform",
     allowed: "Any text up to 120 characters.",
     example: "Gulf Retail Group",
   },

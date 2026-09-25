@@ -6,13 +6,10 @@ import { SegmentOption } from "@/components/app/toggle-chip";
 import { Input } from "@/components/ui/input";
 import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
 import { ProjectKeyField } from "@/features/fleet/project-key-field";
-import {
-  SOURCE_COMPANY_KEYS,
-  SOURCE_COMPANY_LABEL,
-  type SourceCompanyKey,
-} from "@/features/performance/performance-ops-formulas";
 import { countrySearchSelectItems } from "@/lib/geo/countries";
 import type { DriverRiderCategory } from "../types";
+import { companyMatchesCategory, selectableCompanies } from "../source-companies";
+import { useSourceCompanies } from "../use-source-companies";
 import { DriverAvatarUpload } from "../driver-avatar-upload";
 import { CIVIL_ID_DIGIT_COUNT, restrictDigits } from "../driver-phone";
 import { DriverPhoneField } from "./driver-phone-field";
@@ -121,6 +118,8 @@ export function DriverFormIdentitySection({
   };
 }) {
   const countryItems = useMemo(() => countrySearchSelectItems(), []);
+  const companies = useSourceCompanies();
+  const systemCompany = companies.find((c) => c.is_system) ?? null;
   const companyItems = useMemo(
     () => [
       {
@@ -128,14 +127,20 @@ export function DriverFormIdentitySection({
         label: placeholders.sourceCompany ?? "—",
         keywords: ["none"],
       },
-      ...SOURCE_COMPANY_KEYS.map((key: SourceCompanyKey) => ({
-        value: key,
-        label: SOURCE_COMPANY_LABEL[key],
-        keywords: [key, SOURCE_COMPANY_LABEL[key]],
+      ...selectableCompanies(riderCategory, companies, sourceCompany || null).map((c) => ({
+        value: c.key,
+        label: c.client_code ? `${c.name} · ${c.client_code}` : c.name,
+        keywords: [c.key, c.name, c.client_code ?? ""],
       })),
     ],
-    [placeholders.sourceCompany],
+    [placeholders.sourceCompany, riderCategory, companies, sourceCompany],
   );
+  const changeCategory = (next: DriverRiderCategory) => {
+    onRiderCategoryChange(next);
+    if (sourceCompany && !companyMatchesCategory(next, sourceCompany, companies)) {
+      onSourceCompanyChange("");
+    }
+  };
 
   return (
     <section className="space-y-2.5 rounded-lg border border-border bg-card p-4">
@@ -254,7 +259,7 @@ export function DriverFormIdentitySection({
               selected={riderCategory === "in_house"}
               disabled={disabled}
               variant={riderCategory === "in_house" ? "success" : "default"}
-              onClick={() => onRiderCategoryChange("in_house")}
+              onClick={() => changeCategory("in_house")}
             >
               {riderCategoryLabels.inHouse}
             </SegmentOption>
@@ -262,7 +267,7 @@ export function DriverFormIdentitySection({
               selected={riderCategory === "outsourced"}
               disabled={disabled}
               variant={riderCategory === "outsourced" ? "success" : "default"}
-              onClick={() => onRiderCategoryChange("outsourced")}
+              onClick={() => changeCategory("outsourced")}
             >
               {riderCategoryLabels.outsourced}
             </SegmentOption>
@@ -271,15 +276,25 @@ export function DriverFormIdentitySection({
 
         <FieldBlock>
           <FieldLabel htmlFor="driver-source-company">{labels.sourceCompany}</FieldLabel>
-          <SearchableSelect
-            value={sourceCompany || "none"}
-            onValueChange={(next) => onSourceCompanyChange(next === "none" ? "" : next)}
-            items={companyItems}
-            placeholder={placeholders.sourceCompany ?? "—"}
-            searchPlaceholder={placeholders.searchSourceCompany ?? ""}
-            recentsKey="driver-source-company"
-            disabled={disabled}
-          />
+          {riderCategory === "in_house" ? (
+            <Input
+              id="driver-source-company"
+              value={systemCompany?.name ?? ""}
+              readOnly
+              disabled
+              className="h-9 rounded-md text-sm"
+            />
+          ) : (
+            <SearchableSelect
+              value={sourceCompany || "none"}
+              onValueChange={(next) => onSourceCompanyChange(next === "none" ? "" : next)}
+              items={companyItems}
+              placeholder={placeholders.sourceCompany ?? "—"}
+              searchPlaceholder={placeholders.searchSourceCompany ?? ""}
+              recentsKey="driver-source-company"
+              disabled={disabled}
+            />
+          )}
         </FieldBlock>
 
         <FieldBlock>

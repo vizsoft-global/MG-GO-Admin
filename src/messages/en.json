@@ -50,7 +50,9 @@
       "endTime": "End time",
       "cancel": "Cancel",
       "apply": "Apply"
-    }
+    },
+    "yes": "Yes",
+    "no": "No"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -101,7 +103,8 @@
     "performance": "Performance",
     "assistant": "Staff Assistant",
     "payroll": "Payroll & Requests",
-    "driverDevices": "Driver devices"
+    "driverDevices": "Driver devices",
+    "sourceCompanies": "Companies"
   },
   "appNavGroups": {
     "overview": "Overview",
@@ -412,7 +415,32 @@
         "heading": "Legend",
         "flagsNote": "Flags are shown as badges; status colour never changes"
       },
-      "comingSoon": "Coming soon"
+      "comingSoon": "Coming soon",
+      "details": {
+        "heading": "Rider details",
+        "back": "Back to insights",
+        "location": "Current location",
+        "refreshLocation": "Refresh address",
+        "plate": "Vehicle plate",
+        "assignedRestaurants": "Assigned restaurants",
+        "noRestaurants": "No assigned restaurants",
+        "recentOrders": "Recent orders",
+        "noRecentOrders": "No recent orders",
+        "accuracy": "GPS accuracy",
+        "battery": "Battery",
+        "lastGps": "Last GPS update",
+        "speed": "Current speed",
+        "viewFullTimeline": "View full timeline",
+        "orderStatus": {
+          "on_delivery": "On delivery",
+          "delivered": "Delivered",
+          "pending": "Pending",
+          "verified": "Verified",
+          "rejected": "Rejected",
+          "under_review": "Under review",
+          "cancelled": "Cancelled"
+        }
+      }
     },
     "liveTracking": {
       "title": "Live tracking",
@@ -943,12 +971,12 @@
       "approveConfirmBody": "Create the driver account, activate them, and generate a 6-digit app passcode? The driver can sign in with Driver ID + passcode without OTP.",
       "approveSuccess": "Driver approved — passcode ready",
       "approveErrors": {
-        "missing_fields": "Complete identity fields (name, mobile, civil ID, employee ID) before approving.",
+        "missing_fields": "Complete identity fields (name, mobile, civil ID, MG ID) before approving.",
         "missing_active_restaurant": "Assign a zone or at least one published restaurant first.",
         "missing_assignment": "Assign a zone or at least one restaurant first.",
         "phone_exists": "This phone is already registered.",
         "civil_id_exists": "This civil ID is already registered to another driver.",
-        "employee_id_exists": "This employee ID is already in use.",
+        "employee_id_exists": "This MG ID is already in use.",
         "intake_already_linked": "This driver is already approved.",
         "not_authorized": "You do not have permission.",
         "save_failed": "Approval failed. Please try again."
@@ -971,7 +999,7 @@
         "cancel": "Cancel",
         "columns": {
           "driver_code": "Driver ID",
-          "employee_id": "Employee ID",
+          "employee_id": "MG ID",
           "full_name": "Name",
           "phone": "Phone",
           "partner": "Partner",
@@ -979,14 +1007,18 @@
           "restaurants": "Restaurants",
           "rider_category": "Category",
           "source_company": "Source company",
-          "client_id": "Client ID",
-          "client_name": "Client",
+          "client_id": "Platform ID",
+          "client_name": "Platform",
           "account_status": "Status",
           "on_duty": "Attendance",
           "today_deliveries": "Today Deliveries",
           "workflow_status": "Workflow",
-          "linked": "App linked"
-        }
+          "linked": "App linked",
+          "company_client_id": "Client ID",
+          "company_name": "Company Name"
+        },
+        "truncated": "Only the first {rows} rows were exported. Narrow the filters to export the rest.",
+        "failed": "Could not export drivers."
       },
       "searchPlaceholder": "Search anything…",
       "clearSearch": "Clear search",
@@ -1023,9 +1055,9 @@
       "kpiPending": "Pending Verification",
       "kpiSuspended": "Suspended Drivers",
       "colDriverId": "Driver ID",
-      "colEmployeeId": "Employee ID",
+      "colEmployeeId": "MG ID",
       "colRiderCategory": "Category",
-      "employeeId": "Employee ID",
+      "employeeId": "MG ID",
       "employeeIdPlaceholder": "e.g. EMP2048",
       "employeeIdHelp": "Required. Letters and digits, up to 100 characters, unique.",
       "colName": "Name",
@@ -1043,8 +1075,8 @@
       "sortNameDesc": "Name Z → A",
       "sortDriverCodeAsc": "Driver ID ↑",
       "sortDriverCodeDesc": "Driver ID ↓",
-      "sortEmployeeIdAsc": "Employee ID ↑",
-      "sortEmployeeIdDesc": "Employee ID ↓",
+      "sortEmployeeIdAsc": "MG ID ↑",
+      "sortEmployeeIdDesc": "MG ID ↓",
       "riderCategory": {
         "inHouse": "In-house",
         "outsourced": "Outsourced"
@@ -1065,7 +1097,7 @@
       "restoreErrors": {
         "phone_exists": "Another active driver already uses this phone number.",
         "civil_id_exists": "Another active driver already uses this civil ID.",
-        "employee_id_exists": "Another active driver already uses this employee ID.",
+        "employee_id_exists": "Another active driver already uses this MG ID.",
         "not_authorized": "You do not have permission.",
         "save_failed": "Restore failed. Please try again."
       },
@@ -1113,8 +1145,8 @@
         "lookupHint": "Copy an RST code into Restaurant IDs, or a Zone ID from the Zones sheet. A driver needs one of the two — leave the other cell blank.",
         "lookupFailed": "Could not export the list.",
         "requiredTitle": "Required",
-        "requiredList": "Full name, employee ID (letters and digits, up to 100 characters), and a zone or at least one restaurant.",
-        "optionalList": "Optional: phone (8 digits or +965), civil ID (12 digits), partner, the other of zone/restaurant, vehicle, nationality, rider category (in_house / outsourced), client ID, client name, active (yes/no). Phone and civil ID may be blank, but must be unique when filled in.",
+        "requiredList": "Full name, MG ID (letters and digits, up to 100 characters), and a zone or at least one restaurant.",
+        "optionalList": "Optional: phone (8 digits or +965), civil ID (12 digits), partner, the other of zone/restaurant, vehicle, nationality, rider category (in_house / outsourced), company name, platform ID, platform, active (yes/no). Phone and civil ID may be blank, but must be unique when filled in.",
         "mappingRequired": "Map every required field before preview.",
         "assignmentMappingRequired": "Map a Zone column or a Restaurants column — a driver needs one of the two.",
         "sourceColumns": "File columns",
@@ -1125,26 +1157,26 @@
           "full_name": "Full name",
           "phone": "Phone (+965, optional)",
           "civil_id": "Civil ID (optional)",
-          "employee_id": "Employee ID",
+          "employee_id": "MG ID",
           "partner_id": "Partner (name or UUID, optional)",
           "zone_id": "Zone ID (UUID — required if no restaurant)",
           "vehicle_label": "Vehicle / bike ID",
           "restaurant_ids": "Restaurants (name, RST code, or UUID — required if no zone)",
           "nationality": "Nationality (ISO or country name)",
           "rider_category": "Rider category (in_house / outsourced)",
-          "source_company": "Source company (mg / kn / rvd / sadeeq / brk / hs / ar / zk)",
+          "source_company": "Company Name",
           "active": "Active on import (yes / no)",
-          "client_id": "Client ID",
-          "client_name": "Client name"
+          "client_id": "Platform ID",
+          "client_name": "Platform"
         },
         "preview": "Preview",
         "back": "Back",
         "previewFailed": "Could not build preview.",
-        "previewSummary": "{ready} ready · {duplicate} existing Employee IDs · {invalid} invalid",
-        "duplicateStrategy": "Update existing by Employee ID",
+        "previewSummary": "{ready} ready · {duplicate} existing MG IDs · {invalid} invalid",
+        "duplicateStrategy": "Update existing by MG ID",
         "duplicateSkip": "Skip",
         "duplicateUpdate": "Update",
-        "duplicateUpdateHint": "Match the sheet to the fleet on Employee ID. On: update that rider. Off: skip them. Phone or civil ID belonging to a different rider is still refused.",
+        "duplicateUpdateHint": "Match the sheet to the fleet on MG ID. On: update that rider. Off: skip them. Phone or civil ID belonging to a different rider is still refused.",
         "approveImmediately": "Approve immediately (mint passcode)",
         "approveImmediatelyHint": "Applies to rows that leave the Active column blank.",
         "colStatus": "Status",
@@ -1172,13 +1204,13 @@
           "will_update": "Will update",
           "duplicate_phone": "Duplicate phone",
           "duplicate_civil_id": "Duplicate civil ID",
-          "duplicate_employee_id": "Duplicate employee ID",
+          "duplicate_employee_id": "Duplicate MG ID",
           "invalid_phone": "Invalid phone",
           "invalid_civil_id": "Invalid civil ID",
-          "invalid_employee_id": "Employee ID must be letters and digits, up to 100 characters",
+          "invalid_employee_id": "MG ID must be letters and digits, up to 100 characters",
           "invalid_nationality": "Unknown nationality",
           "invalid_rider_category": "Use in_house or outsourced",
-          "invalid_source_company": "Use mg, kn, rvd, sadeeq, brk, hs, ar, or zk",
+          "invalid_source_company": "Company not found. Use a name or Client ID from the Companies sheet",
           "invalid_active": "Use yes or no",
           "missing_fields": "Missing fields",
           "missing_assignment": "Needs a zone or a restaurant",
@@ -1189,8 +1221,9 @@
           "ambiguous_partner": "Partner name matches more than one",
           "ambiguous_zone": "Zone name matches more than one",
           "ambiguous_restaurant": "Restaurant name matches more than one",
-          "invalid_client_id": "Client ID is too long (max 64)",
-          "invalid_client_name": "Client name is too long (max 120)"
+          "invalid_client_id": "Platform ID is too long (max 64)",
+          "invalid_client_name": "Platform is too long (max 120)",
+          "company_category_mismatch": "In-house riders belong to the system company; outsourced riders to a partner company"
         },
         "templateColumns": "Columns",
         "templateColumnsTitle": "Columns in the template",
@@ -1263,8 +1296,26 @@
           "save_failed": "Could not save assignment. Please try again."
         }
       },
-      "colClientId": "Client ID",
-      "colClientName": "Client"
+      "colClientId": "Platform ID",
+      "colClientName": "Platform",
+      "colCompanyClientId": "Client ID",
+      "colCompanyName": "Company Name",
+      "companyUnassigned": "Unassigned",
+      "companyClientIdNotSet": "Not set",
+      "clearAllFilters": "Clear all filters",
+      "columnFilter": {
+        "search": "Search values…",
+        "contains": "Contains…",
+        "all": "All",
+        "clear": "Clear",
+        "apply": "Apply",
+        "min": "Min",
+        "max": "Max",
+        "noOptions": "No values",
+        "blank": "(Blank)",
+        "sortBy": "Sort by {label}",
+        "filterBy": "Filter {label}"
+      }
     },
     "partners": {
       "title": "Partners",
@@ -1504,12 +1555,12 @@
       "approveAwaitingLogin": "Approved — awaiting first app login",
       "statusActive": "Active",
       "approveErrors": {
-        "missing_fields": "Complete identity fields (name, mobile, civil ID, employee ID) before approving.",
+        "missing_fields": "Complete identity fields (name, mobile, civil ID, MG ID) before approving.",
         "missing_active_restaurant": "Assign a zone or at least one published restaurant first.",
         "missing_assignment": "Assign a zone or at least one restaurant first.",
         "phone_exists": "This phone is already registered.",
         "civil_id_exists": "This civil ID is already registered to another driver.",
-        "employee_id_exists": "This employee ID is already in use.",
+        "employee_id_exists": "This MG ID is already in use.",
         "intake_already_linked": "This driver is already approved.",
         "not_authorized": "You do not have permission.",
         "save_failed": "Approval failed. Please try again."
@@ -1525,7 +1576,7 @@
       "restoreErrors": {
         "phone_exists": "Another active driver already uses this phone number.",
         "civil_id_exists": "Another active driver already uses this civil ID.",
-        "employee_id_exists": "Another active driver already uses this employee ID.",
+        "employee_id_exists": "Another active driver already uses this MG ID.",
         "not_authorized": "You do not have permission.",
         "save_failed": "Restore failed. Please try again."
       },
@@ -1577,7 +1628,7 @@
           "full_name": "Full name",
           "phone": "Phone",
           "civil_id": "Civil ID",
-          "employee_id": "Employee ID",
+          "employee_id": "MG ID",
           "driver_code": "Driver ID",
           "partner": "Partner",
           "zone": "Zone",
@@ -1585,9 +1636,9 @@
           "vehicle": "Vehicle",
           "nationality": "Nationality",
           "rider_category": "Rider category",
-          "source_company": "Source company",
-          "client_id": "Client ID",
-          "client_name": "Client name",
+          "source_company": "Company",
+          "client_id": "Platform ID",
+          "client_name": "Platform",
           "workflow_status": "Workflow status",
           "account_status": "Account status",
           "blocked": "Blocked",
@@ -1859,8 +1910,8 @@
           "save_failed": "Could not update freeze. Please try again."
         }
       },
-      "fieldClientId": "Client ID",
-      "fieldClientName": "Client"
+      "fieldClientId": "Platform ID",
+      "fieldClientName": "Platform"
     },
     "driverGroups": {
       "title": "Driver groups",
@@ -1973,15 +2024,15 @@
         "civilId": "Civil ID (optional)",
         "nationality": "Nationality (optional)",
         "riderCategory": "Category",
-        "sourceCompany": "Source company",
+        "sourceCompany": "Company",
         "project": "Project",
         "driverCode": "Driver ID",
         "partner": "Partner (optional)",
         "zone": "Zone",
         "vehicle": "Assign Vehicle",
         "vehicleType": "Vehicle type",
-        "clientId": "Client ID (optional)",
-        "clientName": "Client name (optional)",
+        "clientId": "Platform ID (optional)",
+        "clientName": "Platform (optional)",
         "accommodation": "Accommodation (optional)"
       },
       "placeholders": {
@@ -2088,8 +2139,8 @@
         "invalid_civil_id": "Enter exactly 12 digits for the civil ID",
         "phone_exists": "This phone number is already registered",
         "civil_id_exists": "This civil ID is already registered to another driver",
-        "employee_id_exists": "This employee ID is already assigned to another driver",
-        "employee_id_format": "Employee ID must be letters and digits, up to 100 characters",
+        "employee_id_exists": "This MG ID is already assigned to another driver",
+        "employee_id_format": "MG ID must be letters and digits, up to 100 characters",
         "driver_code_exists": "This driver ID is already in use",
         "missing_documents": "Upload all required documents",
         "invalid_document_type": "Invalid document file type",
@@ -5694,7 +5745,9 @@
     },
     "deliveryRules": {
       "title": "Delivery rules",
-      "subtitle": "Define which verified deliveries count toward incentives"
+      "subtitle": "Define which verified deliveries count toward incentives",
+      "searchPlaceholder": "Search name, store, or store ID",
+      "emptyFiltered": "No rules match this search"
     },
     "incentiveRules": {
       "title": "Incentive rules",
@@ -7030,6 +7083,41 @@
         "save": "Save",
         "saved": "Vehicle type saved",
         "saveFailed": "Could not save the label."
+      },
+      "sourceCompanies": {
+        "title": "Companies",
+        "subtitle": "Companies riders are supplied by. The Client ID shows on the Drivers list; in-house riders always belong to the system company.",
+        "add": "Add company",
+        "edit": "Edit",
+        "colName": "Company Name",
+        "colClientId": "Client ID",
+        "colStatus": "Status",
+        "colDrivers": "Drivers",
+        "colActions": "Actions",
+        "active": "Active",
+        "inactive": "Inactive",
+        "notSet": "Not set",
+        "system": "System company",
+        "systemHint": "The system company is locked: in-house riders always belong to it.",
+        "inUseHint": "{count, plural, one {# driver uses} other {# drivers use}} this company, so it cannot be deactivated.",
+        "keyHint": "Key: {key}",
+        "clientIdHint": "Optional. Letters, digits and dashes. Blank shows as Not set on the Drivers list.",
+        "addTitle": "Add company",
+        "editTitle": "Edit company",
+        "modalSubtitle": "Name and Client ID show on the Drivers list.",
+        "cancel": "Cancel",
+        "save": "Save",
+        "saved": "Company saved",
+        "errors": {
+          "not_authorized": "You do not have permission to manage companies.",
+          "invalid_company_key": "A company with this name already exists, or the name has no letters or digits.",
+          "invalid_company_name": "Enter a company name (up to 120 characters).",
+          "invalid_client_code": "Client ID may only contain letters, digits and dashes (up to 32).",
+          "client_code_taken": "Another company already uses this Client ID.",
+          "source_company_system_locked": "The system company cannot be changed.",
+          "source_company_in_use": "Active drivers still belong to this company, so it cannot be deactivated.",
+          "save_failed": "Could not save the company."
+        }
       }
     },
     "auditLogs": {
@@ -7084,7 +7172,7 @@
       "downloadTable": "Download this table",
       "loading": "Loading month…",
       "loadError": "Could not load this payroll month",
-      "searchPlaceholder": "Search name, zone, restaurant, AM or MG ID",
+      "searchPlaceholder": "Search name, zone, restaurant, AM or Driver ID",
       "emptyRiders": "No riders match the current filters",
       "emptyRequests": "No requests match this filter",
       "showAll": "Show all",
@@ -7143,7 +7231,7 @@
       },
       "riderCols": {
         "amId": "AM ID",
-        "mgId": "MG ID",
+        "mgId": "Driver ID",
         "name": "Name",
         "restaurant": "Restaurant",
         "zone": "Zone",

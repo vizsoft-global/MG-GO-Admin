@@ -19,7 +19,10 @@ import {
   User,
   Users,
   Flag,
+  Tag,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
@@ -36,7 +39,7 @@ import {
   resolveExportColumnIds,
   type DriverExportCustomField,
 } from "./export-drivers";
-import type { DriverListRow } from "./types";
+import type { DriverListPageRow } from "./types";
 
 const COLUMN_ICONS = {
   driver_code: Hash,
@@ -47,7 +50,8 @@ const COLUMN_ICONS = {
   zone: MapPin,
   restaurants: Store,
   rider_category: Users,
-  source_company: Flag,
+  company_client_id: Tag,
+  company_name: Flag,
   client_id: Briefcase,
   client_name: Building2,
   account_status: Shield,
@@ -67,17 +71,20 @@ function defaultSelected(customFields: readonly DriverExportCustomField[]): stri
 export function DriversExportDialog({
   open,
   onOpenChange,
-  rows,
+  rowCount,
+  loadRows,
   customFields,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  rows: DriverListRow[];
+  rowCount: number;
+  loadRows: () => Promise<{ rows: DriverListPageRow[]; truncated: boolean }>;
   customFields: DriverExportCustomField[];
 }) {
   const t = useTranslations("pages.drivers.exportDialog");
   const [selected, setSelected] = useState<string[]>(() => defaultSelected(customFields));
   const [includeAppCode, setIncludeAppCode] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -103,14 +110,23 @@ export function DriversExportDialog({
     });
   };
 
-  const handleExport = () => {
-    downloadDriversCsv(
-      buildDriversExportAoa(rows, Array.from(selectedIds), {
-        includeAppCode,
-        customFields,
-      }),
-    );
-    onOpenChange(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const { rows, truncated } = await loadRows();
+      downloadDriversCsv(
+        buildDriversExportAoa(rows, Array.from(selectedIds), {
+          includeAppCode,
+          customFields,
+        }),
+      );
+      if (truncated) toast.warning(t("truncated", { rows: rows.length }));
+      onOpenChange(false);
+    } catch {
+      toast.error(t("failed"));
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -193,7 +209,7 @@ export function DriversExportDialog({
         <AppModalFooter
           title={t("title")}
           subtitle={t("subtitle", {
-            rows: rows.length,
+            rows: rowCount,
             columns: columnCount,
           })}
         >
@@ -210,9 +226,10 @@ export function DriversExportDialog({
             type="button"
             size="sm"
             className="h-9 cursor-pointer rounded-md px-4"
-            disabled={rows.length === 0}
+            disabled={rowCount === 0 || exporting}
             onClick={handleExport}
           >
+            {exporting ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
             {t("download")}
           </Button>
         </AppModalFooter>

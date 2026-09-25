@@ -40,7 +40,11 @@ import {
 } from "./driver-change-log";
 import type { DriverImportLogEvent } from "./import/import-progress";
 import { parseImportActive, parseRiderCategory } from "./import/parse";
-import { parseSourceCompany } from "@/features/performance/performance-ops-formulas";
+import {
+  companyMatchesCategory,
+  resolveCompanyInput,
+  type SourceCompany,
+} from "./source-companies";
 import {
   buildPartnerIndex,
   buildRestaurantIndex,
@@ -265,6 +269,7 @@ export async function resolveDriverImportPreview(
     { data: intakes },
     { data: drivers },
     { data: profiles },
+    { data: companyRows },
   ] = await Promise.all([
     supabase.from("partners").select("id, name"),
     supabase.from("zones").select("id, name, code"),
@@ -280,7 +285,11 @@ export async function resolveDriverImportPreview(
       .is("archived_at", null),
     supabase.from("drivers").select("id, employee_id, civil_id").is("archived_at", null),
     supabase.from("profiles").select("id, phone").eq("role", "rider"),
+    supabase
+      .from("source_companies")
+      .select("key, name, client_code, is_active, is_system, sort_order"),
   ]);
+  const companies: SourceCompany[] = companyRows ?? [];
 
   const partnerIndex = buildPartnerIndex(
     (partners ?? []).map((p) => ({ id: p.id, name: p.name })),
@@ -420,9 +429,11 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen()) {
-      const parsedCompany = parseSourceCompany(row.source_company);
+      const parsedCompany = resolveCompanyInput(row.source_company, companies);
       if (parsedCompany === "invalid") status = "invalid_source_company";
-      else source_company = parsedCompany;
+      else if (!companyMatchesCategory(rider_category, parsedCompany, companies)) {
+        status = "company_category_mismatch";
+      } else source_company = parsedCompany;
     }
 
     // Free text, so the only way a cell can be wrong is by being longer than

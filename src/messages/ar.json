@@ -50,7 +50,9 @@
       "endTime": "وقت النهاية",
       "cancel": "إلغاء",
       "apply": "تطبيق"
-    }
+    },
+    "yes": "نعم",
+    "no": "لا"
   },
   "nav": {
     "dashboard": "لوحة التحكم",
@@ -101,7 +103,8 @@
     "performance": "الأداء",
     "assistant": "مساعد الموظفين",
     "payroll": "الرواتب والطلبات",
-    "driverDevices": "أجهزة السائقين"
+    "driverDevices": "أجهزة السائقين",
+    "sourceCompanies": "الشركات"
   },
   "appNavGroups": {
     "overview": "نظرة عامة",
@@ -412,7 +415,32 @@
         "heading": "المفتاح",
         "flagsNote": "تظهر الأعلام كشارات ولا تتغير ألوان الحالة"
       },
-      "comingSoon": "قريباً"
+      "comingSoon": "قريباً",
+      "details": {
+        "heading": "تفاصيل السائق",
+        "back": "العودة إلى التحليلات",
+        "location": "الموقع الحالي",
+        "refreshLocation": "تحديث العنوان",
+        "plate": "لوحة المركبة",
+        "assignedRestaurants": "المطاعم المعينة",
+        "noRestaurants": "لا توجد مطاعم معينة",
+        "recentOrders": "الطلبات الأخيرة",
+        "noRecentOrders": "لا توجد طلبات أخيرة",
+        "accuracy": "دقة GPS",
+        "battery": "البطارية",
+        "lastGps": "آخر تحديث GPS",
+        "speed": "السرعة الحالية",
+        "viewFullTimeline": "عرض الجدول الزمني الكامل",
+        "orderStatus": {
+          "on_delivery": "قيد التوصيل",
+          "delivered": "تم التسليم",
+          "pending": "قيد الانتظار",
+          "verified": "موثق",
+          "rejected": "مرفوض",
+          "under_review": "قيد المراجعة",
+          "cancelled": "ملغى"
+        }
+      }
     },
     "liveTracking": {
       "title": "التتبع المباشر",
@@ -933,12 +961,12 @@
       "approveConfirmBody": "إنشاء حساب السائق وتفعيله وإصدار رمز دخول من 6 أرقام؟ يمكنه تسجيل الدخول برقم السائق + الرمز دون OTP.",
       "approveSuccess": "تم اعتماد السائق — الرمز جاهز",
       "approveErrors": {
-        "missing_fields": "أكمل حقول الهوية (الاسم، الجوال، الرقم المدني، رقم الموظف) قبل الاعتماد.",
+        "missing_fields": "أكمل حقول الهوية (الاسم، الجوال، الرقم المدني، رقم MG) قبل الاعتماد.",
         "missing_active_restaurant": "عيّن منطقة أو مطعماً منشوراً واحداً على الأقل أولاً.",
         "missing_assignment": "عيّن منطقة أو مطعماً واحداً على الأقل أولاً.",
         "phone_exists": "رقم الهاتف مسجل مسبقاً.",
         "civil_id_exists": "الرقم المدني مسجّل مسبقاً لسائق آخر.",
-        "employee_id_exists": "رقم الموظف مستخدم مسبقاً.",
+        "employee_id_exists": "رقم MG هذا مستخدم بالفعل.",
         "intake_already_linked": "تم اعتماد هذا السائق مسبقاً.",
         "not_authorized": "ليس لديك صلاحية.",
         "save_failed": "فشل الاعتماد. حاول مرة أخرى."
@@ -960,7 +988,7 @@
         "cancel": "إلغاء",
         "columns": {
           "driver_code": "رقم السائق",
-          "employee_id": "رقم الموظف",
+          "employee_id": "رقم MG",
           "full_name": "الاسم",
           "phone": "الهاتف",
           "partner": "الشريك",
@@ -968,14 +996,18 @@
           "restaurants": "المطاعم",
           "rider_category": "التصنيف",
           "source_company": "شركة المصدر",
-          "client_id": "معرّف العميل",
-          "client_name": "العميل",
+          "client_id": "معرّف المنصة",
+          "client_name": "المنصة",
           "account_status": "الحالة",
           "on_duty": "الحضور",
           "today_deliveries": "توصيلات اليوم",
           "workflow_status": "سير العمل",
-          "linked": "مربوط بالتطبيق"
-        }
+          "linked": "مربوط بالتطبيق",
+          "company_client_id": "رقم العميل",
+          "company_name": "اسم الشركة"
+        },
+        "truncated": "تم تصدير أول {rows} صف فقط. ضيّق الفلاتر لتصدير الباقي.",
+        "failed": "تعذر تصدير السائقين."
       },
       "searchPlaceholder": "ابحث عن أي شيء…",
       "clearSearch": "مسح البحث",
@@ -1012,9 +1044,9 @@
       "kpiPending": "بانتظار التحقق",
       "kpiSuspended": "السائقون الموقوفون",
       "colDriverId": "رقم السائق",
-      "colEmployeeId": "رقم الموظف",
+      "colEmployeeId": "رقم MG",
       "colRiderCategory": "التصنيف",
-      "employeeId": "رقم الموظف",
+      "employeeId": "رقم MG",
       "employeeIdPlaceholder": "مثال EMP2048",
       "employeeIdHelp": "إلزامي. حروف وأرقام حتى 100 خانة، فريد لكل سائق.",
       "colName": "الاسم",
@@ -1032,8 +1064,8 @@
       "sortNameDesc": "الاسم ي → أ",
       "sortDriverCodeAsc": "رقم السائق ↑",
       "sortDriverCodeDesc": "رقم السائق ↓",
-      "sortEmployeeIdAsc": "رقم الموظف ↑",
-      "sortEmployeeIdDesc": "رقم الموظف ↓",
+      "sortEmployeeIdAsc": "رقم MG ↑",
+      "sortEmployeeIdDesc": "رقم MG ↓",
       "riderCategory": {
         "inHouse": "داخلي",
         "outsourced": "خارجي"
@@ -1054,7 +1086,7 @@
       "restoreErrors": {
         "phone_exists": "رقم الهاتف مستخدم من سائق نشط آخر.",
         "civil_id_exists": "الرقم المدني مستخدم من سائق نشط آخر.",
-        "employee_id_exists": "رقم الموظف مستخدم من سائق نشط آخر.",
+        "employee_id_exists": "سائق نشط آخر يستخدم رقم MG هذا.",
         "not_authorized": "ليس لديك صلاحية.",
         "save_failed": "فشلت الاستعادة. حاول مرة أخرى."
       },
@@ -1102,8 +1134,8 @@
         "lookupHint": "انسخ رمز RST إلى عمود المطاعم، أو معرّف المنطقة من ورقة المناطق. يحتاج السائق أحدهما — اترك الخلية الأخرى فارغة.",
         "lookupFailed": "تعذر تصدير القائمة.",
         "requiredTitle": "مطلوب",
-        "requiredList": "الاسم الكامل، رقم الموظف (حروف وأرقام حتى 100 خانة)، ومنطقة أو مطعم واحد على الأقل.",
-        "optionalList": "اختياري: الهاتف (8 أرقام أو +965)، الرقم المدني (12 رقمًا)، الشريك، الآخر من المنطقة/المطعم، المركبة، الجنسية، فئة السائق (داخلي / خارجي)، معرّف العميل، اسم العميل، التفعيل (نعم / لا). يمكن ترك الهاتف والرقم المدني فارغين، لكن يجب ألا يتكررا عند تعبئتهما.",
+        "requiredList": "الاسم الكامل، رقم MG (حروف وأرقام حتى 100 حرف)، ومنطقة أو مطعم واحد على الأقل.",
+        "optionalList": "اختياري: الهاتف (8 أرقام أو ‎+965)، الرقم المدني (12 رقمًا)، الشريك، المنطقة أو المطعم الآخر، المركبة، الجنسية، فئة السائق (in_house / outsourced)، اسم الشركة، معرّف المنصة، المنصة، نشط (yes/no). يمكن ترك الهاتف والرقم المدني فارغين، لكن يجب أن يكونا فريدين عند إدخالهما.",
         "mappingRequired": "اربط كل الحقول المطلوبة قبل المعاينة.",
         "assignmentMappingRequired": "اربط عمود المنطقة أو عمود المطاعم — يحتاج السائق أحدهما.",
         "sourceColumns": "أعمدة الملف",
@@ -1114,26 +1146,26 @@
           "full_name": "الاسم الكامل",
           "phone": "الهاتف (+965، اختياري)",
           "civil_id": "الرقم المدني (اختياري)",
-          "employee_id": "رقم الموظف",
+          "employee_id": "رقم MG",
           "partner_id": "الشريك (الاسم أو UUID، اختياري)",
           "zone_id": "معرّف المنطقة (UUID — مطلوبة إن لم يُحدد مطعم)",
           "vehicle_label": "المركبة / رقم الدراجة",
           "restaurant_ids": "المطاعم (الاسم أو رمز RST أو UUID — مطلوبة إن لم تُحدد منطقة)",
           "nationality": "الجنسية (رمز ISO أو اسم الدولة)",
           "rider_category": "فئة السائق (داخلي / خارجي)",
-          "source_company": "شركة المصدر (mg / kn / rvd / sadeeq / brk / hs / ar / zk)",
+          "source_company": "اسم الشركة",
           "active": "التفعيل عند الاستيراد (نعم / لا)",
-          "client_id": "معرّف العميل",
-          "client_name": "اسم العميل"
+          "client_id": "معرّف المنصة",
+          "client_name": "المنصة"
         },
         "preview": "معاينة",
         "back": "رجوع",
         "previewFailed": "تعذر إنشاء المعاينة.",
-        "previewSummary": "{ready} جاهز · {duplicate} أرقام موظفين موجودة · {invalid} غير صالح",
-        "duplicateStrategy": "تحديث الموجود برقم الموظف",
+        "previewSummary": "{ready} جاهز · {duplicate} أرقام MG موجودة · {invalid} غير صالح",
+        "duplicateStrategy": "تحديث الموجود حسب رقم MG",
         "duplicateSkip": "تخطي",
         "duplicateUpdate": "تحديث",
-        "duplicateUpdateHint": "المطابقة على رقم الموظف. تشغيل: حدّث ذلك السائق. إيقاف: تخطَّه. الهاتف أو البطاقة المدنية العائدة لسائق آخر تُرفض.",
+        "duplicateUpdateHint": "مطابقة الملف مع الأسطول حسب رقم MG. تشغيل: تحديث السائق. إيقاف: تخطيه. يُرفض الهاتف أو الرقم المدني الخاص بسائق آخر.",
         "approveImmediately": "اعتماد فوري (إصدار رمز الدخول)",
         "approveImmediatelyHint": "ينطبق على الصفوف التي تُترك فيها خانة التفعيل فارغة.",
         "colStatus": "الحالة",
@@ -1161,13 +1193,13 @@
           "will_update": "سيتم التحديث",
           "duplicate_phone": "هاتف مكرر",
           "duplicate_civil_id": "رقم مدني مكرر",
-          "duplicate_employee_id": "رقم موظف مكرر",
+          "duplicate_employee_id": "رقم MG مكرر",
           "invalid_phone": "هاتف غير صالح",
           "invalid_civil_id": "رقم مدني غير صالح",
-          "invalid_employee_id": "يجب أن يكون رقم الموظف حروفاً وأرقاماً حتى 100 خانة",
+          "invalid_employee_id": "رقم MG يجب أن يكون حروفًا وأرقامًا حتى 100 حرف",
           "invalid_nationality": "جنسية غير معروفة",
           "invalid_rider_category": "استخدم داخلي أو خارجي",
-          "invalid_source_company": "استخدم mg أو kn أو rvd أو sadeeq أو brk أو hs أو ar أو zk",
+          "invalid_source_company": "الشركة غير موجودة. استخدم اسمًا أو رقم عميل من ورقة Companies",
           "invalid_active": "استخدم نعم أو لا",
           "missing_fields": "حقول ناقصة",
           "missing_assignment": "يحتاج منطقة أو مطعماً",
@@ -1178,8 +1210,9 @@
           "ambiguous_partner": "اسم الشريك يطابق أكثر من سجل",
           "ambiguous_zone": "اسم المنطقة يطابق أكثر من سجل",
           "ambiguous_restaurant": "اسم المطعم يطابق أكثر من سجل",
-          "invalid_client_id": "معرّف العميل طويل جدًا (64 حرفًا كحد أقصى)",
-          "invalid_client_name": "اسم العميل طويل جدًا (120 حرفًا كحد أقصى)"
+          "invalid_client_id": "معرّف المنصة طويل جدًا (الحد 64)",
+          "invalid_client_name": "اسم المنصة طويل جدًا (الحد 120)",
+          "company_category_mismatch": "السائقون الداخليون يتبعون شركة النظام، والخارجيون يتبعون شركة شريكة"
         },
         "templateColumns": "الأعمدة",
         "templateColumnsTitle": "الأعمدة في القالب",
@@ -1252,8 +1285,26 @@
           "save_failed": "تعذّر حفظ التعيين. حاول مرة أخرى."
         }
       },
-      "colClientId": "معرّف العميل",
-      "colClientName": "العميل"
+      "colClientId": "معرّف المنصة",
+      "colClientName": "المنصة",
+      "colCompanyClientId": "رقم العميل",
+      "colCompanyName": "اسم الشركة",
+      "companyUnassigned": "غير معيّن",
+      "companyClientIdNotSet": "غير محدد",
+      "clearAllFilters": "مسح كل الفلاتر",
+      "columnFilter": {
+        "search": "ابحث في القيم…",
+        "contains": "يحتوي على…",
+        "all": "الكل",
+        "clear": "مسح",
+        "apply": "تطبيق",
+        "min": "الأدنى",
+        "max": "الأعلى",
+        "noOptions": "لا توجد قيم",
+        "blank": "(فارغ)",
+        "sortBy": "فرز حسب {label}",
+        "filterBy": "تصفية {label}"
+      }
     },
     "partners": {
       "title": "الشركاء",
@@ -1494,12 +1545,12 @@
       "approveAwaitingLogin": "معتمد — بانتظار أول دخول للتطبيق",
       "statusActive": "نشط",
       "approveErrors": {
-        "missing_fields": "أكمل حقول الهوية (الاسم، الجوال، الرقم المدني، رقم الموظف) قبل الاعتماد.",
+        "missing_fields": "أكمل حقول الهوية (الاسم، الجوال، الرقم المدني، رقم MG) قبل الاعتماد.",
         "missing_active_restaurant": "عيّن منطقة أو مطعماً منشوراً واحداً على الأقل أولاً.",
         "missing_assignment": "عيّن منطقة أو مطعماً واحداً على الأقل أولاً.",
         "phone_exists": "رقم الهاتف مسجل مسبقاً.",
         "civil_id_exists": "الرقم المدني مسجّل مسبقاً لسائق آخر.",
-        "employee_id_exists": "رقم الموظف مستخدم مسبقاً.",
+        "employee_id_exists": "رقم MG هذا مستخدم بالفعل.",
         "intake_already_linked": "تم اعتماد هذا السائق مسبقاً.",
         "not_authorized": "ليس لديك صلاحية.",
         "save_failed": "فشل الاعتماد. حاول مرة أخرى."
@@ -1515,7 +1566,7 @@
       "restoreErrors": {
         "phone_exists": "رقم الهاتف مستخدم من سائق نشط آخر.",
         "civil_id_exists": "الرقم المدني مستخدم من سائق نشط آخر.",
-        "employee_id_exists": "رقم الموظف مستخدم من سائق نشط آخر.",
+        "employee_id_exists": "سائق نشط آخر يستخدم رقم MG هذا.",
         "not_authorized": "ليس لديك صلاحية.",
         "save_failed": "فشلت الاستعادة. حاول مرة أخرى."
       },
@@ -1567,7 +1618,7 @@
           "full_name": "الاسم الكامل",
           "phone": "الهاتف",
           "civil_id": "البطاقة المدنية",
-          "employee_id": "رقم الموظف",
+          "employee_id": "رقم MG",
           "driver_code": "رقم السائق",
           "partner": "الشريك",
           "zone": "المنطقة",
@@ -1575,9 +1626,9 @@
           "vehicle": "المركبة",
           "nationality": "الجنسية",
           "rider_category": "فئة السائق",
-          "source_company": "شركة المصدر",
-          "client_id": "معرّف العميل",
-          "client_name": "اسم العميل",
+          "source_company": "الشركة",
+          "client_id": "معرّف المنصة",
+          "client_name": "المنصة",
           "workflow_status": "حالة سير العمل",
           "account_status": "حالة الحساب",
           "blocked": "محظور",
@@ -1848,8 +1899,8 @@
           "save_failed": "تعذر تحديث التجميد. حاول مرة أخرى."
         }
       },
-      "fieldClientId": "معرّف العميل",
-      "fieldClientName": "العميل"
+      "fieldClientId": "معرّف المنصة",
+      "fieldClientName": "المنصة"
     },
     "driverGroups": {
       "title": "مجموعات السائقين",
@@ -1962,15 +2013,15 @@
         "civilId": "الرقم المدني (اختياري)",
         "nationality": "الجنسية (اختياري)",
         "riderCategory": "التصنيف",
-        "sourceCompany": "شركة المصدر",
+        "sourceCompany": "الشركة",
         "project": "المشروع",
         "driverCode": "رقم السائق",
         "partner": "الشريك (اختياري)",
         "zone": "المنطقة",
         "vehicle": "تعيين مركبة",
         "vehicleType": "نوع المركبة",
-        "clientId": "معرّف العميل (اختياري)",
-        "clientName": "اسم العميل (اختياري)",
+        "clientId": "معرّف المنصة (اختياري)",
+        "clientName": "المنصة (اختياري)",
         "accommodation": "السكن (اختياري)"
       },
       "placeholders": {
@@ -2076,8 +2127,8 @@
         "invalid_civil_id": "أدخل 12 رقمًا بالضبط للرقم المدني",
         "phone_exists": "رقم الهاتف مسجّل مسبقاً",
         "civil_id_exists": "الرقم المدني مسجّل مسبقاً لسائق آخر",
-        "employee_id_exists": "رقم الموظف هذا مُعيَّن لسائق آخر",
-        "employee_id_format": "يجب أن يكون رقم الموظف حروفاً وأرقاماً حتى 100 خانة",
+        "employee_id_exists": "رقم MG هذا مخصص لسائق آخر",
+        "employee_id_format": "رقم MG يجب أن يكون حروفًا وأرقامًا حتى 100 حرف",
         "driver_code_exists": "رقم السائق مستخدم مسبقاً",
         "missing_documents": "ارفع جميع المستندات المطلوبة",
         "invalid_document_type": "نوع ملف غير صالح",
@@ -5619,7 +5670,9 @@
     },
     "deliveryRules": {
       "title": "قواعد التوصيل",
-      "subtitle": "تحديد التوصيلات المؤكدة التي تُحتسب ضمن الحوافز"
+      "subtitle": "تحديد التوصيلات المؤكدة التي تُحتسب ضمن الحوافز",
+      "searchPlaceholder": "ابحث بالاسم أو المتجر أو رقم المتجر",
+      "emptyFiltered": "لا توجد قواعد تطابق هذا البحث"
     },
     "incentiveRules": {
       "title": "قواعد الحوافز",
@@ -6952,6 +7005,41 @@
         "save": "حفظ",
         "saved": "تم حفظ نوع المركبة",
         "saveFailed": "تعذر حفظ التسمية."
+      },
+      "sourceCompanies": {
+        "title": "الشركات",
+        "subtitle": "الشركات التي توفّر السائقين. يظهر رقم العميل في قائمة السائقين؛ السائقون الداخليون يتبعون دائمًا شركة النظام.",
+        "add": "إضافة شركة",
+        "edit": "تعديل",
+        "colName": "اسم الشركة",
+        "colClientId": "رقم العميل",
+        "colStatus": "الحالة",
+        "colDrivers": "السائقون",
+        "colActions": "الإجراءات",
+        "active": "نشطة",
+        "inactive": "غير نشطة",
+        "notSet": "غير محدد",
+        "system": "شركة النظام",
+        "systemHint": "شركة النظام مقفلة: السائقون الداخليون يتبعونها دائمًا.",
+        "inUseHint": "{count, plural, one {سائق واحد يستخدم} other {# سائقين يستخدمون}} هذه الشركة، لذا لا يمكن إلغاء تفعيلها.",
+        "keyHint": "المفتاح: {key}",
+        "clientIdHint": "اختياري. حروف وأرقام وشرطات. الفارغ يظهر «غير محدد» في قائمة السائقين.",
+        "addTitle": "إضافة شركة",
+        "editTitle": "تعديل الشركة",
+        "modalSubtitle": "يظهر الاسم ورقم العميل في قائمة السائقين.",
+        "cancel": "إلغاء",
+        "save": "حفظ",
+        "saved": "تم حفظ الشركة",
+        "errors": {
+          "not_authorized": "ليست لديك صلاحية إدارة الشركات.",
+          "invalid_company_key": "توجد شركة بهذا الاسم، أو أن الاسم لا يحتوي حروفًا أو أرقامًا.",
+          "invalid_company_name": "أدخل اسم الشركة (حتى 120 حرفًا).",
+          "invalid_client_code": "رقم العميل يقبل الحروف والأرقام والشرطات فقط (حتى 32).",
+          "client_code_taken": "شركة أخرى تستخدم رقم العميل هذا.",
+          "source_company_system_locked": "لا يمكن تعديل شركة النظام.",
+          "source_company_in_use": "لا يزال سائقون نشطون يتبعون هذه الشركة، لذا لا يمكن إلغاء تفعيلها.",
+          "save_failed": "تعذر حفظ الشركة."
+        }
       }
     },
     "auditLogs": {
@@ -7006,7 +7094,7 @@
       "downloadTable": "تنزيل هذا الجدول",
       "loading": "جارٍ تحميل الشهر…",
       "loadError": "تعذر تحميل شهر الرواتب",
-      "searchPlaceholder": "ابحث بالاسم أو المنطقة أو المطعم أو رقم AM/MG",
+      "searchPlaceholder": "ابحث بالاسم أو المنطقة أو المطعم أو AM أو رقم السائق",
       "emptyRiders": "لا يوجد سائقون مطابقون للفلاتر",
       "emptyRequests": "لا توجد طلبات مطابقة لهذا الفلتر",
       "showAll": "عرض الكل",
@@ -7065,7 +7153,7 @@
       },
       "riderCols": {
         "amId": "رقم AM",
-        "mgId": "رقم MG",
+        "mgId": "رقم السائق",
         "name": "الاسم",
         "restaurant": "المطعم",
         "zone": "المنطقة",

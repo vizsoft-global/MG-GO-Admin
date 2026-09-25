@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  companiesLookupAoa,
   partnersLookupAoa,
   restaurantsLookupAoa,
   zonesLookupAoa,
@@ -47,5 +48,17 @@ describe("lookup spreadsheets", () => {
       { name: "Talabat", id: "11111111-1111-4111-8111-111111111111" },
     ]);
     assert.deepEqual(aoa[1], ["Talabat", "11111111-1111-4111-8111-111111111111"]);
+  });
+
+  it("lists only active companies with Client ID and rider category", () => {
+    const aoa = companiesLookupAoa([
+      { name: "MG", client_code: "CL-0001", is_active: true, is_system: true },
+      { name: "Barakat", client_code: null, is_active: false, is_system: false },
+      { name: "KN", client_code: null, is_active: true, is_system: false },
+    ]);
+    assert.deepEqual(aoa[0], ["Company Name (paste this)", "Client ID", "Rider Category"]);
+    assert.equal(aoa.length, 3);
+    assert.deepEqual(aoa[1], ["MG", "CL-0001", "in_house"]);
+    assert.deepEqual(aoa[2], ["KN", "", "outsourced"]);
   });
 });

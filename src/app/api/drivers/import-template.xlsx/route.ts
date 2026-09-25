@@ -7,6 +7,7 @@ import {
   type DriverImportCustomColumn,
 } from "@/features/drivers/import/template";
 import {
+  companiesLookupAoa,
   partnersLookupAoa,
   restaurantsLookupAoa,
   zonesLookupAoa,
@@ -21,7 +22,7 @@ import {
 
 export async function GET(request: Request) {
   const supabase = await createClient();
-  const [{ data: defs }, lookups] = await Promise.all([
+  const [{ data: defs }, lookups, { data: companies }] = await Promise.all([
     supabase
       .from("custom_field_definitions")
       .select("key, label, field_type, options")
@@ -30,6 +31,10 @@ export async function GET(request: Request) {
       .is("archived_at", null)
       .order("sort_order", { ascending: true }),
     fetchDriverImportLookups(),
+    supabase
+      .from("source_companies")
+      .select("name, client_code, is_active, is_system")
+      .order("sort_order", { ascending: true }),
   ]);
 
   const customColumns: DriverImportCustomColumn[] = (defs ?? []).map((d) => ({
@@ -91,6 +96,11 @@ export async function GET(request: Request) {
     wb,
     XLSX.utils.aoa_to_sheet(partnersLookupAoa(lists.partners)),
     "Partners",
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet(companiesLookupAoa(companies ?? [])),
+    "Companies",
   );
   const buffer = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
 
