@@ -177,6 +177,17 @@ export type DriverListRow = {
   custom_fields: Record<string, string | number | boolean | string[] | null>;
 };
 
+/** mg = in-house (system company), partner = outsourced with a company, unassigned = outsourced with none. */
+export type DriverCompanyTone = "mg" | "partner" | "unassigned";
+
+export type DriverListPageRow = DriverListRow & {
+  company_key: string | null;
+  company_name: string | null;
+  /** The company's Client ID (e.g. CL-0001); null when Ops has not set one. */
+  company_client_code: string | null;
+  company_tone: DriverCompanyTone;
+};
+
 export type DriverAssignedAsset = {
   catalog_item_id: string;
   name: string;
@@ -285,6 +296,7 @@ export type DriverImportPreviewStatus =
   | "invalid_nationality"
   | "invalid_rider_category"
   | "invalid_source_company"
+  | "company_category_mismatch"
   | "invalid_client_id"
   | "invalid_client_name"
   | "invalid_active"

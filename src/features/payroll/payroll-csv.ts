@@ -11,7 +11,7 @@ import type { PayrollRequestRow, PayrollRiderRow } from "./payroll-types";
 
 export const PAYROLL_IDENTITY_HEADERS = [
   "AM ID",
-  "MG ID",
+  "Driver ID",
   "Name",
   "Restaurant",
   "Zone",

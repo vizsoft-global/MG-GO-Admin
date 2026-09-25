@@ -28,11 +28,20 @@ export function normalizeListColumnPreference(
 ): ListColumnPreference {
   if (!isListColumnPreference(raw)) return system;
   const known = new Set(knownIds);
-  const order = [
-    ...raw.order.filter((id) => known.has(id)),
-    ...knownIds.filter((id) => !raw.order.includes(id)),
+  // A column added after the preference was saved lands beside its default
+  // neighbour with its default visibility, not hidden at the end.
+  const order = raw.order.filter((id) => known.has(id));
+  const added: string[] = [];
+  knownIds.forEach((id, index) => {
+    if (order.includes(id)) return;
+    added.push(id);
+    const prev = knownIds.slice(0, index).reverse().find((p) => order.includes(p));
+    order.splice(prev ? order.indexOf(prev) + 1 : 0, 0, id);
+  });
+  const visible = [
+    ...raw.visible.filter((id) => known.has(id)),
+    ...added.filter((id) => system.visible.includes(id)),
   ];
-  const visible = raw.visible.filter((id) => known.has(id));
   const sort =
     raw.sort && known.has(raw.sort.id)
       ? { id: raw.sort.id, dir: raw.sort.dir }

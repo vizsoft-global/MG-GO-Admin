@@ -21,7 +21,11 @@ import {
 } from "./driver-change-log";
 import { normalizeClientValue } from "./driver-client-fields";
 import { parseDriverRiderCategory } from "./driver-rider-category";
-import { parseSourceCompany } from "@/features/performance/performance-ops-formulas";
+import {
+  companyMatchesCategory,
+  resolveCompanyInput,
+  type SourceCompany,
+} from "./source-companies";
 import { parseDriverProjectKey } from "@/features/fleet/fleet-labels";
 import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
 import type { RestrictionReason, RestrictionReasonKind } from "./driver-freeze";
@@ -109,6 +113,25 @@ async function requireDriversView() {
     throw new Error("not_authorized");
   }
   return session;
+}
+
+async function resolveSourceCompanyForSave(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  riderCategory: DriverRiderCategory | null,
+  raw: string,
+): Promise<string | null> {
+  const value = raw.trim();
+  if (!value) return null;
+  const { data } = await supabase
+    .from("source_companies")
+    .select("key, name, client_code, is_active, is_system, sort_order");
+  const companies = (data ?? []) as SourceCompany[];
+  // The form submits the key; an inactive key is the driver's current value.
+  const exact = companies.find((c) => c.key === value);
+  const resolved = exact ? exact.key : resolveCompanyInput(value, companies);
+  if (resolved === "invalid" || resolved === null) return null;
+  if (!riderCategory) return resolved;
+  return companyMatchesCategory(riderCategory, resolved, companies) ? resolved : null;
 }
 
 /** Server-side R2 check — must not call isR2Configured() from client components. */
@@ -319,8 +342,7 @@ export async function createDriverIntake(
   const employeeId = normalizeEmployeeId(employeeIdRaw);
   const nationality = normalizeCountryCode(String(formData.get("nationality") ?? ""));
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
-  const parsedCompany = parseSourceCompany(String(formData.get("sourceCompany") ?? ""));
-  const sourceCompany = parsedCompany === "invalid" ? null : parsedCompany;
+  const sourceCompanyRaw = String(formData.get("sourceCompany") ?? "");
   const projectKey = parseDriverProjectKey(formData.get("projectKey"));
   const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
   const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
@@ -362,6 +384,7 @@ export async function createDriverIntake(
     return { error: "missing_assignment" };
   }
   const supabase = await createClient();
+  const sourceCompany = await resolveSourceCompanyForSave(supabase, riderCategory, sourceCompanyRaw);
   const intakeId = crypto.randomUUID();
 
   const docsToUpload: { docType: DriverDocumentType; file: File }[] = [];
@@ -1055,8 +1078,7 @@ async function updateDriverIntakeInner(
   const employeeId = normalizeEmployeeId(employeeIdRaw);
   const nationality = normalizeCountryCode(String(formData.get("nationality") ?? ""));
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
-  const parsedCompany = parseSourceCompany(String(formData.get("sourceCompany") ?? ""));
-  const sourceCompany = parsedCompany === "invalid" ? null : parsedCompany;
+  const sourceCompanyRaw = String(formData.get("sourceCompany") ?? "");
   const projectKey = parseDriverProjectKey(formData.get("projectKey"));
   const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
   const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
@@ -1092,6 +1114,7 @@ async function updateDriverIntakeInner(
   if (civilId && !civilIdNormalized) return { error: "invalid_civil_id" };
 
   const supabase = await createClient();
+  const sourceCompany = await resolveSourceCompanyForSave(supabase, riderCategory, sourceCompanyRaw);
   const restaurantIds = parseRestaurantIds(formData);
   if (!hasOpsAssignment(zoneId, restaurantIds)) {
     return { error: "missing_assignment" };

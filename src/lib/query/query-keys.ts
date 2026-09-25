@@ -9,6 +9,9 @@ export const queryKeys = {
   drivers: {
     all: () => ["drivers"] as const,
     list: (filters: Record<string, unknown> = {}) => ["drivers", "list", filters] as const,
+    page: (query: Record<string, unknown>) => ["drivers", "page", query] as const,
+    filterValues: (column: string, query: Record<string, unknown>) =>
+      ["drivers", "filter-values", column, query] as const,
     detail: (id: string) => ["drivers", "detail", id] as const,
     devices: (driverId: string) => ["drivers", "devices", driverId] as const,
     multiDeviceRecent: (days: number) => ["drivers", "multi-device-recent", days] as const,
@@ -324,6 +327,11 @@ export const queryKeys = {
   documentExpiry: {
     all: () => ["document-expiry"] as const,
     dashboard: () => ["document-expiry", "dashboard"] as const,
+  },
+  sourceCompanies: {
+    all: () => ["source-companies"] as const,
+    list: () => ["source-companies", "list"] as const,
+    usage: () => ["source-companies", "usage"] as const,
   },
   customFields: {
     all: () => ["custom-fields"] as const,

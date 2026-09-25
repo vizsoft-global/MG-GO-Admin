@@ -6,10 +6,10 @@ import { useRouter, Link } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 import {
   ArchiveRestore,
-  ArrowUpDown,
   CheckCircle2,
   Download,
   Eye,
+  FilterX,
   Loader2,
   Pencil,
   Plus,
@@ -35,15 +35,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CardContent } from "@/components/ui/card";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -58,25 +49,20 @@ import {
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { cn } from "@/lib/utils";
 import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
-import { customFieldColumnId } from "@/lib/custom-fields/types";
+import { customFieldColumnId, type CustomFieldDefinition } from "@/lib/custom-fields/types";
 import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
 import { useDriversListColumns } from "./use-drivers-list-columns";
-import { useDriverFormOptions } from "./use-driver-form-options";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { fetchDriverDetail } from "./drivers-actions";
+import { fetchDriversForExport } from "./drivers-list-actions";
 import { useAuth } from "@/contexts/auth-context";
-import { useApproveDriverIntake, useDriverDetail, useDriversList, useDriversMultiDeviceRecent, useRestoreDriverIntake, type DriversTabFilter } from "./use-drivers";
+import { useApproveDriverIntake, useDriverDetail, useRestoreDriverIntake } from "./use-drivers";
+import { useDriversPage } from "./use-drivers-page";
 import { DriverBulkImportDialog } from "./import/bulk-import-dialog";
 import { DriversExportDialog } from "./export-drivers-dialog";
 import { isDriverErrorKey } from "./driver-errors";
-import {
-  DRIVERS_PAGE_SIZE,
-  DRIVERS_SORT_KEYS,
-  sortDrivers,
-  type DriversSortKey,
-} from "./drivers-list-utils";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import {
   AccountStatusPill,
@@ -89,15 +75,21 @@ import {
 import { DriverFormSheet } from "./driver-form-sheet";
 import { DriverEditSheet } from "./driver-edit-sheet";
 import { DriversKpiStrip } from "./drivers-kpi-strip";
+import { DriversColumnHeader, type DriversHeaderLabels } from "./drivers-column-header";
 import {
-  countActiveDriversFilters,
-  DEFAULT_DRIVERS_FILTERS,
-  DriversFiltersButton,
-  DriversFiltersDialog,
-  type DriversFiltersState,
-} from "./drivers-filters-dialog";
+  DEFAULT_DRIVERS_SORT,
+  DRIVERS_FILTER_KINDS,
+  countActiveFilters,
+  customFilterColumn,
+  nextSort,
+  withColumnFilter,
+  type DriversColumnFilters,
+  type DriversFixedColumn,
+  type DriversSort,
+  type DriversTab,
+} from "./drivers-list-query";
 import { riderCategoryMessageKey } from "./driver-rider-category";
-import { type DriverAccountStatus, type DriverListRow } from "./types";
+import { type DriverAccountStatus, type DriverListPageRow } from "./types";
 
 function shouldIgnoreRowNavigation(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -108,53 +100,36 @@ function shouldIgnoreRowNavigation(target: EventTarget | null): boolean {
   );
 }
 
-const SORT_I18N: Record<DriversSortKey, string> = {
-  name_asc: "sortNameAsc",
-  name_desc: "sortNameDesc",
-  driver_code_asc: "sortDriverCodeAsc",
-  driver_code_desc: "sortDriverCodeDesc",
-  employee_id_asc: "sortEmployeeIdAsc",
-  employee_id_desc: "sortEmployeeIdDesc",
-  zone_asc: "sortZoneAsc",
-  zone_desc: "sortZoneDesc",
-  partner_asc: "sortPartnerAsc",
-  partner_desc: "sortPartnerDesc",
-  deliveries_desc: "sortDeliveriesDesc",
-  deliveries_asc: "sortDeliveriesAsc",
-  status_active_first: "sortStatusActiveFirst",
-  on_duty_first: "sortOnDutyFirst",
+/** Table column id → server filter/sort column. Passcode, select and actions have none. */
+const COLUMN_FILTER_KEY: Record<string, DriversFixedColumn> = {
+  driverId: "driverId",
+  employeeId: "mgId",
+  riderCategory: "riderCategory",
+  companyClientId: "companyClientId",
+  companyName: "companyName",
+  name: "name",
+  phone: "phone",
+  restaurants: "restaurants",
+  zone: "zone",
+  clientId: "platformId",
+  clientName: "platformName",
+  todayDeliveries: "todayDeliveries",
+  status: "status",
+  attendance: "attendance",
 };
 
-function applyDriversListFilters(
-  rows: DriverListRow[],
-  filters: DriversFiltersState,
-  search: string,
-): DriverListRow[] {
-  const q = search.trim().toLowerCase();
-  const qDigits = q.replace(/\D/g, "");
-  return rows.filter((d) => {
-    if (filters.zoneId && d.zone_id !== filters.zoneId) return false;
-    if (filters.partnerId && d.partner_id !== filters.partnerId) return false;
-    if (filters.status !== "all" && d.account_status !== filters.status) return false;
-    if (filters.restaurantId && !d.restaurant_ids.includes(filters.restaurantId)) {
-      return false;
-    }
-    if (!q) return true;
-    const matchesText =
-      d.full_name.toLowerCase().includes(q) ||
-      d.driver_code.toLowerCase().includes(q) ||
-      (d.employee_id?.toLowerCase().includes(q) ?? false) ||
-      d.partner_name.toLowerCase().includes(q) ||
-      d.zone_name.toLowerCase().includes(q) ||
-      (d.client_id?.toLowerCase().includes(q) ?? false) ||
-      (d.client_name?.toLowerCase().includes(q) ?? false);
-    if (matchesText) return true;
-    // A driver with no number simply cannot match a digit search — searching
-    // for digits is asking for a phone.
-    if (qDigits && (d.phone ?? "").replace(/\D/g, "").includes(qDigits)) return true;
-    return false;
-  });
+function customFilterKind(def: CustomFieldDefinition): "text" | "list" {
+  return def.field_type === "select" || def.field_type === "checkbox" ? "list" : "text";
 }
+
+const EMPTY_KPIS = {
+  total: 0,
+  activeToday: 0,
+  onlineNow: 0,
+  inactive: 0,
+  pendingVerification: 0,
+  suspended: 0,
+};
 
 function DriversPageSkeleton() {
   return (
@@ -164,15 +139,50 @@ function DriversPageSkeleton() {
   );
 }
 
+function CompanyNameCell({ row, unassigned }: { row: DriverListPageRow; unassigned: string }) {
+  if (row.company_tone === "unassigned") {
+    return (
+      <Badge variant="outline" className="border-amber-200 bg-amber-100 text-amber-800">
+        {unassigned}
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "max-w-[160px] truncate",
+        row.company_tone === "mg"
+          ? "border-primary/20 bg-primary/10 text-primary"
+          : "border-border bg-muted/40 text-foreground",
+      )}
+    >
+      {row.company_name}
+    </Badge>
+  );
+}
+
+function CompanyClientIdCell({ row, notSet }: { row: DriverListPageRow; notSet: string }) {
+  if (row.company_tone === "unassigned") return <span className="text-muted-foreground">—</span>;
+  if (!row.company_client_code) {
+    return (
+      <Badge variant="outline" className="border-amber-200 bg-amber-100 text-amber-800">
+        {notSet}
+      </Badge>
+    );
+  }
+  return <span className="font-mono text-sm text-muted-foreground">{row.company_client_code}</span>;
+}
+
 function DriversPageContent() {
   const t = useTranslations("pages.drivers");
   const tCommon = useTranslations("common");
   const { can } = useAuth();
   const canCreate = can("drivers.create");
   const canEdit = can("drivers.edit");
-  const { data: customFieldDefs = [] } = useCustomFieldDefinitions();
+  const { data: customFieldDefs } = useCustomFieldDefinitions();
   const activeCustomDefs = useMemo(
-    () => customFieldDefs.filter((d) => d.is_active && !d.archived_at),
+    () => (customFieldDefs ?? []).filter((d) => d.is_active && !d.archived_at),
     [customFieldDefs],
   );
   const approveDriver = useApproveDriverIntake();
@@ -182,15 +192,32 @@ function DriversPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const [tabFilter, setTabFilter] = useState<DriversTabFilter>("all");
-  const listArchived = tabFilter === "archived";
-  const { data: drivers = [], isLoading, refetch } = useDriversList(listArchived);
-  const { data: multiDeviceRows = [] } = useDriversMultiDeviceRecent(7, tabFilter === "multi_device");
-  const multiDeviceDriverIds = useMemo(
-    () => new Set(multiDeviceRows.map((row) => row.driver_id)),
-    [multiDeviceRows],
+  const [tabFilter, setTabFilter] = useState<DriversTab>("all");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [columnFilters, setColumnFilters] = useState<DriversColumnFilters>({});
+  const [sort, setSort] = useState<DriversSort>(DEFAULT_DRIVERS_SORT);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
+
+  const query = useMemo(
+    () => ({ tab: tabFilter, search: debouncedSearch, filters: columnFilters, sort }),
+    [tabFilter, debouncedSearch, columnFilters, sort],
   );
-  const { data: formOptions } = useDriverFormOptions();
+  const pageQuery = useDriversPage(query);
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = pageQuery;
+  const drivers = useMemo(
+    () => pageQuery.data?.pages.flatMap((p) => p.rows) ?? [],
+    [pageQuery.data],
+  );
+  const firstPage = pageQuery.data?.pages[0];
+  const kpiCounts = firstPage?.kpis ?? EMPTY_KPIS;
+  const filteredTotal = firstPage?.filteredTotal ?? 0;
+  const tabTotal = firstPage?.tabTotal ?? 0;
+  const isLoading = pageQuery.isLoading;
 
   useRealtimeInvalidator({
     channel: "admin-drivers-list",
@@ -203,11 +230,6 @@ function DriversPageContent() {
     invalidateKeys: [queryKeys.drivers.all()],
   });
 
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<DriversFiltersState>(DEFAULT_DRIVERS_FILTERS);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [sortKey, setSortKey] = useState<DriversSortKey>("name_asc");
-  const [visibleCount, setVisibleCount] = useState(DRIVERS_PAGE_SIZE);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -257,19 +279,19 @@ function DriversPageContent() {
   ]);
 
   useEffect(() => {
-    setVisibleCount(DRIVERS_PAGE_SIZE);
-  }, [tabFilter, search, filters, sortKey, drivers.length]);
+    const el = loadMoreRef.current;
+    if (!el || !hasNextPage) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !isFetchingNextPage) void fetchNextPage();
+      },
+      { rootMargin: "240px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, drivers.length]);
 
-  const activeFilterCount = countActiveDriversFilters(filters);
-
-  const sortSelectItems = useMemo(
-    () =>
-      DRIVERS_SORT_KEYS.map((key) => ({
-        value: key,
-        label: t(SORT_I18N[key]),
-      })),
-    [t],
-  );
+  const activeFilterCount = countActiveFilters(columnFilters);
 
   function accountStatusLabelFor(status: DriverAccountStatus) {
     switch (status) {
@@ -286,93 +308,29 @@ function DriversPageContent() {
 
   const accountStatusLabel = accountStatusLabelFor;
 
-  const tabFiltered = useMemo(() => {
-    if (tabFilter === "archived") return drivers;
-    return drivers.filter((d) => {
-      if (tabFilter === "pending") {
-        return (
-          !d.linked_profile_id ||
-          d.workflow_status === "pending" ||
-          d.account_status === "pending"
-        );
-      }
-      if (tabFilter === "on_duty") return d.is_on_duty;
-      if (tabFilter === "multi_device") {
-        return Boolean(d.linked_profile_id && multiDeviceDriverIds.has(d.linked_profile_id));
-      }
-      return true;
-    });
-  }, [drivers, tabFilter, multiDeviceDriverIds]);
-
-  const filtered = useMemo(
-    () => applyDriversListFilters(tabFiltered, filters, search),
-    [tabFiltered, filters, search],
-  );
-
-  const sorted = useMemo(() => sortDrivers(filtered, sortKey), [filtered, sortKey]);
-
-  const visible = useMemo(
-    () => sorted.slice(0, visibleCount),
-    [sorted, visibleCount],
-  );
-
-  const hasMore = visible.length < sorted.length;
-
-  useEffect(() => {
-    const el = loadMoreRef.current;
-    if (!el || !hasMore) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + DRIVERS_PAGE_SIZE, sorted.length));
-        }
-      },
-      { rootMargin: "240px" },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [hasMore, sorted.length]);
-
-  const kpiCounts = useMemo(() => {
-    const total = drivers.length;
-    const activeToday = drivers.filter((d) => d.account_status === "active").length;
-    const onlineNow = drivers.filter((d) => d.is_on_duty).length;
-    const inactive = drivers.filter(
-      (d) => d.account_status === "active" && !d.is_on_duty,
-    ).length;
-    const pendingVerification = drivers.filter(
-      (d) =>
-        !d.linked_profile_id ||
-        d.workflow_status === "pending" ||
-        d.account_status === "pending",
-    ).length;
-    const suspended = drivers.filter((d) => d.account_status === "suspended").length;
-
-    return { total, activeToday, onlineNow, inactive, pendingVerification, suspended };
-  }, [drivers]);
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await refetch();
+      await pageQuery.refetch();
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  const showEmptySearch = !isLoading && drivers.length > 0 && sorted.length === 0;
-  const showEmptyAll = !isLoading && drivers.length === 0;
+  const hasNarrowing = activeFilterCount > 0 || debouncedSearch !== "";
+  const showEmptySearch = !isLoading && drivers.length === 0 && (hasNarrowing || tabTotal > 0);
+  const showEmptyAll = !isLoading && drivers.length === 0 && !showEmptySearch;
 
   const allVisibleSelected =
-    visible.length > 0 && visible.every((d) => selectedIds.has(d.id));
+    drivers.length > 0 && drivers.every((d) => selectedIds.has(d.id));
 
-  const toggleSelectAll = () => {
-    if (allVisibleSelected) {
-      setSelectedIds(new Set());
-      return;
-    }
-    setSelectedIds(new Set(visible.map((d) => d.id)));
-  };
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) =>
+      drivers.length > 0 && drivers.every((d) => prev.has(d.id))
+        ? new Set()
+        : new Set(drivers.map((d) => d.id)),
+    );
+  }, [drivers]);
 
   const toggleRow = (id: string) => {
     setSelectedIds((prev) => {
@@ -389,12 +347,14 @@ function DriversPageContent() {
       { id: "driverId", label: t("colDriverId") },
       { id: "employeeId", label: t("colEmployeeId") },
       { id: "riderCategory", label: t("colRiderCategory") },
+      { id: "companyClientId", label: t("colCompanyClientId") },
+      { id: "companyName", label: t("colCompanyName") },
       { id: "name", label: t("colName") },
       { id: "phone", label: t("colPhone") },
       { id: "restaurants", label: t("colRestaurants") },
       { id: "zone", label: t("colZone") },
-      // Off by default: most operations never reference a client, and the list
-      // already runs to the edge of a 14" viewport.
+      // Off by default: most operations never reference a platform, and the
+      // list already runs to the edge of a 14" viewport.
       { id: "clientId", label: t("colClientId"), defaultVisible: false as const },
       { id: "clientName", label: t("colClientName"), defaultVisible: false as const },
       { id: "todayDeliveries", label: t("colTodayDeliveries") },
@@ -417,7 +377,6 @@ function DriversPageContent() {
     move: moveColumn,
     resetToRoleDefault: resetColumns,
     pickerOptions: columnPickerOptions,
-    orderedVisibleIds,
     hiddenToggleableCount,
     source: columnSource,
   } = useDriversListColumns(columnVisibilityOptions);
@@ -429,7 +388,81 @@ function DriversPageContent() {
         ? tCommon("columnSourceRole")
         : tCommon("columnSourceSystem");
 
+  const headerLabels = useMemo<DriversHeaderLabels>(
+    () => ({
+      search: t("columnFilter.search"),
+      contains: t("columnFilter.contains"),
+      all: t("columnFilter.all"),
+      clear: t("columnFilter.clear"),
+      apply: t("columnFilter.apply"),
+      min: t("columnFilter.min"),
+      max: t("columnFilter.max"),
+      noOptions: t("columnFilter.noOptions"),
+      sortBy: (label) => t("columnFilter.sortBy", { label }),
+      filterBy: (label) => t("columnFilter.filterBy", { label }),
+    }),
+    [t],
+  );
+
+  const optionLabelFor = useCallback(
+    (column: string, value: string, label: string | null): string => {
+      if (value === "") {
+        return column === "companyName" ? t("companyUnassigned") : t("columnFilter.blank");
+      }
+      switch (column) {
+        case "riderCategory":
+          return t(`riderCategory.${riderCategoryMessageKey(value as DriverListPageRow["rider_category"])}`);
+        case "status":
+          return value === "blocked"
+            ? t("blockedBadge")
+            : accountStatusLabelFor(value as DriverAccountStatus);
+        case "attendance":
+          return value === "on_duty" ? t("attendanceOnDuty") : t("attendanceOffDuty");
+        default: {
+          if (column.startsWith("cf:")) {
+            const def = activeCustomDefs.find((d) => customFilterColumn(d.key) === column);
+            const opt = def?.options?.find((o) => o.value === value);
+            if (opt) return opt.label;
+            if (value === "true") return tCommon("yes");
+            if (value === "false") return tCommon("no");
+          }
+          return label ?? value;
+        }
+      }
+    },
+    // accountStatusLabelFor only reads `t`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t, tCommon, activeCustomDefs],
+  );
+
+  const filterContext = useMemo(
+    () => ({ tab: tabFilter, search: debouncedSearch, filters: columnFilters }),
+    [tabFilter, debouncedSearch, columnFilters],
+  );
+
   const tableColumns = useMemo(() => {
+    const header = (
+      filterColumn: string,
+      label: string,
+      kind: "text" | "list" | "range",
+    ): ReactNode => (
+      <DriversColumnHeader
+        column={filterColumn}
+        label={label}
+        kind={kind}
+        filter={columnFilters[filterColumn]}
+        onApply={(next) => setColumnFilters((cur) => withColumnFilter(cur, filterColumn, next))}
+        sort={sort}
+        onSort={() => setSort((cur) => nextSort(cur, filterColumn))}
+        context={filterContext}
+        optionLabel={(value, optLabel) => optionLabelFor(filterColumn, value, optLabel)}
+        labels={headerLabels}
+      />
+    );
+    const fixed = (id: string, label: string) => {
+      const key = COLUMN_FILTER_KEY[id];
+      return { id, label: header(key, label, DRIVERS_FILTER_KINDS[key]) };
+    };
     const defs: { id: string; label: ReactNode; className?: string }[] = [
       {
         id: "select",
@@ -443,35 +476,41 @@ function DriversPageContent() {
         ),
         className: "w-10",
       },
-      { id: "driverId", label: t("colDriverId") },
-      { id: "employeeId", label: t("colEmployeeId") },
-      { id: "riderCategory", label: t("colRiderCategory") },
-      { id: "name", label: t("colName") },
-      { id: "phone", label: t("colPhone") },
-      { id: "restaurants", label: t("colRestaurants") },
-      { id: "zone", label: t("colZone") },
-      { id: "clientId", label: t("colClientId") },
-      { id: "clientName", label: t("colClientName") },
-      { id: "todayDeliveries", label: t("colTodayDeliveries") },
-      { id: "status", label: t("colStatus") },
-      { id: "attendance", label: t("colAttendance") },
+      fixed("driverId", t("colDriverId")),
+      fixed("employeeId", t("colEmployeeId")),
+      fixed("riderCategory", t("colRiderCategory")),
+      fixed("companyClientId", t("colCompanyClientId")),
+      fixed("companyName", t("colCompanyName")),
+      fixed("name", t("colName")),
+      fixed("phone", t("colPhone")),
+      fixed("restaurants", t("colRestaurants")),
+      fixed("zone", t("colZone")),
+      fixed("clientId", t("colClientId")),
+      fixed("clientName", t("colClientName")),
+      fixed("todayDeliveries", t("colTodayDeliveries")),
+      fixed("status", t("colStatus")),
+      fixed("attendance", t("colAttendance")),
       { id: "passcode", label: t("colPasscode") },
       ...activeCustomDefs.map((d) => ({
         id: customFieldColumnId(d.key),
-        label: d.label,
+        label: header(customFilterColumn(d.key), d.label, customFilterKind(d)),
       })),
       { id: "actions", label: t("colActions"), className: "w-[88px] text-end" },
     ];
-    const byId = new Map(defs.map((c) => [c.id, c]));
-    return orderedVisibleIds
-      .map((id) => byId.get(id))
-      .filter((c): c is { id: string; label: ReactNode; className?: string } => Boolean(c));
+    // Cells render in this fixed order, so headers must too or a saved
+    // reorder paints one column's header (and filter) over another's data.
+    return defs.filter((c) => isColumnVisible(c.id));
   }, [
     allVisibleSelected,
-    orderedVisibleIds,
+    isColumnVisible,
     t,
     toggleSelectAll,
     activeCustomDefs,
+    columnFilters,
+    sort,
+    filterContext,
+    optionLabelFor,
+    headerLabels,
   ]);
 
   const visibleColumnCount = tableColumns.length;
@@ -486,101 +525,6 @@ function DriversPageContent() {
     ],
     [t],
   );
-
-  const currentSortLabel = sortSelectItems.find((item) => item.value === sortKey)?.label ?? "";
-
-  const getPreviewCount = useCallback(
-    (next: DriversFiltersState) =>
-      applyDriversListFilters(tabFiltered, next, search).length,
-    [tabFiltered, search],
-  );
-
-  const filterChips = useMemo(() => {
-    if (activeFilterCount === 0) return undefined;
-    const chips: ReactNode[] = [];
-
-    if (filters.zoneId) {
-      const name =
-        formOptions?.zones.find((z) => z.id === filters.zoneId)?.name ?? filters.zoneId;
-      chips.push(
-        <Badge key="zone" variant="secondary" className="gap-1 rounded-lg pe-1">
-          {t("filterZone")}: {name}
-          <button
-            type="button"
-            className="cursor-pointer rounded p-0.5 hover:bg-muted"
-            onClick={() => setFilters((f) => ({ ...f, zoneId: "" }))}
-            aria-label={t("clearFilters")}
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>,
-      );
-    }
-    if (filters.partnerId) {
-      const name =
-        formOptions?.partners.find((p) => p.id === filters.partnerId)?.name ??
-        filters.partnerId;
-      chips.push(
-        <Badge key="partner" variant="secondary" className="gap-1 rounded-lg pe-1">
-          {t("filterPartner")}: {name}
-          <button
-            type="button"
-            className="cursor-pointer rounded p-0.5 hover:bg-muted"
-            onClick={() => setFilters((f) => ({ ...f, partnerId: "" }))}
-            aria-label={t("clearFilters")}
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>,
-      );
-    }
-    if (filters.status !== "all") {
-      chips.push(
-        <Badge key="status" variant="secondary" className="gap-1 rounded-lg pe-1">
-          {t("filterStatus")}: {accountStatusLabelFor(filters.status)}
-          <button
-            type="button"
-            className="cursor-pointer rounded p-0.5 hover:bg-muted"
-            onClick={() => setFilters((f) => ({ ...f, status: "all" }))}
-            aria-label={t("clearFilters")}
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>,
-      );
-    }
-    if (filters.restaurantId) {
-      const name =
-        formOptions?.restaurants.find((r) => r.id === filters.restaurantId)?.name ??
-        filters.restaurantId;
-      chips.push(
-        <Badge key="restaurant" variant="secondary" className="gap-1 rounded-lg pe-1">
-          {t("filterRestaurant")}: {name}
-          <button
-            type="button"
-            className="cursor-pointer rounded p-0.5 hover:bg-muted"
-            onClick={() => setFilters((f) => ({ ...f, restaurantId: "" }))}
-            aria-label={t("clearFilters")}
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>,
-      );
-    }
-
-    chips.push(
-      <button
-        key="clear-all"
-        type="button"
-        className="cursor-pointer text-xs text-primary hover:underline"
-        onClick={() => setFilters({ ...DEFAULT_DRIVERS_FILTERS })}
-      >
-        {t("clearFilters")}
-      </button>,
-    );
-
-    return chips;
-  }, [activeFilterCount, filters, formOptions, t]);
 
   return (
     <AppPage className="space-y-4">
@@ -597,7 +541,6 @@ function DriversPageContent() {
       />
 
       <AppListCard
-        filterChips={filterChips}
         toolbar={
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -605,7 +548,7 @@ function DriversPageContent() {
                 items={tabSelectItems}
                 value={tabFilter}
                 onValueChange={(value) => {
-                  if (value) setTabFilter(value as DriversTabFilter);
+                  if (value) setTabFilter(value as DriversTab);
                 }}
               >
                 <SelectTrigger className="h-9 w-[108px] shrink-0 cursor-pointer rounded-lg text-xs">
@@ -641,10 +584,20 @@ function DriversPageContent() {
                 ) : null}
               </div>
 
-              <DriversFiltersButton
-                activeCount={activeFilterCount}
-                onClick={() => setFiltersOpen(true)}
-              />
+              {activeFilterCount > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setColumnFilters({})}
+                >
+                  <FilterX className="h-3.5 w-3.5" aria-hidden />
+                  {t("clearAllFilters")}
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white tabular-nums">
+                    {activeFilterCount}
+                  </span>
+                </Button>
+              ) : null}
 
               <AppTableColumnPicker
                 options={columnPickerOptions}
@@ -655,53 +608,12 @@ function DriversPageContent() {
                 sourceLabel={columnSourceLabel}
                 hiddenCount={hiddenToggleableCount}
               />
-
-              <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <DropdownMenuTrigger
-                        className={cn(
-                          "inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-input bg-background hover:bg-accent",
-                        )}
-                        aria-label={t("sortTooltip", { label: currentSortLabel })}
-                      >
-                        <ArrowUpDown className="h-4 w-4" />
-                      </DropdownMenuTrigger>
-                    }
-                  />
-                  <TooltipContent>
-                    {t("sortTooltip", { label: currentSortLabel })}
-                  </TooltipContent>
-                </Tooltip>
-                <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>{t("sortBy")}</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={sortKey}
-                      onValueChange={(v) => {
-                        if (v) setSortKey(v as DriversSortKey);
-                      }}
-                    >
-                      {sortSelectItems.map((item) => (
-                        <DropdownMenuRadioItem
-                          key={item.value}
-                          value={item.value}
-                          className="cursor-pointer"
-                        >
-                          {item.label}
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5">
-              {sorted.length > 0 ? (
+              {!isLoading ? (
                 <p className="hidden text-xs tabular-nums text-muted-foreground lg:inline">
-                  {t("showingCount", { visible: visible.length, total: sorted.length })}
+                  {t("showingCount", { visible: filteredTotal, total: tabTotal })}
                 </p>
               ) : null}
               <div className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
@@ -734,7 +646,7 @@ function DriversPageContent() {
                       size="icon"
                       className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
                       onClick={() => setExportOpen(true)}
-                      disabled={sorted.length === 0}
+                      disabled={filteredTotal === 0}
                       aria-label={t("export")}
                     >
                       <Download className="h-4 w-4" />
@@ -819,7 +731,7 @@ function DriversPageContent() {
             >
               {!showEmptySearch ? (
                 <>
-                  {visible.map((driver) => (
+                  {drivers.map((driver) => (
                       <AppDataTableRow
                         key={driver.id}
                         className={cn(
@@ -872,6 +784,12 @@ function DriversPageContent() {
                           className="text-sm text-muted-foreground"
                         >
                           {t(`riderCategory.${riderCategoryMessageKey(driver.rider_category)}`)}
+                        </VisibleTableCell>
+                        <VisibleTableCell columnId="companyClientId" isVisible={isColumnVisible}>
+                          <CompanyClientIdCell row={driver} notSet={t("companyClientIdNotSet")} />
+                        </VisibleTableCell>
+                        <VisibleTableCell columnId="companyName" isVisible={isColumnVisible}>
+                          <CompanyNameCell row={driver} unassigned={t("companyUnassigned")} />
                         </VisibleTableCell>
                         <VisibleTableCell columnId="name" isVisible={isColumnVisible}>
                           <div className="min-w-0">
@@ -1111,7 +1029,7 @@ function DriversPageContent() {
                         </VisibleTableCell>
                       </AppDataTableRow>
                     ))}
-                    {hasMore ? (
+                    {hasNextPage ? (
                       <AppDataTableRow ref={loadMoreRef} className="hover:bg-transparent">
                         <TableCell colSpan={visibleColumnCount} className="border-t border-border py-4 text-center">
                           <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
@@ -1127,15 +1045,6 @@ function DriversPageContent() {
           </CardContent>
         )}
       </AppListCard>
-      <DriversFiltersDialog
-        open={filtersOpen}
-        onOpenChange={setFiltersOpen}
-        filters={filters}
-        onApply={setFilters}
-        formOptions={formOptions}
-        getPreviewCount={getPreviewCount}
-        baselineTotal={tabFiltered.length}
-      />
       <DriverFormSheet mode="create" open={addOpen} onOpenChange={setAddOpen} />
       {quickEditDriver?.intake_id ? (
         <DriverEditSheet
@@ -1151,7 +1060,8 @@ function DriversPageContent() {
       <DriversExportDialog
         open={exportOpen}
         onOpenChange={setExportOpen}
-        rows={sorted}
+        rowCount={filteredTotal}
+        loadRows={() => fetchDriversForExport(query)}
         customFields={activeCustomDefs.map((d) => ({ key: d.key, label: d.label }))}
       />
       {canCreate ? (

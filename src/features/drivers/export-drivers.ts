@@ -1,4 +1,6 @@
-import type { DriverListRow } from "./types";
+import type { DriverListPageRow, DriverListRow } from "./types";
+
+type ExportRow = DriverListRow & Partial<DriverListPageRow>;
 
 export const DRIVER_EXPORT_COLUMNS = [
   { id: "driver_code", pinned: true },
@@ -9,7 +11,8 @@ export const DRIVER_EXPORT_COLUMNS = [
   { id: "zone", pinned: false },
   { id: "restaurants", pinned: false },
   { id: "rider_category", pinned: false },
-  { id: "source_company", pinned: false },
+  { id: "company_client_id", pinned: false },
+  { id: "company_name", pinned: false },
   { id: "client_id", pinned: false },
   { id: "client_name", pinned: false },
   { id: "account_status", pinned: false },
@@ -61,7 +64,7 @@ export function resolveExportColumnIds(
 }
 
 function cellValue(
-  row: DriverListRow,
+  row: ExportRow,
   columnId: string,
   customFields: readonly DriverExportCustomField[],
 ): string | number {
@@ -82,8 +85,10 @@ function cellValue(
       return row.restaurant_names.join(", ");
     case "rider_category":
       return row.rider_category;
-    case "source_company":
-      return row.source_company ?? "";
+    case "company_client_id":
+      return row.company_client_code ?? "";
+    case "company_name":
+      return row.company_name ?? row.source_company ?? "";
     case "client_id":
       return row.client_id ?? "";
     case "client_name":
@@ -121,7 +126,7 @@ function headerFor(
 }
 
 export function buildDriversExportAoa(
-  rows: readonly DriverListRow[],
+  rows: readonly ExportRow[],
   selected: readonly string[],
   options: {
     includeAppCode?: boolean;

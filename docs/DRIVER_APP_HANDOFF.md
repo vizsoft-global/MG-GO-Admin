@@ -83,7 +83,7 @@ Staff use **Verify & approve** on `/drivers/[id]` (or bulk import with **Approve
 
 `rider_category` on intakes/drivers: **`in_house`** (direct workforce) or **`outsourced`** (third-party). Required on admin create/edit; defaults to `in_house`; copied to `drivers` on approve. Admin list + detail show the label; mobile app may read from `drivers.rider_category` when needed for reporting/UI.
 
-`source_company` on intakes/drivers: optional catalog **`mg` / `kn` / `rvd` / `sadeeq` / `brk` / `hs` / `ar` / `zk`**. Stored, never inferred from employee ID or `client_name`. Copied on approve. Admin Performance Outsource tab and display-ID prefixes (`KN`, `RVD`, `SD`, `BRK`, `HS`, `AR`, `ZK`) read this column only. App may ignore it.
+`source_company` on intakes/drivers: optional FK to `source_companies.key` (system company `mg` for in-house; partner companies for outsourced). Stored, never inferred from employee ID or `client_name`. Copied on approve. Admin Drivers list shows that company's Client ID + name (MG = `CL-0001`; a company with no code shows Not set). Performance Outsource still reads the key. App may ignore the table. Staff manage rows at Settings → Companies; deactivating a company that still has active drivers is refused.
 
 ### 2c. Legacy OTP bootstrap (old intakes only)
 
@@ -1205,7 +1205,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-09-25 — [admin+app] `deliveries.shift_date` + `delivery_shift_date`. My Deliveries / calendar / Home week counts use the shift day, not midnight. Select `shift_date`; null → Kuwait calendar of delivered/pickup. Old APKs stay midnight-based until Play. Home `week.deliveries_count` is `COALESCE(shift_date, Kuwait date)`. Stored `shift_date` is not restamped if an admin later edits a shift. Payroll / `earn_date` / Extra Earnings unchanged. Migrations `20261028300000`, `20261028400000`. Local only — no db push / Play in this pass.*
+*Last synced: 2026-09-25 — [admin+app] `source_companies` catalog + `source_company` FK (was CHECK of eight keys). In-house riders resolve to system `mg` / `CL-0001`. App may ignore the table and still read `drivers.source_company` as text. Also: `deliveries.shift_date` + `delivery_shift_date`. My Deliveries / calendar / Home week counts use the shift day, not midnight. Select `shift_date`; null → Kuwait calendar of delivered/pickup. Old APKs stay midnight-based until Play. Home `week.deliveries_count` is `COALESCE(shift_date, Kuwait date)`. Stored `shift_date` is not restamped if an admin later edits a shift. Payroll / `earn_date` / Extra Earnings unchanged. Migrations `20261028300000`, `20261028400000`, `20261028500000`, `20261028600000`. Catalog migrations are on production. Admin Vercel prod. No Play.*
 
 *Prior: 2026-09-17 — [admin+app] Admin attach files land at `{driver_id}/{request_id}/…`. Driver storage SELECT also allows owned-request folder[2] so older staff-prefix keys stay readable. App request detail lists attachments and opens signed URLs (document + salary breakdown). Sick leave step 3 **template** gains `approve` (`admin_get_request` joins templates; live steps have no `allowed_actions` column). One Approve completes step 4 when docs already exist. Migrations `20261026400000`, `20261026500000`. Flutter: PopScope back on request detail; Log Fuel station needs a letter/digit; litres/cost one `.` max 3 decimals. No Play release in this pass.*
 

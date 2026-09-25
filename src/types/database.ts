@@ -1123,7 +1123,6 @@ export type Database = {
           pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
-          shift_date: string | null
           status: Database["public"]["Enums"]["delivery_status"]
           updated_at: string
           zone_id: string | null
@@ -1152,7 +1151,6 @@ export type Database = {
           pickup_proof_urls?: string[]
           rejection_reason?: string | null
           restaurant_id?: string | null
-          shift_date?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
           updated_at?: string
           zone_id?: string | null
@@ -1181,7 +1179,6 @@ export type Database = {
           pickup_proof_urls?: string[]
           rejection_reason?: string | null
           restaurant_id?: string | null
-          shift_date?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
           updated_at?: string
           zone_id?: string | null
@@ -2407,6 +2404,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "driver_intakes_source_company_fkey"
+            columns: ["source_company"]
+            isOneToOne: false
+            referencedRelation: "source_companies"
+            referencedColumns: ["key"]
+          },
+          {
             foreignKeyName: "driver_intakes_vehicle_id_fkey"
             columns: ["vehicle_id"]
             isOneToOne: false
@@ -3493,6 +3497,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "restaurants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drivers_source_company_fkey"
+            columns: ["source_company"]
+            isOneToOne: false
+            referencedRelation: "source_companies"
+            referencedColumns: ["key"]
           },
           {
             foreignKeyName: "drivers_vehicle_id_fkey"
@@ -6770,6 +6781,39 @@ export type Database = {
           },
         ]
       }
+      source_companies: {
+        Row: {
+          client_code: string | null
+          created_at: string
+          is_active: boolean
+          is_system: boolean
+          key: string
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          client_code?: string | null
+          created_at?: string
+          is_active?: boolean
+          is_system?: boolean
+          key: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          client_code?: string | null
+          created_at?: string
+          is_active?: boolean
+          is_system?: boolean
+          key?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       storage_uploads: {
         Row: {
           bucket: string
@@ -8280,6 +8324,62 @@ export type Database = {
         Args: { p_driver_id: string; p_from: string; p_to: string }
         Returns: Json
       }
+      admin_drivers_column_value: {
+        Args: { p_key: string; p_row: Json }
+        Returns: Json
+      }
+      admin_drivers_filter_kind: { Args: { p_key: string }; Returns: string }
+      admin_drivers_filter_values: {
+        Args: {
+          p_column: string
+          p_filters?: Json
+          p_search?: string
+          p_tab?: string
+        }
+        Returns: Json
+      }
+      admin_drivers_list_base: {
+        Args: { p_archived: boolean }
+        Returns: {
+          account_status: string
+          app_passcode: string
+          archived_at: string
+          attendance_key: string
+          avatar_object_key: string
+          avatar_url: string
+          client_id: string
+          client_name: string
+          company_client_code: string
+          company_key: string
+          company_name: string
+          company_tone: string
+          created_at: string
+          custom_fields: Json
+          driver_code: string
+          full_name: string
+          id: string
+          is_blocked: boolean
+          is_on_duty: boolean
+          linked: boolean
+          linked_profile_id: string
+          mg_id: string
+          multi_device: boolean
+          partner_id: string
+          partner_logo_key: string
+          partner_name: string
+          phone: string
+          phone_digits: string
+          restaurant_ids: string[]
+          restaurant_names: string[]
+          rider_category: string
+          source_company: string
+          status_key: string
+          today_deliveries: number
+          workflow_status: string
+          zone_id: string
+          zone_name: string
+        }[]
+      }
       admin_drivers_multi_device_recent: {
         Args: { p_days?: number }
         Returns: {
@@ -8287,6 +8387,22 @@ export type Database = {
           driver_id: string
           latest_activity_at: string
         }[]
+      }
+      admin_drivers_row_matches: {
+        Args: { p_filters: Json; p_row: Json; p_skip?: string }
+        Returns: boolean
+      }
+      admin_drivers_search_matches: {
+        Args: { p_row: Json; p_search: string }
+        Returns: boolean
+      }
+      admin_drivers_tab_matches: {
+        Args: { p_row: Json; p_tab: string }
+        Returns: boolean
+      }
+      admin_drivers_validate_filters: {
+        Args: { p_filters: Json }
+        Returns: undefined
       }
       admin_esign_resolve_employees: { Args: { p_rows: Json }; Returns: Json }
       admin_expire_esign_requests: { Args: never; Returns: number }
@@ -8370,6 +8486,18 @@ export type Database = {
       }
       admin_list_driver_performance_ratings: {
         Args: { p_driver_id: string; p_period_month?: string }
+        Returns: Json
+      }
+      admin_list_drivers_page: {
+        Args: {
+          p_filters?: Json
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_sort_dir?: string
+          p_sort_key?: string
+          p_tab?: string
+        }
         Returns: Json
       }
       admin_list_esign_requests: {
@@ -8615,6 +8743,31 @@ export type Database = {
         Args: { p_month: string; p_target: number }
         Returns: Json
       }
+      admin_upsert_source_company: {
+        Args: {
+          p_client_code: string
+          p_is_active: boolean
+          p_key: string
+          p_name: string
+          p_sort_order?: number
+        }
+        Returns: {
+          client_code: string | null
+          created_at: string
+          is_active: boolean
+          is_system: boolean
+          key: string
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "source_companies"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_upsert_step_template: {
         Args: { p_request_type: string; p_steps: Json }
         Returns: Json
@@ -8694,10 +8847,6 @@ export type Database = {
       delivery_matches_rules: {
         Args: { p_delivery_id: string; p_on_date?: string }
         Returns: boolean
-      }
-      delivery_shift_date: {
-        Args: { p_at: string; p_driver: string }
-        Returns: string
       }
       delivery_progress_matches_rules: {
         Args: { p_delivery_id: string; p_on_date?: string }
