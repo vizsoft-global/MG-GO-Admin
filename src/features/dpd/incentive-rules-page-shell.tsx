@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { deleteIncentiveRule, isDpdErrorKey } from "./dpd-actions";
 import { DpdStatusBadge } from "./dpd-status-badge";
 import {
+  displayIncentiveRuleName,
   filterIncentiveRules,
   isIncentiveRulePeriodFilter,
   isIncentiveRuleStatusFilter,
@@ -253,7 +254,7 @@ export function IncentiveRulesPageShell() {
             <TableBody>
               {filteredRules.map((row) => (
                 <TableRow key={row.id} className="hover:bg-muted/40">
-                  <TableCell className="font-medium">{row.name}</TableCell>
+                  <TableCell className="font-medium">{displayIncentiveRuleName(row.name)}</TableCell>
                   <TableCell>{row.scope_label}</TableCell>
                   <TableCell>{t(`period.${row.period}`)}</TableCell>
                   <TableCell>

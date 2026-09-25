@@ -338,13 +338,38 @@ async function loadScopeLabelMaps(supabase: Awaited<ReturnType<typeof createClie
     await Promise.all([
       supabase.from("zones").select("id, name, code"),
       supabase.from("partners").select("id, name"),
-      supabase.from("restaurants").select("id, name"),
+      supabase.from("restaurants").select("id, name, external_merchant_id"),
     ]);
   return {
     zones: new Map((zones ?? []).map((z) => [z.id, z])),
     partners: new Map((partners ?? []).map((p) => [p.id, p])),
     restaurants: new Map((restaurants ?? []).map((r) => [r.id, r])),
   };
+}
+
+function scopeSearch(
+  scopeType: RuleScopeType,
+  ids: string[],
+  maps: Awaited<ReturnType<typeof loadScopeLabelMaps>>,
+): string {
+  const parts: string[] = [];
+  for (const id of ids) {
+    parts.push(id);
+    if (scopeType === "zone") {
+      const zone = maps.zones.get(id);
+      if (zone) parts.push(zone.name, zone.code);
+    } else if (scopeType === "partner") {
+      const partner = maps.partners.get(id);
+      if (partner) parts.push(partner.name);
+    } else {
+      const restaurant = maps.restaurants.get(id);
+      if (restaurant) {
+        parts.push(restaurant.name);
+        if (restaurant.external_merchant_id) parts.push(restaurant.external_merchant_id);
+      }
+    }
+  }
+  return parts.filter((part) => part.trim() !== "").join(" ");
 }
 
 export async function fetchDeliveryRulesForAdmin(): Promise<DeliveryRuleRow[]> {
@@ -387,6 +412,7 @@ export async function fetchDeliveryRulesForAdmin(): Promise<DeliveryRuleRow[]> {
       partner_ids: scopes.partner_ids,
       restaurant_ids: scopes.restaurant_ids,
       scope_label: scopeLabelMulti(row.scope_type, activeIds, maps),
+      scope_search: scopeSearch(row.scope_type, activeIds, maps),
       start_date: row.start_date,
       end_date: row.end_date,
       priority: row.priority,

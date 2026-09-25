@@ -36,6 +36,11 @@ function normalizeSearch(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** Display only. Does not change the stored name or search haystack. */
+export function displayIncentiveRuleName(name: string): string {
+  return name.replace(/\s+\d{4}-\d{2}-\d{2}$/, "");
+}
+
 export function filterIncentiveRules<T extends IncentiveRuleFilterable>(
   rows: readonly T[],
   filter: IncentiveRuleListFilter,

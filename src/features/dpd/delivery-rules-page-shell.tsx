@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
-import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { AppEmptyState, AppListCard, AppListToolbar, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import {
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import { deleteDeliveryRule, isDpdErrorKey } from "./dpd-actions";
+import { filterDeliveryRules } from "./delivery-rule-filter";
 import { DpdStatusBadge } from "./dpd-status-badge";
 import { DeliveryRuleDpdImportDialog } from "./delivery-rule-dpd-import-dialog";
 import { RuleFormSheet } from "./rule-form-sheet";
@@ -44,6 +45,12 @@ export function DeliveryRulesPageShell() {
   });
   const [deleteTarget, setDeleteTarget] = useState<DeliveryRuleRow | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filteredRules = useMemo(
+    () => filterDeliveryRules(deliveryRules ?? [], search),
+    [deliveryRules, search],
+  );
 
   const handleDelete = () => {
     if (!deleteTarget) return;
@@ -92,13 +99,27 @@ export function DeliveryRulesPageShell() {
           ) : null
         }
       />
-      <AppListCard>
+      <AppListCard
+        toolbar={
+          !isLoading && (deliveryRules?.length ?? 0) > 0 ? (
+            <AppListToolbar
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={tPage("searchPlaceholder")}
+            />
+          ) : undefined
+        }
+      >
         {isLoading ? (
           <div className="flex h-32 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (deliveryRules?.length ?? 0) === 0 ? (
           <AppEmptyState title={t("emptyDeliveryRules")} />
+        ) : filteredRules.length === 0 ? (
+          <div className="p-4">
+            <AppEmptyState title={tPage("emptyFiltered")} />
+          </div>
         ) : (
           <Table>
             <TableHeader>
@@ -118,7 +139,7 @@ export function DeliveryRulesPageShell() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(deliveryRules ?? []).map((row) => (
+              {filteredRules.map((row) => (
                 <TableRow key={row.id} className="hover:bg-muted/40">
                   <TableCell className="font-medium">{row.name}</TableCell>
                   <TableCell>{row.scope_label}</TableCell>

@@ -1123,6 +1123,7 @@ export type Database = {
           pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
+          shift_date: string | null
           status: Database["public"]["Enums"]["delivery_status"]
           updated_at: string
           zone_id: string | null
@@ -1151,6 +1152,7 @@ export type Database = {
           pickup_proof_urls?: string[]
           rejection_reason?: string | null
           restaurant_id?: string | null
+          shift_date?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
           updated_at?: string
           zone_id?: string | null
@@ -1179,6 +1181,7 @@ export type Database = {
           pickup_proof_urls?: string[]
           rejection_reason?: string | null
           restaurant_id?: string | null
+          shift_date?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
           updated_at?: string
           zone_id?: string | null
@@ -8691,6 +8694,10 @@ export type Database = {
       delivery_matches_rules: {
         Args: { p_delivery_id: string; p_on_date?: string }
         Returns: boolean
+      }
+      delivery_shift_date: {
+        Args: { p_at: string; p_driver: string }
+        Returns: string
       }
       delivery_progress_matches_rules: {
         Args: { p_delivery_id: string; p_on_date?: string }

@@ -44,6 +44,7 @@ export type DeliveryRuleRow = {
   partner_ids: string[];
   restaurant_ids: string[];
   scope_label: string;
+  scope_search: string;
   start_date: string;
   end_date: string;
   priority: number;

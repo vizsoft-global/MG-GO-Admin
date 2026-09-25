@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  displayIncentiveRuleName,
   filterIncentiveRules,
   isIncentiveRulePeriodFilter,
   isIncentiveRuleStatusFilter,
@@ -64,6 +65,15 @@ test("combined filters can yield an empty list", () => {
   assert.deepEqual(
     filterIncentiveRules(rows, { query: "hq", status: "ended", period: "all" }),
     [],
+  );
+});
+
+test("display name strips a trailing date only", () => {
+  assert.equal(displayIncentiveRuleName("KFC HAWALLY 2 2026-01-08"), "KFC HAWALLY 2");
+  assert.equal(displayIncentiveRuleName("Weekend bonus"), "Weekend bonus");
+  assert.equal(
+    displayIncentiveRuleName("Rule 2026-01-08 mid 2026-02-01"),
+    "Rule 2026-01-08 mid",
   );
 });
 

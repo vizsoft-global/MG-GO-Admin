@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { FleetMap, type FleetMapHandle, type FleetRouteStop } from "./fleet-map";
 import { FleetRail } from "./fleet-rail";
 import { FleetInsightsPanel } from "./fleet-insights-panel";
+import { FleetDriverDetails } from "./fleet-driver-details";
 import { FleetLegend } from "./fleet-legend";
 import { FleetConnectionPill } from "./fleet-connection-pill";
 import { DriverDayRoute } from "./driver-day-route";
@@ -67,8 +68,13 @@ export function FleetCanvas() {
   const [routeGeometry, setRouteGeometry] = useState<FleetRouteGeometry | null>(null);
   const [routeStops, setRouteStops] = useState<FleetRouteStop[] | null>(null);
   const [playhead, setPlayhead] = useState<[number, number] | null>(null);
+  const [showInsightsWhileSelected, setShowInsightsWhileSelected] = useState(false);
 
   const { filters, selectedDriverId } = snapshot;
+
+  useEffect(() => {
+    setShowInsightsWhileSelected(false);
+  }, [selectedDriverId]);
 
   /*
    * Clicking a driver (rail, pin, or same-card re-click) must bring the camera to them.
@@ -439,13 +445,25 @@ export function FleetCanvas() {
                   : "h-full flex-1 items-stretch",
               )}
             >
-              <FleetInsightsPanel
-                collapsed={insightsCollapsed}
-                onCollapsedChange={(collapsed) => {
-                  insightsUserOverride.current = collapsed;
-                  setInsightsCollapsed(collapsed);
-                }}
-              />
+              {selectedDriverId && !showInsightsWhileSelected ? (
+                <FleetDriverDetails
+                  driverId={selectedDriverId}
+                  collapsed={insightsCollapsed}
+                  onCollapsedChange={(collapsed) => {
+                    insightsUserOverride.current = collapsed;
+                    setInsightsCollapsed(collapsed);
+                  }}
+                  onBack={() => setShowInsightsWhileSelected(true)}
+                />
+              ) : (
+                <FleetInsightsPanel
+                  collapsed={insightsCollapsed}
+                  onCollapsedChange={(collapsed) => {
+                    insightsUserOverride.current = collapsed;
+                    setInsightsCollapsed(collapsed);
+                  }}
+                />
+              )}
             </div>
             <div className="fleet-overlay pointer-events-auto flex shrink-0 flex-col rounded-lg border p-1 shadow-sm">
               <CanvasIconButton

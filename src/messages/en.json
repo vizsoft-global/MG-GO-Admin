@@ -412,7 +412,32 @@
         "heading": "Legend",
         "flagsNote": "Flags are shown as badges; status colour never changes"
       },
-      "comingSoon": "Coming soon"
+      "comingSoon": "Coming soon",
+      "details": {
+        "heading": "Rider details",
+        "back": "Back to insights",
+        "location": "Current location",
+        "refreshLocation": "Refresh address",
+        "plate": "Vehicle plate",
+        "assignedRestaurants": "Assigned restaurants",
+        "noRestaurants": "No assigned restaurants",
+        "recentOrders": "Recent orders",
+        "noRecentOrders": "No recent orders",
+        "accuracy": "GPS accuracy",
+        "battery": "Battery",
+        "lastGps": "Last GPS update",
+        "speed": "Current speed",
+        "viewFullTimeline": "View full timeline",
+        "orderStatus": {
+          "on_delivery": "On delivery",
+          "delivered": "Delivered",
+          "pending": "Pending",
+          "verified": "Verified",
+          "rejected": "Rejected",
+          "under_review": "Under review",
+          "cancelled": "Cancelled"
+        }
+      }
     },
     "liveTracking": {
       "title": "Live tracking",
@@ -5694,7 +5719,9 @@
     },
     "deliveryRules": {
       "title": "Delivery rules",
-      "subtitle": "Define which verified deliveries count toward incentives"
+      "subtitle": "Define which verified deliveries count toward incentives",
+      "searchPlaceholder": "Search name, store, or store ID",
+      "emptyFiltered": "No rules match this search"
     },
     "incentiveRules": {
       "title": "Incentive rules",
