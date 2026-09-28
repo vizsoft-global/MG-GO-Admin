@@ -1,6 +1,6 @@
 "use server";
 
-import { getSessionUser } from "@/lib/auth/get-session";
+import { getSessionUser, type SessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -27,16 +27,19 @@ function rpcMissing(error: { code?: string; message?: string } | null): boolean 
   );
 }
 
-async function requireView() {
+async function requireView(): Promise<{ error: "not_authorized" } | { session: SessionUser }> {
   const session = await getSessionUser();
   if (!session || !hasPermissionInSet(session.permissions, "deliveries.view", session.isSuperAdmin)) {
-    return { error: "not_authorized" as const };
+    return { error: "not_authorized" };
   }
   return { session };
 }
 
 async function pageAll<T>(
-  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: { message?: string } | null }>,
+  fetchPage: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
 ): Promise<T[]> {
   const all: T[] = [];
   for (let from = 0; ; from += PAGE) {
@@ -60,7 +63,7 @@ async function loadSnapshotFallback(
     excel_orders: number;
     work_date: string;
     run_id: string;
-  }>((start, end) =>
+  }>(async (start, end) =>
     supabase
       .from("order_recon_rows")
       .select("employee_id, employee_name, excel_orders, work_date, run_id")
@@ -112,15 +115,16 @@ async function loadSnapshotFallback(
 
   const startIso = `${from}T00:00:00+03:00`;
   const endIso = `${addKuwaitDays(to, 1)}T00:00:00+03:00`;
-  const deliveries = await pageAll<{ driver_id: string; delivered_at: string }>((start, end) =>
-    supabase
-      .from("deliveries")
-      .select("driver_id, delivered_at")
-      .in("status", ["pending", "in_transit", "verified"])
-      .not("delivered_at", "is", null)
-      .gte("delivered_at", startIso)
-      .lt("delivered_at", endIso)
-      .range(start, end),
+  const deliveries = await pageAll<{ driver_id: string; delivered_at: string }>(
+    async (start, end) =>
+      supabase
+        .from("deliveries")
+        .select("driver_id, delivered_at")
+        .in("status", ["pending", "in_transit", "verified"])
+        .not("delivered_at", "is", null)
+        .gte("delivered_at", startIso)
+        .lt("delivered_at", endIso)
+        .range(start, end),
   );
 
   const driverIds = [...new Set(deliveries.map((d) => d.driver_id))];

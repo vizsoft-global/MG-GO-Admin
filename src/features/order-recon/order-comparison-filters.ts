@@ -6,11 +6,11 @@ export type ComparisonFilterValue = ComparisonContainsFilter | string[] | Compar
 export type ComparisonColumnFilters = Partial<Record<string, ComparisonFilterValue>>;
 
 export function isContainsFilter(value: unknown): value is ComparisonContainsFilter {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && "contains" in value;
+  return value != null && typeof value === "object" && !Array.isArray(value) && "contains" in value;
 }
 
 export function isRangeFilter(value: unknown): value is ComparisonRangeFilter {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && !("contains" in value);
+  return value != null && typeof value === "object" && !Array.isArray(value) && !("contains" in value);
 }
 
 export function rangeFilterActive(range: ComparisonRangeFilter | undefined): boolean {
