@@ -206,7 +206,7 @@ async function assembleFromTables(
       fetchAll<{
         driver_id: string;
         off_days: number;
-        source: "manual" | "bulk_upload";
+        source: string;
       }>((from, to) =>
         supabase
           .from("driver_off_structure")
@@ -216,7 +216,7 @@ async function assembleFromTables(
       ).catch(() => [] as Array<{
         driver_id: string;
         off_days: number;
-        source: "manual" | "bulk_upload";
+        source: string;
       }>),
     ]);
 
@@ -312,7 +312,7 @@ async function assembleFromTables(
   const offStructures: RawOffStructure[] = (offRows ?? []).map((row) => ({
     driverId: row.driver_id,
     offDays: row.off_days,
-    source: row.source,
+    source: row.source === "bulk_upload" ? "bulk_upload" : "manual",
   }));
 
   return decoratePayrollSnapshot(
@@ -354,7 +354,7 @@ export async function setDriverOffStructure(input: {
   const { data, error } = await supabase.rpc("admin_set_driver_off_structure", {
     p_driver_id: input.driverId,
     p_month: `${input.monthKey}-01`,
-    p_off_days: input.offDays,
+    p_off_days: input.offDays as number,
   });
   if (error) return { error: error.message };
   await logAdminActivity({
