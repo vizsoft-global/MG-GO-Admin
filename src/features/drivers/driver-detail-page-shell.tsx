@@ -48,6 +48,7 @@ import { DriverAccountStatusEditor } from "./driver-account-status-editor";
 import { DriverBlockEditor } from "./driver-block-editor";
 import { DriverFreezeEditor } from "./driver-freeze-editor";
 import { DriverLoginVerificationExemptEditor } from "./driver-login-verification-exempt-editor";
+import { DriverScreenshotsAllowedEditor } from "./driver-screenshots-allowed-editor";
 import { DriverDocumentsTab } from "./driver-documents-tab";
 import { DriverLoginVerificationTab } from "./driver-login-verification-tab";
 import { DriverDevicesTab } from "./driver-devices-tab";
@@ -1029,6 +1030,23 @@ function DriverDetailContent({ id }: { id: string }) {
                   driverId={driver.linked_profile_id}
                   intakeId={driver.intake_id ?? driver.id}
                   exempt={driver.login_verification_exempt}
+                  canManage={canManage}
+                />
+              </div>
+            </div>
+          ) : null}
+          {driver.linked_profile_id && !isArchived && canManage ? (
+            <div className="rounded-xl border border-border bg-card shadow-sm">
+              <div className="border-b border-border px-4 py-3">
+                <p className="text-sm font-semibold text-foreground">
+                  {t("screenshotsAllowedTitle")}
+                </p>
+              </div>
+              <div className="px-4 py-4">
+                <DriverScreenshotsAllowedEditor
+                  driverId={driver.linked_profile_id}
+                  intakeId={driver.intake_id ?? driver.id}
+                  allowed={driver.screenshots_allowed}
                   canManage={canManage}
                 />
               </div>

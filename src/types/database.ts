@@ -3430,6 +3430,7 @@ export type Database = {
           project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
+          screenshots_allowed: boolean
           source_company: string | null
           status: Database["public"]["Enums"]["driver_status"]
           updated_at: string
@@ -3481,6 +3482,7 @@ export type Database = {
           project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
+          screenshots_allowed?: boolean
           source_company?: string | null
           status?: Database["public"]["Enums"]["driver_status"]
           updated_at?: string
@@ -3532,6 +3534,7 @@ export type Database = {
           project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
+          screenshots_allowed?: boolean
           source_company?: string | null
           status?: Database["public"]["Enums"]["driver_status"]
           updated_at?: string
@@ -8103,6 +8106,7 @@ export type Database = {
           project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
+          screenshots_allowed: boolean
           source_company: string | null
           status: Database["public"]["Enums"]["driver_status"]
           updated_at: string

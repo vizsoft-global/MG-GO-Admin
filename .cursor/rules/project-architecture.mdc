@@ -237,6 +237,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin+app] 2026-09-28` — **Per-driver screenshots & recording.** `drivers.screenshots_allowed` default false. Toggle on `/drivers/[id]` aside (`drivers.manage`). Seed ON only for employee_id/driver_code `108899`. App `1.1.25+92` clears `FLAG_SECURE` (and restricted inbox/e-sign) when the flag or the local Vehicle 5-tap pref is on. Migration `20261030200000` on `eoksxkdssptgyqyywdju`. **Admin Vercel prod.** Play required. No Play.
+
 - `[admin+app] 2026-09-28` — **SOP band cutover live.** Migration `20261028700000` applied on `eoksxkdssptgyqyywdju`. `app_settings.incentive_band_math_from` = `2026-09-28`. Live `compute_incentive_amount` uses SOP bands for earn dates on/after that day; earlier dates keep stacked milestone math. Existing `driver_earnings_daily` not recalculated. Cron `/api/cron/dpd-shift-notices` and verify congrats are live. **Admin Vercel prod.** Home Daily DPD / Locked-Active UI still needs Play `1.1.24+91`. No Play.
 
 - `[admin only] 2026-09-28` — **Deliveries list no longer All-time COUNT(*).** `/deliveries` KPIs and list totals use `admin_deliveries_status_counts` (one DEFINER scan). The page query drops `count=exact` so RLS timeouts (57014) cannot hold the spinner. Mock-GPS on the list is a capped `is_mocked` lookup. Migration `20261028900000`. Do not push `20261028700000` / `20261029100000` with this. No Play.
