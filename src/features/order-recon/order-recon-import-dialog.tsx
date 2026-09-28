@@ -100,6 +100,7 @@ export function OrderReconImportDialog({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.orderRecon.latest() }),
       queryClient.invalidateQueries({ queryKey: queryKeys.orderRecon.runs() }),
+      queryClient.invalidateQueries({ queryKey: ["order-recon", "comparison"] }),
     ]);
   };
 

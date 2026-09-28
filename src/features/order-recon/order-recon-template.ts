@@ -37,15 +37,15 @@ export function reconTemplateColumns(dates: readonly string[] = reconSampleDates
     },
     {
       header: "Store Name",
-      required: true,
+      required: false,
       example: "Crystal Tower",
-      notes: "Restaurant name or a saved alias. Also accepts Store / Restaurant.",
+      notes: "Optional. Display-only on Order Comparison (restaurant comes from the rider profile). Still used by the upload preview when present.",
     },
     {
       header: "Position",
-      required: true,
+      required: false,
       example: "Rider",
-      notes: "Required by the sheet layout. Not used in the compare.",
+      notes: "Optional layout column. Not used in matching.",
     },
     ...dates.map((ymd) => ({
       header: ymd,
@@ -73,7 +73,7 @@ export function reconGuideRows(dates: readonly string[] = reconSampleDates()): A
     ["Rules", "", "", ""],
     ["Date span", "", "", "At most 93 calendar days from first date column to last."],
     ["Blank count", "", "", "Empty date cells count as 0."],
-    ["Identity", "", "", "Unknown Employee ID or store stays Unresolved and is not sent as unused."],
+    ["Identity", "", "", "Order Comparison matches on MG ID only. Unknown Employee ID or store stays Unresolved on the upload preview."],
   ];
 }
 

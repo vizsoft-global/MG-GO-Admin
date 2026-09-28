@@ -58,6 +58,19 @@ describe("parseReconWorksheet", () => {
     assert.deepEqual(parseReconWorksheet(wide), { ok: false, error: "range_too_large" });
   });
 
+  it("accepts ID + Driver Name + date columns without store or position", async () => {
+    const ws = await sheetFrom(
+      ["ID", "Driver Name", "2026-09-01", "2026-09-02"],
+      [["10421", "Ada Test", 4, 1]],
+    );
+    const parsed = parseReconWorksheet(ws);
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.rows.length, 2);
+    assert.equal(parsed.rows[0]?.store_name, "");
+    assert.equal(parsed.rows[0]?.excel_orders, 4);
+  });
+
   it("round-trips through an xlsx buffer", async () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Data");

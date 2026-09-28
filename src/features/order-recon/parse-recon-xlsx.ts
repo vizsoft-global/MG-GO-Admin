@@ -59,22 +59,28 @@ export function parseReconWorksheet(ws: ExcelJS.Worksheet): ParseReconResult {
     headers[col - 1] = cell.value;
   });
 
-  const h0 = normHeader(headers[0]);
-  const h1 = normHeader(headers[1]);
-  const h2 = normHeader(headers[2]);
-  const h3 = normHeader(headers[3]);
-  if (
-    headers.length < 4 ||
-    !ID_ALIASES.has(h0) ||
-    !NAME_ALIASES.has(h1) ||
-    !STORE_ALIASES.has(h2) ||
-    !POSITION_ALIASES.has(h3)
-  ) {
+  if (headers.length < 3 || !ID_ALIASES.has(normHeader(headers[0])) || !NAME_ALIASES.has(normHeader(headers[1]))) {
     return { ok: false, error: "invalid_headers" };
   }
 
+  let storeCol: number | null = null;
+  let positionCol: number | null = null;
+  let cursor = 2;
+  if (cursor < headers.length && STORE_ALIASES.has(normHeader(headers[cursor])) && !parseHeaderDate(headers[cursor])) {
+    storeCol = cursor;
+    cursor += 1;
+  }
+  if (
+    cursor < headers.length &&
+    POSITION_ALIASES.has(normHeader(headers[cursor])) &&
+    !parseHeaderDate(headers[cursor])
+  ) {
+    positionCol = cursor;
+    cursor += 1;
+  }
+
   const dateCols: { col: number; ymd: string }[] = [];
-  for (let i = 4; i < headers.length; i += 1) {
+  for (let i = cursor; i < headers.length; i += 1) {
     const raw = headers[i];
     if (raw == null || String(raw).trim() === "") continue;
     const ymd = parseHeaderDate(raw);
@@ -97,7 +103,8 @@ export function parseReconWorksheet(ws: ExcelJS.Worksheet): ParseReconResult {
     if (rowNumber === 1) return;
     const employee_id = cellText(row.getCell(1).value);
     const employee_name = cellText(row.getCell(2).value);
-    const store_name = cellText(row.getCell(3).value);
+    const store_name = storeCol == null ? "" : cellText(row.getCell(storeCol + 1).value);
+    void positionCol;
     if (!employee_id && !employee_name && !store_name) return;
     for (const col of dateCols) {
       rows.push({

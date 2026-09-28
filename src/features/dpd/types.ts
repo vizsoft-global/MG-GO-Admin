@@ -200,21 +200,72 @@ export type EarningsDetailResult = {
   rules: EarningsDetailRule[];
 };
 
+type IncentivePreviewRule = Pick<
+  IncentiveRuleRow,
+  | "target_mode"
+  | "base_minimum_deliveries"
+  | "target_deliveries"
+  | "reward_mode"
+  | "reward_kwd"
+  | "reward_per_delivery_kwd"
+  | "payout_mode"
+  | "tiers"
+>;
+
+/**
+ * Where the per-order bands start (SQL _incentive_band_start), or null when
+ * the rule keeps the legacy math. `dpdTarget` is the restaurant's daily
+ * delivery_rules.dpd_target when known.
+ */
+export function incentiveBandStart(
+  rule: Pick<IncentiveRuleRow, "target_mode" | "base_minimum_deliveries" | "tiers">,
+  dpdTarget?: number | null,
+): number | null {
+  if (rule.target_mode !== "tiered" || rule.tiers.length === 0) return null;
+  if (
+    rule.tiers.some(
+      (t) => t.reward_mode !== "per_delivery" || (t.reward_per_delivery_kwd ?? 0) <= 0,
+    )
+  ) {
+    return null;
+  }
+  const thresholds = [...new Set(rule.tiers.map((t) => t.threshold_deliveries))].sort(
+    (a, b) => a - b,
+  );
+  const first = thresholds[0];
+  if (dpdTarget != null && dpdTarget > 0 && Math.ceil(dpdTarget) < first) {
+    return Math.ceil(dpdTarget);
+  }
+  const base = rule.base_minimum_deliveries;
+  if (base > 0 && base < first) return base;
+  const second = thresholds[1];
+  if (second != null && first - (second - first) >= 0) return first - (second - first);
+  return null;
+}
+
 /** Client-side payout estimate (matches SQL compute_incentive_amount). */
 export function computeIncentivePreview(
-  rule: Pick<
-    IncentiveRuleRow,
-    | "target_mode"
-    | "base_minimum_deliveries"
-    | "target_deliveries"
-    | "reward_mode"
-    | "reward_kwd"
-    | "reward_per_delivery_kwd"
-    | "payout_mode"
-    | "tiers"
-  >,
+  rule: IncentivePreviewRule,
   eligibleCount: number,
+  bandStart: number | null = null,
 ): number {
+  if (eligibleCount <= 0) return 0;
+
+  if (bandStart != null) {
+    let total = 0;
+    let prev = bandStart;
+    const tiers = [...rule.tiers].sort(
+      (a, b) => a.threshold_deliveries - b.threshold_deliveries,
+    );
+    for (const tier of tiers) {
+      if (tier.threshold_deliveries <= prev) continue;
+      const band = Math.min(eligibleCount, tier.threshold_deliveries) - prev;
+      if (band > 0) total += (tier.reward_per_delivery_kwd ?? 0) * band;
+      prev = tier.threshold_deliveries;
+    }
+    return total;
+  }
+
   const base = rule.base_minimum_deliveries;
   if (eligibleCount <= base) return 0;
   const cumulative = rule.payout_mode === "cumulative";
