@@ -5,21 +5,30 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
-import { assertPayrollMonth, kuwaitMonthBounds, payrollMonths } from "./payroll-formulas";
+import { logAdminActivity } from "@/lib/audit/log-admin-activity";
+import {
+  assertPayrollMonth,
+  attendanceLogHours,
+  kuwaitMonthBounds,
+  payrollMonths,
+} from "./payroll-formulas";
 import {
   assemblePayrollSnapshot,
   decoratePayrollSnapshot,
   kuwaitYmdFromIso,
+  type RawOffStructure,
   type RawPayrollDriver,
   type RawPayrollRequest,
 } from "./payroll-snapshot";
-import type { PayrollSlicers, PayrollSnapshot } from "./payroll-types";
+import type { OffStructureBulkResult, PayrollSlicers, PayrollSnapshot } from "./payroll-types";
 
 function requirePayrollView() {
   return requirePayrollPermission("payroll.view");
 }
 
-async function requirePayrollPermission(slug: "payroll.view" | "payroll.export") {
+async function requirePayrollPermission(
+  slug: "payroll.view" | "payroll.export" | "payroll.manage",
+) {
   const session = await getSessionUser();
   if (
     !session ||
@@ -114,7 +123,7 @@ async function assembleFromTables(
   const startUtc = kuwaitBoundIso(startIso);
   const endUtc = kuwaitBoundIso(endExclusiveIso);
 
-  const [driverRows, profileRows, zoneRows, vehicleRows, mapRows, restaurantRows, logRows, requestRows] =
+  const [driverRows, profileRows, zoneRows, vehicleRows, mapRows, restaurantRows, logRows, requestRows, offRows] =
     await Promise.all([
       fetchAll<{
         id: string;
@@ -155,10 +164,14 @@ async function assembleFromTables(
       fetchAll<{ id: string; name: string }>((from, to) =>
         supabase.from("restaurants").select("id, name").range(from, to),
       ),
-      fetchAll<{ driver_id: string; check_in_at: string | null }>((from, to) =>
+      fetchAll<{
+        driver_id: string;
+        check_in_at: string | null;
+        check_out_at: string | null;
+      }>((from, to) =>
         supabase
           .from("attendance_logs")
-          .select("driver_id, check_in_at")
+          .select("driver_id, check_in_at, check_out_at")
           .gte("check_in_at", startUtc)
           .lt("check_in_at", endUtc)
           .range(from, to),
@@ -190,6 +203,21 @@ async function assembleFromTables(
           )
           .range(from, to),
       ),
+      fetchAll<{
+        driver_id: string;
+        off_days: number;
+        source: "manual" | "bulk_upload";
+      }>((from, to) =>
+        supabase
+          .from("driver_off_structure")
+          .select("driver_id, off_days, source")
+          .eq("period_month", `${monthKey}-01`)
+          .range(from, to),
+      ).catch(() => [] as Array<{
+        driver_id: string;
+        off_days: number;
+        source: "manual" | "bulk_upload";
+      }>),
     ]);
 
   const names = new Map(profileRows.map((p) => [p.id, p.full_name]));
@@ -281,18 +309,104 @@ async function assembleFromTables(
     };
   });
 
-  return assemblePayrollSnapshot({
-    today,
-    monthKey,
-    slicers,
-    roster,
-    checkIns: logRows.flatMap((l) =>
-      l.check_in_at
-        ? [{ driverId: l.driver_id, date: kuwaitYmdFromIso(l.check_in_at) }]
-        : [],
-    ),
-    requests,
+  const offStructures: RawOffStructure[] = (offRows ?? []).map((row) => ({
+    driverId: row.driver_id,
+    offDays: row.off_days,
+    source: row.source,
+  }));
+
+  return decoratePayrollSnapshot(
+    assemblePayrollSnapshot({
+      today,
+      monthKey,
+      slicers,
+      roster,
+      checkIns: logRows.flatMap((l) =>
+        l.check_in_at
+          ? [
+              {
+                driverId: l.driver_id,
+                date: kuwaitYmdFromIso(l.check_in_at),
+                hours: attendanceLogHours(l.check_in_at, l.check_out_at),
+              },
+            ]
+          : [],
+      ),
+      requests,
+      offStructures,
+    }),
+  );
+}
+
+export async function setDriverOffStructure(input: {
+  driverId: string;
+  monthKey: string;
+  offDays: number | null;
+}): Promise<{ ok: true } | { error: string }> {
+  await requirePayrollPermission("payroll.manage");
+  const today = kuwaitToday();
+  try {
+    assertPayrollMonth(input.monthKey, today);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "invalid_month" };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_set_driver_off_structure", {
+    p_driver_id: input.driverId,
+    p_month: `${input.monthKey}-01`,
+    p_off_days: input.offDays,
   });
+  if (error) return { error: error.message };
+  await logAdminActivity({
+    action: "update",
+    entityType: "driver_off_structure",
+    entityId: input.driverId,
+    pagePath: "/payroll",
+    routeName: "payroll",
+    after: {
+      month: input.monthKey,
+      offDays: input.offDays,
+      result: data,
+    },
+  });
+  return { ok: true };
+}
+
+export async function applyOffStructureBulk(input: {
+  monthKey: string;
+  rows: Array<{ driverKey: string; offDays: number }>;
+}): Promise<OffStructureBulkResult | { error: string }> {
+  await requirePayrollPermission("payroll.manage");
+  const today = kuwaitToday();
+  try {
+    assertPayrollMonth(input.monthKey, today);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "invalid_month" };
+  }
+  if (!input.rows.length) return { error: "no_rows" };
+  if (input.rows.length > 2000) return { error: "too_many_rows" };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_bulk_set_driver_off_structure", {
+    p_month: `${input.monthKey}-01`,
+    p_rows: input.rows.map((row) => ({
+      driver_key: row.driverKey,
+      off_days: row.offDays,
+    })),
+  });
+  if (error) return { error: error.message };
+  const result = data as OffStructureBulkResult;
+  await logAdminActivity({
+    action: "update",
+    entityType: "driver_off_structure",
+    pagePath: "/payroll",
+    routeName: "payroll",
+    after: {
+      month: input.monthKey,
+      applied: result.applied,
+      skipped: result.skipped,
+    },
+  });
+  return result;
 }
 
 export async function fetchPayrollMonths(): Promise<{

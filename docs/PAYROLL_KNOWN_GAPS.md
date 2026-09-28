@@ -27,7 +27,7 @@ The roster is every non-archived driver. A rider with no `attendance_logs` row i
 ## Other locked omissions
 
 - Work / `12` is a check-in that Kuwait day, not a Performance working day (verified orders).
-- Efficiency is uncapped (`work / FixedDays × 100`). Fixed Days = calendar days − 2.
+- Efficiency is uncapped Actual Worked Hours ÷ Required Hours. Hours come from `attendance_logs` check-in→check-out (no cap; open log = 0h). Required Hours = (calendar days − Off Structure) × 12. Missing `driver_off_structure` row = 2 OFF days.
 - Unjustified counts OFF / Sick / Accident without `approved` or `awaiting_driver_ack`. Absent never needs a request.
 - Month selector is exactly three buttons (Kuwait current + previous 2). No older archive.
 - RPC `admin_payroll_month_snapshot` is live (`20261025100000` plus `00010`/`00020` enum and month-days casts). The table-query fallback uses the same start_date/end_date overlap as the RPC — never `created_at` in the selected month. A request filed in September that covers only August or November does not appear in September.

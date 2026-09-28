@@ -101,10 +101,14 @@ function useItemLabel() {
   };
 }
 
-const GROUP_I18N_KEY: Record<string, "overview" | "fleet" | "operations" | "wip" | "unorganised"> = {
+const GROUP_I18N_KEY: Record<
+  string,
+  "overview" | "fleet" | "operations" | "payroll" | "wip" | "unorganised"
+> = {
   Overview: "overview",
   Fleet: "fleet",
   Operations: "operations",
+  Payroll: "payroll",
   WIP: "wip",
   "Work in Progress": "wip",
   Unorganised: "unorganised",

@@ -1494,6 +1494,7 @@ async function fetchDriverDetailInner(
       freeze_reason: string | null;
       frozen_at: string | null;
       login_verification_exempt: boolean;
+      screenshots_allowed: boolean;
       avatar_object_key: string | null;
     } | null = null;
     if (linkedId) {
@@ -1505,7 +1506,7 @@ async function fetchDriverDetailInner(
           .maybeSingle(),
         supabase
           .from("drivers")
-          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, accommodation, is_blocked, blocked_reason, blocked_at, login_verification_exempt, avatar_object_key")
+          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, accommodation, is_blocked, blocked_reason, blocked_at, login_verification_exempt, screenshots_allowed, avatar_object_key")
           .eq("id", linkedId)
           .maybeSingle(),
         fetchDriverFreezeRow(supabase, linkedId),
@@ -1531,6 +1532,7 @@ async function fetchDriverDetailInner(
             freeze_reason: freeze.freeze_reason,
             frozen_at: freeze.frozen_at,
             login_verification_exempt: drv.login_verification_exempt ?? false,
+            screenshots_allowed: drv.screenshots_allowed ?? false,
             avatar_object_key: drv.avatar_object_key ?? null,
           }
         : null;
@@ -1628,6 +1630,7 @@ async function fetchDriverDetailInner(
       frozen_at: linkedDriver?.frozen_at ?? null,
       login_verification_exempt:
         linkedDriver?.login_verification_exempt ?? false,
+      screenshots_allowed: linkedDriver?.screenshots_allowed ?? false,
       archived_at: intake.archived_at,
       documents: {},
       custom_fields: parseCustomFieldsJson(intake.custom_fields),
@@ -1664,6 +1667,7 @@ async function fetchDriverDetailInner(
       blocked_reason,
       blocked_at,
       login_verification_exempt,
+      screenshots_allowed,
       archived_at,
       custom_fields,
       avatar_object_key,
@@ -1777,12 +1781,45 @@ async function fetchDriverDetailInner(
     freeze_reason: freeze.freeze_reason,
     frozen_at: freeze.frozen_at,
     login_verification_exempt: driverRow.login_verification_exempt ?? false,
+    screenshots_allowed: driverRow.screenshots_allowed ?? false,
     archived_at: intakeForDriver?.archived_at ?? driverRow.archived_at,
     documents: {},
     custom_fields: parseCustomFieldsJson(driverRow.custom_fields),
     deliveries_today: deliveryCounts.today,
     deliveries_week: deliveryCounts.week,
   };
+}
+
+export async function setDriverScreenshotsAllowed(
+  driverId: string,
+  allowed: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+
+  if (!driverId) return { error: "missing_fields" };
+
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("drivers")
+      .update({ screenshots_allowed: allowed })
+      .eq("id", driverId);
+
+    if (error) return { error: "save_failed" };
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "driver",
+      entityId: driverId,
+      routeName: "setDriverScreenshotsAllowed",
+      after: { screenshots_allowed: allowed },
+    });
+
+    return { success: true };
+  } catch {
+    return { error: "save_failed" };
+  }
 }
 
 export async function setDriverLoginVerificationExempt(

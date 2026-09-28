@@ -243,6 +243,7 @@ export type DriverDetailModel = {
   freeze_reason: string | null;
   frozen_at: string | null;
   login_verification_exempt: boolean;
+  screenshots_allowed: boolean;
   archived_at: string | null;
   documents: Partial<Record<DriverDocumentType, DriverRemoteDocument>>;
   custom_fields: Record<string, string | number | boolean | string[] | null>;

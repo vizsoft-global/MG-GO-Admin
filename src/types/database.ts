@@ -440,6 +440,7 @@ export type Database = {
           fleet_zone_buffer_meters: number
           font_family: string
           id: number
+          incentive_band_math_from: string | null
           logo_type: string
           logo_url: string | null
           maintenance_mode: boolean
@@ -495,6 +496,7 @@ export type Database = {
           fleet_zone_buffer_meters?: number
           font_family?: string
           id?: number
+          incentive_band_math_from?: string | null
           logo_type?: string
           logo_url?: string | null
           maintenance_mode?: boolean
@@ -550,6 +552,7 @@ export type Database = {
           fleet_zone_buffer_meters?: number
           font_family?: string
           id?: number
+          incentive_band_math_from?: string | null
           logo_type?: string
           logo_url?: string | null
           maintenance_mode?: boolean
@@ -1987,6 +1990,38 @@ export type Database = {
           },
         ]
       }
+      driver_dpd_shift_notices: {
+        Row: {
+          campaign_id: string | null
+          driver_id: string
+          kind: string
+          sent_at: string
+          shift_date: string
+        }
+        Insert: {
+          campaign_id?: string | null
+          driver_id: string
+          kind: string
+          sent_at?: string
+          shift_date: string
+        }
+        Update: {
+          campaign_id?: string | null
+          driver_id?: string
+          kind?: string
+          sent_at?: string
+          shift_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_dpd_shift_notices_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       driver_earnings_daily: {
         Row: {
           base_kwd: number
@@ -2639,6 +2674,48 @@ export type Database = {
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      driver_off_structure: {
+        Row: {
+          driver_id: string
+          off_days: number
+          period_month: string
+          source: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          driver_id: string
+          off_days: number
+          period_month: string
+          source?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          driver_id?: string
+          off_days?: number
+          period_month?: string
+          source?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "driver_off_structure_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "driver_off_structure_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -3353,6 +3430,7 @@ export type Database = {
           project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
+          screenshots_allowed: boolean
           source_company: string | null
           status: Database["public"]["Enums"]["driver_status"]
           updated_at: string
@@ -3404,6 +3482,7 @@ export type Database = {
           project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
+          screenshots_allowed?: boolean
           source_company?: string | null
           status?: Database["public"]["Enums"]["driver_status"]
           updated_at?: string
@@ -3455,6 +3534,7 @@ export type Database = {
           project_key?: string | null
           restaurant_id?: string | null
           rider_category?: Database["public"]["Enums"]["driver_rider_category"]
+          screenshots_allowed?: boolean
           source_company?: string | null
           status?: Database["public"]["Enums"]["driver_status"]
           updated_at?: string
@@ -8026,6 +8106,7 @@ export type Database = {
           project_key: string | null
           restaurant_id: string | null
           rider_category: Database["public"]["Enums"]["driver_rider_category"]
+          screenshots_allowed: boolean
           source_company: string | null
           status: Database["public"]["Enums"]["driver_status"]
           updated_at: string
@@ -8043,6 +8124,10 @@ export type Database = {
       _driver_assert_device_match: {
         Args: { p_device_id: string; p_uid: string }
         Returns: boolean
+      }
+      _driver_daily_dpd_state: {
+        Args: { p_driver_id: string; p_on_date: string }
+        Returns: Json
       }
       _driver_find_active_shift: {
         Args: { p_driver_id: string; p_now?: string }
@@ -8129,6 +8214,10 @@ export type Database = {
         Args: { p_lat1: number; p_lat2: number; p_lng1: number; p_lng2: number }
         Returns: number
       }
+      _incentive_band_start: {
+        Args: { p_on_date: string; p_rule_id: string }
+        Returns: number
+      }
       _performance_components_snapshot: { Args: never; Returns: Json }
       _point_in_restaurant_geofence: {
         Args: {
@@ -8148,6 +8237,10 @@ export type Database = {
           p_zone_type: Database["public"]["Enums"]["zone_geometry_type"]
         }
         Returns: boolean
+      }
+      _restaurant_daily_dpd_target: {
+        Args: { p_on_date: string; p_restaurant_id: string }
+        Returns: number
       }
       _shift_end_day_offset: {
         Args: { p_end: string; p_end_day_offset?: number; p_start: string }
@@ -8200,6 +8293,10 @@ export type Database = {
         Returns: Json
       }
       admin_auto_close_requests: { Args: never; Returns: number }
+      admin_bulk_set_driver_off_structure: {
+        Args: { p_month: string; p_rows: Json }
+        Returns: Json
+      }
       admin_bulk_update_deliveries: {
         Args: { p_ids: string[]; p_reason?: string; p_status: string }
         Returns: Json
@@ -8316,6 +8413,19 @@ export type Database = {
         Returns: Json
       }
       admin_dpd_live_snapshot: { Args: { p_date?: string }; Returns: Json }
+      admin_dpd_notice_candidates: {
+        Args: { p_driver_ids?: string[]; p_kinds?: string[]; p_now?: string }
+        Returns: {
+          completed: number
+          driver_id: string
+          incentive_kwd: number
+          kind: string
+          locale: string
+          minutes_left: number
+          shift_date: string
+          target: number
+        }[]
+      }
       admin_driver_app_install_versions: {
         Args: never
         Returns: {
@@ -8676,6 +8786,10 @@ export type Database = {
         Args: { p_driver_ids: string[]; p_enabled: boolean; p_min_code: number }
         Returns: Json
       }
+      admin_set_driver_off_structure: {
+        Args: { p_driver_id: string; p_month: string; p_off_days: number }
+        Returns: Json
+      }
       admin_set_driver_performance_rating_note: {
         Args: {
           p_comment: string
@@ -8797,6 +8911,10 @@ export type Database = {
       approve_payout_run: { Args: { p_run_id: string }; Returns: undefined }
       archive_driver_intake: { Args: { p_intake_id: string }; Returns: Json }
       assert_external_order_id: { Args: { p_raw: string }; Returns: string }
+      claim_dpd_shift_notice: {
+        Args: { p_driver_id: string; p_kind: string; p_shift_date: string }
+        Returns: boolean
+      }
       claim_driver_import_chunk: {
         Args: { p_id: string; p_size: number }
         Returns: Json
@@ -8838,10 +8956,19 @@ export type Database = {
         }
         Returns: string[]
       }
-      compute_incentive_amount: {
-        Args: { p_eligible_count: number; p_rule_id: string }
-        Returns: number
-      }
+      compute_incentive_amount:
+        | {
+            Args: { p_eligible_count: number; p_rule_id: string }
+            Returns: number
+          }
+        | {
+            Args: {
+              p_eligible_count: number
+              p_on_date: string
+              p_rule_id: string
+            }
+            Returns: number
+          }
       count_eligible_deliveries: {
         Args: {
           p_driver_id: string
@@ -9484,6 +9611,7 @@ export type Database = {
         }
         Returns: Json
       }
+      payroll_can_manage: { Args: never; Returns: boolean }
       performance_daily_source: {
         Args: { p_driver_id?: string; p_from: string; p_to: string }
         Returns: {

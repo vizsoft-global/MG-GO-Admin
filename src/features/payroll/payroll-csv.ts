@@ -27,7 +27,9 @@ export const PAYROLL_TOTAL_HEADERS = [
   "Sick",
   "Accident",
   "Absence",
-  "Fixed Days",
+  "Off Structure",
+  "Required Hours",
+  "Actual Hours",
   "Efficiency%",
 ] as const;
 
@@ -53,7 +55,9 @@ export function payrollTableRow(row: PayrollRiderRow): Array<string | number> {
     row.sickDays,
     row.accidentDays,
     row.absentDays,
-    row.fixedDays,
+    row.offStructureDays,
+    Number(row.requiredHours.toFixed(2)),
+    Number(row.actualHours.toFixed(2)),
     Number(row.efficiency.toFixed(2)),
   ];
 }
@@ -77,7 +81,9 @@ export function exportPayrollDistributionCsv(
     "Bucket",
     ...PAYROLL_IDENTITY_HEADERS,
     "Total Days",
-    "Fixed Days",
+    "Off Structure",
+    "Required Hours",
+    "Actual Hours",
     "Efficiency%",
     "Absence",
     "Unjustified Days",
@@ -96,7 +102,9 @@ export function exportPayrollDistributionCsv(
         r.nationality,
         r.status,
         r.workDays,
-        r.fixedDays,
+        r.offStructureDays,
+        Number(r.requiredHours.toFixed(2)),
+        Number(r.actualHours.toFixed(2)),
         Number(r.efficiency.toFixed(2)),
         r.absentDays,
         r.unjustified,

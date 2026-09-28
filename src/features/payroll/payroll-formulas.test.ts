@@ -3,15 +3,18 @@ import { describe, it } from "node:test";
 import {
   applyCover,
   assertPayrollMonth,
+  attendanceLogHours,
   bucketOf,
   classifyDay,
   classifyRiderMonth,
   computePayrollKpis,
   computeRequestKpis,
+  countRidersByStatus,
   coverKindFor,
   dayLabel,
   emptyCover,
   efficiencyPct,
+  filterRidersByStatus,
   fixedDaysFor,
   isAccidentRequest,
   isJustifyingStatus,
@@ -26,8 +29,10 @@ import {
   presetForPayrollMonth,
   requestCoversDate,
   requestOverlapsMonth,
+  requiredHoursFor,
   restaurantLabel,
   riderMatchesSlicers,
+  shareOfPayroll,
   workflowStats,
 } from "./payroll-formulas";
 
@@ -184,12 +189,16 @@ describe("day classifier priority", () => {
 });
 
 describe("efficiency + buckets", () => {
-  it("is uncapped work / FixedDays * 100", () => {
-    assert.equal(efficiencyPct(28, 28), 100);
-    assert.equal(efficiencyPct(30, 28), (30 / 28) * 100);
-    assert.ok(efficiencyPct(30, 28) > 100);
-    assert.equal(efficiencyPct(0, 28), 0);
+  it("is uncapped actual hours / required hours * 100", () => {
+    assert.equal(requiredHoursFor(30, 2), 336);
+    assert.equal(requiredHoursFor(30, 4), 312);
+    assert.equal(efficiencyPct(336, 336), 100);
+    assert.equal(efficiencyPct(360, 336), (360 / 336) * 100);
+    assert.ok(efficiencyPct(360, 336) > 100);
+    assert.equal(efficiencyPct(0, 336), 0);
     assert.equal(efficiencyPct(10, 0), 0);
+    assert.equal(attendanceLogHours("2026-09-01T06:00:00+03:00", "2026-09-01T22:00:00+03:00"), 16);
+    assert.equal(attendanceLogHours("2026-09-01T06:00:00+03:00", null), 0);
   });
 
   it("puts 100 in ≥100% and 99.9 in 90–100%", () => {
@@ -416,5 +425,50 @@ describe("requests KPIs + workflow stats", () => {
       awaitingAction: 1,
       requestsPerRider: 0,
     });
+  });
+});
+
+describe("hours-based rider month + status chips", () => {
+  const month = monthMeta("2026-09")!;
+  const today = "2026-09-16";
+
+  it("uses logged hours when hoursByDate is present and falls back to 12h days when omitted", () => {
+    const checkIns = new Set(["2026-09-01", "2026-09-02"]);
+    const hours = new Map([["2026-09-01", 16], ["2026-09-02", 10]]);
+    const logged = classifyRiderMonth({
+      month,
+      today,
+      checkInDates: checkIns,
+      coversByDate: new Map(),
+      hoursByDate: hours,
+      offStructureDays: 4,
+    });
+    assert.equal(logged.actualHours, 26);
+    assert.equal(logged.requiredHours, requiredHoursFor(30, 4));
+    assert.equal(logged.efficiency, efficiencyPct(26, logged.requiredHours));
+
+    const fallback = classifyRiderMonth({
+      month,
+      today,
+      checkInDates: checkIns,
+      coversByDate: new Map(),
+    });
+    assert.equal(fallback.offStructureDays, 2);
+    assert.equal(fallback.actualHours, 24);
+    assert.equal(fallback.requiredHours, requiredHoursFor(30, 2));
+  });
+
+  it("filters riders by day status and keeps share-of-payroll math", () => {
+    const rows = [
+      { days: ["work", "off", "blank"] as const },
+      { days: ["work", "sick", "absent"] as const },
+      { days: ["accident", "blank"] as const },
+    ];
+    assert.equal(countRidersByStatus(rows).work, 2);
+    assert.equal(countRidersByStatus(rows).off, 1);
+    assert.equal(filterRidersByStatus(rows, "absent").length, 1);
+    assert.equal(filterRidersByStatus(rows, null).length, 3);
+    assert.equal(shareOfPayroll(1, 4), 25);
+    assert.equal(shareOfPayroll(1, 0), 0);
   });
 });
