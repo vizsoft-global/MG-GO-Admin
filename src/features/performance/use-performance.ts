@@ -304,6 +304,8 @@ export function usePerformanceOpsSnapshot(
     queryKey: queryKeys.performance.opsSnapshot(input),
     queryFn: () => fetchPerformanceOpsSnapshot(input),
     enabled,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 

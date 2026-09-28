@@ -7255,7 +7255,7 @@
       "tabAnalysis": "التحليل",
       "tabDpd": "DPD",
       "ops": {
-        "subtitle": "الطلبات المؤكدة وأيام العمل وDPD والكفاءة — تقويم الكويت",
+        "subtitle": "طلبات {status} وأيام العمل وDPD والكفاءة — تقويم الكويت",
         "tabOverview": "نظرة عامة",
         "tabDpd": "DPD والكفاءة",
         "tabRiders": "تحليل السائقين",
@@ -7319,6 +7319,13 @@
           "sourceType": "نوع المصدر",
           "company": "الشركة",
           "store": "المطعم",
+          "orderStatus": "حالة الطلب",
+          "orderStatusOpt": {
+            "verified": "مؤكد",
+            "pending": "معلق",
+            "in_transit": "قيد التوصيل",
+            "all": "الكل"
+          },
           "all": "الكل",
           "allPartners": "كل الشركاء",
           "allZones": "كل المناطق",

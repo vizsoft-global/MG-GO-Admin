@@ -10,9 +10,11 @@ import {
   efficiencyBucket,
   fillCustomPreset,
   matchingCustomPreset,
+  assertOpsOrderStatus,
   attachTrendEff,
   bucketOpsTrend,
   companyKeyOf,
+  DEFAULT_OPS_ORDER_STATUS,
   companyRowsFromRiders,
   DEFAULT_OPS_PRESET,
   formatOpsBucketLabel,
@@ -21,6 +23,8 @@ import {
   inclusiveDayCount,
   isChartableDimKey,
   opsBarColorForKey,
+  opsOrderDayYmd,
+  opsOrderStatusSet,
   kpiDeltaPct,
   meanFinite,
   overallDpd,
@@ -520,6 +524,55 @@ describe("trend window + 4-week buckets", () => {
     );
     assert.equal(row?.tgt_eff, 100);
     assert.equal(row?.dpd_eff, 100);
+  });
+});
+
+describe("order status slicer", () => {
+  it("maps each slicer value to the SQL status set", () => {
+    assert.deepEqual(opsOrderStatusSet("verified"), ["verified"]);
+    assert.deepEqual(opsOrderStatusSet("pending"), ["pending"]);
+    assert.deepEqual(opsOrderStatusSet("in_transit"), ["in_transit"]);
+    assert.deepEqual(opsOrderStatusSet("all"), [
+      "pending",
+      "in_transit",
+      "verified",
+    ]);
+    assert.equal(DEFAULT_OPS_ORDER_STATUS, "verified");
+  });
+
+  it("refuses anything outside the four values", () => {
+    assert.throws(() => assertOpsOrderStatus("under_review"), /invalid_order_status/);
+    assert.throws(() => assertOpsOrderStatus("cancelled"), /invalid_order_status/);
+    assert.throws(() => assertOpsOrderStatus(""), /invalid_order_status/);
+    assert.equal(assertOpsOrderStatus("verified"), "verified");
+  });
+
+  it("day is Kuwait calendar of COALESCE(delivered_at, pickup_at, created_at)", () => {
+    assert.equal(
+      opsOrderDayYmd({
+        deliveredAt: "2026-09-27T21:00:00.000Z",
+        pickupAt: "2026-09-26T10:00:00.000Z",
+        createdAt: "2026-09-26T08:00:00.000Z",
+      }),
+      "2026-09-28",
+    );
+    assert.equal(
+      opsOrderDayYmd({
+        deliveredAt: null,
+        pickupAt: "2026-09-27T21:00:00.000Z",
+        createdAt: "2026-09-26T08:00:00.000Z",
+      }),
+      "2026-09-28",
+    );
+    assert.equal(
+      opsOrderDayYmd({
+        deliveredAt: null,
+        pickupAt: null,
+        createdAt: "2026-09-27T20:59:00.000Z",
+      }),
+      "2026-09-27",
+    );
+    assert.equal(opsOrderDayYmd({}), null);
   });
 });
 

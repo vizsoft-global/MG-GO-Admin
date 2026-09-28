@@ -1,4 +1,10 @@
-import type { EfficiencyBucket, OpsGranularity, OpsRangePreset } from "./performance-ops-formulas";
+import type {
+  EfficiencyBucket,
+  OpsGranularity,
+  OpsOrderStatus,
+  OpsRangePreset,
+} from "./performance-ops-formulas";
+import { DEFAULT_OPS_ORDER_STATUS } from "./performance-ops-formulas";
 
 export type PerformanceHubTab =
   | "overview"
@@ -8,6 +14,7 @@ export type PerformanceHubTab =
   | "outsource";
 
 export type OpsSlicers = {
+  orderStatus: OpsOrderStatus;
   projectKeys: string[];
   zoneIds: string[];
   vehicleKeys: string[];
@@ -18,6 +25,7 @@ export type OpsSlicers = {
 };
 
 export const EMPTY_OPS_SLICERS: OpsSlicers = {
+  orderStatus: DEFAULT_OPS_ORDER_STATUS,
   projectKeys: [],
   zoneIds: [],
   vehicleKeys: [],
