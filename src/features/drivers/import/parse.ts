@@ -84,6 +84,7 @@ export function mapRowsFromSheet(
         client_id: get("client_id"),
         client_name: get("client_name"),
         active: get("active"),
+        off_days: get("off_days"),
         custom_fields,
       };
     })
@@ -170,6 +171,7 @@ export function guessColumnMapping(
     // and guessing that one onto this field would approve drivers nobody asked
     // to approve.
     active: find("active", "approve"),
+    off_days: find("number of offs", "number of off", "off days", "off_days"),
   };
 
   for (const key of customFieldKeys) {

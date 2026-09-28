@@ -39,7 +39,14 @@ import {
   logDriverChange,
 } from "./driver-change-log";
 import type { DriverImportLogEvent } from "./import/import-progress";
+import {
+  importOffNeedsApprovedDriver,
+  kuwaitCalendarMonthDays,
+  offDaysForRpc,
+  parseImportOffDays,
+} from "./import/import-off-days";
 import { parseImportActive, parseRiderCategory } from "./import/parse";
+import { kuwaitToday } from "@/features/performance/performance-formulas";
 import {
   companyMatchesCategory,
   resolveCompanyInput,
@@ -352,6 +359,7 @@ export async function resolveDriverImportPreview(
     phones: new Map(),
     civils: new Map(),
   };
+  const monthDays = kuwaitCalendarMonthDays(kuwaitToday());
 
   return rows.map((row) => {
     let partner_id: string | null = null;
@@ -367,6 +375,7 @@ export async function resolveDriverImportPreview(
     let client_id: string | null = null;
     let client_name: string | null = null;
     let active: boolean | null = null;
+    let off_days: number | null = null;
 
     const identity = evaluateImportIdentity(row, roster, seen);
     let status: DriverImportPreviewStatus = identity.status;
@@ -459,6 +468,12 @@ export async function resolveDriverImportPreview(
       else active = parsedActive;
     }
 
+    if (lookupStillOpen()) {
+      const parsedOff = parseImportOffDays(row.off_days, monthDays);
+      if (parsedOff.error) status = parsedOff.error;
+      else off_days = parsedOff.offDays;
+    }
+
     if (lookupStillOpen() && existingByEmployeeId) {
       status = "duplicate_employee_id";
     }
@@ -480,6 +495,7 @@ export async function resolveDriverImportPreview(
       client_id,
       client_name,
       active,
+      off_days,
     };
   });
 }
@@ -537,6 +553,7 @@ export async function applyOneImportRow(
   let driverCode: string | null = null;
   let updated = false;
   let alreadyLinked = false;
+  let linkedDriverId: string | null = null;
   let beforeSnap = {};
 
   const matchExisting = () =>
@@ -546,6 +563,23 @@ export async function applyOneImportRow(
       .is("archived_at", null)
       .ilike("employee_id", employeeId)
       .maybeSingle();
+
+  if (row.off_days != null) {
+    const { data: existingForOff } = await matchExisting();
+    const linkedId = existingForOff?.linked_profile_id ?? null;
+    const already = Boolean(existingForOff?.linked || linkedId);
+    const approveRequested = row.active ?? ctx.approveImmediately;
+    if (
+      importOffNeedsApprovedDriver(
+        row.off_days,
+        Boolean(linkedId),
+        shouldApproveImportRow(approveRequested, already),
+      )
+    ) {
+      return fail("off_requires_approved_driver");
+    }
+    linkedDriverId = linkedId;
+  }
 
   if (ctx.duplicateStrategy === "update") {
     const { data: existing } = await matchExisting();
@@ -584,6 +618,7 @@ export async function applyOneImportRow(
 
       if (existing.linked_profile_id) {
         const linkedId = existing.linked_profile_id;
+        linkedDriverId = linkedId;
         const { error: driverErr } = await ctx.supabase
           .from("drivers")
           .update({
@@ -738,6 +773,7 @@ export async function applyOneImportRow(
   }
 
   let approved: 0 | 1 = 0;
+  let approvedDriverId: string | null = null;
   let credential: DriverImportCredential | undefined;
   const approveRow = shouldApproveImportRow(
     row.active ?? ctx.approveImmediately,
@@ -747,6 +783,7 @@ export async function applyOneImportRow(
     const result = await approveDriverIntake(intakeId);
     if ("success" in result && result.success) {
       approved = 1;
+      approvedDriverId = result.driverId;
       events.push({
         at: nowIso(),
         kind: "approved",
@@ -793,6 +830,17 @@ export async function applyOneImportRow(
         credential,
       };
     }
+  }
+
+  const driverIdForOff = approvedDriverId ?? linkedDriverId;
+  if (row.off_days != null) {
+    if (!driverIdForOff) return fail("off_requires_approved_driver");
+    const { error: offErr } = await ctx.supabase.rpc("admin_set_driver_off_structure", {
+      p_driver_id: driverIdForOff,
+      p_month: `${kuwaitToday().slice(0, 7)}-01`,
+      p_off_days: offDaysForRpc(row.off_days),
+    });
+    if (offErr) return fail(offErr.message);
   }
 
   return { events, applied: 1, approved, credential };

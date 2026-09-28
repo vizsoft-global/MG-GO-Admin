@@ -25,4 +25,24 @@ describe("permission catalog", () => {
     const slugs = PERMISSION_CATALOG.map((e) => e.slug);
     assert.equal(slugs.length, new Set(slugs).size);
   });
+
+  it("staff-access new page slugs are in the catalog", () => {
+    for (const slug of [
+      "live_tracking.view",
+      "fuel_requests.view",
+      "fuel_refunds.view",
+      "asset_requests.view",
+      "fuel.manage",
+      "fuel.create",
+      "fuel.edit",
+      "payroll.create",
+      "payroll.edit",
+      "companies.view",
+      "companies.edit",
+      "order_recon.view",
+      "order_recon.manage",
+    ]) {
+      assert.ok(CATALOG_SLUG_SET.has(slug), `missing ${slug}`);
+    }
+  });
 });

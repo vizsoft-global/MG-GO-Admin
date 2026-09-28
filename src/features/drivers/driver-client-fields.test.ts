@@ -174,6 +174,10 @@ describe("templateDriversAoa", () => {
     assert.equal(restaurantOnly[zoneAt], "");
     assert.equal(zoneOnly[zoneAt], "55555555-5555-4555-8555-555555555555");
     assert.equal(zoneOnly[restaurantAt], "");
+    const offAt = headers.indexOf("Number of OFFs");
+    assert.ok(offAt >= 0);
+    assert.equal(restaurantOnly[offAt], "3");
+    assert.equal(zoneOnly[offAt], "");
   });
 });
 

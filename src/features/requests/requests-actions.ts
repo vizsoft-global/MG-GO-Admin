@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { getPresignedGetUrl } from "@/lib/storage/r2-client";
@@ -34,11 +34,14 @@ import type {
   RequestRescheduleInput,
 } from "./types";
 
-async function requireRequestsView() {
+async function requireRequestsView(extra?: Permission) {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "requests.view", session.isSuperAdmin)
+    !(
+      hasPermissionInSet(session.permissions, "requests.view", session.isSuperAdmin) ||
+      (extra != null && hasPermissionInSet(session.permissions, extra, session.isSuperAdmin))
+    )
   ) {
     throw new Error("not_authorized");
   }
@@ -93,7 +96,10 @@ export async function fetchRequestTypeCounts(): Promise<{
   return { counts };
 }
 
-export async function fetchAdminRequestsList(filters: RequestListFilters): Promise<{
+export async function fetchAdminRequestsList(
+  filters: RequestListFilters,
+  extraView?: Permission,
+): Promise<{
   rows: RequestListRow[];
   kpi: RequestKpis;
   filteredTotal: number;
@@ -101,7 +107,7 @@ export async function fetchAdminRequestsList(filters: RequestListFilters): Promi
   departmentOptions: RequestDepartmentOption[];
   error?: string;
 }> {
-  await requireRequestsView();
+  await requireRequestsView(extraView);
   const supabase = await createClient();
   const { from, to } = datePresetToBounds(filters.datePreset);
 
@@ -377,7 +383,10 @@ export async function fetchRequestAttachmentUrl(
     !session ||
     !(
       hasPermissionInSet(session.permissions, "requests.view", session.isSuperAdmin) ||
-      hasPermissionInSet(session.permissions, "assets.view", session.isSuperAdmin)
+      hasPermissionInSet(session.permissions, "assets.view", session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "fuel_requests.view", session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "fuel_refunds.view", session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "asset_requests.view", session.isSuperAdmin)
     )
   ) {
     throw new Error("not_authorized");

@@ -142,6 +142,13 @@ const STANDARD_COLUMNS: Array<
       "yes or no. Blank defers to the Approve immediately switch in the import dialog.",
     example: "yes",
   },
+  {
+    field: "off_days",
+    header: "Number of OFFs",
+    allowed:
+      "Whole number of OFF days for the current Kuwait month (0 up to the days in that month). Blank leaves the default of 2 and writes nothing. The rider must be approved on this import or already linked.",
+    example: "3",
+  },
 ];
 
 export const DRIVER_IMPORT_COLUMNS: readonly DriverImportColumnSpec[] =
@@ -279,6 +286,7 @@ export function templateDriversAoa(
     if (column.field === "employee_id") return "EMP2049";
     if (column.field === "phone") return "";
     if (column.field === "civil_id") return "";
+    if (column.field === "off_days") return "";
     return column.example;
   });
 

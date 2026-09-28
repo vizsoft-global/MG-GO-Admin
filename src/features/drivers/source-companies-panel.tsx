@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   companyKeyFromName,
@@ -42,6 +43,9 @@ type Draft = {
 
 export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWithUsage[] }) {
   const t = useTranslations("pages.settings.sourceCompanies");
+  const { can } = useAuth();
+  const canCreate = can("companies.create");
+  const canEdit = can("companies.edit");
   const router = useRouter();
   const queryClient = useQueryClient();
   const [pending, startTransition] = useTransition();
@@ -98,10 +102,12 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
       title={t("title")}
       description={t("subtitle")}
       action={
-        <Button type="button" className="h-9" onClick={openNew}>
-          <Plus className="size-4" aria-hidden />
-          {t("add")}
-        </Button>
+        canCreate ? (
+          <Button type="button" className="h-9" onClick={openNew}>
+            <Plus className="size-4" aria-hidden />
+            {t("add")}
+          </Button>
+        ) : undefined
       }
     >
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -151,16 +157,18 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                 </TableCell>
                 <TableCell className="text-end tabular-nums">{c.driver_count}</TableCell>
                 <TableCell className="text-end">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-primary hover:bg-primary/10"
-                    onClick={() => openEdit(c)}
-                  >
-                    <Pencil className="size-3.5" aria-hidden />
-                    {t("edit")}
-                  </Button>
+                  {canEdit ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-primary hover:bg-primary/10"
+                      onClick={() => openEdit(c)}
+                    >
+                      <Pencil className="size-3.5" aria-hidden />
+                      {t("edit")}
+                    </Button>
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))}

@@ -11,11 +11,11 @@ export default async function LiveTrackingPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const session = await requirePermission(locale, "drivers.view");
+  const session = await requirePermission(locale, "live_tracking.view");
   void logAdminPageView("/live-tracking", "LiveTrackingPage");
 
-  // Live and History stay on drivers.view; only the Activity tab needs the wider
-  // audit permission, so it is hidden rather than 403-ing the whole page.
+  // Maps use live_tracking.view. Activity still needs driver_ops.view; hide
+  // that tab rather than 403-ing the whole page.
   const canViewActivity = hasPermissionInSet(
     session.permissions,
     "driver_ops.view",

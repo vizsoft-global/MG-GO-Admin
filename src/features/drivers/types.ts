@@ -266,6 +266,7 @@ export const DRIVER_IMPORT_FIELDS = [
   "client_id",
   "client_name",
   "active",
+  "off_days",
 ] as const;
 
 /**
@@ -301,6 +302,8 @@ export type DriverImportPreviewStatus =
   | "invalid_client_id"
   | "invalid_client_name"
   | "invalid_active"
+  | "invalid_off_days"
+  | "off_days_exceeds_month"
   | "missing_fields"
   | "missing_assignment"
   | "unmatched_partner"
@@ -332,11 +335,13 @@ export type DriverImportMappedRow = {
   client_name: string | null;
   /** Raw "yes"/"no" cell asking for this driver to be approved on import. */
   active: string | null;
+  /** Raw Number of OFFs cell. Blank means leave the month default. */
+  off_days: string | null;
 };
 
 export type DriverImportPreviewRow = Omit<
   DriverImportMappedRow,
-  "partner_id" | "zone_id" | "restaurant_ids" | "active"
+  "partner_id" | "zone_id" | "restaurant_ids" | "active" | "off_days"
 > & {
   status: DriverImportPreviewStatus;
   partner_id: string | null;
@@ -355,6 +360,8 @@ export type DriverImportPreviewRow = Omit<
    * as it did before the column existed.
    */
   active: boolean | null;
+  /** Parsed OFF days for the current Kuwait month. `null` = do not write. */
+  off_days: number | null;
   skip?: boolean;
   /** True when this employee ID already exists in the fleet (not a second sheet row). */
   existingByEmployeeId?: boolean;

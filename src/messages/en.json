@@ -1147,7 +1147,7 @@
         "lookupFailed": "Could not export the list.",
         "requiredTitle": "Required",
         "requiredList": "Full name, MG ID (letters and digits, up to 100 characters), and a zone or at least one restaurant.",
-        "optionalList": "Optional: phone (8 digits or +965), civil ID (12 digits), partner, the other of zone/restaurant, vehicle, nationality, rider category (in_house / outsourced), company name, platform ID, platform, active (yes/no). Phone and civil ID may be blank, but must be unique when filled in.",
+        "optionalList": "Optional: phone (8 digits or +965), civil ID (12 digits), partner, the other of zone/restaurant, vehicle, nationality, rider category (in_house / outsourced), company name, platform ID, platform, active (yes/no), number of OFFs (current Kuwait month; blank keeps the default of 2). Phone and civil ID may be blank, but must be unique when filled in. Number of OFFs writes only for an approved or already-linked rider.",
         "mappingRequired": "Map every required field before preview.",
         "assignmentMappingRequired": "Map a Zone column or a Restaurants column — a driver needs one of the two.",
         "sourceColumns": "File columns",
@@ -1168,7 +1168,8 @@
           "source_company": "Company Name",
           "active": "Active on import (yes / no)",
           "client_id": "Platform ID",
-          "client_name": "Platform"
+          "client_name": "Platform",
+          "off_days": "Number of OFFs (current Kuwait month)"
         },
         "preview": "Preview",
         "back": "Back",
@@ -1213,6 +1214,8 @@
           "invalid_rider_category": "Use in_house or outsourced",
           "invalid_source_company": "Company not found. Use a name or Client ID from the Companies sheet",
           "invalid_active": "Use yes or no",
+          "invalid_off_days": "Number of OFFs must be a whole number",
+          "off_days_exceeds_month": "Number of OFFs cannot exceed days in the current Kuwait month",
           "missing_fields": "Missing fields",
           "missing_assignment": "Needs a zone or a restaurant",
           "unmatched_partner": "Unknown partner",

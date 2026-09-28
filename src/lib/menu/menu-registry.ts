@@ -175,7 +175,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/live-tracking",
     defaultGroup: "Operations",
     defaultOrder: 1,
-    permission: "drivers.view",
+    permission: "live_tracking.view",
   },
   {
     id: "live-tracking-v2",
@@ -184,7 +184,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/live-tracking-v2",
     defaultGroup: "Operations",
     defaultOrder: 1.5,
-    permission: "drivers.view",
+    permission: "live_tracking.view",
   },
   {
     id: "partners",
@@ -220,7 +220,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/fuel/requests",
     defaultGroup: "Fleet",
     defaultOrder: 3,
-    permission: "requests.view",
+    permission: "fuel_requests.view",
   },
   {
     id: "fuel-refunds",
@@ -229,7 +229,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/fuel/refunds",
     defaultGroup: "Fleet",
     defaultOrder: 4,
-    permission: "requests.view",
+    permission: "fuel_refunds.view",
   },
   {
     id: "assets",
@@ -247,7 +247,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/assets/requests",
     defaultGroup: "Fleet",
     defaultOrder: 6,
-    permission: "requests.view",
+    permission: "asset_requests.view",
   },
   {
     id: "restaurants",
@@ -274,7 +274,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/deliveries/reconciliation",
     defaultGroup: "Operations",
     defaultOrder: 4.5,
-    permission: "deliveries.view",
+    permission: "order_recon.view",
   },
   {
     id: "dpd-verification",
@@ -454,7 +454,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/settings/source-companies",
     defaultGroup: "Settings",
     defaultOrder: 2.6,
-    permission: "settings.manage",
+    permission: "companies.view",
   },
   {
     id: "attendance-settings",

@@ -10,7 +10,7 @@ export default async function OrderReconPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requirePermission(locale, "deliveries.view");
+  await requirePermission(locale, "order_recon.view");
   void logAdminPageView("/deliveries/reconciliation", "OrderReconPage");
   return <OrderReconPageShell />;
 }
