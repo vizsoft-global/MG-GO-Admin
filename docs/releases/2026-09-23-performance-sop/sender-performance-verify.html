@@ -59,7 +59,7 @@
     <ol>
       <li>Reload the page. <strong>This month</strong> is selected (1st → today, Kuwait).</li>
       <li>Pick Last 7 days and a Partner. Click <strong>Clear filters</strong>.</li>
-      <li>All slicers return to All, and the period returns to This Month.</li>
+      <li>All Partner / Zone / Vehicle / Nationality / Source type / Company / Restaurant slicers return to All, <strong>Order status</strong> returns to Verified, and the period returns to This Month.</li>
     </ol>
   </div>
 
@@ -83,21 +83,20 @@
 
   <h2>8. Data freshness (confirmation)</h2>
   <div class="box">
-    <p><strong>Sources:</strong> verified deliveries (Kuwait <code>delivered_at</code>), drivers, profiles, restaurants, zones, vehicles, monthly Target DPD.</p>
-    <p><strong>Cache:</strong> live query every time. Browser keeps the last result 60 seconds. No auto-refresh. Use Refresh.</p>
-    <p><strong>Latency:</strong> an order counts only after it is verified, then on the next Refresh / filter / reload.</p>
+    <p><strong>Sources:</strong> deliveries matching the Order Status slicer (default <strong>Verified</strong>). Day = Kuwait calendar of <code>COALESCE(delivered_at, pickup_at, created_at)</code>. Plus drivers, profiles, restaurants, zones, vehicles, monthly Target DPD.</p>
+    <p><strong>Cache:</strong> live query. The dashboard auto-refreshes every 60 seconds. Header Refresh still works. It does not refetch on tab focus.</p>
+    <p><strong>Latency:</strong> a matching-status order appears on the next poll (≤60s), Refresh, filter change, or reload.</p>
   </div>
 
-  <div class="box ask">
-    <h2>Please confirm — same rule as Order Reconciliation</h2>
-    <p>Performance now counts <strong>verified only</strong>. Reconciliation is provisionally <strong>pending + in transit + verified</strong>.</p>
-    <p>Pick one answer for both pages:</p>
-    <ol type="A">
-      <li>Verified only (current Performance).</li>
-      <li>Pending + in transit + verified on both.</li>
-      <li>Other (please specify).</li>
+  <h2>9. Order Status slicer (Mustafa 2026-09-28)</h2>
+  <div class="box">
+    <ol>
+      <li>Reload. Order status is <strong>Verified</strong>. Totals match today’s verified numbers.</li>
+      <li>Switch to <strong>Pending</strong>, then <strong>In transit</strong>, then <strong>All</strong>. KPIs / charts / rider table move. Cancelled and rejected never appear.</li>
+      <li>Wait 60 seconds — numbers refetch without clicking Refresh.</li>
+      <li>Clear filters returns Order status to Verified and the period to This Month.</li>
     </ol>
-    <p>Also: auto-refresh, or keep manual Refresh?</p>
+    <p>Order Reconciliation is unchanged (still pending + in transit + verified).</p>
   </div>
 </body>
 </html>

@@ -198,7 +198,9 @@ export function PerformancePageShell() {
     <AppPage>
       <AppPageHeader
         title={t("title")}
-        description={t("ops.subtitle")}
+        description={t("ops.subtitle", {
+          status: t(`ops.slicer.orderStatusOpt.${slicers.orderStatus}`),
+        })}
         actions={
           <div className="flex items-center gap-2">
             <button

@@ -47,7 +47,7 @@ import {
   type DpdEfficiencyRider,
   type DpdEfficiencySnapshot,
 } from "./performance-types";
-import { isChartableDimKey } from "./performance-ops-formulas";
+import { assertOpsOrderStatus, isChartableDimKey } from "./performance-ops-formulas";
 import { asInt, asStr, isoDate, numOrNull } from "./performance-ops-format";
 import type {
   OpsBounds,
@@ -1829,6 +1829,7 @@ export async function fetchPerformanceOpsSnapshot(
     p_restaurant_ids: emptyToUndef(slicers.restaurantIds),
     p_outsource_only: input.outsourceOnly,
     p_granularity: input.granularity,
+    p_order_status: assertOpsOrderStatus(slicers.orderStatus ?? "verified"),
   });
   if (error) throw new Error(rpcErrorCode(error));
   return parseOpsSnapshot(data);

@@ -7333,7 +7333,7 @@
       "tabAnalysis": "Analysis",
       "tabDpd": "DPD",
       "ops": {
-        "subtitle": "Verified orders, working days, DPD and efficiency — Kuwait calendar",
+        "subtitle": "{status} orders, working days, DPD and efficiency — Kuwait calendar",
         "tabOverview": "Overview",
         "tabDpd": "DPD & Efficiency",
         "tabRiders": "Riders’ Analysis",
@@ -7397,6 +7397,13 @@
           "sourceType": "Source type",
           "company": "Company",
           "store": "Restaurant",
+          "orderStatus": "Order status",
+          "orderStatusOpt": {
+            "verified": "Verified",
+            "pending": "Pending",
+            "in_transit": "In transit",
+            "all": "All"
+          },
           "all": "All",
           "allPartners": "All partners",
           "allZones": "All zones",

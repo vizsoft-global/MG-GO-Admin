@@ -8591,6 +8591,7 @@ export type Database = {
           p_from: string
           p_granularity?: string
           p_nationalities?: string[]
+          p_order_status?: string
           p_outsource_only?: boolean
           p_project_keys?: string[]
           p_restaurant_ids?: string[]

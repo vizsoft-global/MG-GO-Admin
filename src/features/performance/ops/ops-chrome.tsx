@@ -6,6 +6,7 @@ import {
   Bike,
   Building2,
   CalendarRange,
+  ClipboardCheck,
   Download,
   FilterX,
   Flag,
@@ -27,6 +28,7 @@ import { countryLabel } from "@/lib/geo/countries";
 import { DRIVER_PROJECT_KEYS } from "@/features/fleet/fleet-labels";
 import {
   OPS_GRANULARITIES,
+  OPS_ORDER_STATUSES,
   OPS_RANGE_PRESETS,
   OPS_VIEW_BY,
   SOURCE_COMPANY_KEYS,
@@ -35,6 +37,7 @@ import {
   storesVisibleForPartners,
   type OpsChartMetric,
   type OpsGranularity,
+  type OpsOrderStatus,
   type OpsRangePreset,
 } from "../performance-ops-formulas";
 import type { OpsOptions, OpsSlicers, PerformanceHubTab } from "../performance-ops-types";
@@ -213,6 +216,31 @@ export function OpsSlicerBar({
   return (
     <div className={cn("rounded-xl border border-border bg-card p-4 shadow-sm", LAYOUT.stackGap)}>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+        <div className="min-w-0">
+          <p className="mb-1 flex items-center gap-1 truncate text-[10px] font-medium text-muted-foreground">
+            <ClipboardCheck className="size-3 shrink-0 opacity-70" />
+            {t("slicer.orderStatus")}
+          </p>
+          <Select
+            value={slicers.orderStatus}
+            onValueChange={(next) => patch({ orderStatus: next as OpsOrderStatus })}
+            items={OPS_ORDER_STATUSES.map((id) => ({
+              value: id,
+              label: t(`slicer.orderStatusOpt.${id}`),
+            }))}
+          >
+            <SelectTrigger className="h-9 w-full text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {OPS_ORDER_STATUSES.map((id) => (
+                <SelectItem key={id} value={id}>
+                  {t(`slicer.orderStatusOpt.${id}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <OpsMultiSelect
           label={t("slicer.partner")}
           icon={OPS_SLICER_ICONS.partner}
@@ -328,6 +356,7 @@ export function OpsSlicerBar({
 }
 
 export const OPS_SLICER_ICONS = {
+  orderStatus: ClipboardCheck,
   partner: Building2,
   zone: MapPin,
   vehicle: Bike,

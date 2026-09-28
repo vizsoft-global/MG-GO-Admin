@@ -48,6 +48,53 @@ export const OPS_RANGE_PRESETS = [
   "custom",
 ] as const;
 
+export const OPS_ORDER_STATUSES = [
+  "verified",
+  "pending",
+  "in_transit",
+  "all",
+] as const;
+export type OpsOrderStatus = (typeof OPS_ORDER_STATUSES)[number];
+export const DEFAULT_OPS_ORDER_STATUS: OpsOrderStatus = "verified";
+
+const OPS_ORDER_STATUS_SET: Record<OpsOrderStatus, readonly string[]> = {
+  verified: ["verified"],
+  pending: ["pending"],
+  in_transit: ["in_transit"],
+  all: ["pending", "in_transit", "verified"],
+};
+
+export function isOpsOrderStatus(value: unknown): value is OpsOrderStatus {
+  return (
+    typeof value === "string" &&
+    (OPS_ORDER_STATUSES as readonly string[]).includes(value)
+  );
+}
+
+export function assertOpsOrderStatus(value: unknown): OpsOrderStatus {
+  if (!isOpsOrderStatus(value)) {
+    throw new Error("invalid_order_status");
+  }
+  return value;
+}
+
+export function opsOrderStatusSet(status: OpsOrderStatus): readonly string[] {
+  return OPS_ORDER_STATUS_SET[status];
+}
+
+/** Mirrors the RPC: Kuwait calendar of COALESCE(delivered_at, pickup_at, created_at). */
+export function opsOrderDayYmd(input: {
+  deliveredAt?: string | null;
+  pickupAt?: string | null;
+  createdAt?: string | null;
+}): string | null {
+  const raw = input.deliveredAt ?? input.pickupAt ?? input.createdAt;
+  if (!raw) return null;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuwait" }).format(
+    new Date(raw),
+  );
+}
+
 export const OPS_CHART_METRICS = ["orders", "dpd", "dpd_eff", "tgt_eff"] as const;
 export type OpsChartMetric = (typeof OPS_CHART_METRICS)[number];
 

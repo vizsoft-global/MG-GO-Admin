@@ -237,6 +237,23 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-09-28` — **Performance Order Status slicer + 60s refresh.** Mustafa (SOP reply): default stays **Verified**. `/performance` adds an Order Status `Select` — Pending / In Transit / Verified / All (`pending+in_transit+verified`). Window day is Kuwait `COALESCE(delivered_at, pickup_at, created_at)`. Working day / DPD / previous-period KPIs follow the selected set. `admin_performance_ops_bounds` stays verified+`delivered_at`. Snapshot query `refetchInterval` 60s (no focus refetch). Cancelled / rejected / `under_review` stay out. Order Reconciliation unchanged. Migrations `20261028800000`, `20261028800010` (enum `status::text` compare). **Do not push `20261028700000` (DPD Target SOP).** No Play.
+
+- `[admin+app] 2026-09-25` — **Rider Daily DPD Target SOP.**
+  - **Target:** the daily target is the primary offer restaurant's `delivery_rules.dpd_target`, resolved restaurant rule first, then zone. The app never hard-codes it.
+  - **Band payout:** tiered per-delivery incentive rules pay per order above the target at each tier rate, in consecutive bands. Target 10 with tiers 15/20/25 pays 0.750 at 13 orders and 5.000 at 25. If the target is not below the first threshold, the band start falls back to the rule base, then to `first − (second − first)`. Fixed and single-target rules are unchanged.
+  - **History guard:** band math applies from `app_settings.incentive_band_math_from` (the migration day). `compute_incentive_amount` takes `p_on_date`. Existing `driver_earnings_daily` rows are not recalculated.
+  - **Scope of the switch:** all 116 existing tiered per-delivery rules switch from that day on. At 10 deliveries on the "DPD 5" rule, pay goes from 2.000 to 1.650.
+  - **Extra earnings payload:** `driver_get_extra_earnings` adds `daily_dpd`, plus `display_name`, `band_start`, `locked` and the rate fields on each offer.
+  - **Notices:** the ledger `driver_dpd_shift_notices` and `admin_dpd_notice_candidates` drive the `/api/cron/dpd-shift-notices` cron (every 5 min), which sends a warning 30 minutes before shift end, a congrats when the target is reached and a summary after shift end. The congrats also fires from the verify action.
+  - **Admin form preview:** the incentive form uses the fallback band start, because the form has no restaurant target.
+  - **App (`1.1.24+91`):**
+    - Daily DPD Target card
+    - "Incentives — extra orders" with Locked and Active band rows
+    - `extraEarningsProvider` refresh on a `dpd_target` push
+  - **Validation:** the migration `20261028700000` was validated on `eoksxkdssptgyqyywdju` inside a rolled-back transaction: SOP examples OK, 0 mismatches against legacy results before the cutover, earnings rows unchanged, idempotent.
+  - **Status:** no `db push`, Vercel deploy or Play release yet. Until the push, the cron returns 500 and the verify hook does nothing.
+
 - `[admin+app] 2026-09-25` — **Drivers SOP: company catalog, per-column filters, MG ID.** `source_companies` catalog (system `mg` / `CL-0001`) replaces the `source_company` CHECK; in-house riders resolve to MG, outsourced to a partner company or Unassigned. Drivers list adds Client ID + Company Name after Category, per-column sort/filter (AND, DB-side via `admin_list_drivers_page` / `admin_drivers_filter_values`), Clear all filters, Showing X of Y. Employee ID → MG ID on Drivers; existing `client_id`/`client_name` relabelled Platform ID / Platform. Import accepts MG ID / Company Name / Platform headers plus legacy aliases; template gains a Companies sheet. Settings → Companies (`settings.manage`). Deactivating a company with active drivers is blocked. Payroll list/CSV `MG ID` → Driver ID (AM ID unchanged). Migrations `20261028500000`, `20261028600000` on `eoksxkdssptgyqyywdju`. **Admin Vercel prod. No Play — app may ignore the catalog.**
 
 - `[admin+app] 2026-09-25` — **Shift-day deliveries, 05:00 Orders Report, V2 rider details, Delivery Rules search.** `deliveries.shift_date` + `delivery_shift_date` (Orders Report attribution; `[kd-1,kd]` only; exact end belongs to the next shift). Home `week.deliveries_count` uses `COALESCE(shift_date, Kuwait date)`. `report_delivery_orders` keeps shift columns at From 00:00; any other From time is an operational day (05:00→next 05:00 exclusive). V2 selected overlay matches V1 depth + Geocoder address. Delivery Rules search (name / scope / merchant id). Incentive list strips a trailing `YYYY-MM-DD` for display only. Known limitation: stored `shift_date` is not restamped if an admin later edits a shift. Old APKs stay midnight-grouped until Play. Migrations `20261028300000`, `20261028400000`. **Admin Vercel prod. No db push / Play — shift-day and 05:00 report stay inert until the two migrations apply.**
