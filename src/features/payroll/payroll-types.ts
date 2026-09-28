@@ -8,6 +8,8 @@ import type {
   RequestKpis,
 } from "./payroll-formulas";
 
+export type { PayrollMonthMeta };
+
 export type PayrollSlicers = OpsSlicers;
 
 export type PayrollOptions = {
