@@ -8296,6 +8296,15 @@ export type Database = {
         Args: { p_id: string }
         Returns: Json
       }
+      admin_deliveries_status_counts: {
+        Args: {
+          p_from?: string
+          p_partner_id?: string
+          p_to?: string
+          p_zone_id?: string
+        }
+        Returns: Json
+      }
       admin_dpd_efficiency_snapshot: {
         Args: {
           p_from: string
@@ -8566,6 +8575,10 @@ export type Database = {
       }
       admin_live_fleet_snapshot: {
         Args: { p_seen_within_minutes?: number }
+        Returns: Json
+      }
+      admin_order_comparison_snapshot: {
+        Args: { p_from: string; p_to: string }
         Returns: Json
       }
       admin_order_recon_compare: {

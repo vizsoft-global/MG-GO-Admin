@@ -35,6 +35,7 @@ export function useDeliveriesInfinite(filter: DeliveriesQueryFilter) {
       fetchDeliveriesPage({ ...filter, offset: pageParam }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
+    retry: false,
   });
 }
 
@@ -43,6 +44,7 @@ export function useDeliveriesKpis() {
   return useQuery({
     queryKey: queryKeys.deliveries.kpis(),
     queryFn: fetchDeliveriesKpis,
+    retry: false,
   });
 }
 

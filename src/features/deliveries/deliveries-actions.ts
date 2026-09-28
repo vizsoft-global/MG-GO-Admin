@@ -26,7 +26,11 @@ import {
   type DeliveryDbRowForList,
 } from "./map-delivery-list-row";
 import { CANCEL_REASON_CODES } from "./parse-cancel-reason";
-import { readExactCount } from "./delivery-kpi-counts";
+import {
+  listTotalFromStatusCounts,
+  parseDeliveriesStatusCounts,
+  readExactCount,
+} from "./delivery-kpi-counts";
 
 type DeliveryMutationResult =
   | { ok: true }
@@ -437,76 +441,23 @@ async function fetchGpsMockFlagsByDeliveryIds(
   const result = new Map<string, boolean>();
   if (deliveryIds.length === 0) return result;
 
-  const admin = createAdminClient() as unknown as {
-    from: (table: string) => {
-      select: (columns: string) => Record<string, unknown>;
-    };
-  };
-
-  const byDeliveryIdQuery = admin
-    .from("driver_location_events")
-    .select("delivery_id, is_mocked, recorded_at") as {
-    in: (
-      column: string,
-      values: string[],
-    ) => {
-      order: (
-        column: string,
-        options: { ascending: boolean },
-      ) => Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-    };
-  };
-
-  const { data: byDeliveryId, error: err1 } = await byDeliveryIdQuery
-    .in("delivery_id", deliveryIds)
-    .order("recorded_at", { ascending: false });
-
-  if (err1) {
-    console.error("[fetchDeliveriesForAdmin] gps mock by delivery_id failed", err1);
-  } else {
-    for (const row of (byDeliveryId ?? []) as unknown as Array<{
-      delivery_id: string | null;
-      is_mocked: boolean | null;
-    }>) {
-      if (!row.delivery_id || result.has(row.delivery_id)) continue;
-      if (row.is_mocked === true) result.set(row.delivery_id, true);
-      else if (!result.has(row.delivery_id)) result.set(row.delivery_id, false);
-    }
-  }
-
-  const missing = deliveryIds.filter((id) => !result.has(id));
-  if (missing.length > 0) {
-    const byActiveIdQuery = admin
+  try {
+    const admin = createAdminClient({ timeoutMs: 2500 });
+    const { data, error } = await admin
       .from("driver_location_events")
-      .select("active_delivery_id, is_mocked, recorded_at") as {
-      in: (
-        column: string,
-        values: string[],
-      ) => {
-        order: (
-          column: string,
-          options: { ascending: boolean },
-        ) => Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-      };
-    };
-
-    const { data: byActiveId, error: err2 } = await byActiveIdQuery
-      .in("active_delivery_id", missing)
-      .order("recorded_at", { ascending: false });
-
-    if (err2) {
-      console.error("[fetchDeliveriesForAdmin] gps mock by active_delivery_id failed", err2);
+      .select("delivery_id")
+      .in("delivery_id", deliveryIds)
+      .eq("is_mocked", true)
+      .limit(deliveryIds.length);
+    if (error) {
+      console.error("[fetchDeliveriesPage] gps mock lookup failed", error);
     } else {
-      for (const row of (byActiveId ?? []) as unknown as Array<{
-        active_delivery_id: string | null;
-        is_mocked: boolean | null;
-      }>) {
-        const id = row.active_delivery_id;
-        if (!id || result.has(id)) continue;
-        if (row.is_mocked === true) result.set(id, true);
-        else if (!result.has(id)) result.set(id, false);
+      for (const row of data ?? []) {
+        if (row.delivery_id) result.set(row.delivery_id, true);
       }
     }
+  } catch (error) {
+    console.error("[fetchDeliveriesPage] gps mock lookup failed", error);
   }
 
   for (const id of deliveryIds) {
@@ -657,32 +608,44 @@ export async function fetchDeliveriesPage(
   const search = params.search?.trim() ?? "";
   const searchDriverIds = search ? await resolveSearchDriverIds(supabase, search) : [];
 
-  let query = supabase.from("deliveries").select(DELIVERY_LIST_SELECT, { count: "exact" });
-
-  if (params.status && params.status !== "all") {
-    if (params.status === "in_progress") {
-      query = query.in("status", [...IN_PROGRESS_DELIVERY_STATUSES]);
-    } else {
-      const statusValue = normalizeDeliveryStatusFilter(
-        params.status,
-      ) as DeliveryStatus;
-      query = query.eq("status", statusValue);
+  const applyListFilters = <T extends {
+    eq: Function;
+    in: Function;
+    or: Function;
+    gte: Function;
+    lte: Function;
+  }>(query: T): T => {
+    let next = query;
+    if (params.status && params.status !== "all") {
+      if (params.status === "in_progress") {
+        next = next.in("status", [...IN_PROGRESS_DELIVERY_STATUSES]) as T;
+      } else {
+        next = next.eq(
+          "status",
+          normalizeDeliveryStatusFilter(params.status) as DeliveryStatus,
+        ) as T;
+      }
     }
-  }
-  if (params.zoneId && params.zoneId !== "all") query = query.eq("zone_id", params.zoneId);
-  if (params.partnerId && params.partnerId !== "all") {
-    query = query.eq("partner_id", params.partnerId);
-  }
-  if (params.cancelReason && params.cancelReason !== "all") {
-    query = query.or(buildCancelReasonOrFilter(params.cancelReason));
-  }
-  if (params.dateFrom) query = query.gte("created_at", params.dateFrom);
-  if (params.dateTo) query = query.lte("created_at", params.dateTo);
-  if (search) {
-    query = query.or(buildSearchOrFilter(search, searchDriverIds));
-  }
+    if (params.zoneId && params.zoneId !== "all") {
+      next = next.eq("zone_id", params.zoneId) as T;
+    }
+    if (params.partnerId && params.partnerId !== "all") {
+      next = next.eq("partner_id", params.partnerId) as T;
+    }
+    if (params.cancelReason && params.cancelReason !== "all") {
+      next = next.or(buildCancelReasonOrFilter(params.cancelReason)) as T;
+    }
+    if (params.dateFrom) next = next.gte("created_at", params.dateFrom) as T;
+    if (params.dateTo) next = next.lte("created_at", params.dateTo) as T;
+    if (search) {
+      next = next.or(buildSearchOrFilter(search, searchDriverIds)) as T;
+    }
+    return next;
+  };
 
-  const { data, error, count } = await query
+  let query = applyListFilters(supabase.from("deliveries").select(DELIVERY_LIST_SELECT));
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .range(offset, offset + limit - 1);
@@ -690,6 +653,37 @@ export async function fetchDeliveriesPage(
   if (error) throw error;
 
   const rows = (data ?? []) as unknown as DeliveryDbRowForList[];
+  const needsFilteredCount = Boolean(
+    search || (params.cancelReason && params.cancelReason !== "all"),
+  );
+  let total = 0;
+  if (needsFilteredCount) {
+    const countQuery = applyListFilters(
+      supabase.from("deliveries").select("id", { count: "exact", head: true }),
+    );
+    const { count, error: countError } = await countQuery;
+    total = countError ? offset + rows.length : (count ?? 0);
+  } else {
+    const { data: rawCounts, error: countError } = await supabase.rpc(
+      "admin_deliveries_status_counts",
+      {
+        p_from: params.dateFrom ?? undefined,
+        p_to: params.dateTo ?? undefined,
+        p_zone_id:
+          params.zoneId && params.zoneId !== "all" ? params.zoneId : undefined,
+        p_partner_id:
+          params.partnerId && params.partnerId !== "all"
+            ? params.partnerId
+            : undefined,
+      },
+    );
+    if (countError) throw countError;
+    total = listTotalFromStatusCounts(
+      parseDeliveriesStatusCounts(rawCounts),
+      params.status,
+    );
+  }
+
   const gpsFlags = await fetchGpsMockFlagsByDeliveryIds(rows.map((r) => r.id));
   const mapped = await mapDeliveryDbRowsToListRows(rows, gpsFlags, {
     resolveAssets: false,
@@ -700,7 +694,7 @@ export async function fetchDeliveriesPage(
   return {
     rows: enriched,
     nextOffset: rows.length === limit ? offset + limit : null,
-    total: count ?? 0,
+    total,
   };
 }
 
@@ -800,24 +794,17 @@ export async function countDeliveriesByFilters(params: {
 export async function fetchDeliveriesKpis(): Promise<DeliveriesKpiCounts> {
   await requireDeliveriesView();
   const supabase = await createClient();
-
-  const countFor = async (status?: DeliveryStatus): Promise<number> => {
-    let q = supabase.from("deliveries").select("id", { count: "exact", head: true });
-    if (status) q = q.eq("status", status);
-    const { count, error } = await q;
-    return readExactCount({ count, error });
+  const { data, error } = await supabase.rpc("admin_deliveries_status_counts");
+  if (error) throw error;
+  const counts = parseDeliveriesStatusCounts(data);
+  return {
+    total: counts.total,
+    active: counts.active,
+    verified: counts.verified,
+    pending: counts.pending,
+    rejected: counts.rejected,
+    cancelled: counts.cancelled,
   };
-
-  const [total, active, verified, pending, rejected, cancelled] = await Promise.all([
-    countFor(),
-    countFor("in_transit"),
-    countFor("verified"),
-    countFor("pending"),
-    countFor("rejected"),
-    countFor("cancelled"),
-  ]);
-
-  return { total, active, verified, pending, rejected, cancelled };
 }
 
 /** Zone + partner options for the list filters. */
