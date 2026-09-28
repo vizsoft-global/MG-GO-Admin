@@ -246,6 +246,7 @@ function relocateAssistantItem(tree: MenuNode[]): MenuNode[] {
 
 function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
   const PAYROLL_ID = "payroll";
+  const GROUP_ID = "group-payroll";
   let found: MenuNode | null = null;
   const strip = (nodes: MenuNode[]): MenuNode[] =>
     nodes.flatMap((node) => {
@@ -255,6 +256,12 @@ function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
           return [];
         }
         return [node];
+      }
+      if (node.id === GROUP_ID) {
+        for (const child of node.children ?? []) {
+          if (child.id === PAYROLL_ID) found = { ...child, hidden: false };
+        }
+        return [];
       }
       const children = node.children ? strip(node.children) : [];
       return [{ ...node, children }];
@@ -268,31 +275,19 @@ function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
     icon: "CalendarClock",
     hidden: false,
   };
+  const group: MenuNode = {
+    id: GROUP_ID,
+    type: "group",
+    label: "Payroll",
+    icon: DEFAULT_GROUP_META.Payroll?.icon ?? "CalendarClock",
+    displayMode: DEFAULT_GROUP_META.Payroll?.displayMode,
+    children: [item],
+  };
 
   const opsIdx = stripped.findIndex((node) => node.id === "group-operations");
-  if (opsIdx < 0) {
-    return [
-      ...stripped,
-      {
-        id: "group-operations",
-        type: "group",
-        label: "Operations",
-        icon: "Folder",
-        children: [item],
-      },
-    ];
-  }
-
-  const ops = stripped[opsIdx];
-  const children = [...(ops.children ?? [])].filter((child) => child.id !== PAYROLL_ID);
-  const assistantIdx = children.findIndex((child) => child.id === "assistant");
-  const perfIdx = children.findIndex((child) => child.id === "performance");
-  const insertAt =
-    assistantIdx >= 0 ? assistantIdx + 1 : perfIdx >= 0 ? perfIdx + 1 : children.length;
-  children.splice(insertAt, 0, item);
   const next = [...stripped];
-  next[opsIdx] = { ...ops, children };
-  return next;
+  next.splice(opsIdx >= 0 ? opsIdx + 1 : next.length, 0, group);
+  return next.filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
 }
 
 function relocateOrderReconItem(tree: MenuNode[]): MenuNode[] {

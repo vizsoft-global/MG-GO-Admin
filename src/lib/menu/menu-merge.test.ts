@@ -109,7 +109,7 @@ describe("relocateStaffAccessItem", () => {
 });
 
 describe("relocatePayrollItem", () => {
-  it("pins Assistant after Performance and Payroll after Assistant", () => {
+  it("pins Assistant after Performance and Payroll in its own group after Operations", () => {
     const { tree } = mergeMenu([
       {
         id: "group-operations",
@@ -119,6 +119,7 @@ describe("relocatePayrollItem", () => {
         children: [
           { id: "attendance", type: "item", label: "Attendance", icon: "ClipboardCheck" },
           { id: "performance", type: "item", label: "Performance", icon: "Gauge" },
+          { id: "payroll", type: "item", label: "Payroll & Requests", icon: "CalendarClock" },
         ],
       },
     ]);
@@ -126,11 +127,12 @@ describe("relocatePayrollItem", () => {
     const ids = (ops?.children ?? []).map((child) => child.id);
     const perfIdx = ids.indexOf("performance");
     const assistantIdx = ids.indexOf("assistant");
-    const payrollIdx = ids.indexOf("payroll");
     assert.ok(perfIdx >= 0);
     assert.equal(assistantIdx, perfIdx + 1);
-    assert.equal(payrollIdx, assistantIdx + 1);
-    assert.equal(ops?.children?.find((child) => child.id === "assistant")?.hidden, false);
-    assert.equal(ops?.children?.find((child) => child.id === "payroll")?.hidden, false);
+    assert.equal(ids.includes("payroll"), false);
+    const opsIdx = tree.findIndex((node) => node.id === "group-operations");
+    assert.equal(tree[opsIdx + 1]?.id, "group-payroll");
+    const payrollGroup = tree.find((node) => node.id === "group-payroll");
+    assert.equal(payrollGroup?.children?.find((child) => child.id === "payroll")?.hidden, false);
   });
 });

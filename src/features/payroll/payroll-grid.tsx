@@ -3,10 +3,20 @@
 import { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLocale, useTranslations } from "next-intl";
+import { Briefcase, CalendarOff, HeartPulse, Siren, UserX } from "lucide-react";
 import { Download } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
-import { dayLabel, type DayStatus } from "./payroll-formulas";
+import {
+  countRidersByStatus,
+  dayLabel,
+  PAYROLL_STATUS_CHIP,
+  PAYROLL_STATUS_FILTERS,
+  shareOfPayroll,
+  type DayStatus,
+  type PayrollStatusFilter,
+} from "./payroll-formulas";
 import { formatEfficiencyCell } from "./payroll-csv";
 import type { PayrollRiderRow } from "./payroll-types";
 
@@ -28,7 +38,9 @@ const TOTAL_COLS = [
   "sick",
   "accident",
   "absence",
-  "fixedDays",
+  "offStructure",
+  "requiredHours",
+  "actualHours",
   "efficiency",
 ] as const;
 
@@ -84,7 +96,7 @@ export function PayrollDayGrid({
     overscan: 16,
   });
 
-  const colCount = 16 + days;
+  const colCount = 18 + days;
   const dayHeaders = Array.from({ length: days }, (_, i) => dayLabel(monthKey, i + 1, locale));
 
   return (
@@ -177,7 +189,9 @@ export function PayrollDayGrid({
                       <td className="px-2 py-1.5">{row.sickDays}</td>
                       <td className="px-2 py-1.5">{row.accidentDays}</td>
                       <td className="px-2 py-1.5">{row.absentDays}</td>
-                      <td className="px-2 py-1.5">{row.fixedDays}</td>
+                      <td className="px-2 py-1.5">{row.offStructureDays}</td>
+                      <td className="px-2 py-1.5">{row.requiredHours.toFixed(1)}</td>
+                      <td className="px-2 py-1.5">{row.actualHours.toFixed(2)}</td>
                       <td
                         className={cn(
                           "px-2 py-1.5 font-semibold",
@@ -224,26 +238,142 @@ export function PayrollDayGrid({
   );
 }
 
-export function PayrollLegend() {
+const STATUS_ICONS = {
+  work: Briefcase,
+  off: CalendarOff,
+  sick: HeartPulse,
+  accident: Siren,
+  absent: UserX,
+} as const;
+
+export function PayrollLegend({
+  riders,
+  selected,
+  onSelect,
+}: {
+  riders?: readonly PayrollRiderRow[];
+  selected?: PayrollStatusFilter | null;
+  onSelect?: (status: PayrollStatusFilter | null) => void;
+}) {
   const t = useTranslations("pages.payroll");
-  const items: Array<{ id: string; className: string; swatch: string }> = [
-    { id: "work", className: "text-muted-foreground", swatch: "#8d8d97" },
-    { id: "off", className: "", swatch: "#33c777" },
-    { id: "sick", className: "", swatch: "#f0a83c" },
-    { id: "accident", className: "", swatch: "#9acd32" },
-    { id: "absent", className: "", swatch: "#ef5b5b" },
-  ];
+  const counts = riders ? countRidersByStatus(riders) : null;
+  const total = riders?.length ?? 0;
   return (
-    <div className="flex flex-wrap gap-2">
-      {items.map((item) => (
-        <div
-          key={item.id}
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] shadow-sm"
-        >
-          <span className="size-3.5 rounded-sm" style={{ background: item.swatch }} />
-          <span className="font-semibold">{t(`legend.${item.id}`)}</span>
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {PAYROLL_STATUS_FILTERS.map((id) => (
+          <ToggleChip
+            key={id}
+            selected={selected === id}
+            onClick={() => onSelect?.(selected === id ? null : id)}
+            icon={STATUS_ICONS[id]}
+            leading={
+              <span
+                className="size-3.5 rounded-sm"
+                style={{ background: PAYROLL_STATUS_CHIP[id].hex }}
+              />
+            }
+          >
+            {t(`legend.${id}`)}
+            {counts ? ` · ${counts[id]}` : ""}
+          </ToggleChip>
+        ))}
+      </div>
+      {selected && counts ? (
+        <div className="rounded-xl border border-emerald-400/50 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+          {t("shareCard", {
+            status: t(`legend.${selected}`),
+            count: counts[selected],
+            total,
+            share: shareOfPayroll(counts[selected], total).toFixed(1),
+          })}
         </div>
-      ))}
+      ) : null}
+    </div>
+  );
+}
+
+export function PayrollSummaryTable({
+  rows,
+  empty,
+}: {
+  rows: readonly PayrollRiderRow[];
+  empty: string;
+}) {
+  const t = useTranslations("pages.payroll");
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="max-h-[min(420px,46dvh)] overflow-auto">
+        <table className="w-max min-w-full border-collapse text-[12px]">
+          <thead className="sticky top-0 z-10 bg-card">
+            <tr>
+              {[...IDENTITY_COLS, ...TOTAL_COLS].map((id) => (
+                <th key={id} className={cn(TABLE_HEAD_CLASS, "whitespace-nowrap px-2 py-2")}>
+                  {t(`riderCols.${id}`)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={IDENTITY_COLS.length + TOTAL_COLS.length}
+                  className="px-3 py-8 text-center text-xs text-muted-foreground"
+                >
+                  {empty}
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
+                const eff = formatEfficiencyCell(row.efficiency);
+                const statusKey = row.status === "Active" ? "active" : "inactive";
+                return (
+                  <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.amId}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.mgId}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.name}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.restaurant}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.zone}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.partner}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.nationality}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                          row.status === "Active"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-red-100 text-red-700",
+                        )}
+                      >
+                        {t(`riderStatus.${statusKey}`)}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5">{row.workDays}</td>
+                    <td className="px-2 py-1.5">{row.totalHours}</td>
+                    <td className="px-2 py-1.5">{row.offDays}</td>
+                    <td className="px-2 py-1.5">{row.sickDays}</td>
+                    <td className="px-2 py-1.5">{row.accidentDays}</td>
+                    <td className="px-2 py-1.5">{row.absentDays}</td>
+                    <td className="px-2 py-1.5">{row.offStructureDays}</td>
+                    <td className="px-2 py-1.5">{row.requiredHours.toFixed(1)}</td>
+                    <td className="px-2 py-1.5">{row.actualHours.toFixed(2)}</td>
+                    <td
+                      className={cn(
+                        "px-2 py-1.5 font-semibold",
+                        eff.tone === "good" && "text-emerald-700",
+                        eff.tone === "bad" && "text-red-600",
+                      )}
+                    >
+                      {eff.text}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

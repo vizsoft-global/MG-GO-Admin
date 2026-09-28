@@ -69,6 +69,55 @@ export type PayrollMonthMeta = {
 
 export type PayrollCoverKind = "accident" | "sick" | "off";
 
+export const PAYROLL_STATUS_FILTERS = ["work", "off", "sick", "accident", "absent"] as const;
+export type PayrollStatusFilter = (typeof PAYROLL_STATUS_FILTERS)[number];
+
+export const PAYROLL_STATUS_CHIP = {
+  work: { hex: "#8d8d97" },
+  off: { hex: "#33c777" },
+  sick: { hex: "#f0a83c" },
+  accident: { hex: "#9acd32" },
+  absent: { hex: "#ef5b5b" },
+} as const;
+
+export function riderHasDayStatus(
+  days: readonly DayStatus[],
+  status: PayrollStatusFilter,
+): boolean {
+  return days.includes(status);
+}
+
+export function countRidersByStatus(
+  rows: ReadonlyArray<{ days: readonly DayStatus[] }>,
+): Record<PayrollStatusFilter, number> {
+  const counts: Record<PayrollStatusFilter, number> = {
+    work: 0,
+    off: 0,
+    sick: 0,
+    accident: 0,
+    absent: 0,
+  };
+  for (const row of rows) {
+    for (const status of PAYROLL_STATUS_FILTERS) {
+      if (riderHasDayStatus(row.days, status)) counts[status] += 1;
+    }
+  }
+  return counts;
+}
+
+export function filterRidersByStatus<T extends { days: readonly DayStatus[] }>(
+  rows: readonly T[],
+  status: PayrollStatusFilter | null,
+): T[] {
+  if (!status) return [...rows];
+  return rows.filter((row) => riderHasDayStatus(row.days, status));
+}
+
+export function shareOfPayroll(matching: number, total: number): number {
+  if (!Number.isFinite(matching) || !Number.isFinite(total) || total <= 0) return 0;
+  return (matching / total) * 100;
+}
+
 export type PayrollKpis = {
   riders: number;
   active: number;
@@ -90,8 +139,29 @@ export function daysInCalendarMonth(year: number, month1to12: number): number {
   return new Date(Date.UTC(year, month1to12, 0)).getUTCDate();
 }
 
+/** Hours a full duty day is worth. Mirrors v_day_hours in admin_payroll_month_snapshot. */
+export const PAYROLL_DAY_HOURS = 12;
+
+/**
+ * Off days assumed when a driver has no driver_off_structure row for the month.
+ * 2 is the rule the page used before the Off Structure editor existed, so an
+ * un-uploaded month keeps the Required Hours it already had.
+ */
+export const PAYROLL_DEFAULT_OFF_DAYS = 2;
+
 export function fixedDaysFor(monthDays: number): number {
-  return monthDays - 2;
+  return monthDays - PAYROLL_DEFAULT_OFF_DAYS;
+}
+
+/** Required Hours = (days in month − contracted OFF days) × 12. */
+export function requiredHoursFor(monthDays: number, offStructureDays: number): number {
+  if (!Number.isFinite(monthDays) || !Number.isFinite(offStructureDays)) return 0;
+  return Math.max(0, (monthDays - offStructureDays) * PAYROLL_DAY_HOURS);
+}
+
+export function offStructureHoursFor(offStructureDays: number): number {
+  if (!Number.isFinite(offStructureDays)) return 0;
+  return Math.max(0, offStructureDays) * PAYROLL_DAY_HOURS;
 }
 
 export function parseMonthKey(key: string): { year: number; month: number } | null {
@@ -213,9 +283,28 @@ export function kuwaitMonthBounds(monthKey: string): { startIso: string; endExcl
   return { startIso: start, endExclusiveIso: `${next}-01` };
 }
 
-export function efficiencyPct(workDays: number, fixedDays: number): number {
-  if (!Number.isFinite(workDays) || !Number.isFinite(fixedDays) || fixedDays <= 0) return 0;
-  return (workDays / fixedDays) * 100;
+/** Attendance Efficiency = Actual Worked Hours ÷ Required Hours. */
+export function efficiencyPct(actualHours: number, requiredHours: number): number {
+  if (!Number.isFinite(actualHours) || !Number.isFinite(requiredHours) || requiredHours <= 0) {
+    return 0;
+  }
+  return (actualHours / requiredHours) * 100;
+}
+
+/**
+ * Hours for one attendance log. An open log (no check-out) is 0 hours: the shift
+ * has not ended, and assuming a length would inflate the month.
+ * Deliberately uncapped — a rider who worked 16 hours worked 16 hours.
+ */
+export function attendanceLogHours(
+  checkInAt: string | null,
+  checkOutAt: string | null,
+): number {
+  if (!checkInAt || !checkOutAt) return 0;
+  const start = Date.parse(checkInAt);
+  const end = Date.parse(checkOutAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.max(0, (end - start) / 3_600_000);
 }
 
 export function bucketOf(efficiency: number): PayrollEffBucketId {
@@ -489,6 +578,10 @@ export function classifyRiderMonth(input: {
   today: string;
   checkInDates: ReadonlySet<string>;
   coversByDate: ReadonlyMap<string, DayCoverFlags>;
+  /** Kuwait check-in date → summed check-in→check-out hours for that date. */
+  hoursByDate?: ReadonlyMap<string, number>;
+  /** Contracted OFF days for this driver this month. Absent = the 2-day default. */
+  offStructureDays?: number;
 }): {
   days: DayStatus[];
   workDays: number;
@@ -499,6 +592,10 @@ export function classifyRiderMonth(input: {
   unjustified: number;
   totalHours: number;
   fixedDays: number;
+  offStructureDays: number;
+  offStructureHours: number;
+  requiredHours: number;
+  actualHours: number;
   efficiency: number;
 } {
   const days: DayStatus[] = [];
@@ -508,9 +605,11 @@ export function classifyRiderMonth(input: {
   let accidentDays = 0;
   let absentDays = 0;
   let unjustified = 0;
+  let actualHours = 0;
 
   for (let d = 1; d <= input.month.days; d += 1) {
     const date = isoDateInMonth(input.month.key, d);
+    actualHours += input.hoursByDate?.get(date) ?? 0;
     const cover = input.coversByDate.get(date) ?? emptyCover();
     const status = classifyDay({
       date,
@@ -553,6 +652,14 @@ export function classifyRiderMonth(input: {
     }
   }
 
+  const offStructureDays = Number.isFinite(input.offStructureDays)
+    ? (input.offStructureDays as number)
+    : PAYROLL_DEFAULT_OFF_DAYS;
+  const requiredHours = requiredHoursFor(input.month.days, offStructureDays);
+  const rounded = Math.round(
+    (input.hoursByDate ? actualHours : workDays * PAYROLL_DAY_HOURS) * 100,
+  ) / 100;
+
   return {
     days,
     workDays,
@@ -561,9 +668,13 @@ export function classifyRiderMonth(input: {
     accidentDays,
     absentDays,
     unjustified,
-    totalHours: workDays * 12,
+    totalHours: workDays * PAYROLL_DAY_HOURS,
     fixedDays: input.month.fixedDays,
-    efficiency: efficiencyPct(workDays, input.month.fixedDays),
+    offStructureDays,
+    offStructureHours: offStructureHoursFor(offStructureDays),
+    requiredHours,
+    actualHours: rounded,
+    efficiency: efficiencyPct(rounded, requiredHours),
   };
 }
 

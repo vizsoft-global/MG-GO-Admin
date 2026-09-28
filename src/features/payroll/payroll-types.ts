@@ -37,14 +37,24 @@ export type PayrollRiderRow = {
   days: DayStatus[];
   workDays: number;
   totalHours: number;
+  /** OFF day-cells in the grid, derived from approved leave requests. */
   offDays: number;
   sickDays: number;
   accidentDays: number;
   absentDays: number;
   fixedDays: number;
+  /** Contracted OFF days for the month, from driver_off_structure. */
+  offStructureDays: number;
+  offStructureSource: OffStructureSource;
+  offStructureHours: number;
+  requiredHours: number;
+  actualHours: number;
   efficiency: number;
   unjustified: number;
 };
+
+/** 'default' = no driver_off_structure row, so the 2-day fallback applies. */
+export type OffStructureSource = "default" | "manual" | "bulk_upload";
 
 export type PayrollRequestRow = {
   id: string;
@@ -73,4 +83,32 @@ export type PayrollSnapshot = {
   workflow: { awaitingAction: number; requestsPerRider: number };
 };
 
-export type PayrollHubTab = "payroll" | "requests";
+export type PayrollHubTab = "payroll" | "combined" | "requests";
+
+export type OffStructureBulkVerdict =
+  | "applied"
+  | "missing_id"
+  | "duplicate"
+  | "invalid_off_days"
+  | "off_days_exceeds_month"
+  | "unknown_id"
+  | "ambiguous_id";
+
+export type OffStructureBulkRow = {
+  index: number;
+  driverKey: string;
+  offDays: number | null;
+  previousOffDays: number | null;
+  verdict: OffStructureBulkVerdict;
+  driverId: string | null;
+  driverName: string | null;
+};
+
+export type OffStructureBulkResult = {
+  ok: true;
+  month: string;
+  monthDays: number;
+  applied: number;
+  skipped: number;
+  rows: OffStructureBulkRow[];
+};

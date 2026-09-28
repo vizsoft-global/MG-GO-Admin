@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
 import { Download, FilterX, Loader2 } from "lucide-react";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
 import { TabBar } from "@/components/dashboard/tab-bar";
@@ -9,8 +10,11 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
+import { queryKeys } from "@/lib/query/query-keys";
 import {
   bucketOf,
+  computePayrollKpis,
+  filterRidersByStatus,
   keepSelectedPayrollOptions,
   monthMeta,
   payrollMonthForPreset,
@@ -18,22 +22,27 @@ import {
   presetForPayrollMonth,
   type PayrollEffBucketId,
   type PayrollRangePreset,
+  type PayrollStatusFilter,
 } from "./payroll-formulas";
 import { PayrollRangePills, PayrollSlicerBar } from "./payroll-chrome";
+import { PayrollLegend } from "./payroll-grid";
 import { PayrollTab } from "./payroll-tab";
+import { CombinedPayrollTab } from "./combined-tab";
 import { RequestsTab } from "./requests-tab";
 import { exportPayrollViewCsv } from "./payroll-csv";
 import { usePayrollSnapshot } from "./use-payroll";
 import type { PayrollHubTab, PayrollSlicers } from "./payroll-types";
 
-export function PayrollPageShell() {
+export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: PayrollHubTab }) {
   const t = useTranslations("pages.payroll");
   const locale = useLocale();
   const { can } = useAuth();
   const canExport = can("payroll.export");
+  const canManage = can("payroll.manage");
+  const queryClient = useQueryClient();
   const today = kuwaitToday();
   const months = useMemo(() => payrollMonths(today, locale), [today, locale]);
-  const [tab, setTab] = useState<PayrollHubTab>("payroll");
+  const [tab, setTab] = useState<PayrollHubTab>(initialTab);
   const [preset, setPreset] = useState<PayrollRangePreset>("thisMonth");
   const [customKey, setCustomKey] = useState<string | null>(null);
   const monthKey = useMemo(() => {
@@ -45,6 +54,7 @@ export function PayrollPageShell() {
   }, [preset, today, customKey, months]);
   const [slicers, setSlicers] = useState<PayrollSlicers>(EMPTY_OPS_SLICERS);
   const [drill, setDrill] = useState<PayrollEffBucketId | null>(null);
+  const [statusFilter, setStatusFilter] = useState<PayrollStatusFilter | null>(null);
 
   const query = usePayrollSnapshot(monthKey, slicers);
   const data = query.data;
@@ -55,32 +65,51 @@ export function PayrollPageShell() {
     return localized ? { ...raw, label: localized.label } : raw;
   }, [data?.month, months, monthKey, locale]);
 
+  const filteredRiders = useMemo(
+    () => filterRidersByStatus(data?.riders ?? [], statusFilter),
+    [data?.riders, statusFilter],
+  );
+  const payrollKpis = useMemo(() => {
+    const next = computePayrollKpis(filteredRiders);
+    return { ...next, riders: data?.riders.length ?? 0 };
+  }, [filteredRiders, data?.riders.length]);
+
   function changePreset(next: Exclude<PayrollRangePreset, "custom">) {
     setPreset(next);
     setDrill(null);
+    setStatusFilter(null);
   }
 
   function applyCustomMonth(key: string) {
     setCustomKey(key);
     setPreset(presetForPayrollMonth(key, today));
     setDrill(null);
+    setStatusFilter(null);
   }
 
   function changeSlicers(next: PayrollSlicers) {
     setSlicers(next);
     setDrill(null);
+    setStatusFilter(null);
   }
 
   function clearFilters() {
     setSlicers(EMPTY_OPS_SLICERS);
     setDrill(null);
+    setStatusFilter(null);
   }
 
   function exportHeader() {
     if (!canExport || !data || !month) return;
     const rows =
-      drill == null ? data.riders : data.riders.filter((r) => bucketOf(r.efficiency) === drill);
+      drill == null
+        ? filteredRiders
+        : filteredRiders.filter((r) => bucketOf(r.efficiency) === drill);
     exportPayrollViewCsv(month.key, month.days, rows);
+  }
+
+  function refreshSnapshot() {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.payroll.all() });
   }
 
   return (
@@ -106,6 +135,7 @@ export function PayrollPageShell() {
       <TabBar
         items={[
           { id: "payroll", label: t("tabPayroll") },
+          { id: "combined", label: t("tabCombined") },
           { id: "requests", label: t("tabRequests") },
         ]}
         activeId={tab}
@@ -128,6 +158,16 @@ export function PayrollPageShell() {
           )}
         />
       </div>
+      {data ? (
+        <PayrollLegend
+          riders={data.riders}
+          selected={statusFilter}
+          onSelect={(status) => {
+            setStatusFilter(status);
+            setDrill(null);
+          }}
+        />
+      ) : null}
       {query.isLoading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
@@ -138,12 +178,17 @@ export function PayrollPageShell() {
       ) : tab === "payroll" ? (
         <PayrollTab
           month={month}
-          kpis={data.payrollKpis}
-          riders={data.riders}
+          kpis={payrollKpis}
+          riders={filteredRiders}
+          allRiders={data.riders}
           drill={drill}
           onDrill={setDrill}
           canExport={canExport}
+          canManage={canManage}
+          onOffStructureApplied={refreshSnapshot}
         />
+      ) : tab === "combined" ? (
+        <CombinedPayrollTab month={month} riders={filteredRiders} canExport={canExport} />
       ) : (
         <RequestsTab
           month={month}

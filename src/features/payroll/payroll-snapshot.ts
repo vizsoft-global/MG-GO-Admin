@@ -8,13 +8,18 @@ import {
   computeRequestKpis,
   coverKindFor,
   emptyCover,
+  efficiencyPct,
   isJustifyingStatus,
   kuwaitMonthBounds,
   mapLiveStatusToUi,
+  offStructureHoursFor,
+  PAYROLL_DAY_HOURS,
+  PAYROLL_DEFAULT_OFF_DAYS,
   requestOverlapsMonth,
   payrollMonths,
   payrollTileFor,
   requestCoversDate,
+  requiredHoursFor,
   restaurantLabel,
   reviewingDeptLabel,
   riderMatchesSlicers,
@@ -23,6 +28,7 @@ import {
   type PayrollMonthMeta,
 } from "./payroll-formulas";
 import type {
+  OffStructureSource,
   PayrollOptions,
   PayrollRequestRow,
   PayrollRiderRow,
@@ -45,6 +51,18 @@ export type RawPayrollDriver = {
   vehicleKey: string | null;
   restaurantId: string | null;
   restaurantName: string | null;
+};
+
+export type RawPayrollCheckIn = {
+  driverId: string;
+  date: string;
+  hours?: number;
+};
+
+export type RawOffStructure = {
+  driverId: string;
+  offDays: number;
+  source: Exclude<OffStructureSource, "default">;
 };
 
 export type RawPayrollRequest = {
@@ -120,10 +138,30 @@ export function buildPayrollOptions(roster: readonly RawPayrollDriver[]): Payrol
 export function decoratePayrollSnapshot(snapshot: PayrollSnapshot): PayrollSnapshot {
   return {
     ...snapshot,
-    riders: snapshot.riders.map((r) => ({
-      ...r,
-      nationality: r.nationalityCode ? countryLabel(r.nationalityCode) : r.nationality,
-    })),
+    riders: snapshot.riders.map((r) => {
+      const offStructureDays = Number.isFinite(r.offStructureDays)
+        ? r.offStructureDays
+        : PAYROLL_DEFAULT_OFF_DAYS;
+      const requiredHours = Number.isFinite(r.requiredHours)
+        ? r.requiredHours
+        : requiredHoursFor(snapshot.month.days, offStructureDays);
+      const hasLoggedHours = Number.isFinite(r.actualHours);
+      const actualHours = hasLoggedHours
+        ? r.actualHours
+        : r.workDays * PAYROLL_DAY_HOURS;
+      return {
+        ...r,
+        nationality: r.nationalityCode ? countryLabel(r.nationalityCode) : r.nationality,
+        offStructureDays,
+        offStructureSource: r.offStructureSource ?? "default",
+        offStructureHours: Number.isFinite(r.offStructureHours)
+          ? r.offStructureHours
+          : offStructureHoursFor(offStructureDays),
+        requiredHours,
+        actualHours,
+        efficiency: hasLoggedHours ? r.efficiency : efficiencyPct(actualHours, requiredHours),
+      };
+    }),
   };
 }
 
@@ -132,8 +170,9 @@ export function assemblePayrollSnapshot(input: {
   monthKey: string;
   slicers: PayrollSlicers;
   roster: RawPayrollDriver[];
-  checkIns: Array<{ driverId: string; date: string }>;
+  checkIns: RawPayrollCheckIn[];
   requests: RawPayrollRequest[];
+  offStructures?: RawOffStructure[];
 }): PayrollSnapshot {
   const months = payrollMonths(input.today);
   const month = assertPayrollMonth(input.monthKey, input.today);
@@ -157,11 +196,22 @@ export function assemblePayrollSnapshot(input: {
   const rosterIds = new Set(filteredRoster.map((r) => r.id));
 
   const checkInByDriver = new Map<string, Set<string>>();
+  const hoursByDriver = new Map<string, Map<string, number>>();
   for (const row of input.checkIns) {
     if (!rosterIds.has(row.driverId)) continue;
     const set = checkInByDriver.get(row.driverId) ?? new Set<string>();
     set.add(row.date);
     checkInByDriver.set(row.driverId, set);
+    const hours = Number.isFinite(row.hours) ? (row.hours as number) : 0;
+    const perDate = hoursByDriver.get(row.driverId) ?? new Map<string, number>();
+    perDate.set(row.date, (perDate.get(row.date) ?? 0) + hours);
+    hoursByDriver.set(row.driverId, perDate);
+  }
+
+  const offByDriver = new Map<string, RawOffStructure>();
+  for (const row of input.offStructures ?? []) {
+    if (!rosterIds.has(row.driverId)) continue;
+    offByDriver.set(row.driverId, row);
   }
 
   const coversByDriver = new Map<string, Map<string, DayCoverFlags>>();
@@ -227,11 +277,14 @@ export function assemblePayrollSnapshot(input: {
 
   const riders: PayrollRiderRow[] = filteredRoster
     .map((r) => {
+      const off = offByDriver.get(r.id);
       const classified = classifyRiderMonth({
         month,
         today: input.today,
         checkInDates: checkInByDriver.get(r.id) ?? new Set(),
         coversByDate: coversByDriver.get(r.id) ?? new Map(),
+        hoursByDate: hoursByDriver.get(r.id),
+        offStructureDays: off?.offDays,
       });
       return {
         driverId: r.id,
@@ -261,6 +314,11 @@ export function assemblePayrollSnapshot(input: {
         accidentDays: classified.accidentDays,
         absentDays: classified.absentDays,
         fixedDays: classified.fixedDays,
+        offStructureDays: classified.offStructureDays,
+        offStructureSource: off?.source ?? "default",
+        offStructureHours: classified.offStructureHours,
+        requiredHours: classified.requiredHours,
+        actualHours: classified.actualHours,
         efficiency: classified.efficiency,
         unjustified: classified.unjustified,
       } satisfies PayrollRiderRow;

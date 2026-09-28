@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Award, Percent, UserCheck, Users } from "lucide-react";
+import { AlertTriangle, Award, CalendarOff, Percent, UserCheck, Users } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/kpi-card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   bucketOf,
@@ -14,7 +15,8 @@ import {
   type PayrollMonthMeta,
 } from "./payroll-formulas";
 import { PayrollDistributionChart } from "./payroll-chart";
-import { PayrollDayGrid, PayrollLegend } from "./payroll-grid";
+import { PayrollSummaryTable } from "./payroll-grid";
+import { OffStructureDialog } from "./off-structure-dialog";
 import {
   bucketLabel,
   exportPayrollDistributionCsv,
@@ -26,19 +28,26 @@ export function PayrollTab({
   month,
   kpis,
   riders,
+  allRiders,
   drill,
   onDrill,
   canExport,
+  canManage,
+  onOffStructureApplied,
 }: {
   month: PayrollMonthMeta;
   kpis: PayrollKpis;
   riders: readonly PayrollRiderRow[];
+  allRiders: readonly PayrollRiderRow[];
   drill: PayrollEffBucketId | null;
   onDrill: (id: PayrollEffBucketId | null) => void;
   canExport: boolean;
+  canManage: boolean;
+  onOffStructureApplied: () => void;
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
+  const [offOpen, setOffOpen] = useState(false);
   const visible = useMemo(
     () => (drill ? riders.filter((r) => bucketOf(r.efficiency) === drill) : riders),
     [riders, drill],
@@ -50,8 +59,17 @@ export function PayrollTab({
 
   return (
     <div className="space-y-2">
-      <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
-        <b>{t("payrollBannerTitle")}</b> {t("payrollBannerBody", { days: month.days, fixed: month.fixedDays })}
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
+          <b>{t("payrollBannerTitle")}</b>{" "}
+          {t("payrollBannerBody", { days: month.days, fixed: month.fixedDays })}
+        </div>
+        {canManage ? (
+          <Button type="button" variant="outline" className="h-9" onClick={() => setOffOpen(true)}>
+            <CalendarOff className="size-3.5" />
+            {t("offStructure.open")}
+          </Button>
+        ) : null}
       </div>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <KpiCard compact label={t("kpi.riders")} value={kpis.riders} icon={Users} />
@@ -77,7 +95,6 @@ export function PayrollTab({
           accent="warning"
         />
       </div>
-      <PayrollLegend />
       <PayrollDistributionChart
         riders={riders}
         selected={drill}
@@ -107,23 +124,27 @@ export function PayrollTab({
         onChange={(e) => setSearch(e.target.value)}
         placeholder={t("searchPlaceholder")}
       />
-      <PayrollDayGrid
-        monthKey={month.key}
-        days={month.days}
-        rows={searched}
-        empty={t("emptyRiders")}
-        exportLabel={t("downloadTable")}
-        onExport={() => {
-          if (canExport) exportPayrollViewCsv(month.key, month.days, searched);
-        }}
-        footer={t("tableFoot", {
-          shown: searched.length,
-          total: riders.length,
-          month: month.label,
-          days: month.days,
-          fixed: month.fixedDays,
-        })}
-      />
+      <PayrollSummaryTable rows={searched} empty={t("emptyRiders")} />
+      {canExport ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => exportPayrollViewCsv(month.key, month.days, searched)}
+            className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-primary hover:bg-primary/10"
+          >
+            {t("downloadTable")}
+          </button>
+        </div>
+      ) : null}
+      {canManage ? (
+        <OffStructureDialog
+          open={offOpen}
+          onOpenChange={setOffOpen}
+          month={month}
+          riders={allRiders}
+          onApplied={onOffStructureApplied}
+        />
+      ) : null}
     </div>
   );
 }
