@@ -56,7 +56,7 @@ export function OrderReconPageShell() {
   const t = useTranslations("pages.orderRecon");
   const locale = useLocale();
   const { can } = useAuth();
-  const canManage = can("deliveries.manage");
+  const canManage = can("order_recon.manage");
   const today = kuwaitTodayYmd();
   const lastMonth = comparisonPeriod("lastMonth", today);
 

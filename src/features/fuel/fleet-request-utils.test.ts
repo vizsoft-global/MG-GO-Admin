@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   fleetDepartmentLabel,
+  fleetQueueViewSlug,
   fleetRequestMatchesSearch,
   formatPeriodMonth,
   mergeRequiredAttachments,
@@ -121,5 +122,13 @@ describe("mergeRequiredAttachments", () => {
     assert.equal(rows[0]?.kind, "handover_form");
     assert.equal(rows[1]?.kind, "signed_acknowledgment");
     assert.equal(rows[0]?.storage_key, "");
+  });
+});
+
+describe("fleetQueueViewSlug", () => {
+  it("maps each fleet queue to its own Staff Access view slug", () => {
+    assert.equal(fleetQueueViewSlug("fuel"), "fuel_requests.view");
+    assert.equal(fleetQueueViewSlug("fuel_refund"), "fuel_refunds.view");
+    assert.equal(fleetQueueViewSlug("asset"), "asset_requests.view");
   });
 });

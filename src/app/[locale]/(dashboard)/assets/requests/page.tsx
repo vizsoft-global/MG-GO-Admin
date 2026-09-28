@@ -9,6 +9,6 @@ export default async function AssetRequestsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requirePermission(locale, "requests.view");
+  await requirePermission(locale, "asset_requests.view");
   return <FleetRequestPageShell type="asset" />;
 }

@@ -18,7 +18,7 @@ export async function POST() {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "drivers.view", session.isSuperAdmin)
+    !hasPermissionInSet(session.permissions, "live_tracking.view", session.isSuperAdmin)
   ) {
     return NextResponse.json({ error: "not_authorized" }, { status: 403 });
   }

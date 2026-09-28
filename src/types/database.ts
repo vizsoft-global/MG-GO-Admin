@@ -8787,7 +8787,7 @@ export type Database = {
         Returns: Json
       }
       admin_set_driver_off_structure: {
-        Args: { p_driver_id: string; p_month: string; p_off_days: number }
+        Args: { p_driver_id: string; p_month: string; p_off_days: number | null }
         Returns: Json
       }
       admin_set_driver_performance_rating_note: {

@@ -17,13 +17,13 @@ import { persistReconKpi } from "./order-recon-views";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { nextUndoSeq, redoTargetId, undoTargetId, type ReconImportTip } from "./recon-import-stack";
 
-async function requireDeliveries(
+async function requireOrderRecon(
   kind: "view" | "manage",
 ): Promise<{ error: "not_authorized" } | { session: SessionUser }> {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, `deliveries.${kind}`, session.isSuperAdmin)
+    !hasPermissionInSet(session.permissions, `order_recon.${kind}`, session.isSuperAdmin)
   ) {
     return { error: "not_authorized" };
   }
@@ -83,7 +83,7 @@ export type ReconPreview = {
 export async function previewOrderRecon(
   formData: FormData,
 ): Promise<{ preview: ReconPreview } | { error: string }> {
-  const auth = await requireDeliveries("manage");
+  const auth = await requireOrderRecon("manage");
   if ("error" in auth) return auth;
 
   const file = formData.get("file");
@@ -141,7 +141,7 @@ type CompareRow = {
 export async function commitOrderRecon(
   preview: ReconPreview,
 ): Promise<{ run: OrderReconRun } | { error: string }> {
-  const auth = await requireDeliveries("manage");
+  const auth = await requireOrderRecon("manage");
   if ("error" in auth) return auth;
 
   const supabase = await createClient();
@@ -362,7 +362,7 @@ function mapRunRows(
 }
 
 export async function listOrderReconRuns(): Promise<OrderReconRunSummary[]> {
-  const auth = await requireDeliveries("view");
+  const auth = await requireOrderRecon("view");
   if ("error" in auth) return [];
 
   const supabase = await createClient();
@@ -376,7 +376,7 @@ export async function listOrderReconRuns(): Promise<OrderReconRunSummary[]> {
 }
 
 export async function getOrderRecon(runId: string): Promise<OrderReconRun | null> {
-  const auth = await requireDeliveries("view");
+  const auth = await requireOrderRecon("view");
   if ("error" in auth) return null;
 
   const supabase = await createClient();
@@ -395,7 +395,7 @@ export async function getOrderRecon(runId: string): Promise<OrderReconRun | null
 }
 
 export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
-  const auth = await requireDeliveries("view");
+  const auth = await requireOrderRecon("view");
   if ("error" in auth) return null;
 
   const supabase = await createClient();
@@ -424,7 +424,7 @@ export async function redoOrderReconImport(): Promise<{ error?: string }> {
 }
 
 async function replayReconImport(direction: "undo" | "redo"): Promise<{ error?: string }> {
-  const auth = await requireDeliveries("manage");
+  const auth = await requireOrderRecon("manage");
   if ("error" in auth) return auth;
 
   const runs = await listOrderReconRuns();

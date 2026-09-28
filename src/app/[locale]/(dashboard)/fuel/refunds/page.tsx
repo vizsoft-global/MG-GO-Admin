@@ -9,6 +9,6 @@ export default async function FuelRefundsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requirePermission(locale, "requests.view");
+  await requirePermission(locale, "fuel_refunds.view");
   return <FleetRequestPageShell type="fuel_refund" />;
 }

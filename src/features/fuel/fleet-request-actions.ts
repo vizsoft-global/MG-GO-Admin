@@ -18,6 +18,7 @@ import {
   requestNumberThisMonth,
   resolveFleetRequestVehicleId,
   type FleetQueueRequestType,
+  fleetQueueViewSlug,
 } from "./fleet-request-utils";
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -85,25 +86,32 @@ export async function listFleetRequests(input: {
     search = driverCode || employeeId || undefined;
   }
 
-  const list = await fetchAdminRequestsList({
-    datePreset: "all",
-    type: input.type,
-    search,
-    limit: 200,
-    offset: 0,
-  });
+  const extraView = fleetQueueViewSlug(input.type);
+  const list = await fetchAdminRequestsList(
+    {
+      datePreset: "all",
+      type: input.type,
+      search,
+      limit: 200,
+      offset: 0,
+    },
+    extraView,
+  );
   if (list.error) return { rows: [], error: list.error };
 
   let scopedRows = input.driverId
     ? list.rows.filter((row) => row.driver_id === input.driverId)
     : list.rows;
   if (input.driverId && scopedRows.length === 0) {
-    const fallback = await fetchAdminRequestsList({
-      datePreset: "all",
-      type: input.type,
-      limit: 200,
-      offset: 0,
-    });
+    const fallback = await fetchAdminRequestsList(
+      {
+        datePreset: "all",
+        type: input.type,
+        limit: 200,
+        offset: 0,
+      },
+      extraView,
+    );
     if (fallback.error) return { rows: [], error: fallback.error };
     scopedRows = fallback.rows.filter((row) => row.driver_id === input.driverId);
   }

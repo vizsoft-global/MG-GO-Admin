@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FuelCompanyBadge, FuelTypeBadge, ProjectBadge } from "@/features/fleet/fleet-badges";
 import { toKuwaitYmd } from "@/features/fleet/fleet-labels";
+import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
 import { formatKuwaitDayLabel, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { FleetRequestDialog } from "./fleet-request-dialog";
@@ -31,6 +32,8 @@ import { useFuelFills, useFuelWithdrawnOverrides } from "./use-fuel";
 
 export function FuelPageShell({ initialAnchor }: { initialAnchor: string }) {
   const t = useTranslations("pages.fuel");
+  const { can } = useAuth();
+  const canEditFuel = can("fuel.edit");
   const [mode, setMode] = useState<FuelRangeMode>("weekly");
   const [customOpen, setCustomOpen] = useState(false);
   const [anchor, setAnchor] = useState(initialAnchor);
@@ -283,7 +286,7 @@ export function FuelPageShell({ initialAnchor }: { initialAnchor: string }) {
                   const request = requestRows.find((item) => item.id === id);
                   if (request) setSelectedRequest(request);
                 }}
-                onEditWithdrawn={() => setEditRow(row)}
+                onEditWithdrawn={canEditFuel ? () => setEditRow(row) : undefined}
               />
             ))}
           </AppDataTable>
@@ -326,7 +329,7 @@ function FuelRow({
   row: FuelLogRow;
   onOpenFill: () => void;
   onOpenRequest: (id: string) => void;
-  onEditWithdrawn: () => void;
+  onEditWithdrawn?: () => void;
 }) {
   const t = useTranslations("pages.fuel");
   const router = useRouter();
@@ -363,17 +366,21 @@ function FuelRow({
         {row.fills.length === 0 && row.monthlyLimit <= 0 ? "—" : `${formatKwd(row.monthlyLimit)} KWD`}
       </TableCell>
       <TableCell className={row.critical ? "font-semibold text-destructive" : undefined}>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 text-start text-primary hover:bg-primary/10"
-          onClick={(event) => {
-            event.stopPropagation();
-            onEditWithdrawn();
-          }}
-        >
+        {onEditWithdrawn ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-start text-primary hover:bg-primary/10"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEditWithdrawn();
+            }}
+          >
+            <span>{row.fills.length === 0 && row.withdrawn <= 0 ? "—" : `${formatKwd(row.withdrawn)} KWD`}</span>
+            <Pencil className="size-3.5 shrink-0" />
+          </button>
+        ) : (
           <span>{row.fills.length === 0 && row.withdrawn <= 0 ? "—" : `${formatKwd(row.withdrawn)} KWD`}</span>
-          <Pencil className="size-3.5 shrink-0" />
-        </button>
+        )}
         {row.monthlyLimit > 0 ? (
           <div className="mt-1 h-1.5 w-16 overflow-hidden rounded-full bg-muted">
             <div

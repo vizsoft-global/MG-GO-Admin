@@ -46,6 +46,12 @@ describe("guessColumnMapping", () => {
     assert.equal(mapping.employee_id, "Employee ID");
     assert.equal(mapping.restaurant_ids, "Restaurant IDs (name, RST code, or UUID)");
   });
+
+  it("maps Number of OFFs and does not steal Office-like headers", () => {
+    const mapping = guessColumnMapping(["Full Name", "Office", "Number of OFFs"]);
+    assert.equal(mapping.off_days, "Number of OFFs");
+    assert.equal(mapping.full_name, "Full Name");
+  });
 });
 
 describe("mapRowsFromSheet", () => {
@@ -61,5 +67,28 @@ describe("mapRowsFromSheet", () => {
       },
     );
     assert.equal(rows[0]?.phone, "+96599123456");
+  });
+
+  it("reads Number of OFFs and keeps a blank cell as null", () => {
+    const filled = mapRowsFromSheet(
+      ["Full Name", "Employee ID", "Number of OFFs"],
+      [["Ahmed", "EMP2048", "3"]],
+      {
+        full_name: "Full Name",
+        employee_id: "Employee ID",
+        off_days: "Number of OFFs",
+      },
+    );
+    assert.equal(filled[0]?.off_days, "3");
+    const blank = mapRowsFromSheet(
+      ["Full Name", "Employee ID", "Number of OFFs"],
+      [["Sara", "EMP2049", ""]],
+      {
+        full_name: "Full Name",
+        employee_id: "Employee ID",
+        off_days: "Number of OFFs",
+      },
+    );
+    assert.equal(blank[0]?.off_days, null);
   });
 });

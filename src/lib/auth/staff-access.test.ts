@@ -74,6 +74,21 @@ describe("staff access ticks", () => {
     assert.ok(saved.has("assets.create"));
     assert.equal(saved.has("assets.delete"), false);
   });
+
+  it("hides .manage for new write modules and keeps their view slugs on the matrix", () => {
+    assert.equal(isStaffMatrixSlug("payroll.manage"), false);
+    assert.equal(isStaffMatrixSlug("fuel.manage"), false);
+    assert.equal(isStaffMatrixSlug("companies.manage"), false);
+    assert.equal(isStaffMatrixSlug("order_recon.manage"), false);
+    assert.ok(isStaffMatrixSlug("payroll.edit"));
+    assert.ok(isStaffMatrixSlug("fuel.create"));
+    assert.ok(isStaffMatrixSlug("companies.view"));
+    assert.ok(isStaffMatrixSlug("order_recon.view"));
+    assert.ok(isStaffMatrixSlug("live_tracking.view"));
+    assert.ok(isStaffMatrixSlug("fuel_requests.view"));
+    assert.ok(isStaffMatrixSlug("fuel_refunds.view"));
+    assert.ok(isStaffMatrixSlug("asset_requests.view"));
+  });
 });
 
 describe("hasPermissionInSet manage alias", () => {
@@ -89,6 +104,15 @@ describe("hasPermissionInSet manage alias", () => {
     assert.equal(hasPermissionInSet(ticks, "assets.manage", false), true);
     assert.equal(hasPermissionInSet(ticks, "assets.create", false), true);
     assert.equal(hasPermissionInSet(ticks, "assets.delete", false), false);
+  });
+
+  it("aliases payroll and fuel manage onto create/edit/delete", () => {
+    assert.equal(hasPermissionInSet(new Set(["payroll.manage"]), "payroll.edit", false), true);
+    assert.equal(hasPermissionInSet(new Set(["payroll.create"]), "payroll.manage", false), true);
+    assert.equal(hasPermissionInSet(new Set(["fuel.view"]), "fuel.edit", false), false);
+    assert.equal(hasPermissionInSet(new Set(["fuel.edit"]), "fuel.manage", false), true);
+    assert.equal(hasPermissionInSet(new Set(["companies.create"]), "companies.manage", false), true);
+    assert.equal(hasPermissionInSet(new Set(["order_recon.manage"]), "order_recon.create", false), true);
   });
 });
 

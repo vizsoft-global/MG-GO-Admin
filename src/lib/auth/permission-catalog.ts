@@ -62,6 +62,11 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     label: "Export driver devices",
     category: "drivers",
   },
+  {
+    slug: "live_tracking.view",
+    label: "View live tracking",
+    category: "drivers",
+  },
   { slug: "partners.view", label: "View partners", category: "partners" },
   { slug: "partners.manage", label: "Manage partners", category: "partners" },
   { slug: "restaurants.view", label: "View restaurants", category: "restaurants" },
@@ -69,10 +74,36 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { slug: "vehicles.view", label: "View vehicles", category: "vehicles" },
   { slug: "vehicles.manage", label: "Manage vehicles", category: "vehicles" },
   { slug: "fuel.view", label: "View fuel log", category: "fleet" },
+  { slug: "fuel.manage", label: "Manage fuel log", category: "fleet" },
+  {
+    slug: "fuel_requests.view",
+    label: "View fuel requests",
+    category: "fleet",
+  },
+  {
+    slug: "fuel_refunds.view",
+    label: "View fuel refunds",
+    category: "fleet",
+  },
   { slug: "assets.view", label: "View assets inventory", category: "assets" },
   { slug: "assets.manage", label: "Manage assets inventory", category: "assets" },
+  {
+    slug: "asset_requests.view",
+    label: "View asset requests",
+    category: "assets",
+  },
   { slug: "deliveries.view", label: "View deliveries", category: "deliveries" },
   { slug: "deliveries.manage", label: "Manage deliveries", category: "deliveries" },
+  {
+    slug: "order_recon.view",
+    label: "View order reconciliation",
+    category: "deliveries",
+  },
+  {
+    slug: "order_recon.manage",
+    label: "Manage order reconciliation",
+    category: "deliveries",
+  },
   {
     slug: "verifications.view",
     label: "View DPD verification",
@@ -202,6 +233,16 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { slug: "support.manage", label: "Manage support", category: "support" },
   { slug: "settings.view", label: "View settings", category: "settings" },
   { slug: "settings.manage", label: "Manage settings", category: "settings" },
+  {
+    slug: "companies.view",
+    label: "View companies",
+    category: "settings",
+  },
+  {
+    slug: "companies.manage",
+    label: "Manage companies",
+    category: "settings",
+  },
   {
     slug: "users.manage",
     label: "Manage users and approvals",

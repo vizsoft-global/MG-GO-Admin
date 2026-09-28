@@ -21,6 +21,14 @@ async function requireFuelView() {
   return { session };
 }
 
+async function requireFuelEdit() {
+  const session = await getSessionUser();
+  if (!session || !hasPermissionInSet(session.permissions, "fuel.edit", session.isSuperAdmin)) {
+    return { error: "not_authorized" as const };
+  }
+  return { session };
+}
+
 export async function fetchFuelFillAttachmentUrl(
   storageKey: string,
 ): Promise<{ url: string | null; error?: string }> {
@@ -173,7 +181,7 @@ export async function saveFuelWithdrawnOverride(input: {
   monthKey: string;
   amountKwd: number;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const auth = await requireFuelView();
+  const auth = await requireFuelEdit();
   if ("error" in auth) return { ok: false, error: auth.error ?? "not_authorized" };
   if (!UUID.test(input.driverId) || !UUID.test(input.vehicleId) || !MONTH_KEY.test(input.monthKey)) {
     return { ok: false, error: "invalid" };

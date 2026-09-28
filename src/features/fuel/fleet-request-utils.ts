@@ -13,6 +13,14 @@ export type FleetFuelRequestType = (typeof FLEET_FUEL_REQUEST_TYPES)[number];
 export const FLEET_QUEUE_REQUEST_TYPES = ["fuel", "fuel_refund", "asset"] as const;
 export type FleetQueueRequestType = (typeof FLEET_QUEUE_REQUEST_TYPES)[number];
 
+export function fleetQueueViewSlug(
+  type: FleetQueueRequestType,
+): "fuel_requests.view" | "fuel_refunds.view" | "asset_requests.view" {
+  if (type === "fuel") return "fuel_requests.view";
+  if (type === "fuel_refund") return "fuel_refunds.view";
+  return "asset_requests.view";
+}
+
 export const FUEL_REQUEST_ATTACHMENT_KINDS = ["clear_fuel_invoice", "vehicle_plate"] as const;
 export const FUEL_REFUND_ATTACHMENT_KINDS = [
   "rejected_fuel_invoice",

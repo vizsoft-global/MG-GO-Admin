@@ -18,6 +18,10 @@ export const RESOURCE_CRUD_MODULES = [
   "earnings",
   "notifications",
   "support",
+  "payroll",
+  "fuel",
+  "companies",
+  "order_recon",
 ] as const;
 
 export type ResourceCrudModule = (typeof RESOURCE_CRUD_MODULES)[number];
@@ -44,6 +48,10 @@ export const RESOURCE_CRUD_LABELS: Record<
   earnings: { noun: "earnings rules", category: "earnings" },
   notifications: { noun: "notifications", category: "notifications" },
   support: { noun: "support threads", category: "support" },
+  payroll: { noun: "payroll off structure", category: "payroll" },
+  fuel: { noun: "fuel log records", category: "fleet" },
+  companies: { noun: "companies", category: "settings" },
+  order_recon: { noun: "order reconciliation runs", category: "deliveries" },
 };
 
 const CRUD_VERBS = ["create", "edit", "delete"] as const;

@@ -29,7 +29,7 @@ function rpcMissing(error: { code?: string; message?: string } | null): boolean 
 
 async function requireView(): Promise<{ error: "not_authorized" } | { session: SessionUser }> {
   const session = await getSessionUser();
-  if (!session || !hasPermissionInSet(session.permissions, "deliveries.view", session.isSuperAdmin)) {
+  if (!session || !hasPermissionInSet(session.permissions, "order_recon.view", session.isSuperAdmin)) {
     return { error: "not_authorized" };
   }
   return { session };

@@ -42,13 +42,13 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/live-tracking",
     labelKey: "nav.liveTracking",
     icon: "Radar",
-    permission: "drivers.view",
+    permission: "live_tracking.view",
   },
   {
     href: "/live-tracking-v2",
     labelKey: "nav.liveTrackingV2",
     icon: "Satellite",
-    permission: "drivers.view",
+    permission: "live_tracking.view",
   },
   {
     href: "/deliveries",

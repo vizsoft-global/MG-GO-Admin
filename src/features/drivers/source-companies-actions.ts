@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { logAdminActivity } from "@/lib/audit/log-admin-activity";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -33,7 +33,7 @@ const KNOWN_ERRORS = new Set<string>([
   "source_company_in_use",
 ]);
 
-async function requirePermission(slug: string) {
+async function requirePermission(slug: Permission) {
   const session = await getSessionUser();
   if (!session || !hasPermissionInSet(session.permissions, slug, session.isSuperAdmin)) {
     throw new Error("not_authorized");
@@ -59,7 +59,7 @@ export async function listSourceCompanies(): Promise<SourceCompany[]> {
 
 /** Settings list: every company plus how many live riders reference it. */
 export async function listSourceCompaniesWithUsage(): Promise<SourceCompanyWithUsage[]> {
-  await requirePermission("settings.manage");
+  await requirePermission("companies.view");
   const supabase = await createClient();
   const [companies, { data: intakes, error }] = await Promise.all([
     loadCompanies(supabase),
@@ -87,7 +87,7 @@ export async function upsertSourceCompany(input: {
   isNew: boolean;
 }): Promise<{ ok: true } | { error: SourceCompanyError }> {
   try {
-    await requirePermission("settings.manage");
+    await requirePermission(input.isNew ? "companies.create" : "companies.edit");
   } catch {
     return { error: "not_authorized" };
   }

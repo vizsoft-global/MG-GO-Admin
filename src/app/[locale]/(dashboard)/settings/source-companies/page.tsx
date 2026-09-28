@@ -10,7 +10,7 @@ export default async function SourceCompaniesSettingsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requirePermission(locale, "settings.manage");
+  await requirePermission(locale, "companies.view");
 
   const companies = await listSourceCompaniesWithUsage();
   return <SourceCompaniesPanel companies={companies} />;
