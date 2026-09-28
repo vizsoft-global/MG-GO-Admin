@@ -31,6 +31,7 @@ import {
 import { ScopePicker } from "./scope-picker";
 import {
   computeIncentivePreview,
+  incentiveBandStart,
   INCENTIVE_PERIODS,
   INCENTIVE_REWARD_MODES,
   INCENTIVE_TARGET_MODES,
@@ -231,7 +232,7 @@ export function IncentiveRuleFormSheet({
   const previewAmount = useMemo(() => {
     const count = Number(previewCount);
     if (!Number.isFinite(count) || count < 0) return 0;
-    return computeIncentivePreview(previewRule, count);
+    return computeIncentivePreview(previewRule, count, incentiveBandStart(previewRule));
   }, [previewRule, previewCount]);
 
   const errorMessage = (key?: DpdErrorKey) => (key ? t(`errors.${key}`) : undefined);

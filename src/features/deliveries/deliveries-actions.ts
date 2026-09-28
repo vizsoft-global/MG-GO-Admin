@@ -31,6 +31,7 @@ import {
   parseDeliveriesStatusCounts,
   readExactCount,
 } from "./delivery-kpi-counts";
+import { sendDpdCongratsFor } from "@/features/notifications/dpd-shift-notices";
 
 type DeliveryMutationResult =
   | { ok: true }
@@ -1075,6 +1076,10 @@ export async function updateDeliveryStatus(
     session.id,
   );
 
+  if (status === "verified") {
+    await sendDpdCongratsFor([existing.driver_id]);
+  }
+
   return { ok: true };
 }
 
@@ -1159,6 +1164,15 @@ export async function bulkUpdateDeliveries(
       failed,
     },
   });
+
+  if (status === "verified" && updated > 0) {
+    const { data: rows } = await supabase
+      .from("deliveries")
+      .select("driver_id")
+      .in("id", ids)
+      .eq("status", "verified");
+    await sendDpdCongratsFor((rows ?? []).map((r) => r.driver_id));
+  }
 
   return { ok: true, updated, skipped, failed };
 }

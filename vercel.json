@@ -23,6 +23,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/dpd-shift-notices",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/expire-stale-pickups",
       "schedule": "*/15 * * * *"
     },
