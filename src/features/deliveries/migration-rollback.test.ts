@@ -39,3 +39,14 @@ test("migrations declare the objects the rollback removes", () => {
   assert.match(report, /v_operational boolean := v_from_clock <> time '00:00:00'/);
   assert.match(report, /v_exclusive_end boolean := v_operational AND v_from_clock = v_to_clock/);
 });
+
+test("additive 306 reapplies shift_date objects without editing 283", () => {
+  const applied = read("supabase/migrations/20261030600000_apply_delivery_shift_date.sql");
+  const original = read("supabase/migrations/20261028300000_delivery_shift_date.sql");
+  assert.match(applied, /ADD COLUMN IF NOT EXISTS shift_date date/);
+  assert.match(applied, /CREATE TRIGGER deliveries_stamp_shift_date/);
+  assert.match(applied, /CREATE OR REPLACE FUNCTION public\.delivery_shift_date/);
+  assert.match(applied, /CREATE OR REPLACE FUNCTION public\.driver_get_home_dashboard/);
+  assert.match(applied, /COALESCE\(\s*d\.shift_date,/);
+  assert.match(original, /CREATE OR REPLACE FUNCTION public\.delivery_shift_date/);
+});
