@@ -20,7 +20,6 @@ import {
   VEHICLE_CONDITIONS,
   VEHICLE_FUEL_COMPANIES,
   VEHICLE_FUEL_TYPES,
-  VEHICLE_TYPES_OF_USE,
   defaultFuelMonthlyLimit,
   isDriverProjectKey,
   toKuwaitYmd,
@@ -28,7 +27,8 @@ import {
 } from "@/features/fleet/fleet-labels";
 import { ProjectKeyField } from "@/features/fleet/project-key-field";
 import { saveVehicle } from "./vehicles-actions";
-import { useVehiclePartners } from "./use-vehicles";
+import { plateToBikeId } from "./plate-id";
+import { useVehiclePartners, useVehicleUseTypes } from "./use-vehicles";
 import type { VehicleListRow, VehicleTypeRow } from "./types";
 import {
   filterChassis,
@@ -37,7 +37,6 @@ import {
   filterLocation,
   filterMakeModel,
   filterPlate,
-  filterVehicleId,
   filterYear,
   validateVehicleForm,
   type VehicleFieldError,
@@ -61,7 +60,7 @@ export function VehicleFormDialog({
   const t = useTranslations("pages.vehicles");
   const [pending, startTransition] = useTransition();
   const { data: partners = [] } = useVehiclePartners();
-  const [bikeId, setBikeId] = useState("");
+  const { data: useTypes = [] } = useVehicleUseTypes();
   const [regNumber, setRegNumber] = useState("");
   const [chassisNo, setChassisNo] = useState("");
   const [make, setMake] = useState("");
@@ -85,7 +84,6 @@ export function VehicleFormDialog({
 
   useEffect(() => {
     if (!open) return;
-    setBikeId(vehicle?.bike_id ?? "");
     setRegNumber(vehicle?.reg_number ?? "");
     setChassisNo(vehicle?.chassis_no ?? "");
     setMake(vehicle?.make ?? "");
@@ -111,6 +109,18 @@ export function VehicleFormDialog({
     setProjectKey(isDriverProjectKey(vehicle?.assigned_project_key) ? vehicle.assigned_project_key : "");
     setFieldError(null);
   }, [open, vehicle]);
+
+  const useTypeItems = useMemo(() => {
+    const rows = useTypes.filter((item) => item.is_active || item.key === typeOfUse);
+    if (rows.length > 0) {
+      return rows.map((item) => ({ key: item.key, label: item.label_en }));
+    }
+    return [
+      { key: "operational", label: t("typeOfUse.operational") },
+      { key: "trainer", label: t("typeOfUse.trainer") },
+      { key: "standby", label: t("typeOfUse.standby") },
+    ];
+  }, [t, typeOfUse, useTypes]);
 
   const replacementItems = useMemo(
     () =>
@@ -147,7 +157,7 @@ export function VehicleFormDialog({
           onSubmit={(event) => {
             event.preventDefault();
             const error = validateVehicleForm({
-              bikeId,
+              bikeId: plateToBikeId(regNumber),
               regNumber,
               chassisNo,
               make,
@@ -165,7 +175,7 @@ export function VehicleFormDialog({
             setFieldError(null);
             const formData = new FormData();
             if (vehicle?.id) formData.set("id", vehicle.id);
-            formData.set("bikeId", bikeId);
+            formData.set("bikeId", plateToBikeId(regNumber));
             formData.set("regNumber", regNumber);
             formData.set("chassisNo", chassisNo);
             formData.set("make", make);
@@ -206,26 +216,15 @@ export function VehicleFormDialog({
             <FieldBlock>
               <FieldLabel required>{t("fieldVehicleId")}</FieldLabel>
               <Input
-                value={bikeId}
-                onChange={(event) => setBikeId(filterVehicleId(event.target.value))}
-                className="h-9"
-                required
-                maxLength={32}
-              />
-              {fieldError === "invalid_vehicle_id" || fieldError === "missing_fields" ? (
-                <p className="text-[10px] text-destructive">{t(`errors.${fieldError}`)}</p>
-              ) : null}
-            </FieldBlock>
-            <FieldBlock>
-              <FieldLabel>{t("colPlate")}</FieldLabel>
-              <Input
                 value={regNumber}
                 onChange={(event) => setRegNumber(filterPlate(event.target.value))}
                 className="h-9"
+                required
                 inputMode="numeric"
+                placeholder="5/6767"
               />
-              {fieldError === "invalid_plate" ? (
-                <p className="text-[10px] text-destructive">{t("errors.invalid_plate")}</p>
+              {fieldError === "invalid_plate" || fieldError === "missing_fields" ? (
+                <p className="text-[10px] text-destructive">{t(`errors.${fieldError}`)}</p>
               ) : null}
             </FieldBlock>
             <FieldBlock>
@@ -388,7 +387,7 @@ export function VehicleFormDialog({
             <FieldBlock>
               <FieldLabel>{t("colTypeOfUse")}</FieldLabel>
               <Select
-                items={VEHICLE_TYPES_OF_USE.map((value) => ({ value, label: t(`typeOfUse.${value}`) }))}
+                items={useTypeItems.map((item) => ({ value: item.key, label: item.label }))}
                 value={typeOfUse}
                 onValueChange={(value) => {
                   if (value) setTypeOfUse(value);
@@ -398,9 +397,9 @@ export function VehicleFormDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {VEHICLE_TYPES_OF_USE.map((value) => (
-                    <SelectItem key={value} value={value} label={t(`typeOfUse.${value}`)}>
-                      {t(`typeOfUse.${value}`)}
+                  {useTypeItems.map((item) => (
+                    <SelectItem key={item.key} value={item.key} label={item.label}>
+                      {item.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

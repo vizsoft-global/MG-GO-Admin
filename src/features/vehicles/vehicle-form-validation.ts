@@ -109,10 +109,11 @@ function optionalInvalid(value: string, re: RegExp): boolean {
 }
 
 export function validateVehicleForm(values: VehicleFormValues): VehicleFieldError | null {
+  const plate = trim(values.regNumber);
+  if (!plate) return "missing_fields";
+  if (!PLATE_RE.test(plate)) return "invalid_plate";
   const bikeId = trim(values.bikeId);
-  if (!bikeId) return "missing_fields";
-  if (!VEHICLE_ID_RE.test(bikeId)) return "invalid_vehicle_id";
-  if (optionalInvalid(values.regNumber, PLATE_RE)) return "invalid_plate";
+  if (bikeId && !VEHICLE_ID_RE.test(bikeId)) return "invalid_vehicle_id";
   if (optionalInvalid(values.chassisNo, CHASSIS_RE)) return "invalid_chassis";
   if (optionalInvalid(values.make, MAKE_MODEL_RE)) return "invalid_make";
   if (optionalInvalid(values.model, MAKE_MODEL_RE)) return "invalid_model";

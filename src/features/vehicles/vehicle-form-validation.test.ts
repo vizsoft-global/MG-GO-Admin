@@ -57,8 +57,8 @@ describe("validateVehicleForm", () => {
     assert.equal(validateVehicleForm(valid), null);
   });
 
-  it("requires Vehicle ID and rejects junk identity", () => {
-    assert.equal(validateVehicleForm({ ...valid, bikeId: "" }), "missing_fields");
+  it("requires a plate and rejects junk identity", () => {
+    assert.equal(validateVehicleForm({ ...valid, regNumber: "" }), "missing_fields");
     assert.equal(validateVehicleForm({ ...valid, bikeId: "***" }), "invalid_vehicle_id");
     assert.equal(validateVehicleForm({ ...valid, regNumber: "abc" }), "invalid_plate");
     assert.equal(validateVehicleForm({ ...valid, chassisNo: "short" }), "invalid_chassis");
@@ -73,8 +73,8 @@ describe("validateVehicleForm", () => {
   it("allows empty optional fields", () => {
     assert.equal(
       validateVehicleForm({
-        bikeId: "Test1",
-        regNumber: "",
+        bikeId: "5-6767",
+        regNumber: "5/6767",
         chassisNo: "",
         make: "",
         model: "",

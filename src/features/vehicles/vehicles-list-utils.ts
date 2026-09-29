@@ -1,10 +1,10 @@
 import {
   parseDriverProjectKey,
   VEHICLE_CAR_TYPES,
-  VEHICLE_TYPES_OF_USE,
   type DriverProjectKey,
 } from "@/features/fleet/fleet-labels";
 import type { VehicleListRow } from "./types";
+import { vehicleIsUnderRepair } from "./vehicle-on-duty";
 
 export const VEHICLE_LIST_TABS = ["all", "suspended", "on-duty"] as const;
 export type VehicleListTab = (typeof VEHICLE_LIST_TABS)[number];
@@ -12,14 +12,13 @@ export type VehicleListTab = (typeof VEHICLE_LIST_TABS)[number];
 export const VEHICLE_PROJECT_FILTERS = ["all", "keeta", "americana"] as const;
 export type VehicleProjectFilter = (typeof VEHICLE_PROJECT_FILTERS)[number];
 
-export const VEHICLE_STATUS_FILTERS = ["all", "active", "suspended", "maintenance"] as const;
+export const VEHICLE_STATUS_FILTERS = ["all", "active", "suspended", "maintenance", "under_repair"] as const;
 export type VehicleStatusFilter = (typeof VEHICLE_STATUS_FILTERS)[number];
 
 export const VEHICLE_CAR_TYPE_FILTERS = ["all", ...VEHICLE_CAR_TYPES] as const;
 export type VehicleCarTypeFilter = (typeof VEHICLE_CAR_TYPE_FILTERS)[number];
 
-export const VEHICLE_TYPE_OF_USE_FILTERS = ["all", ...VEHICLE_TYPES_OF_USE] as const;
-export type VehicleTypeOfUseFilter = (typeof VEHICLE_TYPE_OF_USE_FILTERS)[number];
+export type VehicleTypeOfUseFilter = "all" | string;
 
 export const VEHICLE_KIND_FILTERS = ["all", "bike", "car"] as const;
 export type VehicleKindFilter = (typeof VEHICLE_KIND_FILTERS)[number];
@@ -55,7 +54,14 @@ export function parseVehicleProjectFilter(value: string | null | undefined): Veh
 }
 
 export function parseVehicleStatusFilter(value: string | null | undefined): VehicleStatusFilter {
-  if (value === "active" || value === "suspended" || value === "maintenance") return value;
+  if (
+    value === "active" ||
+    value === "suspended" ||
+    value === "maintenance" ||
+    value === "under_repair"
+  ) {
+    return value;
+  }
   return "all";
 }
 
@@ -65,8 +71,9 @@ export function parseVehicleCarTypeFilter(value: string | null | undefined): Veh
 }
 
 export function parseVehicleTypeOfUseFilter(value: string | null | undefined): VehicleTypeOfUseFilter {
-  if (value === "operational" || value === "trainer" || value === "standby") return value;
-  return "all";
+  const key = value?.trim() ?? "";
+  if (!key || key === "all") return "all";
+  return key as VehicleTypeOfUseFilter;
 }
 
 export function parseVehicleKindFilter(value: string | null | undefined): VehicleKindFilter {
@@ -75,10 +82,11 @@ export function parseVehicleKindFilter(value: string | null | undefined): Vehicl
 }
 
 export function vehicleMatchesStatus(
-  row: Pick<VehicleListRow, "status">,
+  row: Pick<VehicleListRow, "status" | "condition">,
   filter: VehicleStatusFilter,
 ): boolean {
   if (filter === "all") return true;
+  if (filter === "under_repair") return vehicleIsUnderRepair(row);
   return row.status === filter;
 }
 
@@ -125,7 +133,7 @@ export function applyVehicleKpi(
   if (key === "suspended") return { ...prev, tab: "all", status: "suspended" };
   if (key === "company") return { ...prev, carType: "company" };
   if (key === "rent") return { ...prev, carType: "rent" };
-  return { ...prev, tab: "all", status: "maintenance" };
+  return { ...prev, tab: "all", status: "under_repair" };
 }
 
 export function vehicleKpiSelected(
@@ -142,7 +150,7 @@ export function vehicleKpiSelected(
   if (key === "suspended") return state.status === "suspended" || state.tab === "suspended";
   if (key === "company") return state.carType === "company";
   if (key === "rent") return state.carType === "rent";
-  return state.status === "maintenance";
+  return state.status === "under_repair";
 }
 
 export function vehicleMatchesTab(
@@ -186,7 +194,7 @@ export function vehicleMatchesSearch(row: VehicleListRow, query: string): boolea
 }
 
 export function vehicleListKpis(
-  vehicles: readonly Pick<VehicleListRow, "status" | "car_type" | "assigned_on_duty">[],
+  vehicles: readonly Pick<VehicleListRow, "status" | "car_type" | "condition" | "assigned_on_duty">[],
 ) {
   return {
     total: vehicles.length,
@@ -194,7 +202,7 @@ export function vehicleListKpis(
     suspended: vehicles.filter((row) => row.status === "suspended").length,
     company: vehicles.filter((row) => row.car_type === "company").length,
     rent: vehicles.filter((row) => row.car_type === "rent").length,
-    underRepair: vehicles.filter((row) => row.status === "maintenance").length,
+    underRepair: vehicles.filter((row) => vehicleIsUnderRepair(row)).length,
   };
 }
 

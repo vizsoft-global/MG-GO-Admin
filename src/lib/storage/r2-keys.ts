@@ -8,6 +8,7 @@ const ALLOWED_PREFIXES = [
   "notifications/",
   "assets/",
   "releases/",
+  "vehicles/",
 ] as const;
 
 export function isAllowedStorageKey(key: string): boolean {
@@ -27,7 +28,8 @@ export function isR2ObjectKey(value: string | null | undefined): boolean {
     v.startsWith("restaurants/") ||
     v.startsWith("notifications/") ||
     v.startsWith("assets/") ||
-    v.startsWith("releases/")
+    v.startsWith("releases/") ||
+    v.startsWith("vehicles/")
   );
 }
 
@@ -84,6 +86,10 @@ export function buildDriverAvatarKey(driverId: string, ext: string): string {
 
 export function buildPartnerLogoKey(partnerId: string, ext: string): string {
   return `partners/${partnerId}/logo.${ext}`;
+}
+
+export function buildVehicleFileKey(vehicleId: string, folder: string, ext: string): string {
+  return `vehicles/${vehicleId}/${folder}/${crypto.randomUUID()}.${ext}`;
 }
 
 export function buildAssetCatalogImageKey(catalogItemId: string, ext: string): string {

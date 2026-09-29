@@ -49,9 +49,23 @@ import { formatReplacementSince } from "@/features/fleet/fleet-labels";
 import { VehicleBulkImportDialog } from "./import/vehicle-bulk-import-dialog";
 import { downloadVehicleListXlsx } from "./import/vehicle-import-sheet";
 import { VehicleFormDialog } from "./vehicle-form-dialog";
-import { VehicleRecordDialog } from "./vehicle-record-dialog";
-import { useVehicleTypes, useVehiclesList } from "./use-vehicles";
+import { VehiclesColumnHeader } from "./vehicles-column-header";
+import { useVehicleTypes, useVehicleUseTypes, useVehiclesList } from "./use-vehicles";
 import type { VehicleListRow } from "./types";
+import {
+  countActiveFilters,
+  DEFAULT_VEHICLES_SORT,
+  nextSort,
+  rowMatchesColumnFilters,
+  sortVehicles,
+  uniqueColumnValues,
+  VEHICLE_COLUMN_KINDS,
+  vehiclesFilterKind,
+  withColumnFilter,
+  type VehiclesColumnFilters,
+  type VehiclesFixedColumn,
+  type VehiclesSort,
+} from "./vehicles-list-query";
 import {
   applyVehicleKpi,
   parseVehicleCarTypeFilter,
@@ -78,6 +92,8 @@ import {
   type VehicleTypeOfUseFilter,
 } from "./vehicles-list-utils";
 
+const COLUMN_ORDER = Object.keys(VEHICLE_COLUMN_KINDS) as VehiclesFixedColumn[];
+
 export function VehiclesPageShell({
   addOpen,
   tab,
@@ -88,19 +104,19 @@ export function VehiclesPageShell({
   const t = useTranslations("pages.vehicles");
   const { can } = useAuth();
   const canCreate = can("vehicles.create");
-  const canEdit = can("vehicles.edit");
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: vehicles = [], isLoading } = useVehiclesList();
   const { data: types = [] } = useVehicleTypes();
+  const { data: useTypes = [] } = useVehicleUseTypes();
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState<VehicleProjectFilter>("all");
   const [statusFilter, setStatusFilter] = useState<VehicleStatusFilter>("all");
   const [carTypeFilter, setCarTypeFilter] = useState<VehicleCarTypeFilter>("all");
   const [typeOfUseFilter, setTypeOfUseFilter] = useState<VehicleTypeOfUseFilter>("all");
   const [kindFilter, setKindFilter] = useState<VehicleKindFilter>("all");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [editId, setEditId] = useState<string | null>(null);
+  const [columnFilters, setColumnFilters] = useState<VehiclesColumnFilters>({});
+  const [sort, setSort] = useState<VehiclesSort>(DEFAULT_VEHICLES_SORT);
   const [importOpen, setImportOpen] = useState(false);
   const activeTab = parseVehicleListTab(tab);
   const filterState = {
@@ -123,7 +139,7 @@ export function VehiclesPageShell({
     router.replace(qs ? `/vehicles?${qs}` : "/vehicles");
   };
 
-  const visible = useMemo(
+  const scoped = useMemo(
     () =>
       vehicles.filter(
         (row) =>
@@ -138,6 +154,11 @@ export function VehiclesPageShell({
     [activeTab, carTypeFilter, kindFilter, projectFilter, search, statusFilter, typeOfUseFilter, vehicles],
   );
 
+  const visible = useMemo(
+    () => sortVehicles(scoped.filter((row) => rowMatchesColumnFilters(row, columnFilters)), sort),
+    [columnFilters, scoped, sort],
+  );
+
   const applyKpi = (key: VehicleKpiKey) => {
     const next = applyVehicleKpi(key, filterState);
     setStatusFilter(next.status);
@@ -149,55 +170,66 @@ export function VehiclesPageShell({
     if (next.tab !== activeTab) replaceQuery({ tab: next.tab });
   };
 
+  const clearAll = () => {
+    setSearch("");
+    setProjectFilter("all");
+    setStatusFilter("all");
+    setCarTypeFilter("all");
+    setTypeOfUseFilter("all");
+    setKindFilter("all");
+    setColumnFilters({});
+    setSort(DEFAULT_VEHICLES_SORT);
+    if (activeTab !== "all") replaceQuery({ tab: "all" });
+  };
+
   const counts = useMemo(() => vehicleListKpis(vehicles), [vehicles]);
-  const selected = vehicles.find((row) => row.id === selectedId) ?? null;
-  const editing = vehicles.find((row) => row.id === editId) ?? null;
+  const activeFilterCount =
+    countActiveFilters(columnFilters) +
+    (search ? 1 : 0) +
+    (projectFilter !== "all" ? 1 : 0) +
+    (statusFilter !== "all" ? 1 : 0) +
+    (carTypeFilter !== "all" ? 1 : 0) +
+    (typeOfUseFilter !== "all" ? 1 : 0) +
+    (kindFilter !== "all" ? 1 : 0);
+  const headerLabels = {
+    search: t("colFilterSearch"),
+    contains: t("colFilterContains"),
+    all: t("colFilterAll"),
+    clear: t("colFilterClear"),
+    apply: t("colFilterApply"),
+    min: t("colFilterMin"),
+    max: t("colFilterMax"),
+    noOptions: t("colFilterEmpty"),
+    sortBy: (label: string) => t("colSortBy", { label }),
+    filterBy: (label: string) => t("colFilterBy", { label }),
+  };
+  const optionLabel = (column: VehiclesFixedColumn, value: string) => {
+    if (column === "kind") return value === "car" ? t("kindCar") : t("kindBike");
+    if (column === "condition") return t(`condition.${value}` as "condition.running");
+    if (column === "fuelType") return t(`fuelType.${value}` as "fuelType.chip");
+    if (column === "fuelCompany") return t(`fuelCompany.${value}` as "fuelCompany.mus");
+    if (column === "carType") return t(`carType.${value}` as "carType.company");
+    if (column === "typeOfUse") {
+      return useTypes.find((item) => item.key === value)?.label_en ?? value;
+    }
+    if (column === "replacement") return value === "yes" ? t("replacementBanner") : t("replacementNo");
+    return value;
+  };
+
   const kpis = [
-    {
-      key: "total" as const,
-      label: t("kpiTotal"),
-      value: isLoading ? "—" : String(counts.total),
-      icon: Bike,
-      accent: "primary" as const,
-    },
-    {
-      key: "onDuty" as const,
-      label: t("kpiOnDuty"),
-      value: isLoading ? "—" : String(counts.onDuty),
-      icon: CircleDot,
-      accent: "success" as const,
-    },
-    {
-      key: "suspended" as const,
-      label: t("kpiSuspended"),
-      value: isLoading ? "—" : String(counts.suspended),
-      icon: Ban,
-      accent: "danger" as const,
-    },
-    {
-      key: "company" as const,
-      label: t("kpiCompany"),
-      value: isLoading ? "—" : String(counts.company),
-      icon: Users,
-    },
-    {
-      key: "rent" as const,
-      label: t("kpiRent"),
-      value: isLoading ? "—" : String(counts.rent),
-      icon: Wallet,
-    },
-    {
-      key: "underRepair" as const,
-      label: t("kpiUnderRepair"),
-      value: isLoading ? "—" : String(counts.underRepair),
-      icon: Wrench,
-      accent: "warning" as const,
-    },
+    { key: "total" as const, label: t("kpiTotal"), value: isLoading ? "—" : String(counts.total), icon: Bike, accent: "primary" as const },
+    { key: "onDuty" as const, label: t("kpiOnDuty"), value: isLoading ? "—" : String(counts.onDuty), icon: CircleDot, accent: "success" as const },
+    { key: "suspended" as const, label: t("kpiSuspended"), value: isLoading ? "—" : String(counts.suspended), icon: Ban, accent: "danger" as const },
+    { key: "company" as const, label: t("kpiCompany"), value: isLoading ? "—" : String(counts.company), icon: Users },
+    { key: "rent" as const, label: t("kpiRent"), value: isLoading ? "—" : String(counts.rent), icon: Wallet },
+    { key: "underRepair" as const, label: t("kpiUnderRepair"), value: isLoading ? "—" : String(counts.underRepair), icon: Wrench, accent: "warning" as const },
   ].map((kpi) => ({
     ...kpi,
     selected: vehicleKpiSelected(kpi.key, filterState),
     onClick: () => applyKpi(kpi.key),
   }));
+
+  const useTypeOptions = useTypes.filter((item) => item.is_active || item.key === typeOfUseFilter);
 
   return (
     <AppPage>
@@ -282,19 +314,11 @@ export function VehiclesPageShell({
               value={projectFilter}
               onValueChange={(value) => setProjectFilter(parseVehicleProjectFilter(value))}
             >
-              <SelectTrigger className="h-9 w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="h-9 w-[160px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" label={t("projectAll")}>
-                  {t("projectAll")}
-                </SelectItem>
-                <SelectItem value="keeta" label={t("projectKeeta")}>
-                  {t("projectKeeta")}
-                </SelectItem>
-                <SelectItem value="americana" label={t("projectAmericana")}>
-                  {t("projectAmericana")}
-                </SelectItem>
+                <SelectItem value="all" label={t("projectAll")}>{t("projectAll")}</SelectItem>
+                <SelectItem value="keeta" label={t("projectKeeta")}>{t("projectKeeta")}</SelectItem>
+                <SelectItem value="americana" label={t("projectAmericana")}>{t("projectAmericana")}</SelectItem>
               </SelectContent>
             </Select>
             <Select
@@ -304,25 +328,15 @@ export function VehiclesPageShell({
                 { value: "suspended", label: t("statusSuspended") },
                 { value: "maintenance", label: t("statusMaintenance") },
               ]}
-              value={statusFilter}
+              value={statusFilter === "under_repair" ? "maintenance" : statusFilter}
               onValueChange={(value) => setStatusFilter(parseVehicleStatusFilter(value))}
             >
-              <SelectTrigger className="h-9 w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="h-9 w-[160px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" label={t("filterStatusAll")}>
-                  {t("filterStatusAll")}
-                </SelectItem>
-                <SelectItem value="active" label={t("statusActive")}>
-                  {t("statusActive")}
-                </SelectItem>
-                <SelectItem value="suspended" label={t("statusSuspended")}>
-                  {t("statusSuspended")}
-                </SelectItem>
-                <SelectItem value="maintenance" label={t("statusMaintenance")}>
-                  {t("statusMaintenance")}
-                </SelectItem>
+                <SelectItem value="all" label={t("filterStatusAll")}>{t("filterStatusAll")}</SelectItem>
+                <SelectItem value="active" label={t("statusActive")}>{t("statusActive")}</SelectItem>
+                <SelectItem value="suspended" label={t("statusSuspended")}>{t("statusSuspended")}</SelectItem>
+                <SelectItem value="maintenance" label={t("statusMaintenance")}>{t("statusMaintenance")}</SelectItem>
               </SelectContent>
             </Select>
             <Select
@@ -335,50 +349,30 @@ export function VehiclesPageShell({
               value={carTypeFilter}
               onValueChange={(value) => setCarTypeFilter(parseVehicleCarTypeFilter(value))}
             >
-              <SelectTrigger className="h-9 w-[168px]">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="h-9 w-[168px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" label={t("filterCarTypeAll")}>
-                  {t("filterCarTypeAll")}
-                </SelectItem>
-                <SelectItem value="company" label={t("carType.company")}>
-                  {t("carType.company")}
-                </SelectItem>
-                <SelectItem value="rent" label={t("carType.rent")}>
-                  {t("carType.rent")}
-                </SelectItem>
-                <SelectItem value="maintenance" label={t("carType.maintenance")}>
-                  {t("carType.maintenance")}
-                </SelectItem>
+                <SelectItem value="all" label={t("filterCarTypeAll")}>{t("filterCarTypeAll")}</SelectItem>
+                <SelectItem value="company" label={t("carType.company")}>{t("carType.company")}</SelectItem>
+                <SelectItem value="rent" label={t("carType.rent")}>{t("carType.rent")}</SelectItem>
+                <SelectItem value="maintenance" label={t("carType.maintenance")}>{t("carType.maintenance")}</SelectItem>
               </SelectContent>
             </Select>
             <Select
               items={[
                 { value: "all", label: t("filterTypeOfUseAll") },
-                { value: "operational", label: t("typeOfUse.operational") },
-                { value: "trainer", label: t("typeOfUse.trainer") },
-                { value: "standby", label: t("typeOfUse.standby") },
+                ...useTypeOptions.map((item) => ({ value: item.key, label: item.label_en })),
               ]}
               value={typeOfUseFilter}
               onValueChange={(value) => setTypeOfUseFilter(parseVehicleTypeOfUseFilter(value))}
             >
-              <SelectTrigger className="h-9 w-[168px]">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="h-9 w-[168px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" label={t("filterTypeOfUseAll")}>
-                  {t("filterTypeOfUseAll")}
-                </SelectItem>
-                <SelectItem value="operational" label={t("typeOfUse.operational")}>
-                  {t("typeOfUse.operational")}
-                </SelectItem>
-                <SelectItem value="trainer" label={t("typeOfUse.trainer")}>
-                  {t("typeOfUse.trainer")}
-                </SelectItem>
-                <SelectItem value="standby" label={t("typeOfUse.standby")}>
-                  {t("typeOfUse.standby")}
-                </SelectItem>
+                <SelectItem value="all" label={t("filterTypeOfUseAll")}>{t("filterTypeOfUseAll")}</SelectItem>
+                {useTypeOptions.map((item) => (
+                  <SelectItem key={item.key} value={item.key} label={item.label_en}>
+                    {item.label_en}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select
@@ -390,24 +384,24 @@ export function VehiclesPageShell({
               value={kindFilter}
               onValueChange={(value) => setKindFilter(parseVehicleKindFilter(value))}
             >
-              <SelectTrigger className="h-9 w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="h-9 w-[140px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" label={t("filterKindAll")}>
-                  {t("filterKindAll")}
-                </SelectItem>
-                <SelectItem value="bike" label={t("kindBike")}>
-                  {t("kindBike")}
-                </SelectItem>
-                <SelectItem value="car" label={t("kindCar")}>
-                  {t("kindCar")}
-                </SelectItem>
+                <SelectItem value="all" label={t("filterKindAll")}>{t("filterKindAll")}</SelectItem>
+                <SelectItem value="bike" label={t("kindBike")}>{t("kindBike")}</SelectItem>
+                <SelectItem value="car" label={t("kindCar")}>{t("kindCar")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
         }
       >
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2 text-xs text-muted-foreground">
+          <p>{t("showingCount", { shown: visible.length, total: vehicles.length })}</p>
+          {activeFilterCount > 0 ? (
+            <Button type="button" variant="outline" className="h-8" onClick={clearAll}>
+              {t("clearAllFilters")}
+            </Button>
+          ) : null}
+        </div>
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -416,63 +410,43 @@ export function VehiclesPageShell({
           <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
         ) : (
           <AppDataTable
-            columns={[
-              { id: "plate", label: t("colPlate") },
-              { id: "chassis", label: t("colChassis") },
-              { id: "kind", label: t("colKind") },
-              { id: "model", label: t("colModel") },
-              { id: "year", label: t("colYear") },
-              { id: "condition", label: t("colCondition") },
-              { id: "chip", label: t("colChip") },
-              { id: "fuelType", label: t("colFuelType") },
-              { id: "fuelCompany", label: t("colFuelCompany") },
-              { id: "carsCompany", label: t("colCarsCompany") },
-              { id: "project", label: t("colProject") },
-              { id: "typeOfUse", label: t("colTypeOfUse") },
-              { id: "location", label: t("colLocation") },
-              { id: "driver", label: t("colDriver") },
-              { id: "empCompany", label: t("colEmpCompany") },
-              { id: "carType", label: t("colCarType") },
-              { id: "replacement", label: t("colReplacement") },
-              { id: "repPlate", label: t("colRepPlate") },
-              { id: "since", label: t("colSince") },
-            ]}
+            columns={COLUMN_ORDER.map((id) => ({
+              id,
+              label: (
+                <VehiclesColumnHeader
+                  column={id}
+                  label={t(columnLabelKey(id))}
+                  kind={vehiclesFilterKind(id) ?? "text"}
+                  filter={columnFilters[id]}
+                  onApply={(next) => setColumnFilters((prev) => withColumnFilter(prev, id, next))}
+                  sort={sort}
+                  onSort={() => setSort((prev) => nextSort(prev, id))}
+                  options={uniqueColumnValues(scoped, id)}
+                  optionLabel={(value) => optionLabel(id, value)}
+                  labels={headerLabels}
+                />
+              ),
+            }))}
             empty={visible.length === 0 ? <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty> : null}
           >
             {visible.map((row) => (
-              <VehicleRow key={row.id} row={row} onOpen={() => setSelectedId(row.id)} />
+              <VehicleRow key={row.id} row={row} onOpen={() => router.push(`/vehicles/${row.id}`)} />
             ))}
           </AppDataTable>
         )}
       </AppListCard>
-      <VehicleRecordDialog
-        open={Boolean(selected)}
-        vehicle={selected}
-        canManage={canEdit}
-        onOpenChange={(open) => {
-          if (!open) setSelectedId(null);
-        }}
-        onEdit={() => {
-          if (!selected) return;
-          setEditId(selected.id);
-          setSelectedId(null);
-        }}
-      />
       <VehicleFormDialog
-        open={(addOpen && canCreate) || (Boolean(editing) && canEdit)}
-        vehicle={editing}
+        open={addOpen && canCreate}
+        vehicle={null}
         types={types}
         vehicles={vehicles}
         onOpenChange={(open) => {
-          if (open) return;
-          setEditId(null);
-          if (addOpen) replaceQuery({ add: false });
+          if (!open && addOpen) replaceQuery({ add: false });
         }}
         onSaved={(id) => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all() });
-          setEditId(null);
           if (addOpen) replaceQuery({ add: false });
-          setSelectedId(id);
+          router.push(`/vehicles/${id}`);
         }}
       />
       <VehicleBulkImportDialog
@@ -482,6 +456,31 @@ export function VehiclesPageShell({
       />
     </AppPage>
   );
+}
+
+function columnLabelKey(id: VehiclesFixedColumn): "colPlate" {
+  const map: Record<VehiclesFixedColumn, string> = {
+    plate: "colPlate",
+    chassis: "colChassis",
+    kind: "colKind",
+    model: "colModel",
+    year: "colYear",
+    condition: "colCondition",
+    chip: "colChip",
+    fuelType: "colFuelType",
+    fuelCompany: "colFuelCompany",
+    carsCompany: "colCarsCompany",
+    project: "colProject",
+    typeOfUse: "colTypeOfUse",
+    location: "colLocation",
+    driver: "colDriver",
+    empCompany: "colEmpCompany",
+    carType: "colCarType",
+    replacement: "colReplacement",
+    repPlate: "colRepPlate",
+    since: "colSince",
+  };
+  return map[id] as "colPlate";
 }
 
 function VehicleRow({
@@ -496,11 +495,15 @@ function VehicleRow({
     <AppDataTableRow className="cursor-pointer" onClick={onOpen}>
       <TableCell className="whitespace-nowrap">
         <p className="font-medium">{row.reg_number || row.bike_id}</p>
-        {row.status !== "active" ? (
-          <div className="mt-0.5">
-            <VehicleStatusBadge status={row.status} />
-          </div>
-        ) : null}
+        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+          <VehicleStatusBadge status={row.status} />
+          {row.assigned_on_duty ? (
+            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900">
+              <CircleDot className="size-2.5" />
+              {t("tabOnDuty")}
+            </span>
+          ) : null}
+        </div>
         <Link
           href={`/vehicles/${row.id}`}
           className="inline-flex items-center gap-1 text-[11px] text-primary hover:bg-primary/10"
@@ -532,9 +535,7 @@ function VehicleRow({
       <TableCell>
         <ProjectBadge value={row.assigned_project_key} />
       </TableCell>
-      <TableCell className="whitespace-nowrap">
-        {row.type_of_use ? t(`typeOfUse.${row.type_of_use}`) : "—"}
-      </TableCell>
+      <TableCell className="whitespace-nowrap">{row.type_of_use_label ?? row.type_of_use ?? "—"}</TableCell>
       <TableCell className="whitespace-nowrap">{row.location_text ?? "—"}</TableCell>
       <TableCell className="whitespace-nowrap">
         {row.assigned_driver_name

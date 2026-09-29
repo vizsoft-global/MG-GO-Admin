@@ -3,7 +3,6 @@ import {
   VEHICLE_CONDITIONS,
   VEHICLE_FUEL_COMPANIES,
   VEHICLE_FUEL_TYPES,
-  VEHICLE_TYPES_OF_USE,
 } from "@/features/fleet/fleet-labels";
 
 export const VEHICLE_IMPORT_FIELDS = [
@@ -45,15 +44,15 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Vehicle ID",
     required: true,
     pinned: true,
-    allowed: "Letters, numbers, hyphen, underscore. Max 32. Match key.",
-    example: "TEST-FLEET-01",
+    allowed: "Kuwait plate, e.g. 5/6767. Unique Vehicle ID. Also accepted as Plate.",
+    example: "5/6767",
   },
   {
     field: "regNumber",
-    header: "Plate No.",
+    header: "Plate",
     required: false,
     pinned: false,
-    allowed: "Digits and one slash, e.g. 5/6767. Blank clears.",
+    allowed: "Same as Vehicle ID. If both are filled, Plate wins.",
     example: "5/6767",
   },
   {
@@ -141,7 +140,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Type of Use",
     required: false,
     pinned: false,
-    allowed: VEHICLE_TYPES_OF_USE.join(", "),
+    allowed: "Catalog key from Settings → Vehicle uses (seeded operational, trainer, standby).",
     example: "operational",
   },
   {

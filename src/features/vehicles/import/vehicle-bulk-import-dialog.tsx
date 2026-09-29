@@ -36,10 +36,12 @@ import {
   downloadVehicleTemplate,
 } from "./vehicle-import-sheet";
 import { VehicleTemplateColumnPicker } from "./vehicle-template-picker";
+import { useVehicleUseTypes } from "../use-vehicles";
 
 const KNOWN_ERRORS = new Set([
   "missing_fields",
   "duplicate_bike_id",
+  "duplicate_plate",
   "invalid_vehicle_id",
   "invalid_plate",
   "invalid_chassis",
@@ -101,6 +103,7 @@ export function VehicleBulkImportDialog({
   const t = useTranslations("pages.vehicles.import");
   const te = useTranslations("pages.vehicles.errors");
   const queryClient = useQueryClient();
+  const { data: useTypes = [] } = useVehicleUseTypes();
   const [panel, setPanel] = useState<"new" | "history">("new");
   const [logBatchId, setLogBatchId] = useState<string | null>(null);
   const [selected, setSelected] = useState(defaultTemplateSelection);
@@ -137,9 +140,10 @@ export function VehicleBulkImportDialog({
             headers,
             rows: sheetRows,
             existing: vehicles.map(toExisting),
+            allowedUseTypes: useTypes.filter((item) => item.is_active).map((item) => item.key),
           })
         : { error: null, rows: [] },
-    [headers, sheetRows, vehicles],
+    [headers, sheetRows, useTypes, vehicles],
   );
   const ready = preview.rows.filter((row) => row.status !== "error").length;
 

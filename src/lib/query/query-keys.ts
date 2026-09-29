@@ -153,6 +153,8 @@ export const queryKeys = {
     list: (filters: Record<string, unknown> = {}) => ["vehicles", "list", filters] as const,
     detail: (id: string) => ["vehicles", "detail", id] as const,
     imports: () => ["vehicles", "imports"] as const,
+    useTypes: () => ["vehicles", "use-types"] as const,
+    tabs: (id: string, tab: string) => ["vehicles", "tabs", id, tab] as const,
   },
   fuel: {
     all: () => ["fuel"] as const,

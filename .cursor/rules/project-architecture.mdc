@@ -237,6 +237,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-09-29` — **Vehicles: Driver-like structure.** Plate (`reg_number`) is the unique Vehicle ID; `bike_id` is a slug alias. All Uses is `vehicle_use_types` at `/settings/vehicle-uses`. List: per-column sort/filter, row → `/vehicles/[id]`, Condition + Status badges, On Duty = assigned rider + open Kuwait attendance + shift window. Detail: identity header + Handover / Accident / Documents / Service / Assets (rider assignments). Migration `20261030700000` on `eoksxkdssptgyqyywdju`. Do not apply `20261030600000`. Handoff plate note only. **No Play.**
+
 - `[admin only] 2026-09-29` — **Sidebar: Payroll & Requests sits in Operations** after Performance and before Staff Assistant. `relocatePayrollItem` no longer creates `group-payroll`. Saved menus are remapped. No migration / no Play.
 
 - `[admin only] 2026-09-29` — **Staff Assistant `rank_orders_zone`.** `/assistant` "highest orders last week" used `rank_complaints_zone` then fleet `deliveries_counts` because analytics had no order rank. New kind reads one `admin_performance_ops_snapshot` (`by_zone.orders`, verified + Kuwait `delivered_at`). Answer is `headline.zone` + `headline.orders` for that window — never a fleet total. Follow-ups ("how many orders?") reuse `rank_orders_zone`, not `deliveries_counts`. Prompt: complaints kind is complaints only. No migration / no Play.
