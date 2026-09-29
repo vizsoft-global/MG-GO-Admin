@@ -482,6 +482,7 @@ export async function runAnalytics(input: DateInput & {
     | "assets_kpis"
     | "notifications_history"
     | "performance_trend"
+    | "rank_orders_zone"
     | "rank_complaints_zone"
     | "rank_complaints_restaurant"
     | "low_performance_high_absence";

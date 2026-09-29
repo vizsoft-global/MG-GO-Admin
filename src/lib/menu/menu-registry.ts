@@ -317,8 +317,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Payroll & Requests",
     defaultIcon: "CalendarClock",
     href: "/payroll",
-    defaultGroup: "Payroll",
-    defaultOrder: 9,
+    defaultGroup: "Operations",
+    defaultOrder: 8.25,
     permission: "payroll.view",
   },
   {
