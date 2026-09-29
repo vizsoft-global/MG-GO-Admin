@@ -7568,6 +7568,13 @@
           "dpd_eff": "DPD Efficiency",
           "tgt_eff": "Target Efficiency"
         },
+        "show": {
+          "label": "Show",
+          "auto": "Auto",
+          "custom": "Custom",
+          "customAria": "Custom count, whole number from 1 to 50",
+          "invalid": "Enter a whole number from 1 to 50."
+        },
         "granularity": {
           "daily": "Daily",
           "weekly": "Weekly",
@@ -7725,6 +7732,9 @@
         "topBottomHint": "N = {n} (10% of active riders, clamped 2–10).",
         "topBottomStoresHint": "N = {n} (10% of stores in view, clamped 2–10).",
         "topBottomZonesHint": "N = {n} (10% of zones in view, clamped 2–10).",
+        "topBottomFewerRiders": "Only {count} riders in view.",
+        "topBottomFewerStores": "Only {count} stores in view.",
+        "topBottomFewerZones": "Only {count} zones in view.",
         "topBottomTooltip": "Hover a bar for name, value, ID, nationality, store, vehicle, zone and source.",
         "errorTitle": "Dashboard could not load",
         "errorHint": "Refresh, or pick a shorter range.",

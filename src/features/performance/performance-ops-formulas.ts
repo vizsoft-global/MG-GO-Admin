@@ -278,6 +278,131 @@ export function topBottomN(count: number): number {
   return Math.min(10, Math.max(2, Math.round(count / 10)));
 }
 
+export const TOP_BOTTOM_SHOW_PRESETS = [3, 5, 10, 20] as const;
+export type TopBottomShowPreset = (typeof TOP_BOTTOM_SHOW_PRESETS)[number];
+export const TOP_BOTTOM_CUSTOM_MIN = 1;
+export const TOP_BOTTOM_CUSTOM_MAX = 50;
+
+export type TopBottomShowSelection =
+  | { mode: "auto" }
+  | { mode: "preset"; n: TopBottomShowPreset }
+  | { mode: "custom"; n: number };
+
+export const DEFAULT_TOP_BOTTOM_SHOW: TopBottomShowSelection = { mode: "auto" };
+
+/** Integer 1–50 only. Empty, 0, negative, decimal, and 51+ are invalid. */
+export function parseTopBottomCustomN(raw: unknown): number | null {
+  if (typeof raw === "number") {
+    if (!Number.isInteger(raw)) return null;
+    if (raw < TOP_BOTTOM_CUSTOM_MIN || raw > TOP_BOTTOM_CUSTOM_MAX) return null;
+    return raw;
+  }
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed.includes(".")) return null;
+  if (!/^[+-]?\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  if (!Number.isInteger(n) || n < TOP_BOTTOM_CUSTOM_MIN || n > TOP_BOTTOM_CUSTOM_MAX) {
+    return null;
+  }
+  return n;
+}
+
+/** Auto: existing topBottomN(pool). Preset/custom: the requested N, same for every pool. */
+export function resolveTopBottomRequestedN(
+  selection: TopBottomShowSelection,
+  poolSize: number,
+): number {
+  if (selection.mode === "auto") return topBottomN(poolSize);
+  return selection.n;
+}
+
+/**
+ * Cap requested N to the pool, then split so Top and Bottom never share a row.
+ * One item → Top only. When 2N > total → ceil/floor halves.
+ */
+export function disjointTopBottomCounts(
+  total: number,
+  requested: number,
+): { topCount: number; bottomCount: number } {
+  if (!Number.isFinite(total) || total <= 0) return { topCount: 0, bottomCount: 0 };
+  if (!Number.isFinite(requested) || requested <= 0) return { topCount: 0, bottomCount: 0 };
+  if (total === 1) return { topCount: 1, bottomCount: 0 };
+  const k = Math.min(Math.floor(requested), total);
+  if (2 * k > total) {
+    return { topCount: Math.ceil(total / 2), bottomCount: Math.floor(total / 2) };
+  }
+  return { topCount: k, bottomCount: k };
+}
+
+export type TopBottomPair<T> = {
+  top: Array<T & { value: number }>;
+  bottom: Array<T & { value: number }>;
+};
+
+function scoredRows<T>(
+  rows: T[],
+  valueOf: (row: T) => number | null,
+): Array<T & { value: number }> {
+  const out: Array<T & { value: number }> = [];
+  for (const row of rows) {
+    const value = valueOf(row);
+    if (value == null || !Number.isFinite(value)) continue;
+    out.push({ ...row, value });
+  }
+  return out;
+}
+
+/** Existing Auto pair: value desc only; Top/Bottom may overlap. */
+export function pairTopBottomAuto<T>(
+  rows: T[],
+  valueOf: (row: T) => number | null,
+  n: number,
+): TopBottomPair<T> {
+  const sorted = scoredRows(rows, valueOf).sort((a, b) => b.value - a.value);
+  return {
+    top: sorted.slice(0, n),
+    bottom: [...sorted].reverse().slice(0, n),
+  };
+}
+
+export function compareTopBottomRows<T extends { value: number }>(
+  a: T,
+  b: T,
+  nameOf: (row: T) => string,
+  workingDaysOf?: (row: T) => number | null | undefined,
+): number {
+  if (b.value !== a.value) return b.value - a.value;
+  if (workingDaysOf) {
+    const days = (row: T) => {
+      const v = workingDaysOf(row);
+      return v != null && Number.isFinite(v) ? v : 0;
+    };
+    const d = days(b) - days(a);
+    if (d !== 0) return d;
+  }
+  return nameOf(a).localeCompare(nameOf(b));
+}
+
+/** Fixed Show N: tie-aware sort, disjoint Top/Bottom, Bottom worst-first. */
+export function pairTopBottomDisjoint<T>(
+  rows: T[],
+  valueOf: (row: T) => number | null,
+  requestedN: number,
+  nameOf: (row: T) => string,
+  workingDaysOf?: (row: T) => number | null | undefined,
+): TopBottomPair<T> {
+  const sorted = scoredRows(rows, valueOf).sort((a, b) =>
+    compareTopBottomRows(a, b, nameOf, workingDaysOf),
+  );
+  const { topCount, bottomCount } = disjointTopBottomCounts(sorted.length, requestedN);
+  return {
+    top: sorted.slice(0, topCount),
+    bottom:
+      bottomCount === 0 ? [] : sorted.slice(sorted.length - bottomCount).reverse(),
+  };
+}
+
 /** Assumption #1: (current − previous) / previous on the card value itself. */
 export function kpiDeltaPct(
   current: number | null,

@@ -7490,6 +7490,13 @@
           "dpd_eff": "كفاءة DPD",
           "tgt_eff": "كفاءة الهدف"
         },
+        "show": {
+          "label": "عرض",
+          "auto": "تلقائي",
+          "custom": "مخصص",
+          "customAria": "عدد مخصص، رقم صحيح من 1 إلى 50",
+          "invalid": "أدخل رقماً صحيحاً من 1 إلى 50."
+        },
         "granularity": {
           "daily": "يومي",
           "weekly": "أسبوعي",
@@ -7647,6 +7654,9 @@
         "topBottomHint": "N = {n} (10% من السائقين النشطين، بين 2 و10).",
         "topBottomStoresHint": "N = {n} (10% من المتاجر المعروضة، بين 2 و10).",
         "topBottomZonesHint": "N = {n} (10% من المناطق المعروضة، بين 2 و10).",
+        "topBottomFewerRiders": "فقط {count} سائقون في العرض.",
+        "topBottomFewerStores": "فقط {count} متاجر في العرض.",
+        "topBottomFewerZones": "فقط {count} مناطق في العرض.",
         "topBottomTooltip": "مرّر على العمود للاسم والقيمة والمعرّف والجنسية والمتجر والمركبة والمنطقة والمصدر.",
         "errorTitle": "تعذّر تحميل اللوحة",
         "errorHint": "حدّث الصفحة أو اختر نطاقاً أقصر.",

@@ -7,9 +7,12 @@ import {
   dimMetricValue,
   isChartableDimKey,
   OPS_METRIC_COLOR,
+  pairTopBottomAuto,
+  pairTopBottomDisjoint,
+  resolveTopBottomRequestedN,
   storeChartValue,
-  topBottomN,
   type OpsChartMetric,
+  type TopBottomShowSelection,
 } from "../performance-ops-formulas";
 import { downloadCsv, toCsv } from "../performance-ops-table";
 import { enrichOpsRider } from "../performance-ops-format";
@@ -17,62 +20,82 @@ import type { OpsRiderView, OpsSnapshot } from "../performance-ops-types";
 import { OpsBarChart, OpsChartCard } from "./ops-charts";
 import { cn } from "@/lib/utils";
 
-function pair<T>(
-  rows: T[],
-  valueOf: (row: T) => number | null,
-  n: number,
-): { top: Array<T & { value: number }>; bottom: Array<T & { value: number }> } {
-  const scored = rows
-    .map((row) => ({ row, value: valueOf(row) }))
-    .filter((x): x is { row: T; value: number } => x.value != null && Number.isFinite(x.value));
-  const sorted = [...scored].sort((a, b) => b.value - a.value);
-  return {
-    top: sorted.slice(0, n).map((x) => ({ ...x.row, value: x.value })),
-    bottom: [...sorted].reverse().slice(0, n).map((x) => ({ ...x.row, value: x.value })),
-  };
-}
-
 export function OpsTopBottomTab({
   data,
   metric,
+  show,
 }: {
   data: OpsSnapshot;
   metric: OpsChartMetric;
+  show: TopBottomShowSelection;
 }) {
   const t = useTranslations("pages.performance.ops");
   const riders = useMemo(() => data.riders.map(enrichOpsRider), [data.riders]);
   const active = riders.filter((r) => r.working_days > 0);
-  const nRiders = topBottomN(active.length);
   const stores = data.stores.filter((s) => s.store_name && s.working_days > 0);
   const zones = data.by_zone.filter((z) => isChartableDimKey(z.key) && z.working_days > 0);
-  const nStores = topBottomN(stores.length);
-  const nZones = topBottomN(zones.length);
+  const auto = show.mode === "auto";
+  const requestedRiders = resolveTopBottomRequestedN(show, active.length);
+  const requestedStores = resolveTopBottomRequestedN(show, stores.length);
+  const requestedZones = resolveTopBottomRequestedN(show, zones.length);
   const seriesName = t(`viewBy.${metric}`);
 
   const byRider = useMemo(
     () =>
-      pair(
-        active,
-        (r) => (metric === "orders" ? r.orders : r[metric]),
-        nRiders,
-      ),
-    [active, metric, nRiders],
+      auto
+        ? pairTopBottomAuto(
+            active,
+            (r) => (metric === "orders" ? r.orders : r[metric]),
+            requestedRiders,
+          )
+        : pairTopBottomDisjoint(
+            active,
+            (r) => (metric === "orders" ? r.orders : r[metric]),
+            requestedRiders,
+            (r) => r.name,
+            (r) => r.working_days,
+          ),
+    [active, auto, metric, requestedRiders],
   );
   const byStore = useMemo(
     () =>
-      pair(
-        stores,
-        (s) => storeChartValue(s, metric, data.kpis.overall_dpd, data.target_dpd),
-        nStores,
-      ),
-    [stores, metric, data.kpis.overall_dpd, data.target_dpd, nStores],
+      auto
+        ? pairTopBottomAuto(
+            stores,
+            (s) => storeChartValue(s, metric, data.kpis.overall_dpd, data.target_dpd),
+            requestedStores,
+          )
+        : pairTopBottomDisjoint(
+            stores,
+            (s) => storeChartValue(s, metric, data.kpis.overall_dpd, data.target_dpd),
+            requestedStores,
+            (s) => s.store_name ?? "—",
+            (s) => s.working_days,
+          ),
+    [auto, stores, metric, data.kpis.overall_dpd, data.target_dpd, requestedStores],
   );
   const byZone = useMemo(
-    () => pair(zones, (z) => dimMetricValue(z, metric), nZones),
-    [zones, metric, nZones],
+    () =>
+      auto
+        ? pairTopBottomAuto(zones, (z) => dimMetricValue(z, metric), requestedZones)
+        : pairTopBottomDisjoint(
+            zones,
+            (z) => dimMetricValue(z, metric),
+            requestedZones,
+            (z) => z.key,
+            (z) => z.working_days,
+          ),
+    [auto, zones, metric, requestedZones],
   );
 
-  if (nRiders === 0 && nStores === 0 && nZones === 0) {
+  const riderTopN = auto ? requestedRiders : byRider.top.length;
+  const riderBottomN = auto ? requestedRiders : byRider.bottom.length;
+  const storeTopN = auto ? requestedStores : byStore.top.length;
+  const storeBottomN = auto ? requestedStores : byStore.bottom.length;
+  const zoneTopN = auto ? requestedZones : byZone.top.length;
+  const zoneBottomN = auto ? requestedZones : byZone.bottom.length;
+
+  if (active.length === 0 && stores.length === 0 && zones.length === 0) {
     return (
       <div className={cn("flex flex-col", LAYOUT.stackGap)}>
         <p className="text-sm text-muted-foreground">{t("emptyTopBottom")}</p>
@@ -96,16 +119,27 @@ export function OpsTopBottomTab({
     }));
   }
 
+  const showRiderSection = auto ? requestedRiders > 0 : byRider.top.length > 0;
+  const showStoreSection = auto ? requestedStores > 0 : byStore.top.length > 0;
+  const showZoneSection = auto ? requestedZones > 0 : byZone.top.length > 0;
+  const showRiderBottom = auto ? requestedRiders > 0 : byRider.bottom.length > 0;
+  const showStoreBottom = auto ? requestedStores > 0 : byStore.bottom.length > 0;
+  const showZoneBottom = auto ? requestedZones > 0 : byZone.bottom.length > 0;
+
   return (
     <div className={cn("flex flex-col", LAYOUT.stackGap)}>
-      {nRiders > 0 ? (
+      {showRiderSection ? (
         <section className={cn("flex flex-col", LAYOUT.stackGap)}>
-          <p className="text-[11px] text-muted-foreground">
-            {t("topBottomHint", { n: nRiders })}
-          </p>
+          {auto ? (
+            <p className="text-[11px] text-muted-foreground">{t("topBottomHint", { n: requestedRiders })}</p>
+          ) : active.length < requestedRiders ? (
+            <p className="text-[11px] text-muted-foreground">
+              {t("topBottomFewerRiders", { count: active.length })}
+            </p>
+          ) : null}
           <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
             <OpsChartCard
-              title={t("chart.topMetric", { n: nRiders, metric: seriesName })}
+              title={t("chart.topMetric", { n: riderTopN, metric: seriesName })}
               onExport={() =>
                 downloadCsv(
                   "ops-top-riders",
@@ -124,38 +158,44 @@ export function OpsTopBottomTab({
                 metric={metric}
               />
             </OpsChartCard>
-            <OpsChartCard
-              title={t("chart.bottomMetric", { n: nRiders, metric: seriesName })}
-              onExport={() =>
-                downloadCsv(
-                  "ops-bottom-riders",
-                  toCsv(
-                    ["name", "id", "value", "Restaurant", "zone"],
-                    byRider.bottom.map((r) => [r.name, r.display_id, r.value, r.store_label, r.zone]),
-                  ),
-                )
-              }
-            >
-              <OpsBarChart
-                data={riderChart(byRider.bottom)}
-                xKey="key"
-                series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
-                layout="horizontal"
-                metric={metric}
-              />
-            </OpsChartCard>
+            {showRiderBottom ? (
+              <OpsChartCard
+                title={t("chart.bottomMetric", { n: riderBottomN, metric: seriesName })}
+                onExport={() =>
+                  downloadCsv(
+                    "ops-bottom-riders",
+                    toCsv(
+                      ["name", "id", "value", "Restaurant", "zone"],
+                      byRider.bottom.map((r) => [r.name, r.display_id, r.value, r.store_label, r.zone]),
+                    ),
+                  )
+                }
+              >
+                <OpsBarChart
+                  data={riderChart(byRider.bottom)}
+                  xKey="key"
+                  series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
+                  layout="horizontal"
+                  metric={metric}
+                />
+              </OpsChartCard>
+            ) : null}
           </div>
         </section>
       ) : null}
 
-      {nStores > 0 ? (
+      {showStoreSection ? (
         <section className={cn("flex flex-col", LAYOUT.stackGap)}>
-          <p className="text-[11px] text-muted-foreground">
-            {t("topBottomStoresHint", { n: nStores })}
-          </p>
+          {auto ? (
+            <p className="text-[11px] text-muted-foreground">{t("topBottomStoresHint", { n: requestedStores })}</p>
+          ) : stores.length < requestedStores ? (
+            <p className="text-[11px] text-muted-foreground">
+              {t("topBottomFewerStores", { count: stores.length })}
+            </p>
+          ) : null}
           <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
             <OpsChartCard
-              title={t("chart.topStores", { n: nStores, metric: seriesName })}
+              title={t("chart.topStores", { n: storeTopN, metric: seriesName })}
               onExport={() =>
                 downloadCsv(
                   "ops-top-stores",
@@ -174,40 +214,44 @@ export function OpsTopBottomTab({
                 metric={metric}
               />
             </OpsChartCard>
-            <OpsChartCard
-              title={t("chart.bottomStores", { n: nStores, metric: seriesName })}
-              onExport={() =>
-                downloadCsv(
-                  "ops-bottom-stores",
-                  toCsv(
-                    ["Restaurant", "zone", "value"],
-                    byStore.bottom.map((s) => [s.store_name, s.zone_name, s.value]),
-                  ),
-                )
-              }
-            >
-              <OpsBarChart
-                data={byStore.bottom.map((s) => ({ key: s.store_name ?? "—", value: s.value }))}
-                xKey="key"
-                series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
-                layout="horizontal"
-                metric={metric}
-              />
-            </OpsChartCard>
+            {showStoreBottom ? (
+              <OpsChartCard
+                title={t("chart.bottomStores", { n: storeBottomN, metric: seriesName })}
+                onExport={() =>
+                  downloadCsv(
+                    "ops-bottom-stores",
+                    toCsv(
+                      ["Restaurant", "zone", "value"],
+                      byStore.bottom.map((s) => [s.store_name, s.zone_name, s.value]),
+                    ),
+                  )
+                }
+              >
+                <OpsBarChart
+                  data={byStore.bottom.map((s) => ({ key: s.store_name ?? "—", value: s.value }))}
+                  xKey="key"
+                  series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
+                  layout="horizontal"
+                  metric={metric}
+                />
+              </OpsChartCard>
+            ) : null}
           </div>
         </section>
       ) : null}
 
       <section className={cn("flex flex-col", LAYOUT.stackGap)}>
-        {nZones > 0 ? (
+        {showZoneSection && auto ? (
+          <p className="text-[11px] text-muted-foreground">{t("topBottomZonesHint", { n: requestedZones })}</p>
+        ) : showZoneSection && zones.length < requestedZones ? (
           <p className="text-[11px] text-muted-foreground">
-            {t("topBottomZonesHint", { n: nZones })}
+            {t("topBottomFewerZones", { count: zones.length })}
           </p>
         ) : null}
-        {nZones > 0 ? (
+        {showZoneSection ? (
           <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
             <OpsChartCard
-              title={t("chart.topZones", { n: nZones, metric: seriesName })}
+              title={t("chart.topZones", { n: zoneTopN, metric: seriesName })}
               onExport={() =>
                 downloadCsv(
                   "ops-top-zones",
@@ -226,26 +270,28 @@ export function OpsTopBottomTab({
                 metric={metric}
               />
             </OpsChartCard>
-            <OpsChartCard
-              title={t("chart.bottomZones", { n: nZones, metric: seriesName })}
-              onExport={() =>
-                downloadCsv(
-                  "ops-bottom-zones",
-                  toCsv(
-                    ["zone", "value"],
-                    byZone.bottom.map((z) => [z.key, z.value]),
-                  ),
-                )
-              }
-            >
-              <OpsBarChart
-                data={byZone.bottom.map((z) => ({ key: z.key, value: z.value }))}
-                xKey="key"
-                series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
-                layout="horizontal"
-                metric={metric}
-              />
-            </OpsChartCard>
+            {showZoneBottom ? (
+              <OpsChartCard
+                title={t("chart.bottomZones", { n: zoneBottomN, metric: seriesName })}
+                onExport={() =>
+                  downloadCsv(
+                    "ops-bottom-zones",
+                    toCsv(
+                      ["zone", "value"],
+                      byZone.bottom.map((z) => [z.key, z.value]),
+                    ),
+                  )
+                }
+              >
+                <OpsBarChart
+                  data={byZone.bottom.map((z) => ({ key: z.key, value: z.value }))}
+                  xKey="key"
+                  series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
+                  layout="horizontal"
+                  metric={metric}
+                />
+              </OpsChartCard>
+            ) : null}
           </div>
         ) : (
           <OpsChartCard title={t("chart.topZones", { n: 0, metric: seriesName })} empty emptyTitle={t("emptyZones")}>
