@@ -285,12 +285,12 @@ function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
       ...stripped,
       {
         id: "group-operations",
-        type: "group",
+        type: "group" as const,
         label: "Operations",
         icon: "Folder",
         children: [item],
       },
-    ].filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
+    ];
   }
 
   const ops = stripped[opsIdx];
