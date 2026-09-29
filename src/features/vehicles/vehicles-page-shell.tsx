@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -9,8 +9,10 @@ import {
   CircleDot,
   Download,
   ExternalLink,
+  FilterX,
   Loader2,
   Plus,
+  RefreshCw,
   Search,
   Upload,
   Users,
@@ -18,22 +20,30 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { AppListCard, AppPage } from "@/components/app";
 import { useRouter } from "@/i18n/navigation";
 import { Link } from "@/i18n/navigation";
 import {
   AppDataTable,
   AppDataTableEmpty,
   AppDataTableRow,
-  TableCell,
-} from "@/components/app/app-data-table";
+  AppTableColumnPicker,
+  VisibleTableCell,
+} from "@/components/app";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button } from "@/components/ui/button";
+import { CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { KpiGrid } from "@/components/dashboard/kpi-grid";
-import { TabBar } from "@/components/dashboard/tab-bar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { MetricTile, type Tone } from "@/components/ui/metric-tile";
 import { useAuth } from "@/contexts/auth-context";
+import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
+import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   CarTypeBadge,
@@ -68,12 +78,7 @@ import {
 } from "./vehicles-list-query";
 import {
   applyVehicleKpi,
-  parseVehicleCarTypeFilter,
-  parseVehicleKindFilter,
   parseVehicleListTab,
-  parseVehicleProjectFilter,
-  parseVehicleStatusFilter,
-  parseVehicleTypeOfUseFilter,
   vehicleKpiSelected,
   vehicleListKpis,
   vehicleMatchesCarType,
@@ -93,6 +98,27 @@ import {
 } from "./vehicles-list-utils";
 
 const COLUMN_ORDER = Object.keys(VEHICLE_COLUMN_KINDS) as VehiclesFixedColumn[];
+const COLUMN_LABEL_KEYS: Record<VehiclesFixedColumn, string> = {
+  plate: "colPlate",
+  chassis: "colChassis",
+  kind: "colKind",
+  model: "colModel",
+  year: "colYear",
+  condition: "colCondition",
+  chip: "colChip",
+  fuelType: "colFuelType",
+  fuelCompany: "colFuelCompany",
+  carsCompany: "colCarsCompany",
+  project: "colProject",
+  typeOfUse: "colTypeOfUse",
+  location: "colLocation",
+  driver: "colDriver",
+  empCompany: "colEmpCompany",
+  carType: "colCarType",
+  replacement: "colReplacement",
+  repPlate: "colRepPlate",
+  since: "colSince",
+};
 
 export function VehiclesPageShell({
   addOpen,
@@ -106,7 +132,7 @@ export function VehiclesPageShell({
   const canCreate = can("vehicles.create");
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: vehicles = [], isLoading } = useVehiclesList();
+  const { data: vehicles = [], isLoading, isFetching, refetch } = useVehiclesList();
   const { data: types = [] } = useVehicleTypes();
   const { data: useTypes = [] } = useVehicleUseTypes();
   const [search, setSearch] = useState("");
@@ -128,6 +154,18 @@ export function VehiclesPageShell({
     search,
     project: projectFilter,
   };
+
+  const columnOptions = useMemo(
+    () =>
+      COLUMN_ORDER.map((id) => ({
+        id,
+        label: t(COLUMN_LABEL_KEYS[id] as "colPlate"),
+        locked: id === "plate",
+      })),
+    [t],
+  );
+  const { isVisible, toggle, reset, pickerOptions, hiddenToggleableCount } =
+    useTableColumnVisibility("dpd:vehicles:list-columns", columnOptions);
 
   const replaceQuery = (next: { add?: boolean; tab?: VehicleListTab }) => {
     const params = new URLSearchParams();
@@ -183,256 +221,307 @@ export function VehiclesPageShell({
   };
 
   const counts = useMemo(() => vehicleListKpis(vehicles), [vehicles]);
-  const activeFilterCount =
-    countActiveFilters(columnFilters) +
-    (search ? 1 : 0) +
+  const kpiExtras =
     (projectFilter !== "all" ? 1 : 0) +
     (statusFilter !== "all" ? 1 : 0) +
     (carTypeFilter !== "all" ? 1 : 0) +
     (typeOfUseFilter !== "all" ? 1 : 0) +
     (kindFilter !== "all" ? 1 : 0);
-  const headerLabels = {
-    search: t("colFilterSearch"),
-    contains: t("colFilterContains"),
-    all: t("colFilterAll"),
-    clear: t("colFilterClear"),
-    apply: t("colFilterApply"),
-    min: t("colFilterMin"),
-    max: t("colFilterMax"),
-    noOptions: t("colFilterEmpty"),
-    sortBy: (label: string) => t("colSortBy", { label }),
-    filterBy: (label: string) => t("colFilterBy", { label }),
-  };
-  const optionLabel = (column: VehiclesFixedColumn, value: string) => {
-    if (column === "kind") return value === "car" ? t("kindCar") : t("kindBike");
-    if (column === "condition") return t(`condition.${value}` as "condition.running");
-    if (column === "fuelType") return t(`fuelType.${value}` as "fuelType.chip");
-    if (column === "fuelCompany") return t(`fuelCompany.${value}` as "fuelCompany.mus");
-    if (column === "carType") return t(`carType.${value}` as "carType.company");
-    if (column === "typeOfUse") {
-      return useTypes.find((item) => item.key === value)?.label_en ?? value;
-    }
-    if (column === "replacement") return value === "yes" ? t("replacementBanner") : t("replacementNo");
-    return value;
-  };
+  const activeFilterCount = countActiveFilters(columnFilters) + (search ? 1 : 0) + kpiExtras;
+  const headerLabels = useMemo(
+    () => ({
+      search: t("colFilterSearch"),
+      contains: t("colFilterContains"),
+      all: t("colFilterAll"),
+      clear: t("colFilterClear"),
+      apply: t("colFilterApply"),
+      min: t("colFilterMin"),
+      max: t("colFilterMax"),
+      noOptions: t("colFilterEmpty"),
+      sortBy: (label: string) => t("colSortBy", { label }),
+      filterBy: (label: string) => t("colFilterBy", { label }),
+    }),
+    [t],
+  );
+  const optionLabel = useCallback(
+    (column: VehiclesFixedColumn, value: string) => {
+      if (column === "kind") return value === "car" ? t("kindCar") : t("kindBike");
+      if (column === "condition") return t(`condition.${value}` as "condition.running");
+      if (column === "fuelType") return t(`fuelType.${value}` as "fuelType.chip");
+      if (column === "fuelCompany") return t(`fuelCompany.${value}` as "fuelCompany.mus");
+      if (column === "carType") return t(`carType.${value}` as "carType.company");
+      if (column === "typeOfUse") {
+        return useTypes.find((item) => item.key === value)?.label_en ?? value;
+      }
+      if (column === "replacement") return value === "yes" ? t("replacementBanner") : t("replacementNo");
+      return value;
+    },
+    [t, useTypes],
+  );
 
-  const kpis = [
-    { key: "total" as const, label: t("kpiTotal"), value: isLoading ? "—" : String(counts.total), icon: Bike, accent: "primary" as const },
-    { key: "onDuty" as const, label: t("kpiOnDuty"), value: isLoading ? "—" : String(counts.onDuty), icon: CircleDot, accent: "success" as const },
-    { key: "suspended" as const, label: t("kpiSuspended"), value: isLoading ? "—" : String(counts.suspended), icon: Ban, accent: "danger" as const },
-    { key: "company" as const, label: t("kpiCompany"), value: isLoading ? "—" : String(counts.company), icon: Users },
-    { key: "rent" as const, label: t("kpiRent"), value: isLoading ? "—" : String(counts.rent), icon: Wallet },
-    { key: "underRepair" as const, label: t("kpiUnderRepair"), value: isLoading ? "—" : String(counts.underRepair), icon: Wrench, accent: "warning" as const },
-  ].map((kpi) => ({
-    ...kpi,
-    selected: vehicleKpiSelected(kpi.key, filterState),
-    onClick: () => applyKpi(kpi.key),
-  }));
+  const tabSelectItems = useMemo(
+    () => [
+      { value: "all" as const, label: t("tabAll") },
+      { value: "suspended" as const, label: t("tabSuspended") },
+      { value: "on-duty" as const, label: t("tabOnDuty") },
+    ],
+    [t],
+  );
 
-  const useTypeOptions = useTypes.filter((item) => item.is_active || item.key === typeOfUseFilter);
+  const kpis: { key: VehicleKpiKey; label: string; value: string; icon: typeof Bike; tone: Tone }[] = [
+    { key: "total", label: t("kpiTotal"), value: isLoading ? "—" : String(counts.total), icon: Bike, tone: "primary" },
+    { key: "onDuty", label: t("kpiOnDuty"), value: isLoading ? "—" : String(counts.onDuty), icon: CircleDot, tone: "success" },
+    { key: "suspended", label: t("kpiSuspended"), value: isLoading ? "—" : String(counts.suspended), icon: Ban, tone: "danger" },
+    { key: "company", label: t("kpiCompany"), value: isLoading ? "—" : String(counts.company), icon: Users, tone: "primary" },
+    { key: "rent", label: t("kpiRent"), value: isLoading ? "—" : String(counts.rent), icon: Wallet, tone: "warning" },
+    { key: "underRepair", label: t("kpiUnderRepair"), value: isLoading ? "—" : String(counts.underRepair), icon: Wrench, tone: "warning" },
+  ];
+
+  const tableColumns = useMemo(
+    () =>
+      COLUMN_ORDER.filter((id) => isVisible(id)).map((id) => ({
+        id,
+        label: (
+          <VehiclesColumnHeader
+            column={id}
+            label={t(COLUMN_LABEL_KEYS[id] as "colPlate")}
+            kind={vehiclesFilterKind(id) ?? "text"}
+            filter={columnFilters[id]}
+            onApply={(next) => setColumnFilters((prev) => withColumnFilter(prev, id, next))}
+            sort={sort}
+            onSort={() => setSort((prev) => nextSort(prev, id))}
+            options={uniqueColumnValues(scoped, id)}
+            optionLabel={(value) => optionLabel(id, value)}
+            labels={headerLabels}
+          />
+        ),
+      })),
+    [columnFilters, headerLabels, isVisible, optionLabel, scoped, sort, t],
+  );
+
+  const isRefreshing = isFetching && !isLoading;
 
   return (
-    <AppPage>
-      <AppPageHeader
-        title={t("title")}
-        description={t("subtitle")}
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 cursor-pointer rounded-lg"
-              disabled={isLoading || visible.length === 0}
-              onClick={() => downloadVehicleListXlsx(visible)}
-            >
-              <Download className="me-2 h-3.5 w-3.5" />
-              {t("export")}
-            </Button>
-            {canCreate ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 cursor-pointer rounded-lg"
-                onClick={() => setImportOpen(true)}
-              >
-                <Upload className="me-2 h-3.5 w-3.5" />
-                {t("bulkImport")}
-              </Button>
-            ) : null}
-            <Button
-              className="h-9 cursor-pointer rounded-lg"
-              disabled={!canCreate}
-              onClick={() => {
-                if (canCreate) replaceQuery({ add: true });
-              }}
-            >
-              <Plus className="me-2 h-3.5 w-3.5" />
-              {t("addVehicle")}
-            </Button>
+    <AppPage className="space-y-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        {kpis.map((kpi) => (
+          <div
+            key={kpi.key}
+            role="button"
+            tabIndex={0}
+            onClick={() => applyKpi(kpi.key)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              applyKpi(kpi.key);
+            }}
+            className="min-w-0 cursor-pointer"
+          >
+            <MetricTile
+              label={kpi.label}
+              value={kpi.value}
+              icon={kpi.icon}
+              tone={kpi.tone}
+              selected={vehicleKpiSelected(kpi.key, filterState)}
+              className="h-full p-2.5"
+            />
           </div>
-        }
-        tabs={
-          <TabBar
-            activeId={activeTab}
-            onSelect={(id) => replaceQuery({ tab: parseVehicleListTab(id) })}
-            items={[
-              { id: "all", label: t("tabAll"), icon: Bike },
-              { id: "suspended", label: t("tabSuspended"), icon: Ban },
-              { id: "on-duty", label: t("tabOnDuty"), icon: CircleDot },
-            ]}
-          />
-        }
-      />
-      <KpiGrid items={kpis} compact />
+        ))}
+      </div>
+
       <AppListCard
         toolbar={
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t("searchPlaceholder")}
-                className="h-9 rounded-lg bg-background ps-9 pe-9"
-              />
-              {search ? (
-                <button
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <Select
+                items={tabSelectItems}
+                value={activeTab}
+                onValueChange={(value) => {
+                  if (value) replaceQuery({ tab: parseVehicleListTab(value) });
+                }}
+              >
+                <SelectTrigger className="h-9 w-[148px] shrink-0 cursor-pointer rounded-lg text-xs">
+                  <SelectValue placeholder={t("filterView")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {tabSelectItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value} className="cursor-pointer">
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t("searchPlaceholder")}
+                  className="h-9 rounded-lg bg-background ps-8 pe-8 text-xs"
+                  aria-label={t("searchPlaceholder")}
+                />
+                {search ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute end-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
+                    aria-label={t("clearSearch")}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                ) : null}
+              </div>
+
+              {activeFilterCount > 0 ? (
+                <Button
                   type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
+                  variant="outline"
+                  className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={clearAll}
                 >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                  <FilterX className="h-3.5 w-3.5" aria-hidden />
+                  {t("clearAllFilters")}
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white tabular-nums">
+                    {activeFilterCount}
+                  </span>
+                </Button>
+              ) : null}
+
+              <AppTableColumnPicker
+                options={pickerOptions}
+                isVisible={isVisible}
+                onToggle={toggle}
+                onReset={reset}
+                hiddenCount={hiddenToggleableCount}
+              />
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5">
+              {!isLoading ? (
+                <p className="hidden text-xs tabular-nums text-muted-foreground lg:inline">
+                  {t("showingCount", { shown: visible.length, total: vehicles.length })}
+                </p>
+              ) : null}
+              <div className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
+                      onClick={() => {
+                        void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all() });
+                        void refetch();
+                      }}
+                      disabled={isRefreshing}
+                      aria-label={t("refresh")}
+                    >
+                      <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t("refresh")}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
+                      onClick={() => downloadVehicleListXlsx(visible)}
+                      disabled={isLoading || visible.length === 0}
+                      aria-label={t("export")}
+                    >
+                      <Download className="h-4 w-4" />
+                      <span className="ms-1.5 hidden md:inline">{t("export")}</span>
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t("export")}</TooltipContent>
+              </Tooltip>
+              {canCreate ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
+                        onClick={() => setImportOpen(true)}
+                        aria-label={t("bulkImport")}
+                      >
+                        <Upload className="h-4 w-4" />
+                        <span className="ms-1.5 hidden md:inline">{t("bulkImport")}</span>
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>{t("bulkImport")}</TooltipContent>
+                </Tooltip>
+              ) : null}
+              {canCreate ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 shrink-0 cursor-pointer rounded-lg px-2.5"
+                  onClick={() => replaceQuery({ add: true })}
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="ms-1.5 hidden sm:inline">{t("addVehicle")}</span>
+                </Button>
               ) : null}
             </div>
-            <Select
-              items={[
-                { value: "all", label: t("projectAll") },
-                { value: "keeta", label: t("projectKeeta") },
-                { value: "americana", label: t("projectAmericana") },
-              ]}
-              value={projectFilter}
-              onValueChange={(value) => setProjectFilter(parseVehicleProjectFilter(value))}
-            >
-              <SelectTrigger className="h-9 w-[160px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" label={t("projectAll")}>{t("projectAll")}</SelectItem>
-                <SelectItem value="keeta" label={t("projectKeeta")}>{t("projectKeeta")}</SelectItem>
-                <SelectItem value="americana" label={t("projectAmericana")}>{t("projectAmericana")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              items={[
-                { value: "all", label: t("filterStatusAll") },
-                { value: "active", label: t("statusActive") },
-                { value: "suspended", label: t("statusSuspended") },
-                { value: "maintenance", label: t("statusMaintenance") },
-              ]}
-              value={statusFilter === "under_repair" ? "maintenance" : statusFilter}
-              onValueChange={(value) => setStatusFilter(parseVehicleStatusFilter(value))}
-            >
-              <SelectTrigger className="h-9 w-[160px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" label={t("filterStatusAll")}>{t("filterStatusAll")}</SelectItem>
-                <SelectItem value="active" label={t("statusActive")}>{t("statusActive")}</SelectItem>
-                <SelectItem value="suspended" label={t("statusSuspended")}>{t("statusSuspended")}</SelectItem>
-                <SelectItem value="maintenance" label={t("statusMaintenance")}>{t("statusMaintenance")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              items={[
-                { value: "all", label: t("filterCarTypeAll") },
-                { value: "company", label: t("carType.company") },
-                { value: "rent", label: t("carType.rent") },
-                { value: "maintenance", label: t("carType.maintenance") },
-              ]}
-              value={carTypeFilter}
-              onValueChange={(value) => setCarTypeFilter(parseVehicleCarTypeFilter(value))}
-            >
-              <SelectTrigger className="h-9 w-[168px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" label={t("filterCarTypeAll")}>{t("filterCarTypeAll")}</SelectItem>
-                <SelectItem value="company" label={t("carType.company")}>{t("carType.company")}</SelectItem>
-                <SelectItem value="rent" label={t("carType.rent")}>{t("carType.rent")}</SelectItem>
-                <SelectItem value="maintenance" label={t("carType.maintenance")}>{t("carType.maintenance")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              items={[
-                { value: "all", label: t("filterTypeOfUseAll") },
-                ...useTypeOptions.map((item) => ({ value: item.key, label: item.label_en })),
-              ]}
-              value={typeOfUseFilter}
-              onValueChange={(value) => setTypeOfUseFilter(parseVehicleTypeOfUseFilter(value))}
-            >
-              <SelectTrigger className="h-9 w-[168px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" label={t("filterTypeOfUseAll")}>{t("filterTypeOfUseAll")}</SelectItem>
-                {useTypeOptions.map((item) => (
-                  <SelectItem key={item.key} value={item.key} label={item.label_en}>
-                    {item.label_en}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              items={[
-                { value: "all", label: t("filterKindAll") },
-                { value: "bike", label: t("kindBike") },
-                { value: "car", label: t("kindCar") },
-              ]}
-              value={kindFilter}
-              onValueChange={(value) => setKindFilter(parseVehicleKindFilter(value))}
-            >
-              <SelectTrigger className="h-9 w-[140px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" label={t("filterKindAll")}>{t("filterKindAll")}</SelectItem>
-                <SelectItem value="bike" label={t("kindBike")}>{t("kindBike")}</SelectItem>
-                <SelectItem value="car" label={t("kindCar")}>{t("kindCar")}</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         }
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2 text-xs text-muted-foreground">
-          <p>{t("showingCount", { shown: visible.length, total: vehicles.length })}</p>
-          {activeFilterCount > 0 ? (
-            <Button type="button" variant="outline" className="h-8" onClick={clearAll}>
-              {t("clearAllFilters")}
-            </Button>
-          ) : null}
-        </div>
         {isLoading ? (
-          <div className="flex h-48 items-center justify-center">
+          <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : vehicles.length === 0 ? (
-          <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
+          <div className="px-6 py-12 text-center">
+            <p className="text-sm font-medium text-foreground">{t("emptyTitle")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("emptyHint")}</p>
+            {canCreate ? (
+              <Button
+                type="button"
+                size="sm"
+                className="mt-4 cursor-pointer rounded-lg"
+                onClick={() => replaceQuery({ add: true })}
+              >
+                <Plus className="me-2 h-3.5 w-3.5" />
+                {t("addVehicle")}
+              </Button>
+            ) : null}
+          </div>
         ) : (
-          <AppDataTable
-            columns={COLUMN_ORDER.map((id) => ({
-              id,
-              label: (
-                <VehiclesColumnHeader
-                  column={id}
-                  label={t(columnLabelKey(id))}
-                  kind={vehiclesFilterKind(id) ?? "text"}
-                  filter={columnFilters[id]}
-                  onApply={(next) => setColumnFilters((prev) => withColumnFilter(prev, id, next))}
-                  sort={sort}
-                  onSort={() => setSort((prev) => nextSort(prev, id))}
-                  options={uniqueColumnValues(scoped, id)}
-                  optionLabel={(value) => optionLabel(id, value)}
-                  labels={headerLabels}
+          <CardContent className="p-0">
+            <AppDataTable
+              columns={tableColumns}
+              headerRowClassName="bg-primary/5 hover:bg-primary/5"
+              empty={
+                visible.length === 0 ? (
+                  <AppDataTableEmpty>
+                    <AppEmptyState title={t("emptyFilters")} />
+                  </AppDataTableEmpty>
+                ) : undefined
+              }
+            >
+              {visible.map((row) => (
+                <VehicleRow
+                  key={row.id}
+                  row={row}
+                  isVisible={isVisible}
+                  onOpen={() => router.push(`/vehicles/${row.id}`)}
                 />
-              ),
-            }))}
-            empty={visible.length === 0 ? <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty> : null}
-          >
-            {visible.map((row) => (
-              <VehicleRow key={row.id} row={row} onOpen={() => router.push(`/vehicles/${row.id}`)} />
-            ))}
-          </AppDataTable>
+              ))}
+            </AppDataTable>
+          </CardContent>
         )}
       </AppListCard>
       <VehicleFormDialog
@@ -458,42 +547,19 @@ export function VehiclesPageShell({
   );
 }
 
-function columnLabelKey(id: VehiclesFixedColumn): "colPlate" {
-  const map: Record<VehiclesFixedColumn, string> = {
-    plate: "colPlate",
-    chassis: "colChassis",
-    kind: "colKind",
-    model: "colModel",
-    year: "colYear",
-    condition: "colCondition",
-    chip: "colChip",
-    fuelType: "colFuelType",
-    fuelCompany: "colFuelCompany",
-    carsCompany: "colCarsCompany",
-    project: "colProject",
-    typeOfUse: "colTypeOfUse",
-    location: "colLocation",
-    driver: "colDriver",
-    empCompany: "colEmpCompany",
-    carType: "colCarType",
-    replacement: "colReplacement",
-    repPlate: "colRepPlate",
-    since: "colSince",
-  };
-  return map[id] as "colPlate";
-}
-
 function VehicleRow({
   row,
+  isVisible,
   onOpen,
 }: {
   row: VehicleListRow;
+  isVisible: (id: string) => boolean;
   onOpen: () => void;
 }) {
   const t = useTranslations("pages.vehicles");
   return (
     <AppDataTableRow className="cursor-pointer" onClick={onOpen}>
-      <TableCell className="whitespace-nowrap">
+      <VisibleTableCell columnId="plate" isVisible={isVisible} className="whitespace-nowrap">
         <p className="font-medium">{row.reg_number || row.bike_id}</p>
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
           <VehicleStatusBadge status={row.status} />
@@ -512,47 +578,63 @@ function VehicleRow({
           <ExternalLink className="h-3 w-3" />
           {t("viewDetails")}
         </Link>
-      </TableCell>
-      <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+      </VisibleTableCell>
+      <VisibleTableCell columnId="chassis" isVisible={isVisible} className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
         {row.chassis_no ?? "—"}
-      </TableCell>
-      <TableCell>
+      </VisibleTableCell>
+      <VisibleTableCell columnId="kind" isVisible={isVisible}>
         <KindBadge value={row.vehicle_type_key} />
-      </TableCell>
-      <TableCell className="whitespace-nowrap">{row.model ?? "—"}</TableCell>
-      <TableCell>{row.model_year ?? "—"}</TableCell>
-      <TableCell>
+      </VisibleTableCell>
+      <VisibleTableCell columnId="model" isVisible={isVisible} className="whitespace-nowrap">
+        {row.model ?? "—"}
+      </VisibleTableCell>
+      <VisibleTableCell columnId="year" isVisible={isVisible}>
+        {row.model_year ?? "—"}
+      </VisibleTableCell>
+      <VisibleTableCell columnId="condition" isVisible={isVisible}>
         <ConditionBadge value={row.condition} />
-      </TableCell>
-      <TableCell className="font-mono text-[11px]">{row.chip_no ?? "—"}</TableCell>
-      <TableCell>
+      </VisibleTableCell>
+      <VisibleTableCell columnId="chip" isVisible={isVisible} className="font-mono text-[11px]">
+        {row.chip_no ?? "—"}
+      </VisibleTableCell>
+      <VisibleTableCell columnId="fuelType" isVisible={isVisible}>
         <FuelTypeBadge value={row.fuel_type} />
-      </TableCell>
-      <TableCell>
+      </VisibleTableCell>
+      <VisibleTableCell columnId="fuelCompany" isVisible={isVisible}>
         <FuelCompanyBadge value={row.fuel_company} />
-      </TableCell>
-      <TableCell className="whitespace-nowrap">{row.owner_partner_name ?? "—"}</TableCell>
-      <TableCell>
+      </VisibleTableCell>
+      <VisibleTableCell columnId="carsCompany" isVisible={isVisible} className="whitespace-nowrap">
+        {row.owner_partner_name ?? "—"}
+      </VisibleTableCell>
+      <VisibleTableCell columnId="project" isVisible={isVisible}>
         <ProjectBadge value={row.assigned_project_key} />
-      </TableCell>
-      <TableCell className="whitespace-nowrap">{row.type_of_use_label ?? row.type_of_use ?? "—"}</TableCell>
-      <TableCell className="whitespace-nowrap">{row.location_text ?? "—"}</TableCell>
-      <TableCell className="whitespace-nowrap">
+      </VisibleTableCell>
+      <VisibleTableCell columnId="typeOfUse" isVisible={isVisible} className="whitespace-nowrap">
+        {row.type_of_use_label ?? row.type_of_use ?? "—"}
+      </VisibleTableCell>
+      <VisibleTableCell columnId="location" isVisible={isVisible} className="whitespace-nowrap">
+        {row.location_text ?? "—"}
+      </VisibleTableCell>
+      <VisibleTableCell columnId="driver" isVisible={isVisible} className="whitespace-nowrap">
         {row.assigned_driver_name
           ? `${row.assigned_driver_name}${row.assigned_employee_id ? ` · ${row.assigned_employee_id}` : ""}`
           : "—"}
-      </TableCell>
-      <TableCell className="whitespace-nowrap">{row.assigned_partner_name ?? "—"}</TableCell>
-      <TableCell>
+      </VisibleTableCell>
+      <VisibleTableCell columnId="empCompany" isVisible={isVisible} className="whitespace-nowrap">
+        {row.assigned_partner_name ?? "—"}
+      </VisibleTableCell>
+      <VisibleTableCell columnId="carType" isVisible={isVisible}>
         <CarTypeBadge value={row.car_type} />
-      </TableCell>
-      <TableCell>
+      </VisibleTableCell>
+      <VisibleTableCell columnId="replacement" isVisible={isVisible}>
         <ReplacementBadge active={Boolean(row.replaces_vehicle_id)} />
-      </TableCell>
-      <TableCell className="whitespace-nowrap">{row.replaces_plate ?? "—"}</TableCell>
-      <TableCell className="whitespace-nowrap">
+      </VisibleTableCell>
+      <VisibleTableCell columnId="repPlate" isVisible={isVisible} className="whitespace-nowrap">
+        {row.replaces_plate ?? "—"}
+      </VisibleTableCell>
+      <VisibleTableCell columnId="since" isVisible={isVisible} className="whitespace-nowrap">
         {formatReplacementSince(row.replacement_started_at) ?? "—"}
-      </TableCell>
+      </VisibleTableCell>
     </AppDataTableRow>
   );
 }
