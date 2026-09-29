@@ -38,6 +38,12 @@ function canReadStorageKey(
   if (key.startsWith("notifications/")) {
     return hasPermissionInSet(permissions, "notifications.view", isSuperAdmin);
   }
+  if (key.startsWith("vehicles/")) {
+    return (
+      hasPermissionInSet(permissions, "vehicles.view", isSuperAdmin) ||
+      hasPermissionInSet(permissions, "vehicles.manage", isSuperAdmin)
+    );
+  }
   return false;
 }
 

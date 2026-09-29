@@ -5,8 +5,9 @@ import {
   isVehicleCondition,
   isVehicleFuelCompany,
   isVehicleFuelType,
-  isVehicleTypeOfUse,
 } from "@/features/fleet/fleet-labels";
+import { isKuwaitPlate, plateToBikeId } from "../plate-id";
+import { USE_TYPE_KEY_RE } from "../vehicle-use-types";
 import { validateVehicleForm } from "../vehicle-form-validation";
 import {
   headerToField,
@@ -62,7 +63,6 @@ const ENUMS: Partial<Record<VehicleImportField, readonly string[]>> = {
   fuelType: ["chip", "card"],
   fuelCompany: ["mus", "unp", "rscd"],
   carType: ["company", "rent", "maintenance"],
-  typeOfUse: ["operational", "trainer", "standby"],
 };
 
 const ENUM_ERROR: Partial<Record<VehicleImportField, string>> = {
@@ -75,6 +75,8 @@ const ENUM_ERROR: Partial<Record<VehicleImportField, string>> = {
   typeOfUse: "invalid_type_of_use",
 };
 
+const FALLBACK_USE_TYPES = ["operational", "trainer", "standby"] as const;
+
 function normEnum(raw: string, allowed: readonly string[]): string | null {
   const text = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
   return allowed.find((item) => item === text) ?? null;
@@ -85,46 +87,92 @@ function textOrNull(value: string | undefined): string | null {
   return text ? text : null;
 }
 
+function normalizePlateKey(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function matchExisting(
+  existing: VehicleImportExisting[],
+  plate: string,
+  slug: string,
+): VehicleImportExisting | null {
+  const plateKey = normalizePlateKey(plate);
+  if (plateKey) {
+    const byPlate = existing.find((row) => normalizePlateKey(row.reg_number) === plateKey);
+    if (byPlate) return byPlate;
+  }
+  if (slug) {
+    const byBike = existing.find((row) => row.bike_id === slug);
+    if (byBike) return byBike;
+  }
+  return null;
+}
+
+function rowPlate(present: Partial<Record<VehicleImportField, string>>): string {
+  const rawPlate = present.regNumber?.trim() ?? "";
+  if (rawPlate) return rawPlate;
+  const rawId = present.bikeId?.trim() ?? "";
+  return isKuwaitPlate(rawId) ? rawId : "";
+}
+
 export function previewVehicleImport(input: {
   headers: string[];
   rows: string[][];
   existing: VehicleImportExisting[];
+  allowedUseTypes?: string[];
 }): { error: string | null; rows: VehicleImportPreviewRow[] } {
   const fieldIndex = new Map<VehicleImportField, number>();
   input.headers.forEach((header, index) => {
     const field = headerToField(header);
     if (field && !fieldIndex.has(field)) fieldIndex.set(field, index);
   });
-  if (!fieldIndex.has("bikeId")) return { error: "missing_vehicle_id_column", rows: [] };
+  if (!fieldIndex.has("bikeId") && !fieldIndex.has("regNumber")) {
+    return { error: "missing_vehicle_id_column", rows: [] };
+  }
 
-  const byBike = new Map(input.existing.map((row) => [row.bike_id, row]));
-  const counts = new Map<string, number>();
   const parsed = input.rows.map((row, rowIndex) => {
-    const bikeId = cell(row, fieldIndex.get("bikeId")).trim();
-    if (bikeId) counts.set(bikeId, (counts.get(bikeId) ?? 0) + 1);
-    return { row, rowIndex, bikeId };
+    const present: Partial<Record<VehicleImportField, string>> = {};
+    for (const [field, index] of fieldIndex) {
+      present[field] = cell(row, index);
+    }
+    const plate = rowPlate(present);
+    const rawId = present.bikeId?.trim() ?? "";
+    const slug = plate ? plateToBikeId(plate) : rawId;
+    return { row, rowIndex, present, plate, slug };
   });
+
+  const plateCounts = new Map<string, number>();
+  for (const item of parsed) {
+    const key = normalizePlateKey(item.plate);
+    if (key) plateCounts.set(key, (plateCounts.get(key) ?? 0) + 1);
+  }
+
+  const useTypes = input.allowedUseTypes?.length
+    ? input.allowedUseTypes
+    : [...FALLBACK_USE_TYPES];
 
   const rows: VehicleImportPreviewRow[] = [];
   for (const item of parsed) {
-    if (!item.bikeId) continue;
-    const existing = byBike.get(item.bikeId) ?? null;
-    if ((counts.get(item.bikeId) ?? 0) > 1) {
-      rows.push(errorRow(item.rowIndex, item.bikeId, "duplicate_in_file", existing));
+    if (!item.plate && !item.slug) continue;
+    const existing = matchExisting(input.existing, item.plate, item.slug);
+    const plate = item.plate || existing?.reg_number || "";
+    const displayId = plate || item.slug;
+    if (!plate) {
+      rows.push(errorRow(item.rowIndex, displayId, "missing_fields", existing));
       continue;
     }
-    const present: Partial<Record<VehicleImportField, string>> = {};
-    for (const [field, index] of fieldIndex) {
-      present[field] = cell(item.row, index);
+    if ((plateCounts.get(normalizePlateKey(plate)) ?? 0) > 1) {
+      rows.push(errorRow(item.rowIndex, plate, "duplicate_plate", existing));
+      continue;
     }
-    const built = buildSnapshot(existing, present);
+    const built = buildSnapshot(existing, { ...item.present, regNumber: plate, bikeId: plateToBikeId(plate) }, useTypes);
     if ("error" in built) {
-      rows.push(errorRow(item.rowIndex, item.bikeId, built.error, existing));
+      rows.push(errorRow(item.rowIndex, plate, built.error, existing));
       continue;
     }
     rows.push({
       rowIndex: item.rowIndex,
-      bikeId: item.bikeId,
+      bikeId: built.snapshot.bike_id,
       status: existing ? "update" : "create",
       error: null,
       after: built.snapshot,
@@ -165,6 +213,7 @@ function snapshotOf(row: VehicleImportExisting): VehicleSheetSnapshot {
 export function buildSnapshot(
   existing: VehicleImportExisting | null,
   present: Partial<Record<VehicleImportField, string>>,
+  allowedUseTypes: readonly string[] = FALLBACK_USE_TYPES,
 ): { snapshot: VehicleSheetSnapshot } | { error: string } {
   for (const field of Object.keys(ENUMS) as VehicleImportField[]) {
     const raw = present[field];
@@ -173,6 +222,15 @@ export function buildSnapshot(
     if (!allowed || !normEnum(raw, allowed)) {
       return { error: ENUM_ERROR[field] ?? "invalid_option" };
     }
+  }
+
+  const typeOfUseRaw = present.typeOfUse?.trim();
+  if (typeOfUseRaw) {
+    const normalized = typeOfUseRaw.toLowerCase().replace(/[\s-]+/g, "_");
+    const allowed =
+      allowedUseTypes.includes(normalized) ||
+      (USE_TYPE_KEY_RE.test(normalized) && allowedUseTypes.length === 0);
+    if (!allowed) return { error: "invalid_type_of_use" };
   }
 
   const kind = present.kind?.trim()
@@ -206,8 +264,9 @@ export function buildSnapshot(
         ? String(existing.fuel_monthly_limit_kwd)
         : "";
 
+  const bikeId = plateToBikeId(regNumber ?? "");
   const formError = validateVehicleForm({
-    bikeId: present.bikeId?.trim() || existing?.bike_id || "",
+    bikeId,
     regNumber: regNumber ?? "",
     chassisNo: chassisNo ?? "",
     make: make ?? "",
@@ -227,11 +286,7 @@ export function buildSnapshot(
     isVehicleFuelCompany,
   );
   const carType = pickEnum(present.carType, existing?.car_type ?? null, isVehicleCarType);
-  const typeOfUse = pickEnum(
-    present.typeOfUse,
-    existing?.type_of_use ?? null,
-    isVehicleTypeOfUse,
-  );
+  const typeOfUse = pickUseType(present.typeOfUse, existing?.type_of_use ?? null, allowedUseTypes);
 
   const fuelMonthly =
     present.fuelMonthlyLimitKwd === undefined
@@ -244,7 +299,7 @@ export function buildSnapshot(
 
   return {
     snapshot: {
-      bike_id: (present.bikeId ?? existing?.bike_id ?? "").trim(),
+      bike_id: bikeId,
       reg_number: regNumber,
       chassis_no: chassisNo,
       make,
@@ -284,4 +339,15 @@ function pickEnum<T extends string>(
   if (!text) return null;
   const normalized = text.toLowerCase().replace(/[\s-]+/g, "_");
   return guard(normalized) ? normalized : null;
+}
+
+function pickUseType(
+  raw: string | undefined,
+  fallback: string | null,
+  allowed: readonly string[],
+): string | null {
+  if (raw === undefined) return fallback;
+  const text = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!text) return null;
+  return allowed.includes(text) || USE_TYPE_KEY_RE.test(text) ? text : null;
 }

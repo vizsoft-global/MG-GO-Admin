@@ -4,7 +4,6 @@ import type {
   VehicleCondition,
   VehicleFuelCompany,
   VehicleFuelType,
-  VehicleTypeOfUse,
 } from "@/features/fleet/fleet-labels";
 
 export type VehicleStatus = "active" | "suspended" | "maintenance";
@@ -33,7 +32,8 @@ export type VehicleListRow = {
   location_text: string | null;
   condition: VehicleCondition | null;
   car_type: VehicleCarType | null;
-  type_of_use: VehicleTypeOfUse | null;
+  type_of_use: string | null;
+  type_of_use_label: string | null;
   fuel_type: VehicleFuelType | null;
   fuel_company: VehicleFuelCompany | null;
   chip_no: string | null;

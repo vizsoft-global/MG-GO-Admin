@@ -22,7 +22,7 @@ const EXPORT_READONLY: Array<{ header: string; value: (row: VehicleListRow) => s
 function writableValue(row: VehicleListRow, field: VehicleImportField): string | number {
   switch (field) {
     case "bikeId":
-      return row.bike_id;
+      return row.reg_number || row.bike_id;
     case "regNumber":
       return row.reg_number ?? "";
     case "chassisNo":

@@ -275,7 +275,7 @@ Returns one object or `null` (no assignment). App does not send arguments. Field
 | Field | Type | Notes |
 |---|---|---|
 | `vehicle_id` | uuid | `vehicles.id` |
-| `plate` | text | Display plate (`reg_number` / bike plate) |
+| `plate` | text | Unique business Vehicle ID (`reg_number`). `bike_id` is a slug alias (`5/6767` → `5-6767`) so older app fields keep working. **No Play** — the app already reads `plate`. |
 | `kind` | text | `bike` \| `car` from `vehicle_type_key` |
 | `fuel_type` | text | `chip` \| `card` |
 | `chip_no` | text \| null | Fuel chip number |

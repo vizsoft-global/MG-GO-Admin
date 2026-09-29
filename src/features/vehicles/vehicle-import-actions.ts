@@ -11,7 +11,6 @@ import {
   type VehicleImportPreviewRow,
   type VehicleSheetSnapshot,
 } from "./import/vehicle-import-preview";
-import { headerToField } from "./import/vehicle-import-columns";
 import {
   nextUndoSeq,
   redoRowPlan,
@@ -158,26 +157,18 @@ export async function applyVehicleImport(input: {
   if (input.rows.length > MAX_ROWS) return { error: "too_many_rows" };
 
   const supabase = await createClient();
-  const bikeHeader = input.headers.findIndex((header) => headerToField(header) === "bikeId");
-  const bikeIds = [
-    ...new Set(
-      input.rows
-        .map((row) => (bikeHeader >= 0 ? (row[bikeHeader] ?? "").trim() : ""))
-        .filter(Boolean),
-    ),
-  ];
-  const existing: VehicleImportExisting[] = [];
-  for (let i = 0; i < bikeIds.length; i += 200) {
-    const slice = bikeIds.slice(i, i + 200);
-    const { data, error } = await supabase.from("vehicles").select(VEHICLE_COLUMNS).in("bike_id", slice);
-    if (error) return { error: error.message };
-    existing.push(...(data ?? []).map((row) => asSnapshot(row)));
-  }
+  const [{ data, error }, usesRes] = await Promise.all([
+    supabase.from("vehicles").select(VEHICLE_COLUMNS),
+    supabase.from("vehicle_use_types").select("key").eq("is_active", true),
+  ]);
+  if (error) return { error: error.message };
+  const existing = (data ?? []).map((row) => asSnapshot(row));
 
   const preview = previewVehicleImport({
     headers: input.headers,
     rows: input.rows,
     existing,
+    allowedUseTypes: (usesRes.data ?? []).map((row) => row.key),
   });
   if (preview.error) return { error: preview.error };
   if (!preview.rows.length) return { error: "empty_sheet" };

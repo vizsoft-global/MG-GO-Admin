@@ -448,6 +448,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "vehicles.manage",
   },
   {
+    id: "vehicle-uses",
+    defaultLabel: "Vehicle uses",
+    defaultIcon: "Car",
+    href: "/settings/vehicle-uses",
+    defaultGroup: "Settings",
+    defaultOrder: 2.55,
+    permission: "settings.manage",
+  },
+  {
     id: "source-companies",
     defaultLabel: "Companies",
     defaultIcon: "Handshake",
@@ -617,6 +626,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   profile: "profile",
   branding: "branding",
   "driver-app": "driverApp",
+  "vehicle-uses": "vehicleUses",
   "source-companies": "sourceCompanies",
   storage: "storage",
   roles: "roles",

@@ -12,17 +12,18 @@ import {
   isVehicleCondition,
   isVehicleFuelCompany,
   isVehicleFuelType,
-  isVehicleTypeOfUse,
   kuwaitYmdToIso,
 } from "@/features/fleet/fleet-labels";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { assignedDriverProjectWrite } from "./vehicles-list-utils";
 import { validateVehicleForm } from "./vehicle-form-validation";
+import { plateToBikeId } from "./plate-id";
+import { vehicleAssignedOnDuty } from "./vehicle-on-duty";
 import type {
   VehicleCarType,
   VehicleCondition,
   VehicleFuelCompany,
   VehicleFuelType,
-  VehicleTypeOfUse,
 } from "@/features/fleet/fleet-labels";
 import type {
   VehicleListRow,
@@ -34,7 +35,11 @@ import type {
 
 function formatError(error: { code?: string | null; message?: string | null } | null | undefined) {
   if (!error?.message) return "save_failed";
-  if (error.code === "23505") return "duplicate_bike_id";
+  if (error.code === "23505") {
+    const msg = error.message ?? "";
+    if (msg.includes("reg_number")) return "duplicate_plate";
+    return "duplicate_bike_id";
+  }
   return error.code ? `${error.code} — ${error.message}` : error.message;
 }
 
@@ -104,23 +109,38 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
   if ("error" in auth) throw new Error(auth.error);
 
   const supabase = await createClient();
-  const [vehiclesRes, typesRes, driversRes, partnersRes, zonesRes] = await Promise.all([
+  const today = kuwaitTodayYmd();
+  const [vehiclesRes, typesRes, driversRes, partnersRes, zonesRes, useTypesRes, logsRes, shiftsRes] =
+    await Promise.all([
     supabase
       .from("vehicles")
       .select(
         "id, bike_id, reg_number, chassis_no, make, model, model_year, project_type, status, vehicle_type_key, location_text, condition, car_type, type_of_use, fuel_type, fuel_company, chip_no, fuel_monthly_limit_kwd, owner_partner_id, replaces_vehicle_id, replacement_started_at, created_at",
       )
-      .order("bike_id"),
+      .order("reg_number"),
     supabase.from("vehicle_types").select("key, label_en, label_ar"),
     supabase
       .from("drivers")
       .select(
-        "id, driver_code, employee_id, vehicle_id, is_on_duty, partner_id, zone_id, project_key, accommodation, profiles!drivers_id_fkey(full_name, phone)",
+        "id, driver_code, employee_id, vehicle_id, partner_id, zone_id, project_key, accommodation, profiles!drivers_id_fkey(full_name, phone)",
       )
       .not("vehicle_id", "is", null)
       .is("archived_at", null),
     supabase.from("partners").select("id, name"),
     supabase.from("zones").select("id, name"),
+    supabase.from("vehicle_use_types").select("key, label_en, label_ar"),
+    supabase
+      .from("attendance_logs")
+      .select("driver_id")
+      .eq("log_date", today)
+      .not("check_in_at", "is", null)
+      .is("check_out_at", null),
+    supabase
+      .from("driver_daily_shifts")
+      .select(
+        "driver_id, shift_date, shift_type, session1_start, session1_end, session1_end_day_offset, session2_start, session2_end, session2_start_day_offset, session2_end_day_offset",
+      )
+      .eq("shift_date", today),
   ]);
 
   if (vehiclesRes.error) throw new Error(vehiclesRes.error.message);
@@ -144,7 +164,6 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       employee_id: string;
       name: string | null;
       phone: string | null;
-      onDuty: boolean;
       project_key: string | null;
       accommodation: string | null;
       partner_name: string | null;
@@ -156,7 +175,6 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
     driver_code: string;
     employee_id: string;
     vehicle_id: string | null;
-    is_on_duty: boolean | null;
     partner_id: string | null;
     zone_id: string | null;
     project_key: string | null;
@@ -171,7 +189,6 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       employee_id: row.employee_id,
       name: profile?.full_name ?? null,
       phone: profile?.phone ?? null,
-      onDuty: row.is_on_duty === true,
       project_key: row.project_key,
       accommodation: row.accommodation,
       partner_name: row.partner_id ? partnerNames.get(row.partner_id) ?? null : null,
@@ -182,12 +199,35 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
   const plateById = new Map(
     ((vehiclesRes.data ?? []) as VehicleDbRow[]).map((row) => [row.id, row.reg_number]),
   );
+  const useTypeLabels = new Map(
+    ((useTypesRes.data ?? []) as Array<{ key: string; label_en: string; label_ar: string }>).map(
+      (row) => [row.key, row.label_en],
+    ),
+  );
+  const openAttendance = new Set(
+    ((logsRes.data ?? []) as Array<{ driver_id: string }>).map((row) => row.driver_id),
+  );
+  const shiftByDriver = new Map(
+    ((shiftsRes.data ?? []) as Array<{
+      driver_id: string;
+      shift_date: string;
+      shift_type: string;
+      session1_start: string;
+      session1_end: string;
+      session1_end_day_offset: number;
+      session2_start: string | null;
+      session2_end: string | null;
+      session2_start_day_offset: number;
+      session2_end_day_offset: number;
+    }>).map((row) => [row.driver_id, row]),
+  );
 
   void logAdminRead("vehicles", "/vehicles");
 
   return ((vehiclesRes.data ?? []) as VehicleDbRow[]).map((row) => {
     const driver = assigned.get(row.id);
     const type = typeLabels.get(row.vehicle_type_key);
+    const useKey = row.type_of_use?.trim() || null;
     return {
       id: row.id,
       bike_id: row.bike_id,
@@ -203,7 +243,8 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       location_text: row.location_text,
       condition: isVehicleCondition(row.condition) ? row.condition : null,
       car_type: isVehicleCarType(row.car_type) ? row.car_type : null,
-      type_of_use: isVehicleTypeOfUse(row.type_of_use) ? row.type_of_use : null,
+      type_of_use: useKey,
+      type_of_use_label: useKey ? useTypeLabels.get(useKey) ?? useKey : null,
       fuel_type: isVehicleFuelType(row.fuel_type) ? row.fuel_type : null,
       fuel_company: isVehicleFuelCompany(row.fuel_company) ? row.fuel_company : null,
       chip_no: row.chip_no,
@@ -222,7 +263,11 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       assigned_accommodation: driver?.accommodation ?? null,
       assigned_partner_name: driver?.partner_name ?? null,
       assigned_zone_name: driver?.zone_name ?? null,
-      assigned_on_duty: driver?.onDuty === true,
+      assigned_on_duty: vehicleAssignedOnDuty({
+        assignedDriverId: driver?.id ?? null,
+        hasOpenAttendance: Boolean(driver && openAttendance.has(driver.id)),
+        shift: driver ? shiftByDriver.get(driver.id) ?? null : null,
+      }),
       created_at: row.created_at,
     };
   });
@@ -240,7 +285,8 @@ export async function saveVehicle(
   if ("error" in auth) return auth;
 
   const id = emptyText(formData.get("id"));
-  const bikeId = emptyText(formData.get("bikeId"));
+  const regNumber = emptyText(formData.get("regNumber"));
+  const bikeId = plateToBikeId(regNumber);
   const vehicleTypeKey = emptyText(formData.get("vehicleTypeKey")) || "bike";
   const status = emptyText(formData.get("status")) as VehicleStatus;
   const carTypeRaw = emptyText(formData.get("carType"));
@@ -253,10 +299,10 @@ export async function saveVehicle(
   const replacesVehicleId = optionalText(formData.get("replacesVehicleId"));
   const replacementStartedRaw = emptyText(formData.get("replacementStartedAt"));
 
-  if (!bikeId) return { error: "missing_fields" };
+  if (!regNumber) return { error: "missing_fields" };
   const formError = validateVehicleForm({
     bikeId,
-    regNumber: emptyText(formData.get("regNumber")),
+    regNumber,
     chassisNo: emptyText(formData.get("chassisNo")),
     make: emptyText(formData.get("make")),
     model: emptyText(formData.get("model")),
@@ -276,7 +322,7 @@ export async function saveVehicle(
   const fuelCompany: VehicleFuelCompany | null = isVehicleFuelCompany(fuelCompanyRaw)
     ? fuelCompanyRaw
     : null;
-  const typeOfUse: VehicleTypeOfUse | null = isVehicleTypeOfUse(typeOfUseRaw) ? typeOfUseRaw : null;
+  const typeOfUse = typeOfUseRaw || null;
 
   const modelYear = modelYearRaw ? Number(modelYearRaw) : null;
 
@@ -293,7 +339,7 @@ export async function saveVehicle(
   const supabase = await createClient();
   const payload = {
     bike_id: bikeId,
-    reg_number: optionalText(formData.get("regNumber")),
+    reg_number: regNumber,
     chassis_no: optionalText(formData.get("chassisNo")),
     make: optionalText(formData.get("make")),
     model: optionalText(formData.get("model")),

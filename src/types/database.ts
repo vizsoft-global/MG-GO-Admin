@@ -7136,6 +7136,183 @@ export type Database = {
           },
         ]
       }
+      vehicle_accidents: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          location_text: string | null
+          notes: string | null
+          occurred_at: string
+          severity: string
+          storage_key: string | null
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          location_text?: string | null
+          notes?: string | null
+          occurred_at?: string
+          severity?: string
+          storage_key?: string | null
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          location_text?: string | null
+          notes?: string | null
+          occurred_at?: string
+          severity?: string
+          storage_key?: string | null
+          vehicle_id?: string
+        }
+        Relationships: []
+      }
+      vehicle_documents: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          doc_type: string
+          expires_at: string | null
+          file_name: string | null
+          id: string
+          storage_key: string
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          doc_type: string
+          expires_at?: string | null
+          file_name?: string | null
+          id?: string
+          storage_key: string
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          doc_type?: string
+          expires_at?: string | null
+          file_name?: string | null
+          id?: string
+          storage_key?: string
+          vehicle_id?: string
+        }
+        Relationships: []
+      }
+      vehicle_handovers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          from_driver_id: string | null
+          handed_at: string
+          id: string
+          notes: string | null
+          storage_key: string | null
+          to_driver_id: string | null
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          from_driver_id?: string | null
+          handed_at?: string
+          id?: string
+          notes?: string | null
+          storage_key?: string | null
+          to_driver_id?: string | null
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          from_driver_id?: string | null
+          handed_at?: string
+          id?: string
+          notes?: string | null
+          storage_key?: string | null
+          to_driver_id?: string | null
+          vehicle_id?: string
+        }
+        Relationships: []
+      }
+      vehicle_services: {
+        Row: {
+          cost_kwd: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          notes: string | null
+          odometer: number | null
+          serviced_at: string
+          vehicle_id: string
+          vendor: string | null
+        }
+        Insert: {
+          cost_kwd?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          notes?: string | null
+          odometer?: number | null
+          serviced_at?: string
+          vehicle_id: string
+          vendor?: string | null
+        }
+        Update: {
+          cost_kwd?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          notes?: string | null
+          odometer?: number | null
+          serviced_at?: string
+          vehicle_id?: string
+          vendor?: string | null
+        }
+        Relationships: []
+      }
+      vehicle_use_types: {
+        Row: {
+          created_at: string
+          is_active: boolean
+          is_system: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          is_active?: boolean
+          is_system?: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          is_active?: boolean
+          is_system?: boolean
+          key?: string
+          label_ar?: string
+          label_en?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       vehicle_types: {
         Row: {
           is_active: boolean
@@ -8892,6 +9069,31 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "source_companies"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_upsert_vehicle_use_type: {
+        Args: {
+          p_is_active: boolean
+          p_key: string
+          p_label_ar: string
+          p_label_en: string
+          p_sort_order?: number
+        }
+        Returns: {
+          created_at: string
+          is_active: boolean
+          is_system: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "vehicle_use_types"
           isOneToOne: true
           isSetofReturn: false
         }

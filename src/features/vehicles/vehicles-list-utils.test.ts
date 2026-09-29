@@ -35,6 +35,7 @@ function row(
     condition: "running",
     car_type: "company",
     type_of_use: "operational",
+    type_of_use_label: "Operational",
     fuel_type: "chip",
     fuel_company: "mus",
     chip_no: null,
@@ -199,7 +200,7 @@ describe("applyVehicleKpi", () => {
     assert.equal(suspended.tab, "all");
     assert.equal(suspended.status, "suspended");
     const repair = applyVehicleKpi("underRepair", suspended);
-    assert.equal(repair.status, "maintenance");
+    assert.equal(repair.status, "under_repair");
     assert.equal(repair.tab, "all");
   });
 
@@ -235,14 +236,15 @@ describe("vehicleListKpis", () => {
       row({ id: "1", bike_id: "A", assigned_on_duty: true, car_type: "company" }),
       row({ id: "2", bike_id: "B", status: "suspended", car_type: "rent" }),
       row({ id: "3", bike_id: "C", status: "maintenance", car_type: "maintenance" }),
+      row({ id: "4", bike_id: "D", status: "active", condition: "repair_required", car_type: "company" }),
     ]);
     assert.deepEqual(kpis, {
-      total: 3,
+      total: 4,
       onDuty: 1,
       suspended: 1,
-      company: 1,
+      company: 2,
       rent: 1,
-      underRepair: 1,
+      underRepair: 2,
     });
   });
 });

@@ -37,42 +37,45 @@ function existing(overrides: Partial<VehicleImportExisting> = {}): VehicleImport
 }
 
 describe("vehicle import preview", () => {
-  it("creates a new bike when the id is unknown and kind is blank", () => {
+  it("creates a new bike when the plate is unknown and kind is blank", () => {
     const result = previewVehicleImport({
       headers,
-      rows: [["NEW1", "", ""]],
+      rows: [["9/1001", "", ""]],
       existing: [],
     });
     assert.equal(result.rows[0]?.status, "create");
     assert.equal(result.rows[0]?.after?.vehicle_type_key, "bike");
+    assert.equal(result.rows[0]?.after?.bike_id, "9-1001");
+    assert.equal(result.rows[0]?.after?.reg_number, "9/1001");
     assert.equal(result.rows[0]?.before, null);
   });
 
-  it("updates an existing vehicle and clears a blank plate", () => {
+  it("updates an existing vehicle by plate and keeps the plate", () => {
     const result = previewVehicleImport({
       headers,
-      rows: [["BIKE1", "", "car"]],
+      rows: [["5/6767", "", "car"]],
       existing: [existing()],
     });
     assert.equal(result.rows[0]?.status, "update");
     assert.equal(result.rows[0]?.before?.reg_number, "5/6767");
-    assert.equal(result.rows[0]?.after?.reg_number, null);
+    assert.equal(result.rows[0]?.after?.reg_number, "5/6767");
+    assert.equal(result.rows[0]?.after?.bike_id, "5-6767");
     assert.equal(result.rows[0]?.after?.vehicle_type_key, "car");
   });
 
-  it("rejects both rows when the same Vehicle ID appears twice", () => {
+  it("rejects both rows when the same plate appears twice", () => {
     const result = previewVehicleImport({
       headers,
       rows: [
-        ["DUP1", "5/1", "bike"],
-        ["DUP1", "5/2", "bike"],
+        ["5/1", "5/1", "bike"],
+        ["5/1", "5/1", "bike"],
       ],
       existing: [],
     });
     assert.equal(result.rows.length, 2);
     assert.deepEqual(
       result.rows.map((row) => row.error),
-      ["duplicate_in_file", "duplicate_in_file"],
+      ["duplicate_plate", "duplicate_plate"],
     );
   });
 
