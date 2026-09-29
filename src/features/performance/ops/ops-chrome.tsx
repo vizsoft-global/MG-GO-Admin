@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Bike,
@@ -11,10 +11,12 @@ import {
   FilterX,
   Flag,
   Globe2,
+  ListOrdered,
   MapPin,
   Store,
   Users,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import {
@@ -33,12 +35,15 @@ import {
   OPS_VIEW_BY,
   SOURCE_COMPANY_KEYS,
   SOURCE_COMPANY_LABEL,
+  TOP_BOTTOM_SHOW_PRESETS,
   isChartableDimKey,
+  parseTopBottomCustomN,
   storesVisibleForPartners,
   type OpsChartMetric,
   type OpsGranularity,
   type OpsOrderStatus,
   type OpsRangePreset,
+  type TopBottomShowSelection,
 } from "../performance-ops-formulas";
 import type { OpsOptions, OpsSlicers, PerformanceHubTab } from "../performance-ops-types";
 import { partnerLabel, vehicleLabel } from "../performance-ops-format";
@@ -113,6 +118,90 @@ export function OpsViewByPills({
           {t(`viewBy.${id}`)}
         </ToggleChip>
       ))}
+    </div>
+  );
+}
+
+export function OpsTopBottomShowPills({
+  value,
+  onChange,
+  resetKey = 0,
+}: {
+  value: TopBottomShowSelection;
+  onChange: (next: TopBottomShowSelection) => void;
+  resetKey?: number;
+}) {
+  const t = useTranslations("pages.performance.ops");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState(value.mode === "custom" ? String(value.n) : "");
+  const [invalid, setInvalid] = useState(false);
+
+  useEffect(() => {
+    setDraft("");
+    setInvalid(false);
+  }, [resetKey]);
+
+  function commitCustom() {
+    const parsed = parseTopBottomCustomN(draft);
+    if (parsed == null) {
+      setInvalid(draft.trim() !== "");
+      setDraft(value.mode === "custom" ? String(value.n) : "");
+      return;
+    }
+    setInvalid(false);
+    setDraft(String(parsed));
+    onChange({ mode: "custom", n: parsed });
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        <ListOrdered className="size-3 opacity-70" aria-hidden />
+        {t("show.label")}
+      </span>
+      <ToggleChip selected={value.mode === "auto"} onClick={() => onChange({ mode: "auto" })}>
+        {t("show.auto")}
+      </ToggleChip>
+      {TOP_BOTTOM_SHOW_PRESETS.map((n) => (
+        <ToggleChip
+          key={n}
+          selected={value.mode === "preset" && value.n === n}
+          onClick={() => onChange({ mode: "preset", n })}
+        >
+          {n}
+        </ToggleChip>
+      ))}
+      <ToggleChip
+        selected={value.mode === "custom"}
+        onClick={() => {
+          const parsed = parseTopBottomCustomN(draft);
+          if (parsed != null) onChange({ mode: "custom", n: parsed });
+          inputRef.current?.focus();
+        }}
+      >
+        {t("show.custom")}
+      </ToggleChip>
+      <Input
+        ref={inputRef}
+        type="text"
+        inputMode="numeric"
+        aria-label={t("show.customAria")}
+        aria-invalid={invalid}
+        placeholder="1–50"
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setInvalid(false);
+        }}
+        onBlur={commitCustom}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        className="h-9 w-14 px-2 text-center text-[11px]"
+      />
+      {invalid ? (
+        <span className="text-[10px] text-destructive">{t("show.invalid")}</span>
+      ) : null}
     </div>
   );
 }

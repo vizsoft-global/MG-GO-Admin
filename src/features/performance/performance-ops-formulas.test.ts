@@ -47,6 +47,14 @@ import {
   targetEfficiencyPct,
   toggleOpsMultiSelect,
   topBottomN,
+  parseTopBottomCustomN,
+  resolveTopBottomRequestedN,
+  disjointTopBottomCounts,
+  compareTopBottomRows,
+  pairTopBottomAuto,
+  pairTopBottomDisjoint,
+  TOP_BOTTOM_SHOW_PRESETS,
+  DEFAULT_TOP_BOTTOM_SHOW,
 } from "./performance-ops-formulas";
 
 describe("riderDpd / overallDpd", () => {
@@ -182,12 +190,205 @@ describe("efficiency", () => {
 describe("topBottomN", () => {
   it("clamps round(count/10) between 2 and 10; empty is 0", () => {
     assert.equal(topBottomN(0), 0);
+    assert.equal(topBottomN(1), 2);
+    assert.equal(topBottomN(2), 2);
+    assert.equal(topBottomN(3), 2);
     assert.equal(topBottomN(10), 2);
     assert.equal(topBottomN(14), 2);
     assert.equal(topBottomN(15), 2);
     assert.equal(topBottomN(16), 2);
     assert.equal(topBottomN(100), 10);
     assert.equal(topBottomN(200), 10);
+  });
+});
+
+function named(n: number, value: number, extra?: { working_days?: number }) {
+  return { name: `R${n}`, value, ...extra };
+}
+
+describe("parseTopBottomCustomN", () => {
+  it("accepts integers 1–50 including Custom 50", () => {
+    assert.equal(parseTopBottomCustomN(1), 1);
+    assert.equal(parseTopBottomCustomN("1"), 1);
+    assert.equal(parseTopBottomCustomN(" 7 "), 7);
+    assert.equal(parseTopBottomCustomN(50), 50);
+    assert.equal(parseTopBottomCustomN("50"), 50);
+  });
+
+  it("rejects empty, 0, negative, decimal, and 51+", () => {
+    assert.equal(parseTopBottomCustomN(""), null);
+    assert.equal(parseTopBottomCustomN("   "), null);
+    assert.equal(parseTopBottomCustomN(null), null);
+    assert.equal(parseTopBottomCustomN(undefined), null);
+    assert.equal(parseTopBottomCustomN(0), null);
+    assert.equal(parseTopBottomCustomN("0"), null);
+    assert.equal(parseTopBottomCustomN(-1), null);
+    assert.equal(parseTopBottomCustomN("-3"), null);
+    assert.equal(parseTopBottomCustomN(3.7), null);
+    assert.equal(parseTopBottomCustomN("3.7"), null);
+    assert.equal(parseTopBottomCustomN("3.0"), null);
+    assert.equal(parseTopBottomCustomN(51), null);
+    assert.equal(parseTopBottomCustomN("51"), null);
+    assert.equal(parseTopBottomCustomN(100), null);
+    assert.equal(parseTopBottomCustomN("abc"), null);
+  });
+});
+
+describe("resolveTopBottomRequestedN", () => {
+  it("Auto still uses topBottomN per pool and ignores presets", () => {
+    assert.deepEqual(DEFAULT_TOP_BOTTOM_SHOW, { mode: "auto" });
+    assert.deepEqual(TOP_BOTTOM_SHOW_PRESETS, [3, 5, 10, 20]);
+    assert.equal(resolveTopBottomRequestedN({ mode: "auto" }, 0), 0);
+    assert.equal(resolveTopBottomRequestedN({ mode: "auto" }, 1), 2);
+    assert.equal(resolveTopBottomRequestedN({ mode: "auto" }, 3), 2);
+    assert.equal(resolveTopBottomRequestedN({ mode: "auto" }, 100), 10);
+    assert.equal(resolveTopBottomRequestedN({ mode: "auto" }, 200), 10);
+  });
+
+  it("preset and custom apply the same requested N to every pool", () => {
+    assert.equal(resolveTopBottomRequestedN({ mode: "preset", n: 3 }, 1), 3);
+    assert.equal(resolveTopBottomRequestedN({ mode: "preset", n: 3 }, 80), 3);
+    assert.equal(resolveTopBottomRequestedN({ mode: "custom", n: 50 }, 12), 50);
+    assert.equal(resolveTopBottomRequestedN({ mode: "custom", n: 50 }, 200), 50);
+  });
+});
+
+describe("disjointTopBottomCounts", () => {
+  it("1/2/3-item pools and Show 3 with fewer items", () => {
+    assert.deepEqual(disjointTopBottomCounts(0, 3), { topCount: 0, bottomCount: 0 });
+    assert.deepEqual(disjointTopBottomCounts(1, 3), { topCount: 1, bottomCount: 0 });
+    assert.deepEqual(disjointTopBottomCounts(2, 3), { topCount: 1, bottomCount: 1 });
+    assert.deepEqual(disjointTopBottomCounts(3, 3), { topCount: 2, bottomCount: 1 });
+  });
+
+  it("never overlaps when 2N would exceed the pool; Custom 50", () => {
+    assert.deepEqual(disjointTopBottomCounts(4, 3), { topCount: 2, bottomCount: 2 });
+    assert.deepEqual(disjointTopBottomCounts(6, 3), { topCount: 3, bottomCount: 3 });
+    assert.deepEqual(disjointTopBottomCounts(10, 3), { topCount: 3, bottomCount: 3 });
+    assert.deepEqual(disjointTopBottomCounts(5, 5), { topCount: 3, bottomCount: 2 });
+    assert.deepEqual(disjointTopBottomCounts(12, 50), { topCount: 6, bottomCount: 6 });
+    assert.deepEqual(disjointTopBottomCounts(100, 50), { topCount: 50, bottomCount: 50 });
+  });
+});
+
+describe("pairTopBottomAuto", () => {
+  it("keeps Auto overlap and value-only sort on 1/2/3-item datasets", () => {
+    const one = [named(1, 10)];
+    const auto1 = pairTopBottomAuto(one, (r) => r.value, topBottomN(1));
+    assert.deepEqual(auto1.top.map((r) => r.name), ["R1"]);
+    assert.deepEqual(auto1.bottom.map((r) => r.name), ["R1"]);
+
+    const two = [named(1, 10), named(2, 4)];
+    const auto2 = pairTopBottomAuto(two, (r) => r.value, topBottomN(2));
+    assert.deepEqual(auto2.top.map((r) => r.name), ["R1", "R2"]);
+    assert.deepEqual(auto2.bottom.map((r) => r.name), ["R2", "R1"]);
+
+    const three = [named(1, 10), named(2, 5), named(3, 1)];
+    const auto3 = pairTopBottomAuto(three, (r) => r.value, topBottomN(3));
+    assert.deepEqual(auto3.top.map((r) => r.name), ["R1", "R2"]);
+    assert.deepEqual(auto3.bottom.map((r) => r.name), ["R3", "R2"]);
+  });
+});
+
+describe("pairTopBottomDisjoint", () => {
+  it("Show 3 on 1/2/3-item datasets is capped and Top/Bottom names are disjoint", () => {
+    const one = pairTopBottomDisjoint([named(1, 10)], (r) => r.value, 3, (r) => r.name);
+    assert.deepEqual(one.top.map((r) => r.name), ["R1"]);
+    assert.deepEqual(one.bottom.map((r) => r.name), []);
+
+    const two = pairTopBottomDisjoint(
+      [named(1, 10), named(2, 4)],
+      (r) => r.value,
+      3,
+      (r) => r.name,
+    );
+    assert.deepEqual(two.top.map((r) => r.name), ["R1"]);
+    assert.deepEqual(two.bottom.map((r) => r.name), ["R2"]);
+    assert.equal(new Set([...two.top, ...two.bottom].map((r) => r.name)).size, 2);
+
+    const three = pairTopBottomDisjoint(
+      [named(1, 10), named(2, 5), named(3, 1)],
+      (r) => r.value,
+      3,
+      (r) => r.name,
+    );
+    assert.deepEqual(three.top.map((r) => r.name), ["R1", "R2"]);
+    assert.deepEqual(three.bottom.map((r) => r.name), ["R3"]);
+    const names = [...three.top, ...three.bottom].map((r) => r.name);
+    assert.equal(names.length, new Set(names).size);
+  });
+
+  it("Custom 50 on a 12-item pool splits 6/6 with no shared name", () => {
+    const rows = Array.from({ length: 12 }, (_, i) => named(i + 1, 12 - i));
+    const pair = pairTopBottomDisjoint(rows, (r) => r.value, 50, (r) => r.name);
+    assert.equal(pair.top.length, 6);
+    assert.equal(pair.bottom.length, 6);
+    const names = [...pair.top, ...pair.bottom].map((r) => r.name);
+    assert.equal(names.length, new Set(names).size);
+    assert.deepEqual(pair.top.map((r) => r.name), ["R1", "R2", "R3", "R4", "R5", "R6"]);
+    assert.deepEqual(pair.bottom.map((r) => r.name), ["R12", "R11", "R10", "R9", "R8", "R7"]);
+  });
+
+  it("Bottom is worst-first (reverse of the desc-sorted tail)", () => {
+    const rows = [named(1, 9), named(2, 6), named(3, 3), named(4, 1), named(5, 0), named(6, -1)];
+    const pair = pairTopBottomDisjoint(rows, (r) => r.value, 3, (r) => r.name);
+    assert.deepEqual(pair.top.map((r) => r.name), ["R1", "R2", "R3"]);
+    assert.deepEqual(pair.bottom.map((r) => r.name), ["R6", "R5", "R4"]);
+  });
+});
+
+describe("compareTopBottomRows / tie ordering", () => {
+  it("breaks ties with working_days desc then name when that field is available", () => {
+    const a = { name: "Ali", value: 10, working_days: 2 };
+    const b = { name: "Ben", value: 10, working_days: 5 };
+    assert.ok(compareTopBottomRows(b, a, (r) => r.name, (r) => r.working_days) < 0);
+    const tiedDays = [
+      { name: "Ben", value: 10, working_days: 2 },
+      { name: "Ali", value: 10, working_days: 2 },
+      { name: "Zoe", value: 1, working_days: 9 },
+      { name: "Yan", value: 0, working_days: 9 },
+    ];
+    const pair = pairTopBottomDisjoint(
+      tiedDays,
+      (r) => r.value,
+      2,
+      (r) => r.name,
+      (r) => r.working_days,
+    );
+    assert.deepEqual(pair.top.map((r) => r.name), ["Ali", "Ben"]);
+    assert.deepEqual(pair.bottom.map((r) => r.name), ["Yan", "Zoe"]);
+  });
+
+  it("does not require working_days on stores/zones — value then name still works", () => {
+    const stores = [
+      { name: "Zulu Kitchen", value: 40 },
+      { name: "Alpha Grill", value: 40 },
+    ];
+    const pair = pairTopBottomDisjoint(stores, (r) => r.value, 2, (r) => r.name);
+    assert.deepEqual(pair.top.map((r) => r.name), ["Alpha Grill"]);
+    assert.deepEqual(pair.bottom.map((r) => r.name), ["Zulu Kitchen"]);
+    assert.doesNotThrow(() =>
+      compareTopBottomRows(stores[0]!, stores[1]!, (r) => r.name),
+    );
+  });
+
+  it("uses working_days on a store/zone only when the accessor is passed", () => {
+    const zones = [
+      { name: "Hawally", value: 20, working_days: 1 },
+      { name: "Jahra", value: 20, working_days: 8 },
+    ];
+    const withDays = pairTopBottomDisjoint(
+      zones,
+      (r) => r.value,
+      2,
+      (r) => r.name,
+      (r) => r.working_days,
+    );
+    assert.deepEqual(withDays.top.map((r) => r.name), ["Jahra"]);
+    assert.deepEqual(withDays.bottom.map((r) => r.name), ["Hawally"]);
+    const withoutDays = pairTopBottomDisjoint(zones, (r) => r.value, 2, (r) => r.name);
+    assert.deepEqual(withoutDays.top.map((r) => r.name), ["Hawally"]);
+    assert.deepEqual(withoutDays.bottom.map((r) => r.name), ["Jahra"]);
   });
 });
 

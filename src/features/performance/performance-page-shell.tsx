@@ -14,6 +14,7 @@ import {
   attachTrendEff,
   bucketOpsTrend,
   DEFAULT_OPS_PRESET,
+  DEFAULT_TOP_BOTTOM_SHOW,
   opsYearOptions,
   resetOpsPeriod,
   resolveOpsRange,
@@ -22,6 +23,7 @@ import {
   type OpsChartMetric,
   type OpsGranularity,
   type OpsRangePreset,
+  type TopBottomShowSelection,
 } from "./performance-ops-formulas";
 import { downloadCsv, toCsv } from "./performance-ops-table";
 import {
@@ -31,7 +33,13 @@ import {
 } from "./performance-ops-types";
 import { enrichOpsRider } from "./performance-ops-format";
 import { usePerformanceOpsBounds, usePerformanceOpsSnapshot } from "./use-performance";
-import { OpsGranularityPills, OpsRangePills, OpsSlicerBar, OpsViewByPills } from "./ops/ops-chrome";
+import {
+  OpsGranularityPills,
+  OpsRangePills,
+  OpsSlicerBar,
+  OpsTopBottomShowPills,
+  OpsViewByPills,
+} from "./ops/ops-chrome";
 import { OpsOverviewTab } from "./ops/ops-overview-tab";
 import { OpsDpdTab } from "./ops/ops-dpd-tab";
 import { OpsRidersTab } from "./ops/ops-riders-tab";
@@ -51,6 +59,8 @@ export function PerformancePageShell() {
   const [trendYear, setTrendYear] = useState<number | null>(null);
   const [slicers, setSlicers] = useState<OpsSlicers>(EMPTY_OPS_SLICERS);
   const [metric, setMetric] = useState<OpsChartMetric>("orders");
+  const [topBottomShow, setTopBottomShow] =
+    useState<TopBottomShowSelection>(DEFAULT_TOP_BOTTOM_SHOW);
   const [filterResetKey, setFilterResetKey] = useState(0);
 
   const boundsQuery = usePerformanceOpsBounds();
@@ -281,13 +291,23 @@ export function PerformancePageShell() {
             setCustomFrom(next.customFrom);
             setCustomTo(next.customTo);
             setTrendYear(null);
+            setTopBottomShow(DEFAULT_TOP_BOTTOM_SHOW);
             setFilterResetKey((k) => k + 1);
           }}
           onExport={data ? exportTab : undefined}
           exportLabel={t("ops.exportTab")}
         />
 
-        <OpsViewByPills tab={tab} value={viewMetric} onChange={setMetric} />
+        <div className="flex flex-wrap items-center gap-2">
+          <OpsViewByPills tab={tab} value={viewMetric} onChange={setMetric} />
+          {tab === "topbottom" ? (
+            <OpsTopBottomShowPills
+              value={topBottomShow}
+              onChange={setTopBottomShow}
+              resetKey={filterResetKey}
+            />
+          ) : null}
+        </div>
 
         {isLoading ? (
           <div className="flex justify-center py-16">
@@ -307,7 +327,7 @@ export function PerformancePageShell() {
         ) : tab === "riders" ? (
           <OpsRidersTab data={data} resetKey={filterResetKey} />
         ) : tab === "topbottom" ? (
-          <OpsTopBottomTab data={data} metric={viewMetric} />
+          <OpsTopBottomTab data={data} metric={viewMetric} show={topBottomShow} />
         ) : (
           <OpsOutsourceTab data={data} metric={viewMetric} granularity={granularity} />
         )}
