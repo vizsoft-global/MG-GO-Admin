@@ -237,6 +237,10 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-09-29` — **Sidebar: Payroll & Requests sits in Operations** after Performance and before Staff Assistant. `relocatePayrollItem` no longer creates `group-payroll`. Saved menus are remapped. No migration / no Play.
+
+- `[admin only] 2026-09-29` — **Staff Assistant `rank_orders_zone`.** `/assistant` "highest orders last week" used `rank_complaints_zone` then fleet `deliveries_counts` because analytics had no order rank. New kind reads one `admin_performance_ops_snapshot` (`by_zone.orders`, verified + Kuwait `delivered_at`). Answer is `headline.zone` + `headline.orders` for that window — never a fleet total. Follow-ups ("how many orders?") reuse `rank_orders_zone`, not `deliveries_counts`. Prompt: complaints kind is complaints only. No migration / no Play.
+
 - `[admin+app] 2026-09-29` — **Home Extra Earnings rate line + Daily DPD progress + shift_date apply.** Remove only the Home band `KD PER ORDER` labels; payout / lock / unlock / `compute_incentive_amount` unchanged. Daily DPD card numerator is `progress_today` (`count_progress_deliveries`); `completed_today` stays verified. Additive migration `20261030600000` creates `deliveries.shift_date` + stamp trigger + backfill + Home week `COALESCE(shift_date, …)` (283 ledger row never created the objects). App `listMyDeliveries` retries without `shift_date` on 42703. **306 not applied.** Do not re-push `20261028300000` / `20261028700000`. **Admin Vercel prod. App `vk-dev` pushed. No Play.**
 
 - `[admin only] 2026-09-28` — **Drivers import Number of OFFs.** Template column writes `driver_off_structure` for the current Kuwait month. Blank keeps the default of 2 (no row). Needs approve-now or an already-linked rider. `admin_set_driver_off_structure` also accepts `drivers.manage` / create / edit ticks. Migration `20261030500000` on `eoksxkdssptgyqyywdju`. **Admin Vercel prod.** No Play.

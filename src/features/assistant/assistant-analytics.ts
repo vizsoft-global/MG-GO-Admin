@@ -54,6 +54,35 @@ export function rankByCount<T extends { count: number; label: string; id?: strin
   return [...rows].sort((a, b) => b.count - a.count).slice(0, cap);
 }
 
+export function opsZonesToRankRows(
+  rows: Array<{ key: string; id?: string | null; orders: number }>,
+): Array<{ id?: string; label: string; count: number }> {
+  return rows.map((row) => ({
+    id: row.id ?? undefined,
+    label: row.key,
+    count: row.orders,
+  }));
+}
+
+export function rankOrdersZoneResult(
+  top: Array<{ id?: string; label: string; count: number }>,
+  window: { from: string; to: string },
+) {
+  const first = top[0];
+  return {
+    kind: "rank_orders_zone" as const,
+    window,
+    headline: first
+      ? { zone: first.label, orders: first.count, id: first.id }
+      : null,
+    cite: "headline.zone and headline.orders — never a fleet total",
+    top,
+    source: "performance_ops_verified" as const,
+    page: "/performance",
+    cap: ASSISTANT_RANK_CAP,
+  };
+}
+
 function can(session: { permissions: ReadonlySet<string>; isSuperAdmin: boolean }, slug: Permission) {
   return assistantModuleAllowed(session.permissions, session.isSuperAdmin, slug);
 }
@@ -207,6 +236,7 @@ export async function runAnalyticsQuery(input: DateInput & {
     | "assets_kpis"
     | "notifications_history"
     | "performance_trend"
+    | "rank_orders_zone"
     | "rank_complaints_zone"
     | "rank_complaints_restaurant"
     | "low_performance_high_absence";
@@ -305,6 +335,20 @@ export async function runAnalyticsQuery(input: DateInput & {
       partnerId: input.partner_id,
     });
     return { kind, window: range, trend };
+  }
+
+  if (kind === "rank_orders_zone") {
+    const snap = await fetchPerformanceOpsSnapshot({
+      from: range.from,
+      to: range.to,
+      granularity: "daily",
+      slicers: EMPTY_OPS_SLICERS,
+      outsourceOnly: false,
+    });
+    return rankOrdersZoneResult(
+      rankByCount(opsZonesToRankRows(snap.by_zone)),
+      { from: snap.from, to: snap.to },
+    );
   }
 
   if (kind === "rank_complaints_restaurant") {

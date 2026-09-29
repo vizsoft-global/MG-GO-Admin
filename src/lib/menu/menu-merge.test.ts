@@ -109,7 +109,7 @@ describe("relocateStaffAccessItem", () => {
 });
 
 describe("relocatePayrollItem", () => {
-  it("pins Assistant after Performance and Payroll in its own group after Operations", () => {
+  it("pins Payroll after Performance and Assistant after Payroll in Operations", () => {
     const { tree } = mergeMenu([
       {
         id: "group-operations",
@@ -126,13 +126,12 @@ describe("relocatePayrollItem", () => {
     const ops = tree.find((node) => node.id === "group-operations");
     const ids = (ops?.children ?? []).map((child) => child.id);
     const perfIdx = ids.indexOf("performance");
+    const payrollIdx = ids.indexOf("payroll");
     const assistantIdx = ids.indexOf("assistant");
     assert.ok(perfIdx >= 0);
-    assert.equal(assistantIdx, perfIdx + 1);
-    assert.equal(ids.includes("payroll"), false);
-    const opsIdx = tree.findIndex((node) => node.id === "group-operations");
-    assert.equal(tree[opsIdx + 1]?.id, "group-payroll");
-    const payrollGroup = tree.find((node) => node.id === "group-payroll");
-    assert.equal(payrollGroup?.children?.find((child) => child.id === "payroll")?.hidden, false);
+    assert.equal(payrollIdx, perfIdx + 1);
+    assert.equal(assistantIdx, payrollIdx + 1);
+    assert.equal(ops?.children?.find((child) => child.id === "payroll")?.hidden, false);
+    assert.equal(tree.some((node) => node.id === "group-payroll"), false);
   });
 });

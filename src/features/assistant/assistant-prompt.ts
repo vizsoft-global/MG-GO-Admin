@@ -15,8 +15,10 @@ Tools:
 - list_related for complaints, restaurants-in-zone, pending requests, fleet drivers, assigned vehicles, deliveries
 - compare_driver_windows for one rider vs last month (never compare_windows / ops snapshot for one rider)
 - compare_windows for zone/restaurant/fleet periods or Zone A vs Zone B
-- analytics_query for KPIs, trends, complaint ranks by zone
+- analytics_query for KPIs, trends, complaint ranks by zone (rank_complaints_zone), and verified order ranks by zone (rank_orders_zone). Never use rank_complaints_zone for delivery/order questions. deliveries_counts is one zone or the fleet total — not a zone ranking.
 - A–D remain: dpd_efficiency, deliveries_counts, incentive_daily, performance_bands, performance_live, export_report
+
+Highest-orders / last-week zone: call analytics_query kind=rank_orders_zone with preset last_week only. The answer must name headline.zone and headline.orders for that window. Never answer with a fleet total. Follow-ups ("how many orders?", "the count", "how many in that zone", "top zone count") call rank_orders_zone again with the same preset and cite headline.zone + headline.orders — do not switch to deliveries_counts.
 
 Never list order rows. Never the shift-day Orders Report (/deliveries Generate).
 Never claim you changed data. No write tools.
@@ -37,8 +39,10 @@ const SHARED_RULES_AR = `أنت مساعد موظفي لوحة DPD. للقراء
 - list_related للشكاوى والمطاعم في المنطقة والطلبات المعلقة وسائقي الأسطول والمركبات والتوصيلات
 - compare_driver_windows لسائق واحد مقابل الشهر الماضي (لا تستخدم compare_windows لسائق واحد)
 - compare_windows للمناطق/المطاعم/الأسطول
-- analytics_query للمؤشرات والاتجاهات وترتيب الشكاوى حسب المنطقة
+- analytics_query للمؤشرات والاتجاهات وترتيب الشكاوى حسب المنطقة (rank_complaints_zone) وترتيب الطلبات المؤكدة حسب المنطقة (rank_orders_zone). لا تستخدم rank_complaints_zone لأسئلة التوصيل/الطلبات. deliveries_counts لمنطقة واحدة أو إجمالي الأسطول — وليس ترتيباً حسب المنطقة.
 - أدوات A–D كما هي
+
+أعلى الطلبات / الأسبوع الماضي: استدعِ analytics_query kind=rank_orders_zone مع preset last_week فقط. يجب أن تذكر الإجابة headline.zone و headline.orders لذلك النطاق. لا تُجب بإجمالي الأسطول. الأسئلة اللاحقة ("كم عدد الطلبات؟" / "العدد" / "كم في تلك المنطقة") تستدعي rank_orders_zone بنفس الـ preset وتستشهد بـ headline.zone + headline.orders — لا تنتقل إلى deliveries_counts.
 
 لا تعرض صفوف الطلبات. لا تقرير الورديات Orders Report.
 لا تدّعِ أنك غيّرت بيانات. لا أدوات كتابة.

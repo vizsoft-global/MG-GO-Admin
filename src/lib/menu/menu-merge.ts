@@ -237,8 +237,11 @@ function relocateAssistantItem(tree: MenuNode[]): MenuNode[] {
 
   const ops = stripped[opsIdx];
   const children = [...(ops.children ?? [])].filter((child) => child.id !== ASSISTANT_ID);
+  const payrollIdx = children.findIndex((child) => child.id === "payroll");
   const perfIdx = children.findIndex((child) => child.id === "performance");
-  children.splice(perfIdx >= 0 ? perfIdx + 1 : children.length, 0, item);
+  const insertAt =
+    payrollIdx >= 0 ? payrollIdx + 1 : perfIdx >= 0 ? perfIdx + 1 : children.length;
+  children.splice(insertAt, 0, item);
   const next = [...stripped];
   next[opsIdx] = { ...ops, children };
   return next;
@@ -275,18 +278,27 @@ function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
     icon: "CalendarClock",
     hidden: false,
   };
-  const group: MenuNode = {
-    id: GROUP_ID,
-    type: "group",
-    label: "Payroll",
-    icon: DEFAULT_GROUP_META.Payroll?.icon ?? "CalendarClock",
-    displayMode: DEFAULT_GROUP_META.Payroll?.displayMode,
-    children: [item],
-  };
 
   const opsIdx = stripped.findIndex((node) => node.id === "group-operations");
+  if (opsIdx < 0) {
+    return [
+      ...stripped,
+      {
+        id: "group-operations",
+        type: "group",
+        label: "Operations",
+        icon: "Folder",
+        children: [item],
+      },
+    ].filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
+  }
+
+  const ops = stripped[opsIdx];
+  const children = [...(ops.children ?? [])].filter((child) => child.id !== PAYROLL_ID);
+  const perfIdx = children.findIndex((child) => child.id === "performance");
+  children.splice(perfIdx >= 0 ? perfIdx + 1 : children.length, 0, item);
   const next = [...stripped];
-  next.splice(opsIdx >= 0 ? opsIdx + 1 : next.length, 0, group);
+  next[opsIdx] = { ...ops, children };
   return next.filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
 }
 

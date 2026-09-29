@@ -167,7 +167,7 @@ export function createAssistantTools() {
     }),
     analytics_query: tool({
       description:
-        "KPIs, trends, and ranked counts: attendance, requests, payroll, vehicles, fleet ops, assets, notifications, performance trend, complaints by zone, low performance + high absence.",
+        "KPIs, trends, and ranked counts. kind=rank_orders_zone: highest verified delivered orders by zone for the Kuwait window (headline.zone + headline.orders). Reuse rank_orders_zone for follow-ups like 'how many orders?' or the top-zone count — never deliveries_counts or a fleet total. Other kinds: attendance, requests, payroll, vehicles, fleet ops, assets, notifications, performance trend, complaints by zone, low performance + high absence.",
       inputSchema: z.object({
         kind: z.enum([
           "attendance_kpis",
@@ -179,6 +179,7 @@ export function createAssistantTools() {
           "assets_kpis",
           "notifications_history",
           "performance_trend",
+          "rank_orders_zone",
           "rank_complaints_zone",
           "rank_complaints_restaurant",
           "low_performance_high_absence",
