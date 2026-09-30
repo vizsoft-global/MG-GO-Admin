@@ -67,3 +67,6 @@ graphify-out/
 .tmp-figma/
 .eslint-visits.json
 qa-esign-*.png
+
+# Local Miniflare / wrangler state (never commit)
+.wrangler/

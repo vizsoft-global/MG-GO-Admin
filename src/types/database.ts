@@ -8940,7 +8940,12 @@ export type Database = {
       admin_purge_drivers: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_incentive_rules: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_preview_all: { Args: { p_entity: string }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_run_all: {
+        Args: { p_entity: string; p_limit?: number }
+        Returns: Json
+      }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
       admin_rebuild_driver_performance_daily: {
         Args: { p_driver_id?: string; p_from: string; p_to: string }

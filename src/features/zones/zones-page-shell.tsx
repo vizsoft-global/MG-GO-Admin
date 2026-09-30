@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/auth-context";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -150,6 +151,7 @@ function ZonesPageContent() {
                   <DropdownMenuItem disabled>{t("geofence.bulkDelete")}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <ClearAllModuleButton entity="zones" compact />
               {canManage ? (
                 <Button
                   type="button"

@@ -259,208 +259,221 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
       </div>
 
       <Dialog open={draft !== null} onOpenChange={(open) => (open ? null : setDraft(null))}>
-        <DialogContent showCloseButton closeOutside className="w-[min(620px,96vw)] overflow-visible p-0">
+        <DialogContent
+          showCloseButton
+          closeOutside
+          className="flex h-[95dvh] max-h-[95dvh] w-[min(1200px,96vw)] max-w-[min(1200px,96vw)] flex-col overflow-visible p-0"
+        >
           {draft ? (
             <form
+              className="flex min-h-0 flex-1 flex-col"
               onSubmit={(event) => {
                 event.preventDefault();
                 save();
               }}
             >
-              <div className="space-y-3 px-5 py-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="source-company-name">
-                    {t("colName")}
-                    <span className="text-destructive" aria-hidden>
-                      {" "}
-                      *
-                    </span>
-                  </Label>
-                  <Input
-                    id="source-company-name"
-                    className="h-9"
-                    value={draft.name}
-                    maxLength={120}
-                    disabled={draft.isSystem}
-                    onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                  />
-                  {draft.isNew && draftKey ? (
-                    <p className="text-[10px] text-muted-foreground">
-                      {t("keyHint", { key: draftKey })}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="source-company-code">{t("colClientId")}</Label>
-                  <Input
-                    id="source-company-code"
-                    className="h-9 font-mono uppercase"
-                    value={draft.clientCode}
-                    maxLength={32}
-                    placeholder="CL-0002"
-                    disabled={draft.isSystem}
-                    onChange={(event) =>
-                      setDraft({ ...draft, clientCode: event.target.value.toUpperCase() })
-                    }
-                  />
-                  <p className="text-[10px] text-muted-foreground">{t("clientIdHint")}</p>
-                </div>
-
-                {!draft.isSystem ? (
-                  <>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="source-company-dpd">{t("dpdTarget")}</Label>
-                        <Input
-                          id="source-company-dpd"
-                          className="h-9 font-mono"
-                          inputMode="numeric"
-                          value={draft.dpdTarget}
-                          placeholder={t("dpdTargetPlaceholder")}
-                          onChange={(event) =>
-                            setDraft({ ...draft, dpdTarget: event.target.value.replace(/\D/g, "") })
-                          }
-                        />
-                        <p className="text-[10px] text-muted-foreground">{t("dpdTargetHint")}</p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="source-company-effective">{t("effectiveFrom")}</Label>
-                        <Input
-                          id="source-company-effective"
-                          type="date"
-                          className="h-9"
-                          openPickerOnFocus={false}
-                          value={draft.effectiveFrom}
-                          onChange={(event) =>
-                            setDraft({ ...draft, effectiveFrom: event.target.value })
-                          }
-                        />
-                        <p className="text-[10px] text-muted-foreground">{t("effectiveFromHint")}</p>
-                      </div>
-                    </div>
-
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                <div className="grid items-start gap-4 lg:grid-cols-2 lg:items-stretch">
+                  <div className="space-y-3">
                     <div className="space-y-1.5">
-                      <Label>{t("incentiveScheme")}</Label>
-                      <div className="flex items-center gap-2">
-                        <ToggleChip
-                          selected={draft.incentiveEnabled}
-                          onClick={() =>
-                            setDraft({ ...draft, incentiveEnabled: !draft.incentiveEnabled })
-                          }
-                        >
-                          {t("incentiveSchemeOn")}
-                        </ToggleChip>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">{t("incentiveSchemeHint")}</p>
+                      <Label htmlFor="source-company-name">
+                        {t("colName")}
+                        <span className="text-destructive" aria-hidden>
+                          {" "}
+                          *
+                        </span>
+                      </Label>
+                      <Input
+                        id="source-company-name"
+                        className="h-9"
+                        value={draft.name}
+                        maxLength={120}
+                        disabled={draft.isSystem}
+                        onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                      />
+                      {draft.isNew && draftKey ? (
+                        <p className="text-[10px] text-muted-foreground">
+                          {t("keyHint", { key: draftKey })}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="source-company-code">{t("colClientId")}</Label>
+                      <Input
+                        id="source-company-code"
+                        className="h-9 font-mono uppercase"
+                        value={draft.clientCode}
+                        maxLength={32}
+                        placeholder="CL-0002"
+                        disabled={draft.isSystem}
+                        onChange={(event) =>
+                          setDraft({ ...draft, clientCode: event.target.value.toUpperCase() })
+                        }
+                      />
+                      <p className="text-[10px] text-muted-foreground">{t("clientIdHint")}</p>
                     </div>
 
-                    {draft.incentiveEnabled ? (
+                    {!draft.isSystem ? (
                       <>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div className="space-y-1.5">
-                            <Label htmlFor="source-company-above">{t("aboveKwd")}</Label>
+                            <Label htmlFor="source-company-dpd">{t("dpdTarget")}</Label>
                             <Input
-                              id="source-company-above"
+                              id="source-company-dpd"
                               className="h-9 font-mono"
-                              inputMode="decimal"
-                              value={draft.aboveKwd}
-                              placeholder="0.100"
+                              inputMode="numeric"
+                              value={draft.dpdTarget}
+                              placeholder={t("dpdTargetPlaceholder")}
                               onChange={(event) =>
-                                setDraft({ ...draft, aboveKwd: event.target.value })
+                                setDraft({ ...draft, dpdTarget: event.target.value.replace(/\D/g, "") })
                               }
                             />
+                            <p className="text-[10px] text-muted-foreground">{t("dpdTargetHint")}</p>
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="source-company-below">{t("belowKwd")}</Label>
+                            <Label htmlFor="source-company-effective">{t("effectiveFrom")}</Label>
                             <Input
-                              id="source-company-below"
-                              className="h-9 font-mono"
-                              inputMode="decimal"
-                              value={draft.belowKwd}
-                              placeholder="0.350"
+                              id="source-company-effective"
+                              type="date"
+                              className="h-9"
+                              openPickerOnFocus={false}
+                              value={draft.effectiveFrom}
                               onChange={(event) =>
-                                setDraft({ ...draft, belowKwd: event.target.value })
+                                setDraft({ ...draft, effectiveFrom: event.target.value })
                               }
                             />
+                            <p className="text-[10px] text-muted-foreground">{t("effectiveFromHint")}</p>
                           </div>
                         </div>
 
-                        {previewRows.length > 0 ? (
-                          <div className="overflow-hidden rounded-lg border border-border">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className={TABLE_HEAD_CLASS}>{t("previewOrders")}</TableHead>
-                                  <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>
-                                    {t("previewIncentive")}
-                                  </TableHead>
-                                  <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>
-                                    {t("previewDeduction")}
-                                  </TableHead>
-                                  <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>
-                                    {t("previewNet")}
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {previewRows.map((row) => (
-                                  <TableRow key={row.orders}>
-                                    <TableCell className="font-mono text-[10px] tabular-nums">
-                                      {row.orders}
-                                    </TableCell>
-                                    <TableCell className="text-end font-mono text-[10px] tabular-nums text-emerald-700">
-                                      {row.incentiveKwd.toFixed(3)}
-                                    </TableCell>
-                                    <TableCell className="text-end font-mono text-[10px] tabular-nums text-destructive">
-                                      {row.deductionKwd.toFixed(3)}
-                                    </TableCell>
-                                    <TableCell
-                                      className={`text-end font-mono text-[10px] tabular-nums ${
-                                        row.netKwd < 0 ? "text-destructive" : "text-emerald-700"
-                                      }`}
-                                    >
-                                      {row.netKwd.toFixed(3)}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
+                        <div className="space-y-1.5">
+                          <Label>{t("incentiveScheme")}</Label>
+                          <div className="flex items-center gap-2">
+                            <ToggleChip
+                              selected={draft.incentiveEnabled}
+                              onClick={() =>
+                                setDraft({ ...draft, incentiveEnabled: !draft.incentiveEnabled })
+                              }
+                            >
+                              {t("incentiveSchemeOn")}
+                            </ToggleChip>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">{t("incentiveSchemeHint")}</p>
+                        </div>
+
+                        {draft.incentiveEnabled ? (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <Label htmlFor="source-company-above">{t("aboveKwd")}</Label>
+                              <Input
+                                id="source-company-above"
+                                className="h-9 font-mono"
+                                inputMode="decimal"
+                                value={draft.aboveKwd}
+                                placeholder="0.100"
+                                onChange={(event) =>
+                                  setDraft({ ...draft, aboveKwd: event.target.value })
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor="source-company-below">{t("belowKwd")}</Label>
+                              <Input
+                                id="source-company-below"
+                                className="h-9 font-mono"
+                                inputMode="decimal"
+                                value={draft.belowKwd}
+                                placeholder="0.350"
+                                onChange={(event) =>
+                                  setDraft({ ...draft, belowKwd: event.target.value })
+                                }
+                              />
+                            </div>
                           </div>
                         ) : null}
+
+                        <p className="text-[10px] text-muted-foreground">{t("companyConfigNote")}</p>
                       </>
                     ) : null}
 
-                    <p className="text-[10px] text-muted-foreground">{t("companyConfigNote")}</p>
-                  </>
-                ) : null}
-
-                <div className="space-y-1.5">
-                  <Label>{t("colStatus")}</Label>
-                  <div role="radiogroup" className="grid grid-cols-2 gap-1.5">
-                    <SegmentOption
-                      selected={draft.isActive}
-                      variant={draft.isActive ? "success" : "default"}
-                      disabled={draft.isSystem}
-                      onClick={() => setDraft({ ...draft, isActive: true })}
-                    >
-                      {t("active")}
-                    </SegmentOption>
-                    <SegmentOption
-                      selected={!draft.isActive}
-                      disabled={draft.isSystem}
-                      onClick={() => setDraft({ ...draft, isActive: false })}
-                    >
-                      {t("inactive")}
-                    </SegmentOption>
+                    <div className="space-y-1.5">
+                      <Label>{t("colStatus")}</Label>
+                      <div role="radiogroup" className="grid grid-cols-2 gap-1.5">
+                        <SegmentOption
+                          selected={draft.isActive}
+                          variant={draft.isActive ? "success" : "default"}
+                          disabled={draft.isSystem}
+                          onClick={() => setDraft({ ...draft, isActive: true })}
+                        >
+                          {t("active")}
+                        </SegmentOption>
+                        <SegmentOption
+                          selected={!draft.isActive}
+                          disabled={draft.isSystem}
+                          onClick={() => setDraft({ ...draft, isActive: false })}
+                        >
+                          {t("inactive")}
+                        </SegmentOption>
+                      </div>
+                      {!draft.isNew && draft.driverCount > 0 ? (
+                        <p className="text-[10px] text-muted-foreground">
+                          {t("inUseHint", { count: draft.driverCount })}
+                        </p>
+                      ) : null}
+                      {draft.isSystem ? (
+                        <p className="text-[10px] text-muted-foreground">{t("systemHint")}</p>
+                      ) : null}
+                    </div>
                   </div>
-                  {!draft.isNew && draft.driverCount > 0 ? (
-                    <p className="text-[10px] text-muted-foreground">
-                      {t("inUseHint", { count: draft.driverCount })}
-                    </p>
-                  ) : null}
-                  {draft.isSystem ? (
-                    <p className="text-[10px] text-muted-foreground">{t("systemHint")}</p>
-                  ) : null}
+
+                  <div className="h-full rounded-xl border border-border bg-card p-4 shadow-sm">
+                    {previewRows.length > 0 ? (
+                      <div className="overflow-hidden rounded-lg border border-border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className={TABLE_HEAD_CLASS}>{t("previewOrders")}</TableHead>
+                              <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>
+                                {t("previewIncentive")}
+                              </TableHead>
+                              <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>
+                                {t("previewDeduction")}
+                              </TableHead>
+                              <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>
+                                {t("previewNet")}
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {previewRows.map((row) => (
+                              <TableRow key={row.orders}>
+                                <TableCell className="font-mono text-[10px] tabular-nums">
+                                  {row.orders}
+                                </TableCell>
+                                <TableCell className="text-end font-mono text-[10px] tabular-nums text-emerald-700">
+                                  {row.incentiveKwd.toFixed(3)}
+                                </TableCell>
+                                <TableCell className="text-end font-mono text-[10px] tabular-nums text-destructive">
+                                  {row.deductionKwd.toFixed(3)}
+                                </TableCell>
+                                <TableCell
+                                  className={`text-end font-mono text-[10px] tabular-nums ${
+                                    row.netKwd < 0 ? "text-destructive" : "text-emerald-700"
+                                  }`}
+                                >
+                                  {row.netKwd.toFixed(3)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">
+                        {draft.isSystem ? t("systemHint") : t("incentiveSchemeHint")}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
               <AppModalFooter

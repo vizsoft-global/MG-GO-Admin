@@ -15,8 +15,25 @@ import {
 } from "@/lib/storage/r2-keys";
 import type { DriverDocumentType } from "@/features/drivers/types";
 import { deleteObject, deleteObjects } from "@/lib/storage/r2-client";
+import { hasPermissionInSet } from "@/lib/auth/permissions";
+import {
+  isPurgeAllEntity,
+  purgeAllModuleFor,
+  type PurgeAllEntity,
+} from "./purge-entities";
 
 const PAGE_SIZE = 25;
+
+/**
+ * Clear all loops the batched RPC until the module is empty, but it stops after
+ * this long and hands the remainder back. `deliveries` is ~168k rows at 500 per
+ * round; one request that walked the whole table would sit past every serverless
+ * ceiling and lose the count it had already deleted. A short budget plus a
+ * visible remaining count means the operator presses the button again instead.
+ */
+const PURGE_ALL_BUDGET_MS = 40_000;
+const PURGE_ALL_BATCH = 500;
+const PURGE_ALL_MAX_ROUNDS = 400;
 
 export type CleanupTab =
   | "drivers"
@@ -500,4 +517,204 @@ export async function executeCleanupPurge(
   }
 
   return { ok: true, deleted, errors };
+}
+
+/* ------------------------------------------------------------------ */
+/* Clear all — one module at a time                                    */
+/* ------------------------------------------------------------------ */
+
+export type PurgeAllPreviewItem = {
+  entity: PurgeAllEntity;
+  count: number;
+  blockers: string[];
+};
+
+export type PurgeAllPreviewResult =
+  | { items: PurgeAllPreviewItem[] }
+  | { error: string; errorDetail?: string };
+
+export type PurgeAllRunResult =
+  | {
+      ok: true;
+      entity: PurgeAllEntity;
+      deleted: number;
+      remaining: number;
+      blockers: string[];
+      rounds: number;
+      done: boolean;
+      /** Set when a round failed after some rows were already gone. */
+      warning?: string;
+    }
+  | { error: string; errorDetail?: string };
+
+async function requirePurgeAllAccess(entity: PurgeAllEntity) {
+  const session = await getSessionUser();
+  if (!session) return { error: "not_authorized" as const };
+
+  const module = purgeAllModuleFor(entity);
+  if (!module) return { error: "unknown_entity" as const };
+
+  if (
+    !hasPermissionInSet(session.permissions, module.slug, session.isSuperAdmin)
+  ) {
+    return { error: "not_authorized" as const };
+  }
+
+  return { session };
+}
+
+/**
+ * Live row count and blockers per module. Only the modules the caller holds a
+ * `*.bulk_delete` tick for are returned — the database checks the same tick
+ * again on every run, so this is the UI's copy of the lock, not the lock.
+ */
+export async function previewPurgeAllModules(
+  entities: PurgeAllEntity[],
+): Promise<PurgeAllPreviewResult> {
+  const session = await getSessionUser();
+  if (!session) return { error: "not_authorized" };
+
+  const allowed = entities.filter((entity) => {
+    const module = purgeAllModuleFor(entity);
+    return (
+      module !== null &&
+      hasPermissionInSet(session.permissions, module.slug, session.isSuperAdmin)
+    );
+  });
+
+  if (allowed.length === 0) return { items: [] };
+
+  const supabase = await createClient();
+  const items: PurgeAllPreviewItem[] = [];
+
+  for (const entity of allowed) {
+    const { data, error } = await supabase.rpc("admin_purge_preview_all", {
+      p_entity: entity,
+    });
+    if (error) {
+      return { error: "preview_failed", errorDetail: error.message };
+    }
+    const payload = (data ?? {}) as {
+      count?: number;
+      blockers?: string[] | null;
+    };
+    items.push({
+      entity,
+      count: payload.count ?? 0,
+      blockers: payload.blockers ?? [],
+    });
+  }
+
+  return { items };
+}
+
+export async function previewPurgeAllModule(
+  entity: PurgeAllEntity,
+): Promise<PurgeAllPreviewResult> {
+  if (!isPurgeAllEntity(entity)) return { error: "unknown_entity" };
+  return previewPurgeAllModules([entity]);
+}
+
+/**
+ * Empties one module, in 500-row rounds, until it is clear or the budget runs
+ * out. Storage objects and linked Auth users are collected across every round
+ * and cleaned once at the end, because a driver deleted in round 3 still owns
+ * the avatar that round 1 already reported.
+ */
+export async function runPurgeAllModule(
+  entity: PurgeAllEntity,
+): Promise<PurgeAllRunResult> {
+  if (!isPurgeAllEntity(entity)) return { error: "unknown_entity" };
+
+  const auth = await requirePurgeAllAccess(entity);
+  if (auth.error) return { error: auth.error };
+
+  const supabase = await createClient();
+  const startedAt = Date.now();
+  const storageEntries = new Set<string>();
+  const authUserIds = new Set<string>();
+
+  let deleted = 0;
+  let remaining = 0;
+  let blockers: string[] = [];
+  let rounds = 0;
+  let failure: string | null = null;
+  let storageKeyCount = 0;
+
+  for (let round = 0; round < PURGE_ALL_MAX_ROUNDS; round += 1) {
+    if (round > 0 && Date.now() - startedAt > PURGE_ALL_BUDGET_MS) break;
+
+    const { data, error } = await supabase.rpc("admin_purge_run_all", {
+      p_entity: entity,
+      p_limit: PURGE_ALL_BATCH,
+    });
+    if (error) {
+      failure = error.message;
+      break;
+    }
+
+    rounds += 1;
+    const payload = (data ?? {}) as {
+      deleted?: number;
+      remaining?: number;
+      blockers?: string[] | null;
+      storage_keys?: string[] | null;
+      manifest?: Array<{ auth_user_id?: string | null }> | null;
+    };
+
+    const roundDeleted = payload.deleted ?? 0;
+    deleted += roundDeleted;
+    remaining = payload.remaining ?? 0;
+    blockers = payload.blockers ?? [];
+
+    for (const entry of payload.storage_keys ?? []) {
+      if (entry) {
+        storageEntries.add(entry);
+        storageKeyCount += 1;
+      }
+    }
+    for (const entry of payload.manifest ?? []) {
+      if (entry?.auth_user_id) authUserIds.add(entry.auth_user_id);
+    }
+
+    if (blockers.length > 0 || roundDeleted === 0 || remaining === 0) break;
+  }
+
+  if (storageEntries.size > 0) {
+    await cleanupStorageEntries([...storageEntries]);
+  }
+
+  if (authUserIds.size > 0) {
+    const admin = createAdminClient();
+    for (const authUserId of authUserIds) {
+      try {
+        await admin.auth.admin.deleteUser(authUserId);
+      } catch {
+        /* best-effort — the profile row is already gone */
+      }
+    }
+  }
+
+  void logAdminMutation({
+    action: "delete",
+    entityType: `data_cleanup_${entity}_all`,
+    routeName: "runPurgeAllModule",
+    context: { entity, deleted, remaining, rounds, storage_key_count: storageKeyCount },
+    after: { entity, deleted, remaining, blockers },
+  });
+
+  if (failure && deleted === 0) {
+    return { error: "purge_failed", errorDetail: failure };
+  }
+
+  return {
+    ok: true,
+    entity,
+    deleted,
+    remaining,
+    blockers,
+    rounds,
+    done: blockers.length === 0 && remaining === 0,
+    warning: failure ?? undefined,
+  };
 }

@@ -21,6 +21,7 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -284,6 +285,7 @@ function PartnersPageContent() {
         description={t("subtitle")}
         actions={
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <ClearAllModuleButton entity="partners" />
               <Button
                 type="button"
                 variant="outline"

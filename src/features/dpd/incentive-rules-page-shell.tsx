@@ -9,6 +9,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { AppEmptyState, AppListCard, AppListToolbar, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { useAuth } from "@/contexts/auth-context";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -113,13 +114,15 @@ export function IncentiveRulesPageShell() {
         title={tPage("title")}
         description={tPage("subtitle")}
         actions={
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 cursor-pointer rounded-lg"
-              disabled={exporting || filteredRules.length === 0}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <ClearAllModuleButton entity="incentive_rules" />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                disabled={exporting || filteredRules.length === 0}
               onClick={async () => {
                 if (!filteredRules.length) {
                   toast.error(t("incentiveExportEmpty"));
@@ -168,6 +171,7 @@ export function IncentiveRulesPageShell() {
                 {t("addIncentiveRule")}
               </Button>
             ) : null}
+            </div>
           </div>
         }
       />

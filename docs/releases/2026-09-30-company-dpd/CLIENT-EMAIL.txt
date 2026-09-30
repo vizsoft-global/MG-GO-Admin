@@ -1,0 +1,32 @@
+To: Noura; Mohamed; Vijay; Mustafa; Aziz
+Subject: MG GO — outsourced company DPD target and incentive is live on Admin (rider app follows Play)
+
+Hi team,
+
+The company DPD / incentive SOP is now live on the admin panel.
+
+What you asked for, in short:
+• Outsourced companies get their own daily DPD target and a simple above / below per-order scheme (not restaurant Extra Earnings quests).
+• Sadeeq starts ON (target 15, +0.100 KD above, −0.350 KD below).
+• Other outsourced companies start with the scheme OFF until you turn it on.
+• In-house (MG) and Unassigned riders stay on restaurant rules.
+• The Home Daily DPD card can show submitted progress; payout / lock / remaining still use verified orders.
+
+What is live today:
+• Admin: https://dpdadmin-prod.vercel.app/en/settings/source-companies
+  Sign in with a staff account that can open Settings → Companies.
+• Rider app screens are coded and on our vk-dev branch. They will appear for riders after the Play Store update. We will not publish Play until you confirm.
+
+Please use the attached client note for the request, what we shipped, and how to verify both Admin and the rider app.
+
+The Sadeeq worked examples (target 15):
+  30 orders → +1.500 KD
+  21 orders → +0.600 KD
+  15 orders → 0
+  10 orders → −1.750 KD
+  0 orders  → −5.250 KD
+
+Happy to walk through Settings → Companies on a short call.
+
+Thank you,
+Vizsoft

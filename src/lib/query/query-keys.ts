@@ -302,6 +302,8 @@ export const queryKeys = {
       page: number,
       archivedOnly: boolean,
     ) => ["data-cleanup", "candidates", tab, search, page, archivedOnly] as const,
+    purgeAll: (entities: readonly string[]) =>
+      ["data-cleanup", "purge-all", [...entities].sort().join(",")] as const,
   },
   notifications: {
     all: () => ["notifications"] as const,

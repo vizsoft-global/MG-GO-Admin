@@ -27,6 +27,8 @@ import type {
   CleanupPurgeSelection,
   CleanupTab,
 } from "./data-cleanup-actions";
+import { DataCleanupClearAllPanel } from "./data-cleanup-clear-all-panel";
+import type { PurgeAllEntity } from "./purge-entities";
 import { useCleanupCandidates, useCleanupPreview, useCleanupPurge } from "./use-data-cleanup";
 
 const TABS: CleanupTab[] = [
@@ -38,6 +40,9 @@ const TABS: CleanupTab[] = [
   "incentive_rules",
   "assets",
 ];
+
+const CLEAR_ALL_TAB = "clear_all" as const;
+type CleanupPanelTab = CleanupTab | typeof CLEAR_ALL_TAB;
 
 function selectionKey(item: CleanupPurgeSelection): string {
   return `${item.purgeType}:${item.purgeId}`;
@@ -260,9 +265,28 @@ function CleanupTabPanel({
   );
 }
 
-export function DataCleanupPanel() {
+export function DataCleanupPanel({
+  purgeEntities = [],
+  canUseCandidateCleanup = false,
+}: {
+  purgeEntities?: readonly PurgeAllEntity[];
+  /**
+   * Row-by-row candidate selection is super admin only (its actions sweep
+   * storage and purge arbitrary ids). Everyone else gets the Clear all list,
+   * where each module is still gated by its own `*.bulk_delete` tick on the
+   * server.
+   */
+  canUseCandidateCleanup?: boolean;
+}) {
   const t = useTranslations("pages.settings.dataCleanup");
-  const [activeTab, setActiveTab] = useState<CleanupTab>("deliveries");
+  // Nothing to clear all means an empty tab bar, so fall back to the candidate
+  // tabs rather than drawing a page with no body. Unreachable for a non-super
+  // operator: `data.cleanup` only reaches them through a bulk_delete tick.
+  const showCandidateTabs =
+    canUseCandidateCleanup || purgeEntities.length === 0;
+  const [activeTab, setActiveTab] = useState<CleanupPanelTab>(
+    showCandidateTabs ? "deliveries" : CLEAR_ALL_TAB,
+  );
   const [selectedByTab, setSelectedByTab] = useState<Record<CleanupTab, Map<string, CleanupPurgeSelection>>>(
     () =>
       Object.fromEntries(TABS.map((tab) => [tab, new Map()])) as Record<
@@ -279,7 +303,10 @@ export function DataCleanupPanel() {
   const purgeMutation = useCleanupPurge();
 
   const currentSelections = useMemo(
-    () => [...(selectedByTab[activeTab]?.values() ?? [])],
+    () =>
+      activeTab === CLEAR_ALL_TAB
+        ? []
+        : [...(selectedByTab[activeTab as CleanupTab]?.values() ?? [])],
     [selectedByTab, activeTab],
   );
 
@@ -336,6 +363,7 @@ export function DataCleanupPanel() {
   };
 
   const handlePurge = async () => {
+    if (activeTab === CLEAR_ALL_TAB) return;
     try {
       const result = await purgeMutation.mutateAsync(currentSelections);
       if (result.errors.length > 0) {
@@ -352,7 +380,12 @@ export function DataCleanupPanel() {
   };
 
   const hasBlockers = previewItems.some((item) => item.blockers.length > 0);
-  const confirmText = confirmPhrase(activeTab, currentSelections.length, t);
+  const confirmText =
+    activeTab === CLEAR_ALL_TAB
+      ? ""
+      : confirmPhrase(activeTab, currentSelections.length, t);
+  const showSelectionFooter =
+    showCandidateTabs && activeTab !== CLEAR_ALL_TAB;
 
   return (
     <AppPage>
@@ -373,66 +406,84 @@ export function DataCleanupPanel() {
 
       <Tabs
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as CleanupTab)}
+        onValueChange={(value) => setActiveTab(value as CleanupPanelTab)}
         className="space-y-4"
       >
         <TabsList className="flex h-auto flex-wrap justify-start gap-1 rounded-xl bg-muted/50 p-1">
-          {TABS.map((tab) => (
-            <TabsTrigger key={tab} value={tab} className="cursor-pointer rounded-lg">
-              {t(`tabs.${tab}`)}
-              {(selectedByTab[tab]?.size ?? 0) > 0 ? (
-                <Badge variant="secondary" className="ms-2">
-                  {selectedByTab[tab]?.size}
-                </Badge>
-              ) : null}
+          {showCandidateTabs
+            ? TABS.map((tab) => (
+                <TabsTrigger key={tab} value={tab} className="cursor-pointer rounded-lg">
+                  {t(`tabs.${tab}`)}
+                  {(selectedByTab[tab]?.size ?? 0) > 0 ? (
+                    <Badge variant="secondary" className="ms-2">
+                      {selectedByTab[tab]?.size}
+                    </Badge>
+                  ) : null}
+                </TabsTrigger>
+              ))
+            : null}
+          {purgeEntities.length > 0 ? (
+            <TabsTrigger value={CLEAR_ALL_TAB} className="cursor-pointer rounded-lg">
+              <Trash2 className="h-4 w-4" />
+              <span className="ms-1.5">{t("clearAll.tab")}</span>
             </TabsTrigger>
-          ))}
+          ) : null}
         </TabsList>
 
-        {TABS.map((tab) => (
-          <TabsContent key={tab} value={tab}>
-            <CleanupTabPanel
-              tab={tab}
-              selectedKeys={new Set(selectedByTab[tab]?.keys() ?? [])}
-              onToggle={(item) => handleToggle(tab, item)}
-              onTogglePage={(items, checked) => handleTogglePage(tab, items, checked)}
-              onClear={() => updateSelection(tab, (map) => map.clear())}
-            />
+        {showCandidateTabs
+          ? TABS.map((tab) => (
+              <TabsContent key={tab} value={tab}>
+                <CleanupTabPanel
+                  tab={tab}
+                  selectedKeys={new Set(selectedByTab[tab]?.keys() ?? [])}
+                  onToggle={(item) => handleToggle(tab, item)}
+                  onTogglePage={(items, checked) => handleTogglePage(tab, items, checked)}
+                  onClear={() => updateSelection(tab, (map) => map.clear())}
+                />
+              </TabsContent>
+            ))
+          : null}
+
+        {purgeEntities.length > 0 ? (
+          <TabsContent value={CLEAR_ALL_TAB}>
+            <DataCleanupClearAllPanel entities={purgeEntities} />
           </TabsContent>
-        ))}
+        ) : null}
       </Tabs>
 
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-border bg-background/95 p-4 backdrop-blur">
-        <span className="me-auto text-sm text-muted-foreground">
-          {t("selectedCount", { count: currentSelections.length })}
-        </span>
-        <Button
-          type="button"
-          variant="outline"
-          className="cursor-pointer rounded-lg"
-          disabled={currentSelections.length === 0 || isPreviewPending}
-          onClick={handlePreview}
-        >
-          {isPreviewPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <>
-              <Eye className="h-4 w-4" />
-              {t("preview")}
-            </>
-          )}
-        </Button>
-        <Button
-          type="button"
-          variant="destructive"
-          className="cursor-pointer rounded-lg"
-          disabled={currentSelections.length === 0 || purgeMutation.isPending}
-          onClick={() => setDeleteOpen(true)}
-        >
-          <Trash2 className="h-4 w-4" />
-          {t("deleteSelected")}
-        </Button>
-      </div>
+      {showSelectionFooter ? (
+        <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-border bg-background/95 p-4 backdrop-blur">
+          <span className="me-auto text-sm text-muted-foreground">
+            {t("selectedCount", { count: currentSelections.length })}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer rounded-lg"
+            disabled={currentSelections.length === 0 || isPreviewPending}
+            onClick={handlePreview}
+          >
+            {isPreviewPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Eye className="h-4 w-4" />
+                {t("preview")}
+              </>
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            className="cursor-pointer rounded-lg"
+            disabled={currentSelections.length === 0 || purgeMutation.isPending}
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+            {t("deleteSelected")}
+          </Button>
+        </div>
+      ) : null}
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-lg">
