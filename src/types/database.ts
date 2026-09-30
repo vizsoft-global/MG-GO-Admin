@@ -6865,6 +6865,11 @@ export type Database = {
         Row: {
           client_code: string | null
           created_at: string
+          dpd_target: number | null
+          effective_from: string | null
+          incentive_above_kwd: number | null
+          incentive_below_kwd: number | null
+          incentive_enabled: boolean
           is_active: boolean
           is_system: boolean
           key: string
@@ -6875,6 +6880,11 @@ export type Database = {
         Insert: {
           client_code?: string | null
           created_at?: string
+          dpd_target?: number | null
+          effective_from?: string | null
+          incentive_above_kwd?: number | null
+          incentive_below_kwd?: number | null
+          incentive_enabled?: boolean
           is_active?: boolean
           is_system?: boolean
           key: string
@@ -6885,6 +6895,11 @@ export type Database = {
         Update: {
           client_code?: string | null
           created_at?: string
+          dpd_target?: number | null
+          effective_from?: string | null
+          incentive_above_kwd?: number | null
+          incentive_below_kwd?: number | null
+          incentive_enabled?: boolean
           is_active?: boolean
           is_system?: boolean
           key?: string
@@ -9051,6 +9066,11 @@ export type Database = {
       admin_upsert_source_company: {
         Args: {
           p_client_code: string
+          p_dpd_target?: number | null
+          p_effective_from?: string | null
+          p_incentive_above_kwd?: number | null
+          p_incentive_below_kwd?: number | null
+          p_incentive_enabled?: boolean
           p_is_active: boolean
           p_key: string
           p_name: string
@@ -9059,6 +9079,11 @@ export type Database = {
         Returns: {
           client_code: string | null
           created_at: string
+          dpd_target: number | null
+          effective_from: string | null
+          incentive_above_kwd: number | null
+          incentive_below_kwd: number | null
+          incentive_enabled: boolean
           is_active: boolean
           is_system: boolean
           key: string
