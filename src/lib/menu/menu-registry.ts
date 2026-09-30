@@ -536,7 +536,6 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Settings",
     defaultOrder: 6.5,
     permission: "data.cleanup",
-    superAdminOnly: true,
   },
   {
     id: "menu-editor",

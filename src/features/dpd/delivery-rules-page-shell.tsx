@@ -9,6 +9,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { AppEmptyState, AppListCard, AppListToolbar, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { useAuth } from "@/contexts/auth-context";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -74,29 +75,32 @@ export function DeliveryRulesPageShell() {
         title={tPage("title")}
         description={tPage("subtitle")}
         actions={
-          canManage ? (
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 cursor-pointer rounded-lg"
-                onClick={() => setImportOpen(true)}
-              >
-                <Upload className="h-4 w-4" />
-                {t("bulkDpd")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="h-9 cursor-pointer rounded-lg"
-                onClick={() => setSheet({ open: true, row: null })}
-              >
-                <Plus className="h-4 w-4" />
-                {t("addDeliveryRule")}
-              </Button>
-            </div>
-          ) : null
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <ClearAllModuleButton entity="delivery_rules" />
+            {canManage ? (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  onClick={() => setImportOpen(true)}
+                >
+                  <Upload className="h-4 w-4" />
+                  {t("bulkDpd")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  onClick={() => setSheet({ open: true, row: null })}
+                >
+                  <Plus className="h-4 w-4" />
+                  {t("addDeliveryRule")}
+                </Button>
+              </div>
+            ) : null}
+          </div>
         }
       />
       <AppListCard

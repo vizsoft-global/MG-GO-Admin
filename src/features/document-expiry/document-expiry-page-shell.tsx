@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import {
@@ -95,17 +96,20 @@ export function DocumentExpiryPageShell() {
         title={t("title")}
         description={t("subtitle")}
         actions={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 cursor-pointer rounded-lg"
-            disabled={isFetching}
-            onClick={() => void invalidate()}
-          >
-            <RefreshCw className={cn("me-1.5 h-3.5 w-3.5", isFetching && "animate-spin")} />
-            {t("refresh")}
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <ClearAllModuleButton entity="documents" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 cursor-pointer rounded-lg"
+              disabled={isFetching}
+              onClick={() => void invalidate()}
+            >
+              <RefreshCw className={cn("me-1.5 h-3.5 w-3.5", isFetching && "animate-spin")} />
+              {t("refresh")}
+            </Button>
+          </div>
         }
       />
 

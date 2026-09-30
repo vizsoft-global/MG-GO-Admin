@@ -25,6 +25,7 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import { AppListToolbar } from "@/components/app/app-list-toolbar";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DATE_RANGE_ALL,
@@ -343,6 +344,7 @@ export function VisitsPageShell() {
         description={t("subtitle")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <ClearAllModuleButton entity="visits" />
             <Button
               type="button"
               variant="outline"

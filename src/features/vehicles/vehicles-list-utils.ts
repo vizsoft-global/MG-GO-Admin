@@ -30,8 +30,19 @@ export const VEHICLE_KPI_KEYS = [
   "company",
   "rent",
   "underRepair",
+  "unassigned",
+  "bike",
+  "car",
+  "active",
+  "replacement",
 ] as const;
 export type VehicleKpiKey = (typeof VEHICLE_KPI_KEYS)[number];
+
+export const VEHICLE_ASSIGNMENT_FILTERS = ["all", "unassigned"] as const;
+export type VehicleAssignmentFilter = (typeof VEHICLE_ASSIGNMENT_FILTERS)[number];
+
+export const VEHICLE_REPLACEMENT_FILTERS = ["all", "yes"] as const;
+export type VehicleReplacementFilter = (typeof VEHICLE_REPLACEMENT_FILTERS)[number];
 
 export type VehicleListFilterState = {
   tab: VehicleListTab;
@@ -41,6 +52,8 @@ export type VehicleListFilterState = {
   kind: VehicleKindFilter;
   search: string;
   project: VehicleProjectFilter;
+  assignment: VehicleAssignmentFilter;
+  replacement: VehicleReplacementFilter;
 };
 
 export function parseVehicleListTab(value: string | null | undefined): VehicleListTab {
@@ -114,6 +127,34 @@ export function vehicleMatchesKind(
   return row.vehicle_type_key === filter;
 }
 
+export function parseVehicleAssignmentFilter(
+  value: string | null | undefined,
+): VehicleAssignmentFilter {
+  return value === "unassigned" ? "unassigned" : "all";
+}
+
+export function parseVehicleReplacementFilter(
+  value: string | null | undefined,
+): VehicleReplacementFilter {
+  return value === "yes" ? "yes" : "all";
+}
+
+export function vehicleMatchesAssignment(
+  row: Pick<VehicleListRow, "assigned_driver_id">,
+  filter: VehicleAssignmentFilter,
+): boolean {
+  if (filter === "all") return true;
+  return row.assigned_driver_id == null;
+}
+
+export function vehicleMatchesReplacement(
+  row: Pick<VehicleListRow, "replaces_vehicle_id">,
+  filter: VehicleReplacementFilter,
+): boolean {
+  if (filter === "all") return true;
+  return row.replaces_vehicle_id != null;
+}
+
 export function applyVehicleKpi(
   key: VehicleKpiKey,
   prev: VehicleListFilterState,
@@ -127,30 +168,47 @@ export function applyVehicleKpi(
       kind: "all",
       search: "",
       project: "all",
+      assignment: "all",
+      replacement: "all",
     };
   }
   if (key === "onDuty") return { ...prev, tab: "on-duty" };
   if (key === "suspended") return { ...prev, tab: "all", status: "suspended" };
   if (key === "company") return { ...prev, carType: "company" };
   if (key === "rent") return { ...prev, carType: "rent" };
-  return { ...prev, tab: "all", status: "under_repair" };
+  if (key === "underRepair") return { ...prev, tab: "all", status: "under_repair" };
+  if (key === "unassigned") return { ...prev, assignment: "unassigned" };
+  if (key === "bike") return { ...prev, kind: "bike" };
+  if (key === "car") return { ...prev, kind: "car" };
+  if (key === "active") return { ...prev, tab: "all", status: "active" };
+  return { ...prev, replacement: "yes" };
 }
 
 export function vehicleKpiSelected(
   key: VehicleKpiKey,
-  state: Pick<VehicleListFilterState, "tab" | "status" | "carType" | "typeOfUse" | "kind">,
+  state: Pick<
+    VehicleListFilterState,
+    "tab" | "status" | "carType" | "typeOfUse" | "kind" | "assignment" | "replacement"
+  >,
 ): boolean {
   const extrasClear =
     state.status === "all" &&
     state.carType === "all" &&
     state.typeOfUse === "all" &&
-    state.kind === "all";
+    state.kind === "all" &&
+    state.assignment === "all" &&
+    state.replacement === "all";
   if (key === "total") return state.tab === "all" && extrasClear;
   if (key === "onDuty") return state.tab === "on-duty";
   if (key === "suspended") return state.status === "suspended" || state.tab === "suspended";
   if (key === "company") return state.carType === "company";
   if (key === "rent") return state.carType === "rent";
-  return state.status === "under_repair";
+  if (key === "underRepair") return state.status === "under_repair";
+  if (key === "unassigned") return state.assignment === "unassigned";
+  if (key === "bike") return state.kind === "bike";
+  if (key === "car") return state.kind === "car";
+  if (key === "active") return state.status === "active";
+  return state.replacement === "yes";
 }
 
 export function vehicleMatchesTab(
@@ -194,7 +252,16 @@ export function vehicleMatchesSearch(row: VehicleListRow, query: string): boolea
 }
 
 export function vehicleListKpis(
-  vehicles: readonly Pick<VehicleListRow, "status" | "car_type" | "condition" | "assigned_on_duty">[],
+  vehicles: readonly Pick<
+    VehicleListRow,
+    | "status"
+    | "car_type"
+    | "condition"
+    | "assigned_on_duty"
+    | "assigned_driver_id"
+    | "vehicle_type_key"
+    | "replaces_vehicle_id"
+  >[],
 ) {
   return {
     total: vehicles.length,
@@ -203,6 +270,11 @@ export function vehicleListKpis(
     company: vehicles.filter((row) => row.car_type === "company").length,
     rent: vehicles.filter((row) => row.car_type === "rent").length,
     underRepair: vehicles.filter((row) => vehicleIsUnderRepair(row)).length,
+    unassigned: vehicles.filter((row) => row.assigned_driver_id == null).length,
+    bike: vehicles.filter((row) => row.vehicle_type_key === "bike").length,
+    car: vehicles.filter((row) => row.vehicle_type_key === "car").length,
+    active: vehicles.filter((row) => row.status === "active").length,
+    replacement: vehicles.filter((row) => row.replaces_vehicle_id != null).length,
   };
 }
 

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MG GO QA — Company DPD &amp; incentive verification</title>
+  <style>
+    @page { size: A4; margin: 13mm 12mm 15mm; }
+    * { box-sizing: border-box; }
+    body { font: 11px/1.42 "Segoe UI", system-ui, sans-serif; color: #1c1917; margin: 0; }
+    .kicker { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #0f766e; font-weight: 700; margin: 0 0 4px; }
+    h1 { font-size: 18px; line-height: 1.25; margin: 0 0 6px; color: #0f172a; }
+    .meta { color: #57534e; font-size: 10.5px; margin: 0 0 12px; }
+    h2 { font-size: 13px; color: #0f766e; margin: 14px 0 7px; padding-bottom: 3px; border-bottom: 1px solid #d6d3d1; }
+    h3 { font-size: 11.5px; margin: 9px 0 5px; }
+    p, ul, ol { margin: 0 0 7px; }
+    ul, ol { padding-left: 1.2em; }
+    li { margin: 2px 0; }
+    .box { border: 1px solid #d6d3d1; border-radius: 8px; padding: 8px 10px; margin: 7px 0; page-break-inside: avoid; }
+    .ask { background: #fff7ed; border-color: #fdba74; }
+    .did { background: #f0fdf4; border-color: #86efac; }
+    .warn { background: #fffbeb; border-color: #fbbf24; }
+    .fail { background: #fef2f2; border-color: #fca5a5; }
+    table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin: 5px 0 9px; }
+    th, td { border: 1px solid #d6d3d1; padding: 4px 6px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f4; font-weight: 600; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
+    .pos { color: #047857; }
+    .neg { color: #b91c1c; }
+    .c { text-align: center; width: 52px; }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 10px; background: #f5f5f4; padding: 0 3px; border-radius: 3px; }
+    .check { list-style: none; padding-left: 0; }
+    .check li { padding-left: 1.35em; position: relative; }
+    .check li::before { content: "☐"; position: absolute; left: 0; color: #0f766e; }
+    .footer { margin-top: 12px; font-size: 9.5px; color: #78716c; border-top: 1px solid #e7e5e4; padding-top: 7px; }
+    .small { font-size: 10px; color: #57534e; }
+  </style>
+</head>
+<body>
+  <p class="kicker">MG GO · Internal QA pack · 30 Sep 2026 · not for client forward</p>
+  <h1>Company DPD + incentive — request, ship, verify</h1>
+  <p class="meta">
+    Admin prod: <code>https://dpdadmin-prod.vercel.app</code>
+    &nbsp;·&nbsp; App branch: <code>vk-dev</code> commit <code>6e7b0ab</code>
+    &nbsp;·&nbsp; Play: <strong>do not publish</strong> until explicit approval
+    &nbsp;·&nbsp; DB: <code>20261030600000</code> + <code>20261030800000</code> on <code>eoksxkdssptgyqyywdju</code>
+  </p>
+
+  <h2>0. Builds and access</h2>
+  <table>
+    <thead>
+      <tr><th>Surface</th><th>Where</th><th>Who</th><th>Ready?</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Admin Companies UI</td>
+        <td><code>/en/settings/source-companies</code></td>
+        <td><code>companies.view</code> / <code>companies.edit</code> (or super admin)</td>
+        <td>Yes — Vercel prod aliased</td>
+      </tr>
+      <tr>
+        <td>Payout / Daily DPD / extra earnings RPC</td>
+        <td>Production Postgres</td>
+        <td>Any rider session hitting extra earnings / home</td>
+        <td>Yes — 308 applied</td>
+      </tr>
+      <tr>
+        <td>Rider Home + Extra Earnings UI</td>
+        <td>MG-GO <code>vk-dev</code></td>
+        <td>Test APK / sideload only</td>
+        <td>Code yes · Play no</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="box warn">
+    Production Play APK will still hide <code>company_scheme</code> and keep restaurant quests. QA of User screens <strong>must</strong> use a build that includes <code>6e7b0ab</code> (company scheme card + Extra Earnings branch). Do not file “app still shows quests” against Play until that build is installed.
+  </div>
+
+  <h2>1. What the client requested</h2>
+  <div class="box ask">
+    <ul>
+      <li>Per-company DPD target for <strong>outsourced</strong> riders.</li>
+      <li>Flat above/below per-order incentive (not stacked restaurant Extra Earnings quests) when the company scheme is live.</li>
+      <li><strong>Option A seed:</strong> Sadeeq ON (T=15, +0.100 / −0.350). Every other non-system company incentive OFF from the migration day.</li>
+      <li>Unassigned outsourced riders keep <strong>restaurant</strong> behaviour (no invented company scheme).</li>
+      <li>In-house (system company MG) never uses the company scheme.</li>
+      <li>Payout / remaining / achieved / lock use <strong>verified</strong> counts. Home Daily DPD <strong>numerator</strong> may use submitted progress (<code>progress_today</code>).</li>
+      <li>Ops can change target, toggle, rates, and <code>effective_from</code> in Admin without a code release.</li>
+    </ul>
+  </div>
+
+  <h2>2. What we shipped (map to request)</h2>
+  <table>
+    <thead>
+      <tr><th>Request</th><th>Shipped</th><th>Where to see it</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Company DPD target</td>
+        <td><code>source_companies.dpd_target</code> + Daily DPD company branch</td>
+        <td>Admin list DPD column; rider Daily DPD card target</td>
+      </tr>
+      <tr>
+        <td>Above / below scheme</td>
+        <td><code>compute_source_company_incentive</code> + extra earnings <code>company_scheme</code></td>
+        <td>Admin preview table; rider Incentive / Deduction / Net</td>
+      </tr>
+      <tr>
+        <td>Sadeeq seed ON</td>
+        <td>T=15, +0.100, −0.350, enabled, effective_from = migration day</td>
+        <td>Settings → Companies → Sadeeq</td>
+      </tr>
+      <tr>
+        <td>Other companies OFF</td>
+        <td><code>incentive_enabled = false</code> from migration day</td>
+        <td>No Scheme badge; riders keep restaurant quests</td>
+      </tr>
+      <tr>
+        <td>Hide restaurant quests when scheme live</td>
+        <td>Home quest card + Extra Earnings list branch on <code>company_scheme != null</code></td>
+        <td>User app (vk-dev build)</td>
+      </tr>
+      <tr>
+        <td>Verified vs progress</td>
+        <td>Card display = <code>progress_today ?? completed_today</code>; remaining/achieved = verified vs target</td>
+        <td>Home Daily DPD; extra earnings <code>completed_today</code></td>
+      </tr>
+      <tr>
+        <td>Ops self-serve</td>
+        <td>Companies modal: target, emerald On chip, rates, date, preview</td>
+        <td>Admin production</td>
+      </tr>
+      <tr>
+        <td>Shift-day week counts (same ship)</td>
+        <td><code>deliveries.shift_date</code> + Home week COALESCE</td>
+        <td>Home This week progress; My Deliveries day grouping on new builds</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="small">Do not apply leftover migrations <code>20261028300000</code> / <code>284</code> / <code>307</code>. Do not re-push <code>287</code>.</p>
+
+  <h2>3. Gold numbers (Sadeeq) — fail the row if UI disagrees</h2>
+  <p>T = 15 · above = 0.100 KD · below = 0.350 KD · round 3 decimals. n = <strong>verified</strong> orders today.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>n</th>
+        <th class="num">Incentive (n−T)×0.100</th>
+        <th class="num">Deduction (T−n)×0.350</th>
+        <th class="num">Net</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>30</td><td class="num pos">1.500</td><td class="num">0</td><td class="num pos">1.500</td></tr>
+      <tr><td>21</td><td class="num pos">0.600</td><td class="num">0</td><td class="num pos">0.600</td></tr>
+      <tr><td>15</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+      <tr><td>10</td><td class="num">0</td><td class="num neg">1.750</td><td class="num neg">−1.750</td></tr>
+      <tr><td>5</td><td class="num">0</td><td class="num neg">3.500</td><td class="num neg">−3.500</td></tr>
+      <tr><td>0</td><td class="num">0</td><td class="num neg">5.250</td><td class="num neg">−5.250</td></tr>
+    </tbody>
+  </table>
+  <p class="small">Admin preview uses the same six n values (30, 21, 15, 10, 5, 0). Rider Net on Extra Earnings must match verified n, not in-transit progress.</p>
+
+  <h2>4. Verify — Admin</h2>
+  <h3>A. List</h3>
+  <ol class="check">
+    <li>Open Settings → Companies. Permission: without <code>companies.view</code> the page is denied.</li>
+    <li>Sadeeq: DPD badge <strong>T 15</strong> + emerald <strong>Scheme</strong>.</li>
+    <li>Other outsourced rows: no Scheme unless a tester already enabled it. System company: lock + DPD “—”.</li>
+    <li>Drivers column is live intake count (in-house counted on MG, outsourced on their company key).</li>
+    <li>Edit is <code>companies.edit</code>. Add is <code>companies.create</code>. View-only must not save.</li>
+  </ol>
+  <h3>B. Sadeeq edit + preview</h3>
+  <ol class="check">
+    <li>Edit Sadeeq. Scheme chip selected = emerald + check (not pale primary).</li>
+    <li>Preview at 30/21/15/10/5/0 matches the gold table.</li>
+    <li>Change above to 0.200, preview at 21 becomes 1.200; revert before leaving production if this is a live company.</li>
+    <li>Prefer a <strong>throwaway company</strong> for destructive toggle tests.</li>
+  </ol>
+  <h3>C. Validation (use a dummy company)</h3>
+  <ol class="check">
+    <li>Scheme On + blank DPD target → error, no save.</li>
+    <li>Scheme On + blank above or below → error.</li>
+    <li>Scheme On + empty effective-from → error.</li>
+    <li>Scheme Off + blank rates/date → allowed (DPD-only / no scheme).</li>
+    <li>Target 0 or 1.5 → refused.</li>
+    <li>Cannot deactivate a company with active drivers. System company cannot be renamed / deactivated.</li>
+  </ol>
+  <h3>D. Effective-from</h3>
+  <ol class="check">
+    <li>On a dummy company, set scheme On with effective-from = <strong>tomorrow</strong> (Kuwait). Rider extra earnings must still be restaurant quests until that date.</li>
+    <li>Set effective-from = today or past. After save, a rider on that company with vk-dev app sees <code>company_scheme</code>.</li>
+  </ol>
+  <h3>E. Performance (admin)</h3>
+  <ol class="check">
+    <li>Performance DPD / Outsource: live company-scheme riders use <strong>company</strong> target, not restaurant <code>delivery_rules.dpd_target</code>.</li>
+    <li>In-house riders still use restaurant / zone target.</li>
+  </ol>
+
+  <h2>5. Verify — User (driver app)</h2>
+  <div class="box fail">
+    <p><strong>Precondition:</strong> install vk-dev APK that includes Extra Earnings <code>company_scheme</code> parse and <code>CompanySchemeCard</code>. Confirm build in About / driver devices if needed.</p>
+  </div>
+  <p>Prepare four riders (or one rider reassigned between tests):</p>
+  <table>
+    <thead>
+      <tr><th>Rider</th><th>Category</th><th>Company</th><th>Expect Home Extra Earnings</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>A</td><td>Outsourced</td><td>Sadeeq (scheme On, date ≤ today)</td><td>Company card only — no quests</td></tr>
+      <tr><td>B</td><td>Outsourced</td><td>Other company, scheme Off</td><td>Restaurant quests (or empty if no rules)</td></tr>
+      <tr><td>C</td><td>Outsourced</td><td>Unassigned</td><td>Restaurant rules — no company card</td></tr>
+      <tr><td>D</td><td>In-house</td><td>MG</td><td>Restaurant quests — no company card</td></tr>
+    </tbody>
+  </table>
+  <h3>Rider A (scheme live)</h3>
+  <ol class="check">
+    <li>Daily DPD target text = company target (15), not restaurant 10/20/etc.</li>
+    <li>Create pickup (submitted). Card numerator can increase (<code>progress_today</code>) while verified stays lower.</li>
+    <li>Remaining / achieved must <strong>not</strong> flip to achieved on progress alone. Need verified ≥ target.</li>
+    <li>Home quest area = company name, “Daily target: 15 orders”, “Verified today: N”, “+ 0.100 KD…”, “− 0.350 KD…”, three amounts.</li>
+    <li>Tap through to Extra Earnings: same card, no restaurant offer list.</li>
+    <li>Net on the card tracks <strong>verified</strong> N against the gold table (not in-transit count).</li>
+    <li>Arabic locale: target / verified / rate strings render; amounts stay numeric.</li>
+  </ol>
+  <h3>Riders B / C / D</h3>
+  <ol class="check">
+    <li>No company scheme card.</li>
+    <li>Restaurant Extra Earnings / band rows behave as before 308.</li>
+    <li>Daily DPD target from restaurant / zone rule.</li>
+  </ol>
+
+  <h2>6. Sign-off</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Block</th>
+        <th class="c">Pass</th>
+        <th class="c">Fail</th>
+        <th>Tester / date</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Admin list + Sadeeq seed</td><td class="c">☐</td><td class="c">☐</td><td></td><td></td></tr>
+      <tr><td>Admin preview vs gold table</td><td class="c">☐</td><td class="c">☐</td><td></td><td></td></tr>
+      <tr><td>Admin validation + deactivate guard</td><td class="c">☐</td><td class="c">☐</td><td></td><td></td></tr>
+      <tr><td>effective_from future = no scheme</td><td class="c">☐</td><td class="c">☐</td><td></td><td></td></tr>
+      <tr><td>User A company card (vk-dev)</td><td class="c">☐</td><td class="c">☐</td><td></td><td></td></tr>
+      <tr><td>User A progress vs verified</td><td class="c">☐</td><td class="c">☐</td><td></td><td></td></tr>
+      <tr><td>User B/C/D restaurant path</td><td class="c">☐</td><td class="c">☐</td><td></td><td></td></tr>
+      <tr><td>Play still withheld</td><td class="c">☐</td><td class="c">☐</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+
+  <p class="footer">Internal QA only. Client PDF is <code>client-company-dpd.pdf</code>. Do not paste migration filenames or vk-dev SHAs into the client email.</p>
+</body>
+</html>

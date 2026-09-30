@@ -281,8 +281,19 @@ Returns one object or `null` (no assignment). App does not send arguments. Field
 | `chip_no` | text \| null | Fuel chip number |
 | `fuel_monthly_limit_kwd` | numeric \| null | Monthly cap |
 | `model` | text \| null | Vehicle model |
+| `condition` | text \| null | Fleet condition catalog (e.g. `running`, `repair_required`). Added 2026-09-30. |
+| `type_of_use` | text \| null | `operational` \| `trainer` \| `standby`. Added 2026-09-30. |
+| `chassis_no` | text \| null | Chassis / frame number |
+| `model_year` | int \| null | Model year |
+| `car_type` | text \| null | `company` \| `rent` \| `maintenance` |
+| `status` | text \| null | Vehicle row status |
+| `handovers[]` | array | Read-only ledger, newest first, max 20 |
+| `accidents[]` | array | Read-only ledger, newest first, max 20 |
+| `documents[]` | array | Read-only ledger, newest first, max 20 |
+| `services[]` | array | Read-only ledger, newest first, max 20 |
+| `assets[]` | array | Read-only ledger (assigned assets), newest first, max 20 |
 
-Admin fleet condition catalog (2026-09-18) is admin-only (`vehicles.condition`). This RPC still omits it. `type_of_use` is also omitted.
+**Ledger entries (2026-09-30, migration `20261030900000`).** Additive — an app built before this still reads the old keys and simply ignores the new ones. Every entry is `{ at, notes, kind, has_file }` and **carries no storage key and no signed URL**: the rider only learns that a file exists (`has_file`), never where it lives. `at` is a Kuwait `YYYY-MM-DD` string, `kind` is the accident severity / document type / service kind / `name · code` for assets, and `notes` is the file name for a document. The arrays exist so the Vehicle tab can show the fleet record without the app ever holding another driver's paperwork. Staff RLS on `vehicle_handovers` / `vehicle_accidents` / `vehicle_documents` / `vehicle_services` / `asset_assignments` stays closed; the rider reads only through this `SECURITY DEFINER` RPC.
 
 #### `driver_report_fuel_fill` payload
 

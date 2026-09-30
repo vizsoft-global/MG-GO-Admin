@@ -20,6 +20,7 @@ import { CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/auth-context";
 import { cloneNotificationCampaign } from "./notifications-actions";
 import { NotificationsTabBar } from "./notifications-tab-bar";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { useInfiniteNotificationCampaigns, useNotificationDashboard } from "./use-notifications";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 
@@ -76,12 +77,15 @@ export function NotificationsPageShell() {
         title={t("title")}
         description={t("subtitle")}
         actions={
-          canManage ? (
-            <Button render={<Link href={`/${locale}/notifications/new`} />} className="h-9 cursor-pointer rounded-lg">
-              <Plus className="size-4" />
-              {t("createNotification")}
-            </Button>
-          ) : null
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <ClearAllModuleButton entity="notifications" />
+            {canManage ? (
+              <Button render={<Link href={`/${locale}/notifications/new`} />} className="h-9 cursor-pointer rounded-lg">
+                <Plus className="size-4" />
+                {t("createNotification")}
+              </Button>
+            ) : null}
+          </div>
         }
       />
 

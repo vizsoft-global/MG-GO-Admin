@@ -31,6 +31,7 @@ import {
 } from "@/components/app";
 import { AppPage } from "@/components/app/app-page";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { useAuth } from "@/contexts/auth-context";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -803,6 +804,7 @@ function DeliveriesPageContent() {
                   <Download className="h-3.5 w-3.5" />
                 )}
               </Button>
+              <ClearAllModuleButton entity="deliveries" compact />
             </div>
             {(hasActiveFilters || search) && (
               <p className="text-sm tabular-nums text-muted-foreground">

@@ -30,6 +30,7 @@ import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { WrongActionFormDialog } from "./wrong-action-form-dialog";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { useWrongActionDriverOptions, useWrongActionsList } from "./use-wrong-actions";
 import type { WrongActionRow, WrongActionSeverity } from "./types";
 import {
@@ -126,16 +127,19 @@ export function WrongActionsPageShell({
         title={t("title")}
         description={t("subtitle")}
         actions={
-          <Button
-            className="h-9 cursor-pointer rounded-lg"
-            disabled={!canManage}
-            onClick={() => {
-              if (canManage) replaceQuery({ add: true });
-            }}
-          >
-            <Plus className="me-2 h-3.5 w-3.5" />
-            {t("addIncident")}
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <ClearAllModuleButton entity="wrong_actions" />
+            <Button
+              className="h-9 cursor-pointer rounded-lg"
+              disabled={!canManage}
+              onClick={() => {
+                if (canManage) replaceQuery({ add: true });
+              }}
+            >
+              <Plus className="me-2 h-3.5 w-3.5" />
+              {t("addIncident")}
+            </Button>
+          </div>
         }
         tabs={
           <TabBar

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MG GO — Company DPD &amp; incentive (client note)</title>
+  <style>
+    @page { size: A4; margin: 14mm 13mm 16mm; }
+    * { box-sizing: border-box; }
+    body { font: 11.5px/1.45 "Segoe UI", system-ui, sans-serif; color: #1c1917; margin: 0; }
+    .kicker { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #0f766e; font-weight: 700; margin: 0 0 4px; }
+    h1 { font-size: 20px; line-height: 1.25; margin: 0 0 6px; color: #0f172a; }
+    .meta { color: #57534e; font-size: 11px; margin: 0 0 14px; }
+    h2 { font-size: 13.5px; color: #0f766e; margin: 16px 0 8px; padding-bottom: 3px; border-bottom: 1px solid #d6d3d1; }
+    h3 { font-size: 12px; margin: 10px 0 6px; }
+    p, ul, ol { margin: 0 0 8px; }
+    ul, ol { padding-left: 1.25em; }
+    li { margin: 3px 0; }
+    .box { border: 1px solid #d6d3d1; border-radius: 8px; padding: 10px 12px; margin: 8px 0; page-break-inside: avoid; }
+    .ask { background: #fff7ed; border-color: #fdba74; }
+    .did { background: #f0fdf4; border-color: #86efac; }
+    .warn { background: #fffbeb; border-color: #fbbf24; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0 10px; }
+    th, td { border: 1px solid #d6d3d1; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f4; font-weight: 600; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
+    .pos { color: #047857; }
+    .neg { color: #b91c1c; }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; background: #f5f5f4; padding: 0 3px; border-radius: 3px; }
+    .check { list-style: none; padding-left: 0; }
+    .check li { padding-left: 1.4em; position: relative; }
+    .check li::before { content: "☐"; position: absolute; left: 0; color: #0f766e; }
+    .footer { margin-top: 14px; font-size: 10px; color: #78716c; border-top: 1px solid #e7e5e4; padding-top: 8px; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  </style>
+</head>
+<body>
+  <p class="kicker">MG GO · Client note · 30 Sep 2026</p>
+  <h1>Outsourced company DPD target and incentive</h1>
+  <p class="meta">Audience: operations / payroll stakeholders &nbsp;·&nbsp; Admin live on production &nbsp;·&nbsp; Rider Play Store update not published yet</p>
+
+  <h2>1. What you requested</h2>
+  <div class="box ask">
+    <p>Outsourced riders should not always follow restaurant Extra Earnings quests. Each supplying company should be able to run its own daily target and a flat per-order incentive.</p>
+    <ul>
+      <li><strong>Own daily DPD target</strong> per outsourced company (not the restaurant rule).</li>
+      <li><strong>Simple scheme:</strong> pay extra for every verified order <em>above</em> the target; deduct for every verified order <em>below</em> the target.</li>
+      <li><strong>Sadeeq live from day one:</strong> target 15, +0.100 KD per order above, −0.350 KD per order below.</li>
+      <li><strong>Other outsourced companies:</strong> scheme stays <strong>off</strong> until you turn it on (so nobody is paid or deducted by surprise).</li>
+      <li><strong>In-house (MG)</strong> and <strong>Unassigned</strong> outsourced riders keep today’s restaurant delivery / incentive rules.</li>
+      <li>The rider <strong>Daily DPD</strong> card should use that company target. The card may count orders as they are submitted; <strong>payout, lock, remaining, and achieved</strong> stay on <strong>verified</strong> orders only.</li>
+      <li>Staff must be able to set target, on/off, rates, and start date in Admin — without a developer change.</li>
+    </ul>
+  </div>
+
+  <h2>2. What we delivered</h2>
+  <div class="box did">
+    <ul>
+      <li><strong>Settings → Companies</strong> now shows DPD target and a Scheme badge. Edit opens target, emerald <strong>On</strong> toggle, above/below KD rates, effective-from date, and a live preview of incentive / deduction / net.</li>
+      <li>The in-house system company (MG) stays locked. It has no company scheme — in-house riders keep restaurant rules.</li>
+      <li><strong>Sadeeq</strong> is seeded On (15 / +0.100 / −0.350) from the Kuwait date the change went live (30 Sep 2026).</li>
+      <li>Other outsourced companies are seeded with incentive <strong>Off</strong> from that same day. You can turn a scheme on when ready.</li>
+      <li>A live scheme replaces restaurant Extra Earnings quests for that rider on Home and Extra Earnings.</li>
+      <li>Home “This week” delivery counts now follow the working <strong>shift day</strong> (overnight after midnight still belongs to the shift that started).</li>
+      <li><strong>Admin production:</strong> <code>https://dpdadmin-prod.vercel.app/en/settings/source-companies</code></li>
+      <li><strong>Rider app:</strong> screens are built. They will show for riders only after the Play Store update. Until then, production Play still shows restaurant Extra Earnings.</li>
+    </ul>
+  </div>
+
+  <h3>How the scheme pays (verified orders today = n, target = T)</h3>
+  <ul>
+    <li>If n &gt; T: incentive = (n − T) × above rate. Deduction = 0.</li>
+    <li>If n &lt; T: deduction = (T − n) × below rate. Incentive = 0. Zero orders = a full-day deduction (T × below).</li>
+    <li>If n = T: incentive and deduction are both 0.</li>
+  </ul>
+  <p>Worked example for <strong>Sadeeq</strong> (T = 15, above = 0.100 KD, below = 0.350 KD):</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Verified orders today</th>
+        <th class="num">Incentive</th>
+        <th class="num">Deduction</th>
+        <th class="num">Net</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>30</td><td class="num pos">+1.500 KD</td><td class="num">0</td><td class="num pos">+1.500 KD</td></tr>
+      <tr><td>21</td><td class="num pos">+0.600 KD</td><td class="num">0</td><td class="num pos">+0.600 KD</td></tr>
+      <tr><td>15 (on target)</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+      <tr><td>10</td><td class="num">0</td><td class="num neg">−1.750 KD</td><td class="num neg">−1.750 KD</td></tr>
+      <tr><td>5</td><td class="num">0</td><td class="num neg">−3.500 KD</td><td class="num neg">−3.500 KD</td></tr>
+      <tr><td>0</td><td class="num">0</td><td class="num neg">−5.250 KD</td><td class="num neg">−5.250 KD</td></tr>
+    </tbody>
+  </table>
+
+  <h2>3. How to verify — Admin</h2>
+  <p>Sign in at <code>https://dpdadmin-prod.vercel.app</code> with a staff account that can open Settings. Open <strong>Settings → Companies</strong> (or <code>/en/settings/source-companies</code>).</p>
+  <ol class="check">
+    <li>The table has a <strong>DPD</strong> column. Sadeeq should show <strong>T 15</strong> and a green <strong>Scheme</strong> badge.</li>
+    <li>Other outsourced companies should <em>not</em> show Scheme unless you already turned them on. DPD may still show a target if one was set.</li>
+    <li>The MG / in-house company shows a lock and “—” for DPD (no company scheme).</li>
+    <li>Click <strong>Edit</strong> on Sadeeq. Confirm DPD target 15, Scheme <strong>On</strong> (green with a check), above 0.100, below 0.350, and an effective-from date.</li>
+    <li>The preview table updates as you type. At 30 / 21 / 15 / 10 / 5 / 0 orders it should match the example table above.</li>
+    <li>Turn Scheme off on a test company (not Sadeeq if riders are live), save, then on again. List badge follows On / Off.</li>
+    <li>Scheme On with a blank target, blank rate, or no effective-from date is refused with an error — it must not save.</li>
+    <li>You cannot deactivate a company that still has active drivers.</li>
+    <li>Optional: Performance → DPD / Outsource — outsourced riders on a live scheme use the <strong>company</strong> target for DPD, not the restaurant target.</li>
+  </ol>
+
+  <h2>4. How to verify — Rider app (User)</h2>
+  <div class="box warn">
+    <p><strong>Play Store is not updated yet.</strong> Production riders still see restaurant Extra Earnings until Play is published. Use a test build from Vizsoft, or wait for the Play release note.</p>
+  </div>
+  <div class="cols">
+    <div class="box">
+      <h3>Outsourced rider on a live scheme (e.g. Sadeeq)</h3>
+      <ol class="check">
+        <li>Home <strong>Daily DPD Target</strong> uses the <strong>company</strong> target (15 for Sadeeq), not a restaurant number.</li>
+        <li>The card count can rise when the rider submits an order (in transit / pending). Remaining / achieved still wait for <strong>verified</strong>.</li>
+        <li>Home Extra Earnings shows the <strong>company</strong> card (company name, daily target, verified today, +rate, −rate, Incentive / Deduction / Net) — not restaurant “quest” rows.</li>
+        <li>Open Extra Earnings from the menu. Same company card. No restaurant offer list.</li>
+      </ol>
+    </div>
+    <div class="box">
+      <h3>In-house or Unassigned rider</h3>
+      <ol class="check">
+        <li>Home Daily DPD still follows the restaurant / zone target.</li>
+        <li>Extra Earnings still lists restaurant incentive quests (Locked / Active bands as before).</li>
+        <li>No company scheme card.</li>
+      </ol>
+    </div>
+  </div>
+  <p>If a company’s scheme is Off, those outsourced riders also stay on restaurant Extra Earnings until you turn the scheme On and the effective-from date has been reached (Kuwait calendar).</p>
+
+  <p class="footer">MG GO Admin · production 30 Sep 2026 · Rider Play not in this note · Contact Vizsoft for a walkthrough or a test APK.</p>
+</body>
+</html>

@@ -33,6 +33,10 @@ import { CATALOG_SLUGS } from "@/lib/auth/permission-catalog";
 import {
   isStaffMatrixSlug,
   managerDowngradeSeedTicks,
+  RESOURCE_CRUD_LABELS,
+  RESOURCE_CRUD_MODULES,
+  RESOURCE_MATRIX_VERBS,
+  type ResourceCrudModule,
   type StaffAccessKind,
 } from "@/lib/auth/staff-access";
 import {
@@ -124,6 +128,43 @@ export function StaffAccessListShell({
   );
 }
 
+function ResourceTickRow({
+  module,
+  ticks,
+  onToggle,
+}: {
+  module: ResourceCrudModule;
+  ticks: Set<string>;
+  onToggle: (slug: string, on: boolean) => void;
+}) {
+  const { noun } = RESOURCE_CRUD_LABELS[module];
+  const viewSlug = `${module}.view`;
+  return (
+    <TableRow>
+      <TableCell className="font-medium capitalize">{noun}</TableCell>
+      <TableCell>
+        <Switch
+          checked={ticks.has(viewSlug)}
+          onCheckedChange={(on) => onToggle(viewSlug, on)}
+          className="scale-90 cursor-pointer"
+        />
+      </TableCell>
+      {RESOURCE_MATRIX_VERBS.map((verb) => {
+        const slug = `${module}.${verb}`;
+        return (
+          <TableCell key={verb}>
+            <Switch
+              checked={ticks.has(slug)}
+              onCheckedChange={(on) => onToggle(slug, on)}
+              className="scale-90 cursor-pointer"
+            />
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
+}
+
 function kindLabel(
   kind: StaffAccessKind | null,
   t: ReturnType<typeof useTranslations<"pages.settings.staffAccess">>,
@@ -160,10 +201,20 @@ export function StaffAccessDetailShell({
     [permissions],
   );
 
+  const resourceSlugs = useMemo(() => {
+    const slugs = new Set<string>();
+    for (const module of RESOURCE_CRUD_MODULES) {
+      slugs.add(`${module}.view`);
+      for (const verb of RESOURCE_MATRIX_VERBS) slugs.add(`${module}.${verb}`);
+    }
+    return slugs;
+  }, []);
+
   const byCategory = useMemo(() => {
     const q = search.trim().toLowerCase();
     const groups = new Map<string, PermissionRow[]>();
     for (const row of matrixPermissions) {
+      if (resourceSlugs.has(row.slug)) continue;
       if (
         q &&
         !row.label.toLowerCase().includes(q) &&
@@ -176,7 +227,20 @@ export function StaffAccessDetailShell({
       groups.set(row.category, list);
     }
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [matrixPermissions, search]);
+  }, [matrixPermissions, resourceSlugs, search]);
+
+  const resourceRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return RESOURCE_CRUD_MODULES.filter((module) => {
+      if (!q) return true;
+      const { noun, category } = RESOURCE_CRUD_LABELS[module];
+      return (
+        module.includes(q) ||
+        noun.toLowerCase().includes(q) ||
+        category.toLowerCase().includes(q)
+      );
+    });
+  }, [search]);
 
   const applyKind = (next: StaffAccessKind) => {
     if (kind === "manager" && next === "user") {
@@ -289,6 +353,36 @@ export function StaffAccessDetailShell({
               {t("applyTemplate")}
             </Button>
           </div>
+
+          {resourceRows.length > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-border bg-card p-4 shadow-sm">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("matrixTitle")}
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("matrixModule")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("matrixView")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("matrixCreate")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("matrixEdit")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("matrixDelete")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("matrixBulkDelete")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {resourceRows.map((module) => (
+                    <ResourceTickRow
+                      key={module}
+                      module={module}
+                      ticks={ticks}
+                      onToggle={toggle}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
 
           {byCategory.map(([category, rows]) => (
             <div key={category} className="rounded-xl border border-border bg-card p-4 shadow-sm">
