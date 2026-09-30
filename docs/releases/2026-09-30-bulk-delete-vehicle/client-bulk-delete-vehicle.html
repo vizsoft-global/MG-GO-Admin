@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MG GO — Bulk delete / Clear all + Vehicles as a full record (client note)</title>
+  <style>
+    @page { size: A4; margin: 14mm 13mm 16mm; }
+    * { box-sizing: border-box; }
+    body { font: 11.5px/1.45 "Segoe UI", system-ui, sans-serif; color: #1c1917; margin: 0; }
+    .kicker { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #0f766e; font-weight: 700; margin: 0 0 4px; }
+    h1 { font-size: 20px; line-height: 1.25; margin: 0 0 6px; color: #0f172a; }
+    .meta { color: #57534e; font-size: 11px; margin: 0 0 14px; }
+    h2 { font-size: 13.5px; color: #0f766e; margin: 16px 0 8px; padding-bottom: 3px; border-bottom: 1px solid #d6d3d1; }
+    h3 { font-size: 12px; margin: 10px 0 6px; }
+    p, ul, ol { margin: 0 0 8px; }
+    ul, ol { padding-left: 1.25em; }
+    li { margin: 3px 0; }
+    .box { border: 1px solid #d6d3d1; border-radius: 8px; padding: 10px 12px; margin: 8px 0; page-break-inside: avoid; }
+    .ask { background: #fff7ed; border-color: #fdba74; }
+    .did { background: #f0fdf4; border-color: #86efac; }
+    .warn { background: #fffbeb; border-color: #fbbf24; }
+    .stop { background: #fef2f2; border-color: #fca5a5; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0 10px; }
+    th, td { border: 1px solid #d6d3d1; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f4; font-weight: 600; }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; background: #f5f5f4; padding: 0 3px; border-radius: 3px; }
+    .check { list-style: none; padding-left: 0; }
+    .check li { padding-left: 1.5em; position: relative; }
+    .check li::before { content: "☐"; position: absolute; left: 0; color: #0f766e; font-size: 12px; }
+    .footer { margin-top: 14px; font-size: 10px; color: #78716c; border-top: 1px solid #e7e5e4; padding-top: 8px; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .yes { color: #047857; font-weight: 600; }
+    .no { color: #b91c1c; font-weight: 600; }
+    .pill { display: inline-block; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; border: 1px solid; }
+    .pill.live { color: #065f46; background: #d1fae5; border-color: #6ee7b7; }
+    .pill.play { color: #92400e; background: #fef3c7; border-color: #fcd34d; }
+  </style>
+</head>
+<body>
+  <p class="kicker">MG GO — Client note — 30 September 2026</p>
+  <h1>Clear all data (as its own permission) and Vehicles as a full record</h1>
+  <p class="meta">Audience: operations &amp; compliance stakeholders &nbsp;·&nbsp; Admin live on production &nbsp;·&nbsp; Rider app screens built, Play Store build not published yet</p>
+
+  <h2>1. What you requested</h2>
+  <div class="box ask">
+    <p><strong>Bulk delete / Clear all data.</strong> Before go-live, and after a QA pass, you need to empty a whole module — not tick rows one by one — and it has to be impossible for someone who is only allowed to delete a single record. You asked for:</p>
+    <ul>
+      <li>Its <strong>own permission</strong> on the Staff Access matrix, separate from Edit and Delete.</li>
+      <li><strong>Nobody gets it by surprise</strong> — no existing user should gain it when we ship.</li>
+      <li>A <strong>count first</strong>, then a typed confirmation — never a single click.</li>
+      <li>Module by module: driver groups, companies, zones, vehicles, and so on.</li>
+      <li>It must also <strong>clean the files</strong>, not leave orphan photos in storage.</li>
+    </ul>
+  </div>
+  <div class="box ask">
+    <p><strong>Vehicles.</strong> The Vehicles page was hard to work with:</p>
+    <ul>
+      <li>The same vehicle could be identified by its plate <em>or</em> by a “bike ID”, depending on the page.</li>
+      <li>The list had one filter row and no counts — you could not see how many bikes or cars you run, or how many have no rider.</li>
+      <li>Opening a vehicle gave a thin page with a driver line. There was no way to see its documents, handovers, accidents or services.</li>
+      <li>There was no way to <strong>assign a rider from the fleet side</strong>, or to see and assign that rider’s assets.</li>
+      <li>Riders could not see any of it in the app.</li>
+    </ul>
+  </div>
+
+  <h2>2. What we delivered — Admin <span class="pill live">LIVE</span></h2>
+
+  <h3>2.1 Clear all data, as its own permission</h3>
+  <div class="box did">
+    <ul>
+      <li><strong>A new tick</strong> on Staff Access: <em>Bulk delete / Clear all data</em>. The matrix now reads View data · Add data · Edit data · Delete individual records · <strong>Bulk delete / Clear all data</strong>.</li>
+      <li><strong>Nothing was granted automatically.</strong> We checked production after the release: 22 module ticks exist in the permission catalogue, and <strong>0 roles and 0 users</strong> hold any of them. You decide who gets it.</li>
+      <li><strong>Delete one row still does not mean clear the table.</strong> Someone with Edit, Delete, or the older “manage” level cannot clear anything — there is no upgrade path from one to the other, by design.</li>
+      <li><strong>24 modules</strong> can be cleared, in a recommended order, covering deliveries, attendance, earnings, payouts, requests, visit bookings, notifications, e-signature, drivers, driver groups, vehicles, assets, fuel, restaurants, zones, partners, companies, delivery &amp; incentive rules, wrong actions, document expiry, order reconciliation, DPD verifications and payroll. Rules and payouts reuse the Earnings tick, which is why they do not each add a separate one.</li>
+      <li><strong>It tells you the number first.</strong> Opening Clear all shows the live row count, and if a module cannot be emptied yet it names the reason (“Deliveries still point at these rows”, “Restaurants still point at these rows”, “Fuel log rows still point at these vehicles”).</li>
+      <li><strong>Typed confirmation.</strong> You must type the phrase (for example <code>CLEAR 42 DRIVERS</code>). The dialog states plainly that it is permanent and there is no undo.</li>
+      <li><strong>Files are cleaned too.</strong> Storage objects are removed after the rows are gone, and clearing Drivers also removes the linked app logins.</li>
+      <li><strong>Two places to do it:</strong> <code>Settings → Data cleanup → Clear all data</code> (all 24 modules, in order), and a <strong>Clear all</strong> button on the list page of each module that has one — drivers, deliveries, requests, visits, zones, partners, assets, fuel, notifications, document expiry, delivery rules, incentive rules, wrong actions and order reconciliation (the modules with no list of their own are cleared from the Settings screen).</li>
+      <li><strong>Look, don’t touch:</strong> the page opens straight onto Clear all for someone who holds only a bulk-delete tick, so nobody sees row-by-row purge tools they cannot use.</li>
+    </ul>
+  </div>
+
+  <h3>Recommended order (the screen follows it, top to bottom)</h3>
+  <table>
+    <thead><tr><th>Step</th><th>Modules</th><th>Why this order</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Deliveries · Attendance &amp; shifts · Earnings · Payouts</td><td>Nothing points at them, so they go first and free everything below.</td></tr>
+      <tr><td>2</td><td>Requests · Visit bookings · Notifications · E-signature</td><td>Hold their own approval steps and attachments.</td></tr>
+      <tr><td>3</td><td>Drivers · Driver groups</td><td>Deliveries and attendance must already be gone.</td></tr>
+      <tr><td>4</td><td>Vehicles · Assets · Fuel</td><td>Fleet rows that point at drivers.</td></tr>
+      <tr><td>5</td><td>Restaurants · Zones · Partners · Companies</td><td>Reference data. Rules borrow the Earnings tick because that is where they live.</td></tr>
+      <tr><td>6</td><td>Delivery rules · Incentive rules · Wrong actions · Document expiry · Order reconciliation · DPD verifications · Payroll</td><td>Configuration and reporting rows.</td></tr>
+    </tbody>
+  </table>
+  <div class="box warn">
+    <p><strong>Preserved on purpose — these are never cleared:</strong> app settings, staff roles, languages, menu layouts, staff accounts, and the two system companies (MG / Unassigned).</p>
+  </div>
+
+  <h3>2.2 Vehicles, as a record</h3>
+  <div class="box did">
+    <ul>
+      <li><strong>One identity.</strong> The plate is now the unique Vehicle ID everywhere; the internal “bike ID” is only a slug alias. No screen can identify a vehicle two different ways again.</li>
+      <li><strong>Counts on the list.</strong> A KPI strip shows Total, Unassigned, Bike, Car, Active and Replacement. Clicking a tile or picking the matching dropdown filters the same list, so the number you clicked and the rows you see always agree.</li>
+      <li><strong>A real detail page.</strong> The same identity header the Drivers page uses — plate as the ID badge, then Chassis, Model, Year, Kind, Car type, Type of use, Fuel, Chip, Limit, Location, Owner, Replacement, Driver, MG ID, Phone and Project.</li>
+      <li><strong>Assign a rider from the fleet side.</strong> A search box (name, MG ID or driver code — never a raw ID) assigns or unassigns on the spot, and a vehicle can only have one rider at a time.</li>
+      <li><strong>Assets.</strong> The vehicle’s Assets tab lists the assigned rider’s assets and lets you Assign from the catalogue or Add a new asset; the Assignments tab under Assets gained its own Add button.</li>
+      <li><strong>Companies popup</strong> is now a wide two-column dialog — fields on one side, live preview on the other, actions in the footer.</li>
+    </ul>
+  </div>
+
+  <h2>3. What we delivered — Rider app <span class="pill play">NEEDS PLAY UPDATE</span></h2>
+  <div class="box did">
+    <ul>
+      <li>The rider’s <strong>Vehicle</strong> tab now shows six more details (Chassis, Year, Condition, Car type, Type of use, Status) and five read-only history sections: <strong>Handover, Accident, Documents, Service, Assets</strong> — newest first, up to 20 entries each.</li>
+      <li>Each entry shows the date, what it was, and a note; where paperwork exists the row simply says <strong>File</strong>.</li>
+      <li><strong>Riders see that a document exists, never where it is stored.</strong> No file paths and no private links ever reach the phone, and a rider can only ever read their own vehicle.</li>
+      <li>Old app versions are unaffected: the data was added, nothing was changed or removed.</li>
+    </ul>
+  </div>
+  <div class="box warn">
+    <p><strong>Timing:</strong> the rider-app screens are written and on our branch, but the Play Store build has <em>not</em> been published — we will not push Play without your confirmation. Until that update reaches riders, the app keeps showing the current Vehicle tab. If a rider restarts on the old build, nothing breaks.</p>
+  </div>
+
+  <h2>4. How to verify — Admin</h2>
+  <ol>
+    <li><strong>Staff Access.</strong> Sign in as super admin → <code>Settings → Staff access</code>. Scroll the module matrix: the fifth column reads <strong>Bulk delete / Clear all data</strong>, and it is <strong>off</strong> for every existing user. Confirm your own account is unaffected.</li>
+    <li><strong>The module list.</strong> Open <code>Settings → Data cleanup → Clear all data</code>. You should see the modules in order, each with a live row count and a <strong>Clear all</strong> button — and the note that it empties the module, not selected rows.</li>
+    <li><strong>Count and blockers.</strong> Find <strong>Zones</strong>. Its preview first reports how many rows would go. If drivers still have zones, the primary button stays disabled and the reason is printed. Repeat after clearing drivers — the block should lift.</li>
+    <li><strong>Typed confirmation.</strong> Open any module you intend to empty. The dialog shows the count and asks you to type the phrase (for example <code>CLEAR 12 DRIVER GROUPS</code>). Confirm anything else is refused, and that Cancel does nothing.</li>
+    <li><strong>Do one honest run.</strong> Clear a module you actually want emptied (driver groups or order reconciliation is the safest first). It should report the number cleared, and running it again should find nothing left.</li>
+    <li><strong>Files.</strong> After a clear that had attachments, open the storage browser for that module and confirm the files for those rows are gone, not just the rows.</li>
+    <li><strong>Do not look for it as a normal admin.</strong> Open the same page with an operator who has no bulk-delete tick: the Clear all tab/buttons are not offered, and the page refuses the action if it is called directly.</li>
+    <li><strong>Vehicles.</strong> <code>/vehicles</code> → the KPI strip counts match the list; click <strong>Unassigned</strong> and <strong>Bike</strong> and watch the rows narrow. Open a vehicle → the identity header shows the plate as the ID badge, the six-across field grid is filled, and <strong>Assign driver</strong> searches by name / MG ID / code and saves. Then check the Assets tab: the rider’s assets are listed, and Assign / Add asset both work.</li>
+    <li><strong>Companies popup.</strong> <code>Settings → Companies</code> → Edit opens a wide two-column dialog with the preview beside the fields and the buttons in the footer, with no inner scrollbar on a laptop screen.</li>
+  </ol>
+
+  <h2>5. How to verify — Rider app</h2>
+  <div class="box warn">
+    <p>This part needs an updated app build. On the rider’s phone, Play still has the previous version, so the new sections will not be visible until that update is published.</p>
+  </div>
+  <ol>
+    <li>Install the updated build on a test phone and sign in as a rider who <strong>has</strong> a vehicle assigned.</li>
+    <li>Open <strong>Vehicle</strong>. Under the identity rows you should now see the six extra fields, then the five sections: Handover, Accident, Documents, Service, Assets.</li>
+    <li>A rider with no history sees a friendly empty line in each section, not a blank card.</li>
+    <li>Where a document exists, the row shows <strong>File</strong> — and there is no way to open or reveal the file itself, which is intended.</li>
+    <li>Sign in as a rider with <strong>no</strong> vehicle assigned: no sections about someone else’s vehicle appear.</li>
+    <li>Confirm Arabic still reads right-to-left and nothing overflows.</li>
+  </ol>
+
+  <h2>6. What did not change</h2>
+  <ul>
+    <li>Existing permissions, roles and sidebar layouts. The new tick starts off for everyone.</li>
+    <li>Nothing was deleted on production during this work — the counts shown are simply the live numbers.</li>
+    <li>Delivery, earnings, incentive and payroll rules are untouched.</li>
+    <li>The rider app keeps working on the current Play build.</li>
+  </ul>
+
+  <div class="box stop">
+    <p><strong>Before you hand Clear all to anyone:</strong> decide the list of people who may use it, grant the tick per person in Staff access, and agree that a clear is run top to bottom. It is permanent and there is no undo.</p>
+  </div>
+
+  <h2>7. Sign-off</h2>
+  <table>
+    <thead><tr><th>Item</th><th>Owner</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Admin pages reviewed (Clear all, Vehicles, Companies)</td><td>Operations</td><td>Please confirm</td></tr>
+      <tr><td>Bulk-delete tick granted to the agreed people only</td><td>Super admin</td><td>Your call</td></tr>
+      <tr><td>First intentional clear run</td><td>Operations</td><td>Pending your go</td></tr>
+      <tr><td>Play Store update for the rider app</td><td>Vizsoft</td><td>Waiting for your approval</td></tr>
+    </tbody>
+  </table>
+
+  <p class="footer">
+    Prepared by Vizsoft · MG GO admin panel · 30 September 2026 · Admin build <code>cd8ec3b</code> on <code>dpdadmin-prod.vercel.app</code>.
+    Companion documents: the internal QA pack covers the same items step by step, including the permission matrix and the database gate.
+  </p>
+</body>
+</html>

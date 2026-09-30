@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MG GO — Bulk delete / Clear all + Vehicle record (internal QA pack)</title>
+  <style>
+    @page { size: A4; margin: 13mm 12mm 15mm; }
+    * { box-sizing: border-box; }
+    body { font: 11px/1.42 "Segoe UI", system-ui, sans-serif; color: #1c1917; margin: 0; }
+    .kicker { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #b91c1c; font-weight: 700; margin: 0 0 4px; }
+    h1 { font-size: 19px; line-height: 1.25; margin: 0 0 6px; color: #0f172a; }
+    .meta { color: #57534e; font-size: 10.5px; margin: 0 0 12px; }
+    h2 { font-size: 13px; color: #0f766e; margin: 15px 0 7px; padding-bottom: 3px; border-bottom: 1px solid #d6d3d1; }
+    h3 { font-size: 11.5px; margin: 10px 0 5px; color: #0f172a; }
+    p, ul, ol { margin: 0 0 7px; }
+    ul, ol { padding-left: 1.2em; }
+    li { margin: 2px 0; }
+    .box { border: 1px solid #d6d3d1; border-radius: 8px; padding: 8px 10px; margin: 7px 0; page-break-inside: avoid; }
+    .ask { background: #fff7ed; border-color: #fdba74; }
+    .did { background: #f0fdf4; border-color: #86efac; }
+    .warn { background: #fffbeb; border-color: #fbbf24; }
+    .stop { background: #fef2f2; border-color: #fca5a5; }
+    .info { background: #eff6ff; border-color: #93c5fd; }
+    table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin: 5px 0 9px; }
+    th, td { border: 1px solid #d6d3d1; padding: 4px 6px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f4; font-weight: 600; }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 10px; background: #f5f5f4; padding: 0 3px; border-radius: 3px; }
+    pre { font-family: ui-monospace, Consolas, monospace; font-size: 9.5px; background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 6px; padding: 7px 9px; margin: 6px 0; white-space: pre-wrap; page-break-inside: avoid; }
+    .check { list-style: none; padding-left: 0; }
+    .check li { padding-left: 1.5em; position: relative; }
+    .check li::before { content: "☐"; position: absolute; left: 0; color: #0f766e; font-size: 12px; }
+    .footer { margin-top: 12px; font-size: 9.5px; color: #78716c; border-top: 1px solid #e7e5e4; padding-top: 7px; }
+    .yes { color: #047857; font-weight: 600; }
+    .no { color: #b91c1c; font-weight: 600; }
+    .pill { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 999px; border: 1px solid; }
+    .pill.live { color: #065f46; background: #d1fae5; border-color: #6ee7b7; }
+    .pill.play { color: #92400e; background: #fef3c7; border-color: #fcd34d; }
+    .pill.known { color: #3730a3; background: #e0e7ff; border-color: #a5b4fc; }
+    .pass { text-align: center; width: 70px; }
+  </style>
+</head>
+<body>
+  <p class="kicker">MG GO — Internal QA pack — 30 Sep 2026 — not for client forward</p>
+  <h1>Bulk delete / Clear all + Vehicles as a full record — request, ship, verify</h1>
+  <p class="meta">Scope: Admin panel (shipped) and MG-GO rider app (coded, no Play build). Written so each step can be marked pass/fail and handed to a developer without a meeting.</p>
+
+  <h2>0. Builds and access</h2>
+  <table>
+    <thead><tr><th>Thing</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Admin production</td><td><code>https://dpdadmin-prod.vercel.app</code></td></tr>
+      <tr><td>Admin commit</td><td><code>cd8ec3b</code> (branch <code>vk-dev</code>) — this is the deployment that owns the production alias</td></tr>
+      <tr><td>Rider app repo</td><td>MG-GO, branch <code>vk-dev</code>, commit <code>4323af9</code></td></tr>
+      <tr><td>Supabase</td><td><code>eoksxkdssptgyqyywdju</code> (production)</td></tr>
+      <tr><td>Migrations applied</td><td><code>20261030900000</code> (vehicle RPC), <code>20261031000000</code> (bulk-delete gate + purge-all), <code>20261031100000</code> (FK guards)</td></tr>
+      <tr><td>Play build</td><td><span class="no">Not published.</span> The rider-app section can only be verified from a locally built <code>vk-dev</code> build against production.</td></tr>
+    </tbody>
+  </table>
+  <div class="box info">
+    <p><strong>Accounts needed:</strong> (1) super admin, (2) a Manager, (3) a User with <em>none</em> of the bulk-delete ticks, (4) a User you can grant exactly one tick to, (5) two riders — one with a vehicle assigned and history, one with no vehicle.</p>
+  </div>
+
+  <h2>1. What the client requested</h2>
+  <div class="box ask">
+    <ol>
+      <li>Empty a whole module in one operation instead of ticking rows, <strong>gated by its own permission</strong> — never implied by Edit or Delete.</li>
+      <li><strong>No silent grant:</strong> shipping must not hand the capability to anyone who already exists.</li>
+      <li>A <strong>count before the act</strong>, and a typed confirmation — never a single click.</li>
+      <li>Cover the modules: drivers, deliveries, requests, visits, earnings, attendance, vehicles, assets, fuel, zones, partners, companies, rules, notifications, e-signature, wrong actions, reconciliation, verifications, payroll.</li>
+      <li>Clean the <strong>files</strong> too, not just the rows.</li>
+      <li>Vehicles: one identity (plate, not a second “bike ID”), counts on the list, a real detail page, assign a rider from the fleet side, see and assign the rider’s assets.</li>
+      <li>Riders should see their own vehicle’s handover / accident / document / service / asset history in the app, read-only, without exposing paperwork.</li>
+    </ol>
+  </div>
+
+  <h2>2. What we shipped (mapped to the request)</h2>
+  <table>
+    <thead><tr><th>#</th><th>Request</th><th>Implementation</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Own permission</td><td>New verb <code>bulk_delete</code> added to the staff matrix → <code>{module}.bulk_delete</code>. <strong>22 slugs</strong> seeded in <code>admin_permissions</code>; 24 clearable entities map onto them because rules and payouts borrow <code>earnings.bulk_delete</code>.</td></tr>
+      <tr><td>2</td><td>No silent grant</td><td>Role junction and user ticks left empty by the migration. Verified on production: 22 catalogue rows, <strong>0 role grants, 0 user ticks</strong>.</td></tr>
+      <tr><td>3</td><td>Never implied by manage / delete</td><td><code>permissionGrantedByTicks</code> returns <strong>false</strong> for <code>bulk_delete</code> however the ticks are spelled; <code>roleSlugsForSave</code> does not synthesise the slug from CRUD verbs. Pinned by <code>staff-access.test.ts</code>.</td></tr>
+      <tr><td>4</td><td>Count + typed confirm</td><td><code>admin_purge_preview_all(entity)</code> returns the row count and blocker codes; <code>ConfirmDeleteDialog</code> requires the phrase <code>CLEAR {count} {NOUN}</code>.</td></tr>
+      <tr><td>5</td><td>Module coverage</td><td>24 entities, go-live order 1→6 (deliveries → reference data). Rules and payouts borrow <code>earnings.bulk_delete</code>.</td></tr>
+      <tr><td>6</td><td>Files cleaned</td><td><code>admin_purge_run_all</code> returns <code>storage_keys</code> + <code>manifest</code> and the server action sweeps storage <em>after</em> the rows are gone.</td></tr>
+      <tr><td>7</td><td>Vehicle identity</td><td>Plate (<code>reg_number</code>) is the unique Vehicle ID; <code>bike_id</code> is a slug alias only.</td></tr>
+      <tr><td>8</td><td>Counts on the list</td><td>KPI strip: Total, Unassigned, Bike, Car, Active, Replacement; tiles and dropdowns filter the same list.</td></tr>
+      <tr><td>9</td><td>Real detail page</td><td>Drivers-style identity header + 6-column field grid; Edit + Assign driver.</td></tr>
+      <tr><td>10</td><td>Assign rider from fleet</td><td><code>assignVehicleDriver(vehicleId, driverId | null)</code> — clears the vehicle from any other rider, writes <code>drivers.vehicle_id</code> + matching <code>driver_intakes.vehicle_id</code>.</td></tr>
+      <tr><td>11</td><td>Rider assets</td><td>Vehicle <em>Assets</em> tab lists the rider’s assigned assets with Assign (catalogue search + qty, same stock gate) and Add asset; Assets → Assignments gained its own Add.</td></tr>
+      <tr><td>12</td><td>Rider app ledgers</td><td><code>driver_get_assigned_vehicle</code> extended <strong>additively</strong>: 6 identity fields + 5 arrays, entries <code>{ at, notes, kind, has_file }</code> with <strong>no storage key and no signed URL</strong>.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>3. Permission model — the exact gate</h2>
+  <div class="box did">
+    <ul>
+      <li><strong>Matrix wording:</strong> View data · Add data · Edit data · Delete individual records · <strong>Bulk delete / Clear all data</strong>.</li>
+      <li><strong>Who may clear:</strong> super admin; a Manager (<code>access_kind = 'manager'</code>, full catalogue); a User holding that module’s individual tick; or a non-custom role that carries the slug. Enforced in the database by <code>_admin_purge_require(slug)</code> via <code>_admin_purge_slug_for_entity(entity)</code>.</li>
+      <li><strong>Page access:</strong> the route requires <code>data.cleanup</code>. That slug is granted automatically to anyone holding a bulk-delete tick, so a User lands on Clear all rather than on a tab whose every request would be refused. The row-by-row candidate tabs and their storage sweeps remain super admin.</li>
+      <li><strong>Not aliased:</strong> holding <code>{module}.manage</code>, <code>.create</code>, <code>.edit</code> or <code>.delete</code> clears nothing.</li>
+    </ul>
+  </div>
+
+  <h3>3.1 Read-only SQL proof (safe to run on production)</h3>
+  <pre>select (select count(*) from admin_permissions
+         where slug like '%.bulk_delete')            as catalog_rows,   -- expect 22
+       (select count(*) from admin_role_permissions
+         where permission_slug like '%.bulk_delete')  as role_grants,     -- expect 0
+       (select count(*) from admin_user_permissions
+         where permission_slug like '%.bulk_delete')  as user_ticks,      -- expect 0
+       (select count(*) from admin_permissions
+         where slug = 'data.cleanup')                 as data_cleanup;    -- expect 1</pre>
+
+  <h3>3.2 Gate refuses a non-staff session (already proven, re-run if you like)</h3>
+  <pre>set local role authenticated;                     -- simulate a rider session
+select admin_purge_preview_all('zones');
+-- expected: ERROR  P0001: not_authorized
+--           CONTEXT: _admin_purge_require(text) line 4 at RAISE</pre>
+  <p><em>Run both statements in one transaction so the role change rolls back with it.</em></p>
+
+  <h2>4. Go-live order and blockers</h2>
+  <table>
+    <thead><tr><th>Step</th><th>Modules (entity keys)</th><th>Slug checked</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>deliveries · attendance · earnings · payouts</td><td>deliveries/attendance/earnings <code>.bulk_delete</code></td></tr>
+      <tr><td>2</td><td>requests · visits · notifications · esign</td><td>requests/notifications <code>.bulk_delete</code>, visits/esign category slugs</td></tr>
+      <tr><td>3</td><td>drivers · driver_groups</td><td>drivers/driver_groups <code>.bulk_delete</code></td></tr>
+      <tr><td>4</td><td>vehicles · assets · fuel</td><td>vehicles/assets/fuel <code>.bulk_delete</code></td></tr>
+      <tr><td>5</td><td>restaurants · zones · partners · companies · delivery_rules · incentive_rules</td><td>own slugs; the two rule entities borrow <code>earnings.bulk_delete</code></td></tr>
+      <tr><td>6</td><td>wrong_actions · documents · order_recon · verifications · payroll</td><td>own slugs</td></tr>
+    </tbody>
+  </table>
+  <div class="box warn">
+    <p><strong>Blocker codes</strong> the preview can return, and their client copy: <code>blocked_by_deliveries</code> → “Deliveries still point at these rows.” · <code>blocked_by_restaurants</code> → “Restaurants still point at these rows.” · <code>blocked_by_fuel</code> → “Fuel log rows still point at these vehicles.”</p>
+    <p><code>admin_purge_run_all(entity, limit)</code> clamps the batch to 500 rows; the server action loops batches inside a time budget and reports how many are left if it stops early.</p>
+  </div>
+  <div class="box stop">
+    <p><strong>QA data-destruction rules.</strong> Never run Clear all on production <code>Drivers</code> or <code>Deliveries</code> during testing — that removes real riders and real orders. Use <code>driver_groups</code> or <code>order_recon</code> for a genuine run, and use the preview-only path (count + blockers) for the rest. A clear is permanent.</p>
+  </div>
+
+  <h2>5. Verify — Admin</h2>
+
+  <h3>A. Staff Access matrix</h3>
+  <ul class="check">
+    <li>Super admin → <code>/en/settings/staff-access</code>. The module matrix has a fifth column <strong>Bulk delete / Clear all data</strong>.</li>
+    <li>Every existing user shows that column <strong>unticked</strong> (0 grants at ship).</li>
+    <li>Tick <em>Bulk delete</em> for one module on the test User and save. Re-open: the tick persisted; no other module’s tick changed.</li>
+    <li>On the same user, tick <em>Delete individual records</em> only. The bulk-delete column must stay unticked — Delete must not carry it.</li>
+    <li>Untick the bulk-delete tick again and confirm the User loses the Clear all surface (section E).</li>
+  </ul>
+
+  <h3>B. Where the control appears</h3>
+  <ul class="check">
+    <li>Sidebar → <em>Settings → Data cleanup</em> is visible to super admin and to a bulk-delete holder, and hidden from a User with none.</li>
+    <li>The page opens on the <strong>Clear all data</strong> tab for a bulk-delete-only User (no row-by-row tabs drawn).</li>
+    <li>As super admin, the row-by-row candidate tabs are still present and still work.</li>
+    <li>List-page <strong>Clear all</strong> buttons exist (destructive + trash icon, visually distinct from Add) on the 14 list pages that have one: drivers, deliveries, requests, visits, zones, partners, assets, fuel, notifications, document expiry, delivery rules, incentive rules, wrong actions, order reconciliation — and are absent when the tick is missing.</li>
+  </ul>
+
+  <h3>C. Preview — count and blockers</h3>
+  <ul class="check">
+    <li>Open Clear all on <strong>Driver groups</strong>: the button shows a live row count (“N rows”); the dialog title reads “Clear driver groups”.</li>
+    <li>Open Clear all on <strong>Zones</strong> while drivers still reference zones: the primary button is disabled and the reason names deliveries/restaurants/fuel as applicable.</li>
+    <li>Repeat after clearing drivers (step D): the block lifts.</li>
+    <li>Confirm the count is the whole module, not selected rows — the banner says so.</li>
+  </ul>
+
+  <h3>D. The run itself</h3>
+  <ul class="check">
+    <li>Trigger Clear all on <strong>Driver groups</strong>. The typed phrase is required (for example <code>CLEAR 3 DRIVER GROUPS</code>); any other text leaves the confirm disabled.</li>
+    <li>Confirm → success toast names the module and the number cleared; the list is empty afterwards.</li>
+    <li>Run it a second time → it finds nothing left (idempotent, no error).</li>
+    <li>If you stop it early (a large module), the toast reports rows cleared <em>and</em> rows remaining, and running again continues.</li>
+    <li>Buttons are disabled while the run is in flight (no double submit).</li>
+  </ul>
+
+  <h3>E. Access refusal, both layers</h3>
+  <ul class="check">
+    <li>As the User with <em>no</em> bulk-delete tick: the Clear all control is not drawn anywhere.</li>
+    <li>Call it directly (devtools → invoke the server action or POST the RPC): it is refused, not silently ignored.</li>
+    <li>As a rider session (<code>set local role authenticated</code>): <code>not_authorized</code>, as in §3.2.</li>
+    <li>As a User holding only <code>{module}.bulk_delete</code> for one module: clearing a <em>different</em> module is refused.</li>
+  </ul>
+
+  <h3>F. Storage and linked logins</h3>
+  <ul class="check">
+    <li>Clear a module that had attachments (safe candidate: a driver group is not enough — use order reconciliation or a small request set you created for QA).</li>
+    <li>The storage objects for those rows are gone afterwards, not orphaned.</li>
+    <li>Clearing <strong>Drivers</strong> (only with approval) removes the linked rider app logins, and those riders can no longer sign in with their old passcode.</li>
+  </ul>
+
+  <h3>G. Preserved data</h3>
+  <ul class="check">
+    <li>After every test run above: <code>app_settings</code>, roles, locales, menu layouts and staff profiles are untouched.</li>
+    <li>The two system companies (MG / Unassigned) survive a Companies clear.</li>
+    <li>Audit log (<code>/en/settings/logs</code>) has one entry per clear, with the entity and count.</li>
+  </ul>
+
+  <h3>H. Vehicles — list</h3>
+  <ul class="check">
+    <li><code>/en/vehicles</code> shows the KPI strip: Total, Unassigned, Bike, Car, Active, Replacement.</li>
+    <li>Each tile equals the row count of the list after clicking it; <strong>Unassigned</strong> shows only vehicles with no rider; <strong>Bike</strong>/<strong>Car</strong> match the kind dropdown.</li>
+    <li>Clicking <strong>Total</strong> clears the KPI-driven filters.</li>
+    <li>No vehicle can be identified by a “bike ID” anywhere a plate should appear.</li>
+  </ul>
+
+  <h3>I. Vehicles — detail and assignment</h3>
+  <ul class="check">
+    <li>Open a vehicle: plate is the ID badge, with Kind / Condition / Status / On Duty badges beside it.</li>
+    <li>The field grid is six across on a laptop and carries Chassis, Model, Year, Kind, Car type, Type of use, Fuel, Chip, Limit, Location, Owner, Replacement, Driver, MG ID, Phone, Project.</li>
+    <li><strong>Assign driver</strong> searches by name, MG ID or driver code (recents appear first, the trigger never shows a raw UUID). Saving shows “Driver assignment saved” and the Driver / MG ID / Phone rows update.</li>
+    <li>Assign rider B to a vehicle that already had rider A: A is unassigned (their <code>vehicle_id</code> is cleared), and the vehicle shows B.</li>
+    <li>Unassign: the vehicle becomes Unassigned on the list and the KPI count moves.</li>
+    <li>Edit form also offers the driver picker and saves without touching the assignment unexpectedly.</li>
+  </ul>
+
+  <h3>J. Vehicles — assets, and the Assets module</h3>
+  <ul class="check">
+    <li>Vehicle → <strong>Assets</strong> tab lists the assigned rider’s assets (empty state when none, with the prompt to assign a driver first).</li>
+    <li><strong>Assign</strong> opens a catalogue search, requires a quantity, respects the stock gate, and the row appears after saving.</li>
+    <li><strong>Add asset</strong> opens the asset sheet (needs <code>assets.create</code>).</li>
+    <li><code>/en/assets</code> → <strong>Assignments</strong> tab now has its own Add (previously only the catalogue tab had one).</li>
+    <li>Assets actions are refused for a user without <code>assets.manage</code> / <code>assets.create</code>.</li>
+  </ul>
+
+  <h3>K. Companies popup</h3>
+  <ul class="check">
+    <li><code>/en/settings/source-companies</code> → Edit: wide dialog (~96vw, ~95dvh on a laptop), two columns — fields left, live preview right.</li>
+    <li>Actions sit in the footer (left title/subtitle, right Cancel + primary); the Close X is outside the frame top-right.</li>
+    <li>No inner scrollbar at 1366×768.</li>
+  </ul>
+
+  <h2>6. Verify — Rider app (MG-GO)</h2>
+  <div class="box warn">
+    <p><strong>Play build is not published.</strong> Production Play still shows the old Vehicle tab. Build from branch <code>vk-dev</code> (commit <code>4323af9</code>) against production Supabase and install on a test phone. Do not file “missing in app” bugs against the Play build for this section.</p>
+  </div>
+  <ul class="check">
+    <li>Rider with a vehicle assigned → <strong>Vehicle</strong>: six extra rows appear (Chassis, Year, Condition, Car type, Type of use, Status) when the data exists; missing fields simply do not render.</li>
+    <li>Five sections render below: <strong>Handover, Accident, Documents, Service, Assets</strong>.</li>
+    <li>A section with no history shows its empty line (“No handover records yet.” etc.), not a blank card.</li>
+    <li>Entries show date · kind · notes, newest first, capped at 20.</li>
+    <li>Where a file exists the row shows <strong>File</strong> only — the app never receives, displays or can open a storage path or signed URL (inspect the RPC response and confirm keys are absent).</li>
+    <li>Rider with <strong>no</strong> vehicle assigned: none of another rider’s vehicle data appears.</li>
+    <li>An older payload (simulate by removing the new keys) must not break the screen — the arrays are optional.</li>
+    <li>Arabic: RTL direction correct, no overflow or clipped rows.</li>
+  </ul>
+
+  <h2>7. Automated coverage and commands</h2>
+  <pre>cd dpdadmin
+npm run test:permissions   # 30 pass - staff-access + purge entity map
+npm run test:vehicles      # 60 pass - KPI filters, list utils, import
+npm run test:drivers       # 177 pass
+npx tsc --noEmit           # 0 errors
+npm run build              # production build, exit 0</pre>
+  <pre>cd MG-GO
+flutter test test/assigned_vehicle_test.dart test/fleet_vehicle_ui_test.dart   # 9 pass</pre>
+
+  <h2>8. Known issues — do not file these as new bugs</h2>
+  <table>
+    <thead><tr><th>Item</th><th>State</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>arabic_overflow_test.dart</code> → <em>request detail in Arabic</em> golden</td>
+        <td><span class="pill known">Pre-existing</span></td>
+        <td>0.47% (1769px) diff. Reproduced at the commit <em>before</em> this change (<code>6e7b0ab</code>) with identical numbers, so it is not caused by the vehicle work.</td>
+      </tr>
+      <tr>
+        <td><code>arabic_overflow_test.dart</code> → <em>visit ticket in Arabic</em> golden</td>
+        <td><span class="pill known">Pre-existing</span></td>
+        <td>5.05% (19027px) diff, identical at <code>6e7b0ab</code>. Environment-dependent golden.</td>
+      </tr>
+      <tr>
+        <td>Rider app Vehicle ledgers on the Play build</td>
+        <td><span class="pill play">Expected</span></td>
+        <td>Needs a Play release; see §6.</td>
+      </tr>
+      <tr>
+        <td>Two Arabic goldens refresh</td>
+        <td><span class="pill known">Deferred on purpose</span></td>
+        <td>Client decision: leave the goldens as they are rather than re-baseline.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>9. Engineering appendix</h2>
+  <p><strong>Key files (Admin).</strong></p>
+  <ul>
+    <li><code>src/features/settings/purge-entities.ts</code> — the 24 entity → <code>{module}.bulk_delete</code> map, go-live order, permission filter.</li>
+    <li><code>src/features/settings/data-cleanup-actions.ts</code> — preview / run / storage sweep server actions, batch loop and budget.</li>
+    <li><code>src/features/settings/clear-all-module-button.tsx</code>, <code>data-cleanup-clear-all-panel.tsx</code>, <code>data-cleanup-panel.tsx</code>, <code>purge-blockers.ts</code> — UI and blocker copy.</li>
+    <li><code>src/lib/auth/staff-access.ts</code> — <code>bulk_delete</code> never aliased; <code>grantDataCleanupIfBulkDelete</code>.</li>
+    <li><code>src/features/vehicles/*</code> — KPI filters, identity header, <code>assignVehicleDriver</code>, assets tab.</li>
+    <li><code>scripts/release-pdf.mjs</code> — renders this pack and the client note to PDF (the two files beside the HTML).</li>
+  </ul>
+  <p><strong>Key files (MG-GO).</strong> <code>lib/features/vehicle/assigned_vehicle.dart</code>, <code>lib/features/vehicle/vehicle_screen.dart</code>, <code>lib/l10n/app_{en,ar}.arb</code>, <code>test/assigned_vehicle_test.dart</code>, <code>test/fleet_vehicle_ui_test.dart</code>.</p>
+  <p><strong>Migrations (already applied to <code>eoksxkdssptgyqyywdju</code>).</strong></p>
+  <ul>
+    <li><code>20261030900000_driver_vehicle_record.sql</code> — additive <code>driver_get_assigned_vehicle</code>.</li>
+    <li><code>20261031000000_bulk_delete_purge_all.sql</code> — 24 permission rows, <code>_admin_purge_require</code>, <code>_admin_purge_slug_for_entity</code>, <code>admin_purge_preview_all</code>, <code>admin_purge_run_all</code>.</li>
+    <li><code>20261031100000_bulk_delete_purge_fk_guards.sql</code> — FK-guard nullifications and junction cleanup.</li>
+  </ul>
+  <p><strong>API contract for the rider app:</strong> <code>docs/DRIVER_APP_HANDOFF.md</code> → <code>driver_get_assigned_vehicle</code> return shape, including the ledger keys and the explicit statement that no storage key or signed URL is returned.</p>
+
+  <h2>10. Sign-off</h2>
+  <table>
+    <thead><tr><th>#</th><th>Test group</th><th>Owner</th><th class="pass">Pass / Fail</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>A</td><td>Staff Access matrix</td><td></td><td class="pass"></td><td></td></tr>
+      <tr><td>B</td><td>Control visibility</td><td></td><td class="pass"></td><td></td></tr>
+      <tr><td>C</td><td>Preview count + blockers</td><td></td><td class="pass"></td><td></td></tr>
+      <tr><td>D</td><td>Clear-all run + idempotence</td><td></td><td class="pass"></td><td></td></tr>
+      <tr><td>E</td><td>Refusals (UI, action, role, per-module)</td><td></td><td class="pass"></td><td></td></tr>
+      <tr><td>F</td><td>Storage + linked logins</td><td></td><td class="pass"></td><td></td></tr>
+      <tr><td>G</td><td>Preserved data + audit</td><td></td><td class="pass"></td><td></td></tr>
+      <tr><td>H–J</td><td>Vehicles list / detail / assets</td><td></td><td class="pass"></td><td></td></tr>
+      <tr><td>K</td><td>Companies popup</td><td></td><td class="pass"></td><td></td></tr>
+      <tr><td>6</td><td>Rider app vehicle tab</td><td></td><td class="pass"></td><td>needs vk-dev build</td></tr>
+    </tbody>
+  </table>
+
+  <p class="footer">
+    Vizsoft QA pack · 30 September 2026 · Admin <code>cd8ec3b</code> · MG-GO <code>4323af9</code> · Supabase <code>eoksxkdssptgyqyywdju</code>.
+    Not for client distribution — the companion file <code>client-bulk-delete-vehicle.pdf</code> is the client-facing version.
+  </p>
+</body>
+</html>
