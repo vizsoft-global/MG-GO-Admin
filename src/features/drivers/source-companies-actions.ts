@@ -21,6 +21,9 @@ export type SourceCompanyError =
   | "client_code_taken"
   | "source_company_system_locked"
   | "source_company_in_use"
+  | "invalid_dpd_target"
+  | "invalid_incentive_rate"
+  | "incentive_effective_from_required"
   | "save_failed";
 
 const KNOWN_ERRORS = new Set<string>([
@@ -31,6 +34,9 @@ const KNOWN_ERRORS = new Set<string>([
   "client_code_taken",
   "source_company_system_locked",
   "source_company_in_use",
+  "invalid_dpd_target",
+  "invalid_incentive_rate",
+  "incentive_effective_from_required",
 ]);
 
 async function requirePermission(slug: Permission) {
@@ -45,7 +51,9 @@ async function loadCompanies(
 ): Promise<SourceCompany[]> {
   const { data, error } = await supabase
     .from("source_companies")
-    .select("key, name, client_code, is_active, is_system, sort_order")
+    .select(
+      "key, name, client_code, is_active, is_system, sort_order, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
+    )
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
   if (error) throw new Error(error.message);
@@ -85,6 +93,11 @@ export async function upsertSourceCompany(input: {
   clientCode: string;
   isActive: boolean;
   isNew: boolean;
+  dpdTarget: number | null;
+  incentiveEnabled: boolean;
+  incentiveAboveKwd: number | null;
+  incentiveBelowKwd: number | null;
+  effectiveFrom: string | null;
 }): Promise<{ ok: true } | { error: SourceCompanyError }> {
   try {
     await requirePermission(input.isNew ? "companies.create" : "companies.edit");
@@ -101,7 +114,9 @@ export async function upsertSourceCompany(input: {
   const supabase = await createClient();
   const { data: before } = await supabase
     .from("source_companies")
-    .select("key, name, client_code, is_active")
+    .select(
+      "key, name, client_code, is_active, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
+    )
     .eq("key", key)
     .maybeSingle();
   if (input.isNew && before) return { error: "invalid_company_key" };
@@ -111,6 +126,11 @@ export async function upsertSourceCompany(input: {
     p_name: name,
     p_client_code: clientCode ?? "",
     p_is_active: input.isActive,
+    p_dpd_target: input.dpdTarget,
+    p_incentive_enabled: input.incentiveEnabled,
+    p_incentive_above_kwd: input.incentiveAboveKwd,
+    p_incentive_below_kwd: input.incentiveBelowKwd,
+    p_effective_from: input.effectiveFrom,
   });
   if (error) {
     const code = KNOWN_ERRORS.has(error.message) ? error.message : "save_failed";
@@ -123,7 +143,17 @@ export async function upsertSourceCompany(input: {
     entityId: key,
     routeName: "upsertSourceCompany",
     before: before ?? null,
-    after: { key, name, client_code: clientCode, is_active: input.isActive },
+    after: {
+      key,
+      name,
+      client_code: clientCode,
+      is_active: input.isActive,
+      dpd_target: input.dpdTarget,
+      incentive_enabled: input.incentiveEnabled,
+      incentive_above_kwd: input.incentiveAboveKwd,
+      incentive_below_kwd: input.incentiveBelowKwd,
+      effective_from: input.effectiveFrom,
+    },
   });
   revalidatePath("/[locale]/(dashboard)/settings/source-companies", "page");
   return { ok: true };

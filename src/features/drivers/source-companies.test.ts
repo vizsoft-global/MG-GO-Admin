@@ -5,16 +5,37 @@ import { guessColumnMapping } from "./import/parse";
 import {
   companyKeyFromName,
   companyMatchesCategory,
+  computeSourceCompanyIncentive,
   normalizeClientCode,
+  parseDpdTarget,
+  parseRateKwd,
   resolveCompanyInput,
   selectableCompanies,
+  validateSourceCompanyScheme,
   type SourceCompany,
 } from "./source-companies";
 
+const company = (
+  overrides: Partial<SourceCompany> = {},
+): SourceCompany => ({
+  key: "kn",
+  name: "KN",
+  client_code: null,
+  is_active: true,
+  is_system: false,
+  sort_order: 1,
+  dpd_target: null,
+  incentive_enabled: false,
+  incentive_above_kwd: null,
+  incentive_below_kwd: null,
+  effective_from: null,
+  ...overrides,
+});
+
 const companies: SourceCompany[] = [
-  { key: "mg", name: "MG", client_code: "CL-0001", is_active: true, is_system: true, sort_order: 0 },
-  { key: "kn", name: "KN", client_code: null, is_active: true, is_system: false, sort_order: 1 },
-  { key: "brk", name: "Barakat", client_code: "CL-0009", is_active: false, is_system: false, sort_order: 2 },
+  { key: "mg", name: "MG", client_code: "CL-0001", is_active: true, is_system: true, sort_order: 0, dpd_target: null, incentive_enabled: false, incentive_above_kwd: null, incentive_below_kwd: null, effective_from: null },
+  company({ key: "kn", name: "KN" }),
+  company({ key: "brk", name: "Barakat", client_code: "CL-0009", is_active: false, sort_order: 2 }),
 ];
 
 describe("resolveCompanyInput", () => {
@@ -79,5 +100,146 @@ describe("SOP import headers", () => {
     assert.equal(mapping.client_id, "Client ID");
     assert.equal(mapping.client_name, "Client Name");
     assert.equal(mapping.source_company, undefined);
+  });
+});
+
+describe("computeSourceCompanyIncentive", () => {
+  // Sadeeq scheme: target 15, above 0.100, below 0.350.
+  const target = 15;
+  const above = 0.1;
+  const below = 0.35;
+
+  it("matches the Excel Sadeeq rows", () => {
+    assert.deepEqual(computeSourceCompanyIncentive(30, target, above, below), {
+      incentiveKwd: 1.5,
+      deductionKwd: 0,
+      netKwd: 1.5,
+    });
+    assert.deepEqual(computeSourceCompanyIncentive(21, target, above, below), {
+      incentiveKwd: 0.6,
+      deductionKwd: 0,
+      netKwd: 0.6,
+    });
+    assert.deepEqual(computeSourceCompanyIncentive(10, target, above, below), {
+      incentiveKwd: 0,
+      deductionKwd: 1.75,
+      netKwd: -1.75,
+    });
+    assert.deepEqual(computeSourceCompanyIncentive(5, target, above, below), {
+      incentiveKwd: 0,
+      deductionKwd: 3.5,
+      netKwd: -3.5,
+    });
+  });
+
+  it("is zero at exactly the target", () => {
+    assert.deepEqual(computeSourceCompanyIncentive(15, target, above, below), {
+      incentiveKwd: 0,
+      deductionKwd: 0,
+      netKwd: 0,
+    });
+  });
+
+  it("applies a full deduction at zero orders when the scheme is on", () => {
+    assert.deepEqual(computeSourceCompanyIncentive(0, target, above, below), {
+      incentiveKwd: 0,
+      deductionKwd: 5.25,
+      netKwd: -5.25,
+    });
+  });
+
+  it("treats a negative order count as zero", () => {
+    assert.deepEqual(computeSourceCompanyIncentive(-3, target, above, below), {
+      incentiveKwd: 0,
+      deductionKwd: 5.25,
+      netKwd: -5.25,
+    });
+  });
+});
+
+describe("scheme parsers", () => {
+  it("parses a positive integer DPD target, else null", () => {
+    assert.equal(parseDpdTarget("15"), 15);
+    assert.equal(parseDpdTarget(" 15 "), 15);
+    assert.equal(parseDpdTarget(""), null);
+    assert.equal(parseDpdTarget("0"), null);
+    assert.equal(parseDpdTarget("-1"), null);
+    assert.equal(parseDpdTarget("1.5"), null);
+    assert.equal(parseDpdTarget("abc"), null);
+  });
+
+  it("parses a positive KWD rate, else null", () => {
+    assert.equal(parseRateKwd("0.100"), 0.1);
+    assert.equal(parseRateKwd("0.35"), 0.35);
+    assert.equal(parseRateKwd(""), null);
+    assert.equal(parseRateKwd("0"), null);
+    assert.equal(parseRateKwd("-0.1"), null);
+    assert.equal(parseRateKwd("abc"), null);
+  });
+});
+
+describe("validateSourceCompanyScheme", () => {
+  const base = {
+    dpdTarget: "15",
+    incentiveEnabled: true,
+    aboveKwd: "0.100",
+    belowKwd: "0.350",
+    effectiveFrom: "2026-09-30",
+  };
+
+  it("accepts a complete scheme", () => {
+    assert.equal(validateSourceCompanyScheme(base), null);
+  });
+
+  it("allows incentive off without rates or date", () => {
+    assert.equal(
+      validateSourceCompanyScheme({
+        ...base,
+        incentiveEnabled: false,
+        aboveKwd: "",
+        belowKwd: "",
+        effectiveFrom: "",
+      }),
+      null,
+    );
+  });
+
+  it("rejects a blank or non-integer DPD target", () => {
+    assert.equal(validateSourceCompanyScheme({ ...base, dpdTarget: "" }), "invalid_dpd_target");
+    assert.equal(validateSourceCompanyScheme({ ...base, dpdTarget: "1.5" }), "invalid_dpd_target");
+  });
+
+  it("rejects a missing rate when the scheme is on", () => {
+    assert.equal(validateSourceCompanyScheme({ ...base, aboveKwd: "" }), "invalid_incentive_rate");
+    assert.equal(validateSourceCompanyScheme({ ...base, belowKwd: "" }), "invalid_incentive_rate");
+  });
+
+  it("rejects a missing effective date when the scheme is on", () => {
+    assert.equal(
+      validateSourceCompanyScheme({ ...base, effectiveFrom: "" }),
+      "incentive_effective_from_required",
+    );
+  });
+
+  it("allows DPD-only (target + date, incentive off) and still rejects a bad target", () => {
+    assert.equal(
+      validateSourceCompanyScheme({
+        ...base,
+        incentiveEnabled: false,
+        aboveKwd: "",
+        belowKwd: "",
+      }),
+      null,
+    );
+    assert.equal(
+      validateSourceCompanyScheme({
+        ...base,
+        incentiveEnabled: false,
+        aboveKwd: "",
+        belowKwd: "",
+        dpdTarget: "0",
+      }),
+      "invalid_dpd_target",
+    );
   });
 });

@@ -294,7 +294,9 @@ export async function resolveDriverImportPreview(
     supabase.from("profiles").select("id, phone").eq("role", "rider"),
     supabase
       .from("source_companies")
-      .select("key, name, client_code, is_active, is_system, sort_order"),
+      .select(
+        "key, name, client_code, is_active, is_system, sort_order, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
+      ),
   ]);
   const companies: SourceCompany[] = companyRows ?? [];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Building2, Lock, Pencil, Plus } from "lucide-react";
@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AppFormSection } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
-import { SegmentOption } from "@/components/app/toggle-chip";
+import { SegmentOption, ToggleChip } from "@/components/app/toggle-chip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -27,6 +27,10 @@ import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   companyKeyFromName,
+  computeSourceCompanyIncentive,
+  parseDpdTarget,
+  parseRateKwd,
+  validateSourceCompanyScheme,
   type SourceCompanyWithUsage,
 } from "./source-companies";
 import { upsertSourceCompany } from "./source-companies-actions";
@@ -39,7 +43,17 @@ type Draft = {
   isNew: boolean;
   isSystem: boolean;
   driverCount: number;
+  dpdTarget: string;
+  incentiveEnabled: boolean;
+  aboveKwd: string;
+  belowKwd: string;
+  effectiveFrom: string;
 };
+
+const PREVIEW_ORDERS = [30, 21, 15, 10, 5, 0];
+
+const toRateStr = (v: number | string | null | undefined): string =>
+  v == null ? "" : String(v);
 
 export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWithUsage[] }) {
   const t = useTranslations("pages.settings.sourceCompanies");
@@ -60,6 +74,11 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
       isNew: true,
       isSystem: false,
       driverCount: 0,
+      dpdTarget: "",
+      incentiveEnabled: false,
+      aboveKwd: "",
+      belowKwd: "",
+      effectiveFrom: "",
     });
 
   const openEdit = (c: SourceCompanyWithUsage) =>
@@ -71,12 +90,44 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
       isNew: false,
       isSystem: c.is_system,
       driverCount: c.driver_count,
+      dpdTarget: c.dpd_target != null ? String(c.dpd_target) : "",
+      incentiveEnabled: c.incentive_enabled,
+      aboveKwd: toRateStr(c.incentive_above_kwd),
+      belowKwd: toRateStr(c.incentive_below_kwd),
+      effectiveFrom: c.effective_from ?? "",
     });
 
   const draftKey = draft ? (draft.isNew ? companyKeyFromName(draft.name) : draft.key) : "";
 
+  const schemeError = useMemo(() => {
+    if (!draft || draft.isSystem) return null;
+    return validateSourceCompanyScheme({
+      dpdTarget: draft.dpdTarget,
+      incentiveEnabled: draft.incentiveEnabled,
+      aboveKwd: draft.aboveKwd,
+      belowKwd: draft.belowKwd,
+      effectiveFrom: draft.effectiveFrom,
+    });
+  }, [draft]);
+
+  const previewRows = useMemo(() => {
+    if (!draft || !draft.incentiveEnabled || draft.isSystem) return [];
+    const target = parseDpdTarget(draft.dpdTarget);
+    const above = parseRateKwd(draft.aboveKwd);
+    const below = parseRateKwd(draft.belowKwd);
+    if (target == null || above == null || below == null) return [];
+    return PREVIEW_ORDERS.map((orders) => ({
+      orders,
+      ...computeSourceCompanyIncentive(orders, target, above, below),
+    }));
+  }, [draft]);
+
   const save = () => {
     if (!draft) return;
+    if (schemeError) {
+      toast.error(t(`errors.${schemeError}`));
+      return;
+    }
     startTransition(async () => {
       const result = await upsertSourceCompany({
         key: draftKey,
@@ -84,6 +135,11 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
         clientCode: draft.clientCode,
         isActive: draft.isActive,
         isNew: draft.isNew,
+        dpdTarget: parseDpdTarget(draft.dpdTarget),
+        incentiveEnabled: draft.incentiveEnabled,
+        incentiveAboveKwd: parseRateKwd(draft.aboveKwd),
+        incentiveBelowKwd: parseRateKwd(draft.belowKwd),
+        effectiveFrom: draft.effectiveFrom.trim() || null,
       });
       if ("error" in result) {
         toast.error(t(`errors.${result.error}`));
@@ -116,6 +172,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
             <TableRow>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colClientId")}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colDpd")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
               <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>{t("colDrivers")}</TableHead>
               <TableHead className={`${TABLE_HEAD_CLASS} w-24 text-end`}>{t("colActions")}</TableHead>
@@ -142,6 +199,31 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                     <Badge variant="outline" className="border-amber-200 bg-amber-100 text-amber-800">
                       {t("notSet")}
                     </Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {c.is_system ? (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      —
+                    </Badge>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      {c.dpd_target != null ? (
+                        <Badge variant="outline" className="border-primary/20 bg-primary/10 font-mono text-primary">
+                          {t("dpdBadge", { target: c.dpd_target })}
+                        </Badge>
+                      ) : null}
+                      {c.incentive_enabled ? (
+                        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                          {t("scheme")}
+                        </Badge>
+                      ) : null}
+                      {!c.incentive_enabled && c.dpd_target == null ? (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          —
+                        </Badge>
+                      ) : null}
+                    </span>
                   )}
                 </TableCell>
                 <TableCell>
@@ -177,7 +259,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
       </div>
 
       <Dialog open={draft !== null} onOpenChange={(open) => (open ? null : setDraft(null))}>
-        <DialogContent showCloseButton closeOutside className="w-[min(560px,96vw)] overflow-visible p-0">
+        <DialogContent showCloseButton closeOutside className="w-[min(620px,96vw)] overflow-visible p-0">
           {draft ? (
             <form
               onSubmit={(event) => {
@@ -223,6 +305,135 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                   />
                   <p className="text-[10px] text-muted-foreground">{t("clientIdHint")}</p>
                 </div>
+
+                {!draft.isSystem ? (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="source-company-dpd">{t("dpdTarget")}</Label>
+                        <Input
+                          id="source-company-dpd"
+                          className="h-9 font-mono"
+                          inputMode="numeric"
+                          value={draft.dpdTarget}
+                          placeholder={t("dpdTargetPlaceholder")}
+                          onChange={(event) =>
+                            setDraft({ ...draft, dpdTarget: event.target.value.replace(/\D/g, "") })
+                          }
+                        />
+                        <p className="text-[10px] text-muted-foreground">{t("dpdTargetHint")}</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="source-company-effective">{t("effectiveFrom")}</Label>
+                        <Input
+                          id="source-company-effective"
+                          type="date"
+                          className="h-9"
+                          openPickerOnFocus={false}
+                          value={draft.effectiveFrom}
+                          onChange={(event) =>
+                            setDraft({ ...draft, effectiveFrom: event.target.value })
+                          }
+                        />
+                        <p className="text-[10px] text-muted-foreground">{t("effectiveFromHint")}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label>{t("incentiveScheme")}</Label>
+                      <div className="flex items-center gap-2">
+                        <ToggleChip
+                          selected={draft.incentiveEnabled}
+                          onClick={() =>
+                            setDraft({ ...draft, incentiveEnabled: !draft.incentiveEnabled })
+                          }
+                        >
+                          {t("incentiveSchemeOn")}
+                        </ToggleChip>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">{t("incentiveSchemeHint")}</p>
+                    </div>
+
+                    {draft.incentiveEnabled ? (
+                      <>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="source-company-above">{t("aboveKwd")}</Label>
+                            <Input
+                              id="source-company-above"
+                              className="h-9 font-mono"
+                              inputMode="decimal"
+                              value={draft.aboveKwd}
+                              placeholder="0.100"
+                              onChange={(event) =>
+                                setDraft({ ...draft, aboveKwd: event.target.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="source-company-below">{t("belowKwd")}</Label>
+                            <Input
+                              id="source-company-below"
+                              className="h-9 font-mono"
+                              inputMode="decimal"
+                              value={draft.belowKwd}
+                              placeholder="0.350"
+                              onChange={(event) =>
+                                setDraft({ ...draft, belowKwd: event.target.value })
+                              }
+                            />
+                          </div>
+                        </div>
+
+                        {previewRows.length > 0 ? (
+                          <div className="overflow-hidden rounded-lg border border-border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className={TABLE_HEAD_CLASS}>{t("previewOrders")}</TableHead>
+                                  <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>
+                                    {t("previewIncentive")}
+                                  </TableHead>
+                                  <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>
+                                    {t("previewDeduction")}
+                                  </TableHead>
+                                  <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>
+                                    {t("previewNet")}
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {previewRows.map((row) => (
+                                  <TableRow key={row.orders}>
+                                    <TableCell className="font-mono text-[10px] tabular-nums">
+                                      {row.orders}
+                                    </TableCell>
+                                    <TableCell className="text-end font-mono text-[10px] tabular-nums text-emerald-700">
+                                      {row.incentiveKwd.toFixed(3)}
+                                    </TableCell>
+                                    <TableCell className="text-end font-mono text-[10px] tabular-nums text-destructive">
+                                      {row.deductionKwd.toFixed(3)}
+                                    </TableCell>
+                                    <TableCell
+                                      className={`text-end font-mono text-[10px] tabular-nums ${
+                                        row.netKwd < 0 ? "text-destructive" : "text-emerald-700"
+                                      }`}
+                                    >
+                                      {row.netKwd.toFixed(3)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : null}
+
+                    <p className="text-[10px] text-muted-foreground">{t("companyConfigNote")}</p>
+                  </>
+                ) : null}
+
                 <div className="space-y-1.5">
                   <Label>{t("colStatus")}</Label>
                   <div role="radiogroup" className="grid grid-cols-2 gap-1.5">
@@ -262,7 +473,13 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                 <Button
                   type="submit"
                   className="h-9"
-                  disabled={pending || draft.isSystem || !draft.name.trim() || !draftKey}
+                  disabled={
+                    pending ||
+                    draft.isSystem ||
+                    !draft.name.trim() ||
+                    !draftKey ||
+                    schemeError !== null
+                  }
                 >
                   {t("save")}
                 </Button>
