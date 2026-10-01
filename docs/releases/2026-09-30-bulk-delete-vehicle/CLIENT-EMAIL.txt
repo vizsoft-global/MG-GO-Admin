@@ -1,0 +1,78 @@
+To: Noura; Mohamed; Vijay; Mustafa; Aziz
+Cc: (Vizsoft team)
+Subject: MG GO — Clear all data (its own permission) and Vehicles as a full record are live on Admin
+
+Hi team,
+
+Two things from your last list are live on the admin panel today: a safe way to
+empty a whole module, and the Vehicles page rebuilt as a proper record. Summary
+below; the attached client note has the detail and the checks, and our QA pack
+covers the same steps internally.
+
+WHAT YOU ASKED FOR
+• Clearing a whole module must be its own permission — never something a person
+  who can edit or delete one row already has.
+• Nobody should gain it by surprise when we ship.
+• Show how many rows will go, and require a typed confirmation. No one-click.
+• Also clean the files, not just the rows.
+• Vehicles: one identity (the plate), counts on the list, a real detail page,
+  assign a rider from the fleet side, and see/assign that rider's assets.
+• Riders should see their own vehicle's handover / accident / document /
+  service / asset history in the app, read-only.
+
+WHAT IS LIVE (ADMIN)
+• Settings -> Staff access now has a fifth column: "Bulk delete / Clear all
+  data". At ship, 0 roles and 0 users hold it — it is yours to grant, per person.
+• Edit or Delete does NOT carry it. Clearing is a separate decision and a
+  separate tick, by design.
+• 24 modules can be cleared from Settings -> Data cleanup -> "Clear all data",
+  in the recommended order (Deliveries / Attendance / Earnings first, reference
+  data last), plus a "Clear all" button on the module's own list page where the
+  module has one.
+• Before anything happens you see the live row count. If a module cannot be
+  emptied yet, the screen says why ("Deliveries still point at these rows").
+• Confirmation is typed: CLEAR 42 DRIVERS. Permanent, no undo, and the dialog
+  says so.
+• Storage files are swept after the rows, and clearing Drivers also removes the
+  linked app logins.
+• Never touched: app settings, roles, languages, menu layouts, staff accounts,
+  and the MG / Unassigned system companies.
+• Vehicles: the plate is the unique Vehicle ID everywhere; the list gained the
+  counts (Total, Unassigned, Bike, Car, Active, Replacement) and they filter the
+  same list; the detail page opens with the same identity header the Drivers
+  page uses, with Edit and Assign driver right there; the Assets tab lists the
+  assigned rider's assets with Assign and Add asset.
+• Settings -> Companies popup is now a wide two-column dialog, fields on one
+  side and preview on the other.
+
+WHAT IS CODED (RIDER APP)
+• The Vehicle tab gains six details plus read-only Handover / Accident /
+  Documents / Service / Assets sections. Riders see that paperwork exists, never
+  where the file is stored — no paths or private links reach the phone.
+• This needs the Play Store update, which we have NOT published. We will not
+  publish it without your go-ahead; until then the app is unchanged for riders.
+
+HOW TO CHECK IT (5 minutes, Admin)
+1. Settings -> Staff access: the new column is there and off for everyone.
+2. Settings -> Data cleanup -> Clear all data: modules in order, each with a
+   live count and a Clear all button.
+3. Open Clear all on Zones and confirm the count appears and, if drivers still
+   have zones, the button is disabled with the reason shown.
+4. Type the phrase in the confirm box — anything else stays disabled.
+5. /vehicles: the KPI counts match the list; Unassigned and Bike narrow the rows;
+   open a vehicle, Assign driver by name / MG ID / code; check the Assets tab.
+6. Settings -> Companies -> Edit: wide two-column dialog, no inner scrolling.
+
+Please read the attached client note before handing Clear all to anyone: decide
+the names, grant the tick per person, and agree that it runs top to bottom.
+Nothing was deleted on production while building this — the counts you see are
+simply the live numbers.
+
+Happy to walk through it on a short call, and to schedule the first intentional
+clear together.
+
+Thank you,
+Vizsoft
+
+Attachments: client-bulk-delete-vehicle.pdf (client note)
+             qa-bulk-delete-vehicle.pdf (internal QA pack — not for the client)
