@@ -557,7 +557,7 @@ export async function savePayrollClient(input: {
     p_default_result: input.defaultResult,
     p_good_threshold: input.goodThreshold,
     p_average_threshold: input.averageThreshold,
-    p_sort_order: input.sortOrder ?? null,
+    p_sort_order: input.sortOrder ?? undefined,
   });
   if (error) return { error: error.message };
   await logAdminActivity({
@@ -607,7 +607,7 @@ export async function addPayrollClient(input: {
     p_uses_zone: input.usesZone,
     p_uses_orders: input.usesOrders,
     p_uses_hours: input.usesHours,
-    p_copy_from: input.copyFrom ?? null,
+    p_copy_from: input.copyFrom ?? undefined,
     p_month: `${month}-01`,
   });
   if (error) return { error: error.message };
@@ -731,6 +731,7 @@ export async function savePayrollZoneOverride(input: {
   dpdUsed: number | null;
   targetDpdUsed: number | null;
   categoryOverride: "good" | "average" | "low" | null;
+  efficiencyOverride?: number | null;
 }): Promise<{ error: string } | { ok: true }> {
   await requirePayrollPermission("payroll.manage");
   const today = kuwaitToday();
@@ -744,9 +745,10 @@ export async function savePayrollZoneOverride(input: {
   const { error } = await supabase.rpc("admin_save_payroll_zone_override", {
     p_zone_id: input.zoneId,
     p_month: `${month}-01`,
-    p_dpd_used: input.dpdUsed,
-    p_target_dpd_used: input.targetDpdUsed,
-    p_category_override: input.categoryOverride,
+    p_dpd_used: input.dpdUsed ?? undefined,
+    p_target_dpd_used: input.targetDpdUsed ?? undefined,
+    p_category_override: input.categoryOverride ?? undefined,
+    p_efficiency_override: input.efficiencyOverride ?? undefined,
   });
   if (error) return { error: error.message };
   await logAdminActivity({
@@ -760,7 +762,85 @@ export async function savePayrollZoneOverride(input: {
       dpdUsed: input.dpdUsed,
       targetDpdUsed: input.targetDpdUsed,
       categoryOverride: input.categoryOverride,
+      efficiencyOverride: input.efficiencyOverride ?? null,
     },
+  });
+  return { ok: true };
+}
+
+export async function fetchPayrollZoneSettings(input: {
+  monthKey: string;
+}): Promise<import("./payroll-types").PayrollZoneSettings> {
+  await requirePayrollView();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_payroll_zone_settings", {
+    p_month: `${input.monthKey}-01`,
+  });
+  if (error) throw new Error(error.message);
+  const o = (data ?? {}) as Record<string, unknown>;
+  return {
+    periodMonth: String(o.periodMonth ?? `${input.monthKey}-01`),
+    targetDpdOverride: o.targetDpdOverride == null ? null : Number(o.targetDpdOverride),
+    goodThreshold: Number(o.goodThreshold ?? 110),
+    averageThreshold: Number(o.averageThreshold ?? 70),
+    autoTargetDpd: o.autoTargetDpd == null ? null : Number(o.autoTargetDpd),
+  };
+}
+
+export async function savePayrollZoneSettings(input: {
+  monthKey: string;
+  targetDpdOverride: number | null;
+  goodThreshold: number;
+  averageThreshold: number;
+}): Promise<{ error: string } | { ok: true }> {
+  await requirePayrollPermission("payroll.manage");
+  const today = kuwaitToday();
+  let month: string;
+  try {
+    month = assertPayrollMonth(input.monthKey, today).key;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "invalid_month" };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_save_payroll_zone_settings", {
+    p_month: `${month}-01`,
+    p_target_dpd_override: input.targetDpdOverride ?? undefined,
+    p_good_threshold: input.goodThreshold,
+    p_average_threshold: input.averageThreshold,
+  });
+  if (error) return { error: error.message };
+  await logAdminActivity({
+    action: "update",
+    entityType: "payroll_zone_settings",
+    entityId: month,
+    pagePath: "/payroll/settings",
+    routeName: "payroll-settings",
+    after: {
+      month,
+      targetDpdOverride: input.targetDpdOverride,
+      goodThreshold: input.goodThreshold,
+      averageThreshold: input.averageThreshold,
+    },
+  });
+  return { ok: true };
+}
+
+export async function deletePayrollClient(input: {
+  key: string;
+}): Promise<{ error: string } | { ok: true }> {
+  await requirePayrollPermission("payroll.manage");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_delete_payroll_client", {
+    p_key: input.key,
+  });
+  if (error) return { error: error.message };
+  await logAdminActivity({
+    action: "delete",
+    entityType: "payroll_client",
+    entityId: input.key,
+    pagePath: "/payroll/settings",
+    routeName: "payroll-settings",
+    after: { key: input.key },
   });
   return { ok: true };
 }
@@ -820,9 +900,9 @@ export async function fetchPayrollAdjustmentAudit(input: {
   await requirePayrollView();
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("admin_payroll_adjustment_audit", {
-    p_from: input.from ?? null,
-    p_to: input.to ?? null,
-    p_driver_id: input.driverId ?? null,
+    p_from: (input.from ?? null) as unknown as string,
+    p_to: (input.to ?? null) as unknown as string,
+    p_driver_id: input.driverId ?? undefined,
   });
   if (error) throw new Error(error.message);
   const list = Array.isArray(data) ? data : [];

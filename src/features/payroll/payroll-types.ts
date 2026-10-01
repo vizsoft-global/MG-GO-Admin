@@ -3,6 +3,8 @@ import type {
   DayStatus,
   PayrollKpis,
   PayrollMonthMeta,
+  PayrollPeriod,
+  PayrollRange,
   PayrollTileKey,
   PayrollUiStatus,
   RequestKpis,
@@ -16,7 +18,7 @@ import type {
 } from "./payroll-rules-engine";
 import type { ZoneMetricInput } from "./payroll-zone-metrics";
 
-export type { PayrollMonthMeta };
+export type { PayrollMonthMeta, PayrollPeriod, PayrollRange };
 
 export type PayrollSlicers = OpsSlicers;
 
@@ -29,6 +31,8 @@ export type PayrollOptions = {
 
 /** Per-day inputs and the engine's verdict, parallel to `days`. */
 export type PayrollDayInfo = {
+  /** Kuwait calendar date of this cell (YYYY-MM-DD). */
+  date: string;
   /** Daily final adjusted orders (Order Reconciliation). */
   orders: number;
   /** Kuwait check-in → check-out hours. */
@@ -43,6 +47,12 @@ export type PayrollDayInfo = {
   adjustmentReason: string | null;
   /** Credited hours for this day. */
   creditedHours: number;
+  /** What the day would be with no hand adjustment, and which rule said so. */
+  autoStatus: DayStatus;
+  autoHours: number;
+  autoRuleIndex: number | null;
+  autoRuleLabel: string | null;
+  autoSource: DaySource;
 };
 
 export type PayrollRiderRow = {
@@ -58,6 +68,8 @@ export type PayrollRiderRow = {
   zoneCategory: ZoneCategory;
   zoneEfficiency: number | null;
   zoneDpd: number | null;
+  /** The zone's orders in the month its category was read from. */
+  zoneOrders: number | null;
   partner: string;
   projectKey: string | null;
   nationality: string;
@@ -92,8 +104,11 @@ export type PayrollRiderRow = {
   fixedDays: number;
   /** Contracted OFF days for the month, from driver_off_structure. */
   offStructureDays: number;
+  /** Same as contracted; kept so a prorated display cannot feed the Off Structure editor. */
+  offStructureContracted: number;
   offStructureSource: OffStructureSource;
   offStructureHours: number;
+  requiredHoursPerDay: number;
   requiredHours: number;
   actualHours: number;
   efficiency: number;
@@ -120,7 +135,7 @@ export type PayrollRequestRow = {
 
 export type PayrollSnapshot = {
   today: string;
-  month: PayrollMonthMeta;
+  month: PayrollPeriod;
   months: PayrollMonthMeta[];
   options: PayrollOptions;
   riders: PayrollRiderRow[];
@@ -149,6 +164,8 @@ export type PayrollZoneMetricRow = {
   efficiency: number | null;
   categoryAuto: ZoneCategory;
   categoryOverride: "good" | "average" | "low" | null;
+  /** When set, this is the efficiency the rules and the table use. */
+  efficiencyOverride: number | null;
   goodThreshold: number;
   averageThreshold: number;
   computedAt: string | null;
@@ -157,7 +174,15 @@ export type PayrollZoneMetricRow = {
 export type PayrollZoneOverrideInput = Pick<
   ZoneMetricInput,
   "dpdUsed" | "targetDpdUsed" | "categoryOverride"
->;
+> & { efficiencyOverride?: number | null };
+
+export type PayrollZoneSettings = {
+  periodMonth: string;
+  targetDpdOverride: number | null;
+  goodThreshold: number;
+  averageThreshold: number;
+  autoTargetDpd: number | null;
+};
 
 export type PayrollRuleConfigSnapshot = {
   month: string;

@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Bike, Building2, CalendarRange, Check, CircleAlert, CircleCheck, CircleDashed, CircleMinus, Flag, Globe2, MapPin, Store, Users } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Popover,
   PopoverContent,
@@ -20,9 +19,12 @@ import {
   PAYROLL_RANGE_PRESETS,
   PAYROLL_ZONE_CATEGORY_CHIP,
   PAYROLL_ZONE_CATEGORY_FILTERS,
+  clampPayrollRange,
   countRidersByZoneCategory,
-  monthMeta,
-  payrollMonths,
+  isoDayLabel,
+  payrollAccessibleRange,
+  rangeDays,
+  type PayrollRange,
   type PayrollRangePreset,
   type PayrollZoneCategoryFilter,
 } from "./payroll-formulas";
@@ -36,11 +38,21 @@ const SOURCE_TYPES = ["in_house", "outsourced"] as const;
  * Partner slicer: the client *is* the partner, so the buttons are the fastest way
  * to switch which rule set the grid is showing.
  */
+export function PayrollNewTag({ children }: { children?: React.ReactNode }) {
+  return (
+    <span className="rounded-sm bg-amber-100 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-amber-800">
+      {children ?? "NEW"}
+    </span>
+  );
+}
+
 export function PayrollPartnerView({
+  clients,
   riders,
   value,
   onChange,
 }: {
+  clients: ReadonlyArray<{ key: string; name: string }>;
   riders: ReadonlyArray<{ projectKey: string | null }>;
   value: readonly string[];
   onChange: (projectKeys: string[]) => void;
@@ -51,9 +63,16 @@ export function PayrollPartnerView({
     if (!rider.projectKey) continue;
     counts.set(rider.projectKey, (counts.get(rider.projectKey) ?? 0) + 1);
   }
+  const keys = clients.length
+    ? clients.map((client) => client.key)
+    : [...DRIVER_PROJECT_KEYS];
+  const names = new Map(clients.map((client) => [client.key, client.name]));
   const allSelected = value.length === 0;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      <span className="me-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+        {t("viewLabel")}
+      </span>
       <button
         type="button"
         aria-pressed={allSelected}
@@ -69,7 +88,7 @@ export function PayrollPartnerView({
         {t("all")}
         <span className="tabular-nums opacity-70">{riders.length}</span>
       </button>
-      {DRIVER_PROJECT_KEYS.map((key) => {
+      {keys.map((key) => {
         const selected = value.includes(key);
         const count = counts.get(key) ?? 0;
         return (
@@ -86,7 +105,7 @@ export function PayrollPartnerView({
             )}
           >
             {selected ? <Check className="size-3.5" /> : <Building2 className="size-3.5 opacity-60" />}
-            {partnerLabel(key)}
+            {names.get(key) ?? partnerLabel(key)}
             <span className="tabular-nums opacity-70">{count}</span>
           </button>
         );
@@ -117,8 +136,16 @@ export function PayrollZoneCategoryChips({
     low: CircleAlert,
     not_set: CircleDashed,
   } as const;
+  const allSelected = value == null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      <span className="me-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+        {t("viewLabel")}
+      </span>
+      <ToggleChip selected={allSelected} icon={CircleDashed} onClick={() => onChange(null)}>
+        {t("all")}
+        <span className="tabular-nums opacity-70"> · {riders.length}</span>
+      </ToggleChip>
       {PAYROLL_ZONE_CATEGORY_FILTERS.map((category) => {
         const Icon = icons[category];
         const selected = value === category;
@@ -147,18 +174,39 @@ export function PayrollZoneCategoryChips({
 export function PayrollRangePills({
   today,
   preset,
-  customKey,
+  customRange,
   onPreset,
   onApplyCustom,
 }: {
   today: string;
   preset: PayrollRangePreset;
-  customKey: string | null;
+  customRange: PayrollRange | null;
   onPreset: (next: Exclude<PayrollRangePreset, "custom">) => void;
-  onApplyCustom: (monthKey: string) => void;
+  onApplyCustom: (range: PayrollRange) => void;
 }) {
   const t = useTranslations("pages.payroll.range");
-  const allowed = useMemo(() => payrollMonths(today), [today]);
+  const win = useMemo(() => payrollAccessibleRange(today), [today]);
+  const [open, setOpen] = useState(false);
+  const [draftFrom, setDraftFrom] = useState(customRange?.from ?? win.from);
+  const [draftTo, setDraftTo] = useState(customRange?.to ?? win.to);
+
+  useEffect(() => {
+    if (!open) return;
+    setDraftFrom(customRange?.from ?? win.from);
+    setDraftTo(customRange?.to ?? win.to);
+  }, [open, customRange, win.from, win.to]);
+
+  const customLabel =
+    preset === "custom" && customRange
+      ? `${isoDayLabel(customRange.from)} – ${isoDayLabel(customRange.to)} · ${t("daysCount", { count: rangeDays(customRange.from, customRange.to) })}`
+      : t("custom");
+
+  function apply() {
+    const next = clampPayrollRange(draftFrom, draftTo, today);
+    onApplyCustom(next);
+    setOpen(false);
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {PAYROLL_RANGE_PRESETS.filter((id) => id !== "custom").map((id) => (
@@ -171,119 +219,92 @@ export function PayrollRangePills({
           {t(id)}
         </ToggleChip>
       ))}
-      <PayrollCustomMonthPopover
-        selected={preset === "custom"}
-        today={today}
-        allowedKeys={allowed.map((m) => m.key)}
-        appliedKey={customKey}
-        onApply={onApplyCustom}
-      />
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          className={cn(
+            "inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px] font-semibold transition-colors",
+            preset === "custom"
+              ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm ring-1 ring-emerald-400/50"
+              : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+          )}
+        >
+          <CalendarRange className={cn("h-3 w-3 shrink-0", preset === "custom" ? "text-emerald-900" : "opacity-50")} />
+          {customLabel}
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-[min(340px,92vw)] origin-(--transform-origin) p-3">
+          <p className="mb-2 text-xs font-semibold">{t("customTitle")}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[10px] font-medium text-muted-foreground">
+              {t("from")}
+              <input
+                type="date"
+                className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+                min={win.from}
+                max={win.to}
+                value={draftFrom}
+                onChange={(e) => setDraftFrom(e.target.value)}
+              />
+            </label>
+            <label className="text-[10px] font-medium text-muted-foreground">
+              {t("to")}
+              <input
+                type="date"
+                className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+                min={win.from}
+                max={win.to}
+                value={draftTo}
+                onChange={(e) => setDraftTo(e.target.value)}
+              />
+            </label>
+          </div>
+          <p className="mt-2 text-[10px] text-muted-foreground">
+            {t("windowHint", { from: isoDayLabel(win.from), to: isoDayLabel(win.to) })}
+          </p>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              className="inline-flex h-9 items-center rounded-md border border-border px-3 text-xs"
+              onClick={() => setOpen(false)}
+            >
+              {t("customCancel")}
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground"
+              onClick={apply}
+            >
+              {t("customApply")}
+            </button>
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
 
-function PayrollCustomMonthPopover({
-  selected,
-  today,
-  allowedKeys,
-  appliedKey,
-  onApply,
+export function PayrollSummaryStrip({
+  riders,
+  ruleCount,
+  usesLabel,
 }: {
-  selected: boolean;
-  today: string;
-  allowedKeys: string[];
-  appliedKey: string | null;
-  onApply: (monthKey: string) => void;
+  riders: ReadonlyArray<{ zoneCategory: string }>;
+  ruleCount: number;
+  usesLabel: string;
 }) {
-  const t = useTranslations("pages.payroll.range");
-  const locale = useLocale();
-  const [open, setOpen] = useState(false);
-  const fallback = allowedKeys[allowedKeys.length - 1] ?? today.slice(0, 7);
-  const [draft, setDraft] = useState(appliedKey ?? fallback);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setDraft(appliedKey ?? fallback);
-    setErr(null);
-  }, [open, appliedKey, fallback]);
-
-  const appliedMeta = appliedKey ? monthMeta(appliedKey, locale) : null;
-  const label = selected && appliedMeta ? appliedMeta.label : t("custom");
-  const monthItems = allowedKeys.map((key) => ({
-    value: key,
-    label: monthMeta(key, locale)?.label ?? key,
-  }));
-
-  function apply() {
-    if (!allowedKeys.includes(draft)) {
-      setErr(t("customErr"));
-      return;
-    }
-    setErr(null);
-    onApply(draft);
-    setOpen(false);
-  }
-
+  const t = useTranslations("pages.payroll");
+  const counts = useMemo(() => countRidersByZoneCategory(riders), [riders]);
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setErr(null);
-      }}
-    >
-      <PopoverTrigger
-        className={cn(
-          "inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px] font-semibold transition-colors",
-          selected
-            ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm ring-1 ring-emerald-400/50"
-            : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-        )}
-      >
-        <CalendarRange className={cn("h-3 w-3 shrink-0", selected ? "text-emerald-900" : "opacity-50")} />
-        {label}
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-[min(280px,92vw)] origin-(--transform-origin) p-3">
-        <p className="mb-2 text-xs font-semibold">{t("customTitle")}</p>
-        <label className="min-w-0 text-[10px] font-medium text-muted-foreground">
-          {t("customMonth")}
-          <Select
-            value={draft}
-            onValueChange={(value) => setDraft(String(value ?? fallback))}
-            items={monthItems}
-          >
-            <SelectTrigger className="mt-1 h-9 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {monthItems.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        {err ? <p className="mt-2 text-[11px] text-destructive">{err}</p> : null}
-        <div className="mt-3 flex justify-end gap-2">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center rounded-md border border-border px-3 text-xs"
-            onClick={() => setOpen(false)}
-          >
-            {t("customCancel")}
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground"
-            onClick={apply}
-          >
-            {t("customApply")}
-          </button>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <p className="text-[11px] text-muted-foreground">
+      {t("summaryStrip", {
+        riders: riders.length,
+        good: counts.good,
+        average: counts.average,
+        low: counts.low,
+        notSet: counts.not_set,
+        rules: ruleCount,
+        uses: usesLabel,
+      })}
+    </p>
   );
 }
 

@@ -130,15 +130,22 @@ export function PayrollFilterChips({
   onClear,
   onRemove,
   clearLabel,
+  sortLabel,
+  prefix,
 }: {
   chips: Array<{ columnId: string; text: string }>;
   onClear: () => void;
   onRemove: (columnId: string) => void;
   clearLabel: string;
+  sortLabel?: string | null;
+  prefix?: string;
 }) {
-  if (!chips.length) return null;
+  if (!chips.length && !sortLabel) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      {prefix ? (
+        <span className="text-[11px] font-semibold text-muted-foreground">{prefix}</span>
+      ) : null}
       {chips.map((chip) => (
         <span
           key={chip.columnId}
@@ -156,6 +163,11 @@ export function PayrollFilterChips({
           </button>
         </span>
       ))}
+      {sortLabel ? (
+        <span className="inline-flex h-7 items-center rounded-md border border-emerald-300 bg-emerald-50 px-2 text-[11px] font-semibold text-emerald-900">
+          {sortLabel}
+        </span>
+      ) : null}
       <button
         type="button"
         onClick={onClear}

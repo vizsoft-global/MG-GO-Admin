@@ -543,6 +543,8 @@ export type DayOutcome = {
   source: DaySource;
   /** The rule that decided the day, when a rule did. */
   ruleLabel: string | null;
+  /** 1-based position of that rule in the client's list. */
+  ruleIndex?: number | null;
   /** A hand adjustment is in force for this date. */
   adjusted: boolean;
   /** An Operations cover with no approval behind it. */
@@ -624,6 +626,7 @@ export function evalDay(facts: DayFacts): DayOutcome {
         }),
         source: "rule",
         ruleLabel: describeRule(rule),
+        ruleIndex: facts.rules.indexOf(rule) + 1,
         adjusted: false,
         unjustified: false,
       };

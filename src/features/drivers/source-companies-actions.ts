@@ -126,11 +126,11 @@ export async function upsertSourceCompany(input: {
     p_name: name,
     p_client_code: clientCode ?? "",
     p_is_active: input.isActive,
-    p_dpd_target: input.dpdTarget,
+    p_dpd_target: input.dpdTarget ?? undefined,
     p_incentive_enabled: input.incentiveEnabled,
-    p_incentive_above_kwd: input.incentiveAboveKwd,
-    p_incentive_below_kwd: input.incentiveBelowKwd,
-    p_effective_from: input.effectiveFrom,
+    p_incentive_above_kwd: input.incentiveAboveKwd ?? undefined,
+    p_incentive_below_kwd: input.incentiveBelowKwd ?? undefined,
+    p_effective_from: input.effectiveFrom ?? undefined,
   });
   if (error) {
     const code = KNOWN_ERRORS.has(error.message) ? error.message : "save_failed";
