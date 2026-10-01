@@ -28,7 +28,6 @@ import {
   countedRiderDays,
   dayGridLabel,
   isoDayLabel,
-  NEW_PAYROLL_STATUS_FILTERS,
   PAYROLL_STATUS_CHIP,
   PAYROLL_STATUS_FILTERS,
   shareOfPayroll,
@@ -36,7 +35,6 @@ import {
   type PayrollStatusFilter,
 } from "./payroll-formulas";
 import { formatEfficiencyCell } from "./payroll-csv";
-import { PayrollNewTag } from "./payroll-chrome";
 import {
   activeFilterChips,
   columnFilterActive,
@@ -151,11 +149,6 @@ function stickyClass(index: number, head = false): string | undefined {
   if (index === 1) return `sticky start-16 ${z} min-w-16 w-16 bg-card`;
   if (index === 2) return `sticky start-32 ${z} min-w-[190px] w-[190px] bg-card`;
   return undefined;
-}
-
-function newHeadClass(isNew?: boolean): string | undefined {
-  if (!isNew) return undefined;
-  return "border-t-2 border-amber-400 bg-amber-50/70";
 }
 
 function normalizeRect(rect: CellRect): { top: number; bottom: number; left: number; right: number } {
@@ -956,11 +949,7 @@ export function PayrollSummaryTable({
               {columns.map((column, index) => (
                 <PayrollColumnHeader
                   key={column.id}
-                  label={
-                    column.isNew
-                      ? `${t(`riderCols.${column.labelKey}`)} · NEW`
-                      : t(`riderCols.${column.labelKey}`)
-                  }
+                  label={t(`riderCols.${column.labelKey}`)}
                   columnId={column.id}
                   values={rows.map((row) => String(riderColumnValue(row, column.id) ?? ""))}
                   filter={filters[column.id]}
@@ -968,7 +957,7 @@ export function PayrollSummaryTable({
                   sort={sort}
                   onSort={setSort}
                   numeric={column.numeric}
-                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", stickyClass(index, true), newHeadClass(column.isNew))}
+                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", stickyClass(index, true))}
                 />
               ))}
             </tr>
@@ -1042,7 +1031,6 @@ export function PayrollLegend({
   const t = useTranslations("pages.payroll");
   const counts = riders ? countDaysByStatus(riders) : null;
   const total = riders ? countedRiderDays(riders) : 0;
-  const newSet = new Set<string>(NEW_PAYROLL_STATUS_FILTERS);
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
@@ -1058,7 +1046,6 @@ export function PayrollLegend({
           >
             {t(`legend.${id}`)}
             {counts ? ` · ${counts[id]}` : ""}
-            {newSet.has(id) ? <PayrollNewTag /> : null}
           </ToggleChip>
         ))}
       </div>

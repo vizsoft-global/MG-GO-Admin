@@ -38,13 +38,6 @@ const SOURCE_TYPES = ["in_house", "outsourced"] as const;
  * Partner slicer: the client *is* the partner, so the buttons are the fastest way
  * to switch which rule set the grid is showing.
  */
-export function PayrollNewTag({ children }: { children?: React.ReactNode }) {
-  return (
-    <span className="rounded-sm bg-amber-100 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-amber-800">
-      {children ?? "NEW"}
-    </span>
-  );
-}
 
 export function PayrollPartnerView({
   clients,

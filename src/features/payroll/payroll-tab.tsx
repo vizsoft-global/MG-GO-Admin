@@ -10,7 +10,6 @@ import {
   type PayrollKpis,
   type PayrollPeriod,
 } from "./payroll-formulas";
-import { PayrollNewTag } from "./payroll-chrome";
 import { PayrollSummaryTable } from "./payroll-grid";
 import { exportPayrollViewCsv } from "./payroll-csv";
 import type { PayrollRiderRow } from "./payroll-types";
@@ -65,14 +64,12 @@ export function PayrollTab({
         <KpiCard
           compact
           label={t("kpi.reduced3Days")}
-          caption={<PayrollNewTag />}
           value={kpis.reduced3Days}
           icon={Clock}
         />
         <KpiCard
           compact
           label={t("kpi.manualAdjustments")}
-          caption={<PayrollNewTag />}
           value={kpis.manualAdjustments}
           icon={Hand}
           accent="warning"

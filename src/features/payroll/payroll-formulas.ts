@@ -118,16 +118,6 @@ export const PAYROLL_STATUS_CHIP: Record<PayrollStatusFilter, { hex: string }> =
   custom: { hex: "#c084fc" },
 };
 
-export const NEW_PAYROLL_STATUS_FILTERS: readonly PayrollStatusFilter[] = [
-  "reduced3",
-  "half",
-  "actual",
-  "vehicle",
-  "abs_lh",
-  "abs_lo",
-  "custom",
-];
-
 export function riderHasDayStatus(
   days: readonly DayStatus[],
   status: PayrollStatusFilter,
