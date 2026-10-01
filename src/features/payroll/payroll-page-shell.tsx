@@ -22,7 +22,6 @@ import {
   type PayrollZoneCategoryFilter,
 } from "./payroll-formulas";
 import {
-  PayrollNewTag,
   PayrollPartnerView,
   PayrollRangePills,
   PayrollSlicerBar,
@@ -41,7 +40,6 @@ import { usePayrollRangeSnapshot } from "./use-payroll";
 import type { PayrollHubTab, PayrollSlicers } from "./payroll-types";
 
 const TABS: PayrollHubTab[] = ["payroll", "combined", "attendance-orders", "requests", "settings"];
-const NEW_TABS = new Set<PayrollHubTab>(["attendance-orders", "settings"]);
 
 export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: PayrollHubTab }) {
   const t = useTranslations("pages.payroll");
@@ -162,18 +160,11 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       <TabBar
         items={TABS.map((id) => ({
           id,
-          label: NEW_TABS.has(id)
-            ? `${t(`tab${tabLabelKey(id)}`)} · NEW`
-            : t(`tab${tabLabelKey(id)}`),
+          label: t(`tab${tabLabelKey(id)}`),
         }))}
         activeId={tab}
         onSelect={(id) => setTab(id as PayrollHubTab)}
       />
-      {NEW_TABS.has(tab) ? (
-        <div className="flex justify-end">
-          <PayrollNewTag />
-        </div>
-      ) : null}
       <PayrollRangePills
         today={today}
         preset={preset}
@@ -193,7 +184,6 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       </div>
       <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50/40 p-4 shadow-sm">
         <div className="flex items-center gap-2">
-          <PayrollNewTag>{t("slicerCardTag")}</PayrollNewTag>
           <span className="text-[11px] font-semibold text-amber-900">{t("slicerCardTitle")}</span>
         </div>
         <PayrollPartnerView

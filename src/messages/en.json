@@ -928,7 +928,20 @@
         "deliverySubmitted": "Delivery submitted",
         "deliveryVerified": "Delivery verified",
         "adminAction": "Admin action"
-      }
+      },
+      "demoBadge": "Demo",
+      "demoTooltip": "Sample data until the live backend is connected",
+      "demoPresenceTooltip": "Live GPS tracking is not enabled yet. Pins are simulated.",
+      "demoAlertsTooltip": "The alerts engine is not enabled. Some alerts come from real data.",
+      "demoComplianceTooltip": "The compliance engine is not enabled. Items are simulated.",
+      "liveBadge": "Live",
+      "lastSeen": "Last seen",
+      "widgetAlerts": "Alerts center",
+      "noAlerts": "No alerts to show",
+      "widgetCompliance": "Compliance",
+      "noComplianceIssues": "No compliance issues",
+      "widgetPresenceMap": "Live presence",
+      "noLiveLocations": "No live locations yet"
     },
     "locations": {
       "mapUnavailable": "Map unavailable",
@@ -6947,7 +6960,8 @@
           "order_recon": "Order reconciliation",
           "verifications": "DPD verifications",
           "payroll": "Payroll"
-        }
+        },
+        "previewAction": "Preview"
       },
       "storage": {
         "title": "Cloudflare R2 storage",
@@ -7387,8 +7401,29 @@
           "client_code_taken": "Another company already uses this Client ID.",
           "source_company_system_locked": "The system company cannot be changed.",
           "source_company_in_use": "Active drivers still belong to this company, so it cannot be deactivated.",
-          "save_failed": "Could not save the company."
-        }
+          "save_failed": "Could not save the company.",
+          "invalid_dpd_target": "DPD target must be a whole number of 1 or more.",
+          "invalid_incentive_rate": "Enter above-target and below-target rates greater than 0.",
+          "incentive_effective_from_required": "Set an effective-from date when the scheme is on."
+        },
+        "colDpd": "DPD",
+        "dpdBadge": "T {target}",
+        "scheme": "Scheme",
+        "dpdTarget": "DPD target",
+        "dpdTargetPlaceholder": "15",
+        "dpdTargetHint": "Daily target for outsourced riders on this company. Blank = no company target.",
+        "effectiveFrom": "Effective from",
+        "effectiveFromHint": "Kuwait date the scheme starts. Required when the scheme is on.",
+        "incentiveScheme": "Incentive scheme",
+        "incentiveSchemeOn": "On",
+        "incentiveSchemeHint": "Flat above/below per-order pay for outsourced riders. Off leaves restaurant incentive rules unused for this company.",
+        "aboveKwd": "Above target (KWD)",
+        "belowKwd": "Below target (KWD)",
+        "previewOrders": "Orders",
+        "previewIncentive": "Incentive",
+        "previewDeduction": "Deduction",
+        "previewNet": "Net",
+        "companyConfigNote": "This target and scheme apply only to outsourced riders on this company. In-house riders keep restaurant delivery rules."
       }
     },
     "auditLogs": {
@@ -7504,7 +7539,6 @@
       "requestsBannerBody": "Approved Leave / Sick / Accident requests justify the matching day statuses in the Payroll report.",
       "tableFoot": "Showing {shown} of {total} riders · {month} · Fixed Days = {days} − 2 = {fixed}",
       "tableFootRange": "Showing {shown} of {total} riders · {range}",
-      "slicerCardTag": "NEW · SLICERS",
       "slicerCardTitle": "Partner view and zone category",
       "summaryStrip": "Partner · {riders} riders · Good {good} · Avg {average} · Low {low} · Not set {notSet} · rules use {uses} ({rules} rules)",
       "uses": {

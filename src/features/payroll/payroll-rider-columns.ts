@@ -9,7 +9,6 @@ export type PayrollRiderColumn = {
   id: string;
   numeric: boolean;
   labelKey: string;
-  isNew?: boolean;
 };
 
 export const PAYROLL_SUMMARY_COLUMNS: readonly PayrollRiderColumn[] = [
@@ -18,12 +17,12 @@ export const PAYROLL_SUMMARY_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "name", numeric: false, labelKey: "name" },
   { id: "restaurant", numeric: false, labelKey: "restaurant" },
   { id: "zone", numeric: false, labelKey: "zone" },
-  { id: "zoneCategory", numeric: false, labelKey: "zoneCategory", isNew: true },
-  { id: "zoneOrders", numeric: true, labelKey: "zoneOrders", isNew: true },
-  { id: "zoneDpd", numeric: true, labelKey: "zoneDpd", isNew: true },
-  { id: "zoneEff", numeric: true, labelKey: "zoneEff", isNew: true },
+  { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
+  { id: "zoneOrders", numeric: true, labelKey: "zoneOrders" },
+  { id: "zoneDpd", numeric: true, labelKey: "zoneDpd" },
+  { id: "zoneEff", numeric: true, labelKey: "zoneEff" },
   { id: "partner", numeric: false, labelKey: "partner" },
-  { id: "vehicleKind", numeric: false, labelKey: "vehicleKind", isNew: true },
+  { id: "vehicleKind", numeric: false, labelKey: "vehicleKind" },
   { id: "status", numeric: false, labelKey: "status" },
   { id: "totalDays", numeric: true, labelKey: "totalDays" },
   { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
