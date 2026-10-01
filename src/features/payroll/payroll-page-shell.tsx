@@ -23,15 +23,25 @@ import {
   type PayrollEffBucketId,
   type PayrollRangePreset,
   type PayrollStatusFilter,
+  type PayrollZoneCategoryFilter,
 } from "./payroll-formulas";
-import { PayrollRangePills, PayrollSlicerBar } from "./payroll-chrome";
+import {
+  PayrollPartnerView,
+  PayrollRangePills,
+  PayrollSlicerBar,
+  PayrollZoneCategoryChips,
+} from "./payroll-chrome";
 import { PayrollLegend } from "./payroll-grid";
 import { PayrollTab } from "./payroll-tab";
 import { CombinedPayrollTab } from "./combined-tab";
+import { PayrollAttendanceOrdersTab } from "./payroll-attendance-orders-tab";
+import { PayrollSettingsTab } from "./payroll-settings-tab";
 import { RequestsTab } from "./requests-tab";
 import { exportPayrollViewCsv } from "./payroll-csv";
 import { usePayrollSnapshot } from "./use-payroll";
 import type { PayrollHubTab, PayrollSlicers } from "./payroll-types";
+
+const TABS: PayrollHubTab[] = ["payroll", "combined", "attendance-orders", "requests", "settings"];
 
 export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: PayrollHubTab }) {
   const t = useTranslations("pages.payroll");
@@ -55,6 +65,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   const [slicers, setSlicers] = useState<PayrollSlicers>(EMPTY_OPS_SLICERS);
   const [drill, setDrill] = useState<PayrollEffBucketId | null>(null);
   const [statusFilter, setStatusFilter] = useState<PayrollStatusFilter | null>(null);
+  const [zoneCategory, setZoneCategory] = useState<PayrollZoneCategoryFilter | null>(null);
 
   const query = usePayrollSnapshot(monthKey, slicers);
   const data = query.data;
@@ -65,10 +76,11 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
     return localized ? { ...raw, label: localized.label } : raw;
   }, [data?.month, months, monthKey, locale]);
 
-  const filteredRiders = useMemo(
-    () => filterRidersByStatus(data?.riders ?? [], statusFilter),
-    [data?.riders, statusFilter],
-  );
+  const filteredRiders = useMemo(() => {
+    const byStatus = filterRidersByStatus(data?.riders ?? [], statusFilter);
+    return zoneCategory ? byStatus.filter((r) => r.zoneCategory === zoneCategory) : byStatus;
+  }, [data?.riders, statusFilter, zoneCategory]);
+
   const payrollKpis = useMemo(() => {
     const next = computePayrollKpis(filteredRiders);
     return { ...next, riders: data?.riders.length ?? 0 };
@@ -78,6 +90,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
     setPreset(next);
     setDrill(null);
     setStatusFilter(null);
+    setZoneCategory(null);
   }
 
   function applyCustomMonth(key: string) {
@@ -85,18 +98,21 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
     setPreset(presetForPayrollMonth(key, today));
     setDrill(null);
     setStatusFilter(null);
+    setZoneCategory(null);
   }
 
   function changeSlicers(next: PayrollSlicers) {
     setSlicers(next);
     setDrill(null);
     setStatusFilter(null);
+    setZoneCategory(null);
   }
 
   function clearFilters() {
     setSlicers(EMPTY_OPS_SLICERS);
     setDrill(null);
     setStatusFilter(null);
+    setZoneCategory(null);
   }
 
   function exportHeader() {
@@ -133,11 +149,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         }
       />
       <TabBar
-        items={[
-          { id: "payroll", label: t("tabPayroll") },
-          { id: "combined", label: t("tabCombined") },
-          { id: "requests", label: t("tabRequests") },
-        ]}
+        items={TABS.map((id) => ({ id, label: t(`tab${tabLabelKey(id)}`) }))}
         activeId={tab}
         onSelect={(id) => setTab(id as PayrollHubTab)}
       />
@@ -148,7 +160,22 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         onPreset={changePreset}
         onApplyCustom={applyCustomMonth}
       />
-      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
+        <PayrollPartnerView
+          riders={data?.riders ?? []}
+          value={slicers.projectKeys}
+          onChange={(projectKeys) => changeSlicers({ ...slicers, projectKeys })}
+        />
+        {data ? (
+          <PayrollZoneCategoryChips
+            riders={data.riders}
+            value={zoneCategory}
+            onChange={(next) => {
+              setZoneCategory(next);
+              setDrill(null);
+            }}
+          />
+        ) : null}
         <PayrollSlicerBar
           slicers={slicers}
           onChange={changeSlicers}
@@ -158,7 +185,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           )}
         />
       </div>
-      {data ? (
+      {data && tab !== "settings" ? (
         <PayrollLegend
           riders={data.riders}
           selected={statusFilter}
@@ -188,8 +215,19 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           onOffStructureApplied={refreshSnapshot}
         />
       ) : tab === "combined" ? (
-        <CombinedPayrollTab month={month} riders={filteredRiders} canExport={canExport} />
-      ) : (
+        <CombinedPayrollTab
+          month={month}
+          riders={filteredRiders}
+          canExport={canExport}
+          canManage={canManage}
+        />
+      ) : tab === "attendance-orders" ? (
+        <PayrollAttendanceOrdersTab
+          month={month}
+          riders={filteredRiders}
+          canExport={canExport}
+        />
+      ) : tab === "requests" ? (
         <RequestsTab
           month={month}
           kpis={data.requestKpis}
@@ -197,7 +235,33 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           workflow={data.workflow}
           canExport={canExport}
         />
+      ) : (
+        <PayrollSettingsTab
+          month={month}
+          zoneMetrics={data.zoneMetrics}
+          canManage={canManage}
+        />
       )}
     </AppPage>
   );
+}
+
+/** `attendance-orders` → `AttendanceOrders`, matching the existing key style. */
+function tabLabelKey(id: PayrollHubTab): string {
+  switch (id) {
+    case "payroll":
+      return "Payroll";
+    case "combined":
+      return "Combined";
+    case "attendance-orders":
+      return "AttendanceOrders";
+    case "requests":
+      return "Requests";
+    case "settings":
+      return "Settings";
+    default: {
+      const never: never = id;
+      return never;
+    }
+  }
 }

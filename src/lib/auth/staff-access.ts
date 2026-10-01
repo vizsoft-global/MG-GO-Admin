@@ -55,9 +55,6 @@ export const RESOURCE_CRUD_LABELS: Record<
 };
 
 const CRUD_VERBS = ["create", "edit", "delete"] as const;
-const MATRIX_CRUD_VERBS = ["create", "edit", "delete", "bulk_delete"] as const;
-
-export const RESOURCE_MATRIX_VERBS = MATRIX_CRUD_VERBS;
 
 export function parseStaffAccessKind(value: unknown): StaffAccessKind | null {
   if (value === "manager" || value === "user") return value;
@@ -139,23 +136,10 @@ export function permissionGrantedByTicks(
       ticks.has(`${module}.delete`)
     );
   }
-  if (verb === "bulk_delete") {
-    return false;
-  }
   if (verb === "create" || verb === "edit" || verb === "delete") {
     return ticks.has(`${module}.manage`);
   }
   return false;
-}
-
-export function grantDataCleanupIfBulkDelete(slugs: Set<string>): Set<string> {
-  for (const slug of slugs) {
-    if (slug.endsWith(".bulk_delete")) {
-      slugs.add("data.cleanup");
-      break;
-    }
-  }
-  return slugs;
 }
 
 export function resolveSessionPermissionSlugs(input: {
@@ -169,9 +153,9 @@ export function resolveSessionPermissionSlugs(input: {
     return new Set(input.catalogSlugs);
   }
   if (input.accessKind === "user") {
-    return grantDataCleanupIfBulkDelete(new Set(input.userTicks ?? []));
+    return new Set(input.userTicks ?? []);
   }
-  return grantDataCleanupIfBulkDelete(new Set(input.roleSlugs));
+  return new Set(input.roleSlugs);
 }
 
 /** After backfill, every old role slug must still pass the User tick set. */

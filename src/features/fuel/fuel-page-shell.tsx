@@ -21,7 +21,6 @@ import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
 import { formatKuwaitDayLabel, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { FleetRequestDialog } from "./fleet-request-dialog";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { FLEET_REQUEST_CHIP_CLASS } from "./fleet-request-utils";
 import type { FleetRequestListRow } from "./fleet-request-types";
 import { FuelFillDialog } from "./fuel-fill-dialog";
@@ -138,11 +137,7 @@ export function FuelPageShell({ initialAnchor }: { initialAnchor: string }) {
 
   return (
     <AppPage>
-      <AppPageHeader
-        title={t("title")}
-        description={t("subtitle")}
-        actions={<ClearAllModuleButton entity="fuel" />}
-      />
+      <AppPageHeader title={t("title")} description={t("subtitle")} />
       <AppListCard
         title={t("rangeTitle", {
           from: formatKuwaitDayLabel(range.start),

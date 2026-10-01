@@ -19,7 +19,6 @@ import { AppListCard } from "@/components/app/app-list-card";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { ToggleChip } from "@/components/app/toggle-chip";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -170,7 +169,6 @@ export function OrderReconPageShell() {
         description={t("matchNote")}
         actions={
           <div className="flex flex-wrap gap-2">
-            <ClearAllModuleButton entity="order_recon" />
             {canManage ? (
               <Button type="button" variant="outline" className="h-9 cursor-pointer" onClick={() => setOpen(true)}>
                 <Upload className="size-4" />

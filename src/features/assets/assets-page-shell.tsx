@@ -17,7 +17,6 @@ import {
   X,
 } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -230,48 +229,45 @@ function AssetsPageContent() {
         title={t("title")}
         description={tab === "assignments" ? t("assignmentsSubtitle") : t("subtitle")}
         actions={
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <ClearAllModuleButton entity="assets" />
-            {tab === "catalog" ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 cursor-pointer rounded-lg"
-                  onClick={handleRefresh}
-                  disabled={isRefreshing}
-                >
-                  <RefreshCw
-                    className={`me-2 h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
-                  />
-                  {t("refresh")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 cursor-pointer rounded-lg"
-                  onClick={() => exportAssetsCsv(visible)}
-                  disabled={visible.length === 0}
-                >
-                  <Download className="me-2 h-3.5 w-3.5" />
-                  {t("export")}
-                </Button>
-              </>
-            ) : null}
-            {canCreate ? (
+          tab === "catalog" ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button
                 type="button"
+                variant="outline"
                 size="sm"
                 className="h-9 cursor-pointer rounded-lg"
-                onClick={handleAdd}
+                onClick={handleRefresh}
+                disabled={isRefreshing}
               >
-                <Plus className="me-2 h-3.5 w-3.5" />
-                {t("addAsset")}
+                <RefreshCw
+                  className={`me-2 h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+                />
+                {t("refresh")}
               </Button>
-            ) : null}
-          </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => exportAssetsCsv(visible)}
+                disabled={visible.length === 0}
+              >
+                <Download className="me-2 h-3.5 w-3.5" />
+                {t("export")}
+              </Button>
+              {canCreate ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  onClick={handleAdd}
+                >
+                  <Plus className="me-2 h-3.5 w-3.5" />
+                  {t("addAsset")}
+                </Button>
+              ) : null}
+            </div>
+          ) : null
         }
       />
       <TabBar

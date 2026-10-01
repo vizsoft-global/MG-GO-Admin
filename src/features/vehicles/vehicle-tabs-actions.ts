@@ -6,7 +6,6 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { putObject } from "@/lib/storage/r2-client";
 import { buildVehicleFileKey, extensionFromMime } from "@/lib/storage/r2-keys";
 import { createClient } from "@/lib/supabase/server";
-import { syncIntakeAssetAssignments } from "@/features/assets/assets-actions";
 
 export type VehicleHandoverRow = {
   id: string;
@@ -57,7 +56,6 @@ export type VehicleAssetRow = {
 export type VehicleDriverOption = {
   id: string;
   label: string;
-  keywords: string[];
 };
 
 async function requireVehicles(permission: "vehicles.view" | "vehicles.manage") {
@@ -114,105 +112,8 @@ export async function listVehicleTabDrivers(): Promise<VehicleDriverOption[]> {
     return {
       id: row.id,
       label: [profile?.full_name, row.employee_id || row.driver_code].filter(Boolean).join(" · "),
-      keywords: [profile?.full_name, row.employee_id, row.driver_code].filter(Boolean) as string[],
     };
   });
-}
-
-export type VehicleAssetCatalogOption = {
-  id: string;
-  label: string;
-  keywords: string[];
-};
-
-export async function listVehicleAssetCatalog(): Promise<VehicleAssetCatalogOption[]> {
-  const session = await getSessionUser();
-  if (
-    !session ||
-    !(
-      session.isSuperAdmin ||
-      hasPermissionInSet(session.permissions, "assets.view", false) ||
-      hasPermissionInSet(session.permissions, "vehicles.manage", false)
-    )
-  ) {
-    return [];
-  }
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("asset_catalog")
-    .select("id, name, code")
-    .eq("is_active", true)
-    .order("name");
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    label: row.code ? `${row.name} · ${row.code}` : row.name,
-    keywords: [row.name, row.code].filter(Boolean) as string[],
-  }));
-}
-
-export async function assignVehicleAsset(input: {
-  driverId: string;
-  catalogItemId: string;
-  quantity: number;
-}): Promise<{ error?: string }> {
-  const session = await getSessionUser();
-  if (
-    !session ||
-    !hasPermissionInSet(session.permissions, "assets.manage", session.isSuperAdmin)
-  ) {
-    return { error: "not_authorized" };
-  }
-  const driverId = input.driverId.trim();
-  const catalogItemId = input.catalogItemId.trim();
-  const quantity = Number.isFinite(input.quantity) ? Math.max(1, Math.floor(input.quantity)) : 1;
-  if (!driverId || !catalogItemId) return { error: "missing_fields" };
-
-  const supabase = await createClient();
-  const { data: intake, error: intakeError } = await supabase
-    .from("driver_intakes")
-    .select("id")
-    .eq("linked_profile_id", driverId)
-    .is("archived_at", null)
-    .maybeSingle();
-  if (intakeError) return { error: "save_failed" };
-  if (!intake) return { error: "missing_fields" };
-
-  const { data: current, error: currentError } = await supabase
-    .from("asset_assignments")
-    .select("catalog_item_id")
-    .eq("intake_id", intake.id)
-    .eq("status", "assigned");
-  if (currentError) return { error: "save_failed" };
-
-  const nextIds = [...new Set([...(current ?? []).map((row) => row.catalog_item_id), catalogItemId])];
-  const synced = await syncIntakeAssetAssignments(
-    supabase,
-    intake.id,
-    nextIds,
-    session.id,
-    driverId,
-  );
-  if (synced.error) return { error: synced.error };
-
-  if (quantity !== 1) {
-    const { error: qtyError } = await supabase
-      .from("asset_assignments")
-      .update({ quantity, updated_at: new Date().toISOString() })
-      .eq("intake_id", intake.id)
-      .eq("catalog_item_id", catalogItemId)
-      .eq("status", "assigned");
-    if (qtyError) return { error: "save_failed" };
-  }
-
-  void logAdminMutation({
-    action: "update",
-    entityType: "asset_assignment",
-    entityId: driverId,
-    routeName: "/vehicles",
-    after: { catalog_item_id: catalogItemId, quantity },
-  });
-  return {};
 }
 
 function nameMap(

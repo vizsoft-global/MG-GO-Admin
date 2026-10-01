@@ -27,7 +27,6 @@ const PERMISSION_CRUD_CATALOG = RESOURCE_CRUD_MODULES.flatMap((module) => {
     { slug: `${module}.create` as const, label: `Create ${noun}`, category },
     { slug: `${module}.edit` as const, label: `Edit ${noun}`, category },
     { slug: `${module}.delete` as const, label: `Delete ${noun}`, category },
-    { slug: `${module}.bulk_delete` as const, label: `Bulk delete ${noun}`, category },
   ];
 });
 
@@ -256,18 +255,8 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   },
   {
     slug: "data.cleanup",
-    label: "Permanent data cleanup (super admin or bulk delete)",
+    label: "Permanent data cleanup (super admin)",
     category: "admin",
-  },
-  {
-    slug: "visits.bulk_delete",
-    label: "Bulk delete visit bookings",
-    category: "visits",
-  },
-  {
-    slug: "esign.bulk_delete",
-    label: "Bulk delete e-sign requests",
-    category: "requests",
   },
   {
     slug: "assistant.view",

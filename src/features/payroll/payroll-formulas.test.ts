@@ -394,6 +394,8 @@ describe("5 payroll KPI cards", () => {
       avgEfficiency: 0,
       atOrAbove100: 0,
       unjustifiedRiders: 0,
+      reduced3Days: 0,
+      manualAdjustments: 0,
     });
   });
 });

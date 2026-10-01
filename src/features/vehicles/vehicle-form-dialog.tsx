@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { queryKeys } from "@/lib/query/query-keys";
 import { Bike, Car, Fuel, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -28,9 +26,8 @@ import {
   type DriverProjectKey,
 } from "@/features/fleet/fleet-labels";
 import { ProjectKeyField } from "@/features/fleet/project-key-field";
-import { saveVehicle, assignVehicleDriver } from "./vehicles-actions";
+import { saveVehicle } from "./vehicles-actions";
 import { plateToBikeId } from "./plate-id";
-import { listVehicleTabDrivers } from "./vehicle-tabs-actions";
 import { useVehiclePartners, useVehicleUseTypes } from "./use-vehicles";
 import type { VehicleListRow, VehicleTypeRow } from "./types";
 import {
@@ -83,22 +80,7 @@ export function VehicleFormDialog({
   const [replacesVehicleId, setReplacesVehicleId] = useState<string | null>(null);
   const [replacementStartedAt, setReplacementStartedAt] = useState("");
   const [projectKey, setProjectKey] = useState<DriverProjectKey | "">("");
-  const [assignedDriverId, setAssignedDriverId] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<VehicleFieldError | null>(null);
-  const drivers = useQuery({
-    queryKey: [...queryKeys.vehicles.all(), "tab-drivers"],
-    queryFn: listVehicleTabDrivers,
-    enabled: open,
-  });
-  const driverItems = useMemo(
-    () =>
-      (drivers.data ?? []).map((item) => ({
-        value: item.id,
-        label: item.label,
-        keywords: item.keywords,
-      })),
-    [drivers.data],
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -125,7 +107,6 @@ export function VehicleFormDialog({
     setReplacesVehicleId(vehicle?.replaces_vehicle_id ?? null);
     setReplacementStartedAt(toKuwaitYmd(vehicle?.replacement_started_at));
     setProjectKey(isDriverProjectKey(vehicle?.assigned_project_key) ? vehicle.assigned_project_key : "");
-    setAssignedDriverId(vehicle?.assigned_driver_id ?? null);
     setFieldError(null);
   }, [open, vehicle]);
 
@@ -213,17 +194,14 @@ export function VehicleFormDialog({
             if (ownerPartnerId) formData.set("ownerPartnerId", ownerPartnerId);
             if (replacesVehicleId) formData.set("replacesVehicleId", replacesVehicleId);
             formData.set("replacementStartedAt", replacementStartedAt);
-            if (assignedDriverId) formData.set("assignedDriverId", assignedDriverId);
+            if (vehicle?.assigned_driver_id) {
+              formData.set("assignedDriverId", vehicle.assigned_driver_id);
+            }
             formData.set("projectKey", projectKey);
             startTransition(async () => {
               const result = await saveVehicle(formData);
               if (result.error || !result.id) {
                 toast.error(t(`errors.${result.error ?? "save_failed"}` as "errors.save_failed"));
-                return;
-              }
-              const assigned = await assignVehicleDriver(result.id, assignedDriverId);
-              if (assigned.error) {
-                toast.error(t(`errors.${assigned.error}` as "errors.save_failed"));
                 return;
               }
               toast.success(t("saved"));
@@ -559,18 +537,6 @@ export function VehicleFormDialog({
                 onChange={(event) => setReplacementStartedAt(event.target.value)}
                 className="h-9"
                 disabled={!replacesVehicleId}
-              />
-            </FieldBlock>
-            <FieldBlock>
-              <FieldLabel>{t("colDriver")}</FieldLabel>
-              <SearchSelect
-                items={driverItems}
-                value={assignedDriverId}
-                onChange={setAssignedDriverId}
-                placeholder={t("assignDriverPlaceholder")}
-                searchPlaceholder={t("assignDriverPlaceholder")}
-                recentsKey="vehicle-assign-driver"
-                className="h-9"
               />
             </FieldBlock>
           </div>

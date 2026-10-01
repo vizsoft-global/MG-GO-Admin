@@ -5998,6 +5998,267 @@ export type Database = {
           },
         ]
       }
+      payroll_clients: {
+        Row: {
+          average_threshold: number
+          created_at: string
+          default_off_days: number
+          default_result: Json
+          full_day_hours: number
+          good_threshold: number
+          half_day_hours: number
+          is_active: boolean
+          is_system: boolean
+          key: string
+          name: string
+          reduced_hours: number
+          required_hours_per_day: number
+          sort_order: number
+          updated_at: string
+          uses_hours: boolean
+          uses_orders: boolean
+          uses_zone: boolean
+        }
+        Insert: {
+          average_threshold?: number
+          created_at?: string
+          default_off_days?: number
+          default_result?: Json
+          full_day_hours?: number
+          good_threshold?: number
+          half_day_hours?: number
+          is_active?: boolean
+          is_system?: boolean
+          key: string
+          name: string
+          reduced_hours?: number
+          required_hours_per_day?: number
+          sort_order?: number
+          updated_at?: string
+          uses_hours?: boolean
+          uses_orders?: boolean
+          uses_zone?: boolean
+        }
+        Update: {
+          average_threshold?: number
+          created_at?: string
+          default_off_days?: number
+          default_result?: Json
+          full_day_hours?: number
+          good_threshold?: number
+          half_day_hours?: number
+          is_active?: boolean
+          is_system?: boolean
+          key?: string
+          name?: string
+          reduced_hours?: number
+          required_hours_per_day?: number
+          sort_order?: number
+          updated_at?: string
+          uses_hours?: boolean
+          uses_orders?: boolean
+          uses_zone?: boolean
+        }
+        Relationships: []
+      }
+      payroll_client_rules: {
+        Row: {
+          client_key: string
+          conditions: Json
+          created_at: string
+          id: string
+          label: string
+          period_month: string
+          result: Json
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          client_key: string
+          conditions: Json
+          created_at?: string
+          id?: string
+          label?: string
+          period_month: string
+          result: Json
+          sort_order: number
+          updated_at?: string
+        }
+        Update: {
+          client_key?: string
+          conditions?: Json
+          created_at?: string
+          id?: string
+          label?: string
+          period_month?: string
+          result?: Json
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_client_rules_client_key_fkey"
+            columns: ["client_key"]
+            isOneToOne: false
+            referencedRelation: "payroll_clients"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      payroll_rule_audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_name: string | null
+          after: Json | null
+          before: Json | null
+          client_key: string | null
+          created_at: string
+          entity: string
+          id: string
+          period_month: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_name?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_key?: string | null
+          created_at?: string
+          entity: string
+          id?: string
+          period_month?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_name?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_key?: string | null
+          created_at?: string
+          entity?: string
+          id?: string
+          period_month?: string | null
+        }
+        Relationships: []
+      }
+      payroll_zone_metrics: {
+        Row: {
+          average_threshold: number
+          category_auto: string | null
+          category_override: string | null
+          computed_at: string
+          dpd: number | null
+          dpd_used: number | null
+          efficiency: number | null
+          good_threshold: number
+          orders: number
+          override_at: string | null
+          override_by: string | null
+          period_month: string
+          rider_days: number
+          target_dpd: number | null
+          target_dpd_used: number | null
+          zone_id: string
+        }
+        Insert: {
+          average_threshold?: number
+          category_auto?: string | null
+          category_override?: string | null
+          computed_at?: string
+          dpd?: number | null
+          dpd_used?: number | null
+          efficiency?: number | null
+          good_threshold?: number
+          orders?: number
+          override_at?: string | null
+          override_by?: string | null
+          period_month: string
+          rider_days?: number
+          target_dpd?: number | null
+          target_dpd_used?: number | null
+          zone_id: string
+        }
+        Update: {
+          average_threshold?: number
+          category_auto?: string | null
+          category_override?: string | null
+          computed_at?: string
+          dpd?: number | null
+          dpd_used?: number | null
+          efficiency?: number | null
+          good_threshold?: number
+          orders?: number
+          override_at?: string | null
+          override_by?: string | null
+          period_month?: string
+          rider_days?: number
+          target_dpd?: number | null
+          target_dpd_used?: number | null
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_zone_metrics_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_manual_adjustments: {
+        Row: {
+          adjusted_at: string
+          adjusted_by: string | null
+          adjusted_by_name: string | null
+          adjusted_hours: number | null
+          adjusted_status: string
+          driver_id: string
+          id: string
+          original_status: string | null
+          period_month: string
+          reason: string
+          work_date: string
+        }
+        Insert: {
+          adjusted_at?: string
+          adjusted_by?: string | null
+          adjusted_by_name?: string | null
+          adjusted_hours?: number | null
+          adjusted_status: string
+          driver_id: string
+          id?: string
+          original_status?: string | null
+          period_month: string
+          reason: string
+          work_date: string
+        }
+        Update: {
+          adjusted_at?: string
+          adjusted_by?: string | null
+          adjusted_by_name?: string | null
+          adjusted_hours?: number | null
+          adjusted_status?: string
+          driver_id?: string
+          id?: string
+          original_status?: string | null
+          period_month?: string
+          reason?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_manual_adjustments_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           access_kind: string | null
@@ -8898,6 +9159,91 @@ export type Database = {
           p_vehicle_keys?: string[]
           p_zone_ids?: string[]
         }
+        Returns: Json
+      }
+      admin_payroll_rule_snapshot: {
+        Args: {
+          p_month: string
+          p_nationalities?: string[]
+          p_project_keys?: string[]
+          p_restaurant_ids?: string[]
+          p_source_companies?: string[]
+          p_source_types?: string[]
+          p_vehicle_keys?: string[]
+          p_zone_ids?: string[]
+        }
+        Returns: Json
+      }
+      admin_payroll_rule_config: {
+        Args: { p_month: string }
+        Returns: Json
+      }
+      admin_open_payroll_rule_month: {
+        Args: { p_month: string }
+        Returns: Json
+      }
+      admin_save_payroll_client: {
+        Args: {
+          p_average_threshold: number
+          p_default_off_days: number
+          p_default_result: string
+          p_full_day_hours: number
+          p_good_threshold: number
+          p_half_day_hours: number
+          p_key: string
+          p_name: string
+          p_reduced_hours: number
+          p_required_hours_per_day: number
+          p_sort_order?: number | null
+          p_uses_hours: boolean
+          p_uses_orders: boolean
+          p_uses_zone: boolean
+        }
+        Returns: Json
+      }
+      admin_add_payroll_client: {
+        Args: {
+          p_name: string
+          p_uses_zone: boolean
+          p_uses_orders: boolean
+          p_uses_hours: boolean
+          p_copy_from?: string | null
+          p_month?: string | null
+        }
+        Returns: Json
+      }
+      admin_save_payroll_client_rules: {
+        Args: { p_client_key: string; p_month: string; p_rules: Json }
+        Returns: Json
+      }
+      admin_reset_payroll_client_rules: {
+        Args: { p_client_key: string; p_month: string }
+        Returns: Json
+      }
+      admin_recompute_payroll_zone_metrics: {
+        Args: { p_month: string }
+        Returns: Json
+      }
+      admin_save_payroll_zone_override: {
+        Args: {
+          p_zone_id: string
+          p_month: string
+          p_dpd_used?: number | null
+          p_target_dpd_used?: number | null
+          p_category_override?: string | null
+        }
+        Returns: Json
+      }
+      admin_payroll_zone_metrics: {
+        Args: { p_month: string }
+        Returns: Json
+      }
+      admin_apply_payroll_adjustments: {
+        Args: { p_cells: Json; p_reason: string; p_driver_ids?: string[] | null }
+        Returns: Json
+      }
+      admin_payroll_adjustment_audit: {
+        Args: { p_from?: string | null; p_to?: string | null; p_driver_id?: string | null }
         Returns: Json
       }
       admin_performance_ops_bounds: { Args: never; Returns: Json }

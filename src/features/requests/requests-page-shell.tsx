@@ -29,7 +29,6 @@ import {
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -418,7 +417,6 @@ export function RequestsPageShell({
               <Settings className="me-1.5 h-3.5 w-3.5" />
               {t("settingsLink")}
             </Button>
-            <ClearAllModuleButton entity="requests" compact />
             {canCreate ? (
               <Button
                 type="button"

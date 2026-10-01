@@ -89,7 +89,6 @@ import {
   type DriversTab,
 } from "./drivers-list-query";
 import { riderCategoryMessageKey } from "./driver-rider-category";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { type DriverAccountStatus, type DriverListPageRow } from "./types";
 
 function shouldIgnoreRowNavigation(target: EventTarget | null): boolean {
@@ -677,7 +676,6 @@ function DriversPageContent() {
                   <TooltipContent>{t("bulkImport")}</TooltipContent>
                 </Tooltip>
               ) : null}
-              <ClearAllModuleButton entity="drivers" />
               {canCreate ? (
                 <Button
                   type="button"
