@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Award, CalendarOff, Percent, UserCheck, Users } from "lucide-react";
+import { AlertTriangle, Award, CalendarOff, Clock, Hand, Percent, UserCheck, Users } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,7 +71,7 @@ export function PayrollTab({
           </Button>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
         <KpiCard compact label={t("kpi.riders")} value={kpis.riders} icon={Users} />
         <KpiCard compact label={t("kpi.active")} value={kpis.active} icon={UserCheck} accent="success" />
         <KpiCard
@@ -92,6 +92,14 @@ export function PayrollTab({
           label={t("kpi.unjustified")}
           value={kpis.unjustifiedRiders}
           icon={AlertTriangle}
+          accent="warning"
+        />
+        <KpiCard compact label={t("kpi.reduced3Days")} value={kpis.reduced3Days} icon={Clock} />
+        <KpiCard
+          compact
+          label={t("kpi.manualAdjustments")}
+          value={kpis.manualAdjustments}
+          icon={Hand}
           accent="warning"
         />
       </div>

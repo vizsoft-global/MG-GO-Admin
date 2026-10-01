@@ -174,8 +174,6 @@ describe("applyVehicleKpi", () => {
     kind: "car",
     search: "kwt",
     project: "keeta",
-    assignment: "all",
-    replacement: "all",
   };
 
   it("resets extras on Total and leaves On Duty when Company is clicked", () => {
@@ -194,8 +192,6 @@ describe("applyVehicleKpi", () => {
       kind: "all",
       search: "",
       project: "all",
-      assignment: "all",
-      replacement: "all",
     });
   });
 
@@ -216,8 +212,6 @@ describe("applyVehicleKpi", () => {
         carType: "all",
         typeOfUse: "all",
         kind: "all",
-        assignment: "all",
-        replacement: "all",
       }),
       true,
     );
@@ -233,30 +227,6 @@ describe("applyVehicleKpi", () => {
       vehicleKpiSelected("total", { ...base, tab: "on-duty" }),
       false,
     );
-  });
-
-  it("filters Unassigned, Bike, Car, Active, and Replacement from KPI tiles", () => {
-    const unassigned = applyVehicleKpi("unassigned", base);
-    assert.equal(unassigned.assignment, "unassigned");
-    assert.equal(unassigned.tab, "on-duty");
-    assert.equal(vehicleKpiSelected("unassigned", unassigned), true);
-
-    const bike = applyVehicleKpi("bike", base);
-    assert.equal(bike.kind, "bike");
-    assert.equal(vehicleKpiSelected("bike", bike), true);
-
-    const car = applyVehicleKpi("car", { ...base, kind: "all" });
-    assert.equal(car.kind, "car");
-    assert.equal(vehicleKpiSelected("car", car), true);
-
-    const active = applyVehicleKpi("active", base);
-    assert.equal(active.status, "active");
-    assert.equal(active.tab, "all");
-    assert.equal(vehicleKpiSelected("active", active), true);
-
-    const replacement = applyVehicleKpi("replacement", base);
-    assert.equal(replacement.replacement, "yes");
-    assert.equal(vehicleKpiSelected("replacement", replacement), true);
   });
 });
 
@@ -275,11 +245,6 @@ describe("vehicleListKpis", () => {
       company: 2,
       rent: 1,
       underRepair: 2,
-      unassigned: 4,
-      bike: 4,
-      car: 0,
-      active: 2,
-      replacement: 0,
     });
   });
 });

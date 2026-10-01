@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import type { Json } from "@/types/database";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
 import { logAdminActivity } from "@/lib/audit/log-admin-activity";
@@ -16,11 +17,23 @@ import {
   assemblePayrollSnapshot,
   decoratePayrollSnapshot,
   kuwaitYmdFromIso,
+  parseClientConfig,
+  snapshotFromRpc,
   type RawOffStructure,
   type RawPayrollDriver,
   type RawPayrollRequest,
+  type RawPayrollRuleSnapshot,
 } from "./payroll-snapshot";
-import type { OffStructureBulkResult, PayrollSlicers, PayrollSnapshot } from "./payroll-types";
+import { parseRules } from "./payroll-rules-engine";
+import type {
+  OffStructureBulkResult,
+  PayrollAdjustmentAuditRow,
+  PayrollAdjustmentCell,
+  PayrollAdjustmentResult,
+  PayrollRuleConfigSnapshot,
+  PayrollSlicers,
+  PayrollSnapshot,
+} from "./payroll-types";
 
 function requirePayrollView() {
   return requirePayrollPermission("payroll.view");
@@ -91,6 +104,26 @@ export async function fetchPayrollMonthSnapshot(input: {
   const month = assertPayrollMonth(input.monthKey, today);
   const slicers = input.slicers ?? EMPTY_OPS_SLICERS;
   const supabase = await createClient();
+
+  // The rule snapshot is the source of truth: it already resolves hours,
+  // requests, recon orders, per-month rules, zone category and adjustments in
+  // one call, and the client engine re-evaluates it (the two cannot disagree).
+  const rule = await supabase.rpc("admin_payroll_rule_snapshot", {
+    p_month: `${month.key}-01`,
+    p_zone_ids: emptyToUndef(slicers.zoneIds),
+    p_project_keys: emptyToUndef(slicers.projectKeys),
+    p_vehicle_keys: emptyToUndef(slicers.vehicleKeys),
+    p_nationalities: emptyToUndef(slicers.nationalities),
+    p_source_types: emptyToUndef(slicers.sourceTypes),
+    p_source_companies: emptyToUndef(slicers.sourceCompanies),
+    p_restaurant_ids: emptyToUndef(slicers.restaurantIds),
+  });
+  if (!rule.error && rule.data) {
+    return snapshotFromRpc(rule.data as RawPayrollRuleSnapshot);
+  }
+  if (rule.error && !isMissingRpc(rule.error)) {
+    throw new Error(rule.error.message);
+  }
 
   const { data, error } = await supabase.rpc("admin_payroll_month_snapshot", {
     p_month: `${month.key}-01`,
@@ -416,4 +449,397 @@ export async function fetchPayrollMonths(): Promise<{
   await requirePayrollView();
   const today = kuwaitToday();
   return { today, months: payrollMonths(today) };
+}
+
+/* ------------------------------------------------------------------ */
+/* Payroll v4 — client rules, zone efficiency, manual adjustments      */
+/* ------------------------------------------------------------------ */
+
+function parseRuleConfigSnapshot(raw: unknown): PayrollRuleConfigSnapshot {
+  const payload = (raw ?? {}) as Record<string, unknown>;
+  const clients = (Array.isArray(payload.clients) ? payload.clients : [])
+    .map((item) => {
+      const parsed = parseClientConfig(item);
+      if (!parsed) return null;
+      const o = (item ?? {}) as Record<string, unknown>;
+      return {
+        ...parsed,
+        riderCount: Number(o.riderCount ?? 0),
+        effectiveMonth: o.effectiveMonth ? String(o.effectiveMonth) : null,
+        hasRulesForMonth: Boolean(o.hasRulesForMonth),
+      };
+    })
+    .filter((c): c is PayrollRuleConfigSnapshot["clients"][number] => c !== null);
+
+  const audit = (Array.isArray(payload.audit) ? payload.audit : []).map((item) => {
+    const o = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: String(o.id ?? ""),
+      clientKey: o.clientKey ? String(o.clientKey) : null,
+      periodMonth: o.periodMonth ? String(o.periodMonth) : null,
+      entity: String(o.entity ?? ""),
+      action: String(o.action ?? ""),
+      actorName: String(o.actorName ?? "—"),
+      createdAt: String(o.createdAt ?? ""),
+      before: o.before ?? null,
+      after: o.after ?? null,
+    };
+  });
+
+  return {
+    month: String(payload.month ?? ""),
+    canManage: Boolean(payload.canManage),
+    clients,
+    rules: parseRules(payload.rules),
+    audit,
+  };
+}
+
+/** The Settings tab / zone panel payload for one month. */
+export async function fetchPayrollRuleConfig(input: {
+  monthKey: string;
+}): Promise<PayrollRuleConfigSnapshot> {
+  await requirePayrollView();
+  const today = kuwaitToday();
+  const month = assertPayrollMonth(input.monthKey, today);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_payroll_rule_config", {
+    p_month: `${month.key}-01`,
+  });
+  if (error) throw new Error(error.message);
+  return parseRuleConfigSnapshot(data);
+}
+
+/** Open (auto-copy / seed) the rule month, then return the config. */
+export async function openPayrollRuleMonth(input: {
+  monthKey: string;
+}): Promise<PayrollRuleConfigSnapshot> {
+  await requirePayrollPermission("payroll.manage");
+  const today = kuwaitToday();
+  const month = assertPayrollMonth(input.monthKey, today);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_open_payroll_rule_month", {
+    p_month: `${month.key}-01`,
+  });
+  if (error) throw new Error(error.message);
+  return parseRuleConfigSnapshot(data);
+}
+
+export async function savePayrollClient(input: {
+  key: string;
+  name: string;
+  usesZone: boolean;
+  usesOrders: boolean;
+  usesHours: boolean;
+  fullDayHours: number;
+  halfDayHours: number;
+  reducedHours: number;
+  requiredHoursPerDay: number;
+  defaultOffDays: number;
+  defaultResult: string;
+  goodThreshold: number;
+  averageThreshold: number;
+  sortOrder?: number | null;
+}): Promise<{ error: string } | { ok: true }> {
+  await requirePayrollPermission("payroll.manage");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_save_payroll_client", {
+    p_key: input.key,
+    p_name: input.name,
+    p_uses_zone: input.usesZone,
+    p_uses_orders: input.usesOrders,
+    p_uses_hours: input.usesHours,
+    p_full_day_hours: input.fullDayHours,
+    p_half_day_hours: input.halfDayHours,
+    p_reduced_hours: input.reducedHours,
+    p_required_hours_per_day: input.requiredHoursPerDay,
+    p_default_off_days: input.defaultOffDays,
+    p_default_result: input.defaultResult,
+    p_good_threshold: input.goodThreshold,
+    p_average_threshold: input.averageThreshold,
+    p_sort_order: input.sortOrder ?? null,
+  });
+  if (error) return { error: error.message };
+  await logAdminActivity({
+    action: "update",
+    entityType: "payroll_client",
+    entityId: input.key,
+    pagePath: "/payroll/settings",
+    routeName: "payroll-settings",
+    after: {
+      name: input.name,
+      usesZone: input.usesZone,
+      usesOrders: input.usesOrders,
+      usesHours: input.usesHours,
+      fullDayHours: input.fullDayHours,
+      halfDayHours: input.halfDayHours,
+      reducedHours: input.reducedHours,
+      requiredHoursPerDay: input.requiredHoursPerDay,
+      defaultOffDays: input.defaultOffDays,
+      defaultResult: input.defaultResult,
+      goodThreshold: input.goodThreshold,
+      averageThreshold: input.averageThreshold,
+      sortOrder: input.sortOrder ?? null,
+    },
+  });
+  return { ok: true };
+}
+
+export async function addPayrollClient(input: {
+  name: string;
+  usesZone: boolean;
+  usesOrders: boolean;
+  usesHours: boolean;
+  copyFrom?: string | null;
+  monthKey: string;
+}): Promise<{ error: string } | { ok: true; config: PayrollRuleConfigSnapshot }> {
+  await requirePayrollPermission("payroll.manage");
+  const today = kuwaitToday();
+  let month: string;
+  try {
+    month = assertPayrollMonth(input.monthKey, today).key;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "invalid_month" };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_add_payroll_client", {
+    p_name: input.name,
+    p_uses_zone: input.usesZone,
+    p_uses_orders: input.usesOrders,
+    p_uses_hours: input.usesHours,
+    p_copy_from: input.copyFrom ?? null,
+    p_month: `${month}-01`,
+  });
+  if (error) return { error: error.message };
+  await logAdminActivity({
+    action: "create",
+    entityType: "payroll_client",
+    entityId: input.name,
+    pagePath: "/payroll/settings",
+    routeName: "payroll-settings",
+    after: { name: input.name, copyFrom: input.copyFrom ?? null, month },
+  });
+  return { ok: true, config: parseRuleConfigSnapshot(data) };
+}
+
+export async function savePayrollClientRules(input: {
+  clientKey: string;
+  monthKey: string;
+  rules: ReadonlyArray<{
+    label: string;
+    conditions: unknown;
+    result: unknown;
+    sortOrder: number;
+  }>;
+}): Promise<{ error: string } | { ok: true; config: PayrollRuleConfigSnapshot }> {
+  await requirePayrollPermission("payroll.manage");
+  const today = kuwaitToday();
+  let month: string;
+  try {
+    month = assertPayrollMonth(input.monthKey, today).key;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "invalid_month" };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_save_payroll_client_rules", {
+    p_client_key: input.clientKey,
+    p_month: `${month}-01`,
+    p_rules: input.rules.map((rule) => ({
+      label: rule.label,
+      conditions: rule.conditions,
+      result: rule.result,
+      sortOrder: rule.sortOrder,
+    })) as unknown as Json,
+  });
+  if (error) return { error: error.message };
+  await logAdminActivity({
+    action: "update",
+    entityType: "payroll_client_rules",
+    entityId: input.clientKey,
+    pagePath: "/payroll/settings",
+    routeName: "payroll-settings",
+    after: { month, ruleCount: input.rules.length },
+  });
+  return { ok: true, config: parseRuleConfigSnapshot(data) };
+}
+
+export async function resetPayrollClientRules(input: {
+  clientKey: string;
+  monthKey: string;
+}): Promise<{ error: string } | { ok: true; config: PayrollRuleConfigSnapshot }> {
+  await requirePayrollPermission("payroll.manage");
+  const today = kuwaitToday();
+  let month: string;
+  try {
+    month = assertPayrollMonth(input.monthKey, today).key;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "invalid_month" };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_reset_payroll_client_rules", {
+    p_client_key: input.clientKey,
+    p_month: `${month}-01`,
+  });
+  if (error) return { error: error.message };
+  await logAdminActivity({
+    action: "update",
+    entityType: "payroll_client_rules",
+    entityId: input.clientKey,
+    pagePath: "/payroll/settings",
+    routeName: "payroll-settings",
+    after: { month, action: "reset_to_defaults" },
+  });
+  return { ok: true, config: parseRuleConfigSnapshot(data) };
+}
+
+/** Roll the previous completed month's zone figures forward and recompute. */
+export async function recomputePayrollZoneMetrics(input: {
+  monthKey: string;
+}): Promise<{ error: string } | { ok: true; month: string; zones: unknown }> {
+  await requirePayrollPermission("payroll.manage");
+  const today = kuwaitToday();
+  let month: string;
+  try {
+    month = assertPayrollMonth(input.monthKey, today).key;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "invalid_month" };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_recompute_payroll_zone_metrics", {
+    p_month: `${month}-01`,
+  });
+  if (error) return { error: error.message };
+  const payload = (data ?? {}) as Record<string, unknown>;
+  await logAdminActivity({
+    action: "update",
+    entityType: "payroll_zone_metrics",
+    entityId: month,
+    pagePath: "/payroll/settings",
+    routeName: "payroll-settings",
+    after: { month, reason: "recompute" },
+  });
+  return {
+    ok: true,
+    month: String(payload.month ?? month),
+    zones: payload.zones ?? [],
+  };
+}
+
+export async function savePayrollZoneOverride(input: {
+  zoneId: string;
+  monthKey: string;
+  dpdUsed: number | null;
+  targetDpdUsed: number | null;
+  categoryOverride: "good" | "average" | "low" | null;
+}): Promise<{ error: string } | { ok: true }> {
+  await requirePayrollPermission("payroll.manage");
+  const today = kuwaitToday();
+  let month: string;
+  try {
+    month = assertPayrollMonth(input.monthKey, today).key;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "invalid_month" };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_save_payroll_zone_override", {
+    p_zone_id: input.zoneId,
+    p_month: `${month}-01`,
+    p_dpd_used: input.dpdUsed,
+    p_target_dpd_used: input.targetDpdUsed,
+    p_category_override: input.categoryOverride,
+  });
+  if (error) return { error: error.message };
+  await logAdminActivity({
+    action: "update",
+    entityType: "payroll_zone_override",
+    entityId: input.zoneId,
+    pagePath: "/payroll/settings",
+    routeName: "payroll-settings",
+    after: {
+      month,
+      dpdUsed: input.dpdUsed,
+      targetDpdUsed: input.targetDpdUsed,
+      categoryOverride: input.categoryOverride,
+    },
+  });
+  return { ok: true };
+}
+
+function normaliseAdjustmentCells(
+  cells: ReadonlyArray<PayrollAdjustmentCell>,
+): Array<Record<string, unknown>> {
+  return cells.map((cell) => ({
+    driverId: cell.driverId,
+    date: cell.date,
+    status: cell.status,
+    hours: cell.hours ?? null,
+  }));
+}
+
+export async function applyPayrollAdjustments(input: {
+  cells: ReadonlyArray<PayrollAdjustmentCell>;
+  reason: string;
+}): Promise<{ error: string } | { ok: true } & PayrollAdjustmentResult> {
+  await requirePayrollPermission("payroll.manage");
+  const reason = input.reason.trim();
+  if (!reason) return { error: "reason_required" };
+  if (!input.cells.length) return { error: "no_cells" };
+  if (input.cells.length > 2000) return { error: "too_many_cells" };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_apply_payroll_adjustments", {
+    p_cells: normaliseAdjustmentCells(input.cells) as unknown as Json,
+    p_reason: reason,
+  });
+  if (error) return { error: error.message };
+  const payload = (data ?? {}) as Record<string, unknown>;
+  await logAdminActivity({
+    action: "update",
+    entityType: "payroll_manual_adjustment",
+    entityId: `batch:${input.cells.length}`,
+    pagePath: "/payroll",
+    routeName: "payroll",
+    after: {
+      applied: Number(payload.applied ?? input.cells.length),
+      reason,
+      cells: input.cells.length,
+    },
+  });
+  return {
+    ok: true,
+    applied: Number(payload.applied ?? input.cells.length),
+    reason: String(payload.reason ?? reason),
+    by: String(payload.by ?? ""),
+  };
+}
+
+export async function fetchPayrollAdjustmentAudit(input: {
+  from?: string | null;
+  to?: string | null;
+  driverId?: string | null;
+}): Promise<PayrollAdjustmentAuditRow[]> {
+  await requirePayrollView();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_payroll_adjustment_audit", {
+    p_from: input.from ?? null,
+    p_to: input.to ?? null,
+    p_driver_id: input.driverId ?? null,
+  });
+  if (error) throw new Error(error.message);
+  const list = Array.isArray(data) ? data : [];
+  return list.map((item) => {
+    const o = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: String(o.id ?? ""),
+      driverId: String(o.driverId ?? ""),
+      driverName: String(o.driverName ?? "—"),
+      mgId: String(o.mgId ?? "—"),
+      workDate: String(o.workDate ?? ""),
+      originalStatus: o.originalStatus ? String(o.originalStatus) : null,
+      adjustedStatus: String(o.adjustedStatus ?? ""),
+      adjustedHours: o.adjustedHours == null ? null : Number(o.adjustedHours),
+      reason: String(o.reason ?? ""),
+      actorName: String(o.actorName ?? "—"),
+      adjustedAt: String(o.adjustedAt ?? ""),
+    };
+  });
 }

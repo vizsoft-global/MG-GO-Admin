@@ -15,12 +15,24 @@ export const MONTH_ABBR = [
   "Dec",
 ] as const;
 
+/**
+ * MGGO Payroll SOP v4.0 day types. `work` is the full 12 h day and keeps its
+ * original name so a month nobody has configured yet produces the same numbers
+ * it did before the rule engine existed.
+ */
 export const DAY_STATUSES = [
   "work",
+  "reduced3",
+  "half",
+  "actual",
   "off",
   "sick",
   "accident",
+  "vehicle",
   "absent",
+  "abs_lh",
+  "abs_lo",
+  "custom",
   "blank",
 ] as const;
 
@@ -69,16 +81,38 @@ export type PayrollMonthMeta = {
 
 export type PayrollCoverKind = "accident" | "sick" | "off";
 
-export const PAYROLL_STATUS_FILTERS = ["work", "off", "sick", "accident", "absent"] as const;
+export const PAYROLL_STATUS_FILTERS = [
+  "work",
+  "reduced3",
+  "half",
+  "actual",
+  "off",
+  "sick",
+  "accident",
+  "vehicle",
+  "absent",
+  "abs_lh",
+  "abs_lo",
+  "custom",
+] as const;
 export type PayrollStatusFilter = (typeof PAYROLL_STATUS_FILTERS)[number];
 
-export const PAYROLL_STATUS_CHIP = {
+/** Chip dot colours, one per SOP day type. Selected state is the emerald
+ *  ToggleChip stack, so these are only the legend's identity swatch. */
+export const PAYROLL_STATUS_CHIP: Record<PayrollStatusFilter, { hex: string }> = {
   work: { hex: "#8d8d97" },
+  reduced3: { hex: "#7dd3fc" },
+  half: { hex: "#60a5fa" },
+  actual: { hex: "#a78bfa" },
   off: { hex: "#33c777" },
   sick: { hex: "#f0a83c" },
   accident: { hex: "#9acd32" },
+  vehicle: { hex: "#22d3ee" },
   absent: { hex: "#ef5b5b" },
-} as const;
+  abs_lh: { hex: "#fb923c" },
+  abs_lo: { hex: "#f472b6" },
+  custom: { hex: "#94a3b8" },
+};
 
 export function riderHasDayStatus(
   days: readonly DayStatus[],
@@ -90,13 +124,9 @@ export function riderHasDayStatus(
 export function countRidersByStatus(
   rows: ReadonlyArray<{ days: readonly DayStatus[] }>,
 ): Record<PayrollStatusFilter, number> {
-  const counts: Record<PayrollStatusFilter, number> = {
-    work: 0,
-    off: 0,
-    sick: 0,
-    accident: 0,
-    absent: 0,
-  };
+  const counts = Object.fromEntries(
+    PAYROLL_STATUS_FILTERS.map((status) => [status, 0]),
+  ) as Record<PayrollStatusFilter, number>;
   for (const row of rows) {
     for (const status of PAYROLL_STATUS_FILTERS) {
       if (riderHasDayStatus(row.days, status)) counts[status] += 1;
@@ -118,12 +148,58 @@ export function shareOfPayroll(matching: number, total: number): number {
   return (matching / total) * 100;
 }
 
+/**
+ * The previous-month zone category, as SOP §5.1 bands it. Kept as a filter list
+ * separate from `ZoneCategory` so this module stays free of the engine import
+ * (the engine already depends on `DayStatus` from here).
+ */
+export const PAYROLL_ZONE_CATEGORY_FILTERS = [
+  "good",
+  "average",
+  "low",
+  "not_set",
+] as const;
+export type PayrollZoneCategoryFilter = (typeof PAYROLL_ZONE_CATEGORY_FILTERS)[number];
+
+/** Identity swatch per zone band. Selected state is the emerald ToggleChip. */
+export const PAYROLL_ZONE_CATEGORY_CHIP: Record<PayrollZoneCategoryFilter, string> = {
+  good: "#33c777",
+  average: "#f0a83c",
+  low: "#ef5b5b",
+  not_set: "#94a3b8",
+};
+
+export function countRidersByZoneCategory(
+  rows: ReadonlyArray<{ zoneCategory: string }>,
+): Record<PayrollZoneCategoryFilter, number> {
+  const counts = Object.fromEntries(
+    PAYROLL_ZONE_CATEGORY_FILTERS.map((category) => [category, 0]),
+  ) as Record<PayrollZoneCategoryFilter, number>;
+  for (const row of rows) {
+    const category = row.zoneCategory as PayrollZoneCategoryFilter;
+    if (category in counts) counts[category] += 1;
+  }
+  return counts;
+}
+
+export function filterRidersByZoneCategory<T extends { zoneCategory: string }>(
+  rows: readonly T[],
+  category: PayrollZoneCategoryFilter | null,
+): T[] {
+  if (!category) return [...rows];
+  return rows.filter((row) => row.zoneCategory === category);
+}
+
 export type PayrollKpis = {
   riders: number;
   active: number;
   avgEfficiency: number;
   atOrAbove100: number;
   unjustifiedRiders: number;
+  /** Day-cells credited at the 3 h rate across the filtered riders. */
+  reduced3Days: number;
+  /** Day-cells carrying a hand adjustment across the filtered riders. */
+  manualAdjustments: number;
 };
 
 export type RequestKpis = {
@@ -450,16 +526,23 @@ export function isUnjustifiedDay(
   approved: { accident: boolean; sick: boolean; off: boolean },
 ): boolean {
   switch (status) {
-    case "work":
-    case "absent":
-    case "blank":
-      return false;
     case "off":
       return !approved.off;
     case "sick":
       return !approved.sick;
     case "accident":
       return !approved.accident;
+    case "work":
+    case "reduced3":
+    case "half":
+    case "actual":
+    case "vehicle":
+    case "absent":
+    case "abs_lh":
+    case "abs_lo":
+    case "custom":
+    case "blank":
+      return false;
     default: {
       const _never: never = status;
       return _never;
@@ -643,6 +726,16 @@ export function classifyRiderMonth(input: {
       case "absent":
         absentDays += 1;
         break;
+      // The v4 rule statuses can only arrive from the rule engine / an
+      // adjustment, never from `classifyDay` here. They are counted by the
+      // rider row itself, so this legacy pass leaves them alone.
+      case "reduced3":
+      case "half":
+      case "actual":
+      case "vehicle":
+      case "abs_lh":
+      case "abs_lo":
+      case "custom":
       case "blank":
         break;
       default: {
@@ -679,7 +772,13 @@ export function classifyRiderMonth(input: {
 }
 
 export function computePayrollKpis(
-  rows: ReadonlyArray<{ status: "Active" | "Inactive"; efficiency: number; unjustified: number }>,
+  rows: ReadonlyArray<{
+    status: "Active" | "Inactive";
+    efficiency: number;
+    unjustified: number;
+    reducedDays?: number;
+    adjustedCells?: number;
+  }>,
 ): PayrollKpis {
   const riders = rows.length;
   const active = rows.filter((r) => r.status === "Active").length;
@@ -687,7 +786,17 @@ export function computePayrollKpis(
     riders === 0 ? 0 : rows.reduce((sum, r) => sum + r.efficiency, 0) / riders;
   const atOrAbove100 = rows.filter((r) => r.efficiency >= 100).length;
   const unjustifiedRiders = rows.filter((r) => r.unjustified > 0).length;
-  return { riders, active, avgEfficiency, atOrAbove100, unjustifiedRiders };
+  const reduced3Days = rows.reduce((sum, r) => sum + (r.reducedDays ?? 0), 0);
+  const manualAdjustments = rows.reduce((sum, r) => sum + (r.adjustedCells ?? 0), 0);
+  return {
+    riders,
+    active,
+    avgEfficiency,
+    atOrAbove100,
+    unjustifiedRiders,
+    reduced3Days,
+    manualAdjustments,
+  };
 }
 
 export function computeRequestKpis(
@@ -749,14 +858,28 @@ export function dayStatusLabel(status: DayStatus): string {
   switch (status) {
     case "work":
       return "12";
+    case "reduced3":
+      return "3h";
+    case "half":
+      return "HALF";
+    case "actual":
+      return "ACT";
     case "off":
       return "OFF";
     case "sick":
       return "Sick";
     case "accident":
       return "Accident";
+    case "vehicle":
+      return "Vehicle";
     case "absent":
       return "Absent";
+    case "abs_lh":
+      return "Abs·LH";
+    case "abs_lo":
+      return "Abs·LO";
+    case "custom":
+      return "CUS";
     case "blank":
       return "";
     default: {
