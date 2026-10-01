@@ -1,0 +1,78 @@
+To: Noura; Mohamed; Vijay; Mustafa; Aziz
+Cc: Vizsoft Delivery
+Subject: MG GO — Payroll v4 (SOP v4.0) is live: client-owned rules, zone efficiency and an Excel-style grid
+
+Hi team,
+
+The MGGO Payroll SOP v4.0 is now live on the admin panel. Payroll is no longer one
+hard-coded rule — each client owns its own rules, and your staff can change them on
+screen without a developer.
+
+WHAT YOU ASKED FOR, IN SHORT
+• The client is the unit: each client keeps its own hour values, thresholds, a default
+  day status, and its own ordered list of day rules.
+• A rule matches on zone band (Good / Average / Low), zone name, orders and worked
+  hours. The first match from the top wins.
+• The SOP result codes, exactly as written: Full day 12 h, Reduced day 3 h, Half day 6 h,
+  Actual hours, Absent, Absent LH, Absent LO, Custom hours.
+• Zone efficiency is read from the previous completed month only:
+  DPD = orders / rider-days, efficiency = DPD / the target DPD, banded Good >= 110%,
+  Average >= 70%, Low < 70%. A zone nobody measured is "Not set" — never "Low".
+• One stated order of precedence: hand adjustment > Operations (OFF / Sick / Accident /
+  Vehicle issue) > first matching client rule > client default > the previous behaviour.
+• Off Structure per rider (contracted OFF days, default 2) drives Required Hours, and is
+  uploadable in bulk from Excel.
+• The Combined grid behaves like a spreadsheet: select a block of rider-days, fill it,
+  copy and paste across it, and adjust the whole selection with one reason.
+• Attendance Efficiency = Actual Worked Hours / Required Hours, uncapped, with filters.
+
+WHAT IS LIVE TODAY
+• Admin: https://dpdadmin-prod.vercel.app/en/payroll
+  Four pages: Payroll / Combined Payroll / Attendance & Orders / Settings, plus Requests.
+• Two SOP clients are seeded with their starting rule lists:
+  - Americana (zone band + orders)
+  - Keeta (orders + hours)
+• Settings is where you edit it all: client criteria, the rule list, a "Try the rules"
+  simulator that saves nothing, the Zones & efficiency table with a Recompute button and
+  per-zone overrides, and a change log that names who changed what and when.
+• Combined Payroll has the grid, the batch adjustment (a reason is mandatory) and the
+  manual changes record — original value, new value, reason, user, time.
+• Off Structure has a per-rider editor and a bulk Excel upload with a preview that says
+  what will apply, what will not change and what was rejected, row by row.
+
+NO RIDER APP UPDATE IS NEEDED
+Payroll is an admin screen only. Nothing changes in the rider app. What the rider already
+does — clock in and out, deliver orders, raise Leave / Sick / Accident requests — is what
+feeds payroll, and the rules read those same figures.
+
+A FEW WORKED EXAMPLES (Americana, top to bottom, first match wins)
+  Khiran, 3 orders        -> Full day 12 h
+  Low zone, 4 orders      -> Reduced day 3 h
+  Low zone, 5 orders      -> Full day 12 h   (rule needs orders below 5)
+  Good zone, 6 orders     -> Reduced day 3 h
+  Good zone, 7 orders     -> Full day 12 h   (no rule matched, client default)
+
+A FEW WORKED EXAMPLES (Keeta)
+  0 h, 0 orders           -> Absent
+  9 h, 2 orders           -> Absent LO
+  3 h, 8 orders           -> Absent LH
+  5 h, 6 orders           -> Half day 6 h
+  11 h, 8 orders          -> Actual hours (11 h)
+  11 h, 4 orders          -> Half day 6 h
+  13 h, 8 orders          -> Full day 12 h
+  8 h, 6 orders           -> Actual hours (8 h)   (no rule matched, client default)
+
+A NOTE ON ZONE EFFICIENCY
+Efficiency always comes from the previous completed month. That is deliberate: a band that
+moved with the current, half-finished month would silently re-price days you have already
+decided. So a newly created zone stays "Not set" until a full month has passed and you
+press Recompute. And a zone with no rider-days is left out of the target rather than
+dragging it down, which is why an empty zone cannot push a working zone into "Average".
+
+Please use the attached client note for the full picture: what you requested, what we
+built, and how to verify it on Admin and against the rider app inputs.
+
+Happy to walk through Settings and the Combined grid on a short call.
+
+Thank you,
+Vizsoft
