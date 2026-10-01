@@ -1,0 +1,58 @@
+-- ============================================================================
+-- wrong_actions: the rider can read their own rows
+-- ============================================================================
+--
+-- Why this is one additive policy and not an RPC
+--
+-- 1.  The rider-facing path already exists on paper. `docs/DRIVER_APP_HANDOFF.md`
+--     documents "Wrong action details + history" as a read of `wrong_actions`,
+--     and `20260531100000_app_page_registry.sql` states the contract in plain
+--     words: "Driver reads own wrong_actions where driver_id=auth.uid()".
+--
+-- 2.  There is no rider-facing RPC to reuse. On production the only functions
+--     whose body mentions `wrong_actions` are `_admin_purge_slug_for_entity`,
+--     `admin_purge_preview_all`, `admin_purge_run_all` and
+--     `performance_daily_source` - all staff-side. So a `driver_list_my_wrong_actions`
+--     SECURITY DEFINER function would be a *new* read path invented to satisfy a
+--     contract that a policy satisfies directly, and a DEFINER function here
+--     would additionally have to re-implement row scoping that RLS already does.
+--
+-- 3.  The path was blocked, not missing. `20261005100200_wrong_actions_module.sql`
+--     left exactly one SELECT policy, `wrong_actions_staff_read`, gated on
+--     `is_admin_panel_user()`. A rider session therefore read zero rows even
+--     though the app page registry, the handoff doc and the table all agreed the
+--     rider should see their own.
+--
+-- 4.  The convention to mirror is already established in this schema:
+--     `driver_payouts.driver_read_own_payouts`,
+--     `driver_earnings_daily.driver_read_own_earnings_daily` and
+--     `attendance_logs.attendance_logs_driver_select` are all
+--     `driver_id = auth.uid()` on `authenticated`.
+--
+-- What the rider app actually selects
+--
+-- `id, action_type, severity, details, occurred_at` only. Two columns are
+-- deliberately never requested:
+--   * `created_by` - a staff identifier. It is not the rider's business who
+--     filed the incident, and a SELECT policy cannot hide a column it does not
+--     know about, so the app simply does not ask (the test in the app repo
+--     asserts the select string, not the policy).
+--   * `penalty_kwd` - does not exist on this table. It appears only inside the
+--     app page registry jsonb, and requesting it is a `42703` that would blank
+--     the page.
+--
+-- This policy grants row visibility, not column visibility. Everything a rider
+-- can see on a row they own is listed above and is safe for them to see.
+--
+-- Scope
+--
+-- SELECT only, `authenticated` only. No INSERT / UPDATE / DELETE policy is added
+-- and none is relaxed: an incident is an accusation and the rider may not file,
+-- edit or erase one. Staff reads continue through `wrong_actions_staff_read`
+-- (policies are OR-ed, so this one narrows nothing).
+-- ============================================================================
+
+DROP POLICY IF EXISTS wrong_actions_rider_read ON public.wrong_actions;
+CREATE POLICY wrong_actions_rider_read ON public.wrong_actions
+  FOR SELECT TO authenticated
+  USING (driver_id = auth.uid());
