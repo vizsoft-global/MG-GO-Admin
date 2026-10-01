@@ -410,7 +410,77 @@ export async function saveVehicle(
     routeName: "/vehicles",
     after: payload,
   });
-  return { id: data.id };
+    return { id: data.id };
+}
+
+export async function assignVehicleDriver(
+  vehicleId: string,
+  driverId: string | null,
+): Promise<{ error?: string }> {
+  const auth = await requireVehicles("vehicles.manage");
+  if ("error" in auth) return auth;
+  const id = vehicleId.trim();
+  if (!id) return { error: "missing_fields" };
+
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const nextDriverId = driverId?.trim() || null;
+
+  const { data: previous, error: previousError } = await supabase
+    .from("drivers")
+    .select("id")
+    .eq("vehicle_id", id)
+    .is("archived_at", null);
+  if (previousError) return { error: formatError(previousError) };
+
+  const { error: clearDriversError } = await supabase
+    .from("drivers")
+    .update({ vehicle_id: null, updated_at: now })
+    .eq("vehicle_id", id);
+  if (clearDriversError) return { error: formatError(clearDriversError) };
+
+  const { error: clearIntakesError } = await supabase
+    .from("driver_intakes")
+    .update({ vehicle_id: null, updated_at: now })
+    .eq("vehicle_id", id)
+    .is("archived_at", null);
+  if (clearIntakesError) return { error: formatError(clearIntakesError) };
+
+  if (nextDriverId) {
+    const { data: driver, error: driverError } = await supabase
+      .from("drivers")
+      .select("id")
+      .eq("id", nextDriverId)
+      .is("archived_at", null)
+      .maybeSingle();
+    if (driverError) return { error: formatError(driverError) };
+    if (!driver) return { error: "missing_fields" };
+
+    const { error: setDriverError } = await supabase
+      .from("drivers")
+      .update({ vehicle_id: id, updated_at: now })
+      .eq("id", nextDriverId);
+    if (setDriverError) return { error: formatError(setDriverError) };
+
+    const { error: setIntakeError } = await supabase
+      .from("driver_intakes")
+      .update({ vehicle_id: id, updated_at: now })
+      .eq("linked_profile_id", nextDriverId)
+      .is("archived_at", null);
+    if (setIntakeError) return { error: formatError(setIntakeError) };
+  }
+
+  void logAdminMutation({
+    action: "update",
+    entityType: "vehicle",
+    entityId: id,
+    routeName: "/vehicles",
+    after: {
+      assigned_driver_id: nextDriverId,
+      previous_driver_ids: (previous ?? []).map((row) => row.id),
+    },
+  });
+  return {};
 }
 
 export async function updateVehicleTypeLabel(formData: FormData): Promise<{ error?: string }> {

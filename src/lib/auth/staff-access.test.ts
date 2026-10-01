@@ -32,6 +32,7 @@ describe("staff access ticks", () => {
     assert.ok(ticks.has("drivers.create"));
     assert.ok(ticks.has("drivers.edit"));
     assert.ok(ticks.has("drivers.delete"));
+    assert.equal(ticks.has("drivers.bulk_delete"), false);
     assert.ok(ticks.has("assets.create"));
     assert.ok(ticks.has("performance.export"));
     assert.ok(ticks.has("users.manage"));
@@ -61,6 +62,7 @@ describe("staff access ticks", () => {
     assert.ok(seeded.size > OPERATOR_ROLE.length);
     assert.ok(seeded.has("assistant.view"));
     assert.ok(seeded.has("assets.create"));
+    assert.ok(seeded.has("drivers.bulk_delete"));
     assert.equal(seeded.has("assets.manage"), false);
     for (const slug of seeded) {
       assert.equal(isStaffMatrixSlug(slug), true);
@@ -73,6 +75,18 @@ describe("staff access ticks", () => {
     assert.ok(saved.has("assets.manage"));
     assert.ok(saved.has("assets.create"));
     assert.equal(saved.has("assets.delete"), false);
+  });
+
+  it("does not treat bulk_delete as a manage alias", () => {
+    assert.equal(permissionGrantedByTicks(new Set(["assets.manage"]), "assets.bulk_delete"), false);
+    assert.equal(permissionGrantedByTicks(new Set(["assets.delete"]), "assets.bulk_delete"), false);
+    assert.equal(permissionGrantedByTicks(new Set(["assets.bulk_delete"]), "assets.bulk_delete"), true);
+    assert.equal(permissionGrantedByTicks(new Set(["assets.bulk_delete"]), "assets.delete"), false);
+    const saved = new Set(roleSlugsForSave(["assets.bulk_delete"]));
+    assert.ok(saved.has("assets.bulk_delete"));
+    assert.equal(saved.has("assets.manage"), false);
+    const expanded = expandRoleSlugsToUserTicks(["assets.manage", "assets.delete"]);
+    assert.equal(expanded.has("assets.bulk_delete"), false);
   });
 
   it("hides .manage for new write modules and keeps their view slugs on the matrix", () => {
@@ -97,6 +111,7 @@ describe("hasPermissionInSet manage alias", () => {
     assert.equal(hasPermissionInSet(role, "assets.create", false), true);
     assert.equal(hasPermissionInSet(role, "assets.edit", false), true);
     assert.equal(hasPermissionInSet(role, "assets.delete", false), true);
+    assert.equal(hasPermissionInSet(role, "assets.bulk_delete", false), false);
   });
 
   it("lets migrated create/edit/delete unlock manage, but not the missing verb", () => {
@@ -104,6 +119,7 @@ describe("hasPermissionInSet manage alias", () => {
     assert.equal(hasPermissionInSet(ticks, "assets.manage", false), true);
     assert.equal(hasPermissionInSet(ticks, "assets.create", false), true);
     assert.equal(hasPermissionInSet(ticks, "assets.delete", false), false);
+    assert.equal(hasPermissionInSet(ticks, "assets.bulk_delete", false), false);
   });
 
   it("aliases payroll and fuel manage onto create/edit/delete", () => {
@@ -150,5 +166,17 @@ describe("resolveSessionPermissionSlugs", () => {
       catalogSlugs: CATALOG_SLUGS,
     });
     assert.deepEqual([...slugs], ["assets.create"]);
+  });
+
+  it("opens data cleanup when a User holds any bulk_delete tick", () => {
+    const slugs = resolveSessionPermissionSlugs({
+      isSuperAdmin: false,
+      accessKind: "user",
+      userTicks: ["drivers.bulk_delete"],
+      roleSlugs: [],
+      catalogSlugs: CATALOG_SLUGS,
+    });
+    assert.ok(slugs.has("drivers.bulk_delete"));
+    assert.ok(slugs.has("data.cleanup"));
   });
 });

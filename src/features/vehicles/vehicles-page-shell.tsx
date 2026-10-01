@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Ban,
   Bike,
+  Car,
   CircleDot,
   Download,
   ExternalLink,
@@ -13,8 +14,10 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Repeat,
   Search,
   Upload,
+  UserX,
   Users,
   Wallet,
   Wrench,
@@ -81,18 +84,22 @@ import {
   parseVehicleListTab,
   vehicleKpiSelected,
   vehicleListKpis,
+  vehicleMatchesAssignment,
   vehicleMatchesCarType,
   vehicleMatchesKind,
   vehicleMatchesProject,
+  vehicleMatchesReplacement,
   vehicleMatchesSearch,
   vehicleMatchesStatus,
   vehicleMatchesTab,
   vehicleMatchesTypeOfUse,
+  type VehicleAssignmentFilter,
   type VehicleCarTypeFilter,
   type VehicleKindFilter,
   type VehicleKpiKey,
   type VehicleListTab,
   type VehicleProjectFilter,
+  type VehicleReplacementFilter,
   type VehicleStatusFilter,
   type VehicleTypeOfUseFilter,
 } from "./vehicles-list-utils";
@@ -141,6 +148,8 @@ export function VehiclesPageShell({
   const [carTypeFilter, setCarTypeFilter] = useState<VehicleCarTypeFilter>("all");
   const [typeOfUseFilter, setTypeOfUseFilter] = useState<VehicleTypeOfUseFilter>("all");
   const [kindFilter, setKindFilter] = useState<VehicleKindFilter>("all");
+  const [assignmentFilter, setAssignmentFilter] = useState<VehicleAssignmentFilter>("all");
+  const [replacementFilter, setReplacementFilter] = useState<VehicleReplacementFilter>("all");
   const [columnFilters, setColumnFilters] = useState<VehiclesColumnFilters>({});
   const [sort, setSort] = useState<VehiclesSort>(DEFAULT_VEHICLES_SORT);
   const [importOpen, setImportOpen] = useState(false);
@@ -153,6 +162,8 @@ export function VehiclesPageShell({
     kind: kindFilter,
     search,
     project: projectFilter,
+    assignment: assignmentFilter,
+    replacement: replacementFilter,
   };
 
   const columnOptions = useMemo(
@@ -187,9 +198,22 @@ export function VehiclesPageShell({
           vehicleMatchesTypeOfUse(row, typeOfUseFilter) &&
           vehicleMatchesKind(row, kindFilter) &&
           vehicleMatchesProject(row, projectFilter) &&
+          vehicleMatchesAssignment(row, assignmentFilter) &&
+          vehicleMatchesReplacement(row, replacementFilter) &&
           vehicleMatchesSearch(row, search),
       ),
-    [activeTab, carTypeFilter, kindFilter, projectFilter, search, statusFilter, typeOfUseFilter, vehicles],
+    [
+      activeTab,
+      assignmentFilter,
+      carTypeFilter,
+      kindFilter,
+      projectFilter,
+      replacementFilter,
+      search,
+      statusFilter,
+      typeOfUseFilter,
+      vehicles,
+    ],
   );
 
   const visible = useMemo(
@@ -205,6 +229,8 @@ export function VehiclesPageShell({
     setKindFilter(next.kind);
     setSearch(next.search);
     setProjectFilter(next.project);
+    setAssignmentFilter(next.assignment);
+    setReplacementFilter(next.replacement);
     if (next.tab !== activeTab) replaceQuery({ tab: next.tab });
   };
 
@@ -215,6 +241,8 @@ export function VehiclesPageShell({
     setCarTypeFilter("all");
     setTypeOfUseFilter("all");
     setKindFilter("all");
+    setAssignmentFilter("all");
+    setReplacementFilter("all");
     setColumnFilters({});
     setSort(DEFAULT_VEHICLES_SORT);
     if (activeTab !== "all") replaceQuery({ tab: "all" });
@@ -226,7 +254,9 @@ export function VehiclesPageShell({
     (statusFilter !== "all" ? 1 : 0) +
     (carTypeFilter !== "all" ? 1 : 0) +
     (typeOfUseFilter !== "all" ? 1 : 0) +
-    (kindFilter !== "all" ? 1 : 0);
+    (kindFilter !== "all" ? 1 : 0) +
+    (assignmentFilter !== "all" ? 1 : 0) +
+    (replacementFilter !== "all" ? 1 : 0);
   const activeFilterCount = countActiveFilters(columnFilters) + (search ? 1 : 0) + kpiExtras;
   const headerLabels = useMemo(
     () => ({
@@ -275,6 +305,11 @@ export function VehiclesPageShell({
     { key: "company", label: t("kpiCompany"), value: isLoading ? "—" : String(counts.company), icon: Users, tone: "primary" },
     { key: "rent", label: t("kpiRent"), value: isLoading ? "—" : String(counts.rent), icon: Wallet, tone: "warning" },
     { key: "underRepair", label: t("kpiUnderRepair"), value: isLoading ? "—" : String(counts.underRepair), icon: Wrench, tone: "warning" },
+    { key: "unassigned", label: t("kpiUnassigned"), value: isLoading ? "—" : String(counts.unassigned), icon: UserX, tone: "warning" },
+    { key: "bike", label: t("kpiBike"), value: isLoading ? "—" : String(counts.bike), icon: Bike, tone: "primary" },
+    { key: "car", label: t("kpiCar"), value: isLoading ? "—" : String(counts.car), icon: Car, tone: "primary" },
+    { key: "active", label: t("kpiActive"), value: isLoading ? "—" : String(counts.active), icon: CircleDot, tone: "success" },
+    { key: "replacement", label: t("kpiReplacement"), value: isLoading ? "—" : String(counts.replacement), icon: Repeat, tone: "warning" },
   ];
 
   const tableColumns = useMemo(
