@@ -178,6 +178,9 @@ function CompanyClientIdCell({ row, notSet }: { row: DriverListPageRow; notSet: 
 function DriversPageContent() {
   const t = useTranslations("pages.drivers");
   const tCommon = useTranslations("common");
+  // The quick-edit lookup targets one driver record, so its "not found" copy is
+  // the driver-detail message rather than a second, drifting string here.
+  const tDriverDetail = useTranslations("pages.driverDetail");
   const { can } = useAuth();
   const canCreate = can("drivers.create");
   const canEdit = can("drivers.edit");
@@ -262,13 +265,13 @@ function DriversPageContent() {
   useEffect(() => {
     if (!quickEditId) return;
     if (quickEditQuery.isError) {
-      toast.error(t("notFoundTitle"));
+      toast.error(tDriverDetail("notFoundTitle"));
       setQuickEditId(null);
       return;
     }
     if (!quickEditQuery.isSuccess || !quickEditDriver) return;
     if (!quickEditDriver.intake_id || quickEditDriver.archived_at) {
-      toast.error(t("notFoundTitle"));
+      toast.error(tDriverDetail("notFoundTitle"));
       setQuickEditId(null);
     }
   }, [
@@ -276,7 +279,7 @@ function DriversPageContent() {
     quickEditQuery.isError,
     quickEditQuery.isSuccess,
     quickEditDriver,
-    t,
+    tDriverDetail,
   ]);
 
   useEffect(() => {

@@ -767,7 +767,12 @@
         "queue_created": "إنشاء قائمة انتظار",
         "queue_flushed": "إرسال قائمة الانتظار",
         "client_error": "خطأ في التطبيق"
-      }
+      },
+      "zoomIn": "تكبير",
+      "zoomOut": "تصغير",
+      "historyIdleMinutes": "مدة الخمول",
+      "historyMovingMinutes": "مدة الحركة",
+      "lastGpsUpdate": "آخر تحديث GPS"
     },
     "dashboard": {
       "title": "برج المراقبة",
@@ -919,7 +924,24 @@
         "deliverySubmitted": "تقديم توصيل",
         "deliveryVerified": "توصيل مُ verified",
         "adminAction": "إجراء إداري"
-      }
+      },
+      "fleetOps": {
+        "title": "دوام الأسطول والتتبع",
+        "onDuty": "في الخدمة",
+        "online": "الجلسات المتصلة",
+        "unvalidated": "غير مُتحقق اليوم",
+        "outOfZone": "خارج المنطقة",
+        "openMap": "الخريطة المباشرة",
+        "linkAttendance": "الحضور",
+        "linkWorktime": "وقت العمل",
+        "linkShifts": "الورديات"
+      },
+      "widgetAlerts": "مركز التنبيهات",
+      "noAlerts": "لا توجد تنبيهات",
+      "widgetCompliance": "الامتثال",
+      "noComplianceIssues": "لا توجد مشكلات امتثال",
+      "widgetPresenceMap": "التواجد المباشر",
+      "noLiveLocations": "لا توجد مواقع مباشرة"
     },
     "locations": {
       "mapUnavailable": "الخريطة غير متاحة",
@@ -951,7 +973,8 @@
         "active": "نشط",
         "idle": "خامل",
         "alert": "تنبيه"
-      }
+      },
+      "distanceTodayLabel": "المسافة اليوم"
     },
     "drivers": {
       "title": "السائقون",
@@ -1309,7 +1332,8 @@
         "blank": "(فارغ)",
         "sortBy": "فرز حسب {label}",
         "filterBy": "تصفية {label}"
-      }
+      },
+      "colDriver": "السائق"
     },
     "partners": {
       "title": "الشركاء",
@@ -2050,7 +2074,8 @@
         "vehicle": "اختر المركبة",
         "clientId": "مثال: CLI-204",
         "clientName": "مثال: مجموعة الخليج للتجزئة",
-        "accommodation": "المبنى / المنطقة"
+        "accommodation": "المبنى / المنطقة",
+        "searchRestaurants": "بحث في المطاعم…"
       },
       "assets": {
         "gps": "جهاز GPS",
@@ -3765,7 +3790,68 @@
       "paginationSummary": "{from}–{to} من {total}",
       "pageOf": "صفحة {page} من {totalPages}",
       "prevPage": "السابق",
-      "nextPage": "التالي"
+      "nextPage": "التالي",
+      "colDistance": "المسافة",
+      "colLastSeen": "آخر ظهور",
+      "colProblem": "المشكلة",
+      "colSince": "منذ",
+      "colDuty": "وقت الدوام",
+      "emptyAnalytics": "لا توجد تحليلات لهذه الفترة",
+      "emptyAnalyticsHint": "جرّب نطاقاً زمنياً أوسع",
+      "emptyFiltersHint": "جرّب مسح التصفية أو توسيع النطاق الزمني",
+      "filtersTitle": "تصفية الحضور",
+      "filterPartner": "الشريك",
+      "filterPartnerAll": "كل الشركاء",
+      "filterZone": "المنطقة",
+      "filterZoneAll": "كل المناطق",
+      "filterRestaurant": "المطعم",
+      "filterRestaurantAll": "كل المطاعم",
+      "clearFilters": "إعادة التصفية",
+      "applyFilters": "تطبيق",
+      "last7Days": "آخر 7 أيام",
+      "last30Days": "آخر 30 يوماً",
+      "exportPreparing": "جارٍ تجهيز التنزيل…",
+      "exportFailed": "فشل التصدير",
+      "backToAttendance": "العودة إلى الحضور",
+      "driverDetailTitle": "حضور السائق",
+      "emptyDriverDay": "لا يوجد حضور لهذا اليوم",
+      "emptyDriverDayHint": "اختر تاريخاً آخر أو تحقق من إرسال الوردية",
+      "weekPresent": "حاضر (7 أيام)",
+      "timelineTitle": "الجدول الزمني للنشاط",
+      "emptyTimeline": "لا توجد أحداث مسجّلة لهذا اليوم",
+      "resolveTitle": "حل المشكلة",
+      "resolveNotePlaceholder": "ملاحظة اختيارية للمشرفين",
+      "saveResolution": "حفظ",
+      "exceptionResolved": "تم تحديث المشكلة",
+      "resolutionStatus": "الحالة",
+      "resolutionOpen": "مفتوح",
+      "resolutionAcknowledged": "تم الاطلاع",
+      "resolutionResolved": "تم الحل",
+      "groupBy": "تجميع حسب",
+      "groupNone": "بدون تجميع",
+      "groupPartner": "تجميع حسب الشريك",
+      "groupDate": "تجميع حسب التاريخ",
+      "analyticsDays": "الأيام في النطاق",
+      "liveOnDuty": "في الخدمة",
+      "livePresent": "حاضر",
+      "liveLate": "متأخر",
+      "liveAbsent": "غائب",
+      "liveOffline": "غير متصل خلال الوردية",
+      "liveGpsStale": "GPS قديم",
+      "liveOutsideZone": "خارج المنطقة",
+      "liveCompleted": "مكتمل",
+      "liveScheduled": "مجدول",
+      "liveNoShift": "لا وردية",
+      "exceptionLateCheckIn": "تسجيل حضور متأخر",
+      "exceptionNoCheckIn": "بدون تسجيل حضور",
+      "exceptionEarlyLogout": "خروج مبكر",
+      "exceptionOfflineDuringShift": "غير متصل خلال الوردية",
+      "exceptionGpsDisabled": "GPS مغلق",
+      "exceptionOutsideZone": "خارج المنطقة",
+      "exceptionNoAssignedShift": "لا وردية مُعيّنة",
+      "exceptionIncompleteShift": "وردية غير مكتملة",
+      "exceptionMissingLocationUpdates": "تحديثات موقع مفقودة",
+      "sortNameAscOld": "اسم السائق (أ–ي)"
     },
     "attendanceSettings": {
       "title": "حدود الحضور",
@@ -3904,7 +3990,9 @@
         "name_asc": "السائق (أ–ي)",
         "name_desc": "السائق (ي–أ)",
         "shift_start_asc": "بداية الجلسة 1"
-      }
+      },
+      "onDutyYes": "في الخدمة",
+      "onDutyNo": "خارج الخدمة"
     },
     "worktime": {
       "title": "ساعات العمل",
@@ -6872,7 +6960,8 @@
           "order_recon": "مطابقة الطلبات",
           "verifications": "تحقق DPD",
           "payroll": "الرواتب"
-        }
+        },
+        "previewAction": "معاينة"
       },
       "storage": {
         "title": "تخزين Cloudflare R2",
@@ -7081,7 +7170,10 @@
           "invalidType": "استخدم PNG أو JPG أو WebP أو SVG فقط.",
           "saveFailed": "تعذر حفظ الهوية. حاول مرة أخرى.",
           "notAuthorized": "ليس لديك صلاحية تغيير الهوية."
-        }
+        },
+        "appSubtitleDriverHint": "يظهر أيضاً كشعار في شاشة تسجيل دخول تطبيق السائق.",
+        "driverAppLoginHint": "رسالة تسجيل دخول تطبيق السائق",
+        "driverAppLoginHintHelp": "نص مساعد أسفل الشعار في شاشة تسجيل دخول تطبيق السائق."
       },
       "driverApp": {
         "title": "إعدادات تطبيق السائق",
@@ -7309,8 +7401,29 @@
           "client_code_taken": "شركة أخرى تستخدم رقم العميل هذا.",
           "source_company_system_locked": "لا يمكن تعديل شركة النظام.",
           "source_company_in_use": "لا يزال سائقون نشطون يتبعون هذه الشركة، لذا لا يمكن إلغاء تفعيلها.",
-          "save_failed": "تعذر حفظ الشركة."
-        }
+          "save_failed": "تعذر حفظ الشركة.",
+          "invalid_dpd_target": "هدف DPD يجب أن يكون عدداً صحيحاً من 1 فأكثر.",
+          "invalid_incentive_rate": "أدخل معدّل فوق الهدف ومعدّل تحت الهدف أكبر من 0.",
+          "incentive_effective_from_required": "حدّد تاريخ السريان عند تفعيل المخطط."
+        },
+        "colDpd": "DPD",
+        "dpdBadge": "T {target}",
+        "scheme": "المخطط",
+        "dpdTarget": "هدف DPD",
+        "dpdTargetPlaceholder": "15",
+        "dpdTargetHint": "الهدف اليومي للسائقين الخارجيين في هذه الشركة. الفارغ = لا هدف للشركة.",
+        "effectiveFrom": "يسري من",
+        "effectiveFromHint": "تاريخ الكويت لبدء المخطط. مطلوب عند تفعيل المخطط.",
+        "incentiveScheme": "مخطط الحوافز",
+        "incentiveSchemeOn": "مفعّل",
+        "incentiveSchemeHint": "أجر ثابت لكل طلب فوق/تحت الهدف للسائقين الخارجيين. الإيقاف يترك قواعد حوافز المطعم دون استخدام لهذه الشركة.",
+        "aboveKwd": "فوق الهدف (د.ك)",
+        "belowKwd": "تحت الهدف (د.ك)",
+        "previewOrders": "الطلبات",
+        "previewIncentive": "الحافز",
+        "previewDeduction": "الخصم",
+        "previewNet": "الصافي",
+        "companyConfigNote": "هذا الهدف والمخطط ينطبقان على السائقين الخارجيين في هذه الشركة فقط. السائقون الداخليون يبقون على قواعد توصيل المطعم."
       }
     },
     "auditLogs": {
@@ -7426,7 +7539,6 @@
       "requestsBannerBody": "طلبات الإجازة / المرض / الحادث الموافق عليها تبرر حالة اليوم في تقرير الرواتب.",
       "tableFoot": "عرض {shown} من {total} سائق · {month} · الأيام الثابتة = {days} − 2 = {fixed}",
       "tableFootRange": "عرض {shown} من {total} سائق · {range}",
-      "slicerCardTag": "جديد · فلاتر",
       "slicerCardTitle": "عرض العميل وفئة المنطقة",
       "summaryStrip": "العميل · {riders} سائق · جيد {good} · متوسط {average} · منخفض {low} · غير محدد {notSet} · القواعد تستخدم {uses} ({rules} قاعدة)",
       "uses": {
