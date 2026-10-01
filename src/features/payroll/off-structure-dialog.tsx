@@ -71,7 +71,7 @@ export function OffStructureDialog({
         name: r.name,
         employeeId: r.amId === "—" ? null : r.amId,
         driverCode: r.mgId === "—" ? null : r.mgId,
-        offStructureDays: r.offStructureDays,
+        offStructureDays: r.offStructureContracted ?? r.offStructureDays,
       })),
     [riders],
   );

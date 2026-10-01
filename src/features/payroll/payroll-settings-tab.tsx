@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   ArrowDown,
@@ -13,12 +13,12 @@ import {
   MapPin,
   Plus,
   RotateCcw,
-  Save,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,39 +31,47 @@ import {
   fallbackClientConfig,
   firstMatchingRule,
   hoursForStatus,
-  RULE_FIELDS,
   RULE_KIND_TO_STATUS,
-  RULE_NUMERIC_OPS,
   RULE_RESULT_KINDS,
-  RULE_SET_OPS,
-  zoneCategoryFor,
   type PayrollClientConfig,
   type PayrollRule,
   type PayrollRuleCondition,
-  type RuleField,
-  type RuleOp,
   type RuleResultKind,
   type ZoneCategory,
 } from "./payroll-rules-engine";
 import {
+  conditionsToColumns,
+  columnsToConditions,
+  readsAs,
+  summariseAudit,
+  type RuleTableRow,
+  type ZoneCategoryColumn,
+} from "./payroll-rule-table-model";
+import {
   useAddPayrollClient,
+  useDeletePayrollClient,
   useOpenPayrollRuleMonth,
   usePayrollRuleConfig,
+  usePayrollZoneSettings,
   useRecomputePayrollZoneMetrics,
   useResetPayrollClientRules,
   useSavePayrollClient,
   useSavePayrollClientRules,
   useSavePayrollZoneOverride,
+  useSavePayrollZoneSettings,
 } from "./use-payroll";
-import type { PayrollZoneMetricRow } from "./payroll-types";
+import type { PayrollRiderRow, PayrollZoneMetricRow } from "./payroll-types";
 
 type RuleDraft = {
-  /** A stable key for React, so reordering does not remount every row. */
   uid: string;
   label: string;
   conditions: PayrollRuleCondition[];
   result: { kind: RuleResultKind; hours: number | null };
 };
+
+type SettingsView = "client" | "zones";
+
+const ZONE_CAT_OPTIONS: ZoneCategoryColumn[] = ["any", "good", "average", "low", "good_or_average"];
 
 let uidSeed = 0;
 function nextUid(): string {
@@ -80,32 +88,40 @@ function draftFromRule(rule: PayrollRule): RuleDraft {
   };
 }
 
-function blankCondition(): PayrollRuleCondition {
-  return { field: "orders", op: "lt", value: 7 };
+function usesOf(client: PayrollClientConfig | null) {
+  return {
+    usesZone: client?.usesZone ?? false,
+    usesOrders: client?.usesOrders ?? false,
+    usesHours: client?.usesHours ?? false,
+  };
+}
+
+function rulesSignature(rules: readonly RuleDraft[]): string {
+  return JSON.stringify(
+    rules.map((rule) => ({
+      label: rule.label,
+      conditions: rule.conditions,
+      result: rule.result,
+    })),
+  );
 }
 
 /**
- * The Settings tab — SOP §5.5 and §8.
- *
- * Every rule write is a whole-list save (`admin_save_payroll_client_rules`),
- * diffed into the audit log on the server, so the change log can always answer
- * "who changed this rule and when". Nothing here writes until Save: an operator
- * building a six-condition rule list must be able to abandon it by navigating
- * away, which is also why the drafts are local state.
+ * Settings tab — SOP §5.5 / §8 and the v4 reference: per-criterion rule table,
+ * autosave, a Zones & efficiency view, and a readable change log.
  */
 export function PayrollSettingsTab({
   month,
   zoneMetrics,
   canManage,
+  riders = [],
 }: {
   month: PayrollMonthMeta;
   zoneMetrics: readonly PayrollZoneMetricRow[];
   canManage: boolean;
+  riders?: readonly PayrollRiderRow[];
 }) {
   const t = useTranslations("pages.payroll.settings");
-  // The day-status and zone-band vocabularies already exist for the grid and the
-  // legend; a second copy here is how "Reduced day · 3 h" starts reading
-  // differently on the Settings tab than on the day cells beside it.
   const tDayStatus = useTranslations("pages.payroll.dayStatus");
   const tZoneCategory = useTranslations("pages.payroll.zoneCategory");
   const config = usePayrollRuleConfig(month.key);
@@ -116,22 +132,38 @@ export function PayrollSettingsTab({
   const resetRules = useResetPayrollClientRules();
   const recompute = useRecomputePayrollZoneMetrics();
   const saveOverride = useSavePayrollZoneOverride();
+  const deleteClient = useDeletePayrollClient();
+  const zoneSettingsQuery = usePayrollZoneSettings(month.key);
+  const saveZoneSettings = useSavePayrollZoneSettings();
 
+  const [view, setView] = useState<SettingsView>("client");
   const [clientKey, setClientKey] = useState<string | null>(null);
   const [clientDraft, setClientDraft] = useState<PayrollClientConfig | null>(null);
   const [rules, setRules] = useState<RuleDraft[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [addName, setAddName] = useState("");
   const [addCopy, setAddCopy] = useState("none");
+  const [addUsesZone, setAddUsesZone] = useState(true);
+  const [addUsesOrders, setAddUsesOrders] = useState(true);
+  const [addUsesHours, setAddUsesHours] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [simZoneName, setSimZoneName] = useState("any");
   const [simZone, setSimZone] = useState<ZoneCategory>("good");
   const [simOrders, setSimOrders] = useState("6");
   const [simHours, setSimHours] = useState("12");
+  const [saveFlash, setSaveFlash] = useState<"idle" | "saving" | "saved">("idle");
+
+  const skipRulesSave = useRef(true);
+  const lastRulesSig = useRef("");
+  const clientTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rulesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clients = useMemo(() => config.data?.clients ?? [], [config.data?.clients]);
+  const zoneNames = useMemo(
+    () => [...new Set(zoneMetrics.map((z) => z.zoneName).filter(Boolean))],
+    [zoneMetrics],
+  );
 
-  // First paint picks a client. A month whose rules are missing is opened once
-  // (seed the SOP starting list, or copy the previous month) so the operator
-  // never lands on an empty rule table for a client that is already configured.
   useEffect(() => {
     if (clientKey || !clients.length) return;
     setClientKey(clients[0].key);
@@ -141,8 +173,6 @@ export function PayrollSettingsTab({
     if (!canManage || !config.data || !clients.length) return;
     if (clients.some((c) => c.hasRulesForMonth)) return;
     openMonth.mutate({ monthKey: month.key });
-    // Keyed on the month rather than on `openMonth`: the mutation object changes
-    // identity every render and would re-fire this effect forever.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage, config.data, clients, month.key]);
 
@@ -156,11 +186,14 @@ export function PayrollSettingsTab({
   }, [selected]);
 
   useEffect(() => {
+    skipRulesSave.current = true;
     const forClient = (config.data?.rules ?? []).filter((r) => r.clientKey === clientKey);
-    setRules(forClient.map(draftFromRule));
+    const next = forClient.map(draftFromRule);
+    setRules(next);
+    lastRulesSig.current = rulesSignature(next);
   }, [config.data?.rules, clientKey]);
 
-  /* ---- the simulator: SOP §5.5 "Try the rules" ---- */
+  const uses = usesOf(clientDraft);
 
   const simulator = useMemo(() => {
     const orders = Number(simOrders);
@@ -176,13 +209,19 @@ export function PayrollSettingsTab({
       conditions: r.conditions,
       result: r.result,
     }));
+    const facts = {
+      zoneName: simZoneName === "any" ? null : simZoneName,
+      zoneCategory: simZone,
+      orders,
+      hours,
+    };
     if (!client) {
       const outcome = evalDay({
         date: `${month.key}-01`,
         today: `${month.key}-28`,
         client: null,
         rules: [],
-        zoneName: null,
+        zoneName: facts.zoneName,
         zoneCategory: simZone,
         loggedHours: hours,
         orders,
@@ -191,18 +230,14 @@ export function PayrollSettingsTab({
         hasCheckIn: hours > 0,
         adjustment: null,
       });
-      return { via: "legacy" as const, label: "", status: outcome.status, hours: outcome.hours };
+      return { via: "legacy" as const, n: 0, label: "", status: outcome.status, hours: outcome.hours };
     }
-    const rule = firstMatchingRule(list, {
-      zoneName: null,
-      zoneCategory: simZone,
-      orders,
-      hours,
-    });
+    const rule = firstMatchingRule(list, facts);
     if (rule) {
       const status = RULE_KIND_TO_STATUS[rule.result.kind];
       return {
         via: "rule" as const,
+        n: list.indexOf(rule) + 1,
         label: describeRule(rule),
         status,
         hours: hoursForStatus(status, {
@@ -215,6 +250,7 @@ export function PayrollSettingsTab({
     const status = RULE_KIND_TO_STATUS[client.defaultResult.kind];
     return {
       via: "default" as const,
+      n: 0,
       label: "",
       status,
       hours: hoursForStatus(status, {
@@ -223,50 +259,72 @@ export function PayrollSettingsTab({
         customHours: client.defaultResult.hours ?? null,
       }),
     };
-  }, [simOrders, simHours, simZone, clientDraft, clientKey, rules, month.key]);
+  }, [simOrders, simHours, simZone, simZoneName, clientDraft, clientKey, rules, month.key]);
 
-  /* ---- writes ---- */
-
-  function patchClient(patch: Partial<PayrollClientConfig>) {
-    setClientDraft((prev) => (prev ? { ...prev, ...patch } : prev));
+  function markSaving() {
+    setSaveFlash("saving");
+  }
+  function markSaved() {
+    setSaveFlash("saved");
+    window.setTimeout(() => setSaveFlash("idle"), 1200);
   }
 
-  function commitClient() {
-    if (!clientDraft || !canManage) return;
+  function persistClient(draft: PayrollClientConfig) {
+    if (!canManage) return;
+    markSaving();
     saveClient.mutate(
       {
-        key: clientDraft.key,
-        name: clientDraft.name,
-        usesZone: clientDraft.usesZone,
-        usesOrders: clientDraft.usesOrders,
-        usesHours: clientDraft.usesHours,
-        fullDayHours: clientDraft.fullDayHours,
-        halfDayHours: clientDraft.halfDayHours,
-        reducedHours: clientDraft.reducedHours,
-        requiredHoursPerDay: clientDraft.requiredHoursPerDay,
-        defaultOffDays: clientDraft.defaultOffDays,
-        defaultResult: clientDraft.defaultResult.kind,
-        goodThreshold: clientDraft.goodThreshold,
-        averageThreshold: clientDraft.averageThreshold,
-        sortOrder: clientDraft.sortOrder,
+        key: draft.key,
+        name: draft.name,
+        usesZone: draft.usesZone,
+        usesOrders: draft.usesOrders,
+        usesHours: draft.usesHours,
+        fullDayHours: draft.fullDayHours,
+        halfDayHours: draft.halfDayHours,
+        reducedHours: draft.reducedHours,
+        requiredHoursPerDay: draft.requiredHoursPerDay,
+        defaultOffDays: draft.defaultOffDays,
+        defaultResult: draft.defaultResult.kind,
+        goodThreshold: draft.goodThreshold,
+        averageThreshold: draft.averageThreshold,
+        sortOrder: draft.sortOrder,
       },
       {
-        onSuccess: (result) =>
-          "error" in result
-            ? toast.error(errorText(t, result.error))
-            : toast.success(t("clientSaved")),
+        onSuccess: (result) => {
+          if ("error" in result) toast.error(errorText(t, result.error));
+          else markSaved();
+        },
         onError: () => toast.error(t("errors.unknown")),
       },
     );
   }
 
-  function commitRules() {
+  function queueClientSave(draft: PayrollClientConfig) {
+    if (!canManage) return;
+    if (clientTimer.current) clearTimeout(clientTimer.current);
+    clientTimer.current = setTimeout(() => persistClient(draft), 400);
+  }
+
+  function patchClient(patch: Partial<PayrollClientConfig>) {
+    setClientDraft((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      queueClientSave(next);
+      return next;
+    });
+  }
+
+  function persistRules(list: RuleDraft[]) {
     if (!clientKey || !canManage) return;
+    const sig = rulesSignature(list);
+    if (sig === lastRulesSig.current) return;
+    lastRulesSig.current = sig;
+    markSaving();
     saveRules.mutate(
       {
         clientKey,
         monthKey: month.key,
-        rules: rules.map((r, index) => ({
+        rules: list.map((r, index) => ({
           label: r.label,
           conditions: { all: r.conditions },
           result: r.result,
@@ -274,14 +332,29 @@ export function PayrollSettingsTab({
         })),
       },
       {
-        onSuccess: (result) =>
-          "error" in result
-            ? toast.error(errorText(t, result.error))
-            : toast.success(t("rulesSaved", { count: rules.length })),
+        onSuccess: (result) => {
+          if ("error" in result) toast.error(errorText(t, result.error));
+          else markSaved();
+        },
         onError: () => toast.error(t("errors.unknown")),
       },
     );
   }
+
+  useEffect(() => {
+    if (skipRulesSave.current) {
+      skipRulesSave.current = false;
+      return;
+    }
+    if (!canManage || !clientKey) return;
+    if (rulesTimer.current) clearTimeout(rulesTimer.current);
+    rulesTimer.current = setTimeout(() => persistRules(rules), 450);
+    return () => {
+      if (rulesTimer.current) clearTimeout(rulesTimer.current);
+    };
+    // persistRules is stable enough for this debounce; rules is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rules, canManage, clientKey]);
 
   function doReset() {
     if (!clientKey || !canManage) return;
@@ -289,9 +362,7 @@ export function PayrollSettingsTab({
       { clientKey, monthKey: month.key },
       {
         onSuccess: (result) =>
-          "error" in result
-            ? toast.error(errorText(t, result.error))
-            : toast.success(t("rulesReset")),
+          "error" in result ? toast.error(errorText(t, result.error)) : toast.success(t("rulesReset")),
         onError: () => toast.error(t("errors.unknown")),
       },
     );
@@ -306,9 +377,9 @@ export function PayrollSettingsTab({
     addClient.mutate(
       {
         name,
-        usesZone: true,
-        usesOrders: true,
-        usesHours: false,
+        usesZone: addUsesZone,
+        usesOrders: addUsesOrders,
+        usesHours: addUsesHours,
         copyFrom: addCopy === "none" ? null : addCopy,
         monthKey: month.key,
       },
@@ -328,6 +399,25 @@ export function PayrollSettingsTab({
     );
   }
 
+  function doDeleteClient() {
+    if (!selected || !canManage) return;
+    deleteClient.mutate(
+      { key: selected.key },
+      {
+        onSuccess: (result) => {
+          if ("error" in result) {
+            toast.error(errorText(t, result.error));
+            return;
+          }
+          toast.success(t("delete.deleted", { name: selected.name }));
+          setClientKey(null);
+          setDeleteOpen(false);
+        },
+        onError: () => toast.error(t("errors.unknown")),
+      },
+    );
+  }
+
   function move(index: number, delta: number) {
     setRules((prev) => {
       const next = [...prev];
@@ -338,20 +428,45 @@ export function PayrollSettingsTab({
     });
   }
 
+  function patchRuleRow(index: number, patch: Partial<RuleTableRow> & { label?: string }) {
+    setRules((prev) =>
+      prev.map((rule, i) => {
+        if (i !== index) return rule;
+        const current = conditionsToColumns(rule.conditions, rule.result);
+        const nextRow: RuleTableRow = {
+          ...current,
+          ...patch,
+          result: patch.result ?? current.result,
+        };
+        return {
+          ...rule,
+          label: patch.label ?? rule.label,
+          conditions: columnsToConditions(nextRow, uses),
+          result: { kind: nextRow.result.kind, hours: nextRow.result.hours ?? null },
+        };
+      }),
+    );
+  }
+
+  const busy =
+    saveClient.isPending || saveRules.isPending || saveZoneSettings.isPending || saveOverride.isPending;
+
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
         <b>{t("bannerTitle")}</b> {t("bannerBody", { month: month.label })}
       </div>
 
-      {/* ---- client picker ---- */}
       <div className="flex flex-wrap items-center gap-1.5">
         {clients.map((client) => (
           <ToggleChip
             key={client.key}
-            selected={clientKey === client.key}
+            selected={view === "client" && clientKey === client.key}
             icon={Building2}
-            onClick={() => setClientKey(client.key)}
+            onClick={() => {
+              setView("client");
+              setClientKey(client.key);
+            }}
           >
             {client.name}
             <span className="tabular-nums opacity-70"> · {client.riderCount}</span>
@@ -362,13 +477,15 @@ export function PayrollSettingsTab({
             )}
           </ToggleChip>
         ))}
+        <ToggleChip
+          selected={view === "zones"}
+          icon={MapPin}
+          onClick={() => setView("zones")}
+        >
+          {t("nav.zones")}
+        </ToggleChip>
         {canManage ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="h-9"
-            onClick={() => setAddOpen((prev) => !prev)}
-          >
+          <Button type="button" className="ms-auto h-9" onClick={() => setAddOpen((prev) => !prev)}>
             <Plus className="size-3.5" />
             {t("addClient.open")}
           </Button>
@@ -376,112 +493,160 @@ export function PayrollSettingsTab({
       </div>
 
       {addOpen && canManage ? (
-        <div className="flex flex-wrap items-end gap-2 rounded-xl border border-border bg-card p-3 shadow-sm">
-          <div className="space-y-1">
-            <Label htmlFor="payroll-new-client" className="text-[11px]">
-              {t("addClient.name")}
-            </Label>
-            <Input
-              id="payroll-new-client"
-              className="h-9 w-56"
-              value={addName}
-              placeholder={t("addClient.namePlaceholder")}
-              onChange={(e) => setAddName(e.target.value)}
-            />
+        <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="payroll-new-client" className="text-[11px]">
+                {t("addClient.name")}
+              </Label>
+              <Input
+                id="payroll-new-client"
+                className="h-9 w-56"
+                value={addName}
+                placeholder={t("addClient.namePlaceholder")}
+                onChange={(e) => setAddName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px]">{t("addClient.copyFrom")}</Label>
+              <Select value={addCopy} onValueChange={(value) => setAddCopy(value ?? "none")}>
+                <SelectTrigger className="h-9 w-52">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("addClient.copyNone")}</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.key} value={client.key}>
+                      {t("addClient.copyOf", { name: client.name })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-[11px]">{t("addClient.copyFrom")}</Label>
-            <Select value={addCopy} onValueChange={(value) => setAddCopy(value ?? "none")}>
-              <SelectTrigger className="h-9 w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t("addClient.copyNone")}</SelectItem>
-                {clients.map((client) => (
-                  <SelectItem key={client.key} value={client.key}>
-                    {client.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap gap-1.5">
+            <ToggleChip selected={addUsesZone} icon={MapPin} onClick={() => setAddUsesZone((v) => !v)}>
+              {t("criteria.usesZone")}
+            </ToggleChip>
+            <ToggleChip selected={addUsesOrders} icon={Check} onClick={() => setAddUsesOrders((v) => !v)}>
+              {t("criteria.usesOrders")}
+            </ToggleChip>
+            <ToggleChip selected={addUsesHours} icon={History} onClick={() => setAddUsesHours((v) => !v)}>
+              {t("criteria.usesHours")}
+            </ToggleChip>
           </div>
-          <Button type="button" className="h-9" disabled={addClient.isPending} onClick={doAddClient}>
-            {addClient.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-            {t("addClient.save")}
-          </Button>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="h-9" onClick={() => setAddOpen(false)}>
+              {t("addClient.cancel")}
+            </Button>
+            <Button type="button" className="h-9" disabled={addClient.isPending} onClick={doAddClient}>
+              {addClient.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+              {t("addClient.save")}
+            </Button>
+          </div>
         </div>
       ) : null}
 
-      {clientDraft ? (
+      {view === "zones" ? (
+        <ZonesView
+          month={month}
+          zoneMetrics={zoneMetrics}
+          riders={riders}
+          canManage={canManage}
+          settings={zoneSettingsQuery.data}
+          busy={recompute.isPending || saveZoneSettings.isPending}
+          onRecompute={() =>
+            recompute.mutate(
+              { monthKey: month.key },
+              {
+                onSuccess: (result) =>
+                  "error" in result
+                    ? toast.error(errorText(t, result.error))
+                    : toast.success(t("zones.recomputed")),
+                onError: () => toast.error(t("errors.unknown")),
+              },
+            )
+          }
+          onSaveSettings={(input) =>
+            saveZoneSettings.mutate(
+              { monthKey: month.key, ...input },
+              {
+                onSuccess: (result) => {
+                  if ("error" in result) toast.error(errorText(t, result.error));
+                  else markSaved();
+                },
+                onError: () => toast.error(t("errors.unknown")),
+              },
+            )
+          }
+          onSaveOverride={(zone, input) =>
+            saveOverride.mutate(
+              { zoneId: zone.zoneId, monthKey: month.key, ...input },
+              {
+                onSuccess: (result) => {
+                  if ("error" in result) toast.error(errorText(t, result.error));
+                  else markSaved();
+                },
+                onError: () => toast.error(t("errors.unknown")),
+              },
+            )
+          }
+        />
+      ) : clientDraft ? (
         <>
-          {/* ---- client criteria + hours (SOP §4 / §5.5) ---- */}
           <div className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-[13px] font-semibold">{t("criteria.title")}</h3>
-              {canManage ? (
-                <Button
-                  type="button"
+              <div className="flex items-center gap-2">
+                <h3 className="text-[13px] font-semibold">{clientDraft.name}</h3>
+                <span className="rounded-sm bg-primary/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-primary">
+                  {t("clientRulesTag")}
+                </span>
+                {saveFlash === "saving" || busy ? (
+                  <span className="text-[10px] text-muted-foreground">{t("autosave.saving")}</span>
+                ) : saveFlash === "saved" ? (
+                  <span className="text-[10px] text-emerald-700">{t("autosave.saved")}</span>
+                ) : null}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
+              <div className="space-y-1 lg:col-span-2">
+                <Label htmlFor="payroll-client-name" className="text-[11px]">
+                  {t("criteria.name")}
+                </Label>
+                <Input
+                  id="payroll-client-name"
                   className="h-9"
-                  disabled={saveClient.isPending}
-                  onClick={commitClient}
-                >
-                  {saveClient.isPending ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Save className="size-3.5" />
-                  )}
-                  {t("criteria.save")}
-                </Button>
-              ) : null}
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              <ToggleChip
-                selected={clientDraft.usesZone}
-                icon={MapPin}
-                onClick={() => patchClient({ usesZone: !clientDraft.usesZone })}
-              >
-                {t("criteria.usesZone")}
-              </ToggleChip>
-              <ToggleChip
-                selected={clientDraft.usesOrders}
-                icon={Check}
-                onClick={() => patchClient({ usesOrders: !clientDraft.usesOrders })}
-              >
-                {t("criteria.usesOrders")}
-              </ToggleChip>
-              <ToggleChip
-                selected={clientDraft.usesHours}
-                icon={History}
-                onClick={() => patchClient({ usesHours: !clientDraft.usesHours })}
-              >
-                {t("criteria.usesHours")}
-              </ToggleChip>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
+                  value={clientDraft.name}
+                  disabled={!canManage}
+                  onChange={(e) => patchClient({ name: e.target.value })}
+                />
+              </div>
               <NumberField
                 id="payroll-full-hours"
                 label={t("criteria.fullDayHours")}
                 value={clientDraft.fullDayHours}
+                disabled={!canManage}
                 onCommit={(v) => patchClient({ fullDayHours: v })}
               />
               <NumberField
                 id="payroll-half-hours"
                 label={t("criteria.halfDayHours")}
                 value={clientDraft.halfDayHours}
+                disabled={!canManage}
                 onCommit={(v) => patchClient({ halfDayHours: v })}
               />
               <NumberField
                 id="payroll-reduced-hours"
                 label={t("criteria.reducedHours")}
                 value={clientDraft.reducedHours}
+                disabled={!canManage}
                 onCommit={(v) => patchClient({ reducedHours: v })}
               />
               <NumberField
                 id="payroll-required-hours"
                 label={t("criteria.requiredHoursPerDay")}
                 value={clientDraft.requiredHoursPerDay}
+                disabled={!canManage}
                 onCommit={(v) => patchClient({ requiredHoursPerDay: v })}
               />
               <NumberField
@@ -489,97 +654,88 @@ export function PayrollSettingsTab({
                 label={t("criteria.defaultOffDays")}
                 value={clientDraft.defaultOffDays}
                 step="1"
+                disabled={!canManage}
                 onCommit={(v) => patchClient({ defaultOffDays: Math.round(v) })}
               />
-              <NumberField
-                id="payroll-good-threshold"
-                label={t("criteria.goodThreshold")}
-                value={clientDraft.goodThreshold}
-                onCommit={(v) => patchClient({ goodThreshold: v })}
-              />
-              <NumberField
-                id="payroll-average-threshold"
-                label={t("criteria.averageThreshold")}
-                value={clientDraft.averageThreshold}
-                onCommit={(v) => patchClient({ averageThreshold: v })}
-              />
             </div>
-
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="space-y-1">
-                <Label className="text-[11px]">{t("criteria.defaultResult")}</Label>
-                <Select
-                  value={clientDraft.defaultResult.kind}
-                  onValueChange={(kind) =>
-                    patchClient({ defaultResult: { kind: kind as RuleResultKind, hours: null } })
-                  }
-                >
-                  <SelectTrigger className="h-9 w-56">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RULE_RESULT_KINDS.map((kind) => (
-                      <SelectItem key={kind} value={kind}>
-                        {t(`result.${kind}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-[10px] leading-4 text-muted-foreground">{t("criteria.defaultHint")}</p>
+            <div className="flex flex-wrap gap-1.5">
+              <ToggleChip
+                selected={clientDraft.usesZone}
+                icon={MapPin}
+                onClick={() => canManage && patchClient({ usesZone: !clientDraft.usesZone })}
+              >
+                {t("criteria.usesZone")}
+              </ToggleChip>
+              <ToggleChip
+                selected={clientDraft.usesOrders}
+                icon={Check}
+                onClick={() => canManage && patchClient({ usesOrders: !clientDraft.usesOrders })}
+              >
+                {t("criteria.usesOrders")}
+              </ToggleChip>
+              <ToggleChip
+                selected={clientDraft.usesHours}
+                icon={History}
+                onClick={() => canManage && patchClient({ usesHours: !clientDraft.usesHours })}
+              >
+                {t("criteria.usesHours")}
+              </ToggleChip>
             </div>
           </div>
 
-          {/* ---- rule builder ---- */}
           <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="text-[13px] font-semibold">{t("rules.title", { month: month.label })}</h3>
                 <p className="text-[10px] text-muted-foreground">{t("rules.hint")}</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {canManage ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-9"
-                      onClick={() =>
-                        setRules((prev) => [
-                          ...prev,
-                          {
-                            uid: nextUid(),
-                            label: "",
-                            conditions: [blankCondition()],
-                            result: { kind: "12", hours: null },
-                          },
-                        ])
-                      }
-                    >
-                      <Plus className="size-3.5" />
-                      {t("rules.addRule")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-9"
-                      disabled={resetRules.isPending}
-                      onClick={doReset}
-                    >
-                      <RotateCcw className="size-3.5" />
-                      {t("rules.reset")}
-                    </Button>
-                    <Button type="button" className="h-9" disabled={saveRules.isPending} onClick={commitRules}>
-                      {saveRules.isPending ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <Save className="size-3.5" />
-                      )}
-                      {t("rules.save")}
-                    </Button>
-                  </>
-                ) : null}
-              </div>
+              {canManage ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    onClick={() =>
+                      setRules((prev) => [
+                        ...prev,
+                        {
+                          uid: nextUid(),
+                          label: "",
+                          conditions: columnsToConditions(
+                            { ...conditionsToColumns([], { kind: "12", hours: null }), result: { kind: "12", hours: null } },
+                            uses,
+                          ),
+                          result: { kind: "12", hours: null },
+                        },
+                      ])
+                    }
+                  >
+                    <Plus className="size-3.5" />
+                    {t("rules.addRule")}
+                  </Button>
+                  <Button type="button" variant="outline" className="h-9" disabled={resetRules.isPending} onClick={doReset}>
+                    <RotateCcw className="size-3.5" />
+                    {t("rules.reset")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 text-destructive hover:bg-destructive/10"
+                    disabled={!selected || selected.isSystem || selected.riderCount > 0}
+                    title={
+                      selected?.isSystem
+                        ? t("delete.system")
+                        : selected && selected.riderCount > 0
+                          ? t("delete.hasRiders")
+                          : undefined
+                    }
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    <Trash2 className="size-3.5" />
+                    {t("delete.open")}
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
             <div className="overflow-x-auto">
@@ -587,225 +743,228 @@ export function PayrollSettingsTab({
                 <thead>
                   <tr className="border-b border-border">
                     <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.order")}</th>
-                    <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.condition")}</th>
-                    <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.result")}</th>
-                    <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.hours")}</th>
+                    {uses.usesZone ? (
+                      <>
+                        <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colZoneCategory")}</th>
+                        <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colZone")}</th>
+                      </>
+                    ) : null}
+                    {uses.usesHours ? (
+                      <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colHours")}</th>
+                    ) : null}
+                    {uses.usesOrders ? (
+                      <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colOrders")}</th>
+                    ) : null}
+                    <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colThen")}</th>
+                    <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colReadsAs")}</th>
                     <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rules.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-xs text-muted-foreground">
+                      <td colSpan={8} className="px-3 py-6 text-center text-xs text-muted-foreground">
                         {t("rules.empty")}
                       </td>
                     </tr>
                   ) : (
-                    rules.map((rule, index) => (
-                      <tr key={rule.uid} className="border-b border-border/60 align-top">
-                        <td className="px-2 py-2 text-center font-semibold tabular-nums">
-                          {index + 1}
-                        </td>
-                        <td className="space-y-1.5 px-2 py-2">
-                          <Input
-                            className="h-9 w-72"
-                            value={rule.label}
-                            placeholder={t("rules.labelPlaceholder")}
-                            disabled={!canManage}
-                            onChange={(e) =>
-                              setRules((prev) =>
-                                prev.map((r, i) =>
-                                  i === index ? { ...r, label: e.target.value } : r,
-                                ),
-                              )
-                            }
-                          />
-                          {rule.conditions.map((condition, cIndex) => (
-                            <div key={cIndex} className="flex items-center gap-1.5">
-                              <Select
-                                value={condition.field}
-                                onValueChange={(field) =>
-                                  setCondition(setRules, index, cIndex, { field: field as RuleField })
-                                }
-                              >
-                                <SelectTrigger className="h-9 w-36" disabled={!canManage}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {RULE_FIELDS.map((field) => (
-                                    <SelectItem key={field} value={field}>
-                                      {t(`field.${field}`)}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <Select
-                                value={condition.op}
-                                onValueChange={(op) =>
-                                  setCondition(setRules, index, cIndex, { op: op as RuleOp })
-                                }
-                              >
-                                <SelectTrigger className="h-9 w-32" disabled={!canManage}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {[...RULE_NUMERIC_OPS, ...RULE_SET_OPS].map((op) => (
-                                    <SelectItem key={op} value={op}>
-                                      {t(`op.${op}`)}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <ConditionValueInput
-                                condition={condition}
+                    rules.map((rule, index) => {
+                      const row = conditionsToColumns(rule.conditions, rule.result);
+                      return (
+                        <tr key={rule.uid} className="border-b border-border/60 align-top">
+                          <td className="px-2 py-2 text-center font-semibold tabular-nums">{index + 1}</td>
+                          {uses.usesZone ? (
+                            <>
+                              <td className="px-2 py-2">
+                                <Select
+                                  value={row.zoneCategory}
+                                  onValueChange={(value) =>
+                                    patchRuleRow(index, { zoneCategory: value as ZoneCategoryColumn })
+                                  }
+                                >
+                                  <SelectTrigger className="h-9 w-40" disabled={!canManage}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {ZONE_CAT_OPTIONS.map((option) => (
+                                      <SelectItem key={option} value={option}>
+                                        {t(`zoneCat.${option}`)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="px-2 py-2">
+                                <Select
+                                  value={row.zone}
+                                  onValueChange={(value) => patchRuleRow(index, { zone: value ?? "any" })}
+                                >
+                                  <SelectTrigger className="h-9 w-40" disabled={!canManage}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="any">{t("zoneCat.any")}</SelectItem>
+                                    {zoneNames.map((name) => (
+                                      <SelectItem key={name} value={name}>
+                                        {name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                            </>
+                          ) : null}
+                          {uses.usesHours ? (
+                            <td className="px-2 py-2">
+                              <HoursRangeInputs
+                                row={row}
                                 disabled={!canManage}
-                                onChange={(value) =>
-                                  setCondition(setRules, index, cIndex, { value })
-                                }
+                                onChange={(patch) => patchRuleRow(index, patch)}
                               />
-                              {canManage && rule.conditions.length > 1 ? (
+                            </td>
+                          ) : null}
+                          {uses.usesOrders ? (
+                            <td className="px-2 py-2">
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  className="h-9 w-16"
+                                  inputMode="numeric"
+                                  placeholder="min"
+                                  value={row.ordersMin ?? ""}
+                                  disabled={!canManage}
+                                  onChange={(e) =>
+                                    patchRuleRow(index, {
+                                      ordersMin: e.target.value === "" ? null : Number(e.target.value),
+                                    })
+                                  }
+                                />
+                                <span className="text-[10px] text-muted-foreground">–</span>
+                                <Input
+                                  className="h-9 w-16"
+                                  inputMode="numeric"
+                                  placeholder="max"
+                                  value={row.ordersMax ?? ""}
+                                  disabled={!canManage}
+                                  onChange={(e) =>
+                                    patchRuleRow(index, {
+                                      ordersMax: e.target.value === "" ? null : Number(e.target.value),
+                                    })
+                                  }
+                                />
+                              </div>
+                            </td>
+                          ) : null}
+                          <td className="px-2 py-2">
+                            <div className="flex flex-col gap-1">
+                              <Select
+                                value={rule.result.kind}
+                                onValueChange={(kind) =>
+                                  patchRuleRow(index, {
+                                    result: { kind: kind as RuleResultKind, hours: rule.result.hours },
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="h-9 w-40" disabled={!canManage}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {RULE_RESULT_KINDS.map((kind) => (
+                                    <SelectItem key={kind} value={kind}>
+                                      {t(`result.${kind}`)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {rule.result.kind === "CUS" ? (
+                                <Input
+                                  className="h-9 w-24"
+                                  inputMode="decimal"
+                                  value={rule.result.hours ?? ""}
+                                  disabled={!canManage}
+                                  onChange={(e) =>
+                                    patchRuleRow(index, {
+                                      result: {
+                                        kind: "CUS",
+                                        hours: e.target.value === "" ? null : Number(e.target.value),
+                                      },
+                                    })
+                                  }
+                                />
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="max-w-[220px] px-2 py-2 text-[11px] leading-4 text-muted-foreground">
+                            {readsAs(row, uses) || "—"}
+                          </td>
+                          <td className="px-2 py-2">
+                            {canManage ? (
+                              <div className="flex items-center gap-1">
                                 <button
                                   type="button"
-                                  aria-label={t("rules.removeCondition")}
+                                  aria-label={t("rules.moveUp")}
+                                  className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted/60 disabled:opacity-40"
+                                  disabled={index === 0}
+                                  onClick={() => move(index, -1)}
+                                >
+                                  <ArrowUp className="size-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={t("rules.moveDown")}
+                                  className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted/60 disabled:opacity-40"
+                                  disabled={index === rules.length - 1}
+                                  onClick={() => move(index, 1)}
+                                >
+                                  <ArrowDown className="size-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={t("rules.removeRule")}
                                   className="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
-                                  onClick={() =>
-                                    setRules((prev) =>
-                                      prev.map((r, i) =>
-                                        i === index
-                                          ? {
-                                              ...r,
-                                              conditions: r.conditions.filter(
-                                                (_, j) => j !== cIndex,
-                                              ),
-                                            }
-                                          : r,
-                                      ),
-                                    )
-                                  }
+                                  onClick={() => setRules((prev) => prev.filter((_, i) => i !== index))}
                                 >
                                   <Trash2 className="size-3.5" />
                                 </button>
-                              ) : null}
-                            </div>
-                          ))}
-                          {canManage ? (
-                            <button
-                              type="button"
-                              className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-primary hover:bg-primary/10"
-                              onClick={() =>
-                                setRules((prev) =>
-                                  prev.map((r, i) =>
-                                    i === index
-                                      ? { ...r, conditions: [...r.conditions, blankCondition()] }
-                                      : r,
-                                  ),
-                                )
-                              }
-                            >
-                              <Plus className="size-3.5" />
-                              {t("rules.addCondition")}
-                            </button>
-                          ) : null}
-                        </td>
-                        <td className="px-2 py-2">
-                          <Select
-                            value={rule.result.kind}
-                            onValueChange={(kind) =>
-                              setRules((prev) =>
-                                prev.map((r, i) =>
-                                  i === index
-                                    ? { ...r, result: { ...r.result, kind: kind as RuleResultKind } }
-                                    : r,
-                                ),
-                              )
-                            }
-                          >
-                            <SelectTrigger className="h-9 w-40" disabled={!canManage}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {RULE_RESULT_KINDS.map((kind) => (
-                                <SelectItem key={kind} value={kind}>
-                                  {t(`result.${kind}`)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {rule.result.kind === "CUS" ? (
-                            <Input
-                              className="mt-1.5 h-9 w-24"
-                              inputMode="decimal"
-                              value={rule.result.hours ?? ""}
-                              disabled={!canManage}
-                              onChange={(e) =>
-                                setRules((prev) =>
-                                  prev.map((r, i) =>
-                                    i === index
-                                      ? {
-                                          ...r,
-                                          result: {
-                                            ...r.result,
-                                            hours: e.target.value === "" ? null : Number(e.target.value),
-                                          },
-                                        }
-                                      : r,
-                                  ),
-                                )
-                              }
-                            />
-                          ) : null}
-                        </td>
-                        <td className="px-2 py-2 tabular-nums">
-                          {rule.result.kind === "ACT" || rule.result.kind === "ABS" ||
-                          rule.result.kind === "ALH" || rule.result.kind === "ALO" ? (
-                            <span className="text-muted-foreground/60">—</span>
-                          ) : (
-                            hoursForResult(rule.result.kind, rule.result.hours, clientDraft)
-                          )}
-                        </td>
-                        <td className="px-2 py-2">
-                          {canManage ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                aria-label={t("rules.moveUp")}
-                                className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted/60 disabled:opacity-40"
-                                disabled={index === 0}
-                                onClick={() => move(index, -1)}
-                              >
-                                <ArrowUp className="size-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={t("rules.moveDown")}
-                                className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted/60 disabled:opacity-40"
-                                disabled={index === rules.length - 1}
-                                onClick={() => move(index, 1)}
-                              >
-                                <ArrowDown className="size-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={t("rules.removeRule")}
-                                className="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
-                                onClick={() =>
-                                  setRules((prev) => prev.filter((_, i) => i !== index))
-                                }
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
-                            </div>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))
+                              </div>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
+                  <tr className="bg-muted/20">
+                    <td className="px-2 py-2 text-[11px] font-semibold" colSpan={uses.usesZone ? 3 : 1}>
+                      {t("rules.defaultRow")}
+                    </td>
+                    {uses.usesHours ? <td /> : null}
+                    {uses.usesOrders ? <td /> : null}
+                    <td className="px-2 py-2">
+                      <Select
+                        value={clientDraft.defaultResult.kind}
+                        onValueChange={(kind) =>
+                          patchClient({ defaultResult: { kind: kind as RuleResultKind, hours: null } })
+                        }
+                      >
+                        <SelectTrigger className="h-9 w-40" disabled={!canManage}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RULE_RESULT_KINDS.map((kind) => (
+                            <SelectItem key={kind} value={kind}>
+                              {t(`result.${kind}`)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="px-2 py-2 text-[11px] text-muted-foreground">{t("criteria.defaultHint")}</td>
+                    <td />
+                  </tr>
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* ---- try the rules ---- */}
           <div className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center gap-1.5">
               <FlaskConical className="size-3.5 text-primary" />
@@ -813,6 +972,30 @@ export function PayrollSettingsTab({
             </div>
             <p className="text-[10px] leading-4 text-muted-foreground">{t("simulator.hint")}</p>
             <div className="flex flex-wrap items-end gap-2">
+              <div className="space-y-1">
+                <Label className="text-[11px]">{t("simulator.zone")}</Label>
+                <Select
+                  value={simZoneName}
+                  onValueChange={(value) => {
+                    const name = value ?? "any";
+                    setSimZoneName(name);
+                    const match = zoneMetrics.find((z) => z.zoneName === name);
+                    if (match) setSimZone(match.categoryOverride ?? match.categoryAuto);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">{t("zoneCat.any")}</SelectItem>
+                    {zoneNames.map((name) => (
+                      <SelectItem key={name} value={name}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1">
                 <Label className="text-[11px]">{t("simulator.zoneCategory")}</Label>
                 <Select value={simZone} onValueChange={(v) => setSimZone(v as ZoneCategory)}>
@@ -854,163 +1037,26 @@ export function PayrollSettingsTab({
               </div>
             </div>
             {simulator ? (
-              <div className="rounded-lg border border-emerald-400/50 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-900">
-                <p className="font-semibold">
+              <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-900">
+                <span className="font-semibold">
                   {simulator.via === "rule"
-                    ? t("simulator.decidedByRule", { label: simulator.label })
+                    ? t("simulator.rulePill", { n: simulator.n, hours: simulator.hours })
                     : simulator.via === "default"
                       ? t("simulator.decidedByDefault")
                       : t("simulator.decidedByLegacy")}
-                </p>
-                <p className="text-[11px]">
+                </span>
+                <span className="text-[11px]">
                   {t("simulator.outcome", {
                     status: tDayStatus(simulator.status),
                     hours: simulator.hours,
                   })}
-                </p>
-                <p className="text-[10px] opacity-80">{t("simulator.nothingSaved")}</p>
+                </span>
               </div>
             ) : null}
           </div>
         </>
       ) : null}
 
-      {/* ---- zones & efficiency ---- */}
-      <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 className="text-[13px] font-semibold">{t("zones.title")}</h3>
-            <p className="text-[10px] text-muted-foreground">{t("zones.hint")}</p>
-          </div>
-          {canManage ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9"
-              disabled={recompute.isPending}
-              onClick={() =>
-                recompute.mutate(
-                  { monthKey: month.key },
-                  {
-                    onSuccess: (result) =>
-                      "error" in result
-                        ? toast.error(errorText(t, result.error))
-                        : toast.success(t("zones.recomputed")),
-                    onError: () => toast.error(t("errors.unknown")),
-                  },
-                )
-              }
-            >
-              {recompute.isPending ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <RotateCcw className="size-3.5" />
-              )}
-              {t("zones.recompute")}
-            </Button>
-          ) : null}
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-max min-w-full border-collapse text-[12px]">
-            <thead>
-              <tr className="border-b border-border">
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.zone")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.orders")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.riderDays")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.dpd")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.targetDpd")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.dpdUsed")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.efficiency")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.category")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {zoneMetrics.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-xs text-muted-foreground">
-                    {t("zones.empty")}
-                  </td>
-                </tr>
-              ) : (
-                zoneMetrics.map((zone) => (
-                  <tr key={zone.zoneId} className="border-b border-border/60">
-                    <td className="whitespace-nowrap px-2 py-1.5 font-medium">{zone.zoneName}</td>
-                    <td className="px-2 py-1.5 tabular-nums">{zone.orders}</td>
-                    <td className="px-2 py-1.5 tabular-nums">{zone.riderDays}</td>
-                    <td className="px-2 py-1.5 tabular-nums">
-                      {zone.dpd == null ? "—" : zone.dpd.toFixed(2)}
-                    </td>
-                    <td className="px-2 py-1.5 tabular-nums">
-                      {zone.targetDpd == null ? "—" : zone.targetDpd.toFixed(2)}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <ZoneOverrideEditor
-                        zone={zone}
-                        disabled={!canManage}
-                        busy={saveOverride.isPending}
-                        onSave={(input) => {
-                          saveOverride.mutate(
-                            { zoneId: zone.zoneId, monthKey: month.key, ...input },
-                            {
-                              onSuccess: (result) =>
-                                "error" in result
-                                  ? toast.error(errorText(t, result.error))
-                                  : toast.success(t("zones.saved")),
-                              onError: () => toast.error(t("errors.unknown")),
-                            },
-                          );
-                        }}
-                        labels={{
-                          auto: t("zones.auto"),
-                          save: t("zones.save"),
-                          placeholder: t("zones.usedPlaceholder"),
-                        }}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 tabular-nums">
-                      {zone.efficiency == null ? "—" : formatPayrollPct(zone.efficiency)}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <ZoneCategoryPillSmall
-                          category={zone.categoryOverride ?? zone.categoryAuto}
-                          label={
-                            zone.categoryOverride
-                              ? t("zones.manual", {
-                                  category: tZoneCategory(zone.categoryOverride),
-                                })
-                              : tZoneCategory(zone.categoryAuto)
-                          }
-                        />
-                        {canManage && zone.categoryOverride ? (
-                          <button
-                            type="button"
-                            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-primary hover:bg-primary/10"
-                            onClick={() =>
-                              saveOverride.mutate({
-                                zoneId: zone.zoneId,
-                                monthKey: month.key,
-                                dpdUsed: zone.dpdUsed,
-                                targetDpdUsed: zone.targetDpdUsed,
-                                categoryOverride: null,
-                              })
-                            }
-                          >
-                            <RotateCcw className="size-3" />
-                            {t("zones.auto")}
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ---- change log ---- */}
       <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="flex items-center gap-1.5">
           <History className="size-3.5 text-primary" />
@@ -1023,15 +1069,13 @@ export function PayrollSettingsTab({
               <tr className="border-b border-border">
                 <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("audit.when")}</th>
                 <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("audit.who")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("audit.client")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("audit.action")}</th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("audit.detail")}</th>
+                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("audit.change")}</th>
               </tr>
             </thead>
             <tbody>
               {(config.data?.audit ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-xs text-muted-foreground">
+                  <td colSpan={3} className="px-3 py-8 text-center text-xs text-muted-foreground">
                     {t("audit.empty")}
                   </td>
                 </tr>
@@ -1040,10 +1084,14 @@ export function PayrollSettingsTab({
                   <tr key={row.id} className="border-b border-border/60">
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">{row.createdAt}</td>
                     <td className="whitespace-nowrap px-2 py-1.5">{row.actorName}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5">{row.clientKey ?? "—"}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5">{auditActionLabel(t, row.action)}</td>
                     <td className="px-2 py-1.5 text-[11px] text-muted-foreground">
-                      {summariseAudit(row.after)}
+                      {summariseAudit({
+                        entity: row.entity,
+                        action: row.action,
+                        clientKey: row.clientKey,
+                        before: row.before,
+                        after: row.after,
+                      })}
                     </td>
                   </tr>
                 ))
@@ -1052,114 +1100,395 @@ export function PayrollSettingsTab({
           </table>
         </div>
       </div>
+
+      {selected && canManage ? (
+        <ConfirmDeleteDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          itemTitle={t("delete.title")}
+          itemName={selected.name}
+          confirmText={selected.name}
+          warning={t("delete.warning")}
+          onConfirm={doDeleteClient}
+          isPending={deleteClient.isPending}
+        />
+      ) : null}
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Small pieces                                                        */
-/* ------------------------------------------------------------------ */
-
-function setCondition(
-  setRules: React.Dispatch<React.SetStateAction<RuleDraft[]>>,
-  ruleIndex: number,
-  conditionIndex: number,
-  patch: Partial<PayrollRuleCondition>,
-) {
-  setRules((prev) =>
-    prev.map((rule, i) => {
-      if (i !== ruleIndex) return rule;
-      return {
-        ...rule,
-        conditions: rule.conditions.map((condition, j) => {
-          if (j !== conditionIndex) return condition;
-          const next = { ...condition, ...patch };
-          // A set operator needs a list; a numeric one needs a number. Switching
-          // between them must not leave the value in the other's shape, or the
-          // save would write a condition the engine reads as "never matches".
-          if (["in", "not_in"].includes(next.op)) {
-            const list = Array.isArray(next.value)
-              ? next.value
-              : [String(next.value ?? "").trim()].filter(Boolean);
-            return { ...next, value: list };
-          }
-          if (Array.isArray(next.value)) {
-            const first = next.value[0] ?? "";
-            return { ...next, value: next.field === "zone" || next.field === "zone_category" ? first : Number(first) || 0 };
-          }
-          return next;
-        }),
-      };
-    }),
-  );
-}
-
-function ConditionValueInput({
-  condition,
+function HoursRangeInputs({
+  row,
   disabled,
   onChange,
 }: {
-  condition: PayrollRuleCondition;
-  disabled?: boolean;
-  onChange: (value: string | number | string[]) => void;
+  row: RuleTableRow;
+  disabled: boolean;
+  onChange: (patch: Partial<RuleTableRow>) => void;
 }) {
-  const t = useTranslations("pages.payroll.settings");
-  if (condition.field === "zone_category") {
-    const list = Array.isArray(condition.value)
-      ? condition.value
-      : [String(condition.value)];
-    return (
-      <Input
-        className="h-9 w-52"
-        value={list.join(", ")}
-        disabled={disabled}
-        placeholder={t("rules.zonePlaceholder")}
-        onChange={(e) =>
-          onChange(e.target.value.split(",").map((part) => part.trim().toLowerCase()).filter(Boolean))
-        }
-      />
-    );
-  }
-  if (Array.isArray(condition.value)) {
-    return (
-      <Input
-        className="h-9 w-52"
-        value={condition.value.join(", ")}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value.split(",").map((part) => part.trim()).filter(Boolean))}
-      />
-    );
-  }
   return (
-    <Input
-      className="h-9 w-28"
-      inputMode={condition.field === "zone" ? "text" : "decimal"}
-      value={String(condition.value)}
-      disabled={disabled}
-      onChange={(e) =>
-        onChange(condition.field === "zone" ? e.target.value : Number(e.target.value) || 0)
-      }
-    />
+    <div className="flex flex-wrap items-center gap-1">
+      <Select
+        value={row.hoursMinOp}
+        onValueChange={(op) => onChange({ hoursMinOp: (op as "gte" | "gt") ?? "gte" })}
+      >
+        <SelectTrigger className="h-9 w-16" disabled={disabled}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="gte">≥</SelectItem>
+          <SelectItem value="gt">&gt;</SelectItem>
+        </SelectContent>
+      </Select>
+      <Input
+        className="h-9 w-14"
+        inputMode="decimal"
+        value={row.hoursMin ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange({ hoursMin: e.target.value === "" ? null : Number(e.target.value) })}
+      />
+      <span className="text-[10px] text-muted-foreground">and</span>
+      <Select
+        value={row.hoursMaxOp}
+        onValueChange={(op) => onChange({ hoursMaxOp: (op as "lt" | "lte") ?? "lt" })}
+      >
+        <SelectTrigger className="h-9 w-16" disabled={disabled}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="lt">&lt;</SelectItem>
+          <SelectItem value="lte">≤</SelectItem>
+        </SelectContent>
+      </Select>
+      <Input
+        className="h-9 w-14"
+        inputMode="decimal"
+        value={row.hoursMax ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange({ hoursMax: e.target.value === "" ? null : Number(e.target.value) })}
+      />
+    </div>
   );
 }
 
-function hoursForResult(
-  kind: RuleResultKind,
-  hours: number | null,
-  client: PayrollClientConfig,
-): string {
-  switch (kind) {
-    case "12":
-      return `${client.fullDayHours} h`;
-    case "3h":
-      return `${client.reducedHours} h`;
-    case "HALF":
-      return `${client.halfDayHours} h`;
-    case "CUS":
-      return `${hours ?? 0} h`;
-    default:
-      return "—";
+function ZonesView({
+  month,
+  zoneMetrics,
+  riders,
+  canManage,
+  settings,
+  busy,
+  onRecompute,
+  onSaveSettings,
+  onSaveOverride,
+}: {
+  month: PayrollMonthMeta;
+  zoneMetrics: readonly PayrollZoneMetricRow[];
+  riders: readonly PayrollRiderRow[];
+  canManage: boolean;
+  settings:
+    | {
+        targetDpdOverride: number | null;
+        goodThreshold: number;
+        averageThreshold: number;
+        autoTargetDpd: number | null;
+      }
+    | undefined;
+  busy: boolean;
+  onRecompute: () => void;
+  onSaveSettings: (input: {
+    targetDpdOverride: number | null;
+    goodThreshold: number;
+    averageThreshold: number;
+  }) => void;
+  onSaveOverride: (
+    zone: PayrollZoneMetricRow,
+    input: {
+      dpdUsed: number | null;
+      targetDpdUsed: number | null;
+      categoryOverride: "good" | "average" | "low" | null;
+      efficiencyOverride: number | null;
+    },
+  ) => void;
+}) {
+  const t = useTranslations("pages.payroll.settings");
+  const tZoneCategory = useTranslations("pages.payroll.zoneCategory");
+  const [targetDraft, setTargetDraft] = useState(
+    settings?.targetDpdOverride == null ? "" : String(settings.targetDpdOverride),
+  );
+  const [goodDraft, setGoodDraft] = useState(String(settings?.goodThreshold ?? 110));
+  const [avgDraft, setAvgDraft] = useState(String(settings?.averageThreshold ?? 70));
+
+  useEffect(() => {
+    setTargetDraft(settings?.targetDpdOverride == null ? "" : String(settings.targetDpdOverride));
+    setGoodDraft(String(settings?.goodThreshold ?? 110));
+    setAvgDraft(String(settings?.averageThreshold ?? 70));
+  }, [settings?.targetDpdOverride, settings?.goodThreshold, settings?.averageThreshold]);
+
+  function commitSettings() {
+    if (!canManage) return;
+    onSaveSettings({
+      targetDpdOverride: targetDraft.trim() === "" ? null : Number(targetDraft),
+      goodThreshold: Number(goodDraft) || 110,
+      averageThreshold: Number(avgDraft) || 70,
+    });
   }
+
+  const noZone = noZoneAggregate(riders, t("zones.noZone"));
+  const rows = [...zoneMetrics, noZone];
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-[13px] font-semibold">{t("zones.title")}</h3>
+          <p className="text-[10px] text-muted-foreground">{t("zones.hint")}</p>
+        </div>
+        {canManage ? (
+          <Button type="button" variant="outline" className="h-9" disabled={busy} onClick={onRecompute}>
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+            {t("zones.recompute")}
+          </Button>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label className="text-[11px]">{t("zones.targetDpd")}</Label>
+          <div className="flex items-center gap-1.5">
+            <Input
+              className="h-9 w-24"
+              inputMode="decimal"
+              placeholder={t("zones.auto")}
+              value={targetDraft}
+              disabled={!canManage}
+              onChange={(e) => setTargetDraft(e.target.value)}
+              onBlur={commitSettings}
+            />
+            <span className="text-[10px] text-muted-foreground">
+              {t("zones.autoEq", {
+                value: settings?.autoTargetDpd == null ? "—" : settings.autoTargetDpd.toFixed(2),
+              })}
+            </span>
+          </div>
+        </div>
+        <NumberField
+          id="payroll-zone-good"
+          label={t("zones.goodThreshold")}
+          value={Number(goodDraft) || 110}
+          disabled={!canManage}
+          onCommit={(v) => {
+            setGoodDraft(String(v));
+            onSaveSettings({
+              targetDpdOverride: targetDraft.trim() === "" ? null : Number(targetDraft),
+              goodThreshold: v,
+              averageThreshold: Number(avgDraft) || 70,
+            });
+          }}
+        />
+        <NumberField
+          id="payroll-zone-avg"
+          label={t("zones.averageThreshold")}
+          value={Number(avgDraft) || 70}
+          disabled={!canManage}
+          onCommit={(v) => {
+            setAvgDraft(String(v));
+            onSaveSettings({
+              targetDpdOverride: targetDraft.trim() === "" ? null : Number(targetDraft),
+              goodThreshold: Number(goodDraft) || 110,
+              averageThreshold: v,
+            });
+          }}
+        />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-max min-w-full border-collapse text-[12px]">
+          <thead>
+            <tr className="border-b border-border">
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.zone")}</th>
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.riders")}</th>
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.monthOrders")}</th>
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.dpd")}</th>
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.efficiencyAuto")}</th>
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.efficiencyUsed")}</th>
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.categoryAuto")}</th>
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.manualOverride")}</th>
+              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.finalCategory")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {zoneMetrics.length === 0 && riders.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-3 py-8 text-center text-xs text-muted-foreground">
+                  {t("zones.empty")}
+                </td>
+              </tr>
+            ) : (
+              rows.map((zone) => {
+                const readOnly = !zone.zoneId;
+                const used = zone.efficiencyOverride ?? zone.efficiency;
+                const finalCat = zone.categoryOverride ?? zone.categoryAuto;
+                return (
+                  <tr key={zone.zoneId || "no-zone"} className="border-b border-border/60">
+                    <td className="whitespace-nowrap px-2 py-1.5 font-medium">{zone.zoneName}</td>
+                    <td className="px-2 py-1.5 tabular-nums">{zone.riderDays}</td>
+                    <td className="px-2 py-1.5 tabular-nums">{zone.orders}</td>
+                    <td className="px-2 py-1.5 tabular-nums">{zone.dpd == null ? "—" : zone.dpd.toFixed(2)}</td>
+                    <td className="px-2 py-1.5 tabular-nums">
+                      {zone.efficiency == null ? "—" : formatPayrollPct(zone.efficiency)}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {readOnly || !canManage ? (
+                        <span className="tabular-nums">{used == null ? "—" : formatPayrollPct(used)}</span>
+                      ) : (
+                        <EfficiencyUsedEditor
+                          zone={zone}
+                          busy={busy}
+                          onSave={(efficiencyOverride) =>
+                            onSaveOverride(zone, {
+                              dpdUsed: zone.dpdUsed,
+                              targetDpdUsed: zone.targetDpdUsed,
+                              categoryOverride: zone.categoryOverride,
+                              efficiencyOverride,
+                            })
+                          }
+                        />
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <ZoneCategoryPillSmall
+                        category={zone.categoryAuto}
+                        label={tZoneCategory(zone.categoryAuto)}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {readOnly || !canManage ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          {zone.categoryOverride ? tZoneCategory(zone.categoryOverride) : t("zones.auto")}
+                        </span>
+                      ) : (
+                        <Select
+                          value={zone.categoryOverride ?? "auto"}
+                          onValueChange={(value) =>
+                            onSaveOverride(zone, {
+                              dpdUsed: zone.dpdUsed,
+                              targetDpdUsed: zone.targetDpdUsed,
+                              categoryOverride:
+                                value === "auto" || !value
+                                  ? null
+                                  : (value as "good" | "average" | "low"),
+                              efficiencyOverride: zone.efficiencyOverride,
+                            })
+                          }
+                        >
+                          <SelectTrigger className="h-9 w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto">{t("zones.auto")}</SelectItem>
+                            <SelectItem value="good">{tZoneCategory("good")}</SelectItem>
+                            <SelectItem value="average">{tZoneCategory("average")}</SelectItem>
+                            <SelectItem value="low">{tZoneCategory("low")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <ZoneCategoryPillSmall category={finalCat} label={tZoneCategory(finalCat)} />
+                        {zone.categoryOverride ? (
+                          <span className="rounded-sm bg-amber-100 px-1 text-[9px] font-bold uppercase text-amber-800">
+                            {t("zones.manualTag")}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-muted-foreground">{t("zones.monthNote", { month: month.label })}</p>
+    </div>
+  );
+}
+
+function EfficiencyUsedEditor({
+  zone,
+  busy,
+  onSave,
+}: {
+  zone: PayrollZoneMetricRow;
+  busy: boolean;
+  onSave: (efficiencyOverride: number | null) => void;
+}) {
+  const t = useTranslations("pages.payroll.settings");
+  const [value, setValue] = useState(
+    zone.efficiencyOverride == null ? "" : String(zone.efficiencyOverride),
+  );
+  useEffect(() => {
+    setValue(zone.efficiencyOverride == null ? "" : String(zone.efficiencyOverride));
+  }, [zone.efficiencyOverride]);
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        className="h-9 w-20"
+        inputMode="decimal"
+        value={value}
+        disabled={busy}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          const next = value.trim() === "" ? null : Number(value);
+          const prev = zone.efficiencyOverride;
+          if (next === prev || (next == null && prev == null)) return;
+          if (next != null && !Number.isFinite(next)) return;
+          onSave(next);
+        }}
+      />
+      {zone.efficiencyOverride != null ? (
+        <>
+          <span className="rounded-sm bg-amber-100 px-1 text-[9px] font-bold uppercase text-amber-800">
+            {t("zones.editedTag")}
+          </span>
+          <button
+            type="button"
+            className="inline-flex h-7 items-center rounded-md px-1.5 text-[10px] font-semibold text-primary hover:bg-primary/10"
+            onClick={() => onSave(null)}
+          >
+            <RotateCcw className="size-3" />
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function noZoneAggregate(riders: readonly PayrollRiderRow[], label: string): PayrollZoneMetricRow {
+  const none = riders.filter((r) => !r.zoneId);
+  const riderDays = none.reduce(
+    (sum, row) => sum + row.days.filter((status) => status !== "blank").length,
+    0,
+  );
+  const orders = none.reduce((sum, row) => sum + row.finalOrders, 0);
+  const dpd = riderDays > 0 ? orders / riderDays : null;
+  return {
+    zoneId: "",
+    zoneName: label,
+    orders,
+    riderDays,
+    dpd,
+    targetDpd: null,
+    dpdUsed: null,
+    targetDpdUsed: null,
+    efficiency: null,
+    categoryAuto: "not_set",
+    categoryOverride: null,
+    efficiencyOverride: null,
+    goodThreshold: 110,
+    averageThreshold: 70,
+    computedAt: null,
+  };
 }
 
 function ZoneCategoryPillSmall({ category, label }: { category: ZoneCategory; label: string }) {
@@ -1178,103 +1507,19 @@ function ZoneCategoryPillSmall({ category, label }: { category: ZoneCategory; la
   );
 }
 
-function ZoneOverrideEditor({
-  zone,
-  disabled,
-  busy,
-  onSave,
-  labels,
-}: {
-  zone: PayrollZoneMetricRow;
-  disabled: boolean;
-  busy: boolean;
-  onSave: (input: {
-    dpdUsed: number | null;
-    targetDpdUsed: number | null;
-    categoryOverride: "good" | "average" | "low" | null;
-  }) => void;
-  labels: { auto: string; save: string; placeholder: string };
-}) {
-  const [value, setValue] = useState(zone.dpdUsed == null ? "" : String(zone.dpdUsed));
-  useEffect(() => {
-    setValue(zone.dpdUsed == null ? "" : String(zone.dpdUsed));
-  }, [zone.dpdUsed]);
-  if (disabled) {
-    return <span className="tabular-nums">{zone.dpdUsed == null ? "—" : zone.dpdUsed.toFixed(2)}</span>;
-  }
-  return (
-    <div className="flex items-center gap-1">
-      <Input
-        className="h-9 w-24"
-        inputMode="decimal"
-        value={value}
-        placeholder={labels.placeholder}
-        onChange={(e) => setValue(e.target.value)}
-      />
-      <button
-        type="button"
-        disabled={busy}
-        className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-[10px] font-semibold hover:bg-muted/50 disabled:opacity-50"
-        onClick={() =>
-          onSave({
-            dpdUsed: value.trim() === "" ? null : Number(value),
-            targetDpdUsed: zone.targetDpdUsed,
-            categoryOverride: categoryOverrideFor(
-              value.trim() === "" ? zone.dpd : Number(value),
-              zone.targetDpdUsed ?? zone.targetDpd,
-              zone.goodThreshold,
-              zone.averageThreshold,
-            ),
-          })
-        }
-      >
-        {labels.save}
-      </button>
-      {zone.dpdUsed != null ? (
-        <button
-          type="button"
-          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[10px] font-semibold text-primary hover:bg-primary/10"
-          onClick={() =>
-            onSave({ dpdUsed: null, targetDpdUsed: null, categoryOverride: null })
-          }
-        >
-          <RotateCcw className="size-3" />
-          {labels.auto}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * The category a manual DPD implies, so setting a value also files the band the
- * operator is clearly aiming at. `null` when the figures are not there to divide
- * — an override with no target is "used", not "judged".
- */
-function categoryOverrideFor(
-  dpd: number | null,
-  target: number | null,
-  goodThreshold: number,
-  averageThreshold: number,
-): "good" | "average" | "low" | null {
-  if (dpd == null || !target) return null;
-  return zoneCategoryFor((dpd / target) * 100, goodThreshold, averageThreshold) as
-    | "good"
-    | "average"
-    | "low";
-}
-
 function NumberField({
   id,
   label,
   value,
   step = "0.5",
+  disabled,
   onCommit,
 }: {
   id: string;
   label: string;
   value: number;
   step?: string;
+  disabled?: boolean;
   onCommit: (value: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
@@ -1292,6 +1537,7 @@ function NumberField({
         inputMode="decimal"
         step={step}
         value={draft}
+        disabled={disabled}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
           const parsed = Number(draft);
@@ -1303,12 +1549,6 @@ function NumberField({
   );
 }
 
-/**
- * A server error code as reader-facing copy. The actions return either one of
- * a small set of codes or a raw Postgres message, and passing the raw message
- * to `t()` would render a missing-key path at the operator — so anything not in
- * the list falls back to the generic line rather than leaking SQL.
- */
 const KNOWN_SETTINGS_ERRORS = new Set([
   "invalid_month",
   "invalid_client",
@@ -1323,39 +1563,12 @@ const KNOWN_SETTINGS_ERRORS = new Set([
   "not_authorized",
   "unknown_zone",
   "invalid_hours",
+  "client_has_riders",
+  "system_client",
+  "invalid_thresholds",
 ]);
-
-/**
- * An audit action as copy. The action column is written by SQL, so a future
- * migration can add a verb this build has never heard of — an unknown one is
- * shown verbatim rather than as a missing-key path.
- */
-const KNOWN_AUDIT_ACTIONS = new Set([
-  "create",
-  "update",
-  "recompute",
-  "apply",
-  "reset",
-  "open",
-]);
-
-function auditActionLabel(t: (key: string) => string, action: string): string {
-  return KNOWN_AUDIT_ACTIONS.has(action) ? t(`audit.action_${action}`) : action;
-}
 
 function errorText(t: (key: string) => string, code: string): string {
-  return t(`errors.${KNOWN_SETTINGS_ERRORS.has(code) ? code : "unknown"}`);
-}
-
-/** One line of the change log, without dumping the whole jsonb on the screen. */
-function summariseAudit(after: unknown): string {
-  if (!after || typeof after !== "object") return "—";
-  const o = after as Record<string, unknown>;
-  const parts: string[] = [];
-  if (typeof o.ruleCount === "number") parts.push(`${o.ruleCount} rules`);
-  if (typeof o.name === "string") parts.push(o.name);
-  if (typeof o.reason === "string") parts.push(o.reason);
-  if (typeof o.action === "string") parts.push(o.action);
-  if (typeof o.categoryOverride === "string") parts.push(o.categoryOverride);
-  return parts.length ? parts.join(" · ") : "—";
+  const match = KNOWN_SETTINGS_ERRORS.has(code) ? code : [...KNOWN_SETTINGS_ERRORS].find((k) => code.includes(k));
+  return t(`errors.${match ?? "unknown"}`);
 }

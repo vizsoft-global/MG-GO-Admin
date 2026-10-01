@@ -1,55 +1,68 @@
 import { downloadCsv, toCsv } from "@/features/performance/performance-ops-table";
 import {
   bucketOf,
-  dayLabel,
-  dayStatusLabel,
+  dayGridLabel,
   formatPayrollPct,
+  isoDayLabel,
   PAYROLL_EFF_BUCKETS,
   type PayrollEffBucketId,
 } from "./payroll-formulas";
-import { dayClipboardToken } from "./payroll-rider-columns";
+import { dayClipboardToken, payrollVehicleKind } from "./payroll-rider-columns";
 import type { PayrollRequestRow, PayrollRiderRow } from "./payroll-types";
 
-export const PAYROLL_IDENTITY_HEADERS = [
+export const PAYROLL_VIEW_HEADERS = [
   "AM ID",
   "Driver ID",
   "Name",
   "Restaurant",
   "Zone",
   "Zone category",
+  "LM zone orders",
+  "LM zone DPD",
+  "LM zone eff%",
   "Partner",
-  "Nationality",
+  "Vehicle",
   "Status",
-] as const;
-
-export const PAYROLL_TOTAL_HEADERS = [
-  "Total Days",
-  "Total Hours",
+  "Total days",
+  "Final orders",
+  "3H days",
+  "Half days",
   "OFF",
   "Sick",
   "Accident",
-  "Absence",
-  "3h days",
-  "Half days",
-  "Actual days",
   "Vehicle issue",
-  "Abs · LH",
-  "Abs · LO",
-  "Custom days",
-  "Adjusted cells",
-  "Final orders",
-  "Off Structure",
-  "Required Hours",
-  "Actual Hours",
+  "Absence",
+  "Abs LH",
+  "Abs LO",
+  "Off structure",
+  "Required hours",
+  "Actual hours",
   "Efficiency%",
 ] as const;
 
-export function payrollTableHeaders(monthKey: string, days: number): string[] {
-  const dayHeaders = Array.from({ length: days }, (_, i) => dayLabel(monthKey, i + 1));
-  return [...PAYROLL_IDENTITY_HEADERS, ...dayHeaders, ...PAYROLL_TOTAL_HEADERS];
-}
+export const COMBINED_IDENTITY_HEADERS = [
+  "AM ID",
+  "Driver ID",
+  "Name",
+  "Zone",
+  "Zone category",
+  "Partner",
+  "Vehicle",
+] as const;
 
-export function payrollTableRow(row: PayrollRiderRow): Array<string | number> {
+export const AO_LEAD_HEADERS = [
+  "AM ID",
+  "Driver ID",
+  "Name",
+  "Partner",
+  "Zone",
+  "Zone category",
+  "Vehicle",
+  "Final orders",
+  "Actual hours",
+] as const;
+
+function summaryCells(row: PayrollRiderRow): Array<string | number> {
   return [
     row.amId,
     row.mgId,
@@ -57,25 +70,23 @@ export function payrollTableRow(row: PayrollRiderRow): Array<string | number> {
     row.restaurant,
     row.zone,
     row.zoneCategory,
+    row.zoneOrders ?? "",
+    row.zoneDpd ?? "",
+    row.zoneEfficiency ?? "",
     row.partner,
-    row.nationality,
+    payrollVehicleKind(row.vehicleKey),
     row.status,
-    ...row.days.map(dayStatusLabel),
     row.workDays,
-    row.totalHours,
+    row.finalOrders,
+    row.reducedDays,
+    row.halfDays,
     row.offDays,
     row.sickDays,
     row.accidentDays,
-    row.absentDays,
-    row.reducedDays,
-    row.halfDays,
-    row.actualDays,
     row.vehicleDays,
+    row.absentDays,
     row.absLhDays,
     row.absLoDays,
-    row.customDays,
-    row.adjustedCells,
-    row.finalOrders,
     row.offStructureDays,
     Number(row.requiredHours.toFixed(2)),
     Number(row.actualHours.toFixed(2)),
@@ -83,67 +94,72 @@ export function payrollTableRow(row: PayrollRiderRow): Array<string | number> {
   ];
 }
 
-export function exportPayrollViewCsv(
-  monthKey: string,
-  days: number,
-  rows: readonly PayrollRiderRow[],
-) {
-  downloadCsv(
-    `MGGO-payroll-${monthKey}`,
-    toCsv(payrollTableHeaders(monthKey, days), rows.map(payrollTableRow)),
-  );
+function combinedIdentityCells(row: PayrollRiderRow): Array<string | number> {
+  return [
+    row.amId,
+    row.mgId,
+    row.name,
+    row.zone,
+    row.zoneCategory,
+    row.partner,
+    payrollVehicleKind(row.vehicleKey),
+  ];
 }
 
-/**
- * The Combined tab's own export. It is the same grid, but the day cells are the
- * SOP token (`12`, `3h`, `OFF`, `ALH`) rather than the UI sentence, so the sheet
- * can be pasted back into the grid: `parseAdjustmentCellText` reads exactly this.
- */
-export function exportCombinedPayrollCsv(
-  monthKey: string,
-  days: number,
+export function exportPayrollViewCsv(
+  fileKey: string,
+  dates: readonly string[],
   rows: readonly PayrollRiderRow[],
 ) {
+  void dates;
+  downloadCsv(`MGGO-payroll-${fileKey}`, toCsv([...PAYROLL_VIEW_HEADERS], rows.map(summaryCells)));
+}
+
+export function exportCombinedPayrollCsv(
+  fileKey: string,
+  dates: readonly string[],
+  rows: readonly PayrollRiderRow[],
+) {
+  const headers = [...COMBINED_IDENTITY_HEADERS, ...dates.map(isoDayLabel)];
   downloadCsv(
-    `MGGO-payroll-combined-${monthKey}`,
+    `MGGO-payroll-combined-${fileKey}`,
     toCsv(
-      payrollTableHeaders(monthKey, days),
+      headers,
       rows.map((row) => [
-        ...payrollTableRow(row).slice(0, PAYROLL_IDENTITY_HEADERS.length),
-        ...Array.from({ length: days }, (_, i) => dayClipboardToken(row, i)),
-        ...payrollTableRow(row).slice(PAYROLL_IDENTITY_HEADERS.length + days),
+        ...combinedIdentityCells(row),
+        ...dates.map((_, i) => dayClipboardToken(row, i)),
       ]),
     ),
   );
 }
 
-/**
- * Payroll attendance and Orders — two cells per day, so the reader can see the
- * credited day and the reconciled order count side by side and tell a rider who
- * worked without orders from one who never turned up.
- */
 export function exportPayrollAttendanceOrdersCsv(
-  monthKey: string,
-  days: number,
+  fileKey: string,
+  dates: readonly string[],
   rows: readonly PayrollRiderRow[],
 ) {
-  const dayHeaders = Array.from({ length: days }, (_, i) => dayLabel(monthKey, i + 1)).flatMap(
-    (label) => [`${label} · Payroll`, `${label} · Orders`],
+  const dayHeaders = dates.flatMap((date) => [`${isoDayLabel(date)} · Payroll`, `${isoDayLabel(date)} · Orders`]);
+  downloadCsv(
+    `MGGO-payroll-attendance-orders-${fileKey}`,
+    toCsv(
+      [...AO_LEAD_HEADERS, ...dayHeaders],
+      rows.map((row) => [
+        row.amId,
+        row.mgId,
+        row.name,
+        row.partner,
+        row.zone,
+        row.zoneCategory,
+        payrollVehicleKind(row.vehicleKey),
+        row.finalOrders,
+        Number(row.actualHours.toFixed(2)),
+        ...dates.flatMap((_, i) => [
+          dayGridLabel(row.days[i] ?? "blank", row.dayInfo[i]?.creditedHours ?? 0),
+          row.dayInfo[i]?.orders ? row.dayInfo[i]!.orders : "–",
+        ]),
+      ]),
+    ),
   );
-  const headers = [
-    ...PAYROLL_IDENTITY_HEADERS,
-    ...dayHeaders,
-    ...PAYROLL_TOTAL_HEADERS,
-  ];
-  const data = rows.map((row) => [
-    ...payrollTableRow(row).slice(0, PAYROLL_IDENTITY_HEADERS.length),
-    ...Array.from({ length: days }, (_, i) => [
-      dayStatusLabel(row.days[i] ?? "blank"),
-      row.dayInfo[i]?.orders ?? 0,
-    ]).flat(),
-    ...payrollTableRow(row).slice(PAYROLL_IDENTITY_HEADERS.length + days),
-  ]);
-  downloadCsv(`MGGO-payroll-attendance-orders-${monthKey}`, toCsv(headers, data));
 }
 
 export function exportPayrollDistributionCsv(
@@ -152,7 +168,13 @@ export function exportPayrollDistributionCsv(
 ) {
   const headers = [
     "Bucket",
-    ...PAYROLL_IDENTITY_HEADERS,
+    "AM ID",
+    "Driver ID",
+    "Name",
+    "Restaurant",
+    "Zone",
+    "Partner",
+    "Status",
     "Total Days",
     "Off Structure",
     "Required Hours",

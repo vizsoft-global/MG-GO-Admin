@@ -7234,11 +7234,15 @@
         "thisMonth": "هذا الشهر",
         "lastMonth": "الشهر الماضي",
         "custom": "مخصص",
-        "customTitle": "اختر شهر الرواتب",
+        "customTitle": "اختر نطاق الرواتب",
         "customMonth": "الشهر",
         "customApply": "تطبيق",
         "customCancel": "إلغاء",
-        "customErr": "اختر هذا الشهر أو أحد الشهرين السابقين."
+        "customErr": "اختر هذا الشهر أو أحد الشهرين السابقين.",
+        "from": "من",
+        "to": "إلى",
+        "daysCount": "{count} أيام",
+        "windowHint": "داخل {from} – {to}."
       },
       "clearFilters": "مسح الفلاتر",
       "export": "تصدير إلى Excel",
@@ -7301,6 +7305,20 @@
       "requestsBannerTitle": "يرفع السائق الطلب من التطبيق وتراجعه الإدارة المختصة.",
       "requestsBannerBody": "طلبات الإجازة / المرض / الحادث الموافق عليها تبرر حالة اليوم في تقرير الرواتب.",
       "tableFoot": "عرض {shown} من {total} سائق · {month} · الأيام الثابتة = {days} − 2 = {fixed}",
+      "tableFootRange": "عرض {shown} من {total} سائق · {range}",
+      "slicerCardTag": "جديد · فلاتر",
+      "slicerCardTitle": "عرض العميل وفئة المنطقة",
+      "summaryStrip": "العميل · {riders} سائق · جيد {good} · متوسط {average} · منخفض {low} · غير محدد {notSet} · القواعد تستخدم {uses} ({rules} قاعدة)",
+      "uses": {
+        "none": "بدون معايير",
+        "zone": "المنطقة",
+        "orders": "الطلبات",
+        "hours": "الساعات"
+      },
+      "columnFiltersPrefix": "فلاتر الأعمدة:",
+      "sortAsc": "الأصغر → الأكبر",
+      "sortDesc": "الأكبر → الأصغر",
+      "clearColumnFilters": "مسح فلاتر الأعمدة",
       "queueTitle": "قائمة الطلبات",
       "queueSub": "{count} طلب · {month}",
       "kpi": {
@@ -7377,7 +7395,11 @@
         "absLo": "غياب LO",
         "custom": "أيام مخصصة",
         "adjusted": "معدَّل",
-        "finalOrders": "الطلبات النهائية"
+        "finalOrders": "الطلبات النهائية",
+        "zoneOrders": "طلبات المنطقة للشهر السابق",
+        "zoneDpd": "DPD المنطقة للشهر السابق",
+        "zoneEff": "كفاءة المنطقة للشهر السابق",
+        "vehicleKind": "المركبة"
       },
       "riderStatus": {
         "active": "نشط",
@@ -7474,15 +7496,18 @@
       "tabAttendanceOrders": "الحضور والطلبات",
       "tabSettings": "الإعدادات",
       "cellHint": "اسحب فوق الخلايا للتحديد · اسحب المقبض في الزاوية للتعبئة · Ctrl+C و Ctrl+V و Ctrl+D",
-      "sortedBy": "مرتب حسب",
+      "sortedBy": "مرتب: {column} {dir}",
       "zoneCategory": {
         "good": "جيد",
         "average": "متوسط",
         "low": "منخفض",
-        "not_set": "غير محدد"
+        "not_set": "غير محدد",
+        "all": "الكل",
+        "viewLabel": "فئة المنطقة"
       },
       "partner": {
-        "all": "كل العملاء"
+        "all": "كل العملاء",
+        "viewLabel": "عرض العميل"
       },
       "columnFilter": {
         "title": "تصفية {column}",
@@ -7527,6 +7552,21 @@
         "pasteFailed": "الكتلة الملصقة لا تطابق الخلايا المحددة.",
         "someSkipped": "تم تخطي {count} خلية.",
         "applied": "تم تعديل {count} خلية",
+        "patternNote": "نمط منسوخ من الخلايا المصدر",
+        "willChange": "{change} ستتغير، {same} كما هي",
+        "automatic": "النتيجة التلقائية",
+        "fillTitle": "تعبئة · {count} خلية",
+        "pasteTitle": "لصق · {count} خلية",
+        "multiTitle": "تعديل · {count} خلية",
+        "ruleN": "القاعدة {n}",
+        "ordersN": "{n} طلب",
+        "hoursN": "{n} ساعة",
+        "copy": "نسخ",
+        "paste": "لصق",
+        "fillDown": "تعبئة للأسفل",
+        "clearSelection": "مسح",
+        "selectionBar": "{cells} خلية محددة · {riders} سائق × {days} يوم",
+        "adjustedCells": "{count} خلية معدّلة يدوياً",
         "errors": {
           "reason_required": "السبب مطلوب.",
           "no_cells": "حدد يوماً واحداً على الأقل.",
@@ -7534,6 +7574,18 @@
           "not_authorized": "لا تملك صلاحية تعديل أيام الرواتب.",
           "unknown": "حدث خطأ. لم يتم حفظ التعديل."
         }
+      },
+      "manualChanges": {
+        "title": "سجل التعديلات اليدوية",
+        "hint": "كل تعديل يدوي، الأحدث أولاً.",
+        "when": "التاريخ/الوقت",
+        "who": "المستخدم",
+        "rider": "السائق",
+        "day": "اليوم",
+        "original": "الأصلي (النظام)",
+        "adjusted": "المعدّل",
+        "reason": "السبب",
+        "empty": "لا تعديلات يدوية في هذا النطاق."
       },
       "ao": {
         "bannerTitle": "حضور الرواتب والطلبات.",
@@ -7551,18 +7603,29 @@
         "clientSaved": "تم حفظ إعدادات العميل",
         "rulesSaved": "تم حفظ {count} قاعدة",
         "rulesReset": "تمت استعادة قواعد البداية",
+        "nav": {
+          "zones": "المناطق والكفاءة"
+        },
+        "clientRulesTag": "قواعد العميل",
+        "autosave": {
+          "saving": "جارٍ الحفظ…",
+          "saved": "تم الحفظ"
+        },
         "addClient": {
           "open": "إضافة عميل",
           "name": "عميل جديد",
           "namePlaceholder": "اسم العميل",
-          "copyFrom": "قواعد البداية",
-          "copyNone": "افتراضيات إجراءات العمل",
-          "save": "إضافة عميل",
+          "copyFrom": "البداية من",
+          "copyNone": "فارغ / افتراضيات إجراءات العمل",
+          "copyOf": "نسخة من {name}",
+          "save": "إنشاء",
+          "cancel": "إلغاء",
           "saved": "تمت إضافة {name}",
           "nameRequired": "أعط العميل اسماً."
         },
         "criteria": {
           "title": "معايير العميل",
+          "name": "اسم العميل",
           "save": "حفظ العميل",
           "usesZone": "فئة المنطقة",
           "usesOrders": "الطلبات",
@@ -7571,7 +7634,7 @@
           "halfDayHours": "ساعات نصف اليوم",
           "reducedHours": "ساعات اليوم المخفّض",
           "requiredHoursPerDay": "الساعات المطلوبة / يوم",
-          "defaultOffDays": "أيام الراحة الافتراضية",
+          "defaultOffDays": "راحة / 30",
           "goodThreshold": "منطقة جيدة ≥ %",
           "averageThreshold": "منطقة متوسطة ≥ %",
           "defaultResult": "عندما لا تنطبق أي قاعدة",
@@ -7595,7 +7658,29 @@
           "save": "حفظ القواعد",
           "reset": "استعادة قواعد البداية",
           "empty": "لا قواعد لهذا الشهر بعد. أضف قاعدة أو استعد قواعد البداية.",
-          "zonePlaceholder": "good, average"
+          "zonePlaceholder": "good, average",
+          "colZoneCategory": "فئة المنطقة",
+          "colZone": "المنطقة",
+          "colHours": "ساعات العمل",
+          "colOrders": "نطاق الطلبات",
+          "colThen": "إذن اليوم هو",
+          "colReadsAs": "تُقرأ كـ",
+          "defaultRow": "إذا لم تنطبق أي قاعدة، اليوم هو"
+        },
+        "zoneCat": {
+          "any": "أي",
+          "good": "جيد",
+          "average": "متوسط",
+          "low": "منخفض",
+          "good_or_average": "جيد أو متوسط"
+        },
+        "delete": {
+          "open": "حذف العميل",
+          "title": "حذف العميل",
+          "warning": "سيُحذف العميل وقواعده. السائقون المعيّنون يبقون معيّنين.",
+          "deleted": "تم حذف {name}",
+          "hasRiders": "انقل السائقين أو ألغِ تعيينهم قبل حذف هذا العميل.",
+          "system": "لا يمكن حذف عملاء النظام."
         },
         "field": {
           "zone_category": "فئة المنطقة",
@@ -7626,6 +7711,7 @@
         "simulator": {
           "title": "تجربة القواعد",
           "hint": "لا شيء يُحفظ هنا. يجيب عمّا ستضيفه القواعد أعلاه ليوم واحد.",
+          "zone": "المنطقة",
           "zoneCategory": "فئة المنطقة",
           "orders": "الطلبات",
           "hours": "الساعات المسجلة",
@@ -7633,7 +7719,8 @@
           "decidedByDefault": "لم تنطبق أي قاعدة — يُطبق افتراضي العميل.",
           "decidedByLegacy": "لا قواعد لهذا العميل في الشهر، فيُطبق التصنيف القديم.",
           "outcome": "المعتمد {status} · {hours} ساعة",
-          "nothingSaved": "لا يُحفظ أي شيء من التجربة."
+          "nothingSaved": "لا يُحفظ أي شيء من التجربة.",
+          "rulePill": "القاعدة {n}، {hours} ساعة"
         },
         "zones": {
           "title": "المناطق والكفاءة",
@@ -7644,16 +7731,30 @@
           "zone": "المنطقة",
           "orders": "الطلبات",
           "riderDays": "أيام السائقين",
+          "riders": "السائقون",
+          "monthOrders": "طلبات الشهر",
           "dpd": "طلبات/يوم",
           "targetDpd": "هدف طلبات/يوم",
           "dpdUsed": "الرقم المستخدم",
           "efficiency": "الكفاءة",
+          "efficiencyAuto": "الكفاءة (تلقائي)",
+          "efficiencyUsed": "الكفاءة المستخدمة",
           "category": "الفئة",
+          "categoryAuto": "الفئة التلقائية",
+          "manualOverride": "تجاوز يدوي",
+          "finalCategory": "الفئة النهائية",
           "auto": "تلقائي",
+          "autoEq": "تلقائي = {value}",
           "save": "استخدام",
           "saved": "تم حفظ مقياس المنطقة",
           "usedPlaceholder": "تلقائي",
-          "manual": "{category} (يدوي)"
+          "manual": "{category} (يدوي)",
+          "editedTag": "معدّل",
+          "manualTag": "يدوي",
+          "noZone": "(بدون منطقة)",
+          "goodThreshold": "جيد ≥ %",
+          "averageThreshold": "متوسط ≥ %",
+          "monthNote": "الأرقام تخص الشهر المكتمل السابق، وليس {month}."
         },
         "audit": {
           "title": "سجل التغييرات",
@@ -7663,6 +7764,7 @@
           "client": "العميل",
           "action": "الإجراء",
           "detail": "التفاصيل",
+          "change": "التغيير",
           "empty": "لا تغييرات مسجلة بعد.",
           "action_create": "إنشاء عميل",
           "action_update": "تحديث",
@@ -7685,6 +7787,9 @@
           "not_authorized": "لا تملك صلاحية تغيير قواعد الرواتب.",
           "unknown_zone": "هذه المنطقة لم تعد موجودة.",
           "invalid_hours": "يجب أن تكون الساعات بين 0 و 24.",
+          "client_has_riders": "لا يزال لهذا العميل سائقون معيّنون.",
+          "system_client": "لا يمكن حذف عملاء النظام.",
+          "invalid_thresholds": "عتبة الجيد يجب أن تكون على الأقل عتبة المتوسط.",
           "unknown": "حدث خطأ. لم يتم حفظ التغيير."
         }
       }

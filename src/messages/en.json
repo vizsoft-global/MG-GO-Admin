@@ -7312,11 +7312,15 @@
         "thisMonth": "This month",
         "lastMonth": "Last month",
         "custom": "Custom",
-        "customTitle": "Select a payroll month",
+        "customTitle": "Select a payroll range",
         "customMonth": "Month",
         "customApply": "Apply",
         "customCancel": "Cancel",
-        "customErr": "Pick this month or one of the previous two."
+        "customErr": "Pick this month or one of the previous two.",
+        "from": "From",
+        "to": "To",
+        "daysCount": "{count} days",
+        "windowHint": "Inside {from} – {to}."
       },
       "clearFilters": "Clear filters",
       "export": "Export to Excel",
@@ -7379,6 +7383,20 @@
       "requestsBannerTitle": "Riders raise requests from the driver app; each one is reviewed by the responsible department.",
       "requestsBannerBody": "Approved Leave / Sick / Accident requests justify the matching day statuses in the Payroll report.",
       "tableFoot": "Showing {shown} of {total} riders · {month} · Fixed Days = {days} − 2 = {fixed}",
+      "tableFootRange": "Showing {shown} of {total} riders · {range}",
+      "slicerCardTag": "NEW · SLICERS",
+      "slicerCardTitle": "Partner view and zone category",
+      "summaryStrip": "Partner · {riders} riders · Good {good} · Avg {average} · Low {low} · Not set {notSet} · rules use {uses} ({rules} rules)",
+      "uses": {
+        "none": "no criteria",
+        "zone": "zone",
+        "orders": "orders",
+        "hours": "hours"
+      },
+      "columnFiltersPrefix": "Column filters:",
+      "sortAsc": "smallest → largest",
+      "sortDesc": "largest → smallest",
+      "clearColumnFilters": "Clear column filters",
       "queueTitle": "Request Queue",
       "queueSub": "{count} request(s) · {month}",
       "kpi": {
@@ -7455,7 +7473,11 @@
         "absLo": "Absent LO",
         "custom": "Custom days",
         "adjusted": "Adjusted",
-        "finalOrders": "Final orders"
+        "finalOrders": "Final orders",
+        "zoneOrders": "LM zone orders",
+        "zoneDpd": "LM zone DPD",
+        "zoneEff": "LM zone eff%",
+        "vehicleKind": "Vehicle"
       },
       "riderStatus": {
         "active": "Active",
@@ -7552,15 +7574,18 @@
       "tabAttendanceOrders": "Attendance & Orders",
       "tabSettings": "Settings",
       "cellHint": "Drag across cells to select · drag the corner handle to fill · Ctrl+C, Ctrl+V, Ctrl+D",
-      "sortedBy": "Sorted",
+      "sortedBy": "Sorted: {column} {dir}",
       "zoneCategory": {
         "good": "Good",
         "average": "Average",
         "low": "Low",
-        "not_set": "Not set"
+        "not_set": "Not set",
+        "all": "All",
+        "viewLabel": "Zone category"
       },
       "partner": {
-        "all": "All partners"
+        "all": "All partners",
+        "viewLabel": "Partner view"
       },
       "columnFilter": {
         "title": "Filter {column}",
@@ -7605,6 +7630,21 @@
         "pasteFailed": "The pasted block did not match the selected cells.",
         "someSkipped": "{count} cells were skipped.",
         "applied": "Adjusted {count} day cells",
+        "patternNote": "Pattern copied from the source cells",
+        "willChange": "{change} will change, {same} already the same",
+        "automatic": "Automatic result",
+        "fillTitle": "Fill · {count} cells",
+        "pasteTitle": "Paste · {count} cells",
+        "multiTitle": "Adjust · {count} cells",
+        "ruleN": "Rule {n}",
+        "ordersN": "{n} orders",
+        "hoursN": "{n} h",
+        "copy": "Copy",
+        "paste": "Paste",
+        "fillDown": "Fill down",
+        "clearSelection": "Clear",
+        "selectionBar": "{cells} cells selected · {riders} riders × {days} days",
+        "adjustedCells": "{count} hand-adjusted cells",
         "errors": {
           "reason_required": "A reason is required.",
           "no_cells": "Select at least one day.",
@@ -7612,6 +7652,18 @@
           "not_authorized": "You do not have permission to adjust payroll days.",
           "unknown": "Something went wrong. The adjustment was not saved."
         }
+      },
+      "manualChanges": {
+        "title": "Manual changes record",
+        "hint": "Every hand adjustment, newest first.",
+        "when": "Date/time",
+        "who": "User",
+        "rider": "Rider",
+        "day": "Day",
+        "original": "Original (system)",
+        "adjusted": "Adjusted",
+        "reason": "Reason",
+        "empty": "No manual changes in this range."
       },
       "ao": {
         "bannerTitle": "Payroll attendance and orders.",
@@ -7629,18 +7681,29 @@
         "clientSaved": "Client settings saved",
         "rulesSaved": "{count} rules saved",
         "rulesReset": "SOP starting rules restored",
+        "nav": {
+          "zones": "Zones & efficiency"
+        },
+        "clientRulesTag": "Client rules",
+        "autosave": {
+          "saving": "Saving…",
+          "saved": "Saved"
+        },
         "addClient": {
           "open": "Add client",
           "name": "New client",
           "namePlaceholder": "Client name",
-          "copyFrom": "Starting rules",
-          "copyNone": "SOP defaults",
-          "save": "Add client",
+          "copyFrom": "Start from",
+          "copyNone": "Blank / SOP defaults",
+          "copyOf": "Copy of {name}",
+          "save": "Create",
+          "cancel": "Cancel",
           "saved": "{name} added",
           "nameRequired": "Give the client a name."
         },
         "criteria": {
           "title": "Client criteria",
+          "name": "Client name",
           "save": "Save client",
           "usesZone": "Zone band",
           "usesOrders": "Orders",
@@ -7649,7 +7712,7 @@
           "halfDayHours": "Half day hours",
           "reducedHours": "Reduced day hours",
           "requiredHoursPerDay": "Required hours / day",
-          "defaultOffDays": "Default OFF days",
+          "defaultOffDays": "Off / 30",
           "goodThreshold": "Good zone ≥ %",
           "averageThreshold": "Average zone ≥ %",
           "defaultResult": "When no rule matches",
@@ -7673,7 +7736,29 @@
           "save": "Save rules",
           "reset": "Restore SOP starting rules",
           "empty": "No rules for this month yet. Add one, or restore the SOP starting rules.",
-          "zonePlaceholder": "good, average"
+          "zonePlaceholder": "good, average",
+          "colZoneCategory": "Zone category",
+          "colZone": "Zone",
+          "colHours": "Worked hours",
+          "colOrders": "Orders range",
+          "colThen": "Then the day is",
+          "colReadsAs": "Reads as",
+          "defaultRow": "If no rule matches, the day is"
+        },
+        "zoneCat": {
+          "any": "Any",
+          "good": "Good",
+          "average": "Average",
+          "low": "Low",
+          "good_or_average": "Good or Average"
+        },
+        "delete": {
+          "open": "Delete client",
+          "title": "Delete client",
+          "warning": "This removes the client and its rules. Riders assigned to it stay assigned.",
+          "deleted": "{name} deleted",
+          "hasRiders": "Move or unassign riders before deleting this client.",
+          "system": "System clients cannot be deleted."
         },
         "field": {
           "zone_category": "Zone band",
@@ -7704,6 +7789,7 @@
         "simulator": {
           "title": "Try the rules",
           "hint": "Nothing here is saved. It answers what the rules above would credit for a single day.",
+          "zone": "Zone",
           "zoneCategory": "Zone band",
           "orders": "Orders",
           "hours": "Logged hours",
@@ -7711,7 +7797,8 @@
           "decidedByDefault": "No rule matched — the client default applies.",
           "decidedByLegacy": "This client has no rules for the month, so the legacy classification applies.",
           "outcome": "Credited {status} · {hours} h",
-          "nothingSaved": "Nothing is saved from the simulator."
+          "nothingSaved": "Nothing is saved from the simulator.",
+          "rulePill": "Rule {n}, {hours} h"
         },
         "zones": {
           "title": "Zones & efficiency",
@@ -7722,16 +7809,30 @@
           "zone": "Zone",
           "orders": "Orders",
           "riderDays": "Rider-days",
+          "riders": "Riders",
+          "monthOrders": "Month orders",
           "dpd": "DPD",
           "targetDpd": "Target DPD",
           "dpdUsed": "DPD used",
           "efficiency": "Efficiency",
+          "efficiencyAuto": "Efficiency (auto)",
+          "efficiencyUsed": "Efficiency used",
           "category": "Band",
+          "categoryAuto": "Automatic category",
+          "manualOverride": "Manual override",
+          "finalCategory": "Final category",
           "auto": "Auto",
+          "autoEq": "auto = {value}",
           "save": "Use",
           "saved": "Zone metric saved",
           "usedPlaceholder": "auto",
-          "manual": "{category} (manual)"
+          "manual": "{category} (manual)",
+          "editedTag": "Edited",
+          "manualTag": "Manual",
+          "noZone": "(no zone)",
+          "goodThreshold": "Good ≥ %",
+          "averageThreshold": "Average ≥ %",
+          "monthNote": "Figures belong to the previous completed month, not {month}."
         },
         "audit": {
           "title": "Change log",
@@ -7741,6 +7842,7 @@
           "client": "Client",
           "action": "Action",
           "detail": "Detail",
+          "change": "Change",
           "empty": "No changes recorded yet.",
           "action_create": "Client created",
           "action_update": "Updated",
@@ -7763,6 +7865,9 @@
           "not_authorized": "You do not have permission to change payroll rules.",
           "unknown_zone": "That zone no longer exists.",
           "invalid_hours": "Hours must be between 0 and 24.",
+          "client_has_riders": "This client still has riders assigned.",
+          "system_client": "System clients cannot be deleted.",
+          "invalid_thresholds": "Good must be at least Average.",
           "unknown": "Something went wrong. The change was not saved."
         }
       }

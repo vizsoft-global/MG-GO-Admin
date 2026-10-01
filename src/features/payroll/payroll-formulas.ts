@@ -79,6 +79,10 @@ export type PayrollMonthMeta = {
   fixedDays: number;
 };
 
+export type PayrollRange = { from: string; to: string };
+
+export type PayrollPeriod = PayrollMonthMeta & PayrollRange & { dates: string[] };
+
 export type PayrollCoverKind = "accident" | "sick" | "off";
 
 export const PAYROLL_STATUS_FILTERS = [
@@ -100,19 +104,29 @@ export type PayrollStatusFilter = (typeof PAYROLL_STATUS_FILTERS)[number];
 /** Chip dot colours, one per SOP day type. Selected state is the emerald
  *  ToggleChip stack, so these are only the legend's identity swatch. */
 export const PAYROLL_STATUS_CHIP: Record<PayrollStatusFilter, { hex: string }> = {
-  work: { hex: "#8d8d97" },
-  reduced3: { hex: "#7dd3fc" },
-  half: { hex: "#60a5fa" },
-  actual: { hex: "#a78bfa" },
-  off: { hex: "#33c777" },
-  sick: { hex: "#f0a83c" },
-  accident: { hex: "#9acd32" },
-  vehicle: { hex: "#22d3ee" },
-  absent: { hex: "#ef5b5b" },
-  abs_lh: { hex: "#fb923c" },
-  abs_lo: { hex: "#f472b6" },
-  custom: { hex: "#94a3b8" },
+  work: { hex: "#9aa4ad" },
+  reduced3: { hex: "#fbbf24" },
+  half: { hex: "#22d3ee" },
+  actual: { hex: "#86efac" },
+  off: { hex: "#34d399" },
+  sick: { hex: "#f59e0b" },
+  accident: { hex: "#a3e635" },
+  vehicle: { hex: "#a5b4fc" },
+  absent: { hex: "#ef4444" },
+  abs_lh: { hex: "#f472b6" },
+  abs_lo: { hex: "#fda4af" },
+  custom: { hex: "#c084fc" },
 };
+
+export const NEW_PAYROLL_STATUS_FILTERS: readonly PayrollStatusFilter[] = [
+  "reduced3",
+  "half",
+  "actual",
+  "vehicle",
+  "abs_lh",
+  "abs_lo",
+  "custom",
+];
 
 export function riderHasDayStatus(
   days: readonly DayStatus[],
@@ -133,6 +147,25 @@ export function countRidersByStatus(
     }
   }
   return counts;
+}
+
+/** Rider-days: every matching day-cell, not unique riders. */
+export function countDaysByStatus(
+  rows: ReadonlyArray<{ days: readonly DayStatus[] }>,
+): Record<PayrollStatusFilter, number> {
+  const counts = Object.fromEntries(
+    PAYROLL_STATUS_FILTERS.map((status) => [status, 0]),
+  ) as Record<PayrollStatusFilter, number>;
+  for (const row of rows) {
+    for (const status of row.days) {
+      if (status in counts) counts[status as PayrollStatusFilter] += 1;
+    }
+  }
+  return counts;
+}
+
+export function countedRiderDays(rows: ReadonlyArray<{ days: readonly DayStatus[] }>): number {
+  return rows.reduce((sum, row) => sum + row.days.filter((status) => status !== "blank").length, 0);
 }
 
 export function filterRidersByStatus<T extends { days: readonly DayStatus[] }>(
@@ -233,6 +266,20 @@ export function fixedDaysFor(monthDays: number): number {
 export function requiredHoursFor(monthDays: number, offStructureDays: number): number {
   if (!Number.isFinite(monthDays) || !Number.isFinite(offStructureDays)) return 0;
   return Math.max(0, (monthDays - offStructureDays) * PAYROLL_DAY_HOURS);
+}
+
+export function prorateOffDays(offDays: number, days: number): number {
+  if (!Number.isFinite(offDays) || !Number.isFinite(days) || days <= 0) return 0;
+  return Math.round((offDays * days) / 30);
+}
+
+export function requiredHoursForRange(
+  days: number,
+  contractedOffDays: number,
+  reqPerDay = PAYROLL_DAY_HOURS,
+): number {
+  const off = prorateOffDays(contractedOffDays, days);
+  return Math.max(0, (days - off) * reqPerDay);
 }
 
 export function offStructureHoursFor(offStructureDays: number): number {
@@ -349,6 +396,122 @@ export function dayLabel(monthKey: string, dayNum: number, locale = "en"): strin
 
 export function isoDateInMonth(monthKey: string, dayNum: number): string {
   return `${monthKey}-${String(dayNum).padStart(2, "0")}`;
+}
+
+const MONTH_ABBR_UPPER = [
+  "JAN",
+  "FEB",
+  "MAR",
+  "APR",
+  "MAY",
+  "JUN",
+  "JUL",
+  "AUG",
+  "SEP",
+  "OCT",
+  "NOV",
+  "DEC",
+] as const;
+
+function parseYmd(iso: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return null;
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+}
+
+export function isoDayLabel(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return iso;
+  return `${Number(match[3])}-${MONTH_ABBR_UPPER[Number(match[2]) - 1]}`;
+}
+
+export function rangeDates(from: string, to: string): string[] {
+  const start = parseYmd(from);
+  const end = parseYmd(to);
+  if (!start || !end || start > end) return [];
+  const dates: string[] = [];
+  for (const cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    dates.push(cursor.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+export function rangeDays(from: string, to: string): number {
+  return rangeDates(from, to).length;
+}
+
+export function monthKeysTouched(from: string, to: string): string[] {
+  return [...new Set(rangeDates(from, to).map((date) => date.slice(0, 7)))];
+}
+
+export function payrollAccessibleRange(todayYmd: string): PayrollRange {
+  const months = payrollMonths(todayYmd);
+  const newest = months[0]!;
+  const oldest = months[months.length - 1]!;
+  return {
+    from: `${oldest.key}-01`,
+    to: `${newest.key}-${String(newest.days).padStart(2, "0")}`,
+  };
+}
+
+export function clampPayrollRange(from: string, to: string, todayYmd: string): PayrollRange {
+  const win = payrollAccessibleRange(todayYmd);
+  let a = from;
+  let b = to;
+  if (a > b) [a, b] = [b, a];
+  if (a < win.from) a = win.from;
+  if (b > win.to) b = win.to;
+  if (a > b) return win;
+  return { from: a, to: b };
+}
+
+export function periodFromMonthMeta(month: PayrollMonthMeta): PayrollPeriod {
+  const from = `${month.key}-01`;
+  const to = `${month.key}-${String(month.days).padStart(2, "0")}`;
+  return { ...month, from, to, dates: rangeDates(from, to) };
+}
+
+export function periodFromRange(
+  from: string,
+  to: string,
+  todayYmd: string,
+  locale = "en",
+): PayrollPeriod {
+  const clamped = clampPayrollRange(from, to, todayYmd);
+  const dates = rangeDates(clamped.from, clamped.to);
+  const startKey = clamped.from.slice(0, 7);
+  const meta = monthMeta(startKey, locale) ?? assertPayrollMonth(startKey, todayYmd);
+  const endKey = clamped.to.slice(0, 7);
+  const fullMonth =
+    startKey === endKey &&
+    clamped.from.endsWith("-01") &&
+    clamped.to === `${startKey}-${String(meta.days).padStart(2, "0")}`;
+  if (fullMonth) return periodFromMonthMeta(meta);
+  return {
+    key: `${clamped.from}_${clamped.to}`,
+    year: meta.year,
+    month: meta.month,
+    days: dates.length,
+    label: `${isoDayLabel(clamped.from)} – ${isoDayLabel(clamped.to)}`,
+    fixedDays: dates.length - prorateOffDays(PAYROLL_DEFAULT_OFF_DAYS, dates.length),
+    from: clamped.from,
+    to: clamped.to,
+    dates,
+  };
+}
+
+export function payrollPeriodForPreset(
+  preset: PayrollRangePreset,
+  todayYmd: string,
+  custom: PayrollRange | null,
+  locale = "en",
+): PayrollPeriod {
+  if (preset === "custom" && custom) {
+    return periodFromRange(custom.from, custom.to, todayYmd, locale);
+  }
+  const months = payrollMonths(todayYmd, locale);
+  const meta = preset === "lastMonth" ? (months[1] ?? months[0]!) : months[0]!;
+  return periodFromMonthMeta(meta);
 }
 
 export function kuwaitMonthBounds(monthKey: string): { startIso: string; endExclusiveIso: string } {
@@ -880,6 +1043,41 @@ export function dayStatusLabel(status: DayStatus): string {
       return "Abs·LO";
     case "custom":
       return "CUS";
+    case "blank":
+      return "";
+    default: {
+      const _never: never = status;
+      return _never;
+    }
+  }
+}
+
+/** Grid cell token. Actual / custom show credited hours, never ACT / CUS. */
+export function dayGridLabel(status: DayStatus, hours: number): string {
+  switch (status) {
+    case "work":
+      return "12";
+    case "reduced3":
+      return "3h";
+    case "off":
+      return "OFF";
+    case "sick":
+      return "Sick";
+    case "accident":
+      return "Acc";
+    case "vehicle":
+      return "Veh";
+    case "absent":
+      return "Absent";
+    case "half":
+      return "Half";
+    case "actual":
+    case "custom":
+      return `${hours}h`;
+    case "abs_lh":
+      return "Abs·LH";
+    case "abs_lo":
+      return "Abs·LO";
     case "blank":
       return "";
     default: {

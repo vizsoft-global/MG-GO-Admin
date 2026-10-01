@@ -17,6 +17,8 @@ import {
   requestOverlapsMonth,
   payrollMonths,
   payrollTileFor,
+  periodFromMonthMeta,
+  prorateOffDays,
   requestCoversDate,
   requiredHoursFor,
   restaurantLabel,
@@ -26,6 +28,7 @@ import {
   type DayCoverFlags,
   type DayStatus,
   type PayrollMonthMeta,
+  type PayrollPeriod,
 } from "./payroll-formulas";
 import {
   evalDay,
@@ -304,6 +307,7 @@ export function parseZoneMetrics(raw: unknown): PayrollZoneMetricRow[] {
           categoryOverride === "low"
             ? (categoryOverride as "good" | "average" | "low")
             : null,
+        efficiencyOverride: nullableNum(o.efficiencyOverride),
         goodThreshold: num(o.goodThreshold, 110),
         averageThreshold: num(o.averageThreshold, 70),
         computedAt: o.computedAt ? String(o.computedAt) : null,
@@ -358,7 +362,7 @@ function dayInfoFrom(
   facts: DayFactsInput,
   ctx: { today: string; client: PayrollClientConfig | null; rules: PayrollRule[]; zoneName: string | null; zoneCategory: ZoneCategory },
 ): { status: DayStatus; info: PayrollDayInfo; unjustified: boolean } {
-  const outcome = evalDay({
+  const base = {
     date,
     today: ctx.today,
     client: ctx.client,
@@ -370,14 +374,24 @@ function dayInfoFrom(
     cover: facts.cover,
     coverApproved: facts.coverApproved,
     hasCheckIn: facts.hasCheckIn,
+  };
+  const outcome = evalDay({
+    ...base,
     adjustment: facts.adjustment
       ? { status: facts.adjustment.status, hours: facts.adjustment.hours }
       : null,
   });
+  const auto = outcome.adjusted ? evalDay({ ...base, adjustment: null }) : outcome;
   return {
     status: outcome.status,
     unjustified: outcome.unjustified,
     info: {
+      date,
+      autoStatus: auto.status,
+      autoHours: auto.hours,
+      autoRuleIndex: auto.ruleIndex ?? null,
+      autoRuleLabel: auto.ruleLabel,
+      autoSource: auto.source,
       orders: facts.orders,
       loggedHours: Math.round(facts.loggedHours * 100) / 100,
       source: outcome.source,
@@ -657,7 +671,7 @@ export function assemblePayrollSnapshot(input: {
 
   return {
     today: input.today,
-    month,
+    month: periodFromMonthMeta(month),
     months,
     options,
     riders,
@@ -706,6 +720,7 @@ function riderRow(input: {
     zoneCategory: input.zoneCategory,
     zoneEfficiency: input.metric?.efficiency ?? null,
     zoneDpd: input.metric?.dpd ?? null,
+    zoneOrders: input.metric ? input.metric.orders : null,
     partner: partnerLabel(r.projectKey),
     projectKey: r.projectKey,
     nationality: r.nationality ? countryLabel(r.nationality) : "—",
@@ -733,12 +748,178 @@ function riderRow(input: {
     adjustedCells: input.dayInfo.filter((d) => d.adjusted).length,
     fixedDays: input.days.length - PAYROLL_DEFAULT_OFF_DAYS,
     offStructureDays: input.offStructureDays,
+    offStructureContracted: input.offStructureDays,
     offStructureSource: input.offStructureSource,
     offStructureHours: offStructureHoursFor(input.offStructureDays),
+    requiredHoursPerDay: input.requiredHoursPerDay,
     requiredHours: input.requiredHours,
     actualHours: input.actualHours,
     efficiency: efficiencyPct(input.actualHours, input.requiredHours),
-    unjustified: input.unjustified,
+    // SOP: a rider is unjustified when any day is one of the three Absent kinds.
+    unjustified: count("absent") + count("abs_lh") + count("abs_lo"),
+  };
+}
+
+/**
+ * Re-derive every per-day total of a row from a new day list. Used when a range
+ * clips or stitches months, so the totals always describe exactly the columns
+ * on screen.
+ */
+export function recountRiderRow(
+  base: PayrollRiderRow,
+  days: readonly DayStatus[],
+  dayInfo: readonly PayrollDayInfo[],
+  offStructureDays: number,
+): PayrollRiderRow {
+  const count = (status: DayStatus) => days.filter((s) => s === status).length;
+  const actualHours =
+    Math.round(dayInfo.reduce((sum, d) => sum + d.loggedHours, 0) * 100) / 100;
+  const totalHours =
+    Math.round(dayInfo.reduce((sum, d) => sum + d.creditedHours, 0) * 100) / 100;
+  const requiredHours = Math.max(0, (days.length - offStructureDays) * base.requiredHoursPerDay);
+  return {
+    ...base,
+    days: [...days],
+    dayInfo: [...dayInfo],
+    workDays: count("work"),
+    totalHours,
+    offDays: count("off"),
+    sickDays: count("sick"),
+    accidentDays: count("accident"),
+    absentDays: count("absent"),
+    reducedDays: count("reduced3"),
+    halfDays: count("half"),
+    actualDays: count("actual"),
+    vehicleDays: count("vehicle"),
+    absLhDays: count("abs_lh"),
+    absLoDays: count("abs_lo"),
+    customDays: count("custom"),
+    finalOrders: dayInfo.reduce((sum, d) => sum + d.orders, 0),
+    adjustedCells: dayInfo.filter((d) => d.adjusted).length,
+    fixedDays: days.length - offStructureDays,
+    offStructureDays,
+    offStructureContracted: base.offStructureContracted ?? offStructureDays,
+    offStructureHours: offStructureHoursFor(offStructureDays),
+    requiredHours,
+    actualHours,
+    efficiency: efficiencyPct(actualHours, requiredHours),
+    unjustified: count("absent") + count("abs_lh") + count("abs_lo"),
+  };
+}
+
+function blankDayInfo(date: string): PayrollDayInfo {
+  return {
+    date,
+    orders: 0,
+    loggedHours: 0,
+    source: "future",
+    ruleLabel: null,
+    adjusted: false,
+    adjustmentStatus: null,
+    adjustmentHours: null,
+    adjustmentReason: null,
+    creditedHours: 0,
+    autoStatus: "blank",
+    autoHours: 0,
+    autoRuleIndex: null,
+    autoRuleLabel: null,
+    autoSource: "future",
+  };
+}
+
+/**
+ * Join one snapshot per calendar month into the selected From/To range.
+ *
+ * Each month was decided by its own rules, so days are only clipped and
+ * concatenated, never re-evaluated. Identity, zone band and the rule config come
+ * from the newest month, because that is the one an operator is acting on.
+ * Contracted OFF days are prorated per month (`off × clipped days ÷ 30`, as the
+ * SOP reference does) and summed before rounding.
+ */
+export function stitchPayrollRange(
+  snapshots: readonly PayrollSnapshot[],
+  period: PayrollPeriod,
+): PayrollSnapshot {
+  const ordered = [...snapshots].sort((a, b) => a.month.key.localeCompare(b.month.key));
+  const latest = ordered[ordered.length - 1];
+  if (!latest) throw new Error("no_snapshots");
+  const inRange = (date: string) => date >= period.from && date <= period.to;
+
+  type Acc = {
+    base: PayrollRiderRow;
+    byDate: Map<string, [DayStatus, PayrollDayInfo]>;
+    offWeighted: number;
+  };
+  const acc = new Map<string, Acc>();
+  for (const snap of ordered) {
+    const monthKey = snap.month.from?.slice(0, 7) ?? snap.month.key.slice(0, 7);
+    const clippedInMonth = period.dates.filter((d) => d.startsWith(`${monthKey}-`)).length;
+    for (const row of snap.riders) {
+      const entry: Acc = acc.get(row.driverId) ?? { base: row, byDate: new Map(), offWeighted: 0 };
+      entry.base = row;
+      row.dayInfo.forEach((info, i) => {
+        if (inRange(info.date)) entry.byDate.set(info.date, [row.days[i] ?? "blank", info]);
+      });
+      const contracted = row.offStructureContracted ?? row.offStructureDays;
+      entry.offWeighted += (contracted * clippedInMonth) / 30;
+      acc.set(row.driverId, entry);
+    }
+  }
+
+  const riders = [...acc.values()]
+    .map(({ base, byDate, offWeighted }) => {
+      const days: DayStatus[] = [];
+      const info: PayrollDayInfo[] = [];
+      for (const date of period.dates) {
+        const cell = byDate.get(date);
+        days.push(cell ? cell[0] : "blank");
+        info.push(cell ? cell[1] : blankDayInfo(date));
+      }
+      const row = recountRiderRow(base, days, info, Math.round(offWeighted));
+      // The legacy path's row keeps its unjustified-cover count on top of absents.
+      return row;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const requests = new Map<string, PayrollRequestRow>();
+  for (const snap of ordered) {
+    for (const req of snap.requests) {
+      if (req.day && inRange(req.day)) requests.set(req.id, req);
+    }
+  }
+  const requestRows = [...requests.values()];
+  const options = mergeOptions(ordered.map((s) => s.options));
+
+  return {
+    ...latest,
+    month: period,
+    options,
+    riders,
+    requests: requestRows,
+    payrollKpis: computePayrollKpis(riders),
+    requestKpis: computeRequestKpis(requestRows),
+    workflow: workflowStats(requestRows, riders.length),
+    canManage: ordered.some((s) => s.canManage),
+  };
+}
+
+function mergeOptions(list: readonly PayrollOptions[]): PayrollOptions {
+  const zones = new Map<string, string>();
+  const restaurants = new Map<string, string>();
+  const nationalities = new Set<string>();
+  const sourceCompanies = new Set<string>();
+  for (const o of list) {
+    for (const z of o.zones) zones.set(z.id, z.name);
+    for (const r of o.restaurants) restaurants.set(r.id, r.name);
+    for (const n of o.nationalities) nationalities.add(n);
+    for (const c of o.sourceCompanies ?? []) sourceCompanies.add(c);
+  }
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+  return {
+    zones: [...zones].map(([id, name]) => ({ id, name })).sort(byName),
+    restaurants: [...restaurants].map(([id, name]) => ({ id, name })).sort(byName),
+    nationalities: [...nationalities].sort(),
+    sourceCompanies: [...sourceCompanies].sort(),
   };
 }
 
@@ -755,7 +936,7 @@ export function snapshotFromRpc(raw: RawPayrollRuleSnapshot): PayrollSnapshot {
   const zoneMetrics = parseZoneMetrics(raw.zoneMetrics);
   const today = raw.today;
   const monthKey = raw.month.key;
-  const month: PayrollMonthMeta = {
+  const monthMetaRaw: PayrollMonthMeta = {
     key: monthKey,
     year: num(raw.month.year),
     month: num(raw.month.month),
@@ -763,6 +944,7 @@ export function snapshotFromRpc(raw: RawPayrollRuleSnapshot): PayrollSnapshot {
     label: String(raw.month.label ?? monthKey),
     fixedDays: num(raw.month.fixedDays, num(raw.month.days, 30) - PAYROLL_DEFAULT_OFF_DAYS),
   };
+  const month = periodFromMonthMeta(monthMetaRaw);
   const months = (Array.isArray(raw.months) ? raw.months : []).map((m) => ({
     key: String(m.key),
     year: num(m.year),
@@ -916,6 +1098,7 @@ export function decoratePayrollSnapshot(snapshot: PayrollSnapshot): PayrollSnaps
         nationality: r.nationalityCode ? countryLabel(r.nationalityCode) : r.nationality,
         zoneCategory: r.zoneCategory ?? zoneCategoryFor(r.zoneEfficiency, 110, 70),
         offStructureDays,
+        offStructureContracted: r.offStructureContracted ?? offStructureDays,
         offStructureSource: r.offStructureSource ?? "default",
         offStructureHours: Number.isFinite(r.offStructureHours)
           ? r.offStructureHours
@@ -997,6 +1180,30 @@ export function cellsFromSelection(
     });
   }
   return { cells, rejected };
+}
+
+/**
+ * Excel paste: a smaller clipboard tiles across the selection. A single copied
+ * cell filling a 4×3 block is the case operators actually use.
+ */
+export function tilePasteOntoSelection(
+  matrix: readonly (readonly string[])[],
+  selectionRows: number,
+  selectionCols: number,
+): string[][] {
+  if (!matrix.length || selectionRows <= 0 || selectionCols <= 0) return [];
+  const height = matrix.length;
+  const width = Math.max(...matrix.map((row) => row.length), 0);
+  if (width === 0) return [];
+  const out: string[][] = [];
+  for (let r = 0; r < selectionRows; r += 1) {
+    const row: string[] = [];
+    for (let c = 0; c < selectionCols; c += 1) {
+      row.push(matrix[r % height]?.[c % width] ?? "");
+    }
+    out.push(row);
+  }
+  return out;
 }
 
 export { normaliseRuleKind };

@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import {
   Ban,
   Briefcase,
   CalendarOff,
   Clock,
+  Copy,
   Download,
+  Eraser,
   HeartPulse,
   Hourglass,
   PencilLine,
@@ -22,9 +24,11 @@ import { TABLE_HEAD_CLASS } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
 import {
-  countRidersByStatus,
-  dayLabel,
-  isoDateInMonth,
+  countDaysByStatus,
+  countedRiderDays,
+  dayGridLabel,
+  isoDayLabel,
+  NEW_PAYROLL_STATUS_FILTERS,
   PAYROLL_STATUS_CHIP,
   PAYROLL_STATUS_FILTERS,
   shareOfPayroll,
@@ -32,6 +36,7 @@ import {
   type PayrollStatusFilter,
 } from "./payroll-formulas";
 import { formatEfficiencyCell } from "./payroll-csv";
+import { PayrollNewTag } from "./payroll-chrome";
 import {
   activeFilterChips,
   columnFilterActive,
@@ -43,44 +48,43 @@ import {
   type ColumnSort,
 } from "./payroll-column-filter";
 import {
+  COMBINED_IDENTITY_COLUMNS,
   dayClipboardToken,
   dayColumnId,
   isNumericRiderColumn,
-  RIDER_IDENTITY_COLUMNS,
-  RIDER_TOTAL_COLUMNS,
+  PAYROLL_SUMMARY_COLUMNS,
   riderColumnValue,
+  type PayrollRiderColumn,
 } from "./payroll-rider-columns";
-import {
-  cellsFromSelection,
-  parseAdjustmentCellText,
-} from "./payroll-snapshot";
+import { cellsFromSelection, tilePasteOntoSelection } from "./payroll-snapshot";
 import type { PayrollAdjustmentCell, PayrollRiderRow } from "./payroll-types";
+
 export function dayClass(status: DayStatus): string {
   switch (status) {
     case "work":
       return "text-muted-foreground";
     case "reduced3":
-      return "bg-sky-100 text-sky-800";
+      return "bg-amber-100 text-amber-900";
     case "half":
-      return "bg-blue-100 text-blue-800";
+      return "bg-cyan-100 text-cyan-900";
     case "actual":
-      return "bg-violet-100 text-violet-800";
+      return "bg-emerald-100 text-emerald-800";
     case "off":
       return "bg-emerald-100 text-emerald-800";
     case "sick":
-      return "bg-amber-100 text-amber-800";
+      return "bg-orange-100 text-orange-800";
     case "accident":
       return "bg-lime-100 text-lime-800";
     case "vehicle":
-      return "bg-cyan-100 text-cyan-800";
+      return "bg-indigo-100 text-indigo-800";
     case "absent":
       return "bg-red-100 text-red-700";
     case "abs_lh":
-      return "bg-orange-100 text-orange-800";
+      return "bg-fuchsia-100 text-fuchsia-800";
     case "abs_lo":
-      return "bg-pink-100 text-pink-800";
+      return "bg-rose-100 text-rose-800 ring-1 ring-inset ring-rose-300";
     case "custom":
-      return "bg-slate-100 text-slate-700";
+      return "bg-purple-100 text-purple-800";
     case "blank":
       return "text-muted-foreground/40";
     default: {
@@ -109,20 +113,62 @@ export const PAYROLL_STATUS_ICONS = {
   custom: PencilLine,
 } as const;
 
-/** A rideable cell range, in visible-row and full-column indexes. */
 type CellRect = { r0: number; c0: number; r1: number; c1: number };
+
+export type PayrollAdjustRequest = {
+  cells: PayrollAdjustmentCell[];
+  riderCount: number;
+  dayCount: number;
+  mode: "click" | "select" | "fill" | "paste";
+  anchor: { top: number; left: number; width: number; height: number };
+  auto: {
+    status: DayStatus;
+    hours: number;
+    ruleIndex: number | null;
+    ruleLabel: string | null;
+  } | null;
+  context: {
+    riderName: string;
+    amId: string;
+    date: string;
+    zone: string;
+    zoneCategory: string;
+    orders: number;
+    hours: number;
+  } | null;
+  note?: string;
+};
 
 export type PayrollGridEditor = {
   canManage: boolean;
-  /** Opens the reason dialog for a batch of rider-days. */
-  onRequestAdjust: (cells: PayrollAdjustmentCell[]) => void;
-  /** A refused paste or an empty selection is worth saying out loud. */
+  onRequestAdjust: (request: PayrollAdjustRequest) => void;
   onNotice?: (message: string) => void;
 };
 
+function stickyClass(index: number, head = false): string | undefined {
+  const z = head ? "z-20" : "z-[2]";
+  if (index === 0) return `sticky start-0 ${z} min-w-16 w-16 bg-card`;
+  if (index === 1) return `sticky start-16 ${z} min-w-16 w-16 bg-card`;
+  if (index === 2) return `sticky start-32 ${z} min-w-[190px] w-[190px] bg-card`;
+  return undefined;
+}
+
+function newHeadClass(isNew?: boolean): string | undefined {
+  if (!isNew) return undefined;
+  return "border-t-2 border-amber-400 bg-amber-50/70";
+}
+
+function normalizeRect(rect: CellRect): { top: number; bottom: number; left: number; right: number } {
+  return {
+    top: Math.min(rect.r0, rect.r1),
+    bottom: Math.max(rect.r0, rect.r1),
+    left: Math.min(rect.c0, rect.c1),
+    right: Math.max(rect.c0, rect.c1),
+  };
+}
+
 export function PayrollDayGrid({
-  monthKey,
-  days,
+  dates,
   rows,
   footer,
   exportLabel,
@@ -130,8 +176,7 @@ export function PayrollDayGrid({
   empty,
   editor,
 }: {
-  monthKey: string;
-  days: number;
+  dates: readonly string[];
   rows: readonly PayrollRiderRow[];
   footer: string;
   exportLabel: string;
@@ -140,32 +185,30 @@ export function PayrollDayGrid({
   editor?: PayrollGridEditor;
 }) {
   const t = useTranslations("pages.payroll");
-  const locale = useLocale();
   const parentRef = useRef<HTMLDivElement>(null);
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
   const [rect, setRect] = useState<CellRect | null>(null);
+  const [fillPreview, setFillPreview] = useState<CellRect | null>(null);
+  const lastAnchor = useRef<DOMRect | null>(null);
 
   const editable = Boolean(editor?.canManage);
+  const identity = COMBINED_IDENTITY_COLUMNS;
+  const days = dates.length;
+  const identityCount = identity.length;
 
-  /** The row→column value map a filter or a sort reads, built once per change. */
   const valuesByRow = useMemo(() => {
     const map = new Map<string, Record<string, string | number | null>>();
     for (const row of rows) {
       const values: Record<string, string | number | null> = {};
-      for (const column of RIDER_IDENTITY_COLUMNS) {
-        values[column.id] = riderColumnValue(row, column.id);
-      }
-      for (const column of RIDER_TOTAL_COLUMNS) {
-        values[column.id] = riderColumnValue(row, column.id);
-      }
+      for (const column of identity) values[column.id] = riderColumnValue(row, column.id);
       for (let i = 0; i < days; i += 1) {
         values[dayColumnId(i)] = riderColumnValue(row, dayColumnId(i));
       }
       map.set(row.driverId, values);
     }
     return map;
-  }, [rows, days]);
+  }, [rows, days, identity]);
 
   const visibleRows = useMemo(() => {
     const filtered = rows.filter((row) => {
@@ -176,10 +219,6 @@ export function PayrollDayGrid({
     return sortByColumn(filtered, sort, (row, columnId) => riderColumnValue(row, columnId));
   }, [rows, filters, sort, valuesByRow]);
 
-  const columns = useMemo(
-    () => [...RIDER_IDENTITY_COLUMNS, ...RIDER_TOTAL_COLUMNS],
-    [],
-  );
   const dayColumnValues = useMemo(() => {
     const map = new Map<string, string[]>();
     for (let i = 0; i < days; i += 1) {
@@ -194,26 +233,46 @@ export function PayrollDayGrid({
     return map;
   }, [rows, days]);
 
-  const colCount = columns.length + days;
-  const dayHeaders = Array.from({ length: days }, (_, i) => dayLabel(monthKey, i + 1, locale));
-  const identityCount = RIDER_IDENTITY_COLUMNS.length;
-
-  // ---- selection, fill and clipboard -----------------------------------
-
+  const colCount = identityCount + days;
   const drag = useRef<{ mode: "select" | "fill"; r0: number; c0: number; r1: number; c1: number } | null>(
     null,
   );
-  /**
-   * The live rectangle. `endDrag` runs from a document listener that must not
-   * read a stale closure or run a side effect inside a state updater, so the
-   * gesture reads it from here and the state copy only drives the painting.
-   */
   const rectRef = useRef<CellRect | null>(null);
 
-  const commitCells = useCallback(
+  const contextFor = useCallback(
+    (row: PayrollRiderRow | undefined, dayIndex: number) => {
+      if (!row) return null;
+      const info = row.dayInfo[dayIndex];
+      return {
+        riderName: row.name,
+        amId: row.amId,
+        date: dates[dayIndex] ?? "",
+        zone: row.zone,
+        zoneCategory: row.zoneCategory,
+        orders: info?.orders ?? 0,
+        hours: info?.loggedHours ?? 0,
+      };
+    },
+    [dates],
+  );
+
+  const autoFor = useCallback((row: PayrollRiderRow | undefined, dayIndex: number) => {
+    const info = row?.dayInfo[dayIndex];
+    if (!info) return null;
+    return {
+      status: info.autoStatus,
+      hours: info.autoHours,
+      ruleIndex: info.autoRuleIndex,
+      ruleLabel: info.autoRuleLabel,
+    };
+  }, []);
+
+  const openAdjust = useCallback(
     (
       inputs: ReadonlyArray<{ driverId: string; date: string; text: string; currentHours?: number }>,
+      mode: PayrollAdjustRequest["mode"],
       emptyMessage: string,
+      first?: { row: PayrollRiderRow; dayIndex: number },
     ) => {
       const { cells, rejected } = cellsFromSelection(
         inputs.map((cell) => ({
@@ -228,41 +287,79 @@ export function PayrollDayGrid({
         return;
       }
       if (rejected > 0) editor?.onNotice?.(t("adjust.someSkipped", { count: rejected }));
-      editor?.onRequestAdjust(cells);
+      const ridersTouched = new Set(cells.map((c) => c.driverId));
+      const datesTouched = new Set(cells.map((c) => c.date));
+      const anchor = lastAnchor.current ?? { top: 80, left: 80, width: 40, height: 28 };
+      editor?.onRequestAdjust({
+        cells,
+        riderCount: ridersTouched.size,
+        dayCount: datesTouched.size,
+        mode,
+        anchor,
+        auto: first ? autoFor(first.row, first.dayIndex) : null,
+        context: first ? contextFor(first.row, first.dayIndex) : null,
+        note: mode === "fill" || mode === "paste" ? t("adjust.patternNote") : undefined,
+      });
     },
-    [editor, t],
+    [autoFor, contextFor, editor, t],
   );
 
   const endDrag = useCallback(() => {
     const active = drag.current;
     drag.current = null;
     const current = rectRef.current;
-    if (!active || active.mode !== "fill" || !current) return;
-
-    // The fill handle repeats the source rectangle across the area dragged to,
-    // which is what Excel does and what makes a 12-day OFF run one gesture.
-    const width = active.c1 - active.c0 + 1;
-    const height = active.r1 - active.r0 + 1;
+    if (!active || !current) {
+      setFillPreview(null);
+      return;
+    }
+    if (active.mode === "fill") {
+      const width = active.c1 - active.c0 + 1;
+      const height = active.r1 - active.r0 + 1;
+      const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
+      let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
+      for (let r = Math.min(active.r0, current.r1); r <= Math.max(active.r1, current.r1); r += 1) {
+        for (let c = Math.min(active.c0, current.c1); c <= Math.max(active.c1, current.c1); c += 1) {
+          const sourceRow = visibleRows[active.r0 + ((r - active.r0) % height)];
+          const sourceDay = active.c0 + ((c - active.c0) % width) - identityCount;
+          const targetRow = visibleRows[r];
+          const targetDay = c - identityCount;
+          if (!sourceRow || !targetRow) continue;
+          if (sourceDay < 0 || sourceDay >= days || targetDay < 0 || targetDay >= days) continue;
+          if (r <= active.r1 && c <= active.c1) continue;
+          inputs.push({
+            driverId: targetRow.driverId,
+            date: dates[targetDay] ?? "",
+            text: dayClipboardToken(sourceRow, sourceDay),
+            currentHours: targetRow.dayInfo[targetDay]?.creditedHours ?? 0,
+          });
+          first ??= { row: targetRow, dayIndex: targetDay };
+        }
+      }
+      setFillPreview(null);
+      openAdjust(inputs, "fill", t("adjust.nothingFilled"), first);
+      return;
+    }
+    const moved = current.r0 !== current.r1 || current.c0 !== current.c1;
+    const bounds = normalizeRect(current);
     const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
-    for (let r = active.r0; r <= current.r1; r += 1) {
-      for (let c = active.c0; c <= current.c1; c += 1) {
-        if (r <= active.r1 && c <= active.c1) continue;
-        const sourceRow = visibleRows[active.r0 + ((r - active.r0) % height)];
-        const sourceDay = active.c0 + ((c - active.c0) % width) - identityCount;
-        const targetRow = visibleRows[r];
-        const targetDay = c - identityCount;
-        if (!sourceRow || !targetRow) continue;
-        if (sourceDay < 0 || sourceDay >= days || targetDay < 0 || targetDay >= days) continue;
+    let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
+    for (let r = bounds.top; r <= bounds.bottom; r += 1) {
+      const row = visibleRows[r];
+      if (!row) continue;
+      for (let c = bounds.left; c <= bounds.right; c += 1) {
+        const dayIndex = c - identityCount;
+        if (dayIndex < 0 || dayIndex >= days) continue;
         inputs.push({
-          driverId: targetRow.driverId,
-          date: isoDateInMonth(monthKey, targetDay + 1),
-          text: dayClipboardToken(sourceRow, sourceDay),
-          currentHours: targetRow.dayInfo[targetDay]?.creditedHours ?? 0,
+          driverId: row.driverId,
+          date: dates[dayIndex] ?? "",
+          text: dayClipboardToken(row, dayIndex),
+          currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
         });
+        first ??= { row, dayIndex };
       }
     }
-    commitCells(inputs, t("adjust.nothingFilled"));
-  }, [visibleRows, days, identityCount, monthKey, commitCells, t]);
+    openAdjust(inputs, moved ? "select" : "click", t("adjust.nothingSelected"), first);
+  }, [visibleRows, days, identityCount, dates, openAdjust, t]);
 
   useEffect(() => {
     rectRef.current = rect;
@@ -275,52 +372,48 @@ export function PayrollDayGrid({
     return () => document.removeEventListener("mouseup", onUp);
   }, [editable, endDrag]);
 
-  const selectedCells = useMemo(() => {
-    if (!rect) return [];
-    const cells: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
-    for (let r = rect.r0; r <= rect.r1; r += 1) {
+  const selectedMeta = useMemo(() => {
+    if (!rect) return null;
+    const bounds = normalizeRect(rect);
+    const riderIds = new Set<string>();
+    const dayIds = new Set<number>();
+    let count = 0;
+    for (let r = bounds.top; r <= bounds.bottom; r += 1) {
       const row = visibleRows[r];
       if (!row) continue;
-      for (let c = rect.c0; c <= rect.c1; c += 1) {
+      for (let c = bounds.left; c <= bounds.right; c += 1) {
         const dayIndex = c - identityCount;
         if (dayIndex < 0 || dayIndex >= days) continue;
-        cells.push({
-          driverId: row.driverId,
-          date: isoDateInMonth(monthKey, dayIndex + 1),
-          text: dayClipboardToken(row, dayIndex),
-          currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
-        });
+        riderIds.add(row.driverId);
+        dayIds.add(dayIndex);
+        count += 1;
       }
     }
-    return cells;
-  }, [rect, visibleRows, identityCount, days, monthKey]);
+    return { count, riders: riderIds.size, days: dayIds.size };
+  }, [rect, visibleRows, identityCount, days]);
 
-  const openSelection = useCallback(() => {
-    if (!editable || !selectedCells.length) return;
-    commitCells(selectedCells, t("adjust.nothingSelected"));
-  }, [editable, selectedCells, commitCells, t]);
-
-  const fillDown = useCallback(() => {
-    if (!rect || !editable) return;
-    const source = visibleRows[rect.r0];
-    if (!source) return;
-    const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
-    for (let r = rect.r0 + 1; r <= rect.r1; r += 1) {
+  const copy = useCallback(async () => {
+    const current = rectRef.current;
+    if (!current) return;
+    const bounds = normalizeRect(current);
+    const lines: string[] = [];
+    for (let r = bounds.top; r <= bounds.bottom; r += 1) {
       const row = visibleRows[r];
       if (!row) continue;
-      for (let c = rect.c0; c <= rect.c1; c += 1) {
+      const line: string[] = [];
+      for (let c = bounds.left; c <= bounds.right; c += 1) {
         const dayIndex = c - identityCount;
-        if (dayIndex < 0 || dayIndex >= days) continue;
-        inputs.push({
-          driverId: row.driverId,
-          date: isoDateInMonth(monthKey, dayIndex + 1),
-          text: dayClipboardToken(source, dayIndex),
-          currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
-        });
+        line.push(dayIndex >= 0 && dayIndex < days ? dayClipboardToken(row, dayIndex) : "");
       }
+      lines.push(line.join("\t"));
     }
-    commitCells(inputs, t("adjust.nothingSelected"));
-  }, [rect, editable, visibleRows, identityCount, days, monthKey, commitCells, t]);
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      editor?.onNotice?.(t("adjust.copied", { count: lines.length }));
+    } catch {
+      editor?.onNotice?.(t("adjust.pasteFailed"));
+    }
+  }, [visibleRows, identityCount, days, editor, t]);
 
   const paste = useCallback(async () => {
     const current = rectRef.current;
@@ -336,54 +429,64 @@ export function PayrollDayGrid({
         .split("\n")
         .filter((line) => line.trim() !== "")
         .map((line) => line.split("\t"));
+      const bounds = normalizeRect(current);
+      const selRows = bounds.bottom - bounds.top + 1;
+      const selCols = bounds.right - bounds.left + 1;
+      const tiled = tilePasteOntoSelection(matrix, selRows, selCols);
       const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
-      for (let r = 0; r < matrix.length; r += 1) {
-        const row = visibleRows[current.r0 + r];
+      let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
+      for (let r = 0; r < tiled.length; r += 1) {
+        const row = visibleRows[bounds.top + r];
         if (!row) break;
-        for (let c = 0; c < matrix[r].length; c += 1) {
-          const dayIndex = current.c0 - identityCount + c;
+        for (let c = 0; c < tiled[r].length; c += 1) {
+          const dayIndex = bounds.left - identityCount + c;
           if (dayIndex < 0 || dayIndex >= days) continue;
           inputs.push({
             driverId: row.driverId,
-            date: isoDateInMonth(monthKey, dayIndex + 1),
-            text: matrix[r][c],
+            date: dates[dayIndex] ?? "",
+            text: tiled[r][c],
             currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
           });
+          first ??= { row, dayIndex };
         }
       }
-      commitCells(inputs, t("adjust.nothingPasted"));
+      openAdjust(inputs, "paste", t("adjust.nothingPasted"), first);
     } catch {
       editor?.onNotice?.(t("adjust.pasteFailed"));
     }
-  }, [editable, visibleRows, identityCount, days, monthKey, commitCells, editor, t]);
+  }, [editable, visibleRows, identityCount, days, dates, openAdjust, editor, t]);
 
-  const copy = useCallback(async () => {
-    const current = rectRef.current;
-    if (!current) return;
-    const lines: string[] = [];
-    for (let r = current.r0; r <= current.r1; r += 1) {
+  const fillDown = useCallback(() => {
+    if (!rect || !editable) return;
+    const bounds = normalizeRect(rect);
+    const source = visibleRows[bounds.top];
+    if (!source) return;
+    const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
+    let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
+    for (let r = bounds.top + 1; r <= bounds.bottom; r += 1) {
       const row = visibleRows[r];
       if (!row) continue;
-      const line: string[] = [];
-      for (let c = current.c0; c <= current.c1; c += 1) {
+      for (let c = bounds.left; c <= bounds.right; c += 1) {
         const dayIndex = c - identityCount;
-        line.push(dayIndex >= 0 && dayIndex < days ? dayClipboardToken(row, dayIndex) : "");
+        if (dayIndex < 0 || dayIndex >= days) continue;
+        inputs.push({
+          driverId: row.driverId,
+          date: dates[dayIndex] ?? "",
+          text: dayClipboardToken(source, dayIndex),
+          currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
+        });
+        first ??= { row, dayIndex };
       }
-      lines.push(line.join("\t"));
     }
-    try {
-      await navigator.clipboard.writeText(lines.join("\n"));
-      editor?.onNotice?.(t("adjust.copied", { count: lines.length }));
-    } catch {
-      editor?.onNotice?.(t("adjust.pasteFailed"));
-    }
-  }, [visibleRows, identityCount, days, editor, t]);
+    openAdjust(inputs, "fill", t("adjust.nothingSelected"), first);
+  }, [rect, editable, visibleRows, identityCount, days, dates, openAdjust, t]);
 
   function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (!editable) return;
     const mod = event.ctrlKey || event.metaKey;
     if (event.key === "Escape") {
       setRect(null);
+      setFillPreview(null);
       return;
     }
     if (mod && event.key.toLowerCase() === "c") {
@@ -399,11 +502,6 @@ export function PayrollDayGrid({
     if (mod && event.key.toLowerCase() === "d") {
       event.preventDefault();
       fillDown();
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      openSelection();
     }
   }
 
@@ -414,23 +512,27 @@ export function PayrollDayGrid({
     overscan: 16,
   });
 
-  function rectBounds() {
-    if (!rect) return null;
-    return {
-      top: Math.min(rect.r0, rect.r1),
-      bottom: Math.max(rect.r0, rect.r1),
-      left: Math.min(rect.c0, rect.c1),
-      right: Math.max(rect.c0, rect.c1),
-    };
-  }
-
-  const bounds = rectBounds();
+  const bounds = rect ? normalizeRect(rect) : null;
+  const fillBounds = fillPreview ? normalizeRect(fillPreview) : null;
   const isSelected = (r: number, c: number) =>
     Boolean(bounds && r >= bounds.top && r <= bounds.bottom && c >= bounds.left && c <= bounds.right);
+  const isFillTarget = (r: number, c: number) =>
+    Boolean(
+      fillBounds &&
+        r >= fillBounds.top &&
+        r <= fillBounds.bottom &&
+        c >= fillBounds.left &&
+        c <= fillBounds.right &&
+        !isSelected(r, c),
+    );
+
   const labelOf = (columnId: string) => {
-    const target = columnLabelTarget(columnId, days);
-    if (target.kind === "rider") return t(`riderCols.${target.labelKey}`);
-    if (target.kind === "day") return String(target.day);
+    const known = identity.find((c) => c.id === columnId);
+    if (known) return t(`riderCols.${known.labelKey}`);
+    if (/^d\d+$/.test(columnId)) {
+      const index = Number(columnId.slice(1)) - 1;
+      return dates[index] ? isoDayLabel(dates[index]) : columnId;
+    }
     return columnId;
   };
   const filterChips = activeFilterChips(filters, labelOf);
@@ -441,7 +543,16 @@ export function PayrollDayGrid({
       {hasFilters ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
           <PayrollFilterChips
+            prefix={t("columnFiltersPrefix")}
             chips={filterChips}
+            sortLabel={
+              sort
+                ? t("sortedBy", {
+                    column: labelOf(sort.columnId),
+                    dir: sort.dir === "asc" ? t("sortAsc") : t("sortDesc"),
+                  })
+                : null
+            }
             onClear={() => {
               setFilters({});
               setSort(null);
@@ -453,13 +564,38 @@ export function PayrollDayGrid({
                 return next;
               })
             }
-            clearLabel={t("clearFilters")}
+            clearLabel={t("clearColumnFilters")}
           />
-          {sort ? (
-            <span className="text-[11px] font-semibold text-muted-foreground">
-              {t("sortedBy", { column: labelOf(sort.columnId) })}
-            </span>
-          ) : null}
+        </div>
+      ) : null}
+      {editable && selectedMeta ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-3 py-2 text-[11px]">
+          <span className="font-semibold">
+            {t("adjust.selectionBar", {
+              cells: selectedMeta.count,
+              riders: selectedMeta.riders,
+              days: selectedMeta.days,
+            })}
+          </span>
+          <button type="button" className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 font-semibold hover:bg-muted/50" onClick={() => void copy()}>
+            <Copy className="size-3" />
+            {t("adjust.copy")}
+          </button>
+          <button type="button" className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 font-semibold hover:bg-muted/50" onClick={() => void paste()}>
+            {t("adjust.paste")}
+          </button>
+          <button type="button" className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 font-semibold hover:bg-muted/50" onClick={fillDown}>
+            {t("adjust.fillDown")}
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 font-semibold text-destructive hover:bg-destructive/10"
+            onClick={() => setRect(null)}
+          >
+            <Eraser className="size-3" />
+            {t("adjust.clearSelection")}
+          </button>
+          <span className="ms-auto text-muted-foreground">{t("adjust.gridHint")}</span>
         </div>
       ) : null}
       <div
@@ -474,12 +610,12 @@ export function PayrollDayGrid({
         <table className="w-max min-w-full border-collapse text-[12px]">
           <colgroup>
             {Array.from({ length: colCount }, (_, i) => (
-              <col key={i} className={i >= identityCount && i < identityCount + days ? "min-w-[52px]" : undefined} />
+              <col key={i} className={i >= identityCount ? "min-w-[52px]" : undefined} />
             ))}
           </colgroup>
           <thead className="sticky top-0 z-10 bg-card">
             <tr>
-              {RIDER_IDENTITY_COLUMNS.map((column) => (
+              {identity.map((column, index) => (
                 <PayrollColumnHeader
                   key={column.id}
                   label={t(`riderCols.${column.labelKey}`)}
@@ -490,13 +626,13 @@ export function PayrollDayGrid({
                   sort={sort}
                   onSort={setSort}
                   numeric={column.numeric}
-                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}
+                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", stickyClass(index, true))}
                 />
               ))}
-              {dayHeaders.map((header, index) => (
+              {dates.map((date, index) => (
                 <PayrollColumnHeader
-                  key={header}
-                  label={header}
+                  key={date}
+                  label={isoDayLabel(date)}
                   columnId={dayColumnId(index)}
                   values={dayColumnValues.get(dayColumnId(index)) ?? []}
                   filter={filters[dayColumnId(index)]}
@@ -504,20 +640,6 @@ export function PayrollDayGrid({
                   sort={sort}
                   onSort={setSort}
                   className={cn(TABLE_HEAD_CLASS, "min-w-[52px] px-1 py-2 text-center")}
-                />
-              ))}
-              {RIDER_TOTAL_COLUMNS.map((column) => (
-                <PayrollColumnHeader
-                  key={column.id}
-                  label={t(`riderCols.${column.labelKey}`)}
-                  columnId={column.id}
-                  values={rows.map((row) => String(riderColumnValue(row, column.id) ?? ""))}
-                  filter={filters[column.id]}
-                  onChange={(next) => setFiltersFor(setFilters, column.id, next)}
-                  sort={sort}
-                  onSort={setSort}
-                  numeric={column.numeric}
-                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}
                 />
               ))}
             </tr>
@@ -538,41 +660,26 @@ export function PayrollDayGrid({
                 ) : null}
                 {virtualizer.getVirtualItems().map((item) => {
                   const row = visibleRows[item.index];
-                  const eff = formatEfficiencyCell(row.efficiency);
-                  const statusKey = row.status === "Active" ? "active" : "inactive";
                   return (
                     <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
-                      <td className="whitespace-nowrap px-2 py-1.5">{row.amId}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5">{row.mgId}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.name}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5">{row.restaurant}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5">{row.zone}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5">
-                        <ZoneCategoryPill category={row.zoneCategory} />
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-1.5">{row.partner}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5">{row.nationality}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                            row.status === "Active"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-red-100 text-red-700",
-                          )}
+                      {identity.map((column, index) => (
+                        <td
+                          key={column.id}
+                          className={cn("whitespace-nowrap px-2 py-1.5", stickyClass(index), index === 2 && "font-medium")}
                         >
-                          {t(`riderStatus.${statusKey}`)}
-                        </span>
-                      </td>
-                      {row.days.map((st, i) => {
+                          {renderIdentityCell(row, column)}
+                        </td>
+                      ))}
+                      {dates.map((date, i) => {
                         const columnIndex = identityCount + i;
                         const selected = isSelected(item.index, columnIndex);
-                        const adjusted = Boolean(row.dayInfo[i]?.adjusted);
+                        const st = row.days[i] ?? "blank";
                         const info = row.dayInfo[i];
-                        const label = st === "blank" ? "" : t(`dayStatus.${st}`);
+                        const adjusted = Boolean(info?.adjusted);
+                        const label = st === "blank" ? "" : dayGridLabel(st, info?.creditedHours ?? 0);
                         return (
                           <td
-                            key={`${row.driverId}-${i}`}
+                            key={`${row.driverId}-${date}`}
                             data-r={item.index}
                             data-c={columnIndex}
                             title={t("cellHint", {
@@ -586,6 +693,7 @@ export function PayrollDayGrid({
                                 ? (event) => {
                                     if (event.button !== 0) return;
                                     event.preventDefault();
+                                    lastAnchor.current = event.currentTarget.getBoundingClientRect();
                                     const next = {
                                       r0: item.index,
                                       c0: columnIndex,
@@ -594,6 +702,7 @@ export function PayrollDayGrid({
                                     };
                                     drag.current = { mode: "select", ...next };
                                     setRect(next);
+                                    setFillPreview(null);
                                   }
                                 : undefined
                             }
@@ -607,22 +716,30 @@ export function PayrollDayGrid({
                                         ? { ...current, r1: item.index, c1: columnIndex }
                                         : { r0: active.r0, c0: active.c0, r1: item.index, c1: columnIndex },
                                     );
+                                    if (active.mode === "fill") {
+                                      setFillPreview({
+                                        r0: Math.min(active.r0, item.index),
+                                        c0: Math.min(active.c0, columnIndex),
+                                        r1: Math.max(active.r1, item.index),
+                                        c1: Math.max(active.c1, columnIndex),
+                                      });
+                                    }
                                   }
                                 : undefined
                             }
-                            onDoubleClick={editable ? () => openSelection() : undefined}
                             className={cn(
                               "relative min-w-[52px] px-1 py-1.5 text-center text-[11px] font-semibold select-none",
                               dayClass(st),
                               selected && "ring-2 ring-inset ring-primary/60",
-                              adjusted && "ring-1 ring-inset ring-orange-400",
+                              isFillTarget(item.index, columnIndex) && "outline-dashed outline-1 outline-emerald-500",
+                              adjusted && "outline outline-2 outline-orange-400",
                             )}
                           >
                             {label}
                             {adjusted ? (
                               <span
                                 aria-hidden
-                                className="absolute end-0 top-0 size-1.5 rounded-es-sm bg-orange-500"
+                                className="absolute end-0 top-0 size-0 border-e-[6px] border-t-[6px] border-e-transparent border-t-orange-500"
                               />
                             ) : null}
                             {editable && selected && bounds?.bottom === item.index && bounds?.right === columnIndex ? (
@@ -647,41 +764,6 @@ export function PayrollDayGrid({
                           </td>
                         );
                       })}
-                      <td className="px-2 py-1.5">{row.workDays}</td>
-                      <td className="px-2 py-1.5">{row.totalHours}</td>
-                      <td className="px-2 py-1.5">{row.offDays}</td>
-                      <td className="px-2 py-1.5">{row.sickDays}</td>
-                      <td className="px-2 py-1.5">{row.accidentDays}</td>
-                      <td className="px-2 py-1.5">{row.reducedDays}</td>
-                      <td className="px-2 py-1.5">{row.halfDays}</td>
-                      <td className="px-2 py-1.5">{row.actualDays}</td>
-                      <td className="px-2 py-1.5">{row.vehicleDays}</td>
-                      <td className="px-2 py-1.5">{row.absLhDays}</td>
-                      <td className="px-2 py-1.5">{row.absLoDays}</td>
-                      <td className="px-2 py-1.5">{row.customDays}</td>
-                      <td className="px-2 py-1.5">{row.absentDays}</td>
-                      <td className="px-2 py-1.5">
-                        {row.adjustedCells > 0 ? (
-                          <span className="inline-flex items-center gap-1 font-semibold text-orange-700">
-                            {row.adjustedCells}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground/50">—</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-1.5">{row.offStructureDays}</td>
-                      <td className="px-2 py-1.5">{row.requiredHours.toFixed(1)}</td>
-                      <td className="px-2 py-1.5">{row.actualHours.toFixed(2)}</td>
-                      <td className="px-2 py-1.5">{row.finalOrders}</td>
-                      <td
-                        className={cn(
-                          "px-2 py-1.5 font-semibold",
-                          eff.tone === "good" && "text-emerald-700",
-                          eff.tone === "bad" && "text-red-600",
-                        )}
-                      >
-                        {eff.text}
-                      </td>
                     </tr>
                   );
                 })}
@@ -705,17 +787,14 @@ export function PayrollDayGrid({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
         <span>{footer}</span>
-        <div className="flex items-center gap-2">
-          {editable ? <span>{t("adjust.gridHint")}</span> : null}
-          <button
-            type="button"
-            onClick={() => onExport(visibleRows)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted/50"
-          >
-            <Download className="size-3.5" />
-            {exportLabel}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => onExport(visibleRows)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted/50"
+        >
+          <Download className="size-3.5" />
+          {exportLabel}
+        </button>
       </div>
     </div>
   );
@@ -734,17 +813,58 @@ function setFiltersFor(
   });
 }
 
-/** What a column id should be labelled as, without needing a translator here. */
-type ColumnLabelTarget = { kind: "rider"; labelKey: string } | { kind: "day"; day: number } | { kind: "raw" };
+function renderIdentityCell(row: PayrollRiderRow, column: PayrollRiderColumn) {
+  if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
+  const value = riderColumnValue(row, column.id);
+  return value == null || value === "" ? "—" : String(value);
+}
 
-function columnLabelTarget(columnId: string, days: number): ColumnLabelTarget {
-  if (/^d\d+$/.test(columnId)) {
-    const day = Number(columnId.slice(1));
-    if (day >= 1 && day <= days) return { kind: "day", day };
-    return { kind: "raw" };
+function renderSummaryCell(row: PayrollRiderRow, column: PayrollRiderColumn) {
+  if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
+  if (column.id === "status") {
+    const active = row.status === "Active";
+    return (
+      <span
+        className={cn(
+          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+          active ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700",
+        )}
+      >
+        {row.status}
+      </span>
+    );
   }
-  const known = [...RIDER_IDENTITY_COLUMNS, ...RIDER_TOTAL_COLUMNS].find((c) => c.id === columnId);
-  return known ? { kind: "rider", labelKey: known.labelKey } : { kind: "raw" };
+  if (column.id === "efficiency" || column.id === "zoneEff") {
+    const raw = column.id === "efficiency" ? row.efficiency : row.zoneEfficiency;
+    if (raw == null) return <span className="text-muted-foreground/50">—</span>;
+    const eff = formatEfficiencyCell(raw);
+    return (
+      <span
+        className={cn(
+          "font-semibold",
+          eff.tone === "good" && "text-emerald-700",
+          eff.tone === "bad" && "text-red-600",
+        )}
+      >
+        {eff.text}
+      </span>
+    );
+  }
+  if (column.id === "reduced3") {
+    return row.reducedDays > 0 ? (
+      <span className="inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+        {row.reducedDays}
+      </span>
+    ) : (
+      0
+    );
+  }
+  const value = riderColumnValue(row, column.id);
+  if (value == null || value === "") return <span className="text-muted-foreground/50">—</span>;
+  if (typeof value === "number" && (column.id === "requiredHours" || column.id === "actualHours" || column.id === "zoneDpd")) {
+    return value.toFixed(column.id === "actualHours" ? 2 : 1);
+  }
+  return String(value);
 }
 
 export function ZoneCategoryPill({ category }: { category: string }) {
@@ -766,26 +886,23 @@ function categoryHex(category: string): string {
   return "#ef4444";
 }
 
-/**
- * The read-only summary: identity + the rider totals, no day columns. Filter
- * and sort read from the same column list, so a column filtered here means the
- * same thing on the day grid.
- */
 export function PayrollSummaryTable({
   rows,
   empty,
   exportLabel,
   onExport,
+  rangeLabel,
 }: {
   rows: readonly PayrollRiderRow[];
   empty: string;
   exportLabel?: string;
   onExport?: (rows: readonly PayrollRiderRow[]) => void;
+  rangeLabel?: string;
 }) {
   const t = useTranslations("pages.payroll");
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
-  const columns = useMemo(() => [...RIDER_IDENTITY_COLUMNS, ...RIDER_TOTAL_COLUMNS], []);
+  const columns = PAYROLL_SUMMARY_COLUMNS;
 
   const visibleRows = useMemo(() => {
     const filtered = rows.filter((row) => {
@@ -797,17 +914,26 @@ export function PayrollSummaryTable({
   }, [rows, filters, sort, columns]);
 
   const labelOf = (columnId: string) => {
-    const target = columnLabelTarget(columnId, 0);
-    return target.kind === "rider" ? t(`riderCols.${target.labelKey}`) : columnId;
+    const known = columns.find((c) => c.id === columnId);
+    return known ? t(`riderCols.${known.labelKey}`) : columnId;
   };
   const chips = activeFilterChips(filters, labelOf);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      {chips.length ? (
+      {chips.length || sort ? (
         <div className="border-b border-border px-3 py-2">
           <PayrollFilterChips
+            prefix={t("columnFiltersPrefix")}
             chips={chips}
+            sortLabel={
+              sort
+                ? t("sortedBy", {
+                    column: labelOf(sort.columnId),
+                    dir: sort.dir === "asc" ? t("sortAsc") : t("sortDesc"),
+                  })
+                : null
+            }
             onClear={() => {
               setFilters({});
               setSort(null);
@@ -819,7 +945,7 @@ export function PayrollSummaryTable({
                 return next;
               })
             }
-            clearLabel={t("clearFilters")}
+            clearLabel={t("clearColumnFilters")}
           />
         </div>
       ) : null}
@@ -827,10 +953,14 @@ export function PayrollSummaryTable({
         <table className="w-max min-w-full border-collapse text-[12px]">
           <thead className="sticky top-0 z-10 bg-card">
             <tr>
-              {columns.map((column) => (
+              {columns.map((column, index) => (
                 <PayrollColumnHeader
                   key={column.id}
-                  label={t(`riderCols.${column.labelKey}`)}
+                  label={
+                    column.isNew
+                      ? `${t(`riderCols.${column.labelKey}`)} · NEW`
+                      : t(`riderCols.${column.labelKey}`)
+                  }
                   columnId={column.id}
                   values={rows.map((row) => String(riderColumnValue(row, column.id) ?? ""))}
                   filter={filters[column.id]}
@@ -838,7 +968,7 @@ export function PayrollSummaryTable({
                   sort={sort}
                   onSort={setSort}
                   numeric={column.numeric}
-                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}
+                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", stickyClass(index, true), newHeadClass(column.isNew))}
                 />
               ))}
             </tr>
@@ -846,83 +976,36 @@ export function PayrollSummaryTable({
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-3 py-8 text-center text-xs text-muted-foreground"
-                >
+                <td colSpan={columns.length} className="px-3 py-8 text-center text-xs text-muted-foreground">
                   {empty}
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row) => {
-                const eff = formatEfficiencyCell(row.efficiency);
-                const statusKey = row.status === "Active" ? "active" : "inactive";
-                return (
-                  <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
-                    <td className="whitespace-nowrap px-2 py-1.5">{row.amId}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5">{row.mgId}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5 font-medium">{row.name}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5">{row.restaurant}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5">{row.zone}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5">
-                      <ZoneCategoryPill category={row.zoneCategory} />
-                    </td>
-                    <td className="whitespace-nowrap px-2 py-1.5">{row.partner}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5">{row.nationality}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5">
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                          row.status === "Active"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-red-100 text-red-700",
-                        )}
-                      >
-                        {t(`riderStatus.${statusKey}`)}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5">{row.workDays}</td>
-                    <td className="px-2 py-1.5">{row.totalHours}</td>
-                    <td className="px-2 py-1.5">{row.offDays}</td>
-                    <td className="px-2 py-1.5">{row.sickDays}</td>
-                    <td className="px-2 py-1.5">{row.accidentDays}</td>
-                    <td className="px-2 py-1.5">{row.reducedDays}</td>
-                    <td className="px-2 py-1.5">{row.halfDays}</td>
-                    <td className="px-2 py-1.5">{row.actualDays}</td>
-                    <td className="px-2 py-1.5">{row.vehicleDays}</td>
-                    <td className="px-2 py-1.5">{row.absLhDays}</td>
-                    <td className="px-2 py-1.5">{row.absLoDays}</td>
-                    <td className="px-2 py-1.5">{row.customDays}</td>
-                    <td className="px-2 py-1.5">{row.absentDays}</td>
-                    <td className="px-2 py-1.5">
-                      {row.adjustedCells > 0 ? (
-                        <span className="font-semibold text-orange-700">{row.adjustedCells}</span>
-                      ) : (
-                        <span className="text-muted-foreground/50">—</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5">{row.offStructureDays}</td>
-                    <td className="px-2 py-1.5">{row.requiredHours.toFixed(1)}</td>
-                    <td className="px-2 py-1.5">{row.actualHours.toFixed(2)}</td>
-                    <td className="px-2 py-1.5">{row.finalOrders}</td>
+              visibleRows.map((row) => (
+                <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
+                  {columns.map((column, index) => (
                     <td
-                      className={cn(
-                        "px-2 py-1.5 font-semibold",
-                        eff.tone === "good" && "text-emerald-700",
-                        eff.tone === "bad" && "text-red-600",
-                      )}
+                      key={column.id}
+                      className={cn("whitespace-nowrap px-2 py-1.5", stickyClass(index), index === 2 && "font-medium")}
                     >
-                      {eff.text}
+                      {renderSummaryCell(row, column)}
                     </td>
-                  </tr>
-                );
-              })
+                  ))}
+                </tr>
+              ))
             )}
           </tbody>
         </table>
       </div>
       {onExport && exportLabel ? (
-        <div className="flex justify-end border-t border-border px-3 py-2">
+        <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
+          <p className="text-[11px] text-muted-foreground">
+            {t("tableFootRange", {
+              shown: visibleRows.length,
+              total: rows.length,
+              range: rangeLabel ?? "",
+            })}
+          </p>
           <button
             type="button"
             onClick={() => onExport(visibleRows)}
@@ -932,7 +1015,17 @@ export function PayrollSummaryTable({
             {exportLabel}
           </button>
         </div>
-      ) : null}
+      ) : (
+        <div className="border-t border-border px-3 py-2">
+          <p className="text-[11px] text-muted-foreground">
+            {t("tableFootRange", {
+              shown: visibleRows.length,
+              total: rows.length,
+              range: rangeLabel ?? "",
+            })}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -947,8 +1040,9 @@ export function PayrollLegend({
   onSelect?: (status: PayrollStatusFilter | null) => void;
 }) {
   const t = useTranslations("pages.payroll");
-  const counts = riders ? countRidersByStatus(riders) : null;
-  const total = riders?.length ?? 0;
+  const counts = riders ? countDaysByStatus(riders) : null;
+  const total = riders ? countedRiderDays(riders) : 0;
+  const newSet = new Set<string>(NEW_PAYROLL_STATUS_FILTERS);
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
@@ -959,14 +1053,12 @@ export function PayrollLegend({
             onClick={() => onSelect?.(selected === id ? null : id)}
             icon={PAYROLL_STATUS_ICONS[id]}
             leading={
-              <span
-                className="size-3.5 rounded-sm"
-                style={{ background: PAYROLL_STATUS_CHIP[id].hex }}
-              />
+              <span className="size-3.5 rounded-sm" style={{ background: PAYROLL_STATUS_CHIP[id].hex }} />
             }
           >
             {t(`legend.${id}`)}
             {counts ? ` · ${counts[id]}` : ""}
+            {newSet.has(id) ? <PayrollNewTag /> : null}
           </ToggleChip>
         ))}
       </div>
@@ -984,10 +1076,4 @@ export function PayrollLegend({
   );
 }
 
-/** `2026-09` + day index → `2026-09-14`. */
-export function monthDate(monthKey: string, dayIndex: number): string {
-  const day = dayIndex + 1;
-  return `${monthKey}-${day < 10 ? "0" : ""}${day}`;
-}
-
-export { parseAdjustmentCellText, isNumericRiderColumn };
+export { isNumericRiderColumn };

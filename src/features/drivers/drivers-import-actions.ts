@@ -840,7 +840,7 @@ export async function applyOneImportRow(
     const { error: offErr } = await ctx.supabase.rpc("admin_set_driver_off_structure", {
       p_driver_id: driverIdForOff,
       p_month: `${kuwaitToday().slice(0, 7)}-01`,
-      p_off_days: offDaysForRpc(row.off_days),
+      p_off_days: offDaysForRpc(row.off_days) as unknown as number,
     });
     if (offErr) return fail(offErr.message);
   }

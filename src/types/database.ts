@@ -1126,6 +1126,7 @@ export type Database = {
           pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
+          shift_date: string | null
           status: Database["public"]["Enums"]["delivery_status"]
           updated_at: string
           zone_id: string | null
@@ -1154,6 +1155,7 @@ export type Database = {
           pickup_proof_urls?: string[]
           rejection_reason?: string | null
           restaurant_id?: string | null
+          shift_date?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
           updated_at?: string
           zone_id?: string | null
@@ -1182,6 +1184,7 @@ export type Database = {
           pickup_proof_urls?: string[]
           rejection_reason?: string | null
           restaurant_id?: string | null
+          shift_date?: string | null
           status?: Database["public"]["Enums"]["delivery_status"]
           updated_at?: string
           zone_id?: string | null
@@ -2432,6 +2435,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "driver_intakes_project_key_fkey"
+            columns: ["project_key"]
+            isOneToOne: false
+            referencedRelation: "payroll_clients"
+            referencedColumns: ["key"]
+          },
+          {
             foreignKeyName: "driver_intakes_restaurant_id_fkey"
             columns: ["restaurant_id"]
             isOneToOne: false
@@ -3570,6 +3580,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "partners"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drivers_project_key_fkey"
+            columns: ["project_key"]
+            isOneToOne: false
+            referencedRelation: "payroll_clients"
+            referencedColumns: ["key"]
           },
           {
             foreignKeyName: "drivers_restaurant_id_fkey"
@@ -5807,6 +5824,327 @@ export type Database = {
         }
         Relationships: []
       }
+      payroll_client_rules: {
+        Row: {
+          client_key: string
+          conditions: Json
+          created_at: string
+          id: string
+          label: string
+          period_month: string
+          result: Json
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          client_key: string
+          conditions: Json
+          created_at?: string
+          id?: string
+          label?: string
+          period_month: string
+          result: Json
+          sort_order: number
+          updated_at?: string
+        }
+        Update: {
+          client_key?: string
+          conditions?: Json
+          created_at?: string
+          id?: string
+          label?: string
+          period_month?: string
+          result?: Json
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_client_rules_client_key_fkey"
+            columns: ["client_key"]
+            isOneToOne: false
+            referencedRelation: "payroll_clients"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      payroll_clients: {
+        Row: {
+          average_threshold: number
+          created_at: string
+          default_off_days: number
+          default_result: Json
+          full_day_hours: number
+          good_threshold: number
+          half_day_hours: number
+          is_active: boolean
+          is_system: boolean
+          key: string
+          name: string
+          reduced_hours: number
+          required_hours_per_day: number
+          sort_order: number
+          updated_at: string
+          uses_hours: boolean
+          uses_orders: boolean
+          uses_zone: boolean
+        }
+        Insert: {
+          average_threshold?: number
+          created_at?: string
+          default_off_days?: number
+          default_result?: Json
+          full_day_hours?: number
+          good_threshold?: number
+          half_day_hours?: number
+          is_active?: boolean
+          is_system?: boolean
+          key: string
+          name: string
+          reduced_hours?: number
+          required_hours_per_day?: number
+          sort_order?: number
+          updated_at?: string
+          uses_hours?: boolean
+          uses_orders?: boolean
+          uses_zone?: boolean
+        }
+        Update: {
+          average_threshold?: number
+          created_at?: string
+          default_off_days?: number
+          default_result?: Json
+          full_day_hours?: number
+          good_threshold?: number
+          half_day_hours?: number
+          is_active?: boolean
+          is_system?: boolean
+          key?: string
+          name?: string
+          reduced_hours?: number
+          required_hours_per_day?: number
+          sort_order?: number
+          updated_at?: string
+          uses_hours?: boolean
+          uses_orders?: boolean
+          uses_zone?: boolean
+        }
+        Relationships: []
+      }
+      payroll_manual_adjustments: {
+        Row: {
+          adjusted_at: string
+          adjusted_by: string | null
+          adjusted_by_name: string | null
+          adjusted_hours: number | null
+          adjusted_status: string
+          driver_id: string
+          id: string
+          original_status: string | null
+          period_month: string
+          reason: string
+          work_date: string
+        }
+        Insert: {
+          adjusted_at?: string
+          adjusted_by?: string | null
+          adjusted_by_name?: string | null
+          adjusted_hours?: number | null
+          adjusted_status: string
+          driver_id: string
+          id?: string
+          original_status?: string | null
+          period_month: string
+          reason: string
+          work_date: string
+        }
+        Update: {
+          adjusted_at?: string
+          adjusted_by?: string | null
+          adjusted_by_name?: string | null
+          adjusted_hours?: number | null
+          adjusted_status?: string
+          driver_id?: string
+          id?: string
+          original_status?: string | null
+          period_month?: string
+          reason?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_manual_adjustments_adjusted_by_fkey"
+            columns: ["adjusted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_manual_adjustments_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_rule_audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_name: string | null
+          after: Json | null
+          before: Json | null
+          client_key: string | null
+          created_at: string
+          entity: string
+          id: string
+          period_month: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_name?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_key?: string | null
+          created_at?: string
+          entity: string
+          id?: string
+          period_month?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_name?: string | null
+          after?: Json | null
+          before?: Json | null
+          client_key?: string | null
+          created_at?: string
+          entity?: string
+          id?: string
+          period_month?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_rule_audit_logs_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_zone_metrics: {
+        Row: {
+          average_threshold: number
+          category_auto: string | null
+          category_override: string | null
+          computed_at: string
+          dpd: number | null
+          dpd_used: number | null
+          efficiency: number | null
+          efficiency_override: number | null
+          good_threshold: number
+          orders: number
+          override_at: string | null
+          override_by: string | null
+          period_month: string
+          rider_days: number
+          target_dpd: number | null
+          target_dpd_used: number | null
+          zone_id: string
+        }
+        Insert: {
+          average_threshold?: number
+          category_auto?: string | null
+          category_override?: string | null
+          computed_at?: string
+          dpd?: number | null
+          dpd_used?: number | null
+          efficiency?: number | null
+          efficiency_override?: number | null
+          good_threshold?: number
+          orders?: number
+          override_at?: string | null
+          override_by?: string | null
+          period_month: string
+          rider_days?: number
+          target_dpd?: number | null
+          target_dpd_used?: number | null
+          zone_id: string
+        }
+        Update: {
+          average_threshold?: number
+          category_auto?: string | null
+          category_override?: string | null
+          computed_at?: string
+          dpd?: number | null
+          dpd_used?: number | null
+          efficiency?: number | null
+          efficiency_override?: number | null
+          good_threshold?: number
+          orders?: number
+          override_at?: string | null
+          override_by?: string | null
+          period_month?: string
+          rider_days?: number
+          target_dpd?: number | null
+          target_dpd_used?: number | null
+          zone_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_zone_metrics_override_by_fkey"
+            columns: ["override_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_zone_metrics_zone_id_fkey"
+            columns: ["zone_id"]
+            isOneToOne: false
+            referencedRelation: "zones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_zone_settings: {
+        Row: {
+          average_threshold: number
+          good_threshold: number
+          period_month: string
+          target_dpd_override: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          average_threshold?: number
+          good_threshold?: number
+          period_month: string
+          target_dpd_override?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          average_threshold?: number
+          good_threshold?: number
+          period_month?: string
+          target_dpd_override?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_zone_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       performance_rating_criteria: {
         Row: {
           created_at: string
@@ -5994,267 +6332,6 @@ export type Database = {
             columns: ["zone_id"]
             isOneToOne: false
             referencedRelation: "zones"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payroll_clients: {
-        Row: {
-          average_threshold: number
-          created_at: string
-          default_off_days: number
-          default_result: Json
-          full_day_hours: number
-          good_threshold: number
-          half_day_hours: number
-          is_active: boolean
-          is_system: boolean
-          key: string
-          name: string
-          reduced_hours: number
-          required_hours_per_day: number
-          sort_order: number
-          updated_at: string
-          uses_hours: boolean
-          uses_orders: boolean
-          uses_zone: boolean
-        }
-        Insert: {
-          average_threshold?: number
-          created_at?: string
-          default_off_days?: number
-          default_result?: Json
-          full_day_hours?: number
-          good_threshold?: number
-          half_day_hours?: number
-          is_active?: boolean
-          is_system?: boolean
-          key: string
-          name: string
-          reduced_hours?: number
-          required_hours_per_day?: number
-          sort_order?: number
-          updated_at?: string
-          uses_hours?: boolean
-          uses_orders?: boolean
-          uses_zone?: boolean
-        }
-        Update: {
-          average_threshold?: number
-          created_at?: string
-          default_off_days?: number
-          default_result?: Json
-          full_day_hours?: number
-          good_threshold?: number
-          half_day_hours?: number
-          is_active?: boolean
-          is_system?: boolean
-          key?: string
-          name?: string
-          reduced_hours?: number
-          required_hours_per_day?: number
-          sort_order?: number
-          updated_at?: string
-          uses_hours?: boolean
-          uses_orders?: boolean
-          uses_zone?: boolean
-        }
-        Relationships: []
-      }
-      payroll_client_rules: {
-        Row: {
-          client_key: string
-          conditions: Json
-          created_at: string
-          id: string
-          label: string
-          period_month: string
-          result: Json
-          sort_order: number
-          updated_at: string
-        }
-        Insert: {
-          client_key: string
-          conditions: Json
-          created_at?: string
-          id?: string
-          label?: string
-          period_month: string
-          result: Json
-          sort_order: number
-          updated_at?: string
-        }
-        Update: {
-          client_key?: string
-          conditions?: Json
-          created_at?: string
-          id?: string
-          label?: string
-          period_month?: string
-          result?: Json
-          sort_order?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payroll_client_rules_client_key_fkey"
-            columns: ["client_key"]
-            isOneToOne: false
-            referencedRelation: "payroll_clients"
-            referencedColumns: ["key"]
-          },
-        ]
-      }
-      payroll_rule_audit_logs: {
-        Row: {
-          action: string
-          actor_id: string | null
-          actor_name: string | null
-          after: Json | null
-          before: Json | null
-          client_key: string | null
-          created_at: string
-          entity: string
-          id: string
-          period_month: string | null
-        }
-        Insert: {
-          action: string
-          actor_id?: string | null
-          actor_name?: string | null
-          after?: Json | null
-          before?: Json | null
-          client_key?: string | null
-          created_at?: string
-          entity: string
-          id?: string
-          period_month?: string | null
-        }
-        Update: {
-          action?: string
-          actor_id?: string | null
-          actor_name?: string | null
-          after?: Json | null
-          before?: Json | null
-          client_key?: string | null
-          created_at?: string
-          entity?: string
-          id?: string
-          period_month?: string | null
-        }
-        Relationships: []
-      }
-      payroll_zone_metrics: {
-        Row: {
-          average_threshold: number
-          category_auto: string | null
-          category_override: string | null
-          computed_at: string
-          dpd: number | null
-          dpd_used: number | null
-          efficiency: number | null
-          good_threshold: number
-          orders: number
-          override_at: string | null
-          override_by: string | null
-          period_month: string
-          rider_days: number
-          target_dpd: number | null
-          target_dpd_used: number | null
-          zone_id: string
-        }
-        Insert: {
-          average_threshold?: number
-          category_auto?: string | null
-          category_override?: string | null
-          computed_at?: string
-          dpd?: number | null
-          dpd_used?: number | null
-          efficiency?: number | null
-          good_threshold?: number
-          orders?: number
-          override_at?: string | null
-          override_by?: string | null
-          period_month: string
-          rider_days?: number
-          target_dpd?: number | null
-          target_dpd_used?: number | null
-          zone_id: string
-        }
-        Update: {
-          average_threshold?: number
-          category_auto?: string | null
-          category_override?: string | null
-          computed_at?: string
-          dpd?: number | null
-          dpd_used?: number | null
-          efficiency?: number | null
-          good_threshold?: number
-          orders?: number
-          override_at?: string | null
-          override_by?: string | null
-          period_month?: string
-          rider_days?: number
-          target_dpd?: number | null
-          target_dpd_used?: number | null
-          zone_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payroll_zone_metrics_zone_id_fkey"
-            columns: ["zone_id"]
-            isOneToOne: false
-            referencedRelation: "zones"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payroll_manual_adjustments: {
-        Row: {
-          adjusted_at: string
-          adjusted_by: string | null
-          adjusted_by_name: string | null
-          adjusted_hours: number | null
-          adjusted_status: string
-          driver_id: string
-          id: string
-          original_status: string | null
-          period_month: string
-          reason: string
-          work_date: string
-        }
-        Insert: {
-          adjusted_at?: string
-          adjusted_by?: string | null
-          adjusted_by_name?: string | null
-          adjusted_hours?: number | null
-          adjusted_status: string
-          driver_id: string
-          id?: string
-          original_status?: string | null
-          period_month: string
-          reason: string
-          work_date: string
-        }
-        Update: {
-          adjusted_at?: string
-          adjusted_by?: string | null
-          adjusted_by_name?: string | null
-          adjusted_hours?: number | null
-          adjusted_status?: string
-          driver_id?: string
-          id?: string
-          original_status?: string | null
-          period_month?: string
-          reason?: string
-          work_date?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payroll_manual_adjustments_driver_id_fkey"
-            columns: ["driver_id"]
-            isOneToOne: false
-            referencedRelation: "drivers"
             referencedColumns: ["id"]
           },
         ]
@@ -7326,6 +7403,149 @@ export type Database = {
           },
         ]
       }
+      vehicle_accidents: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          location_text: string | null
+          notes: string | null
+          occurred_at: string
+          severity: string
+          storage_key: string | null
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          location_text?: string | null
+          notes?: string | null
+          occurred_at?: string
+          severity?: string
+          storage_key?: string | null
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          location_text?: string | null
+          notes?: string | null
+          occurred_at?: string
+          severity?: string
+          storage_key?: string | null
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_accidents_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_documents: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          doc_type: string
+          expires_at: string | null
+          file_name: string | null
+          id: string
+          storage_key: string
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          doc_type: string
+          expires_at?: string | null
+          file_name?: string | null
+          id?: string
+          storage_key: string
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          doc_type?: string
+          expires_at?: string | null
+          file_name?: string | null
+          id?: string
+          storage_key?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_documents_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_handovers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          from_driver_id: string | null
+          handed_at: string
+          id: string
+          notes: string | null
+          storage_key: string | null
+          to_driver_id: string | null
+          vehicle_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          from_driver_id?: string | null
+          handed_at?: string
+          id?: string
+          notes?: string | null
+          storage_key?: string | null
+          to_driver_id?: string | null
+          vehicle_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          from_driver_id?: string | null
+          handed_at?: string
+          id?: string
+          notes?: string | null
+          storage_key?: string | null
+          to_driver_id?: string | null
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_handovers_from_driver_id_fkey"
+            columns: ["from_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_handovers_to_driver_id_fkey"
+            columns: ["to_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicle_handovers_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicle_import_batches: {
         Row: {
           applied_rows: number
@@ -7412,111 +7632,6 @@ export type Database = {
           },
         ]
       }
-      vehicle_accidents: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          id: string
-          location_text: string | null
-          notes: string | null
-          occurred_at: string
-          severity: string
-          storage_key: string | null
-          vehicle_id: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          location_text?: string | null
-          notes?: string | null
-          occurred_at?: string
-          severity?: string
-          storage_key?: string | null
-          vehicle_id: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          location_text?: string | null
-          notes?: string | null
-          occurred_at?: string
-          severity?: string
-          storage_key?: string | null
-          vehicle_id?: string
-        }
-        Relationships: []
-      }
-      vehicle_documents: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          doc_type: string
-          expires_at: string | null
-          file_name: string | null
-          id: string
-          storage_key: string
-          vehicle_id: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          doc_type: string
-          expires_at?: string | null
-          file_name?: string | null
-          id?: string
-          storage_key: string
-          vehicle_id: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          doc_type?: string
-          expires_at?: string | null
-          file_name?: string | null
-          id?: string
-          storage_key?: string
-          vehicle_id?: string
-        }
-        Relationships: []
-      }
-      vehicle_handovers: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          from_driver_id: string | null
-          handed_at: string
-          id: string
-          notes: string | null
-          storage_key: string | null
-          to_driver_id: string | null
-          vehicle_id: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          from_driver_id?: string | null
-          handed_at?: string
-          id?: string
-          notes?: string | null
-          storage_key?: string | null
-          to_driver_id?: string | null
-          vehicle_id: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          from_driver_id?: string | null
-          handed_at?: string
-          id?: string
-          notes?: string | null
-          storage_key?: string | null
-          to_driver_id?: string | null
-          vehicle_id?: string
-        }
-        Relationships: []
-      }
       vehicle_services: {
         Row: {
           cost_kwd: number | null
@@ -7554,6 +7669,38 @@ export type Database = {
           vehicle_id?: string
           vendor?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_services_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicle_types: {
+        Row: {
+          is_active: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order: number
+        }
+        Insert: {
+          is_active?: boolean
+          key: string
+          label_ar: string
+          label_en: string
+          sort_order?: number
+        }
+        Update: {
+          is_active?: boolean
+          key?: string
+          label_ar?: string
+          label_en?: string
+          sort_order?: number
+        }
         Relationships: []
       }
       vehicle_use_types: {
@@ -7586,30 +7733,6 @@ export type Database = {
           label_en?: string
           sort_order?: number
           updated_at?: string
-        }
-        Relationships: []
-      }
-      vehicle_types: {
-        Row: {
-          is_active: boolean
-          key: string
-          label_ar: string
-          label_en: string
-          sort_order: number
-        }
-        Insert: {
-          is_active?: boolean
-          key: string
-          label_ar: string
-          label_en: string
-          sort_order?: number
-        }
-        Update: {
-          is_active?: boolean
-          key?: string
-          label_ar?: string
-          label_en?: string
-          sort_order?: number
         }
         Relationships: []
       }
@@ -7723,6 +7846,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "vehicles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_type_of_use_fkey"
+            columns: ["type_of_use"]
+            isOneToOne: false
+            referencedRelation: "vehicle_use_types"
+            referencedColumns: ["key"]
           },
           {
             foreignKeyName: "vehicles_vehicle_type_key_fkey"
@@ -8493,7 +8623,12 @@ export type Database = {
       }
     }
     Functions: {
+      _admin_purge_require: { Args: { p_slug: string }; Returns: undefined }
       _admin_purge_require_super_admin: { Args: never; Returns: undefined }
+      _admin_purge_slug_for_entity: {
+        Args: { p_entity: string }
+        Returns: string
+      }
       _attendance_apply_checkout: {
         Args: {
           p_distance_meters?: number
@@ -8717,6 +8852,17 @@ export type Database = {
         }
         Returns: unknown
       }
+      admin_add_payroll_client: {
+        Args: {
+          p_copy_from?: string
+          p_month?: string
+          p_name: string
+          p_uses_hours: boolean
+          p_uses_orders: boolean
+          p_uses_zone: boolean
+        }
+        Returns: Json
+      }
       admin_app_release_adoption: {
         Args: { p_channel?: string; p_platform?: string }
         Returns: Json
@@ -8730,6 +8876,10 @@ export type Database = {
           p_search?: string
           p_version_code?: number
         }
+        Returns: Json
+      }
+      admin_apply_payroll_adjustments: {
+        Args: { p_cells: Json; p_driver_ids?: string[]; p_reason: string }
         Returns: Json
       }
       admin_approve_driver: {
@@ -8842,6 +8992,7 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_delete_payroll_client: { Args: { p_key: string }; Returns: Json }
       admin_delete_performance_rating_criterion: {
         Args: { p_id: string }
         Returns: Json
@@ -9140,12 +9291,20 @@ export type Database = {
         Args: { p_seen_within_minutes?: number }
         Returns: Json
       }
+      admin_open_payroll_rule_month: {
+        Args: { p_month: string }
+        Returns: Json
+      }
       admin_order_comparison_snapshot: {
         Args: { p_from: string; p_to: string }
         Returns: Json
       }
       admin_order_recon_compare: {
         Args: { p_excel: Json; p_from: string; p_to: string }
+        Returns: Json
+      }
+      admin_payroll_adjustment_audit: {
+        Args: { p_driver_id?: string; p_from: string; p_to: string }
         Returns: Json
       }
       admin_payroll_month_snapshot: {
@@ -9161,6 +9320,7 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_payroll_rule_config: { Args: { p_month: string }; Returns: Json }
       admin_payroll_rule_snapshot: {
         Args: {
           p_month: string
@@ -9174,78 +9334,8 @@ export type Database = {
         }
         Returns: Json
       }
-      admin_payroll_rule_config: {
-        Args: { p_month: string }
-        Returns: Json
-      }
-      admin_open_payroll_rule_month: {
-        Args: { p_month: string }
-        Returns: Json
-      }
-      admin_save_payroll_client: {
-        Args: {
-          p_average_threshold: number
-          p_default_off_days: number
-          p_default_result: string
-          p_full_day_hours: number
-          p_good_threshold: number
-          p_half_day_hours: number
-          p_key: string
-          p_name: string
-          p_reduced_hours: number
-          p_required_hours_per_day: number
-          p_sort_order?: number | null
-          p_uses_hours: boolean
-          p_uses_orders: boolean
-          p_uses_zone: boolean
-        }
-        Returns: Json
-      }
-      admin_add_payroll_client: {
-        Args: {
-          p_name: string
-          p_uses_zone: boolean
-          p_uses_orders: boolean
-          p_uses_hours: boolean
-          p_copy_from?: string | null
-          p_month?: string | null
-        }
-        Returns: Json
-      }
-      admin_save_payroll_client_rules: {
-        Args: { p_client_key: string; p_month: string; p_rules: Json }
-        Returns: Json
-      }
-      admin_reset_payroll_client_rules: {
-        Args: { p_client_key: string; p_month: string }
-        Returns: Json
-      }
-      admin_recompute_payroll_zone_metrics: {
-        Args: { p_month: string }
-        Returns: Json
-      }
-      admin_save_payroll_zone_override: {
-        Args: {
-          p_zone_id: string
-          p_month: string
-          p_dpd_used?: number | null
-          p_target_dpd_used?: number | null
-          p_category_override?: string | null
-        }
-        Returns: Json
-      }
-      admin_payroll_zone_metrics: {
-        Args: { p_month: string }
-        Returns: Json
-      }
-      admin_apply_payroll_adjustments: {
-        Args: { p_cells: Json; p_reason: string; p_driver_ids?: string[] | null }
-        Returns: Json
-      }
-      admin_payroll_adjustment_audit: {
-        Args: { p_from?: string | null; p_to?: string | null; p_driver_id?: string | null }
-        Returns: Json
-      }
+      admin_payroll_zone_metrics: { Args: { p_month: string }; Returns: Json }
+      admin_payroll_zone_settings: { Args: { p_month: string }; Returns: Json }
       admin_performance_ops_bounds: { Args: never; Returns: Json }
       admin_performance_ops_snapshot: {
         Args: {
@@ -9297,6 +9387,10 @@ export type Database = {
         Args: { p_driver_id?: string; p_from: string; p_to: string }
         Returns: number
       }
+      admin_recompute_payroll_zone_metrics: {
+        Args: { p_month: string }
+        Returns: Json
+      }
       admin_record_fleet_events: { Args: { p_events: Json }; Returns: Json }
       admin_request_department_report: {
         Args: { p_date_from?: string; p_date_to?: string }
@@ -9308,6 +9402,10 @@ export type Database = {
           p_new_date: string
           p_new_slot_id: string
         }
+        Returns: Json
+      }
+      admin_reset_payroll_client_rules: {
+        Args: { p_client_key: string; p_month: string }
         Returns: Json
       }
       admin_resolve_driver_incentive_target: {
@@ -9325,12 +9423,55 @@ export type Database = {
         Returns: Json
       }
       admin_run_request_sla_sweep: { Args: never; Returns: number }
+      admin_save_payroll_client: {
+        Args: {
+          p_average_threshold: number
+          p_default_off_days: number
+          p_default_result: string
+          p_full_day_hours: number
+          p_good_threshold: number
+          p_half_day_hours: number
+          p_key: string
+          p_name: string
+          p_reduced_hours: number
+          p_required_hours_per_day: number
+          p_sort_order?: number
+          p_uses_hours: boolean
+          p_uses_orders: boolean
+          p_uses_zone: boolean
+        }
+        Returns: Json
+      }
+      admin_save_payroll_client_rules: {
+        Args: { p_client_key: string; p_month: string; p_rules: Json }
+        Returns: Json
+      }
+      admin_save_payroll_zone_override: {
+        Args: {
+          p_category_override?: string
+          p_dpd_used?: number
+          p_efficiency_override?: number
+          p_month: string
+          p_target_dpd_used?: number
+          p_zone_id: string
+        }
+        Returns: Json
+      }
+      admin_save_payroll_zone_settings: {
+        Args: {
+          p_average_threshold?: number
+          p_good_threshold?: number
+          p_month: string
+          p_target_dpd_override?: number
+        }
+        Returns: Json
+      }
       admin_set_driver_force_update: {
         Args: { p_driver_ids: string[]; p_enabled: boolean; p_min_code: number }
         Returns: Json
       }
       admin_set_driver_off_structure: {
-        Args: { p_driver_id: string; p_month: string; p_off_days: number | null }
+        Args: { p_driver_id: string; p_month: string; p_off_days: number }
         Returns: Json
       }
       admin_set_driver_performance_rating_note: {
@@ -9417,10 +9558,10 @@ export type Database = {
       admin_upsert_source_company: {
         Args: {
           p_client_code: string
-          p_dpd_target?: number | null
-          p_effective_from?: string | null
-          p_incentive_above_kwd?: number | null
-          p_incentive_below_kwd?: number | null
+          p_dpd_target?: number
+          p_effective_from?: string
+          p_incentive_above_kwd?: number
+          p_incentive_below_kwd?: number
           p_incentive_enabled?: boolean
           p_is_active: boolean
           p_key: string
@@ -9449,6 +9590,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_upsert_step_template: {
+        Args: { p_request_type: string; p_steps: Json }
+        Returns: Json
+      }
       admin_upsert_vehicle_use_type: {
         Args: {
           p_is_active: boolean
@@ -9473,10 +9618,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      admin_upsert_step_template: {
-        Args: { p_request_type: string; p_steps: Json }
-        Returns: Json
       }
       allocate_appointment_code: { Args: never; Returns: string }
       allocate_driver_code: { Args: never; Returns: string }
@@ -9518,6 +9659,11 @@ export type Database = {
         Args: { p_max_age?: string }
         Returns: number
       }
+      companies_can_write: { Args: never; Returns: boolean }
+      company_config_applies: {
+        Args: { p_driver_id: string; p_on_date: string }
+        Returns: boolean
+      }
       compile_notification_audience: {
         Args: {
           p_campaign_id: string
@@ -9547,6 +9693,19 @@ export type Database = {
             }
             Returns: number
           }
+      compute_source_company_incentive: {
+        Args: {
+          p_above: number
+          p_below: number
+          p_orders: number
+          p_target: number
+        }
+        Returns: {
+          deduction_kwd: number
+          incentive_kwd: number
+          net_kwd: number
+        }[]
+      }
       count_eligible_deliveries: {
         Args: {
           p_driver_id: string
@@ -9582,6 +9741,10 @@ export type Database = {
           p_lng: number
           p_restaurant_id: string
         }
+        Returns: string
+      }
+      delivery_shift_date: {
+        Args: { p_at: string; p_driver: string }
         Returns: string
       }
       driver_acknowledge_request: {
@@ -9642,6 +9805,7 @@ export type Database = {
           pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
+          shift_date: string | null
           status: Database["public"]["Enums"]["delivery_status"]
           updated_at: string
           zone_id: string | null
@@ -9695,6 +9859,7 @@ export type Database = {
           pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
+          shift_date: string | null
           status: Database["public"]["Enums"]["delivery_status"]
           updated_at: string
           zone_id: string | null
@@ -9737,6 +9902,7 @@ export type Database = {
           pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
+          shift_date: string | null
           status: Database["public"]["Enums"]["delivery_status"]
           updated_at: string
           zone_id: string | null
@@ -9780,6 +9946,7 @@ export type Database = {
           pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
+          shift_date: string | null
           status: Database["public"]["Enums"]["delivery_status"]
           updated_at: string
           zone_id: string | null
@@ -9854,6 +10021,7 @@ export type Database = {
           pickup_proof_urls: string[]
           rejection_reason: string | null
           restaurant_id: string | null
+          shift_date: string | null
           status: Database["public"]["Enums"]["delivery_status"]
           updated_at: string
           zone_id: string | null
@@ -10049,6 +10217,7 @@ export type Database = {
         Args: { p_driver_id: string; p_today: string; p_week_start: string }
         Returns: number
       }
+      drivers_can_set_off_structure: { Args: never; Returns: boolean }
       enqueue_notification_automation_event: {
         Args: {
           p_driver_id?: string
@@ -10189,7 +10358,29 @@ export type Database = {
         }
         Returns: Json
       }
+      payroll_assert_rule_month: { Args: { p_month: string }; Returns: string }
       payroll_can_manage: { Args: never; Returns: boolean }
+      payroll_default_rules: { Args: { p_client_key: string }; Returns: Json }
+      payroll_effective_rules: {
+        Args: { p_client_key: string; p_month: string }
+        Returns: Json
+      }
+      payroll_log_rule_change: {
+        Args: {
+          p_action: string
+          p_after: Json
+          p_before: Json
+          p_client_key: string
+          p_entity: string
+          p_month: string
+        }
+        Returns: undefined
+      }
+      payroll_validate_rule: { Args: { p_rule: Json }; Returns: Json }
+      payroll_zone_band: {
+        Args: { p_average: number; p_efficiency: number; p_good: number }
+        Returns: string
+      }
       performance_daily_source: {
         Args: { p_driver_id?: string; p_from: string; p_to: string }
         Returns: {

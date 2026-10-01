@@ -4,26 +4,22 @@ import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Hand } from "lucide-react";
 import { toast } from "sonner";
+import { TABLE_HEAD_CLASS } from "@/components/app";
 import { Input } from "@/components/ui/input";
-import { payrollRiderMatchesSearch, type PayrollMonthMeta } from "./payroll-formulas";
+import { payrollRiderMatchesSearch, type PayrollPeriod } from "./payroll-formulas";
 import { AdjustmentDialog, type AdjustmentDialogState } from "./adjustment-dialog";
-import { PayrollDayGrid } from "./payroll-grid";
+import { PayrollDayGrid, PayrollLegend, type PayrollAdjustRequest } from "./payroll-grid";
 import { exportCombinedPayrollCsv } from "./payroll-csv";
-import { useApplyPayrollAdjustments } from "./use-payroll";
+import { useApplyPayrollAdjustments, usePayrollAdjustmentAudit } from "./use-payroll";
 import type { PayrollAdjustmentCell, PayrollRiderRow } from "./payroll-types";
 
-/**
- * The SOP's day grid: one row per rider, one column per day, and the only place
- * a hand adjustment is entered. Selection, the fill handle and the clipboard all
- * end in the same dialog, so there is exactly one path that writes a reason.
- */
 export function CombinedPayrollTab({
   month,
   riders,
   canExport,
   canManage,
 }: {
-  month: PayrollMonthMeta;
+  month: PayrollPeriod;
   riders: readonly PayrollRiderRow[];
   canExport: boolean;
   canManage: boolean;
@@ -32,6 +28,7 @@ export function CombinedPayrollTab({
   const [search, setSearch] = useState("");
   const [adjust, setAdjust] = useState<AdjustmentDialogState | null>(null);
   const apply = useApplyPayrollAdjustments();
+  const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
 
   const searched = useMemo(
     () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
@@ -43,22 +40,13 @@ export function CombinedPayrollTab({
     [searched],
   );
 
-  const onRequestAdjust = useCallback((cells: PayrollAdjustmentCell[]) => {
-    const ridersTouched = new Set(cells.map((c) => c.driverId));
-    const dates = new Set(cells.map((c) => c.date));
-    setAdjust({
-      cells,
-      riderCount: ridersTouched.size,
-      dayCount: dates.size,
-    });
+  const onRequestAdjust = useCallback((request: PayrollAdjustRequest) => {
+    setAdjust(request);
   }, []);
 
-  const onNotice = useCallback(
-    (message: string) => {
-      if (message) toast.warning(message);
-    },
-    [],
-  );
+  const onNotice = useCallback((message: string) => {
+    if (message) toast.warning(message);
+  }, []);
 
   function confirm(input: { cells: PayrollAdjustmentCell[]; reason: string }) {
     apply.mutate(input, {
@@ -92,23 +80,21 @@ export function CombinedPayrollTab({
         placeholder={t("searchPlaceholder")}
       />
       <PayrollDayGrid
-        monthKey={month.key}
-        days={month.days}
+        dates={month.dates}
         rows={searched}
         empty={t("emptyRiders")}
         exportLabel={t("downloadTable")}
-        onExport={() => {
-          if (canExport) exportCombinedPayrollCsv(month.key, month.days, searched);
+        onExport={(visible) => {
+          if (canExport) exportCombinedPayrollCsv(month.key, month.dates, visible);
         }}
         editor={canManage ? { canManage, onRequestAdjust, onNotice } : undefined}
-        footer={t("tableFoot", {
+        footer={t("tableFootRange", {
           shown: searched.length,
           total: riders.length,
-          month: month.label,
-          days: month.days,
-          fixed: month.fixedDays,
+          range: month.label,
         })}
       />
+      <PayrollLegend riders={searched} />
       <AdjustmentDialog
         state={adjust}
         pending={apply.isPending}
@@ -117,14 +103,57 @@ export function CombinedPayrollTab({
         }}
         onConfirm={confirm}
       />
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="border-b border-border px-4 py-2">
+          <h3 className="text-[13px] font-semibold">{t("manualChanges.title")}</h3>
+          <p className="text-[10px] text-muted-foreground">{t("manualChanges.hint")}</p>
+        </div>
+        <div className="max-h-[min(240px,28dvh)] overflow-auto">
+          <table className="w-max min-w-full border-collapse text-[12px]">
+            <thead className="sticky top-0 bg-card">
+              <tr>
+                <th className={TABLE_HEAD_CLASS}>{t("manualChanges.when")}</th>
+                <th className={TABLE_HEAD_CLASS}>{t("manualChanges.who")}</th>
+                <th className={TABLE_HEAD_CLASS}>{t("manualChanges.rider")}</th>
+                <th className={TABLE_HEAD_CLASS}>{t("manualChanges.day")}</th>
+                <th className={TABLE_HEAD_CLASS}>{t("manualChanges.original")}</th>
+                <th className={TABLE_HEAD_CLASS}>{t("manualChanges.adjusted")}</th>
+                <th className={TABLE_HEAD_CLASS}>{t("manualChanges.reason")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(audit.data ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                    {t("manualChanges.empty")}
+                  </td>
+                </tr>
+              ) : (
+                (audit.data ?? []).map((row) => (
+                  <tr key={row.id} className="border-b border-border/60">
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.adjustedAt}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.actorName}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      {row.driverName} · {row.mgId}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.workDate}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">{row.originalStatus ?? "—"}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      {row.adjustedStatus}
+                      {row.adjustedHours != null ? ` · ${row.adjustedHours}h` : ""}
+                    </td>
+                    <td className="px-2 py-1.5">{row.reason}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
 
-/**
- * The server returns a machine code; the dialog prints the sentence. Anything
- * unrecognised still has a sentence rather than a raw string on screen.
- */
 function errorKey(code: string): string {
   const known = ["reason_required", "no_cells", "too_many_cells", "not_authorized"];
   return known.includes(code) ? code : "unknown";

@@ -7,8 +7,11 @@ import {
   bucketOf,
   classifyDay,
   classifyRiderMonth,
+  clampPayrollRange,
   computePayrollKpis,
   computeRequestKpis,
+  countedRiderDays,
+  countDaysByStatus,
   countRidersByStatus,
   coverKindFor,
   dayLabel,
@@ -22,14 +25,21 @@ import {
   mapLiveStatusToUi,
   monthMeta,
   keepSelectedPayrollOptions,
+  payrollAccessibleRange,
   payrollMonthForPreset,
   payrollMonths,
+  payrollPeriodForPreset,
   payrollRiderMatchesSearch,
+  periodFromRange,
+  prorateOffDays,
   payrollTileFor,
   presetForPayrollMonth,
   requestCoversDate,
+  rangeDates,
+  rangeDays,
   requestOverlapsMonth,
   requiredHoursFor,
+  requiredHoursForRange,
   restaurantLabel,
   riderMatchesSlicers,
   shareOfPayroll,
@@ -472,5 +482,70 @@ describe("hours-based rider month + status chips", () => {
     assert.equal(filterRidersByStatus(rows, null).length, 3);
     assert.equal(shareOfPayroll(1, 4), 25);
     assert.equal(shareOfPayroll(1, 0), 0);
+  });
+
+  it("counts rider-days, not unique riders, and skips blank cells", () => {
+    const rows = [
+      { days: ["work", "off", "blank"] as const },
+      { days: ["work", "sick", "absent"] as const },
+    ];
+    const counts = countDaysByStatus(rows);
+    assert.equal(counts.work, 2);
+    assert.equal(counts.off, 1);
+    assert.equal(counts.sick, 1);
+    assert.equal(counts.absent, 1);
+    assert.equal(countedRiderDays(rows), 5);
+  });
+});
+
+describe("custom From/To range + prorated OFF", () => {
+  it("lists inclusive dates and an empty list when inverted", () => {
+    assert.deepEqual(rangeDates("2026-09-29", "2026-10-02"), [
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02",
+    ]);
+    assert.equal(rangeDays("2026-09-29", "2026-10-02"), 4);
+    assert.deepEqual(rangeDates("2026-10-02", "2026-09-29"), []);
+  });
+
+  it("prorates contracted OFF as round(off × days ÷ 30)", () => {
+    assert.equal(prorateOffDays(2, 30), 2);
+    assert.equal(prorateOffDays(2, 15), 1);
+    assert.equal(prorateOffDays(3, 10), 1);
+    assert.equal(prorateOffDays(6, 10), 2);
+    assert.equal(prorateOffDays(2, 0), 0);
+    assert.equal(prorateOffDays(Number.NaN, 15), 0);
+  });
+
+  it("required hours for a range subtracts prorated OFF then multiplies req/day", () => {
+    assert.equal(requiredHoursForRange(15, 2, 12), 14 * 12);
+    assert.equal(requiredHoursForRange(30, 2, 12), requiredHoursFor(30, 2));
+    assert.equal(requiredHoursForRange(10, 6, 12), 8 * 12);
+  });
+
+  it("clamps From/To into the accessible 3-month window and swaps inverted bounds", () => {
+    const today = "2026-10-01";
+    const win = payrollAccessibleRange(today);
+    assert.equal(win.from, "2026-08-01");
+    assert.equal(win.to, "2026-10-31");
+    assert.deepEqual(clampPayrollRange("2026-07-15", "2026-11-01", today), win);
+    assert.deepEqual(clampPayrollRange("2026-09-10", "2026-09-01", today), {
+      from: "2026-09-01",
+      to: "2026-09-10",
+    });
+  });
+
+  it("builds a custom period label from the clamped dates", () => {
+    const period = periodFromRange("2026-08-22", "2026-09-05", "2026-10-01");
+    assert.equal(period.from, "2026-08-22");
+    assert.equal(period.to, "2026-09-05");
+    assert.equal(period.days, 15);
+    assert.equal(period.label, "22-AUG – 5-SEP");
+    const thisMonth = payrollPeriodForPreset("thisMonth", "2026-10-01", null);
+    assert.equal(thisMonth.key, "2026-10");
+    assert.equal(thisMonth.from, "2026-10-01");
+    assert.equal(thisMonth.to, "2026-10-31");
   });
 });

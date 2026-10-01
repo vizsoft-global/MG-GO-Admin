@@ -1,64 +1,76 @@
 "use client";
 
+import { vehicleLabel } from "@/features/performance/performance-ops-format";
 import { PAYROLL_DAY_HOURS, type DayStatus } from "./payroll-formulas";
 import { ADJUSTMENT_STATUS_TO_DAY } from "./payroll-rules-engine";
 import type { PayrollRiderRow } from "./payroll-types";
 
-/**
- * One column list for every payroll grid.
- *
- * The Payroll summary, the Combined day grid and the read-only Attendance and
- * Orders tab must agree about which columns exist, what they are called, which
- * are numeric and what a row's value in each one is, or a column filter applied
- * on one tab would mean something different on the next. The same reason the
- * headers carry the filter popover from this list rather than each tab wiring
- * its own.
- */
-
 export type PayrollRiderColumn = {
   id: string;
-  /** Numeric columns get Range mode in the filter popover. */
   numeric: boolean;
-  /** The i18n key under `pages.payroll.riderCols`. */
   labelKey: string;
+  isNew?: boolean;
 };
 
-export const RIDER_IDENTITY_COLUMNS: readonly PayrollRiderColumn[] = [
+export const PAYROLL_SUMMARY_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "amId", numeric: false, labelKey: "amId" },
   { id: "mgId", numeric: false, labelKey: "mgId" },
   { id: "name", numeric: false, labelKey: "name" },
   { id: "restaurant", numeric: false, labelKey: "restaurant" },
   { id: "zone", numeric: false, labelKey: "zone" },
-  { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
+  { id: "zoneCategory", numeric: false, labelKey: "zoneCategory", isNew: true },
+  { id: "zoneOrders", numeric: true, labelKey: "zoneOrders", isNew: true },
+  { id: "zoneDpd", numeric: true, labelKey: "zoneDpd", isNew: true },
+  { id: "zoneEff", numeric: true, labelKey: "zoneEff", isNew: true },
   { id: "partner", numeric: false, labelKey: "partner" },
-  { id: "nationality", numeric: false, labelKey: "nationality" },
+  { id: "vehicleKind", numeric: false, labelKey: "vehicleKind", isNew: true },
   { id: "status", numeric: false, labelKey: "status" },
-] as const;
-
-export const RIDER_TOTAL_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "totalDays", numeric: true, labelKey: "totalDays" },
-  { id: "totalHours", numeric: true, labelKey: "totalHours" },
+  { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
+  { id: "reduced3", numeric: true, labelKey: "reduced3" },
+  { id: "half", numeric: true, labelKey: "half" },
   { id: "off", numeric: true, labelKey: "off" },
   { id: "sick", numeric: true, labelKey: "sick" },
   { id: "accident", numeric: true, labelKey: "accident" },
-  { id: "reduced3", numeric: true, labelKey: "reduced3" },
-  { id: "half", numeric: true, labelKey: "half" },
-  { id: "actual", numeric: true, labelKey: "actual" },
   { id: "vehicle", numeric: true, labelKey: "vehicle" },
+  { id: "absence", numeric: true, labelKey: "absence" },
   { id: "absLh", numeric: true, labelKey: "absLh" },
   { id: "absLo", numeric: true, labelKey: "absLo" },
-  { id: "custom", numeric: true, labelKey: "custom" },
-  { id: "absence", numeric: true, labelKey: "absence" },
-  { id: "adjusted", numeric: true, labelKey: "adjusted" },
   { id: "offStructure", numeric: true, labelKey: "offStructure" },
   { id: "requiredHours", numeric: true, labelKey: "requiredHours" },
   { id: "actualHours", numeric: true, labelKey: "actualHours" },
-  { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
   { id: "efficiency", numeric: true, labelKey: "efficiency" },
 ] as const;
 
+export const COMBINED_IDENTITY_COLUMNS: readonly PayrollRiderColumn[] = [
+  { id: "amId", numeric: false, labelKey: "amId" },
+  { id: "mgId", numeric: false, labelKey: "mgId" },
+  { id: "name", numeric: false, labelKey: "name" },
+  { id: "zone", numeric: false, labelKey: "zone" },
+  { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
+  { id: "partner", numeric: false, labelKey: "partner" },
+  { id: "vehicleKind", numeric: false, labelKey: "vehicleKind" },
+] as const;
+
+export const AO_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
+  { id: "amId", numeric: false, labelKey: "amId" },
+  { id: "mgId", numeric: false, labelKey: "mgId" },
+  { id: "name", numeric: false, labelKey: "name" },
+  { id: "partner", numeric: false, labelKey: "partner" },
+  { id: "zone", numeric: false, labelKey: "zone" },
+  { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
+  { id: "vehicleKind", numeric: false, labelKey: "vehicleKind" },
+  { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
+  { id: "actualHours", numeric: true, labelKey: "actualHours" },
+] as const;
+
+/** @deprecated Use COMBINED_IDENTITY_COLUMNS / PAYROLL_SUMMARY_COLUMNS. */
+export const RIDER_IDENTITY_COLUMNS = COMBINED_IDENTITY_COLUMNS;
+/** @deprecated Use PAYROLL_SUMMARY_COLUMNS. */
+export const RIDER_TOTAL_COLUMNS = PAYROLL_SUMMARY_COLUMNS.filter((c) => c.numeric);
+
 const NUMERIC_IDS = new Set<string>(
-  [...RIDER_IDENTITY_COLUMNS, ...RIDER_TOTAL_COLUMNS]
+  [...PAYROLL_SUMMARY_COLUMNS, ...COMBINED_IDENTITY_COLUMNS, ...AO_LEAD_COLUMNS]
     .filter((c) => c.numeric)
     .map((c) => c.id),
 );
@@ -67,7 +79,11 @@ export function isNumericRiderColumn(columnId: string): boolean {
   return NUMERIC_IDS.has(columnId);
 }
 
-/** The value a column filter and a sort compare against. */
+export function payrollVehicleKind(key: string | null): string {
+  if (!key) return "—";
+  return vehicleLabel(key);
+}
+
 export function riderColumnValue(
   row: PayrollRiderRow,
   columnId: string,
@@ -85,8 +101,16 @@ export function riderColumnValue(
       return row.zone;
     case "zoneCategory":
       return row.zoneCategory;
+    case "zoneOrders":
+      return row.zoneOrders;
+    case "zoneDpd":
+      return row.zoneDpd;
+    case "zoneEff":
+      return row.zoneEfficiency;
     case "partner":
       return row.partner;
+    case "vehicleKind":
+      return payrollVehicleKind(row.vehicleKey);
     case "nationality":
       return row.nationality;
     case "status":
@@ -130,9 +154,6 @@ export function riderColumnValue(
     case "efficiency":
       return row.efficiency;
     default:
-      // A day column: `d1`…`d31` reads that day's status token, and `o1`…`o31`
-      // the day's final adjusted orders. The Attendance and Orders tab shows
-      // both side by side, so both must be filterable.
       if (/^d\d+$/.test(columnId)) {
         const index = Number(columnId.slice(1)) - 1;
         const status = row.days[index];
@@ -147,12 +168,10 @@ export function riderColumnValue(
   }
 }
 
-/** The orders sub-column beside `d{n}` on the attendance-and-orders grid. */
 export function dayOrdersColumnId(dayIndex: number): string {
   return `o${dayIndex + 1}`;
 }
 
-/** The status token a day column filters on, kept identical to the grid's label. */
 export function dayColumnValue(status: DayStatus): string {
   return status;
 }
@@ -161,11 +180,6 @@ export function dayColumnId(dayIndex: number): string {
   return `d${dayIndex + 1}`;
 }
 
-/**
- * The text an operator copies out of a cell, and what `parseAdjustmentCellText`
- * accepts back. Excel text rather than the UI label, because the SOP is operated
- * from a spreadsheet and `12` / `3h` / `OFF` is what the team types.
- */
 export function dayClipboardToken(row: PayrollRiderRow, dayIndex: number): string {
   const status = row.days[dayIndex];
   if (!status || status === "blank") return "";
@@ -201,7 +215,6 @@ export function dayClipboardToken(row: PayrollRiderRow, dayIndex: number): strin
   }
 }
 
-/** The credited hours a day status stands for, for the tooltip. */
 export function dayCreditedHours(row: PayrollRiderRow, dayIndex: number): number | null {
   const info = row.dayInfo[dayIndex];
   if (!info) return null;
