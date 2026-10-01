@@ -20,16 +20,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import { getSignedStorageUrl } from "@/lib/storage/storage-actions";
+import { AssetFormSheet } from "@/features/assets/asset-form-sheet";
 import type { VehicleListRow } from "./types";
 import {
+  assignVehicleAsset,
   createVehicleAccident,
   createVehicleDocument,
   createVehicleHandover,
   createVehicleService,
   listVehicleAccidents,
   listVehicleAssignedAssets,
+  listVehicleAssetCatalog,
   listVehicleDocuments,
   listVehicleHandovers,
   listVehicleServices,
@@ -51,7 +55,7 @@ export function VehicleDetailTabs({
   if (tab === "accident") return <AccidentTab vehicleId={vehicle.id} canManage={canManage} />;
   if (tab === "documents") return <DocumentsTab vehicleId={vehicle.id} canManage={canManage} />;
   if (tab === "service") return <ServiceTab vehicleId={vehicle.id} canManage={canManage} />;
-  return <AssetsTab driverId={vehicle.assigned_driver_id} />;
+  return <AssetsTab vehicle={vehicle} />;
 }
 
 function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
@@ -337,24 +341,136 @@ function ServiceTab({ vehicleId, canManage }: { vehicleId: string; canManage: bo
   );
 }
 
-function AssetsTab({ driverId }: { driverId: string | null }) {
+function AssetsTab({ vehicle }: { vehicle: VehicleListRow }) {
   const t = useTranslations("pages.vehicleDetail");
+  const { can } = useAuth();
+  const canAssign = can("assets.manage");
+  const canCreate = can("assets.create");
+  const queryClient = useQueryClient();
+  const driverId = vehicle.assigned_driver_id;
+  const [catalogId, setCatalogId] = useState<string | null>(null);
+  const [qty, setQty] = useState("1");
+  const [pending, startTransition] = useTransition();
+  const [addOpen, setAddOpen] = useState(false);
   const list = useQuery({
     queryKey: queryKeys.vehicles.tabs(driverId ?? "none", "assets"),
     queryFn: () => listVehicleAssignedAssets(driverId),
   });
+  const catalog = useQuery({
+    queryKey: [...queryKeys.vehicles.all(), "asset-catalog"],
+    queryFn: listVehicleAssetCatalog,
+    enabled: canAssign,
+  });
   const rows = list.data ?? [];
-  if (!driverId) return <AppEmptyState title={t("emptyAssetsNoDriver")} />;
-  if (rows.length === 0) return <AppEmptyState title={t("emptyAssets")} />;
+
+  const assign = () => {
+    if (!driverId || !catalogId) return;
+    startTransition(async () => {
+      const result = await assignVehicleAsset({
+        driverId,
+        catalogItemId: catalogId,
+        quantity: Number(qty) || 1,
+      });
+      if (result.error) {
+        toast.error(t(`errors.${result.error}` as "errors.save_failed"));
+        return;
+      }
+      toast.success(t("assetAssigned"));
+      setCatalogId(null);
+      setQty("1");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.tabs(driverId, "assets") });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.assets.all() });
+    });
+  };
+
+  if (!driverId) {
+    return (
+      <div className="space-y-3">
+        {canCreate ? (
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" className="h-9" onClick={() => setAddOpen(true)}>
+              <Plus className="me-2 size-3.5" />
+              {t("addAsset")}
+            </Button>
+          </div>
+        ) : null}
+        <AppEmptyState title={t("emptyAssetsNoDriver")} />
+        <AssetFormSheet
+          asset={null}
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          onSaved={() => {
+            setAddOpen(false);
+            void queryClient.invalidateQueries({ queryKey: [...queryKeys.vehicles.all(), "asset-catalog"] });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.assets.all() });
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
-    <TabTable
-      heads={[t("colAsset"), t("colQty"), t("colWhen")]}
-      rows={rows.map((row) => [
-        row.code ? `${row.name} · ${row.code}` : row.name,
-        String(row.quantity),
-        row.assigned_at?.slice(0, 10) ?? "—",
-      ])}
-    />
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-end gap-2">
+        {canAssign ? (
+          <>
+            <div className="w-[min(280px,100%)]">
+              <SearchSelect
+                items={(catalog.data ?? []).map((item) => ({
+                  value: item.id,
+                  label: item.label,
+                  keywords: item.keywords,
+                }))}
+                value={catalogId}
+                onChange={setCatalogId}
+                placeholder={t("assignAssetPlaceholder")}
+                searchPlaceholder={t("assignAssetPlaceholder")}
+                recentsKey="vehicle-assign-asset"
+                className="h-9"
+              />
+            </div>
+            <Input
+              className="h-9 w-20"
+              inputMode="numeric"
+              value={qty}
+              onChange={(event) => setQty(event.target.value.replace(/\D/g, ""))}
+              aria-label={t("colQty")}
+            />
+            <Button type="button" className="h-9" disabled={pending || !catalogId} onClick={assign}>
+              {t("assignAsset")}
+            </Button>
+          </>
+        ) : null}
+        {canCreate ? (
+          <Button type="button" variant="outline" className="h-9" onClick={() => setAddOpen(true)}>
+            <Plus className="me-2 size-3.5" />
+            {t("addAsset")}
+          </Button>
+        ) : null}
+      </div>
+      {rows.length === 0 ? (
+        <AppEmptyState title={t("emptyAssets")} />
+      ) : (
+        <TabTable
+          heads={[t("colAsset"), t("colQty"), t("colWhen")]}
+          rows={rows.map((row) => [
+            row.code ? `${row.name} · ${row.code}` : row.name,
+            String(row.quantity),
+            row.assigned_at?.slice(0, 10) ?? "—",
+          ])}
+        />
+      )}
+      <AssetFormSheet
+        asset={null}
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onSaved={() => {
+          setAddOpen(false);
+          void queryClient.invalidateQueries({ queryKey: [...queryKeys.vehicles.all(), "asset-catalog"] });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.assets.all() });
+        }}
+      />
+    </div>
   );
 }
 
