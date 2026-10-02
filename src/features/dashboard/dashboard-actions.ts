@@ -5,7 +5,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchDeliveriesForAdmin } from "@/features/deliveries/deliveries-actions";
+import { fetchDashboardDeliveryRows } from "@/features/deliveries/deliveries-actions";
 import { deliveryActivityAt } from "@/features/deliveries/delivery-sort-utils";
 import { fetchDriversForAdmin } from "@/features/drivers/drivers-actions";
 import { fetchLiveDriverLocations } from "@/features/locations/locations-actions";
@@ -34,6 +34,26 @@ import type {
 
 const KUWAIT_TZ = "Asia/Kuwait";
 const SILENT_HOURS = 3;
+
+/**
+ * The narrow delivery shape the dashboard reads. It arrives from
+ * `fetchDashboardDeliveryRows` (ten columns, no proof signing, no restaurant
+ * resolution) rather than the full enriched list row, so the dashboard helpers
+ * are typed structurally instead of demanding all of `DeliveryListRow`.
+ */
+type DeliveryActivityRow = Pick<
+  DeliveryListRow,
+  | "id"
+  | "short_id"
+  | "driver_id"
+  | "driver_name"
+  | "status"
+  | "external_order_id"
+  | "created_at"
+  | "pickup_at"
+  | "delivered_at"
+  | "cancelled_at"
+>;
 
 function kuwaitToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: KUWAIT_TZ }).format(new Date());
@@ -247,7 +267,7 @@ function deriveWorkforceStatus(
 
 function buildWorkforceQueue(
   drivers: DriverListRow[],
-  deliveries: DeliveryListRow[],
+  deliveries: DeliveryActivityRow[],
   checkedInDriverIds: Set<string>,
   driverRestaurants: Map<string, string>,
   intakeToProfile: Map<string, string>,
@@ -256,7 +276,7 @@ function buildWorkforceQueue(
     { lastSeenAt: string; zoneStatus: string | null; trackingStatus: string }
   >,
 ): WorkforceQueueRow[] {
-  const deliveriesByDriver = new Map<string, DeliveryListRow[]>();
+  const deliveriesByDriver = new Map<string, DeliveryActivityRow[]>();
   for (const d of deliveries) {
     const list = deliveriesByDriver.get(d.driver_id) ?? [];
     list.push(d);
@@ -312,8 +332,8 @@ function buildWorkforceQueue(
 }
 
 function buildDeliveryMetrics(
-  todayDeliveries: DeliveryListRow[],
-  weekDeliveries: DeliveryListRow[],
+  todayDeliveries: DeliveryActivityRow[],
+  weekDeliveries: DeliveryActivityRow[],
 ): { metrics: DeliveryMonitorMetrics; feed: DeliveryFeedItem[] } {
   const today = todayDeliveries.length;
   const avgLast7Days = weekDeliveries.length / 7;
@@ -495,7 +515,7 @@ export async function fetchDashboardSnapshot(locale = "en"): Promise<DashboardSn
   const weekStart = addDays(today, -6);
 
   let drivers: DriverListRow[] = [];
-  let deliveries: DeliveryListRow[] = [];
+  let deliveries: DeliveryActivityRow[] = [];
 
   if (perms.drivers) {
     try {
@@ -505,9 +525,16 @@ export async function fetchDashboardSnapshot(locale = "en"): Promise<DashboardSn
     }
   }
 
+  // Bound the fetch to the window the two filters below can actually keep.
+  // The coalesce the filters use can only reach the week start if one of its
+  // four timestamps does, so the query's OR is a strict superset and the
+  // filters (unchanged) still decide the result. Replaces an all-time fetch
+  // that pulled 184,353 rows for the same two in-memory filters.
   if (perms.deliveries) {
     try {
-      deliveries = await fetchDeliveriesForAdmin();
+      deliveries = await fetchDashboardDeliveryRows(
+        new Date(`${weekStart}T00:00:00+03:00`).toISOString(),
+      );
     } catch {
       deliveries = [];
     }

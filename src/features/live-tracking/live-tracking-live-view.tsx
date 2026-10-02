@@ -54,6 +54,7 @@ import {
   type TrackingMapLayerPrefs,
 } from "./tracking-map-layer-prefs";
 import { cn } from "@/lib/utils";
+import { useVisibleInterval } from "@/lib/browser/use-visible-interval";
 import type { TrackingViewTab } from "./tracking-tab-switcher";
 
 export function LiveTrackingLiveView({
@@ -95,10 +96,9 @@ export function LiveTrackingLiveView({
     setMapPrefs(loadTrackingMapPrefs());
   }, []);
 
-  useEffect(() => {
-    const id = window.setInterval(() => setNowTick(Date.now()), 10_000);
-    return () => window.clearInterval(id);
-  }, []);
+  // Paused while the tab is hidden, caught up on return: a backgrounded v1 map was
+  // re-rendering its whole tree — including the driver list — ten seconds at a time.
+  useVisibleInterval(() => setNowTick(Date.now()), 10_000);
 
   const { data: driversMeta = [] } = useQuery({
     queryKey: queryKeys.drivers.list({ archived: false }),

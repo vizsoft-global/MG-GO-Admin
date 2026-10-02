@@ -2,7 +2,6 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useBranding } from "@/contexts/branding-context";
 import { DEFAULT_APP_SETTINGS, FONT_OPTIONS } from "@/lib/branding/constants";
 import {
@@ -17,7 +16,6 @@ import { AppFormSection } from "@/components/app";
 export function BrandingSettingsPanel() {
   const t = useTranslations("pages.settings.branding");
   const locale = useLocale();
-  const router = useRouter();
   const branding = useBranding();
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +56,6 @@ export function BrandingSettingsPanel() {
                 setError(result.error);
                 return;
               }
-              router.refresh();
             });
           }}
         >
@@ -165,7 +162,6 @@ export function BrandingSettingsPanel() {
                   setPreview(result.logoUrl);
                 }
                 if (fileRef.current) fileRef.current.value = "";
-                router.refresh();
               });
             }}
           >
@@ -189,7 +185,6 @@ export function BrandingSettingsPanel() {
                 }
                 setPreview(null);
                 if (fileRef.current) fileRef.current.value = "";
-                router.refresh();
               });
             }}
           >

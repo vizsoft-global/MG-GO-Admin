@@ -319,6 +319,18 @@ export async function exportAttendanceDailyCsv(
   return [header, ...lines].join("\n");
 }
 
+/**
+ * Day-grain attendance summary for the Analytics tab.
+ *
+ * This used to select every driver-day row for the range from
+ * `v_attendance_daily` and bucket them in the browser — 9,669 rows / ~1.6 MB
+ * for a single month, for a panel that renders one line per day. The
+ * aggregation now happens server-side (`admin_attendance_analytics_daily`) and
+ * returns at most one row per day. The numeric semantics are unchanged:
+ * checked_in counts non-null check-ins, late counts positive minutes_late,
+ * absent counts live_status 'absent', and avg_compliance is the rounded mean of
+ * the non-null compliance scores (0 when a day has none).
+ */
 export async function fetchAttendanceAnalyticsSummary(
   fromDate: string,
   toDate: string,
@@ -327,50 +339,23 @@ export async function fetchAttendanceAnalyticsSummary(
 }> {
   await requireAttendanceView();
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("v_attendance_daily")
-    .select("log_date, check_in_at, minutes_late, live_status, compliance_score")
-    .gte("log_date", fromDate)
-    .lte("log_date", toDate);
+  const { data, error } = await supabase.rpc("admin_attendance_analytics_daily", {
+    p_from: fromDate,
+    p_to: toDate,
+  });
   if (error) throw error;
 
-  const byDate = new Map<
-    string,
-    { checked_in: number; late: number; absent: number; compliance: number[] }
-  >();
-  for (const row of (data ?? []) as Array<{
-    log_date: string | null;
-    check_in_at: string | null;
-    minutes_late: number | null;
-    live_status: string | null;
-    compliance_score: number | null;
-  }>) {
-    const d = String(row.log_date);
-    const bucket = byDate.get(d) ?? {
-      checked_in: 0,
-      late: 0,
-      absent: 0,
-      compliance: [],
+  const payload = (data ?? {}) as { daily?: unknown[] };
+  const daily = (payload.daily ?? []).map((raw) => {
+    const row = raw as Record<string, unknown>;
+    return {
+      date: String(row.date),
+      checked_in: Number(row.checked_in ?? 0),
+      late: Number(row.late ?? 0),
+      absent: Number(row.absent ?? 0),
+      avg_compliance: Number(row.avg_compliance ?? 0),
     };
-    if (row.check_in_at) bucket.checked_in += 1;
-    if (Number(row.minutes_late ?? 0) > 0) bucket.late += 1;
-    if (row.live_status === "absent") bucket.absent += 1;
-    if (row.compliance_score != null) bucket.compliance.push(Number(row.compliance_score));
-    byDate.set(d, bucket);
-  }
-
-  const daily = [...byDate.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, v]) => ({
-      date,
-      checked_in: v.checked_in,
-      late: v.late,
-      absent: v.absent,
-      avg_compliance:
-        v.compliance.length > 0
-          ? Math.round(v.compliance.reduce((a, b) => a + b, 0) / v.compliance.length)
-          : 0,
-    }));
+  });
 
   return { daily };
 }

@@ -22,6 +22,7 @@ import type { FleetStore, FleetMirrorDriver, FleetSnapshotRow } from "./fleet-st
 import type { FleetZone } from "./fleet-types";
 import type { ClientFrame, ServerFrame } from "./fleet-wire";
 import type { FleetSocketTicket } from "./fleet-token";
+import { shouldRunBackgroundWork } from "@/lib/browser/visibility";
 
 const SNAPSHOT_POLL_MS = 10_000;
 /** Warm-refresh cadence while a live rail is running: roster facts only. */
@@ -86,6 +87,7 @@ export class FleetTransport {
   private flowHandle: ReturnType<typeof setInterval> | null = null;
   private statusClockHandle: ReturnType<typeof setInterval> | null = null;
   private reconnectHandle: ReturnType<typeof setTimeout> | null = null;
+  private visibilityBound = false;
 
   private edgeAttempts = 0;
   private stopped = false;
@@ -113,6 +115,7 @@ export class FleetTransport {
     // runs mount effects twice, so a restarted transport must still follow filters.
     this.store.onFiltersChanged = () => this.sendView();
     this.startStatusClock();
+    this.bindVisibility();
     // Warm start first: an operator should see the fleet while the socket connects,
     // not an empty map with a spinner.
     await this.loadSnapshot();
@@ -121,6 +124,7 @@ export class FleetTransport {
 
   stop(): void {
     this.stopped = true;
+    this.unbindVisibility();
     this.teardownEdge();
     this.teardownMirror();
     this.stopPolling();
@@ -138,6 +142,49 @@ export class FleetTransport {
   setViewport(bbox: [number, number, number, number] | null): void {
     this.bbox = bbox;
     this.sendView();
+  }
+
+  // -------------------------------------------------------------------------
+  // Background work gate
+  // -------------------------------------------------------------------------
+
+  /**
+   * Every timer on this page is a `setInterval`, and a `setInterval` does not care
+   * whether the tab is visible. A tracking tab left in the background therefore kept
+   * calling `admin_live_fleet_snapshot` on the poll cadence, re-aging statuses once a
+   * second and waking every structural subscriber — for the whole time the operator was
+   * working in another tab. Measured before this change, that RPC was the single largest
+   * consumer in the project: 784,984 calls.
+   *
+   * Hidden is not stopped, it is paused. The socket stays open, so the rail is live the
+   * instant the tab is looked at again, and returning runs one catch-up pass — which is
+   * why a hidden tab's staleness is never observable.
+   */
+  private bindVisibility(): void {
+    if (this.visibilityBound) return;
+    if (typeof document === "undefined") return;
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
+    this.visibilityBound = true;
+  }
+
+  private unbindVisibility(): void {
+    if (!this.visibilityBound) return;
+    if (typeof document === "undefined") return;
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    this.visibilityBound = false;
+  }
+
+  private readonly onVisibilityChange = (): void => {
+    if (this.stopped || this.backgrounded()) return;
+    // Caught up on the way back in rather than on the next interval: the operator is
+    // looking at this map now, and waiting out the poll cadence is what makes a
+    // returning tab read as a frozen one.
+    void this.loadSnapshot();
+    this.store.tickStatusDecay();
+  };
+
+  private backgrounded(): boolean {
+    return !shouldRunBackgroundWork(typeof document === "undefined" ? undefined : document);
   }
 
   // -------------------------------------------------------------------------
@@ -307,7 +354,10 @@ export class FleetTransport {
    */
   private startFlowWatchdog(): void {
     this.stopFlowWatchdog();
-    this.flowHandle = setInterval(() => this.checkLiveFlow(), FLOW_WATCHDOG_MS);
+    this.flowHandle = setInterval(() => {
+      if (this.backgrounded()) return;
+      this.checkLiveFlow();
+    }, FLOW_WATCHDOG_MS);
   }
 
   private stopFlowWatchdog(): void {
@@ -327,7 +377,7 @@ export class FleetTransport {
   private startStatusClock(): void {
     this.stopStatusClock();
     this.statusClockHandle = setInterval(() => {
-      if (this.stopped) return;
+      if (this.stopped || this.backgrounded()) return;
       this.store.tickStatusDecay();
     }, STATUS_CLOCK_MS);
   }
@@ -451,7 +501,10 @@ export class FleetTransport {
     if (this.store.getSnapshot().connection.rail === "offline") {
       this.store.setRail("poll", "live");
     }
-    this.pollHandle = setInterval(() => void this.loadSnapshot(), SNAPSHOT_POLL_MS);
+    this.pollHandle = setInterval(() => {
+      if (this.backgrounded()) return;
+      void this.loadSnapshot();
+    }, SNAPSHOT_POLL_MS);
   }
 
   private stopPolling(): void {
@@ -461,7 +514,10 @@ export class FleetTransport {
 
   private startRosterRefresh(): void {
     if (this.rosterHandle) return;
-    this.rosterHandle = setInterval(() => void this.loadSnapshot(), ROSTER_REFRESH_MS);
+    this.rosterHandle = setInterval(() => {
+      if (this.backgrounded()) return;
+      void this.loadSnapshot();
+    }, ROSTER_REFRESH_MS);
   }
 
   private async loadSnapshot(): Promise<void> {
