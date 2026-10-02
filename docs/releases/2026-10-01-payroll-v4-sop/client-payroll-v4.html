@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MG GO — Payroll v4 (client note)</title>
+  <style>
+    @page { size: A4; margin: 14mm 13mm 16mm; }
+    * { box-sizing: border-box; }
+    body { font: 11.5px/1.45 "Segoe UI", system-ui, sans-serif; color: #1c1917; margin: 0; }
+    .kicker { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #0f766e; font-weight: 700; margin: 0 0 4px; }
+    h1 { font-size: 20px; line-height: 1.25; margin: 0 0 6px; color: #0f172a; }
+    .meta { color: #57534e; font-size: 11px; margin: 0 0 14px; }
+    h2 { font-size: 13.5px; color: #0f766e; margin: 16px 0 8px; padding-bottom: 3px; border-bottom: 1px solid #d6d3d1; }
+    h3 { font-size: 12px; margin: 10px 0 6px; }
+    p, ul, ol { margin: 0 0 8px; }
+    ul, ol { padding-left: 1.25em; }
+    li { margin: 3px 0; }
+    .box { border: 1px solid #d6d3d1; border-radius: 8px; padding: 10px 12px; margin: 8px 0; page-break-inside: avoid; }
+    .ask { background: #fff7ed; border-color: #fdba74; }
+    .did { background: #f0fdf4; border-color: #86efac; }
+    .warn { background: #fffbeb; border-color: #fbbf24; }
+    .info { background: #eff6ff; border-color: #93c5fd; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0 10px; page-break-inside: avoid; }
+    th, td { border: 1px solid #d6d3d1; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f4; font-weight: 600; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
+    .c { text-align: center; width: 46px; }
+    .pos { color: #047857; }
+    .neg { color: #b91c1c; }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; background: #f5f5f4; padding: 0 3px; border-radius: 3px; }
+    .check { list-style: none; padding-left: 0; }
+    .check li { padding-left: 1.4em; position: relative; }
+    .check li::before { content: "☐"; position: absolute; left: 0; color: #0f766e; }
+    .footer { margin-top: 14px; font-size: 10px; color: #78716c; border-top: 1px solid #e7e5e4; padding-top: 8px; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .small { font-size: 10px; color: #57534e; }
+  </style>
+</head>
+<body>
+  <p class="kicker">MG GO · Client note · 1 Oct 2026</p>
+  <h1>Payroll v4 — client-owned rules, zone efficiency, and a spreadsheet grid</h1>
+  <p class="meta">
+    Audience: payroll / operations stakeholders &nbsp;·&nbsp; Admin live on production &nbsp;·&nbsp;
+    <strong>No rider app update required</strong> &nbsp;·&nbsp; Module: <code>Payroll &amp; Requests</code>
+  </p>
+
+  <h2>1. What you requested (MGGO Payroll SOP v4.0)</h2>
+  <div class="box ask">
+    <p>Payroll in v3 classified a day with one hard-coded rule. The SOP makes the <strong>client</strong> the unit of the calculation, so each client can keep its own arrangement without a code change.</p>
+    <ul>
+      <li><strong>The client owns the rules.</strong> Each client keeps its own hour values, thresholds, a default day status, and its own ordered list of day rules.</li>
+      <li><strong>Rules decide a day.</strong> A rule matches on <strong>zone band</strong> (Good / Average / Low), <strong>zone name</strong>, <strong>orders</strong> and <strong>worked hours</strong>; the <strong>first match from the top wins</strong>.</li>
+      <li><strong>The SOP's own result codes:</strong> Full day 12 h, Reduced day 3 h, Half day 6 h, Actual hours, Absent, Absent LH, Absent LO, and Custom hours.</li>
+      <li><strong>Zone efficiency comes from the previous completed month only</strong> — DPD = orders ÷ rider-days, efficiency = DPD ÷ the target DPD, banded Good / Average / Low.</li>
+      <li><strong>A stated order of precedence:</strong> hand adjustment → Operations (OFF / Sick / Accident / Vehicle issue) → first matching client rule → client default → the old classification.</li>
+      <li><strong>Off Structure per rider</strong> — contracted OFF days for the month (default 2) — drives Required Hours, and must be uploadable in bulk.</li>
+      <li><strong>Excel-style grid:</strong> select a block of rider-days, fill, copy and paste across the block, and adjust the whole selection with <strong>one reason</strong>.</li>
+      <li>Attendance Efficiency = <strong>Actual Worked Hours ÷ Required Hours</strong>, uncapped, with status filters.</li>
+      <li>Everything above editable by your own staff — no developer, no deployment.</li>
+    </ul>
+  </div>
+
+  <h2>2. What we delivered</h2>
+  <div class="box did">
+    <ul>
+      <li><strong>Payroll is now data, not code.</strong> Clients, their hour values, their default status and their rule lists are stored in the database and edited on screen.</li>
+      <li><strong>Two SOP clients are seeded and ready:</strong> <strong>Americana</strong> (zone band + orders) and <strong>Keeta</strong> (orders + hours), each with the SOP starting rule list for the current month.</li>
+      <li><strong>A stated precedence in one place</strong> — a hand adjustment always beats a rule, and Operations always beats a rule, in the grid, the export, the Attendance &amp; Orders tab and the simulator alike.</li>
+      <li><strong>Zone efficiency from last month</strong>, with a <strong>Recompute</strong> button and an Ops override for DPD, target and band that never destroys the automatic figure.</li>
+      <li><strong>Off Structure</strong> per rider, plus bulk upload from an Excel sheet with a downloadable template and a preview that says what will apply and what will be skipped.</li>
+      <li><strong>The Combined grid behaves like a spreadsheet</strong> — drag to select, corner handle to fill, copy / paste / fill down, and a <em>reason is required</em> before any hand adjustment lands.</li>
+      <li><strong>A manual changes record</strong> — every hand adjustment keeps the original value, the new value, the reason, the user and the time, and a later recalculation never overwrites it.</li>
+      <li><strong>A change log</strong> for every rule, threshold, band override and client edit, with your name and the time.</li>
+      <li><strong>Four pages:</strong> Payroll · Combined Payroll · Attendance &amp; Orders · Settings (plus Requests).</li>
+    </ul>
+  </div>
+
+  <h2>3. How a day is decided, in order</h2>
+  <table>
+    <thead><tr><th class="c">#</th><th>Source</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td class="c">1</td><td><strong>Hand adjustment</strong></td><td>A named person changed that rider-day and left a reason. Nothing overrides this.</td></tr>
+      <tr><td class="c">2</td><td><strong>Operations</strong></td><td>An approved OFF / Sick / Accident / Vehicle-issue request covers the day. The day is that status and credits 0 hours.</td></tr>
+      <tr><td class="c">3</td><td><strong>First matching client rule</strong></td><td>The client's own list, read top to bottom. The first rule whose conditions all hold decides the day.</td></tr>
+      <tr><td class="c">4</td><td><strong>Client default</strong></td><td>No rule matched. The client's own default status applies (Americana: Full day 12 h · Keeta: Actual hours).</td></tr>
+      <tr><td class="c">5</td><td><strong>Previous behaviour</strong></td><td>Only when the client has <em>no saved rules at all</em> for that month: a check-in is a full 12 h day, a covered day is that cover, anything else is Absent.</td></tr>
+    </tbody>
+  </table>
+  <p class="small">Result codes and the hours they credit: <strong>Full day · 12 h</strong> → 12 h · <strong>Reduced day · 3 h</strong> → 3 h · <strong>Half day · 6 h</strong> → 6 h · <strong>Actual hours</strong> → the logged check-in → check-out hours · <strong>Custom hours</strong> → the number typed · <strong>Absent / Absent LH / Absent LO</strong> → 0 h. Hours are the client's own values, so they can differ per client.</p>
+
+  <h2>4. Zone efficiency — what the band means</h2>
+  <div class="box info">
+    <p><strong>DPD</strong> = zone orders ÷ rider-days &nbsp;·&nbsp; <strong>Target DPD</strong> = the average DPD across the zones that actually had rider-days &nbsp;·&nbsp; <strong>Zone efficiency %</strong> = DPD ÷ Target DPD × 100.</p>
+    <p>It is always read from the <strong>previous completed month</strong>. That is deliberate: a band that moved with the current, half-finished month would silently re-price days you have already decided.</p>
+  </div>
+  <table>
+    <thead><tr><th>Zone efficiency</th><th>Band</th><th>Default threshold</th></tr></thead>
+    <tbody>
+      <tr><td>at or above</td><td><strong>Good</strong></td><td class="num">110%</td></tr>
+      <tr><td>at or above</td><td><strong>Average</strong></td><td class="num">70%</td></tr>
+      <tr><td>below</td><td><strong>Low</strong></td><td class="num">&lt; 70%</td></tr>
+      <tr><td>no previous-month data</td><td><strong>Not set</strong></td><td>—</td></tr>
+    </tbody>
+  </table>
+  <p>A zone nobody measured is <strong>Not set</strong>, never "Low". A zone with no rider-days has no DPD to average, so it is left out of the target instead of dragging it down. A zone that is Not set matches no seeded rule, so its days fall to the client default — an unmeasured zone is never punished for being unmeasured.</p>
+
+  <h3>Worked example (Kuwait zones)</h3>
+  <table>
+    <thead>
+      <tr><th>Zone</th><th class="num">Orders</th><th class="num">Rider-days</th><th class="num">DPD</th><th class="num">Efficiency</th><th>Band</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Zone A</td><td class="num">1,200</td><td class="num">40</td><td class="num">30.00</td><td class="num pos">130.4%</td><td><strong>Good</strong></td></tr>
+      <tr><td>Zone B</td><td class="num">400</td><td class="num">25</td><td class="num">16.00</td><td class="num">69.6%</td><td><strong>Low</strong></td></tr>
+      <tr><td>Zone C</td><td class="num">0</td><td class="num">0</td><td class="num">—</td><td class="num">—</td><td><strong>Not set</strong></td></tr>
+    </tbody>
+  </table>
+  <p class="small">Target DPD = (30.00 + 16.00) ÷ 2 = <strong>23.00</strong>. Had the empty Zone C been counted as 0, the target would have fallen to 15.33 and Zone B would have read Average — which is exactly the distortion the rule avoids.</p>
+
+  <h2>5. The SOP starting rules, as seeded</h2>
+  <p>Read top to bottom. The first line whose conditions all hold is the answer.</p>
+  <div class="cols">
+    <div>
+      <h3>Americana — zone band + orders</h3>
+      <table>
+        <thead><tr><th class="c">#</th><th>If</th><th>Then</th></tr></thead>
+        <tbody>
+          <tr><td class="c">1</td><td>Orders &lt; 1</td><td>Absent</td></tr>
+          <tr><td class="c">2</td><td>Zone is Khiran</td><td>Full day 12 h</td></tr>
+          <tr><td class="c">3</td><td>Band Low <em>and</em> orders &lt; 5</td><td>Reduced day 3 h</td></tr>
+          <tr><td class="c">4</td><td>Band Good or Average <em>and</em> orders &lt; 7</td><td>Reduced day 3 h</td></tr>
+          <tr><td colspan="2">nothing matched</td><td><strong>Full day 12 h</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>Keeta — hours + orders</h3>
+      <table>
+        <thead><tr><th class="c">#</th><th>If</th><th>Then</th></tr></thead>
+        <tbody>
+          <tr><td class="c">1</td><td>Hours &lt; 0.5 <em>and</em> orders &lt; 1</td><td>Absent</td></tr>
+          <tr><td class="c">2</td><td>Orders &lt; 3</td><td>Absent LO</td></tr>
+          <tr><td class="c">3</td><td>Hours &lt; 4</td><td>Absent LH</td></tr>
+          <tr><td class="c">4</td><td>Hours &lt; 6 <em>and</em> orders ≥ 6</td><td>Half day 6 h</td></tr>
+          <tr><td class="c">5</td><td>Hours 10–12 <em>and</em> orders ≥ 6</td><td>Actual hours</td></tr>
+          <tr><td class="c">6</td><td>Hours 10–12 <em>and</em> orders &lt; 6</td><td>Half day 6 h</td></tr>
+          <tr><td class="c">7</td><td>Hours &gt; 12</td><td>Full day 12 h</td></tr>
+          <tr><td colspan="2">nothing matched</td><td><strong>Actual hours</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="small">Both lists are editable on screen. <strong>Restore SOP starting rules</strong> puts them back.</p>
+
+  <h2>6. Worked days — what the grid must show</h2>
+  <table>
+    <thead>
+      <tr><th>Client</th><th>Zone band</th><th class="num">Orders</th><th class="num">Logged hours</th><th>Decided by</th><th>Day · credited</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Americana</td><td>Any</td><td class="num">0</td><td class="num">—</td><td>Rule 1</td><td>Absent · 0 h</td></tr>
+      <tr><td>Americana</td><td>Any (Khiran)</td><td class="num">3</td><td class="num">9.0</td><td>Rule 2</td><td>Full day · 12 h</td></tr>
+      <tr><td>Americana</td><td>Low</td><td class="num">4</td><td class="num">8.0</td><td>Rule 3</td><td>Reduced day · 3 h</td></tr>
+      <tr><td>Americana</td><td>Low</td><td class="num">5</td><td class="num">8.0</td><td>Default</td><td>Full day · 12 h</td></tr>
+      <tr><td>Americana</td><td>Good</td><td class="num">6</td><td class="num">8.0</td><td>Rule 4</td><td>Reduced day · 3 h</td></tr>
+      <tr><td>Americana</td><td>Good</td><td class="num">7</td><td class="num">8.0</td><td>Default</td><td>Full day · 12 h</td></tr>
+      <tr><td>Keeta</td><td>—</td><td class="num">0</td><td class="num">0.0</td><td>Rule 1</td><td>Absent · 0 h</td></tr>
+      <tr><td>Keeta</td><td>—</td><td class="num">2</td><td class="num">9.0</td><td>Rule 2</td><td>Absent LO · 0 h</td></tr>
+      <tr><td>Keeta</td><td>—</td><td class="num">8</td><td class="num">3.0</td><td>Rule 3</td><td>Absent LH · 0 h</td></tr>
+      <tr><td>Keeta</td><td>—</td><td class="num">6</td><td class="num">5.0</td><td>Rule 4</td><td>Half day · 6 h</td></tr>
+      <tr><td>Keeta</td><td>—</td><td class="num">8</td><td class="num">11.0</td><td>Rule 5</td><td>Actual hours · 11 h</td></tr>
+      <tr><td>Keeta</td><td>—</td><td class="num">4</td><td class="num">11.0</td><td>Rule 6</td><td>Half day · 6 h</td></tr>
+      <tr><td>Keeta</td><td>—</td><td class="num">8</td><td class="num">13.0</td><td>Rule 7</td><td>Full day · 12 h</td></tr>
+      <tr><td>Keeta</td><td>—</td><td class="num">6</td><td class="num">8.0</td><td>Default</td><td>Actual hours · 8 h</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Required Hours and Attendance Efficiency</h3>
+  <p><strong>Required Hours</strong> = (days in the month − Off Structure) × the full-day hours. <strong>Attendance Efficiency</strong> = Actual Worked Hours ÷ Required Hours, uncapped.</p>
+  <table>
+    <thead><tr><th>Month length</th><th class="num">Off Structure</th><th class="num">Required hours</th><th class="num">Actual hours</th><th class="num">Efficiency</th></tr></thead>
+    <tbody>
+      <tr><td>31 days</td><td class="num">2</td><td class="num">348</td><td class="num">300</td><td class="num">86.2%</td></tr>
+      <tr><td>31 days</td><td class="num">4</td><td class="num">324</td><td class="num">300</td><td class="num">92.6%</td></tr>
+      <tr><td>30 days</td><td class="num">2</td><td class="num">336</td><td class="num">336</td><td class="num">100.0%</td></tr>
+      <tr><td>30 days</td><td class="num">2</td><td class="num">336</td><td class="num">400</td><td class="num pos">119.0%</td></tr>
+    </tbody>
+  </table>
+  <p class="small">Off Structure changes <strong>Required Hours only</strong>. It never changes the day cells — an OFF cell still comes from approved leave.</p>
+
+  <h2>7. How to verify — Admin</h2>
+  <p>Sign in at <code>https://dpdadmin-prod.vercel.app</code> and open <strong>Payroll &amp; Requests</strong> (<code>/en/payroll</code>). You need a role holding <code>payroll.view</code>; edit rights need <code>payroll.manage</code> and the export needs <code>payroll.export</code>.</p>
+
+  <h3>A. The month and the filters</h3>
+  <ol class="check">
+    <li>Five tabs are present: <strong>Payroll · Combined Payroll · Attendance &amp; Orders · Requests · Settings</strong>.</li>
+    <li>Range pills: <strong>This month · Last month · Custom</strong>. Custom accepts a real From / To range, but only inside this month and the previous two.</li>
+    <li>The <strong>Partner view</strong> row lists each client with its rider count. Selecting one narrows the page — and the client is the same thing as the rider's Partner.</li>
+    <li><strong>Zone category</strong> chips (Good / Average / Low / Not set) filter the riders the same way.</li>
+    <li>The summary strip reads <em>Partner · riders · Good / Avg / Low / Not set · rules use zone + orders</em>.</li>
+    <li>Clicking a legend chip (Full day, Absent, 3 h …) filters the page to riders who have that day; the share card appears; clicking again clears it.</li>
+  </ol>
+
+  <h3>B. The Payroll tab</h3>
+  <ol class="check">
+    <li>KPI row: <strong>Riders in payroll · Total active riders · Avg attendance eff. · Riders at / above 100% · Riders with unjustified days · 3 h Days · Manual Adjustments</strong>.</li>
+    <li>Per-rider columns include Off Structure, Required Hours, Actual Hours, Efficiency%, Zone band, and a count per day type.</li>
+    <li>Column filters work per column (text, a list with an explicit All, and a min/max range) and <strong>Clear column filters</strong> resets them.</li>
+    <li><strong>Export to Excel</strong> downloads the filtered rows exactly as shown.</li>
+  </ol>
+
+  <h3>C. Combined Payroll — the spreadsheet grid</h3>
+  <ol class="check">
+    <li>Hovering the grid shows the hint: <em>drag across cells to select · drag the corner handle to fill · Ctrl+C, Ctrl+V, Ctrl+D</em>.</li>
+    <li>Drag across a block of a rider's days. The selection bar reads <em>N cells selected · R riders × D days</em>.</li>
+    <li>Drag the <strong>green corner handle</strong> downwards to fill the pattern into the cells you drag over. The target cells show a dashed preview before you release.</li>
+    <li>Select a block and press <strong>Ctrl+C</strong>, then select another block and <strong>Ctrl+V</strong>. A smaller copied block tiles across the selected block. <strong>Ctrl+D</strong> fills down. <strong>Esc</strong> clears the selection.</li>
+    <li>Select several cells and press <strong>Apply</strong>. The adjustment dialog opens with the cell / rider / day counts, the new status, and a <strong>Reason</strong> box.</li>
+    <li><strong>Apply with an empty reason is refused.</strong> The reason is mandatory for every manual adjustment.</li>
+    <li>Choose <strong>Keep selected status</strong> to leave the cells exactly as the rules computed them, or pick a status (Full day 12 h, Reduced 3 h, Half day 6 h, Actual, OFF, Absent LH / LO, Sick, Accident, Vehicle issue, Custom hours).</li>
+    <li>After applying, the changed cells carry an <strong>orange marker</strong>, and the <strong>Manual changes record</strong> shows the date/time, the user, the rider, the day, the original value, the adjusted value and the reason.</li>
+    <li>Press <strong>Recompute</strong> / reload the month. The hand-adjusted cells must <strong>not</strong> change — a later recalculation never overwrites a manual adjustment.</li>
+  </ol>
+
+  <h3>D. Off Structure</h3>
+  <ol class="check">
+    <li>The header button <strong>Off Structure</strong> opens the dialog titled <em>Contracted OFF days for &lt;month&gt;</em>.</li>
+    <li>Pick one rider, set the days and <strong>Save</strong>. The line under the picker shows the current value and its source (default / manual / bulk upload).</li>
+    <li><strong>Download template</strong>, fill a sheet with a Driver ID (or Employee Number) column and an <strong>Off days</strong> column, then <strong>Upload employee sheet</strong>.</li>
+    <li>The preview lists every row with its verdict: <strong>Will apply · No change · Missing ID · Duplicate · Invalid off days · Exceeds month · Unknown ID · Ambiguous ID · Wrong month</strong>.</li>
+    <li><strong>Apply valid rows</strong> writes only the real changes. A sheet that changes nothing answers <em>No Off Structure changes to write. Default OFF = 2 stays implicit.</em></li>
+    <li>Set a rider to 4 OFF and re-check the Payroll tab: <strong>Required Hours</strong> drops by 4 × 12 = 48 h and Efficiency rises. The <strong>day cells do not move</strong>.</li>
+  </ol>
+
+  <h3>E. Settings — the rules engine</h3>
+  <ol class="check">
+    <li>Open <strong>Settings</strong>. The two seeded clients appear with their criteria ticks and their rule list for the month.</li>
+    <li>The rule table reads as sentences — <em>Zone band is one of Good, Average · Orders is less than 7 → Reduced day · 3 h</em> — with the credited hours beside each result.</li>
+    <li><strong>Add rule</strong>, add conditions, reorder with the up/down arrows, and <strong>Save rules</strong>. The list is evaluated top to bottom.</li>
+    <li><strong>Try the rules</strong> is not saved anywhere. Enter a zone, a band, orders and logged hours, and it answers which rule decided the day and what it credited — or that no rule matched and the client default applies.</li>
+    <li>Change the client criteria (hour values, Required hours / day, Off / 30, Good zone ≥ %, Average zone ≥ %, and the default status) and <strong>Save client</strong>.</li>
+    <li><strong>Good must be at least Average.</strong> A Good of 60 with Average of 70 is refused.</li>
+    <li>Hours outside 0–24 are refused.</li>
+    <li><strong>Add client</strong> creates a new client, optionally copying another client's starting rules. A duplicate name is refused.</li>
+    <li><strong>Delete client</strong> refuses when riders are still assigned to it, and refuses outright for a system client.</li>
+    <li><strong>Restore SOP starting rules</strong> puts the seeded SOP list back.</li>
+  </ol>
+
+  <h3>F. Settings — Zones &amp; efficiency</h3>
+  <ol class="check">
+    <li>The banner repeats that the figures belong to the <strong>previous completed month</strong>, not the selected one.</li>
+    <li>Each zone shows Orders · Rider-days · DPD · Target DPD · Efficiency (auto) · Automatic category.</li>
+    <li><strong>Recompute from last month</strong> refreshes the whole table from the previous completed month.</li>
+    <li>Override the <strong>DPD used</strong>, the <strong>target used</strong> or the <strong>final category</strong> for one zone and press <strong>Use</strong>. The row gains an <strong>Edited</strong> tag and the <strong>Final category</strong> is what the rules read. The automatic figure stays visible beside it.</li>
+    <li>Re-run <strong>Recompute</strong>. Your override must survive.</li>
+    <li>The <strong>(no zone)</strong> row is synthetic — it can be read but not saved.</li>
+    <li>Change <strong>Good ≥ %</strong> / <strong>Average ≥ %</strong> and confirm the automatic banding of every zone moves accordingly.</li>
+  </ol>
+
+  <h3>G. Change log</h3>
+  <ol class="check">
+    <li>Every action above appears in the <strong>Change log</strong> with When · By · Client · Action · Detail — client created, updated, recomputed, adjusted, reset, month opened.</li>
+    <li>Make one change and confirm the row carries your own name and the current time.</li>
+  </ol>
+
+  <h3>H. Permissions</h3>
+  <ol class="check">
+    <li>A user with <code>payroll.view</code> only: no <strong>Off Structure</strong> button, no adjustment dialog, no save button in Settings, no <strong>Export</strong>.</li>
+    <li>A user with <code>payroll.manage</code> but not <code>payroll.export</code>: can edit, cannot export.</li>
+    <li>A user with neither: the module is not reachable.</li>
+  </ol>
+
+  <h2>8. How to verify — Rider app (User side)</h2>
+  <div class="box warn">
+    <p><strong>Payroll is an admin screen only.</strong> There is no rider-facing payroll page in this release and no rider app update to publish. The rider side is the <em>input</em> to payroll: what a rider clocks, delivers and asks for. Verify those three inputs land on the admin grid.</p>
+  </div>
+  <ol class="check">
+    <li><strong>Clock-in / clock-out.</strong> With a test rider, clock in at a known time and clock out a few hours later. On <strong>Admin → Payroll</strong>, that rider's <strong>Actual Hours</strong> for that date must equal the check-in → check-out hours.</li>
+    <li><strong>Orders.</strong> Have the rider submit an order and then verify it on Admin → Deliveries. The verified order must appear as that rider's <strong>Final orders</strong> for that Kuwait day, and it is the number the client rules read.</li>
+    <li><strong>Requests.</strong> Raise a <strong>Leave</strong> (or Sick Leave / Accident) request from the app. It shows as Pending in the app. On Admin → Payroll that day must still be <em>unjustified</em>.</li>
+    <li>Approve the request on Admin → Requests. Come back to Payroll: the day is now <strong>OFF</strong> (or Sick / Accident), it credits 0 hours, and the rider is no longer counted in <strong>Riders with unjustified days</strong>.</li>
+    <li><strong>Precedence, seen from the rider side.</strong> Approve the leave, then hand-adjust that same day in the Combined grid. The hand adjustment wins, and the cell keeps the orange marker.</li>
+    <li><strong>No surprise movement.</strong> A client whose rule list has not been saved for the month keeps the previous behaviour — a clocked-in day is a full 12 h day. Confirm on a client you have not configured yet.</li>
+  </ol>
+
+  <h2>9. Notes and limits worth stating</h2>
+  <div class="box info">
+    <ul>
+      <li><strong>No rider app release is required for any of this.</strong> The module is admin-only.</li>
+      <li>The month window is <strong>this month plus the previous two</strong>. That is the existing payroll bound and is unchanged in v4; widening it is a separate decision.</li>
+      <li>Zone efficiency is <strong>read from the previous completed month</strong> by design, so a newly created zone is <strong>Not set</strong> until a full month has passed and you press Recompute.</li>
+      <li>One adjustment batch can cover at most <strong>2,000 cells</strong>, and one Off Structure upload at most <strong>2,000 rows</strong>. Split anything larger.</li>
+      <li>A hand adjustment without a reason cannot be saved — that is the rule that makes the change log auditable.</li>
+      <li>Nothing in this release recalculates a month you have already paid. Past days keep the value they were given; only the rules and bands you apply from now on decide new days.</li>
+    </ul>
+  </div>
+
+  <p class="footer">MG GO Admin · production 1 Oct 2026 · Payroll v4 (MGGO Payroll SOP v4.0) · Rider app unchanged · Contact Vizsoft for a walkthrough on a screen share.</p>
+</body>
+</html>

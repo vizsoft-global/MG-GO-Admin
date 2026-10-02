@@ -34,6 +34,15 @@ const eslintConfig = defineConfig([
       "no-restricted-imports": "off",
     },
   },
+  {
+    // A `.cjs` file is CommonJS by definition: it cannot use `import`, so the
+    // rule that forbids `require()` has nothing to offer here. `scripts/` holds
+    // Node-side tooling that never enters the app bundle.
+    files: ["scripts/**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
   globalIgnores([
     ".next/**",
     "out/**",

@@ -63,7 +63,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useHasMounted } from "@/hooks/use-has-mounted";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -163,14 +162,6 @@ function exportDeliveriesCsv(rows: DeliveryExportRow[]) {
   a.download = `deliveries-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-function DeliveriesPageSkeleton() {
-  return (
-    <div className="flex h-48 items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
-  );
 }
 
 const GPS_STALE_MS = 5 * 60 * 1000;
@@ -1189,7 +1180,5 @@ function DeliverySelectBox({
 }
 
 export function DeliveriesPageShell() {
-  const mounted = useHasMounted();
-  if (!mounted) return <DeliveriesPageSkeleton />;
   return <DeliveriesPageContent />;
 }

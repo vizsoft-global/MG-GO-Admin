@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MG GO — Payroll v4 email template</title>
+  <style>
+    @page { size: A4; margin: 15mm 14mm 16mm; }
+    * { box-sizing: border-box; }
+    body { font: 12px/1.5 "Segoe UI", system-ui, sans-serif; color: #1c1917; margin: 0; }
+    .head { border: 1px solid #d6d3d1; border-radius: 8px; padding: 10px 12px; background: #fafaf9; margin: 0 0 14px; page-break-inside: avoid; }
+    .head div { margin: 2px 0; }
+    .head b { display: inline-block; min-width: 58px; color: #57534e; font-weight: 600; }
+    .subject { font-size: 14px; font-weight: 700; color: #0f172a; }
+    h1 { font-size: 15px; margin: 14px 0 6px; color: #0f766e; }
+    p { margin: 0 0 9px; }
+    ol { margin: 0 0 9px; padding-left: 1.3em; }
+    li { margin: 3px 0; }
+    .lbl { font-weight: 700; letter-spacing: 0.04em; font-size: 11px; color: #0f766e; text-transform: uppercase; margin: 14px 0 6px; }
+    pre { font: 11.5px/1.5 ui-monospace, Consolas, monospace; background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 6px; padding: 8px 10px; margin: 0 0 10px; page-break-inside: avoid; }
+    .box { border: 1px solid #d6d3d1; border-radius: 8px; padding: 9px 11px; margin: 8px 0; page-break-inside: avoid; }
+    .info { background: #eff6ff; border-color: #93c5fd; }
+    .did { background: #f0fdf4; border-color: #86efac; }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: 11px; background: #f5f5f4; padding: 0 3px; border-radius: 3px; }
+    .sig { margin-top: 14px; }
+    .footer { margin-top: 16px; font-size: 10px; color: #78716c; border-top: 1px solid #e7e5e4; padding-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="head">
+    <div><b>To:</b> Noura; Mohamed; Vijay; Mustafa; Aziz</div>
+    <div><b>Cc:</b> Vizsoft Delivery</div>
+    <div class="subject">MG GO — Payroll v4 (SOP v4.0) is live: client-owned rules, zone efficiency and an Excel-style grid</div>
+    <div style="font-size:11px;color:#57534e;margin-top:6px">Attachment: <code>client-payroll-v4.pdf</code></div>
+  </div>
+
+  <p>Hi team,</p>
+  <p>The MGGO Payroll SOP v4.0 is now live on the admin panel. Payroll is no longer one hard-coded rule — each client owns its own rules, and your staff can change them on screen without a developer.</p>
+
+  <p class="lbl">What you asked for, in short</p>
+  <div class="box did">
+    <ul style="margin:0;padding-left:1.2em">
+      <li><strong>The client is the unit:</strong> each client keeps its own hour values, thresholds, a default day status, and its own ordered list of day rules.</li>
+      <li>A rule matches on <strong>zone band</strong> (Good / Average / Low), <strong>zone name</strong>, <strong>orders</strong> and <strong>worked hours</strong>. The first match from the top wins.</li>
+      <li>The SOP result codes, exactly as written: Full day 12 h, Reduced day 3 h, Half day 6 h, Actual hours, Absent, Absent LH, Absent LO, Custom hours.</li>
+      <li><strong>Zone efficiency</strong> is read from the previous completed month only: DPD = orders ÷ rider-days, efficiency = DPD ÷ the target DPD, banded Good ≥ 110%, Average ≥ 70%, Low &lt; 70%. A zone nobody measured is <strong>Not set</strong> — never "Low".</li>
+      <li><strong>One stated order of precedence:</strong> hand adjustment → Operations (OFF / Sick / Accident / Vehicle issue) → first matching client rule → client default → the previous behaviour.</li>
+      <li><strong>Off Structure</strong> per rider (contracted OFF days, default 2) drives Required Hours, and is uploadable in bulk from Excel.</li>
+      <li>The <strong>Combined grid</strong> behaves like a spreadsheet: select a block of rider-days, fill it, copy and paste across it, and adjust the whole selection with <strong>one reason</strong>.</li>
+      <li>Attendance Efficiency = <strong>Actual Worked Hours ÷ Required Hours</strong>, uncapped, with filters.</li>
+    </ul>
+  </div>
+
+  <p class="lbl">What is live today</p>
+  <ul style="margin:0 0 9px;padding-left:1.2em">
+    <li><strong>Admin:</strong> <code>https://dpdadmin-prod.vercel.app/en/payroll</code> — four pages: Payroll · Combined Payroll · Attendance &amp; Orders · Settings, plus Requests.</li>
+    <li><strong>Two SOP clients are seeded</strong> with their starting rule lists: <strong>Americana</strong> (zone band + orders) and <strong>Keeta</strong> (orders + hours).</li>
+    <li><strong>Settings</strong> is where you edit it all: client criteria, the rule list, a <strong>Try the rules</strong> simulator that saves nothing, the <strong>Zones &amp; efficiency</strong> table with a Recompute button and per-zone overrides, and a change log that names who changed what and when.</li>
+    <li><strong>Combined Payroll</strong> has the grid, the batch adjustment (a reason is mandatory) and the manual changes record — original value, new value, reason, user, time.</li>
+    <li><strong>Off Structure</strong> has a per-rider editor and a bulk Excel upload with a preview that says what will apply, what will not change and what was rejected, row by row.</li>
+  </ul>
+
+  <div class="box info">
+    <p style="margin:0"><strong>No rider app update is needed.</strong> Payroll is an admin screen only. Nothing changes in the rider app. What the rider already does — clock in and out, deliver orders, raise Leave / Sick / Accident requests — is what feeds payroll, and the rules read those same figures.</p>
+  </div>
+
+  <p class="lbl">A few worked examples — Americana (top to bottom, first match wins)</p>
+  <pre>Khiran, 3 orders     -&gt;  Full day 12 h
+Low zone, 4 orders   -&gt;  Reduced day 3 h
+Low zone, 5 orders   -&gt;  Full day 12 h    (the rule needs orders below 5)
+Good zone, 6 orders  -&gt;  Reduced day 3 h
+Good zone, 7 orders  -&gt;  Full day 12 h    (no rule matched, client default)</pre>
+
+  <p class="lbl">A few worked examples — Keeta</p>
+  <pre>0 h,  0 orders       -&gt;  Absent
+9 h,  2 orders       -&gt;  Absent LO
+3 h,  8 orders       -&gt;  Absent LH
+5 h,  6 orders       -&gt;  Half day 6 h
+11 h, 8 orders       -&gt;  Actual hours (11 h)
+11 h, 4 orders       -&gt;  Half day 6 h
+13 h, 8 orders       -&gt;  Full day 12 h
+8 h,  6 orders       -&gt;  Actual hours (8 h)   (no rule matched, client default)</pre>
+
+  <p class="lbl">A note on zone efficiency</p>
+  <p>Efficiency always comes from the previous completed month. That is deliberate: a band that moved with the current, half-finished month would silently re-price days you have already decided. So a newly created zone stays <strong>Not set</strong> until a full month has passed and you press Recompute. And a zone with no rider-days is left out of the target rather than dragging it down, which is why an empty zone cannot push a working zone into "Average".</p>
+
+  <p>Please use the attached client note for the full picture: <strong>what you requested, what we built, and how to verify it</strong> on Admin and against the rider app inputs.</p>
+  <p>Happy to walk through Settings and the Combined grid on a short call.</p>
+
+  <p class="sig">Thank you,<br /><strong>Vizsoft</strong></p>
+
+  <p class="footer">MG GO Admin · production 1 Oct 2026 · Payroll v4 (MGGO Payroll SOP v4.0) · Admin-only change — no rider app release.</p>
+</body>
+</html>

@@ -1,0 +1,49 @@
+-- P4 hot-path index: `admin_live_fleet_snapshot` per-driver delivery counts.
+--
+-- `admin_live_fleet_snapshot` is the single hottest admin RPC — every Live
+-- Tracking client polls it on a 10s/30s cadence — and it computes, per roster
+-- driver:
+--
+--   (SELECT count(*) FROM deliveries dv
+--     WHERE dv.driver_id = d.id
+--       AND dv.status <> 'cancelled'
+--       AND dv.created_at >= v_day_start
+--       AND dv.created_at <  v_day_end)               AS deliveries_today
+--
+-- The only index that served that predicate was
+-- `deliveries_driver_created_at_idx (driver_id, created_at DESC)`, which does
+-- not carry `status`. The planner therefore had to fetch every candidate row
+-- from the heap purely to evaluate `status <> 'cancelled'`.
+--
+-- Measured on production (2026-10-02) over 208 surviving roster drivers against
+-- a busy day (2026-09-15) — `EXPLAIN (ANALYZE, BUFFERS)`:
+--
+--   before: Aggregate 66.183 ms / 2,696 buffers
+--             -> deliveries_today subplan 55.7 ms / 1,882 buffers (208 loops)
+--                Index Scan on deliveries_driver_created_at_idx,
+--                Filter: status <> 'cancelled', no heap-fetch avoidance
+--
+--   after:  Aggregate 11.242 ms / 1,438 buffers
+--             -> deliveries_today subplan  2.5 ms /   629 buffers (208 loops)
+--                Index Only Scan on deliveries_driver_created_active_idx,
+--                no residual filter
+--
+--   => 5.9x faster on the hot subplan, 66.2 ms -> 11.2 ms for the drivers +
+--      counts shape. Live function total moved 62.45 ms -> 56.45 ms on a quiet
+--      current day (today's rows are few, so the win scales with day volume).
+--
+-- Why a PARTIAL index: the partial predicate `status <> 'cancelled'` matches the
+-- function's own predicate exactly, so the row filter moves into the index and
+-- the scan becomes index-only (Heap Fetches: 1 across all 208 loops). It is
+-- additive and strictly narrower than the equivalent full index, so it also
+-- costs less to maintain on every delivery write.
+--
+-- `deliveries_driver_delivered_at_idx (driver_id, delivered_at)` already served
+-- the sibling `deliveries_completed_today` count (which has NO status filter) as
+-- an Index Only Scan at 3.8 ms, so no second index was needed.
+--
+-- No function, grant, policy or column is touched by this migration.
+
+CREATE INDEX IF NOT EXISTS deliveries_driver_created_active_idx
+  ON public.deliveries USING btree (driver_id, created_at DESC)
+  WHERE (status <> 'cancelled');

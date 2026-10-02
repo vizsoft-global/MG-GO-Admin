@@ -21,6 +21,7 @@ import {
 } from "react";
 
 import { createClient } from "@/lib/supabase/client";
+import { useVisibleInterval } from "@/lib/browser/use-visible-interval";
 
 import { FleetStore } from "./fleet-store";
 import { FleetTransport } from "./fleet-transport";
@@ -182,10 +183,10 @@ export function useFleetRailLabel(): {
   const connection = useFleetSelector((snapshot) => snapshot.connection);
   const [now, setNow] = useState(() => Date.now());
 
-  useEffect(() => {
-    const handle = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(handle);
-  }, []);
+  // The tick exists to age `staleSeconds` while the map is being watched; a hidden tab was
+  // re-rendering its header once a second for nobody. Shared with the rail's own clock so
+  // there is one pause-and-catch-up rule on this page rather than one per timer.
+  useVisibleInterval(() => setNow(Date.now()), 1000);
 
   return useMemo(
     () => ({

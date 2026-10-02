@@ -1,0 +1,23 @@
+-- P1: the deliveries list orders by `created_at` descending, and PostgREST emits
+-- that as `ORDER BY created_at DESC NULLS LAST`. A btree index declared plain
+-- `DESC` is NULLS FIRST, and the planner will not match the two, so the query
+-- could not use deliveries_created_at_id_idx (added the same day) and degraded to
+-- a Parallel Seq Scan + Sort over 184,282 rows / 114 MB on every page load.
+--
+-- Measured on production (staff session, warm cache, 2026-10-02):
+--   ORDER BY created_at DESC NULLS LAST  -> Parallel Seq Scan + Sort
+--                                           90.136 ms / 14,632 buffers / 6.6 MB sort
+--   ORDER BY created_at DESC, id DESC    -> Index Scan using deliveries_created_at_id_idx
+--                                           0.198 ms / 48 buffers
+--
+-- This is the single largest statement cost in the database. Over the 29 days since
+-- pg_stat_statements was reset (2026-09-03) the `DESC NULLS LAST` shape accounted for
+-- 1,416,137,883 ms across six statement shapes -- ~13.6 hours of database time per day.
+--
+-- NULLS LAST is a no-op semantically here: deliveries.created_at is NOT NULL, so the
+-- ordering of non-null rows is identical either way. Nothing about the result set
+-- changes; only which plan the planner is allowed to choose. The plain-DESC index is
+-- kept because the `created_at DESC, id DESC` shape genuinely needs it and the planner
+-- does not treat the two NULLS placements as interchangeable.
+CREATE INDEX IF NOT EXISTS deliveries_created_at_nulls_last_idx
+  ON public.deliveries (created_at DESC NULLS LAST, id DESC NULLS LAST);

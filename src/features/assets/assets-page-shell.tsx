@@ -44,7 +44,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
-import { useHasMounted } from "@/hooks/use-has-mounted";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import { TabBar } from "@/components/dashboard/tab-bar";
@@ -576,7 +575,5 @@ function AssetsPageContent() {
 }
 
 export function AssetsPageShell() {
-  const mounted = useHasMounted();
-  if (!mounted) return <AssetsPageSkeleton />;
   return <AssetsPageContent />;
 }

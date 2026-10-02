@@ -32,12 +32,43 @@ export function toAuthProfile(
   };
 }
 
+/**
+ * Per-isolate TTL cache for the permission catalog.
+ *
+ * `admin_permissions` was re-read on every single session load — a full-table
+ * round trip per navigation and per server action, for a list that only changes
+ * when an admin opens Roles & Permissions. Caching it removes one Supabase hop
+ * from the critical path of every page and every mutation while keeping the
+ * database as the source of truth, the same trade the proxy already makes for
+ * `app_settings`.
+ *
+ * A cold isolate still reads it once, so a newly seeded slug is picked up on
+ * the next instance, and the 60 s TTL bounds how long a warm one can be stale.
+ */
+const CATALOG_TTL_MS = 60_000;
+
+let cachedCatalogSlugs: { value: string[]; expiresAt: number } | null = null;
+
+/** Test seam. */
+export function clearCatalogSlugsCache(): void {
+  cachedCatalogSlugs = null;
+}
+
 async function loadCatalogSlugs(
   supabase: SupabaseClient<Database>,
+  now = Date.now(),
 ): Promise<string[]> {
+  if (cachedCatalogSlugs && cachedCatalogSlugs.expiresAt > now) {
+    return cachedCatalogSlugs.value;
+  }
+
   const { data } = await supabase.from("admin_permissions").select("slug");
-  if (data?.length) return data.map((row) => row.slug);
-  return Object.values(PERMISSIONS);
+  const value = data?.length
+    ? data.map((row) => row.slug)
+    : [...Object.values(PERMISSIONS)];
+
+  cachedCatalogSlugs = { value, expiresAt: now + CATALOG_TTL_MS };
+  return value;
 }
 
 async function loadRoleSlugs(
@@ -75,9 +106,11 @@ export async function enrichSessionPermissions(
   }
 
   const accessKind = parseStaffAccessKind(accessKindRaw);
-  const catalogSlugs = await loadCatalogSlugs(supabase);
 
+  // A super admin / Manager resolves from the catalog alone, so the catalog is
+  // the only read on their path.
   if (isSuperAdmin || accessKind === "manager") {
+    const catalogSlugs = await loadCatalogSlugs(supabase);
     return resolveSessionPermissionSlugs({
       isSuperAdmin,
       accessKind: accessKind ?? (isSuperAdmin ? "manager" : null),
@@ -87,17 +120,26 @@ export async function enrichSessionPermissions(
     });
   }
 
-  if (accessKind === "user" && userId) {
-    const userTicks = await loadUserTicks(supabase, userId);
-    if (userTicks) {
-      return resolveSessionPermissionSlugs({
-        isSuperAdmin,
-        accessKind,
-        userTicks,
-        roleSlugs: [],
-        catalogSlugs,
-      });
-    }
+  // The catalog and the caller's own ticks are independent reads, so they go
+  // out together. They used to be sequential — catalog first, then ticks —
+  // which put two Supabase round trips back to back on the critical path of
+  // every page and every mutation. On a cold isolate the two now overlap
+  // instead of queueing; on a warm one the catalog is already cached and this
+  // is a single round trip either way.
+  const tickUserId = accessKind === "user" && userId ? userId : null;
+  const [catalogSlugs, userTicks] = await Promise.all([
+    loadCatalogSlugs(supabase),
+    tickUserId ? loadUserTicks(supabase, tickUserId) : Promise.resolve(null),
+  ]);
+
+  if (userTicks) {
+    return resolveSessionPermissionSlugs({
+      isSuperAdmin,
+      accessKind,
+      userTicks,
+      roleSlugs: [],
+      catalogSlugs,
+    });
   }
 
   const roleSlugs = await loadRoleSlugs(supabase, adminRoleId);

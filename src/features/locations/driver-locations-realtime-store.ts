@@ -13,6 +13,7 @@ import {
   shouldShowOnLiveMap,
 } from "./location-status";
 import { vehicleTypeFromDriverJoin } from "@/features/vehicles/vehicle-type";
+import { shouldRunBackgroundWork } from "@/lib/browser/visibility";
 import type { DriverLiveLocation } from "./types";
 
 type LiveRow = Database["public"]["Tables"]["driver_locations"]["Row"] & {
@@ -41,10 +42,11 @@ const NOTIFY_BATCH_MS = 250;
 const RESYNC_MS = 15_000;
 let channel: RealtimeChannel | null = null;
 let resyncTimer: ReturnType<typeof setInterval> | null = null;
+let visibilityBound = false;
 let listeners = new Set<Listener>();
 /** O(1) live upserts under high write volume. */
 let cacheById = new Map<string, DriverLiveLocation>();
-let fetchPromise: Promise<void> | null = null;
+let inFlightLoad: Promise<void> | null = null;
 let notifyTimer: ReturnType<typeof setTimeout> | null = null;
 let nameCache = new Map<
   string,
@@ -214,6 +216,21 @@ async function loadInitial() {
   notifyNow();
 }
 
+/**
+ * One read at a time. `loadInitial` is idempotent, so a concurrent second call can only
+ * replace the first one's result with an identical one — it costs a full 2500-row query,
+ * a Map rebuild and a list re-render to change nothing. Three things now ask for this read
+ * (first subscriber, the 15s resync, the visibility catch-up) where there used to be two,
+ * so the guard matters more than it did.
+ */
+function requestLoad(): Promise<void> {
+  if (inFlightLoad) return inFlightLoad;
+  inFlightLoad = loadInitial().finally(() => {
+    inFlightLoad = null;
+  });
+  return inFlightLoad;
+}
+
 function applyPayload(
   eventType: "INSERT" | "UPDATE" | "DELETE",
   row: LiveRow | null,
@@ -314,7 +331,7 @@ function ensureChannel() {
       if (dead) void createClient().removeChannel(dead);
       if (listeners.size === 0) return;
       ensureChannel();
-      void loadInitial();
+      void requestLoad();
     });
 }
 
@@ -322,8 +339,33 @@ function ensureResync() {
   if (resyncTimer != null) return;
   resyncTimer = setInterval(() => {
     if (listeners.size === 0) return;
-    void loadInitial();
+    // A hidden v1 tracking tab was re-reading 2500 joined rows every 15s and handing them
+    // to React, for a map nobody was looking at. Paused, then caught up on return below.
+    if (!shouldRunBackgroundWork(typeof document === "undefined" ? undefined : document)) {
+      return;
+    }
+    void requestLoad();
   }, RESYNC_MS);
+}
+
+function onVisibilityReturn() {
+  if (typeof document === "undefined" || document.hidden) return;
+  if (listeners.size === 0) return;
+  // The pins are stale by exactly the time the tab was hidden, so catch up now rather than
+  // waiting out the resync interval — the same reason the v2 transport does it.
+  void requestLoad();
+}
+
+function ensureVisibilityBinding() {
+  if (visibilityBound || typeof document === "undefined") return;
+  document.addEventListener("visibilitychange", onVisibilityReturn);
+  visibilityBound = true;
+}
+
+function releaseVisibilityBinding() {
+  if (!visibilityBound || typeof document === "undefined") return;
+  document.removeEventListener("visibilitychange", onVisibilityReturn);
+  visibilityBound = false;
 }
 
 export function subscribeDriverLocations(listener: Listener): () => void {
@@ -332,12 +374,12 @@ export function subscribeDriverLocations(listener: Listener): () => void {
 
   ensureChannel();
   ensureResync();
+  ensureVisibilityBinding();
 
-  if (!fetchPromise) {
-    fetchPromise = loadInitial().finally(() => {
-      fetchPromise = null;
-    });
-  }
+  // Deduped through `requestLoad`, not fired directly: the initial fetch, the resync and
+  // the visibility catch-up are the same read, and two of them landing together was two
+  // identical 2500-row queries and two full list rebuilds for one answer.
+  void requestLoad();
 
   return () => {
     listeners.delete(listener);
@@ -352,6 +394,7 @@ export function subscribeDriverLocations(listener: Listener): () => void {
         clearInterval(resyncTimer);
         resyncTimer = null;
       }
+      releaseVisibilityBinding();
     }
   };
 }

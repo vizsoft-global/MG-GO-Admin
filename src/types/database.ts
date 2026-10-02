@@ -8997,6 +8997,17 @@ export type Database = {
         Args: { p_id: string }
         Returns: Json
       }
+      admin_deliveries_counts_by_filters: {
+        Args: {
+          p_driver_id?: string
+          p_from?: string
+          p_partner_id?: string
+          p_restaurant_id?: string
+          p_to?: string
+          p_zone_id?: string
+        }
+        Returns: Json
+      }
       admin_deliveries_status_counts: {
         Args: {
           p_from?: string
@@ -9163,6 +9174,13 @@ export type Database = {
           p_scope_type: string
         }
         Returns: string
+      }
+      admin_attendance_analytics_daily: {
+        Args: {
+          p_from: string
+          p_to: string
+        }
+        Returns: Json
       }
       admin_list_attendance_daily: {
         Args: {

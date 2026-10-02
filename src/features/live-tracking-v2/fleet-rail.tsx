@@ -11,13 +11,14 @@
  * full width to the map without losing the fleet count.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useVisibleInterval } from "@/lib/browser/use-visible-interval";
 
 import { FleetDriverCard } from "./fleet-driver-card";
 import { FLEET_TONE_DOT } from "./fleet-tone";
@@ -49,12 +50,9 @@ const RAIL_CLOCK_INTERVAL_MS = 30_000;
 function useRailClock(): number {
   const store = useFleetStore();
   const [nowMs, setNowMs] = useState(() => store.serverNow());
-  useEffect(() => {
-    const handle = window.setInterval(() => {
-      setNowMs(store.serverNow());
-    }, RAIL_CLOCK_INTERVAL_MS);
-    return () => window.clearInterval(handle);
-  }, [store]);
+  // Paused while the tab is hidden, caught up on return. A hidden rail was re-rendering
+  // here (and through the virtualizer beneath it) every 30s for nobody.
+  useVisibleInterval(() => setNowMs(store.serverNow()), RAIL_CLOCK_INTERVAL_MS);
   return nowMs;
 }
 

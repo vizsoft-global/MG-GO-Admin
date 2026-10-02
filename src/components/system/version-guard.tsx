@@ -25,7 +25,12 @@ export function VersionGuard() {
     queryFn: fetchBuildId,
     staleTime: 0,
     refetchInterval: POLL_MS,
-    refetchIntervalInBackground: true,
+    // Deliberately *not* `refetchIntervalInBackground`. `/api/build-id` is
+    // `force-dynamic` with `no-store`, so every poll is an uncacheable function
+    // invocation, and a backgrounded tab was spending ~4/min on an answer nobody could
+    // see. `refetchOnWindowFocus` already asks the same question the moment the tab is
+    // looked at, so the dialog still appears exactly when it did — just not while the
+    // operator is working somewhere else.
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     retry: 2,

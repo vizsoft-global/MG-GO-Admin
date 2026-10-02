@@ -281,7 +281,6 @@ export function DriverAppSettingsPanel({
       toast.success(
         enabled ? t("forceUpdateEnabled", { code: trimmedCode }) : t("forceUpdateSaved"),
       );
-      router.refresh();
     });
   };
 
@@ -332,7 +331,6 @@ export function DriverAppSettingsPanel({
                     return;
                   }
                   toast.success(t("saved"));
-                  router.refresh();
                 });
               }}
             >
@@ -386,7 +384,6 @@ export function DriverAppSettingsPanel({
                       if (result.logoUrl) setLogoPreview(result.logoUrl);
                       if (logoRef.current) logoRef.current.value = "";
                       toast.success(t("logoUploaded"));
-                      router.refresh();
                     });
                   }}
                 />
@@ -423,7 +420,6 @@ export function DriverAppSettingsPanel({
                       if (result.splashUrl) setSplashPreview(result.splashUrl);
                       if (splashRef.current) splashRef.current.value = "";
                       toast.success(t("splashUploaded"));
-                      router.refresh();
                     });
                   }}
                 />
@@ -460,7 +456,6 @@ export function DriverAppSettingsPanel({
                       if (result.iconUrl) setIconPreview(result.iconUrl);
                       if (iconRef.current) iconRef.current.value = "";
                       toast.success(t("appIconUploaded"));
-                      router.refresh();
                     });
                   }}
                 />
@@ -498,7 +493,6 @@ export function DriverAppSettingsPanel({
                       return;
                     }
                     toast.success(t("deliveryProximitySaved"));
-                    router.refresh();
                   });
                 }}
               >
@@ -647,7 +641,6 @@ export function DriverAppSettingsPanel({
                       return;
                     }
                     toast.success(t("messageSaved"));
-                    router.refresh();
                   });
                 }}
               >
@@ -1044,7 +1037,6 @@ export function DriverAppSettingsPanel({
               if (splashRef.current) splashRef.current.value = "";
               if (iconRef.current) iconRef.current.value = "";
               toast.success(t("resetDone"));
-              router.refresh();
             });
           }}
         >
