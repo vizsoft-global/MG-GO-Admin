@@ -38,7 +38,6 @@ import {
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/auth-context";
 import { canManageRestaurants, hasPermissionInSet } from "@/lib/auth/permissions";
-import { useHasMounted } from "@/hooks/use-has-mounted";
 import { cn } from "@/lib/utils";
 import { useRestaurantsList } from "./use-restaurants";
 import { DriverAssignSheet } from "@/features/drivers/driver-assign-sheet";
@@ -122,14 +121,6 @@ function formatCreatedAt(iso: string, locale: string) {
   } catch {
     return iso.slice(0, 10);
   }
-}
-
-function RestaurantsPageSkeleton() {
-  return (
-    <div className="flex h-48 items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
-  );
 }
 
 function RestaurantsPageContent() {
@@ -826,7 +817,5 @@ function RestaurantsPageContent() {
 }
 
 export function RestaurantsPageShell() {
-  const mounted = useHasMounted();
-  if (!mounted) return <RestaurantsPageSkeleton />;
   return <RestaurantsPageContent />;
 }

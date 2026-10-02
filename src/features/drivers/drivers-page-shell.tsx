@@ -46,16 +46,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasMounted } from "@/hooks/use-has-mounted";
 import { cn } from "@/lib/utils";
 import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
 import { customFieldColumnId, type CustomFieldDefinition } from "@/lib/custom-fields/types";
 import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
 import { useDriversListColumns } from "./use-drivers-list-columns";
-import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
-import { fetchDriverDetail } from "./drivers-actions";
 import { fetchDriversForExport } from "./drivers-list-actions";
 import { useAuth } from "@/contexts/auth-context";
 import { useApproveDriverIntake, useDriverDetail, useRestoreDriverIntake } from "./use-drivers";
@@ -132,14 +129,6 @@ const EMPTY_KPIS = {
   suspended: 0,
 };
 
-function DriversPageSkeleton() {
-  return (
-    <div className="flex h-48 items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
-  );
-}
-
 function CompanyNameCell({ row, unassigned }: { row: DriverListPageRow; unassigned: string }) {
   if (row.company_tone === "unassigned") {
     return (
@@ -194,7 +183,6 @@ function DriversPageContent() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const router = useRouter();
-  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [tabFilter, setTabFilter] = useState<DriversTab>("all");
   const [search, setSearch] = useState("");
@@ -241,14 +229,6 @@ function DriversPageContent() {
   const loadMoreRef = useRef<HTMLTableRowElement | null>(null);
   const quickEditQuery = useDriverDetail(quickEditId ?? "");
   const quickEditDriver = quickEditQuery.data ?? null;
-
-  const prefetchDriverDetail = (driverId: string) => {
-    void queryClient.prefetchQuery({
-      queryKey: queryKeys.drivers.detail(driverId),
-      queryFn: () => fetchDriverDetail(driverId),
-      staleTime: 60_000,
-    });
-  };
 
   useEffect(() => {
     if (searchParams.get("add") === "1") {
@@ -746,8 +726,6 @@ function DriversPageContent() {
                           if (shouldIgnoreRowNavigation(event.target)) return;
                           router.push(`/drivers/${driver.id}`);
                         }}
-                        onMouseEnter={() => prefetchDriverDetail(driver.id)}
-                        onFocus={() => prefetchDriverDetail(driver.id)}
                         onKeyDown={(event) => {
                           if (event.key !== "Enter" && event.key !== " ") return;
                           if (shouldIgnoreRowNavigation(event.target)) return;
@@ -1077,7 +1055,5 @@ function DriversPageContent() {
 }
 
 export function DriversPageShell() {
-  const mounted = useHasMounted();
-  if (!mounted) return <DriversPageSkeleton />;
   return <DriversPageContent />;
 }

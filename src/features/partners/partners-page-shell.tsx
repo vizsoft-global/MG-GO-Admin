@@ -37,7 +37,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/auth-context";
-import { useHasMounted } from "@/hooks/use-has-mounted";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import { PartnerFormSheet } from "./partner-form-sheet";
@@ -98,14 +97,6 @@ function formatCreatedAt(iso: string, locale: string) {
   } catch {
     return iso.slice(0, 10);
   }
-}
-
-function PartnersPageSkeleton() {
-  return (
-    <div className="flex h-48 items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
-  );
 }
 
 function PartnersPageContent() {
@@ -532,8 +523,6 @@ function PartnersPageContent() {
 }
 
 export function PartnersPageShell() {
-  const mounted = useHasMounted();
-  if (!mounted) return <PartnersPageSkeleton />;
   return (
     <PartnersPageContent />
   );
