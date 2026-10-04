@@ -3480,6 +3480,10 @@
       "accidentSubtitle": "Record a vehicle accident",
       "documentsSubtitle": "Registration or insurance file",
       "serviceSubtitle": "Workshop visit",
+      "handoverSaved": "Handover recorded",
+      "accidentSaved": "Accident recorded",
+      "documentSaved": "Document added",
+      "serviceSaved": "Service recorded",
       "emptyHandover": "No handover records yet",
       "emptyAccident": "No accident records yet",
       "emptyDocuments": "No vehicle documents yet",
@@ -3511,12 +3515,23 @@
         "medium": "Medium",
         "high": "High"
       },
+      "docType": {
+        "registration": "Registration",
+        "insurance": "Insurance",
+        "other": "Other"
+      },
       "errors": {
         "missing_fields": "Fill the required fields.",
         "save_failed": "Could not save this record.",
         "not_authorized": "You do not have permission to manage vehicles.",
         "file_too_large": "File must be 8 MB or smaller.",
-        "upload_failed": "Could not upload the file."
+        "upload_failed": "Could not upload the file.",
+        "future_date": "The date cannot be in the future.",
+        "location_required": "Enter the accident location.",
+        "expiry_in_past": "The expiry date must be today or later.",
+        "invalid_option": "Choose a valid option.",
+        "invalid_drivers": "Select both drivers.",
+        "same_driver": "From and To must be different drivers."
       }
     },
     "fuel": {
@@ -4714,6 +4729,9 @@
           "searchPlaceholder": "Search route or entity…",
           "eventCount": "{count} events",
           "eventCountInRange": "{count} events · {range}",
+          "sortNewest": "Newest first",
+          "sortOldest": "Oldest first",
+          "clearSearch": "Clear search",
           "detailsOpened": "Opened {target}",
           "detailsCreated": "Created {target}",
           "detailsDecided": "{outcome} · {target}",
@@ -7506,6 +7524,7 @@
         "windowHint": "Inside {from} – {to}."
       },
       "clearFilters": "Clear filters",
+      "clearSearch": "Clear search",
       "export": "Export to Excel",
       "exportCsv": "CSV",
       "downloadTable": "Download this table",

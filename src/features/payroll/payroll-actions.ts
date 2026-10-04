@@ -95,6 +95,35 @@ function isMissingRpc(error: { code?: string; message?: string }): boolean {
   );
 }
 
+/**
+ * Hours elapsed on each check-in that is still open today, keyed by driver id.
+ *
+ * Read-only and display-only. `admin_payroll_rule_snapshot` reports an open log
+ * as `h = 0` on purpose — a shift with no end has no length to credit, and
+ * assuming one would inflate the month — so the grid would otherwise show a
+ * rider who has been on the clock for nine hours as a plain full day. The rule
+ * engine still sees `0`; only the cell label uses this.
+ */
+async function loadOpenLogElapsedToday(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  today: string,
+): Promise<Record<string, number>> {
+  const { data } = await supabase
+    .from("attendance_logs")
+    .select("driver_id, check_in_at")
+    .eq("log_date", today)
+    .is("check_out_at", null);
+  const now = Date.now();
+  const out: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const started = row.check_in_at ? Date.parse(row.check_in_at) : Number.NaN;
+    if (!Number.isFinite(started)) continue;
+    const hours = Math.max(0, (now - started) / 3_600_000);
+    out[row.driver_id] = Math.round(hours * 100) / 100;
+  }
+  return out;
+}
+
 export async function fetchPayrollMonthSnapshot(input: {
   monthKey: string;
   slicers?: PayrollSlicers;
@@ -108,18 +137,32 @@ export async function fetchPayrollMonthSnapshot(input: {
   // The rule snapshot is the source of truth: it already resolves hours,
   // requests, recon orders, per-month rules, zone category and adjustments in
   // one call, and the client engine re-evaluates it (the two cannot disagree).
-  const rule = await supabase.rpc("admin_payroll_rule_snapshot", {
-    p_month: `${month.key}-01`,
-    p_zone_ids: emptyToUndef(slicers.zoneIds),
-    p_project_keys: emptyToUndef(slicers.projectKeys),
-    p_vehicle_keys: emptyToUndef(slicers.vehicleKeys),
-    p_nationalities: emptyToUndef(slicers.nationalities),
-    p_source_types: emptyToUndef(slicers.sourceTypes),
-    p_source_companies: emptyToUndef(slicers.sourceCompanies),
-    p_restaurant_ids: emptyToUndef(slicers.restaurantIds),
-  });
+  //
+  // The snapshot reports `h = 0` for a check-in that has not been closed yet,
+  // because it will not invent a length for a shift with no end. The grid still
+  // has to show the operator how long a rider has been on the clock today, so
+  // today's open logs are fetched alongside — in the same round trip, so this
+  // costs no latency — and fed in as display-only elapsed hours.
+  const [rule, openElapsed] = await Promise.all([
+    supabase.rpc("admin_payroll_rule_snapshot", {
+      p_month: `${month.key}-01`,
+      p_zone_ids: emptyToUndef(slicers.zoneIds),
+      p_project_keys: emptyToUndef(slicers.projectKeys),
+      p_vehicle_keys: emptyToUndef(slicers.vehicleKeys),
+      p_nationalities: emptyToUndef(slicers.nationalities),
+      p_source_types: emptyToUndef(slicers.sourceTypes),
+      p_source_companies: emptyToUndef(slicers.sourceCompanies),
+      p_restaurant_ids: emptyToUndef(slicers.restaurantIds),
+    }),
+    today.startsWith(month.key)
+      ? loadOpenLogElapsedToday(supabase, today)
+      : Promise.resolve(undefined),
+  ]);
   if (!rule.error && rule.data) {
-    return snapshotFromRpc(rule.data as RawPayrollRuleSnapshot);
+    return snapshotFromRpc(
+      rule.data as RawPayrollRuleSnapshot,
+      openElapsed ? new Map(Object.entries(openElapsed)) : undefined,
+    );
   }
   if (rule.error && !isMissingRpc(rule.error)) {
     throw new Error(rule.error.message);

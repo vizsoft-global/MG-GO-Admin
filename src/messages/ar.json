@@ -3480,6 +3480,10 @@
       "accidentSubtitle": "سجّل حادث المركبة",
       "documentsSubtitle": "ملف التسجيل أو التأمين",
       "serviceSubtitle": "زيارة الورشة",
+      "handoverSaved": "تم تسجيل التسليم",
+      "accidentSaved": "تم تسجيل الحادث",
+      "documentSaved": "تمت إضافة الوثيقة",
+      "serviceSaved": "تم تسجيل الصيانة",
       "emptyHandover": "لا توجد سجلات تسليم بعد",
       "emptyAccident": "لا توجد سجلات حوادث بعد",
       "emptyDocuments": "لا توجد وثائق بعد",
@@ -3511,12 +3515,23 @@
         "medium": "متوسطة",
         "high": "عالية"
       },
+      "docType": {
+        "registration": "التسجيل",
+        "insurance": "التأمين",
+        "other": "أخرى"
+      },
       "errors": {
         "missing_fields": "أكمل الحقول المطلوبة.",
         "save_failed": "تعذر حفظ هذا السجل.",
         "not_authorized": "ليس لديك صلاحية إدارة المركبات.",
         "file_too_large": "الملف يجب ألا يتجاوز 8 ميجابايت.",
-        "upload_failed": "تعذر رفع الملف."
+        "upload_failed": "تعذر رفع الملف.",
+        "future_date": "لا يمكن أن يكون التاريخ في المستقبل.",
+        "location_required": "أدخل موقع الحادث.",
+        "expiry_in_past": "يجب أن يكون تاريخ الانتهاء اليوم أو لاحقاً.",
+        "invalid_option": "اختر خياراً صالحاً.",
+        "invalid_drivers": "اختر كلا السائقين.",
+        "same_driver": "يجب أن يكون من وإلى سائقين مختلفين."
       }
     },
     "fuel": {
@@ -4714,6 +4729,9 @@
           "searchPlaceholder": "ابحث عن مسار أو كيان…",
           "eventCount": "{count} حدث",
           "eventCountInRange": "{count} حدث · {range}",
+          "sortNewest": "الأحدث أولاً",
+          "sortOldest": "الأقدم أولاً",
+          "clearSearch": "مسح البحث",
           "detailsOpened": "تم فتح {target}",
           "detailsCreated": "تم إنشاء {target}",
           "detailsDecided": "{outcome} · {target}",
@@ -7506,6 +7524,7 @@
         "windowHint": "داخل {from} – {to}."
       },
       "clearFilters": "مسح الفلاتر",
+      "clearSearch": "مسح البحث",
       "export": "تصدير إلى Excel",
       "exportCsv": "CSV",
       "downloadTable": "تنزيل هذا الجدول",

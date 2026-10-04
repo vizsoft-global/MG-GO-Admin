@@ -27,6 +27,7 @@ import {
   countDaysByStatus,
   countedRiderDays,
   dayGridLabel,
+  dayDisplayHours,
   isoDayLabel,
   PAYROLL_STATUS_CHIP,
   PAYROLL_STATUS_FILTERS,
@@ -669,7 +670,8 @@ export function PayrollDayGrid({
                         const st = row.days[i] ?? "blank";
                         const info = row.dayInfo[i];
                         const adjusted = Boolean(info?.adjusted);
-                        const label = st === "blank" ? "" : dayGridLabel(st, info?.creditedHours ?? 0);
+                        const label =
+                          st === "blank" ? "" : dayGridLabel(st, dayDisplayHours(st, info));
                         return (
                           <td
                             key={`${row.driverId}-${date}`}
@@ -679,7 +681,10 @@ export function PayrollDayGrid({
                               status: label || "—",
                               hours: info?.creditedHours ?? 0,
                               orders: info?.orders ?? 0,
-                              logged: info?.loggedHours ?? 0,
+                              // A still-open check-in has elapsed hours but no
+                              // logged total yet; the hint must not read `0h
+                              // logged` beside a cell that prints 0.8h.
+                              logged: info?.loggedHours || (info?.elapsedHours ?? 0),
                             })}
                             onMouseDown={
                               editable

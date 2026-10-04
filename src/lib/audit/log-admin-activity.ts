@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 
 const READ_THROTTLE_MS = 60_000;
+/**
+ * How far back a decide suppresses a following request Read. The pair is
+ * seconds apart in practice; the window only has to cover a slow re-render.
+ */
+const REQUEST_READ_AFTER_UPDATE_MS = 120_000;
 const readThrottle = new Map<string, number>();
 
 function shouldThrottleRead(key: string): boolean {
@@ -141,6 +146,28 @@ export async function logAdminRead(
   const requestId = typeof context?.requestId === "string" ? context.requestId : "";
   const key = adminReadThrottleKey(routeName, entityType, context);
   if (shouldThrottleRead(key)) return;
+  // The in-process throttle above cannot see a decide that ran in another
+  // serverless invocation, so a re-render could still write a Read *after* the
+  // Update it followed — which the audit list then shows below the decision it
+  // preceded. An Update for this request by this admin in the last two minutes
+  // means the open was already recorded, so the later Read is dropped.
+  if (requestId && routeName === "requests.detail") {
+    const session = await getSessionUser();
+    if (session?.id) {
+      const supabase = await createClient();
+      const since = new Date(Date.now() - REQUEST_READ_AFTER_UPDATE_MS).toISOString();
+      const { data } = await supabase
+        .from("admin_activity_logs")
+        .select("id")
+        .eq("admin_user_id", session.id)
+        .eq("entity_type", "requests")
+        .eq("entity_id", requestId)
+        .eq("action", "update")
+        .gte("created_at", since)
+        .limit(1);
+      if ((data?.length ?? 0) > 0) return;
+    }
+  }
   await logAdminActivity({
     action: "read",
     entityType,

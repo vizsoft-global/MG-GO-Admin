@@ -46,13 +46,36 @@ test("SOP examples pay per order above the daily target", () => {
   }
 });
 
-test("band start falls back like SQL when the target is unknown or too high", () => {
+test("band start falls back like SQL when the target is unknown", () => {
   assert.equal(incentiveBandStart(sopRule), 10);
-  assert.equal(incentiveBandStart(sopRule, 15), 10);
+  assert.equal(incentiveBandStart(sopRule, null), 10);
+  assert.equal(incentiveBandStart(sopRule, 0), 10);
   assert.equal(incentiveBandStart({ ...sopRule, base_minimum_deliveries: 12 }), 12);
 });
 
+test("a resolved target gates the bands wherever it sits (QA #51 option A)", () => {
+  // Below the first tier keeps the SOP example.
+  assert.equal(incentiveBandStart(sopRule, 10), 10);
+  assert.equal(incentiveBandStart(sopRule, 14), 14);
+  // At / above the first tier used to fall back to the synthetic start (10)
+  // and paid below the target; it is now the gate.
+  assert.equal(incentiveBandStart(sopRule, 15), 15);
+  assert.equal(incentiveBandStart(sopRule, 18), 18);
+  const gated = incentiveBandStart(sopRule, 18);
+  assert.equal(kwd(computeIncentivePreview(sopRule, 17, gated)), 0);
+  assert.equal(kwd(computeIncentivePreview(sopRule, 18, gated)), 0);
+  // One order above the target, paid at the next tier's rate.
+  assert.equal(kwd(computeIncentivePreview(sopRule, 19, gated)), 0.35);
+  // The rule base is the floor, so a low target cannot undercut it.
+  assert.equal(incentiveBandStart({ ...sopRule, base_minimum_deliveries: 12 }, 8), 12);
+});
+
 test("fixed tiers and single-target rules keep the legacy math", () => {
+  // QA #51: the SQL gate is applied inside compute_incentive_amount, so a
+  // fixed / single-target / overrides_others rule with a DPD target also pays
+  // nothing below it. The band start (and this client-side mirror of it)
+  // intentionally stays null for those, since the form never resolves a
+  // restaurant target to preview against.
   const fixed: Rule = {
     ...sopRule,
     tiers: [

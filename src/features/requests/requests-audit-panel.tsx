@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { AppListCard, AppPage, AppPageHeader, SearchField } from "@/components/app";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -13,7 +13,6 @@ import {
 } from "@/components/app/app-data-table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -122,6 +121,10 @@ export function RequestsAuditPanel() {
   const [actionFilter, setActionFilter] = useState("all");
   const [actorFilter, setActorFilter] = useState("all");
   const [datePreset, setDatePreset] = useState<RequestDatePreset>("all");
+  // The server returns newest-first. An audit trail is also read as a sequence
+  // — "opened, then updated" — and reading it top-down in reverse is what made
+  // the order look wrong, so the operator can flip it without leaving the page.
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const locale = useLocale();
 
@@ -177,16 +180,23 @@ export function RequestsAuditPanel() {
     });
   }, [rows, search, actionFilter, actorFilter, datePreset]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  // Reversing the newest-first fetch gives a chronological read of the same
+  // set, so both directions describe the same events and neither can drop a row.
+  const orderedRows = useMemo(
+    () => (sortDir === "asc" ? [...filteredRows].reverse() : filteredRows),
+    [filteredRows, sortDir],
+  );
+
+  const pageCount = Math.max(1, Math.ceil(orderedRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pagedRows = useMemo(
-    () => filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [filteredRows, currentPage],
+    () => orderedRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [orderedRows, currentPage],
   );
 
   useEffect(() => {
     setPage(1);
-  }, [search, actionFilter, actorFilter, datePreset]);
+  }, [search, actionFilter, actorFilter, datePreset, sortDir]);
 
   return (
     <AppPage>
@@ -272,12 +282,29 @@ export function RequestsAuditPanel() {
               ))}
             </SelectContent>
           </Select>
-          <Input
-            className="h-9 w-56"
-            placeholder={t("searchPlaceholder")}
+          <SearchField
+            className="w-56 flex-none"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
+            placeholder={t("searchPlaceholder")}
+            clearLabel={t("clearSearch")}
           />
+          <Select
+            value={sortDir}
+            onValueChange={(v) => v && setSortDir(v as "desc" | "asc")}
+            items={selectOptions([
+              { value: "desc", label: t("sortNewest") },
+              { value: "asc", label: t("sortOldest") },
+            ])}
+          >
+            <SelectTrigger className="h-9 w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="desc">{t("sortNewest")}</SelectItem>
+              <SelectItem value="asc">{t("sortOldest")}</SelectItem>
+            </SelectContent>
+          </Select>
           <span className="ms-auto text-[11px] text-muted-foreground">
             {loading
               ? ""

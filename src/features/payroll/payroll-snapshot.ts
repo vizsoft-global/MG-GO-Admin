@@ -350,6 +350,8 @@ export function parseAdjustmentStatus(raw: unknown): AdjustmentStatus | null {
 type DayFactsInput = {
   date: string;
   loggedHours: number;
+  /** Display-only elapsed hours for a still-open log (today). */
+  elapsedHours?: number;
   orders: number;
   cover: "off" | "sick" | "accident" | null;
   coverApproved: boolean;
@@ -401,6 +403,7 @@ function dayInfoFrom(
       adjustmentHours: facts.adjustment?.hours ?? null,
       adjustmentReason: facts.adjustment?.reason ?? null,
       creditedHours: outcome.hours,
+      elapsedHours: facts.elapsedHours ?? 0,
     },
   };
 }
@@ -819,6 +822,7 @@ function blankDayInfo(date: string): PayrollDayInfo {
     adjustmentHours: null,
     adjustmentReason: null,
     creditedHours: 0,
+    elapsedHours: 0,
     autoStatus: "blank",
     autoHours: 0,
     autoRuleIndex: null,
@@ -928,7 +932,11 @@ function mergeOptions(list: readonly PayrollOptions[]): PayrollOptions {
  * this resolves them through the same engine the table fallback uses, so the two
  * cannot disagree.
  */
-export function snapshotFromRpc(raw: RawPayrollRuleSnapshot): PayrollSnapshot {
+export function snapshotFromRpc(
+  raw: RawPayrollRuleSnapshot,
+  /** driverId → hours elapsed on a still-open check-in today (display only). */
+  openElapsed?: ReadonlyMap<string, number>,
+): PayrollSnapshot {
   const clients = (Array.isArray(raw.clients) ? raw.clients : [])
     .map(parseClientConfig)
     .filter((c): c is PayrollClientConfig => c !== null);
@@ -980,6 +988,10 @@ export function snapshotFromRpc(raw: RawPayrollRuleSnapshot): PayrollSnapshot {
       const facts: DayFactsInput = {
         date: String(day.d),
         loggedHours: logged,
+        elapsedHours:
+          openElapsed && String(day.d) === today
+            ? openElapsed.get(row.driverId)
+            : undefined,
         orders: num(day.o),
         cover,
         coverApproved: Boolean(day.ca),
