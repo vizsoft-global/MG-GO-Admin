@@ -190,7 +190,7 @@ export function OpsRidersTab({
         <div ref={parentRef} className="h-[min(420px,48dvh)] overflow-auto">
           <div
             className={cn(
-              "sticky top-0 z-10 flex min-w-[1960px] border-b border-border bg-muted/30 px-3 py-1.5",
+              "sticky top-0 z-20 flex min-w-[1960px] border-b border-border bg-muted px-3 py-1.5",
               TABLE_HEAD_CLASS,
             )}
           >
@@ -198,13 +198,19 @@ export function OpsRidersTab({
               <div
                 key={c.id}
                 className={cn(
-                  "flex flex-col gap-0.5 px-1",
+                  "flex min-w-0 items-center justify-between gap-1 px-1",
                   COL_WIDTH[c.id],
-                  c.align === "end" && "items-end",
                 )}
               >
-                <span className="whitespace-normal leading-tight">{c.label}</span>
-                <div className="flex items-center gap-0.5">
+                <span
+                  className={cn(
+                    "min-w-0 whitespace-normal leading-tight",
+                    c.align === "end" && "text-end",
+                  )}
+                >
+                  {c.label}
+                </span>
+                <div className="flex shrink-0 items-center gap-0.5">
                   <OpsHeaderFilter
                     columnId={c.id}
                     values={columnFilterValues(

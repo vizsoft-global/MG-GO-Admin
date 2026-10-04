@@ -133,6 +133,7 @@ export function OrdersReportDialog({
                 id="orders-report-from"
                 type="date"
                 className="h-9"
+                openPickerOnFocus={false}
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
               />
@@ -157,6 +158,7 @@ export function OrdersReportDialog({
                 id="orders-report-to"
                 type="date"
                 className="h-9"
+                openPickerOnFocus={false}
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
               />

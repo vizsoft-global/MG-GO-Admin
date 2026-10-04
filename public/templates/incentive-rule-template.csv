@@ -1,2 +1,3 @@
-Restaurant,Start,End,Tiers
-Sample Restaurant,2026-09-01,2026-09-30,"50=5;80=10"
+Rule Name,Restaurant,Start,End,Target Type,Target,Reward Type,Reward (KD),Rate (KD/order),Base Minimum Deliveries,Tiers,Period,Priority,Override,Status
+,Sample Restaurant,2026-11-01,2026-11-30,tiered,,,,,0,"50=5;80=10",daily,30,no,active
+,Sample Restaurant 2,2026-11-01,2026-11-30,single,15,fixed,1.5,,0,,daily,30,no,active

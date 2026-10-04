@@ -48,6 +48,7 @@ export function RuleFormSheet({
   );
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const isEdit = Boolean(rule);
 
   const [name, setName] = useState(rule?.name ?? "");
@@ -70,6 +71,7 @@ export function RuleFormSheet({
 
   useEffect(() => {
     if (!open) return;
+    setFieldError(null);
     setName(rule?.name ?? "");
     setStatus(rule?.status ?? "draft");
     setScopeType(rule?.scope_type ?? "zone");
@@ -110,12 +112,14 @@ export function RuleFormSheet({
 
       const result = await saveDeliveryRule(formData);
       if (result.error) {
+        setFieldError(result.error);
         toast.error(errorToast(result.error), {
           description: result.errorDetail,
           duration: result.errorDetail ? 8000 : 4000,
         });
         return;
       }
+      setFieldError(null);
       toast.success(isEdit ? t("deliveryRuleUpdated") : t("deliveryRuleCreated"));
 
       void queryClient.invalidateQueries({ queryKey: queryKeys.dpd.all() });
@@ -138,7 +142,11 @@ export function RuleFormSheet({
             <Input
               id="rule-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (fieldError === "name_required") setFieldError(null);
+              }}
+              aria-invalid={fieldError === "name_required"}
               className="rounded-lg"
             />
           </div>
@@ -210,7 +218,11 @@ export function RuleFormSheet({
                 type="number"
                 min={0}
                 value={dpdTarget}
-                onChange={(e) => setDpdTarget(e.target.value)}
+                onChange={(e) => {
+                  setDpdTarget(e.target.value);
+                  if (fieldError === "invalid_target") setFieldError(null);
+                }}
+                aria-invalid={fieldError === "invalid_target"}
                 className="h-9 rounded-lg"
               />
             </div>
@@ -253,7 +265,11 @@ export function RuleFormSheet({
               id="priority"
               type="number"
               value={priority}
-              onChange={(e) => setPriority(e.target.value)}
+              onChange={(e) => {
+                setPriority(e.target.value);
+                if (fieldError === "invalid_priority") setFieldError(null);
+              }}
+              aria-invalid={fieldError === "invalid_priority"}
               placeholder={t("placeholders.priority")}
               className="rounded-lg"
             />

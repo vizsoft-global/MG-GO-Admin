@@ -44,9 +44,10 @@ export function createAssistantTools() {
     }),
     deliveries_counts: tool({
       description:
-        "B: Delivery counts for a period (verified/pending/rejected/cancelled/in_transit/total). Counts only — never order rows or the Orders Report.",
+        "B: Delivery counts for a period (verified/pending/rejected/cancelled/in_transit/total). Counts only — never order rows or the Orders Report. Pass `rider` for one driver's counts; omitting it is a fleet/zone total, never one rider's.",
       inputSchema: z.object({
         ...dateFields,
+        rider: z.string().optional().describe("Driver code, MG ID, or driver name. Required to answer about a single driver."),
         zone: z.string().optional(),
         partner: z.string().optional(),
       }),
@@ -57,7 +58,7 @@ export function createAssistantTools() {
         "C: Daily incentives already stored for Kuwait earn_date. Does not recalculate money.",
       inputSchema: z.object({
         ...dateFields,
-        rider: z.string().optional().describe("Driver code or employee ID"),
+        rider: z.string().optional().describe("Driver code, MG ID, or driver name"),
         restaurant: z.string().optional(),
       }),
       execute: async (input) => runIncentiveDaily(input),
@@ -67,7 +68,7 @@ export function createAssistantTools() {
         "D: Performance band counts and optional one rider band/rank/score for a period.",
       inputSchema: z.object({
         ...dateFields,
-        rider: z.string().optional(),
+        rider: z.string().optional().describe("Driver code, MG ID, or driver name"),
         zone: z.string().optional(),
         partner: z.string().optional(),
         restaurant: z.string().optional(),

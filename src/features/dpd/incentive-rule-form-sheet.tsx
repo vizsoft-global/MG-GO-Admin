@@ -20,14 +20,18 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { queryKeys } from "@/lib/query/query-keys";
 import { selectOptionsFrom } from "@/lib/select-items";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { isDpdErrorKey, saveIncentiveRule } from "./dpd-actions";
 import type { DpdErrorKey } from "./dpd-errors";
 import {
+  FIXED_REWARD_STEP_KWD,
   hasIncentiveRuleValidationErrors,
+  PER_DELIVERY_REWARD_STEP_KWD,
   validateIncentiveRuleForm,
   type IncentiveRuleFormErrors,
   type IncentiveRuleFormField,
 } from "./incentive-rule-form-validation";
+import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
 import { ScopePicker } from "./scope-picker";
 import {
   computeIncentivePreview,
@@ -62,6 +66,55 @@ function newTierDraft(): TierDraft {
     reward_kwd: "0",
     reward_per_delivery_kwd: "0",
   };
+}
+
+/**
+ * The fields that decide what a rule *pays*. Two rules with the same shape pay
+ * the same money, so this is the comparison that decides whether an edit to a
+ * live rule needs a confirmation. Name, dates and status are excluded on
+ * purpose: renaming a rule or moving its window does not re-price a payout the
+ * way a changed target or reward does.
+ */
+function normalisePayoutShape(input: {
+  targetMode: IncentiveTargetMode;
+  baseMinimum: string;
+  targetDeliveries: string;
+  rewardMode: IncentiveRewardMode;
+  rewardKwd: string;
+  rewardPerDeliveryKwd: string;
+  scopeType: RuleScopeType;
+  scopeIds: string[];
+  tiers: Array<{
+    threshold_deliveries: string;
+    reward_mode: IncentiveRewardMode;
+    reward_kwd: string;
+    reward_per_delivery_kwd: string;
+  }>;
+}): string {
+  const n = (value: string) => String(Number(value) || 0);
+  const tiers = input.tiers
+    .map((tier) => [
+      Number(tier.threshold_deliveries) || 0,
+      tier.reward_mode,
+      Number(tier.reward_kwd) || 0,
+      Number(tier.reward_per_delivery_kwd) || 0,
+    ] as const)
+    .sort((a, b) => a[0] - b[0]);
+  return JSON.stringify([
+    input.targetMode,
+    n(input.baseMinimum),
+    input.targetMode === "single" ? n(input.targetDeliveries) : null,
+    input.targetMode === "single" ? input.rewardMode : null,
+    input.targetMode === "single" && input.rewardMode === "fixed"
+      ? n(input.rewardKwd)
+      : null,
+    input.targetMode === "single" && input.rewardMode === "per_delivery"
+      ? n(input.rewardPerDeliveryKwd)
+      : null,
+    input.scopeType,
+    [...input.scopeIds].sort(),
+    tiers,
+  ]);
 }
 
 function tiersFromRule(rule: IncentiveRuleRow | null): TierDraft[] {
@@ -111,6 +164,7 @@ export function IncentiveRuleFormSheet({
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const isEdit = Boolean(rule);
+  const [confirmActiveEdit, setConfirmActiveEdit] = useState(false);
 
   const [name, setName] = useState(rule?.name ?? "");
   const [status, setStatus] = useState<RuleStatus>(rule?.status ?? "draft");
@@ -181,6 +235,7 @@ export function IncentiveRuleFormSheet({
     setPreviewCount(String(lastThreshold));
     setFieldErrors({});
     setShowErrors(false);
+    setConfirmActiveEdit(false);
   }, [open, rule]);
 
   const previewRule = useMemo((): Parameters<typeof computeIncentivePreview>[0] => {
@@ -282,6 +337,62 @@ export function IncentiveRuleFormSheet({
       return;
     }
 
+    // An active rule whose window covers today is being paid out right now, so a
+    // change to its target, reward, mode or scope moves money for riders on the
+    // current shift. The save confirms first; a rename or a date tweak does not.
+    if (rule && rule.status === "active" && activeEditChangesPayout()) {
+      setConfirmActiveEdit(true);
+      return;
+    }
+
+    submitSave();
+  };
+
+  function activeEditChangesPayout(): boolean {
+    if (!rule) return false;
+    const today = kuwaitTodayYmd();
+    if (today < rule.start_date || today > rule.end_date) return false;
+    const current = normalisePayoutShape({
+      targetMode,
+      baseMinimum,
+      targetDeliveries,
+      rewardMode,
+      rewardKwd,
+      rewardPerDeliveryKwd,
+      scopeType,
+      scopeIds:
+        scopeType === "zone"
+          ? zoneIds
+          : scopeType === "partner"
+            ? partnerIds
+            : restaurantIds,
+      tiers,
+    });
+    const original = normalisePayoutShape({
+      targetMode: rule.target_mode,
+      baseMinimum: String(rule.base_minimum_deliveries ?? 0),
+      targetDeliveries: String(rule.target_deliveries ?? ""),
+      rewardMode: rule.reward_mode,
+      rewardKwd: String(rule.reward_kwd ?? 0),
+      rewardPerDeliveryKwd: String(rule.reward_per_delivery_kwd ?? ""),
+      scopeType: rule.scope_type,
+      scopeIds:
+        rule.scope_type === "zone"
+          ? rule.zone_ids
+          : rule.scope_type === "partner"
+            ? rule.partner_ids
+            : rule.restaurant_ids,
+      tiers: rule.tiers.map((tier) => ({
+        threshold_deliveries: String(tier.threshold_deliveries),
+        reward_mode: tier.reward_mode,
+        reward_kwd: String(tier.reward_kwd ?? 0),
+        reward_per_delivery_kwd: String(tier.reward_per_delivery_kwd ?? 0),
+      })),
+    });
+    return current !== original;
+  }
+
+  function submitSave() {
     startTransition(async () => {
       const formData = new FormData();
       if (rule?.id) formData.append("id", rule.id);
@@ -338,7 +449,18 @@ export function IncentiveRuleFormSheet({
   const title = isEdit ? t("editIncentiveRule") : t("addIncentiveRule");
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <SimpleConfirmDialog
+        open={confirmActiveEdit}
+        onOpenChange={setConfirmActiveEdit}
+        title={t("activeEditTitle")}
+        description={t("activeEditWarning")}
+        confirmLabel={t("activeEditConfirm")}
+        confirmVariant="default"
+        isPending={isPending}
+        onConfirm={() => submitSave()}
+      />
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="flex max-h-[min(92vh,860px)] flex-col gap-0 overflow-visible rounded-xl p-0 sm:max-w-5xl"
         showCloseButton
@@ -595,7 +717,7 @@ export function IncentiveRuleFormSheet({
                       id="reward"
                       type="number"
                       min={0}
-                      step="0.001"
+                      step={String(FIXED_REWARD_STEP_KWD)}
                       value={rewardKwd}
                       onChange={(e) => {
                         setRewardKwd(e.target.value);
@@ -613,7 +735,7 @@ export function IncentiveRuleFormSheet({
                       id="per-delivery"
                       type="number"
                       min={0}
-                      step="0.001"
+                      step={String(PER_DELIVERY_REWARD_STEP_KWD)}
                       value={rewardPerDeliveryKwd}
                       onChange={(e) => {
                         setRewardPerDeliveryKwd(e.target.value);
@@ -722,7 +844,7 @@ export function IncentiveRuleFormSheet({
                           <Input
                             type="number"
                             min={0}
-                            step="0.001"
+                            step={String(FIXED_REWARD_STEP_KWD)}
                             value={tier.reward_kwd}
                             onChange={(e) =>
                               setTiers((prev) =>
@@ -742,7 +864,7 @@ export function IncentiveRuleFormSheet({
                           <Input
                             type="number"
                             min={0}
-                            step="0.001"
+                            step={String(PER_DELIVERY_REWARD_STEP_KWD)}
                             value={tier.reward_per_delivery_kwd}
                             onChange={(e) =>
                               setTiers((prev) =>
@@ -811,6 +933,7 @@ export function IncentiveRuleFormSheet({
           </Button>
         </AppModalFooter>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+    </>
   );
 }

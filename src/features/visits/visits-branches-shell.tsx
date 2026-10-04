@@ -152,7 +152,11 @@ export function VisitsBranchesShell() {
     const result = await setVisitBranchDefault(id);
     setBusy(false);
     if (!result.ok) {
-      toast.error(result.error ?? t("branches.setDefaultFailed"));
+      toast.error(
+        result.error === "inactive_branch"
+          ? t("branches.inactiveHint")
+          : (result.error ?? t("branches.setDefaultFailed")),
+      );
       return;
     }
     toast.success(t("branches.setDefaultOk"));
@@ -278,7 +282,8 @@ export function VisitsBranchesShell() {
                           size="sm"
                           variant="ghost"
                           className="h-8 text-primary hover:bg-primary/10"
-                          disabled={busy}
+                          disabled={busy || !row.is_active}
+                          title={row.is_active ? undefined : t("branches.inactiveHint")}
                           onClick={() => void setDefault(row.id)}
                         >
                           <Star className="me-1 h-3.5 w-3.5" />

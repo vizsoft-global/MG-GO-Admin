@@ -1,6 +1,8 @@
 export const DPD_ERROR_KEYS = [
   "not_authorized",
   "missing_fields",
+  "name_required",
+  "invalid_priority",
   "invalid_dates",
   "invalid_scope",
   "invalid_target",

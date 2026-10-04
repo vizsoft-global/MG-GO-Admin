@@ -45,6 +45,8 @@ import {
 } from "./request-typed-fields";
 import {
   canCloseRequest,
+  isAdvancingRequestAction,
+  isAwaitingDriverClarification,
   isAwaitingRescheduleReply,
   isDriverAcknowledged,
   requestStatusLabelKey,
@@ -169,6 +171,11 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const decided = request?.completed_at != null;
   const awaitingRider =
     request != null && isAwaitingRescheduleReply(request.status, request.payload);
+  // The rider owes an answer to a clarification. The server refuses anything but
+  // reject / clarify in this state, so the row is narrowed rather than removed —
+  // an operator must still be able to close the request out.
+  const awaitingClarification =
+    request != null && isAwaitingDriverClarification(request.status);
   const stepActions = currentStepAllowedActions(steps).filter(
     (action) =>
       action !== "request_documents" || shouldOfferRequestDocumentsAction(attachments.length),
@@ -203,7 +210,12 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     if (error === "attachment_required") return t("detail.attach.required");
     if (error === "invalid_attachment_type") return t("detail.attach.invalidType");
     if (error === "invalid_attachment_size") return t("detail.attach.invalidSize");
-    if (error === "reschedule_note_required") return t("detail.reschedule.noteRequired");
+    if (error === "reschedule_note_required") {
+      return t("detail.reschedule.noteRequired");
+    }
+    if (error === "awaiting_driver_clarification") {
+      return t("detail.awaitingClarification");
+    }
     return error ?? t("detail.actionFailed");
   };
 
@@ -449,6 +461,12 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         {canDecide && !decided && !awaitingRider ? (
           <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <h2 className="mb-2 text-sm font-semibold">{t("detail.actions")}</h2>
+            {awaitingClarification ? (
+              <p className="mb-2 flex items-start gap-1.5 rounded-md border border-warning/30 bg-warning-bg px-2 py-1.5 text-[10px] text-warning">
+                <MessageCircleQuestion className="mt-px h-3.5 w-3.5 shrink-0" />
+                <span>{t("detail.awaitingClarification")}</span>
+              </p>
+            ) : null}
             <Textarea
               className="min-h-16 text-sm"
               placeholder={t("detail.reasonPlaceholder")}
@@ -461,14 +479,24 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                   .filter((action) => action !== "reject")
                   .map((action, index) => {
                     const ActionIcon = ACTION_ICONS[action] ?? Check;
+                    const blockedByClarification =
+                      awaitingClarification && isAdvancingRequestAction(action);
                     return (
                       <Button
                         key={action}
                         type="button"
                         variant={index === 0 ? "default" : "outline"}
                         className="h-9"
-                        disabled={decidePending || (action === "approve" && fuelApproveBlocked)}
+                        disabled={
+                          decidePending ||
+                          blockedByClarification ||
+                          (action === "approve" && fuelApproveBlocked)
+                        }
                         onClick={() => {
+                          if (blockedByClarification) {
+                            toast.error(t("detail.awaitingClarification"));
+                            return;
+                          }
                           if (action === "approve" && fuelApproveBlocked) {
                             toast.error(t("detail.fuelTransfer.requiredBeforeApprove"));
                             return;
@@ -497,7 +525,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 <Button
                   type="button"
                   className="h-9"
-                  disabled={decidePending}
+                  disabled={decidePending || awaitingClarification}
                   onClick={() => void runAction("solve")}
                 >
                   <Check className="me-1.5 h-3.5 w-3.5" />

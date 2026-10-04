@@ -114,6 +114,7 @@ export function stripPerformanceRow(row: Record<string, unknown>): Record<string
     worked_days: row.worked_days,
     leave_days: row.leave_days,
     absent_days: row.absent_days,
+    eligible_days: row.eligible_days,
     actual_deliveries: row.actual_deliveries,
     target_deliveries: row.target_deliveries,
     delivery_efficiency: row.delivery_efficiency,

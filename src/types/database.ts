@@ -39,6 +39,132 @@ export type Database = {
   }
   public: {
     Tables: {
+      _p1_def: {
+        Row: {
+          d: string | null
+        }
+        Insert: {
+          d?: string | null
+        }
+        Update: {
+          d?: string | null
+        }
+        Relationships: []
+      }
+      _p1_diag: {
+        Row: {
+          k: string | null
+          n: number | null
+          tail: string | null
+        }
+        Insert: {
+          k?: string | null
+          n?: number | null
+          tail?: string | null
+        }
+        Update: {
+          k?: string | null
+          n?: number | null
+          tail?: string | null
+        }
+        Relationships: []
+      }
+      _tmp_v_att_verify: {
+        Row: {
+          attendance_log_id: string | null
+          attendance_status: string | null
+          check_in_at: string | null
+          check_out_at: string | null
+          check_out_reason: string | null
+          compliance_score: number | null
+          driver_code: string | null
+          driver_id: string | null
+          driver_name: string | null
+          driver_phone: string | null
+          duty_seconds: number | null
+          employee_id: string | null
+          gps_accuracy_meters: number | null
+          gps_is_mocked: boolean | null
+          gps_zone_status: string | null
+          is_on_duty: boolean | null
+          last_seen_at: string | null
+          live_status: string | null
+          log_date: string | null
+          minutes_early_out: number | null
+          minutes_late: number | null
+          online_seconds: number | null
+          partner_id: string | null
+          partner_name: string | null
+          scheduled_end_at: string | null
+          scheduled_start_at: string | null
+          shift_type: string | null
+          zone_id: string | null
+          zone_name: string | null
+        }
+        Insert: {
+          attendance_log_id?: string | null
+          attendance_status?: string | null
+          check_in_at?: string | null
+          check_out_at?: string | null
+          check_out_reason?: string | null
+          compliance_score?: number | null
+          driver_code?: string | null
+          driver_id?: string | null
+          driver_name?: string | null
+          driver_phone?: string | null
+          duty_seconds?: number | null
+          employee_id?: string | null
+          gps_accuracy_meters?: number | null
+          gps_is_mocked?: boolean | null
+          gps_zone_status?: string | null
+          is_on_duty?: boolean | null
+          last_seen_at?: string | null
+          live_status?: string | null
+          log_date?: string | null
+          minutes_early_out?: number | null
+          minutes_late?: number | null
+          online_seconds?: number | null
+          partner_id?: string | null
+          partner_name?: string | null
+          scheduled_end_at?: string | null
+          scheduled_start_at?: string | null
+          shift_type?: string | null
+          zone_id?: string | null
+          zone_name?: string | null
+        }
+        Update: {
+          attendance_log_id?: string | null
+          attendance_status?: string | null
+          check_in_at?: string | null
+          check_out_at?: string | null
+          check_out_reason?: string | null
+          compliance_score?: number | null
+          driver_code?: string | null
+          driver_id?: string | null
+          driver_name?: string | null
+          driver_phone?: string | null
+          duty_seconds?: number | null
+          employee_id?: string | null
+          gps_accuracy_meters?: number | null
+          gps_is_mocked?: boolean | null
+          gps_zone_status?: string | null
+          is_on_duty?: boolean | null
+          last_seen_at?: string | null
+          live_status?: string | null
+          log_date?: string | null
+          minutes_early_out?: number | null
+          minutes_late?: number | null
+          online_seconds?: number | null
+          partner_id?: string | null
+          partner_name?: string | null
+          scheduled_end_at?: string | null
+          scheduled_start_at?: string | null
+          shift_type?: string | null
+          zone_id?: string | null
+          zone_name?: string | null
+        }
+        Relationships: []
+      }
       admin_activity_logs: {
         Row: {
           action: Database["public"]["Enums"]["admin_activity_action"]
@@ -6764,6 +6890,7 @@ export type Database = {
           target: string
           type_key: string
           updated_at: string
+          visible_when: Json | null
         }
         Insert: {
           created_at?: string
@@ -6786,6 +6913,7 @@ export type Database = {
           target?: string
           type_key: string
           updated_at?: string
+          visible_when?: Json | null
         }
         Update: {
           created_at?: string
@@ -6808,6 +6936,7 @@ export type Database = {
           target?: string
           type_key?: string
           updated_at?: string
+          visible_when?: Json | null
         }
         Relationships: [
           {
@@ -8527,13 +8656,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "drivers_partner_id_fkey"
-            columns: ["partner_id"]
-            isOneToOne: false
-            referencedRelation: "partners"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "drivers_zone_id_fkey"
             columns: ["zone_id"]
             isOneToOne: false
@@ -8606,13 +8728,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "drivers_partner_id_fkey"
-            columns: ["partner_id"]
-            isOneToOne: false
-            referencedRelation: "partners"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "drivers_zone_id_fkey"
             columns: ["zone_id"]
             isOneToOne: false
@@ -8628,6 +8743,15 @@ export type Database = {
       _admin_purge_slug_for_entity: {
         Args: { p_entity: string }
         Returns: string
+      }
+      _admin_resolve_incentive_targets_impl: {
+        Args: { p_driver_ids?: string[]; p_on_date: string }
+        Returns: {
+          driver_id: string
+          period: Database["public"]["Enums"]["incentive_period"]
+          rule_id: string
+          target_deliveries: number
+        }[]
       }
       _attendance_apply_checkout: {
         Args: {
@@ -8806,6 +8930,45 @@ export type Database = {
         Args: { p_on_date: string; p_rule_id: string }
         Returns: number
       }
+      _p1_prs_mz: {
+        Args: {
+          p_month: string
+          p_nationalities?: string[]
+          p_project_keys?: string[]
+          p_restaurant_ids?: string[]
+          p_source_companies?: string[]
+          p_source_types?: string[]
+          p_vehicle_keys?: string[]
+          p_zone_ids?: string[]
+        }
+        Returns: Json
+      }
+      _p1_prs_nodays: {
+        Args: {
+          p_month: string
+          p_nationalities?: string[]
+          p_project_keys?: string[]
+          p_restaurant_ids?: string[]
+          p_source_companies?: string[]
+          p_source_types?: string[]
+          p_vehicle_keys?: string[]
+          p_zone_ids?: string[]
+        }
+        Returns: Json
+      }
+      _p1_prs_v4: {
+        Args: {
+          p_month: string
+          p_nationalities?: string[]
+          p_project_keys?: string[]
+          p_restaurant_ids?: string[]
+          p_source_companies?: string[]
+          p_source_types?: string[]
+          p_vehicle_keys?: string[]
+          p_zone_ids?: string[]
+        }
+        Returns: Json
+      }
       _performance_components_snapshot: { Args: never; Returns: Json }
       _point_in_restaurant_geofence: {
         Args: {
@@ -8844,6 +9007,26 @@ export type Database = {
       _telemetry_sanitize_context: {
         Args: { p_context: Json; p_event_name: string }
         Returns: Json
+      }
+      _verify_lp_orig: {
+        Args: {
+          p_driver_id?: string
+          p_driver_status?: string
+          p_from: string
+          p_limit?: number
+          p_offset?: number
+          p_partner_id?: string
+          p_restaurant_id?: string
+          p_search?: string
+          p_sort?: string
+          p_to: string
+          p_zone_id?: string
+        }
+        Returns: Json
+      }
+      _visit_generate_branch_weekday_slots: {
+        Args: { p_branch_id: string }
+        Returns: number
       }
       _zone_geography_from_feature: {
         Args: {
@@ -8884,6 +9067,10 @@ export type Database = {
       }
       admin_approve_driver: {
         Args: { p_email: string; p_intake_id: string; p_user_id: string }
+        Returns: Json
+      }
+      admin_attendance_analytics_daily: {
+        Args: { p_from: string; p_to: string }
         Returns: Json
       }
       admin_attendance_kpis: {
@@ -9169,18 +9356,13 @@ export type Database = {
         Args: {
           p_dpd_period: string
           p_dpd_target: number
+          p_end_date?: string
           p_name: string
           p_scope_id: string
           p_scope_type: string
+          p_start_date?: string
         }
         Returns: string
-      }
-      admin_attendance_analytics_daily: {
-        Args: {
-          p_from: string
-          p_to: string
-        }
-        Returns: Json
       }
       admin_list_attendance_daily: {
         Args: {
@@ -9260,6 +9442,7 @@ export type Database = {
       }
       admin_list_fuel_fills: {
         Args: {
+          p_driver_id?: string
           p_from?: string
           p_limit?: number
           p_offset?: number
@@ -9434,6 +9617,15 @@ export type Database = {
           target_deliveries: number
         }[]
       }
+      admin_resolve_incentive_targets: {
+        Args: { p_driver_ids: string[]; p_on_date: string }
+        Returns: {
+          driver_id: string
+          period: Database["public"]["Enums"]["incentive_period"]
+          rule_id: string
+          target_deliveries: number
+        }[]
+      }
       admin_run_attendance_auto_checkout: { Args: never; Returns: number }
       admin_run_freeze_start_checkout: { Args: never; Returns: number }
       admin_run_performance_daily_rollup: {
@@ -9515,6 +9707,10 @@ export type Database = {
       }
       admin_set_visit_note_to_rider: {
         Args: { p_booking_id: string; p_note: string }
+        Returns: Json
+      }
+      admin_sync_branch_slots_to_working_days: {
+        Args: { p_branch_id: string }
         Returns: Json
       }
       admin_update_performance_components: {
@@ -10063,6 +10259,10 @@ export type Database = {
       driver_get_home_dashboard: { Args: never; Returns: Json }
       driver_get_request: { Args: { p_request_id: string }; Returns: Json }
       driver_get_today_shift: { Args: never; Returns: Json }
+      driver_get_work_summary: {
+        Args: { p_month: number; p_year: number }
+        Returns: Json
+      }
       driver_has_active_restaurant: {
         Args: { p_driver_id: string }
         Returns: boolean
@@ -10553,6 +10753,10 @@ export type Database = {
       sync_intake_asset_assignments_to_driver: {
         Args: { p_driver_id: string; p_intake_id: string }
         Returns: undefined
+      }
+      visit_slot_availability_block: {
+        Args: { p_branch_id: string; p_date: string }
+        Returns: string
       }
       void_payout_run: {
         Args: { p_reason?: string; p_run_id: string }

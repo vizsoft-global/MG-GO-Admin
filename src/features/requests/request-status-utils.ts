@@ -36,6 +36,41 @@ export function canBulkSelectRequest(status: string): boolean {
 }
 
 /**
+ * The complement of `REQUEST_DECIDED_STATUSES`: a status whose queue is still
+ * waiting on someone. Kept beside the decided set so the two cannot drift.
+ */
+export const REQUEST_OPEN_STATUSES = [
+  "pending",
+  "submitted",
+  "in_review",
+  "needs_clarification",
+  "rescheduled",
+] as const;
+
+/**
+ * Enum → the wording a person reads. The database stores `in_review`; the panel
+ * and the rider app show "In Progress", and an assistant answer that echoes the
+ * raw enum reads as a different status to the operator.
+ */
+export const REQUEST_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  submitted: "Submitted",
+  in_review: "In Progress",
+  needs_clarification: "Needs clarification",
+  rescheduled: "Rescheduled",
+  approved: "Approved",
+  rejected: "Rejected",
+  solved: "Solved",
+  responded: "Responded",
+  closed: "Closed",
+  overdue: "Overdue",
+};
+
+export function requestStatusLabel(status: string): string {
+  return REQUEST_STATUS_LABELS[status] ?? status;
+}
+
+/**
  * Fuel and asset only approve / reject / clarify — these queues never receive
  * a row of either type. Loan can reschedule; complaints can solve / respond.
  */
@@ -89,6 +124,23 @@ export function isAwaitingRescheduleReply(
   payload?: Record<string, unknown> | null,
 ): boolean {
   return status === "rescheduled" && Boolean(payload?.awaiting_driver_reschedule);
+}
+
+/**
+ * The approver asked a question and the rider has not answered yet.
+ *
+ * `admin_decide_request` refuses to advance the request in this state
+ * (`awaiting_driver_clarification`), so the detail page must not offer Approve /
+ * Solve / Reschedule. Unlike a reschedule there is nothing to wait on in the
+ * payload — the status itself is the fact — and Reject / Clarify stay allowed.
+ */
+export function isAwaitingDriverClarification(status: string): boolean {
+  return status === "needs_clarification";
+}
+
+/** An advancing action the server refuses while the rider owes an answer. */
+export function isAdvancingRequestAction(action: string): boolean {
+  return action !== "reject" && action !== "clarify" && action !== "close";
 }
 
 /** A request that has been decided can be archived, but only once. */

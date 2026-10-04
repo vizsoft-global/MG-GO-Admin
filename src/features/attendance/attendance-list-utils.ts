@@ -81,11 +81,12 @@ const STATUS_RANK: Record<string, number> = {
   gps_stale: 3,
   outside_zone: 4,
   absent: 5,
-  on_duty: 6,
-  present: 7,
-  completed: 8,
-  scheduled: 9,
-  no_shift: 10,
+  on_leave: 6,
+  on_duty: 7,
+  present: 8,
+  completed: 9,
+  scheduled: 10,
+  no_shift: 11,
 };
 
 /**
@@ -100,6 +101,7 @@ const STATUS_LABEL_SORT: Record<string, string> = {
   no_shift: "No shift",
   offline_during_shift: "Offline during shift",
   on_duty: "On duty",
+  on_leave: "On leave",
   outside_zone: "Outside zone",
   present: "Present",
   scheduled: "Scheduled",
@@ -254,6 +256,7 @@ export const LIVE_STATUS_LABEL_KEYS: Record<string, string> = {
   present: "livePresent",
   late: "liveLate",
   absent: "liveAbsent",
+  on_leave: "liveOnLeave",
   offline_during_shift: "liveOffline",
   gps_stale: "liveGpsStale",
   outside_zone: "liveOutsideZone",
@@ -300,6 +303,7 @@ export function formatTimeKuwait(iso: string | null): string {
 }
 
 export function mapLiveStatusToAttendanceStatus(row: AttendanceDailyRow): AttendanceStatus {
+  if (row.live_status === "on_leave") return "on_leave";
   if (row.live_status === "late") return "late";
   if (row.live_status === "absent" || row.live_status === "no_shift") return "absent";
   if (row.check_in_at) return "present";

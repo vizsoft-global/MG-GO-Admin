@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Download, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -22,9 +22,13 @@ import { applyIncentiveRuleImport, previewIncentiveRuleImport } from "./dpd-acti
 import {
   applyableIncentiveImportRows,
   mapIncentiveImportSheet,
+  type IncentiveImportInputRow,
   type IncentiveImportPreviewRow,
   type IncentiveImportStatus,
 } from "./incentive-rule-import";
+
+const NO_ROWS: IncentiveImportInputRow[] = [];
+const NO_PREVIEW: IncentiveImportPreviewRow[] = [];
 
 function statusPill(
   status: IncentiveImportStatus,
@@ -34,15 +38,26 @@ function statusPill(
     case "ok":
       return <StatusPill variant="success">{t("importStatus_ok")}</StatusPill>;
     case "would_replace":
-      return <StatusPill variant="warning">{t("importStatus_would_replace")}</StatusPill>;
+      return (
+        <StatusPill variant="warning">
+          {t("importStatus_would_replace")}
+        </StatusPill>
+      );
     case "unknown_restaurant":
     case "ambiguous_restaurant":
     case "invalid_start":
     case "invalid_end":
     case "invalid_range":
     case "invalid_tiers":
+    case "invalid_target":
+    case "invalid_reward":
+    case "invalid_target_type":
+    case "invalid_period":
+    case "invalid_priority":
     case "file_overlap":
-      return <StatusPill variant="warning">{t(`importStatus_${status}`)}</StatusPill>;
+      return (
+        <StatusPill variant="warning">{t(`importStatus_${status}`)}</StatusPill>
+      );
     default: {
       const _exhaustive: never = status;
       return _exhaustive;
@@ -61,10 +76,26 @@ export function IncentiveRuleImportDialog({
 }) {
   const t = useTranslations("pages.dpd");
   const [pending, startTransition] = useTransition();
-  const [rows, setRows] = useState<
-    Array<{ restaurant?: string; start?: string; end?: string; tiers?: string }>
-  >([]);
-  const [preview, setPreview] = useState<IncentiveImportPreviewRow[]>([]);
+  const [rows, setRows] = useState<IncentiveImportInputRow[]>(NO_ROWS);
+  const [preview, setPreview] = useState<IncentiveImportPreviewRow[]>(NO_PREVIEW);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Appling a sheet leaves the dialog mounted, so the finished preview has to be
+   * cleared by hand — otherwise the next import opens on rows that were already
+   * written to the database, and the file input keeps the old selection and
+   * refuses to re-fire for the same file.
+   */
+  const resetImportState = () => {
+    setRows(NO_ROWS);
+    setPreview(NO_PREVIEW);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleClose = (next: boolean) => {
+    if (!next) resetImportState();
+    onOpenChange(next);
+  };
 
   const handleFile = async (file: File) => {
     const parsed = await parseSpreadsheetFile(file, { raw: true });
@@ -96,12 +127,13 @@ export function IncentiveRuleImportDialog({
         }),
       );
       onApplied();
+      resetImportState();
       onOpenChange(false);
     });
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
         showCloseButton
         closeOutside
@@ -113,6 +145,7 @@ export function IncentiveRuleImportDialog({
               <Upload className="size-4" />
               {t("incentivePreview")}
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".csv,.xlsx,.xls"
                 className="hidden"
@@ -137,28 +170,54 @@ export function IncentiveRuleImportDialog({
                 <TableHeader>
                   <TableRow>
                     <TableHead className={TABLE_HEAD_CLASS}>#</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colRestaurant")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colStart")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colEnd")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colTiers")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>
+                      {t("colRuleName")}
+                    </TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>
+                      {t("colRestaurant")}
+                    </TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>
+                      {t("colStart")}
+                    </TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>
+                      {t("colEnd")}
+                    </TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>
+                      {t("colTargetShape")}
+                    </TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>
+                      {t("colStatus")}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {preview.map((row) => (
                     <TableRow key={row.row_number}>
                       <TableCell>{row.row_number}</TableCell>
+                      <TableCell className="max-w-[220px] truncate">
+                        {row.rule_name || "—"}
+                      </TableCell>
                       <TableCell>
                         {row.restaurant || "—"}
                         {row.replace_rule_name ? (
                           <p className="text-[10px] text-muted-foreground">
-                            {t("wouldReplaceRule", { name: row.replace_rule_name })}
+                            {t("wouldReplaceRule", {
+                              name: row.replace_rule_name,
+                            })}
                           </p>
                         ) : null}
                       </TableCell>
                       <TableCell>{row.start || "—"}</TableCell>
                       <TableCell>{row.end || "—"}</TableCell>
-                      <TableCell>{row.tiers || "—"}</TableCell>
+                      <TableCell className="text-xs">
+                        {row.target_mode === "tiered"
+                          ? `${t("targetTypes.tiered")} · ${row.tiers || "—"}`
+                          : `${t("targetTypes.single")} · ${row.target_deliveries ?? "—"} @ ${
+                              row.reward_mode === "per_delivery"
+                                ? `${row.reward_per_delivery_kwd ?? 0} ${t("perDeliveryShort")}`
+                                : `${row.reward_kwd} KD`
+                            }`}
+                      </TableCell>
                       <TableCell>{statusPill(row.status, t)}</TableCell>
                     </TableRow>
                   ))}
@@ -166,7 +225,9 @@ export function IncentiveRuleImportDialog({
               </Table>
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">{t("incentivePreviewHint")}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("incentivePreviewHint")}
+            </p>
           )}
         </div>
         <AppModalFooter
@@ -176,7 +237,11 @@ export function IncentiveRuleImportDialog({
             total: preview.length,
           })}
         >
-          <Button variant="outline" className="h-9 cursor-pointer" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            className="h-9 cursor-pointer"
+            onClick={() => handleClose(false)}
+          >
             {t("cancel")}
           </Button>
           <Button

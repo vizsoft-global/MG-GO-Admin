@@ -97,6 +97,7 @@ export type VisitBranchRow = {
   address: string | null;
   city: string | null;
   working_days: string | null;
+  working_dows: number[];
   opening_time: string | null;
   closing_time: string | null;
   desks_count: number;
@@ -658,12 +659,12 @@ export async function fetchVisitBranches(): Promise<{
   const { data, error } = await supabase
     .from("visit_branches")
     .select(
-      "id, key, name, address, city, working_days, opening_time, closing_time, desks_count, is_default, is_active, sort_order",
+      "id, key, name, address, city, working_days, working_dows, opening_time, closing_time, desks_count, is_default, is_active, sort_order",
     )
     .order("sort_order");
 
   if (error) return { rows: [], error: error.message };
-  return { rows: (data ?? []) as VisitBranchRow[] };
+  return { rows: (data ?? []) as unknown as VisitBranchRow[] };
 }
 
 export async function createVisitBranch(input: {
@@ -794,7 +795,7 @@ export async function copyVisitWeekdaySlotsToAllBranches(): Promise<{
   const supabase = await createClient();
 
   const [branchesRes, slotsRes] = await Promise.all([
-    supabase.from("visit_branches").select("id, is_default, is_active"),
+    supabase.from("visit_branches").select("id, is_default, is_active, working_dows"),
     supabase
       .from("visit_slots")
       .select(
@@ -903,7 +904,7 @@ export async function saveVisitBookingConfig(input: {
   slot_buffer_minutes: number;
   default_slot_capacity: number;
   booking_window_days: number;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; addedSlots?: number }> {
   await requireVisitsManageCatalog();
 
   if (input.closing_time <= input.opening_time) return { ok: false, error: "invalid_hours" };
@@ -942,7 +943,19 @@ export async function saveVisitBookingConfig(input: {
     .eq("id", input.branch_id);
 
   if (error) return { ok: false, error: error.message };
-  return { ok: true };
+
+  // The weekday toggles are the branch's opening days, so they have to become
+  // real slots or the setting is decorative. Add-only and idempotent; a failure
+  // here must not lose the settings that were just saved, so it reports rather
+  // than rolls back.
+  const { data: syncData, error: syncError } = await supabase.rpc(
+    "admin_sync_branch_slots_to_working_days",
+    { p_branch_id: input.branch_id },
+  );
+  if (syncError) return { ok: true, addedSlots: 0, error: "slot_sync_failed" };
+
+  const payload = (syncData ?? {}) as Record<string, unknown>;
+  return { ok: true, addedSlots: Number(payload.added ?? 0) };
 }
 
 export async function fetchVisitBlockedDates(): Promise<{

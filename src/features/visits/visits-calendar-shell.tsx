@@ -35,6 +35,7 @@ import {
   type VisitSlotRow,
 } from "./visits-actions";
 import { DAY_OF_WEEK_LABELS } from "./visit-status-utils";
+import { isBranchWorkingDay } from "./visit-hours";
 
 type BoardMode = "day" | "week";
 
@@ -239,7 +240,8 @@ export function VisitsCalendarShell({
   function cellFor(column: BoardColumn, time: string): BoardCell {
     const day = column.date;
     const dow = new Date(`${day}T00:00:00`).getDay();
-    const dayClosed = config != null && !config.working_dows.includes(dow);
+    // An empty `working_dows` is "not configured", not "closed all week".
+    const dayClosed = config != null && !isBranchWorkingDay(config.working_dows, dow);
     let capacity = 0;
     let booked = 0;
     let blockedSlots = 0;

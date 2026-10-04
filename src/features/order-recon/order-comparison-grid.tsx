@@ -41,6 +41,9 @@ export function ComparisonDayGrid({
     month: string;
     days: string;
     search: string;
+    searchMgId: string;
+    searchName: string;
+    searchRestaurant: string;
     all: string;
     clear: string;
     apply: string;
@@ -51,13 +54,13 @@ export function ComparisonDayGrid({
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const headFilter = (id: string, extra?: string[]) => (
+  const headFilter = (id: string, placeholder: string, extra?: string[]) => (
     <ComparisonHeaderFilter
       columnId={id}
       values={extra ?? columnFilterValues(riders, id)}
       filters={filters}
       onApply={onFilters}
-      searchPlaceholder={labels.search}
+      placeholder={placeholder}
       allLabel={labels.all}
       clearLabel={labels.clear}
       applyLabel={labels.apply}
@@ -76,26 +79,26 @@ export function ComparisonDayGrid({
             <th className={cn(TABLE_HEAD_CLASS, STICKY[1], "px-1.5 py-1")}>
               <span className="inline-flex items-center gap-0.5">
                 {labels.mgId}
-                {headFilter("mgId")}
+                {headFilter("mgId", labels.searchMgId)}
               </span>
             </th>
             <th className={cn(TABLE_HEAD_CLASS, STICKY[2], "px-1.5 py-1")}>
               <span className="inline-flex items-center gap-0.5">
                 {labels.name}
-                {headFilter("name")}
+                {headFilter("name", labels.searchName)}
               </span>
             </th>
             <th className={cn(TABLE_HEAD_CLASS, STICKY[3], "px-1.5 py-1")}>
               <span className="inline-flex items-center gap-0.5">
                 {labels.restaurant}
-                {headFilter("restaurant")}
+                {headFilter("restaurant", labels.searchRestaurant)}
               </span>
             </th>
             <th className={cn(TABLE_HEAD_CLASS, STICKY[4], "px-1.5 py-1 text-center")}>{labels.month}</th>
             <th className={cn(TABLE_HEAD_CLASS, "px-1.5 py-1 text-center")}>
               <span className="inline-flex items-center gap-0.5">
                 {labels.days}
-                {headFilter("offDays")}
+                {headFilter("offDays", labels.search)}
               </span>
             </th>
             {days.map((ymd) => (

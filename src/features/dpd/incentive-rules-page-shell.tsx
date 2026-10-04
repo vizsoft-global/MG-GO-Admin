@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { AppEmptyState, AppListCard, AppListToolbar, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ export function IncentiveRulesPageShell() {
   const tPage = useTranslations("pages.incentiveRules");
   const { can } = useAuth();
   const canManage = can("earnings.manage");
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
 
@@ -257,8 +259,17 @@ export function IncentiveRulesPageShell() {
             </TableHeader>
             <TableBody>
               {filteredRules.map((row) => (
-                <TableRow key={row.id} className="hover:bg-muted/40">
-                  <TableCell className="font-medium">{displayIncentiveRuleName(row.name)}</TableCell>
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer hover:bg-muted/40"
+                  onClick={() => router.push(`/incentive-rules/${row.id}`)}
+                >
+                  <TableCell className="font-medium">
+                    {displayIncentiveRuleName(row.name)}
+                    <p className="text-[11px] font-normal text-primary">
+                      {tPage("viewDetails")}
+                    </p>
+                  </TableCell>
                   <TableCell>{row.scope_label}</TableCell>
                   <TableCell>{t(`period.${row.period}`)}</TableCell>
                   <TableCell>
@@ -282,7 +293,10 @@ export function IncentiveRulesPageShell() {
                           variant="ghost"
                           size="icon-sm"
                           className="cursor-pointer"
-                          onClick={() => setSheet({ open: true, row })}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSheet({ open: true, row });
+                          }}
                           aria-label={t("editIncentiveRule")}
                         >
                           <Pencil className="h-4 w-4" />
@@ -292,7 +306,10 @@ export function IncentiveRulesPageShell() {
                           variant="ghost"
                           size="icon-sm"
                           className="cursor-pointer text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => setDeleteTarget(row)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(row);
+                          }}
                           aria-label={t("delete")}
                         >
                           <Trash2 className="h-4 w-4" />

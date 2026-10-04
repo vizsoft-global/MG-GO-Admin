@@ -40,6 +40,9 @@ function statusPill(
     case "invalid_period":
     case "ambiguous_name":
     case "duplicate":
+    case "invalid_start":
+    case "invalid_end":
+    case "invalid_range":
       return <StatusPill variant="warning">{t(`importStatus_${status}`)}</StatusPill>;
     default: {
       const _exhaustive: never = status;
@@ -107,11 +110,11 @@ export function DeliveryRuleDpdImportDialog({
 
   const exportErrors = () => {
     const header =
-      "row,scope_type,name,partner,zone_code,dpd_target,dpd_period,status,note";
+      "row,scope_type,name,partner,zone_code,dpd_target,dpd_period,start_date,end_date,status,note";
     const body = rejected
       .map(
         (r) =>
-          `${r.row_number},${r.scope_type},${r.name},${r.partner},${r.zone_code},${r.dpd_target},${r.dpd_period},${r.status},${r.note ?? ""}`,
+          `${r.row_number},${r.scope_type},${r.name},${r.partner},${r.zone_code},${r.dpd_target},${r.dpd_period},${r.start_date},${r.end_date},${r.status},${r.note ?? ""}`,
       )
       .join("\n");
     const blob = new Blob([`${header}\n${body}\n`], { type: "text/csv;charset=utf-8" });
@@ -184,6 +187,8 @@ export function DeliveryRuleDpdImportDialog({
                     <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
                     <TableHead className={TABLE_HEAD_CLASS}>{t("colDpdTarget")}</TableHead>
                     <TableHead className={TABLE_HEAD_CLASS}>{t("colDpdPeriod")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colStart")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colEnd")}</TableHead>
                     <TableHead className={TABLE_HEAD_CLASS}>{t("colAction")}</TableHead>
                     <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
                   </TableRow>
@@ -212,6 +217,12 @@ export function DeliveryRuleDpdImportDialog({
                       </TableCell>
                       <TableCell>{row.dpd_target || "—"}</TableCell>
                       <TableCell>{row.dpd_period || "—"}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {row.start_date || "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {row.end_date || "—"}
+                      </TableCell>
                       <TableCell>
                         <ActionChip status={row.status} t={t} />
                       </TableCell>

@@ -160,12 +160,31 @@ test("export headers do not map Name onto Restaurant", () => {
     "Tiers",
     "Reward",
   ]);
-  assert.deepEqual(cols, { restaurant: 1, start: 2, end: 3, tiers: 5 });
+  // Every catalogue column is present in the map; unmapped ones stay -1.
+  // "Name" resolves to the Rule Name column, never the Restaurant column.
+  assert.deepEqual(cols, {
+    name: 0,
+    restaurant: 1,
+    start: 2,
+    end: 3,
+    status: 4,
+    tiers: 5,
+    reward: 6,
+    targetType: -1,
+    target: -1,
+    rewardType: -1,
+    rate: -1,
+    baseMinimum: -1,
+    period: -1,
+    priority: -1,
+    override: -1,
+  });
   const mapped = mapIncentiveImportSheet(
     ["Name", "Restaurant", "Start", "End", "Tiers"],
     [["Old name", "Talabat HQ", "2026-09-01", "2026-09-30", "50=5"]],
   );
   assert.equal(mapped[0]?.restaurant, "Talabat HQ");
+  assert.equal(mapped[0]?.name, "Old name");
 });
 
 test("clamp is a no-op when uploaded start is today or later", () => {

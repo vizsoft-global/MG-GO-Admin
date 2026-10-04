@@ -52,6 +52,31 @@ function scopeIdsForType(input: ValidateIncentiveRuleFormInput): string[] {
   return input.restaurantIds;
 }
 
+/**
+ * A fixed Reward (KD) is cash paid out in whole and half dinars — QA asked for
+ * `1`, `1.5`, `2`, `2.5` and a rejection of `0.001` / `1.25`.
+ */
+export const FIXED_REWARD_STEP_KWD = 0.5;
+
+/**
+ * A per-delivery rate is *not* a cash amount rounded to half a dinar: the
+ * production `DPD 5` rule pays 0.250 / 0.350 / 0.500 per order, and those rates
+ * are what the SOP band math is built on. It still refuses `0.001` — the QA
+ * complaint — by snapping to 0.05, which every seeded rate already satisfies.
+ */
+export const PER_DELIVERY_REWARD_STEP_KWD = 0.05;
+
+/**
+ * True when `value` sits on a `step` grid (step 0.5 → 0, 0.5, 1, 1.5 …).
+ * Uses a tolerance rather than `% 1` because a decimal step such as 0.05 is not
+ * exactly representable in binary floating point (`0.35 / 0.05` is 6.999…).
+ */
+export function isOnRewardStep(value: number, step: number): boolean {
+  if (!Number.isFinite(value) || value < 0 || step <= 0) return false;
+  const units = value / step;
+  return Math.abs(units - Math.round(units)) < 1e-6;
+}
+
 export function validateIncentiveRuleForm(
   input: ValidateIncentiveRuleFormInput,
 ): IncentiveRuleFormErrors {
@@ -95,12 +120,20 @@ export function validateIncentiveRuleForm(
 
     if (input.rewardMode === "fixed") {
       const reward = Number(input.rewardKwd);
-      if (!Number.isFinite(reward) || reward < 0) {
+      if (
+        !Number.isFinite(reward) ||
+        reward < 0 ||
+        !isOnRewardStep(reward, FIXED_REWARD_STEP_KWD)
+      ) {
         errors.rewardKwd = "invalid_reward";
       }
     } else {
       const rate = Number(input.rewardPerDeliveryKwd);
-      if (!Number.isFinite(rate) || rate < 0) {
+      if (
+        !Number.isFinite(rate) ||
+        rate < 0 ||
+        !isOnRewardStep(rate, PER_DELIVERY_REWARD_STEP_KWD)
+      ) {
         errors.rewardPerDeliveryKwd = "invalid_reward";
       }
     }
@@ -115,10 +148,18 @@ export function validateIncentiveRuleForm(
       const hasInvalidReward = input.tiers.some((tier) => {
         if (tier.reward_mode === "fixed") {
           const reward = Number(tier.reward_kwd);
-          return !Number.isFinite(reward) || reward < 0;
+          return (
+            !Number.isFinite(reward) ||
+            reward < 0 ||
+            !isOnRewardStep(reward, FIXED_REWARD_STEP_KWD)
+          );
         }
         const rate = Number(tier.reward_per_delivery_kwd);
-        return !Number.isFinite(rate) || rate < 0;
+        return (
+          !Number.isFinite(rate) ||
+          rate < 0 ||
+          !isOnRewardStep(rate, PER_DELIVERY_REWARD_STEP_KWD)
+        );
       });
       const sorted = [...thresholds].sort((a, b) => a - b);
       const hasDuplicateOrDecreasing = sorted.some(

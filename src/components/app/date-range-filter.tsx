@@ -33,6 +33,18 @@ export type DateRangeValue = {
   from: string | null;
   /** Inclusive ISO bound (end of range) or null when unbounded. */
   to: string | null;
+  /**
+   * When true, `to` is an exclusive bound: the instant named by `to` belongs to
+   * the *next* window rather than closing this one.
+   *
+   * The Order Report already works this way (`exclusiveReportEnd`): selecting
+   * 06:00 -> 06:00 means one operational day, so 06:00:00 must not be paid to
+   * the day that is ending. Without the flag a custom 06:00 end would also
+   * swallow the 06:00:00-06:00:59 minute, and the list could not be reconciled
+   * against the sheet it is checked against. Set only for a custom range whose
+   * start and end clocks match and are not 00:00, mirroring that rule.
+   */
+  toExclusive?: boolean;
 };
 
 export const DATE_RANGE_ALL: DateRangeValue = {
@@ -114,6 +126,17 @@ function isoTimePart(iso: string): string {
 
 function isFullDayRange(from: string, to: string): boolean {
   return isoTimePart(from) === "00:00" && (isoTimePart(to) === "23:59" || isoTimePart(to) === "24:00");
+}
+
+/**
+ * Mirrors `exclusiveReportEnd` in the Orders Report: an equal, non-midnight
+ * start/end clock describes one operational day, so the end instant opens the
+ * next window instead of closing this one.
+ */
+export function exclusiveRangeEnd(startTime: string, endTime: string): boolean {
+  const start = startTime.slice(0, 5);
+  const end = endTime.slice(0, 5);
+  return start !== "00:00" && start === end;
 }
 
 /** Resolve a preset to inclusive ISO bounds (Kuwait day boundaries). */
@@ -204,10 +227,17 @@ export function DateRangeFilter({
     if (!draft?.from) return;
     const fromYmd = dateToYmd(draft.from);
     const toYmd = dateToYmd(draft.to ?? draft.from);
+    const toExclusive = exclusiveRangeEnd(startTime, endTime);
     onChange({
       preset: "custom",
       from: dayIsoAt(fromYmd, startTime, false),
-      to: dayIsoAt(toYmd, endTime, true),
+      // An exclusive end must name the exact instant the next window opens
+      // (06:00:00.000), not the end of that minute: the caller sends `lt`, so
+      // `hh:mm:59.999` would silently drop the 06:00:00-06:00:59 minute.
+      to: toExclusive
+        ? dayIsoAt(toYmd, endTime, false)
+        : dayIsoAt(toYmd, endTime, true),
+      toExclusive,
     });
     setShowCustom(false);
     setOpen(false);

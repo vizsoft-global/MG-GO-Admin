@@ -126,6 +126,13 @@ const TYPE_FILTERS = [
   "salary_justification",
 ] as const;
 
+/** Normalise any `?type=` value onto the filter list, defaulting to All. */
+function normalizeTypeFilter(value: string | undefined): string {
+  return TYPE_FILTERS.includes(value as (typeof TYPE_FILTERS)[number])
+    ? (value as string)
+    : "all";
+}
+
 /**
  * Loan, asset and sick-leave approvals must capture terms (amount, tenure, penalty, document)
  * on the final step, which only the detail page can do — so they are never bulk approved.
@@ -189,11 +196,7 @@ export function RequestsPageShell({
   const [datePreset, setDatePreset] = useState<RequestDatePreset>(
     parseRequestDatePreset(initialDatePreset),
   );
-  const [type, setType] = useState<string>(
-    TYPE_FILTERS.includes(initialType as (typeof TYPE_FILTERS)[number])
-      ? initialType
-      : "all",
-  );
+  const [type, setType] = useState<string>(normalizeTypeFilter(initialType));
   const [status, setStatus] = useState<RequestStatusFilter>("all");
   const [departmentKey, setDepartmentKey] = useState<string>("all");
   const [zoneId, setZoneId] = useState<string>("all");
@@ -204,6 +207,22 @@ export function RequestsPageShell({
   const [rejectReason, setRejectReason] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [viewRow, setViewRow] = useState<RequestListRow | null>(null);
+
+  // The type filter is URL-backed, but the shell only read the URL into
+  // `useState` on its first mount. The App Router keeps this page component
+  // mounted when the query string changes (browser Back/Forward between two
+  // `/requests/overview?type=…` entries), so the previous filter stayed
+  // selected — reported as "clicked Leave, landed on the All list". Mirror the
+  // prop into state whenever the URL moves.
+  useEffect(() => {
+    const next = normalizeTypeFilter(initialType);
+    setType((current) => (current === next ? current : next));
+  }, [initialType]);
+
+  useEffect(() => {
+    const next = parseRequestDatePreset(initialDatePreset);
+    setDatePreset((current) => (current === next ? current : next));
+  }, [initialDatePreset]);
 
   const { can } = useAuth();
   const canDecide = can("requests.approve") || can("requests.manage");

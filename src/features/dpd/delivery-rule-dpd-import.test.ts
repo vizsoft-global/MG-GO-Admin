@@ -211,6 +211,8 @@ test("Partner Name does not steal the Name column", () => {
     dpd_period: 3,
     partner: 1,
     zone_code: -1,
+    start_date: -1,
+    end_date: -1,
   });
   const mapped = mapDpdTargetImportSheet(
     ["Restaurant / Zone Name", "Partner Name", "DPD Target", "DPD Target Period"],
@@ -246,4 +248,100 @@ test("applyable rows are create and update only", () => {
     ready.map((r) => r.status),
     ["ok", "create"],
   );
+});
+
+test("Start and End columns map, normalise DD/MM/YYYY, and round-trip", () => {
+  const cols = guessDpdTargetImportColumns([
+    "Restaurant / Zone Name",
+    "DPD Target",
+    "DPD Target Period",
+    "Start",
+    "End",
+  ]);
+  assert.equal(cols.start_date, 3);
+  assert.equal(cols.end_date, 4);
+
+  const mapped = mapDpdTargetImportSheet(
+    ["Restaurant / Zone Name", "DPD Target", "DPD Target Period", "Start", "End"],
+    [["Crystal Tower", "20", "daily", "01/11/2026", "30/11/2026"]],
+  );
+  assert.equal(mapped[0]?.start_date, "2026-11-01");
+  assert.equal(mapped[0]?.end_date, "2026-11-30");
+
+  const rows = previewDpdTargetRows({ restaurants, zones, rules, rows: mapped });
+  assert.equal(rows[0].status, "ok");
+  assert.equal(rows[0].start_date, "2026-11-01");
+  assert.equal(rows[0].end_date, "2026-11-30");
+});
+
+test("a blank window stays blank so the server default is kept", () => {
+  const rows = previewDpdTargetRows({
+    restaurants,
+    zones,
+    rules,
+    rows: [
+      {
+        scope_type: "restaurant",
+        name: "Crystal Tower",
+        dpd_target: "20",
+        dpd_period: "daily",
+        start_date: "",
+        end_date: "",
+      },
+    ],
+  });
+  assert.equal(rows[0].status, "ok");
+  assert.equal(rows[0].start_date, "");
+  assert.equal(rows[0].end_date, "");
+  // Blank cells are still an applyable update — the window is simply not touched.
+  assert.equal(applyableDpdTargetRows(rows).length, 1);
+});
+
+test("a half-filled or impossible window is rejected", () => {
+  const rows = previewDpdTargetRows({
+    restaurants,
+    zones,
+    rules: [],
+    rows: [
+      {
+        scope_type: "zone",
+        name: "Jahra",
+        dpd_target: "25",
+        dpd_period: "daily",
+        start_date: "2026-11-01",
+        end_date: "",
+      },
+      {
+        scope_type: "restaurant",
+        name: "Crystal Tower",
+        dpd_target: "20",
+        dpd_period: "daily",
+        start_date: "2026-13-01",
+        end_date: "2026-12-01",
+      },
+      {
+        scope_type: "restaurant",
+        name: "Al Abdullah Club",
+        partner: "Talabat",
+        dpd_target: "20",
+        dpd_period: "daily",
+        start_date: "2026-12-31",
+        end_date: "2026-12-01",
+      },
+      {
+        scope_type: "restaurant",
+        name: "Al Abdullah Club",
+        partner: "Deliveroo",
+        dpd_target: "20",
+        dpd_period: "daily",
+        start_date: "2026-02-30",
+        end_date: "2026-03-01",
+      },
+    ],
+  });
+  assert.equal(rows[0].status, "invalid_end");
+  assert.equal(rows[1].status, "invalid_start");
+  assert.equal(rows[2].status, "invalid_range");
+  assert.equal(rows[3].status, "invalid_start");
+  assert.equal(applyableDpdTargetRows(rows).length, 0);
 });

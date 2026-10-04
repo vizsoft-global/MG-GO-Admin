@@ -184,9 +184,27 @@ export function AttendanceDriverExplorePanel({
     );
   }
 
+  // The date control must stay reachable when the chosen day has no record —
+  // otherwise a day with nothing on it is a dead end and the operator has to
+  // collapse the row and reopen it to look at another date.
+  const datePicker = (
+    <Input
+      type="date"
+      value={date}
+      onChange={(e) => {
+        const next = e.target.value;
+        if (next) onDateChange(next);
+      }}
+      openPickerOnFocus={false}
+      className="h-9 w-[160px]"
+      aria-label={t("colDate")}
+    />
+  );
+
   if (!dayRow) {
     return (
-      <div className={className}>
+      <div className={cn("space-y-3", className)}>
+        <div className="flex flex-wrap items-center gap-2">{datePicker}</div>
         <AppEmptyState
           title={t("emptyDriverDay")}
           description={t("emptyDriverDayHint")}
@@ -201,16 +219,7 @@ export function AttendanceDriverExplorePanel({
         <StatusPill variant={resolveStatusVariant(dayRow.live_status)}>
           {t(LIVE_STATUS_LABEL_KEYS[dayRow.live_status] ?? "livePresent")}
         </StatusPill>
-        <Input
-          type="date"
-          value={date}
-          onChange={(e) => {
-            const next = e.target.value;
-            if (next) onDateChange(next);
-          }}
-          className="h-9 w-[160px]"
-          aria-label={t("colDate")}
-        />
+        {datePicker}
       </div>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">

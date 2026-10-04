@@ -798,13 +798,22 @@ export async function fetchDriverPerformanceRank(
 ): Promise<{ rank: number | null; total: number; band: string | null }> {
   await requirePerformanceView();
 
-  const result = await runPerformanceList({
-    fromDate,
-    toDate,
-    sort: "overall_desc",
-    page: 0,
-    pageSize: MAX_EXPORT_ROWS,
-  });
+  // A rank is decoration on the detail page. When the fleet read exceeds the
+  // statement timeout the page must still render the driver it was opened for,
+  // so a failed or truncated rank degrades to `null` rather than throwing out
+  // of the caller.
+  let result: Awaited<ReturnType<typeof runPerformanceList>>;
+  try {
+    result = await runPerformanceList({
+      fromDate,
+      toDate,
+      sort: "overall_desc",
+      page: 0,
+      pageSize: MAX_EXPORT_ROWS,
+    });
+  } catch {
+    return { rank: null, total: 0, band: null };
+  }
 
   if (result.totalCount > result.rows.length) {
     return { rank: null, total: result.totalCount, band: null };

@@ -40,6 +40,28 @@ test("migrations declare the objects the rollback removes", () => {
   assert.match(report, /v_exclusive_end boolean := v_operational AND v_from_clock = v_to_clock/);
 });
 
+// `20261102000400` restored the pre-push function state and silently put the old
+// shift-only body back, which is why the Orders Report kept shifting dates even
+// when a 06:00 boundary was selected. `20261028400000` is already in the ledger,
+// so the operational-day body has to be carried forward under a new version.
+test("orders report operational day is re-applied under a live version", () => {
+  const reapply = read(
+    "supabase/migrations/20261114000300_orders_report_operational_day_reapply.sql",
+  );
+  assert.match(reapply, /CREATE OR REPLACE FUNCTION public\.report_delivery_orders/);
+  assert.match(reapply, /v_operational boolean := v_from_clock <> time '00:00:00'/);
+  assert.match(
+    reapply,
+    /v_exclusive_end boolean := v_operational AND v_from_clock = v_to_clock/,
+  );
+  // Guards the regression: without the operational branch the report attributes
+  // every delivery to a shift window and the chosen clock is only a clip.
+  assert.match(reapply, /IF v_operational THEN/);
+  assert.match(reapply, /v_col_from date;/);
+  assert.match(reapply, /v_col_to date;/);
+  assert.doesNotMatch(reapply, /DROP FUNCTION/);
+});
+
 test("additive 306 reapplies shift_date objects without editing 283", () => {
   const applied = read("supabase/migrations/20261030600000_apply_delivery_shift_date.sql");
   const original = read("supabase/migrations/20261028300000_delivery_shift_date.sql");

@@ -2,6 +2,10 @@ import { countDeliveriesByFilters, fetchRecentDeliveriesForDriver } from "@/feat
 import { getDriverGroup } from "@/features/driver-groups/driver-groups-actions";
 import { fetchDriverDetail } from "@/features/drivers/drivers-actions";
 import { fetchAdminRequestsList } from "@/features/requests/requests-actions";
+import {
+  REQUEST_OPEN_STATUSES,
+  requestStatusLabel,
+} from "@/features/requests/request-status-utils";
 import { fetchRestaurantAssignedDrivers } from "@/features/restaurants/restaurants-actions";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
 import { createClient } from "@/lib/supabase/server";
@@ -145,14 +149,53 @@ export async function listRelated(input: {
       zoneId = input.id;
     }
     const type = input.relation === "complaints" ? "complaint" : undefined;
-    const status =
-      input.relation === "pending_requests" ? input.status || "in_review" : input.status;
+
+    // "Pending" is a group of statuses, not one. Filtering the RPC to a single
+    // `in_review` hid submitted / needs_clarification / rescheduled rows and
+    // reported their count as zero. The list is fetched unfiltered by status
+    // and narrowed here from the same `status_counts` the KPI strip uses, so
+    // the head and the count cannot disagree.
+    if (input.relation === "pending_requests") {
+      const scanLimit = Math.min(Math.max(limit * 5, limit), 50);
+      const list = await fetchAdminRequestsList({
+        datePreset: "all",
+        search,
+        zoneId,
+        type,
+        status: input.status,
+        limit: scanLimit,
+        offset: 0,
+      });
+      const counts = list.statusCounts;
+      const count = REQUEST_OPEN_STATUSES.reduce((sum, key) => sum + (counts[key] ?? 0), 0);
+      const head = list.rows
+        .filter((row) => (REQUEST_OPEN_STATUSES as readonly string[]).includes(String(row.status)))
+        .slice(0, limit)
+        .map((row) => stripRequestRow(row as unknown as Record<string, unknown>));
+      return {
+        relation: input.relation,
+        count,
+        filtered_total: list.filteredTotal,
+        status_counts: counts,
+        status_labels: Object.fromEntries(
+          Object.entries(counts).map(([key]) => [key, requestStatusLabel(key)]),
+        ),
+        open_statuses: REQUEST_OPEN_STATUSES.map((key) => ({
+          key,
+          label: requestStatusLabel(key),
+        })),
+        note: "pending is the open statuses group, not a single status",
+        head,
+        focus: { entity_type: input.from_type, id: input.id },
+      };
+    }
+
     const list = await fetchAdminRequestsList({
       datePreset: "all",
       search,
       zoneId,
       type,
-      status,
+      status: input.status,
       limit,
       offset: 0,
     });
@@ -160,7 +203,13 @@ export async function listRelated(input: {
       relation: input.relation,
       count: list.filteredTotal,
       kpi: list.kpi,
-      head: list.rows.map((row) => stripRequestRow(row as unknown as Record<string, unknown>)),
+      status_counts: Object.fromEntries(
+        Object.entries(list.statusCounts).map(([key, value]) => [requestStatusLabel(key), value]),
+      ),
+      head: list.rows.map((row) => {
+        const stripped = stripRequestRow(row as unknown as Record<string, unknown>);
+        return { ...stripped, status_label: requestStatusLabel(String(row.status)) };
+      }),
       focus: { entity_type: input.from_type, id: input.id },
     };
   }

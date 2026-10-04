@@ -11,6 +11,7 @@ import {
   filterKind,
   isContainsFilter,
   isRangeFilter,
+  sanitizeNumericFilter,
   type ComparisonColumnFilters,
   type ComparisonRangeFilter,
 } from "./order-comparison-filters";
@@ -20,7 +21,7 @@ export function ComparisonHeaderFilter({
   values,
   filters,
   onApply,
-  searchPlaceholder,
+  placeholder,
   allLabel,
   clearLabel,
   applyLabel,
@@ -32,7 +33,7 @@ export function ComparisonHeaderFilter({
   values: string[];
   filters: ComparisonColumnFilters;
   onApply: (next: ComparisonColumnFilters) => void;
-  searchPlaceholder: string;
+  placeholder: string;
   allLabel: string;
   clearLabel: string;
   applyLabel: string;
@@ -41,6 +42,7 @@ export function ComparisonHeaderFilter({
   containsLabel: string;
 }) {
   const kind = filterKind(columnId);
+  const textLike = kind === "text" || kind === "number";
   const current = filters[columnId];
   const active = filterActive(current);
   const [open, setOpen] = useState(false);
@@ -57,7 +59,7 @@ export function ComparisonHeaderFilter({
       setDraftMax(range.max == null ? "" : String(range.max));
       return;
     }
-    if (kind === "text") {
+    if (textLike) {
       setDraftText(isContainsFilter(current) ? current.contains : "");
       return;
     }
@@ -100,19 +102,22 @@ export function ComparisonHeaderFilter({
               <Input type="number" value={draftMax} onChange={(e) => setDraftMax(e.target.value)} className="mt-0.5 h-9" />
             </label>
           </div>
-        ) : kind === "text" ? (
+        ) : textLike ? (
           <label className="text-[10px] text-muted-foreground">
             {containsLabel}
             <Input
               value={draftText}
-              onChange={(e) => setDraftText(e.target.value)}
-              placeholder={searchPlaceholder}
+              inputMode={kind === "number" ? "numeric" : undefined}
+              onChange={(e) =>
+                setDraftText(kind === "number" ? sanitizeNumericFilter(e.target.value) : e.target.value)
+              }
+              placeholder={placeholder}
               className="mt-0.5 h-9"
             />
           </label>
         ) : (
           <>
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={searchPlaceholder} className="h-9" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} className="h-9" />
             <label className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40">
               <Checkbox checked={draftValues.length === 0} onCheckedChange={() => setDraftValues([])} />
               <span className="min-w-0 flex-1 font-medium">{allLabel}</span>
@@ -166,7 +171,7 @@ export function ComparisonHeaderFilter({
                 };
                 if (range.min != null || range.max != null) next[columnId] = range;
                 else delete next[columnId];
-              } else if (kind === "text") {
+              } else if (textLike) {
                 if (draftText.trim()) next[columnId] = { contains: draftText.trim() };
                 else delete next[columnId];
               } else if (draftValues.length === 0) {

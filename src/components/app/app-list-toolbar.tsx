@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function AppListToolbar({
@@ -41,16 +40,18 @@ export function AppListToolbar({
               className="h-9 rounded-lg ps-9 pe-9"
             />
             {searchValue ? (
-              <Button
+              // A plain button, not the shared Button: its base class carries
+              // `active:translate-y-px`, which fights the `-translate-y-1/2`
+              // centring and makes the X visibly jump out of the input while
+              // pressed. `z-10` keeps it above the field at any width.
+              <button
                 type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="absolute end-1 top-1/2 h-7 w-7 -translate-y-1/2 cursor-pointer"
                 onClick={() => onSearchChange("")}
+                aria-label="Clear"
+                className="absolute end-2 top-1/2 z-10 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
               >
                 <X className="h-3.5 w-3.5" />
-                <span className="sr-only">Clear</span>
-              </Button>
+              </button>
             ) : null}
           </div>
         ) : null}

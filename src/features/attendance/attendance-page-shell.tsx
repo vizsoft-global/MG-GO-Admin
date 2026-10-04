@@ -39,6 +39,11 @@ import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -467,29 +472,44 @@ function AttendancePageContent() {
           </VisibleTableCell>
           <TableCell>
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="text-primary hover:bg-primary/10"
-                render={
-                  <Link href={`/attendance/drivers/${row.driver_id}?date=${row.log_date}`} />
-                }
-                aria-label={t("viewDetail")}
-              >
-                <ExternalLink className="h-4 w-4" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="cursor-pointer text-primary hover:bg-primary/10"
+                      render={
+                        <Link href={`/attendance/drivers/${row.driver_id}?date=${row.log_date}`} />
+                      }
+                      aria-label={t("viewDetail")}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t("viewDetail")}</TooltipContent>
+              </Tooltip>
               {canManage ? (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => {
-                    setCorrectionRow(row);
-                    setCorrectionOpen(true);
-                  }}
-                  aria-label={t("correct")}
-                >
-                  <Edit3 className="h-4 w-4" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setCorrectionRow(row);
+                          setCorrectionOpen(true);
+                        }}
+                        aria-label={t("correct")}
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>{t("correct")}</TooltipContent>
+                </Tooltip>
               ) : null}
             </div>
           </TableCell>
