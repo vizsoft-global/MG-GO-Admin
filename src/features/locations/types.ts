@@ -28,6 +28,15 @@ export type DriverLiveLocation = {
   activeDeliveryId: string | null;
   lastSeenAt: string;
   updatedAt: string;
+  /**
+   * Metres travelled since the previous fix we saw for this driver.
+   *
+   * Resolved by `enrichLiveLocation` from the row it is replacing, and `null` on the very first
+   * fix of a session (there is nothing to subtract from). It exists so the list, the popup and
+   * the sub-label can apply the app's own `speed or >= 15 m displacement` motion rule instead of
+   * trusting `speedMps`, which a coarse network fix leaves at 0.
+   */
+  movedMeters?: number | null;
   pinStatus: PinStatus;
 };
 

@@ -63,6 +63,17 @@ export type FleetDriver = {
   lng: number | null;
   speedMps: number;
   /**
+   * Metres travelled since the previous applied fix, for the Moving / Idle sub-label an
+   * On Delivery card carries (QA #48).
+   *
+   * Derived on the client from the two positions the store already holds, rather than added to
+   * the position tuple: the wire's 9-element shape is decoded by clients built before any change
+   * to it, and displacement is a fact about *this* page's consecutive fixes anyway. It is the
+   * same `speed or >= 15 m` input the status machine uses, which is what keeps the sub-label from
+   * contradicting the status beside it.
+   */
+  movedMeters: number;
+  /**
    * Last known bearing, held across fixes that carry none — see `headingSource` for
    * whether the *current* fix contributed it.
    */

@@ -302,7 +302,18 @@ export function VisitsSlotsShell() {
     }
 
     setSaving(false);
-    toast.success(t("catalog.saved"));
+    // The weekday toggles are the branch's opening days, so the save now
+    // generates the slots those days need. Naming the result is what tells the
+    // operator the toggle did something — the old silent save is why it read as
+    // inert.
+    const addedSlots = result.addedSlots ?? 0;
+    if (result.error === "slot_sync_failed") {
+      toast.error(t("slots.syncFailed"));
+    } else if (addedSlots > 0) {
+      toast.success(t("slots.savedWithSlots", { count: addedSlots }));
+    } else {
+      toast.success(t("catalog.saved"));
+    }
     await queryClient.invalidateQueries({ queryKey: queryKeys.visits.all() });
   };
 

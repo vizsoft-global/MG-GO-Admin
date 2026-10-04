@@ -1,3 +1,6 @@
+import { normalizeDateToIso } from "@/lib/import/spreadsheet";
+import { parseIsoDate } from "./incentive-rule-import";
+
 /**
  * Bulk DPD create uses the same defaultPriority as the form (restaurant 30, zone 10).
  *
@@ -20,7 +23,10 @@ export type DpdTargetImportStatus =
   | "invalid_target"
   | "invalid_period"
   | "ambiguous_name"
-  | "duplicate";
+  | "duplicate"
+  | "invalid_start"
+  | "invalid_end"
+  | "invalid_range";
 
 export type DpdTargetImportInputRow = {
   scope_type?: string;
@@ -29,6 +35,11 @@ export type DpdTargetImportInputRow = {
   dpd_period?: string;
   partner?: string;
   zone_code?: string;
+  /** Optional validity window. Both blank means the rule keeps the server's
+   * default window (today → 2099-12-31), which is what a sheet written against
+   * the old 4-column template still gets. */
+  start_date?: string;
+  end_date?: string;
 };
 
 export type DpdTargetImportRestaurant = {
@@ -61,6 +72,10 @@ export type DpdTargetImportPreviewRow = {
   zone_code: string;
   dpd_target: string;
   dpd_period: string;
+  /** Resolved ISO dates. Empty when the sheet left both cells blank, which is
+   * the signal for "let the server pick the window". */
+  start_date: string;
+  end_date: string;
   status: DpdTargetImportStatus;
   rule_id: string | null;
   rule_name: string | null;
@@ -85,6 +100,8 @@ export function guessDpdTargetImportColumns(headers: string[]): {
   dpd_period: number;
   partner: number;
   zone_code: number;
+  start_date: number;
+  end_date: number;
 } {
   const lower = headers.map((h) => h.trim().toLowerCase());
   const exact = (aliases: string[]) => {
@@ -107,6 +124,8 @@ export function guessDpdTargetImportColumns(headers: string[]): {
     dpd_period: exact(["dpd target period", "period"]),
     partner: exact(["partner name", "partner"]),
     zone_code: exact(["zone code", "code"]),
+    start_date: exact(["start date", "start"]),
+    end_date: exact(["end date", "end"]),
   };
 }
 
@@ -122,6 +141,16 @@ export function mapDpdTargetImportSheet(
     dpd_period: cols.dpd_period >= 0 ? cells[cols.dpd_period] : "",
     partner: cols.partner >= 0 ? cells[cols.partner] : "",
     zone_code: cols.zone_code >= 0 ? cells[cols.zone_code] : "",
+    // Sheets are written by hand, so `01/11/2026` has to reach `parseIsoDate`
+    // as an ISO string or every non-US operator gets "invalid start date".
+    start_date:
+      cols.start_date >= 0
+        ? (normalizeDateToIso(cells[cols.start_date] ?? "") ?? cells[cols.start_date])
+        : "",
+    end_date:
+      cols.end_date >= 0
+        ? (normalizeDateToIso(cells[cols.end_date] ?? "") ?? cells[cols.end_date])
+        : "",
   }));
 }
 
@@ -266,6 +295,10 @@ export function previewDpdTargetRows(input: {
     const zone_code = row.zone_code?.trim() ?? "";
     const dpd_target = row.dpd_target?.trim() ?? "";
     const dpd_period = row.dpd_period?.trim() ?? "";
+    const startRaw =
+      normalizeDateToIso(row.start_date?.trim() ?? "") ?? row.start_date?.trim() ?? "";
+    const endRaw =
+      normalizeDateToIso(row.end_date?.trim() ?? "") ?? row.end_date?.trim() ?? "";
     const base: DpdTargetImportPreviewRow = {
       row_number: index + 1,
       scope_type,
@@ -274,6 +307,8 @@ export function previewDpdTargetRows(input: {
       zone_code,
       dpd_target,
       dpd_period,
+      start_date: "",
+      end_date: "",
       status: "unknown_name",
       rule_id: null,
       rule_name: null,
@@ -311,6 +346,46 @@ export function previewDpdTargetRows(input: {
     }
     claimed.add(claimKey);
 
+    // Optional validity window. Blank on both cells means "leave the server
+    // default" (today → 2099-12-31), which is what every sheet written before
+    // these columns existed means.
+    let startIso = "";
+    let endIso = "";
+    if (startRaw || endRaw) {
+      const parsedStart = parseIsoDate(startRaw);
+      const parsedEnd = parseIsoDate(endRaw);
+      if (!startRaw || !parsedStart) {
+        return {
+          ...base,
+          status: "invalid_start",
+          scope_id: resolved.id,
+          resolved_scope: resolved.scope,
+          note: `${startRaw || "—"} → ${endRaw || "—"}`,
+        };
+      }
+      if (!endRaw || !parsedEnd) {
+        return {
+          ...base,
+          status: "invalid_end",
+          scope_id: resolved.id,
+          resolved_scope: resolved.scope,
+          note: `${startRaw} → ${endRaw || "—"}`,
+        };
+      }
+      if (parsedEnd < parsedStart) {
+        return {
+          ...base,
+          status: "invalid_range",
+          scope_id: resolved.id,
+          resolved_scope: resolved.scope,
+          note: `${startRaw} → ${endRaw}`,
+        };
+      }
+      startIso = parsedStart;
+      endIso = parsedEnd;
+    }
+    const dates = { start_date: startIso, end_date: endIso };
+
     const target = Number(dpd_target);
     if (!Number.isFinite(target) || target <= 0) {
       return {
@@ -334,6 +409,7 @@ export function previewDpdTargetRows(input: {
     if (!match) {
       return {
         ...base,
+        ...dates,
         status: "create",
         scope_id: resolved.id,
         resolved_scope: resolved.scope,
@@ -341,6 +417,7 @@ export function previewDpdTargetRows(input: {
     }
     return {
       ...base,
+      ...dates,
       status: "ok",
       rule_id: match.id,
       rule_name: match.name,

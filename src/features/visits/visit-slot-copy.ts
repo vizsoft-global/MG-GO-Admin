@@ -15,6 +15,8 @@ export type VisitBranchForCopy = {
   id: string;
   is_default: boolean;
   is_active: boolean;
+  /** Bookable weekdays (0 = Sun). Empty or absent means "not configured". */
+  working_dows?: readonly number[] | null;
 };
 
 export function normalizeVisitTime(value: string): string {
@@ -52,9 +54,14 @@ export function nextDefaultBranchUpdates(
 ):
   | { ok: true; already: true }
   | { ok: true; already: false; clearIds: string[] }
-  | { ok: false; error: "not_found" } {
+  | { ok: false; error: "not_found" | "inactive_branch" } {
   const target = branches.find((b) => b.id === targetId);
   if (!target) return { ok: false, error: "not_found" };
+  // The default branch is the one the rider app falls back to when a booking
+  // carries no branch (`WHERE is_active ORDER BY is_default DESC`), so making a
+  // deactivated branch the default points every unassigned booking at a place
+  // that is closed. Refuse rather than let the panel create that state.
+  if (!target.is_active) return { ok: false, error: "inactive_branch" };
   if (target.is_default) return { ok: true, already: true };
   return {
     ok: true,
@@ -68,6 +75,9 @@ export function pickSlotCopySource(
   branches: readonly VisitBranchForCopy[],
   slots: readonly RecurringVisitSlot[],
 ): string | null {
+  // A deactivated branch is neither a source nor a default: copying its
+  // weekday templates forward would re-open a schedule nobody is running.
+  const active = branches.filter((b) => b.is_active);
   const recurring = slots.filter(isRecurringWeekdaySlot);
   const countByBranch = new Map<string, number>();
   for (const slot of recurring) {
@@ -75,7 +85,7 @@ export function pickSlotCopySource(
     countByBranch.set(slot.branch_id, (countByBranch.get(slot.branch_id) ?? 0) + 1);
   }
 
-  const defaultBranch = branches.find((b) => b.is_default);
+  const defaultBranch = active.find((b) => b.is_default);
   if (defaultBranch && (countByBranch.get(defaultBranch.id) ?? 0) > 0) {
     return defaultBranch.id;
   }
@@ -83,6 +93,7 @@ export function pickSlotCopySource(
   let bestId: string | null = null;
   let bestCount = 0;
   for (const [id, count] of countByBranch) {
+    if (!active.some((b) => b.id === id)) continue;
     if (count > bestCount) {
       bestId = id;
       bestCount = count;
@@ -122,12 +133,18 @@ export function planVisitWeekdaySlotCopy(
   const inserts: VisitSlotInsert[] = [];
 
   for (const target of targets) {
+    // Never seed a slot onto a weekday the target branch does not open: the
+    // copy exists to give every branch a bookable week, and a template for a
+    // closed day only produces slots the driver RPC then has to refuse.
+    const targetDows = target.working_dows ?? [];
     const existing = new Set(
       slots
         .filter((s) => s.branch_id === target.id && isRecurringWeekdaySlot(s))
         .map((s) => weekdaySlotMatchKey(s)),
     );
     for (const slot of sourceSlots) {
+      const dow = slot.day_of_week as number;
+      if (targetDows.length > 0 && !targetDows.includes(dow)) continue;
       const key = weekdaySlotMatchKey(slot);
       if (existing.has(key)) continue;
       existing.add(key);
@@ -135,7 +152,7 @@ export function planVisitWeekdaySlotCopy(
         branch_id: target.id,
         department_key: slot.department_key,
         slot_date: null,
-        day_of_week: slot.day_of_week as number,
+        day_of_week: dow,
         start_time: slot.start_time,
         end_time: slot.end_time,
         capacity: slot.capacity,

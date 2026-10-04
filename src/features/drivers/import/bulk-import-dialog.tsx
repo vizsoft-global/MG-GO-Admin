@@ -649,6 +649,8 @@ export function DriverBulkImportDialog({
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colName")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPhone")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colEmployeeId")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPlatformId")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPlatform")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colZone")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colRestaurants")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colActive")}</th>
@@ -668,6 +670,8 @@ export function DriverBulkImportDialog({
                           <td className="px-2 py-1">{row.full_name ?? "—"}</td>
                           <td className="px-2 py-1">{row.phone ?? "—"}</td>
                           <td className="px-2 py-1 tabular-nums">{row.employee_id ?? "—"}</td>
+                          <td className="px-2 py-1">{row.client_id ?? "—"}</td>
+                          <td className="px-2 py-1">{row.client_name ?? "—"}</td>
                           <td className="px-2 py-1">{row.zone_name ?? "—"}</td>
                           <td className="px-2 py-1">
                             {row.restaurant_names.length > 0

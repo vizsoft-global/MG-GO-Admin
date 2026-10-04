@@ -3,7 +3,13 @@
 import { getSessionUser, type SessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
-import { excelPayloadForRpc, resolveReconRows, type ReconResolvedRow } from "./order-recon-resolve";
+import {
+  collapseReconIssues,
+  excelPayloadForRpc,
+  resolveReconRows,
+  type ReconIssueRow,
+  type ReconResolvedRow,
+} from "./order-recon-resolve";
 import { parseReconXlsx } from "./parse-recon-xlsx";
 import type {
   OrderReconKpi,
@@ -76,6 +82,7 @@ export type ReconPreview = {
   from: string;
   to: string;
   resolved: ReconResolvedRow[];
+  issues: ReconIssueRow[];
   readyCount: number;
   unresolvedCount: number;
 };
@@ -117,14 +124,19 @@ export async function previewOrderRecon(
     aliases ?? [],
   );
 
+  const issues = collapseReconIssues(resolved);
+
   return {
     preview: {
       fileName: file.name,
       from: parsed.from,
       to: parsed.to,
       resolved,
+      issues,
       readyCount: resolved.filter((r) => r.status === "ready").length,
-      unresolvedCount: resolved.filter((r) => r.status === "unresolved").length,
+      // Grouped count: the list below the header shows one line per issue, so a
+      // per-cell count would contradict it and inflate one unknown rider into 30.
+      unresolvedCount: issues.length,
     },
   };
 }

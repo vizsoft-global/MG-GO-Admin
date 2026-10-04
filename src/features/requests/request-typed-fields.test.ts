@@ -17,8 +17,8 @@ describe("getExtraPayloadRows", () => {
         leave_type: "annual",
         awaiting_driver_reschedule: true,
         reschedule: {
-          proposed_start: "2026-09-20",
-          proposed_end: "2026-09-22",
+          proposed_start_date: "2026-09-20",
+          proposed_end_date: "2026-09-22",
           note: "Need later dates",
           accepted: false,
           driver_note: "Clash",
@@ -27,7 +27,9 @@ describe("getExtraPayloadRows", () => {
     } as RequestDetail;
     const extras = getExtraPayloadRows(request);
     assert.equal(
-      extras.some((row) => row.key === "reschedule" || String(row.value).includes("proposed_start")),
+      extras.some(
+        (row) => row.key === "reschedule" || JSON.stringify(row).includes("proposed_"),
+      ),
       false,
     );
   });

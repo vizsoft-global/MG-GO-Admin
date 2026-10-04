@@ -25,13 +25,22 @@ export function filterActive(value: ComparisonFilterValue | undefined): boolean 
   return rangeFilterActive(value);
 }
 
-const TEXT_KEYS = new Set(["mgId", "name"]);
+const TEXT_KEYS = new Set(["name"]);
+const NUMBER_KEYS = new Set(["mgId"]);
 const LIST_KEYS = new Set(["restaurant"]);
 
-export function filterKind(columnId: string): "text" | "list" | "range" {
+export type ComparisonFilterKind = "text" | "number" | "list" | "range";
+
+export function filterKind(columnId: string): ComparisonFilterKind {
+  if (NUMBER_KEYS.has(columnId)) return "number";
   if (TEXT_KEYS.has(columnId)) return "text";
   if (LIST_KEYS.has(columnId)) return "list";
   return "range";
+}
+
+/** MG ID is numeric-only: strip anything that is not a digit before it reaches the filter. */
+export function sanitizeNumericFilter(input: string): string {
+  return input.replace(/\D+/g, "");
 }
 
 function cellValue(row: ComparisonRider, key: string): string | number {

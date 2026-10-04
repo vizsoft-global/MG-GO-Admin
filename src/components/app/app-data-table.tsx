@@ -8,6 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { AppTableScrollRail } from "./app-table-scroll-rail";
 import { TABLE_HEAD_CLASS } from "./constants";
 
 export function AppDataTable({
@@ -27,6 +28,9 @@ export function AppDataTable({
 }) {
   return (
     <div className={cn("overflow-x-auto", className)}>
+      {/* QA #18 — mirror the scroller above the header row so a wide list can be
+          panned without scrolling to the bottom of the page first. */}
+      <AppTableScrollRail />
       <Table>
         <TableHeader>
           <TableRow

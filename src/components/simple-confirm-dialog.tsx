@@ -13,6 +13,12 @@ export type SimpleConfirmDialogProps = {
   title: string;
   description: string;
   confirmLabel?: string;
+  /**
+   * Destructive by default because this dialog exists for removals. A
+   * confirmation that only warns — "this rule is live, save anyway?" — passes
+   * `"default"` so the button does not read as a delete.
+   */
+  confirmVariant?: "default" | "destructive";
   onConfirm: () => void | Promise<void>;
   isPending?: boolean;
 };
@@ -24,6 +30,7 @@ export function SimpleConfirmDialog({
   title,
   description,
   confirmLabel,
+  confirmVariant = "destructive",
   onConfirm,
   isPending: externalPending,
 }: SimpleConfirmDialogProps) {
@@ -64,7 +71,7 @@ export function SimpleConfirmDialog({
           </Button>
           <Button
             type="button"
-            variant="destructive"
+            variant={confirmVariant}
             size="sm"
             className="h-9 cursor-pointer rounded-md px-4"
             onClick={handleConfirm}

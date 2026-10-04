@@ -45,7 +45,7 @@ import {
 } from "./fleet-status";
 import { FleetInterpolator } from "./fleet-interpolator";
 import { FleetTrailStore } from "./fleet-trail";
-import {
+import { haversineMeters } from "@/features/locations/location-status";import {
   emptyFleetFilters,
   persistFleetFilters,
   readPersistedFleetFilters,
@@ -371,6 +371,7 @@ export class FleetStore {
           lat: null,
           lng: null,
           speedMps: 0,
+          movedMeters: 0,
           headingDeg: 0,
           headingSource: "none",
           fixAtMs: 0,
@@ -432,6 +433,7 @@ export class FleetStore {
         lat: decoded.lat,
         lng: decoded.lng,
         speedMps: decoded.speedMps,
+        movedMeters: movedSince(existing, decoded.lat, decoded.lng),
         headingDeg,
         headingSource: decoded.headingSource,
         fixAtMs,
@@ -497,6 +499,7 @@ export class FleetStore {
         lat: row.lat,
         lng: row.lng,
         speedMps: row.sp ?? 0,
+        movedMeters: movedSince(existing, row.lat, row.lng),
         headingDeg: row.hd ?? existing.headingDeg,
         headingSource: row.hs ?? (row.hd == null ? existing.headingSource : "gps"),
         fixAtMs,
@@ -660,6 +663,7 @@ export class FleetStore {
         lat,
         lng,
         speedMps: toNumber(row.speed_mps) ?? 0,
+        movedMeters: movedSince(existing, lat, lng),
         headingDeg: toNumber(row.heading_deg) ?? existing?.headingDeg ?? 0,
         headingSource:
           toNumber(row.heading_deg) == null
@@ -1040,6 +1044,25 @@ function opsSeverity(event: OpsEventFrame): FleetEventSeverity {
   // Reuse the Class B table where the key overlaps; anything else is informational
   // by definition — a successful driver action is something they did, not a problem.
   return fleetEventSeverity(event.operationKey as never);
+}
+
+/**
+ * Metres travelled since the previous applied fix (QA #48/#50).
+ *
+ * The wire carries no displacement and cannot be given one without breaking clients built
+ * before the change, but the previous position is already in the record this fix replaces — so
+ * the same rule the status machine runs (`speed >= 1.5 m/s` **or** `>= 15 m` moved) can be fed
+ * on the client. Zero when there is nothing to compare against: a first fix is not evidence of
+ * travel, and inventing motion there would label a rider who has just appeared as Moving.
+ */
+function movedSince(
+  previous: { lat: number | null; lng: number | null } | undefined,
+  lat: number | null,
+  lng: number | null,
+): number {
+  if (lat == null || lng == null) return 0;
+  if (!previous || previous.lat == null || previous.lng == null) return 0;
+  return haversineMeters(previous.lat, previous.lng, lat, lng);
 }
 
 function toNumber(value: number | string | null | undefined): number | null {

@@ -117,6 +117,7 @@ export function AttendanceFiltersSheet({
                   <SelectItem value="late">{t("liveLate")}</SelectItem>
                   <SelectItem value="absent">{t("liveAbsent")}</SelectItem>
                   <SelectItem value="on_duty">{t("liveOnDuty")}</SelectItem>
+                  <SelectItem value="on_leave">{t("liveOnLeave")}</SelectItem>
                   <SelectItem value="offline_during_shift">{t("liveOffline")}</SelectItem>
                   <SelectItem value="problems">{t("kpiProblems")}</SelectItem>
                 </SelectContent>
@@ -129,8 +130,10 @@ export function AttendanceFiltersSheet({
             type="button"
             variant="outline"
             onClick={() => {
+              // Clear the controls in place and leave the sheet open, so the
+              // operator can see what was reset and keep editing the rest.
+              setDraft(DEFAULT_ATTENDANCE_FILTERS);
               onApply(DEFAULT_ATTENDANCE_FILTERS);
-              onOpenChange(false);
             }}
           >
             {t("clearFilters")}

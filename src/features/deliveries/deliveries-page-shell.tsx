@@ -85,6 +85,7 @@ import {
   type DeliveriesQueryFilter,
   type DeliveryExportRow,
 } from "./deliveries-actions";
+import { DELIVERIES_EXPORT_MAX_ROWS } from "./export-pagination";
 import { DeliveryDetailSheet } from "./delivery-detail-sheet";
 import { deliveryDetailNav, nextSelectedDeliveryAfterRefresh } from "./delivery-detail-nav";
 import { OrdersReportDialog } from "./orders-report-dialog";
@@ -226,6 +227,7 @@ function DeliveriesPageContent() {
       search: debouncedSearch,
       dateFrom: dateRange.from ?? undefined,
       dateTo: dateRange.to ?? undefined,
+      dateToExclusive: dateRange.toExclusive,
     }),
     [tabFilter, zoneFilter, partnerFilter, cancelReasonFilter, debouncedSearch, dateRange],
   );
@@ -549,6 +551,13 @@ function DeliveriesPageContent() {
         return;
       }
       exportDeliveriesCsv(rows);
+      // A full page means the export stopped at the ceiling rather than at the
+      // end of the window; say so instead of calling a partial file a success.
+      if (rows.length >= DELIVERIES_EXPORT_MAX_ROWS) {
+        toast.warning(t("exportTruncated", { count: DELIVERIES_EXPORT_MAX_ROWS }));
+      } else {
+        toast.success(t("exportReady", { count: rows.length }));
+      }
     } catch {
       toast.error(t("statusChangeFailed"));
     } finally {

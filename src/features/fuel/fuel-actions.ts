@@ -58,27 +58,39 @@ export async function listFuelFills(input: {
   if ("error" in auth) throw new Error(auth.error);
 
   const supabase = await createClient();
+  // `p_driver_id` scopes the query *before* the LIMIT. Filtering the fleet-wide
+  // page in JavaScript meant a rider's own fills fell outside the 2000-row
+  // window whenever the fleet was busier than that, so a custom range came back
+  // empty for a rider who plainly had records.
   const { data, error } = await supabase.rpc("admin_list_fuel_fills", {
     p_from: input.from,
     p_to: input.to,
     p_search: input.search?.trim() || undefined,
     p_project_key: input.projectKey || undefined,
+    p_driver_id: input.driverId || undefined,
     p_limit: 2000,
     p_offset: 0,
   });
   if (error) throw new Error(error.message);
 
-  const payload = data as { ok?: boolean; rows?: unknown } | null;
-  if (!payload?.ok || !Array.isArray(payload.rows)) return [];
+  const payload = data as {
+    ok?: boolean;
+    error?: string;
+    rows?: unknown;
+  } | null;
+  // The RPC answers `ok: false` for a refusal, which is not a PostgREST error —
+  // returning [] here is what made a denial look like "no records".
+  if (!payload?.ok) {
+    throw new Error(payload?.error || "fuel_list_failed");
+  }
+  if (!Array.isArray(payload.rows)) return [];
 
   void logAdminRead("fuel_fills", input.driverId ? `/fuel/drivers/${input.driverId}` : "/fuel");
-  const rows = payload.rows.flatMap((row) => {
+  return payload.rows.flatMap((row) => {
     if (!row || typeof row !== "object") return [];
     const parsed = parseFuelFillRow(row as Record<string, unknown>);
     return parsed ? [parsed] : [];
   });
-  if (input.driverId) return rows.filter((row) => row.driver_id === input.driverId);
-  return rows;
 }
 
 const MONTH_KEY = /^\d{4}-\d{2}$/;

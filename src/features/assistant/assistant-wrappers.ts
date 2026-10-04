@@ -39,6 +39,16 @@ function asError(err: unknown): string {
     if (err.message === "not_authorized") return "not_authorized";
     return err.message;
   }
+  // PostgREST rejects with a plain `{ message, code, details, hint }` object,
+  // not an Error — without this every RPC failure read as the opaque
+  // "tool_failed", which is how a permission or timeout problem looked like a
+  // generic assistant breakdown.
+  if (err && typeof err === "object") {
+    const record = err as { message?: unknown; error?: unknown; code?: unknown };
+    if (typeof record.message === "string" && record.message) return record.message;
+    if (typeof record.error === "string" && record.error) return record.error;
+    if (typeof record.code === "string" && record.code) return record.code;
+  }
   return "tool_failed";
 }
 
@@ -163,6 +173,7 @@ export async function runDpdEfficiency(input: DateInput & {
 }
 
 export async function runDeliveriesCounts(input: DateInput & {
+  rider?: string;
   zone?: string;
   partner?: string;
 }) {
@@ -172,13 +183,16 @@ export async function runDeliveriesCounts(input: DateInput & {
     await requireAssistantModule("deliveries.view");
     const range = resolveAssistantDateRange(input);
     const bounds = kuwaitDayCreatedAtBounds(range.from, range.to);
-    const [zone, partner] = await Promise.all([
+    const [rider, zone, partner] = await Promise.all([
+      resolveDriverId(input.rider),
       resolveZoneId(input.zone),
       resolvePartnerId(input.partner),
     ]);
+    if (input.rider && !rider.id) return fail("driver_not_found");
     const counts = await countDeliveriesByFilters({
       dateFrom: bounds.dateFrom,
       dateTo: bounds.dateTo,
+      driverId: rider.id,
       zoneId: zone.id,
       partnerId: partner.id,
     });
@@ -187,7 +201,7 @@ export async function runDeliveriesCounts(input: DateInput & {
       kind: "deliveries_counts",
       from: range.from,
       to: range.to,
-      filters: { zoneId: zone.id, partnerId: partner.id },
+      filters: { driverId: rider.id, zoneId: zone.id, partnerId: partner.id },
     };
     void logAdminRead("deliveries_counts", "assistant.tool", {
       tool: "deliveries_counts",
@@ -199,6 +213,9 @@ export async function runDeliveriesCounts(input: DateInput & {
       ...counts,
       from: range.from,
       to: range.to,
+      rider: rider.id
+        ? { id: rider.id, name: rider.name, driver_code: rider.driver_code, employee_id: rider.employee_id }
+        : null,
       zone: zone.name,
       partner: partner.name,
       export: exportSpec,

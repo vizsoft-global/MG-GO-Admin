@@ -6,6 +6,7 @@ import { Hand } from "lucide-react";
 import { toast } from "sonner";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/app";
 import { payrollRiderMatchesSearch, type PayrollPeriod } from "./payroll-formulas";
 import { AdjustmentDialog, type AdjustmentDialogState } from "./adjustment-dialog";
 import { PayrollDayGrid, PayrollLegend, type PayrollAdjustRequest } from "./payroll-grid";
@@ -73,11 +74,11 @@ export function CombinedPayrollTab({
           {t("adjust.adjustedCells", { count: adjustedCells })}
         </span>
       </div>
-      <Input
-        className="h-9"
+      <SearchField
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={setSearch}
         placeholder={t("searchPlaceholder")}
+        clearLabel={t("clearSearch")}
       />
       <PayrollDayGrid
         dates={month.dates}

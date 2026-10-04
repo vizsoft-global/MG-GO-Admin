@@ -147,6 +147,7 @@ export function AttendanceCorrectionSheet({
               value={checkIn}
               onChange={(e) => setCheckIn(e.target.value)}
               disabled={!canManage || isPending}
+              openPickerOnFocus={false}
               className="rounded-lg"
             />
           </div>
@@ -159,6 +160,7 @@ export function AttendanceCorrectionSheet({
               value={checkOut}
               onChange={(e) => setCheckOut(e.target.value)}
               disabled={!canManage || isPending}
+              openPickerOnFocus={false}
               className="rounded-lg"
             />
           </div>

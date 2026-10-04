@@ -1,3 +1,5 @@
+import { workingDowsLabel } from "./visit-hours";
+
 export function visitStatusVariant(
   status: string,
 ): "success" | "warning" | "danger" | "neutral" {
@@ -67,12 +69,16 @@ export function avatarTintClass(name: string): string {
 
 export function formatWorkingHours(row: {
   working_days: string | null;
+  working_dows?: readonly number[] | null;
   opening_time: string | null;
   closing_time: string | null;
 }): string {
   if (!row.opening_time || !row.closing_time) return "—";
   const hours = `${row.opening_time.slice(0, 5)}–${row.closing_time.slice(0, 5)}`;
-  return row.working_days ? `${row.working_days} · ${hours}` : hours;
+  // The day toggles on Slot & availability are the live source; `working_days`
+  // is the legacy free-text label and is only shown when the toggles are unset.
+  const days = workingDowsLabel(row.working_dows, DAY_OF_WEEK_LABELS) ?? row.working_days;
+  return days ? `${days} · ${hours}` : hours;
 }
 
 export function initialsOf(name: string): string {

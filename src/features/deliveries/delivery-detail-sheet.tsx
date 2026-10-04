@@ -516,11 +516,19 @@ export function DeliveryDetailSheet({
       toast.error(t("rejectReasonRequired"));
       return;
     }
-    const result = await statusMutation.mutateAsync({
-      deliveryId: delivery.id,
-      status: statusDraft,
-      rejectionReason: statusDraft === "rejected" ? rejectReason : undefined,
-    });
+    let result: Awaited<ReturnType<typeof statusMutation.mutateAsync>>;
+    try {
+      result = await statusMutation.mutateAsync({
+        deliveryId: delivery.id,
+        status: statusDraft,
+        rejectionReason: statusDraft === "rejected" ? rejectReason : undefined,
+      });
+    } catch {
+      // A transport failure rejects `mutateAsync`; the optimistic patch in the
+      // hook is rolled back there, so all this owes the operator is the toast.
+      toast.error(t("statusChangeFailed"));
+      return;
+    }
     if ("error" in result) {
       const msg =
         result.error === "reason_required"
@@ -537,12 +545,21 @@ export function DeliveryDetailSheet({
       return;
     }
     toast.success(t("statusChangeSuccess"));
+    // Refresh the list *before* the sheet closes. Closing first let the operator
+    // see the old row for as long as the refetch took, which read as "the
+    // status change did not apply".
+    await onUpdated?.();
     onClose();
-    void onUpdated?.();
   };
 
   const handleDelete = async () => {
-    const result = await deleteMutation.mutateAsync(delivery.id);
+    let result: Awaited<ReturnType<typeof deleteMutation.mutateAsync>>;
+    try {
+      result = await deleteMutation.mutateAsync(delivery.id);
+    } catch {
+      toast.error(t("deleteFailed"));
+      return;
+    }
     if ("error" in result) {
       toast.error(
         result.error === "not_authorized" ? t("noPermission") : t("deleteFailed"),
@@ -555,8 +572,8 @@ export function DeliveryDetailSheet({
     }
     toast.success(t("deleteSuccess"));
     setDeleteOpen(false);
+    await onUpdated?.();
     onClose();
-    void onUpdated?.();
   };
 
   return (

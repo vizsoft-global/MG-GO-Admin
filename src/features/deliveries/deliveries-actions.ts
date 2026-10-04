@@ -30,6 +30,7 @@ import {
   parseDeliveriesStatusCounts,
 } from "./delivery-kpi-counts";
 import { sendDpdCongratsFor } from "@/features/notifications/dpd-shift-notices";
+import { collectExportPages } from "./export-pagination";
 
 type DeliveryMutationResult =
   | { ok: true }
@@ -337,10 +338,26 @@ export type DeliveriesQueryFilter = {
   /** Cancel-reason code (only meaningful for the cancelled tab) or "all". */
   cancelReason?: string;
   search?: string;
-  /** Inclusive ISO bound on created_at (start of range). */
+  /**
+   * Inclusive ISO bound on `deliveries.delivered_at` (start of the window).
+   *
+   * The date filters bound on `delivered_at`, not `created_at`: the list is
+   * reconciled against the client's daily order-count sheet, and an order
+   * picked up at 23:40 on Sep 30 but completed at 00:10 on Oct 1 belongs to the
+   * Sep 30 operational day. `delivered_at` is the single source of truth for
+   * "when was this order completed", and rows without one (pending, in transit,
+   * cancelled) drop out on their own -- which is why a past operational day
+   * legitimately shows an empty Pending tab.
+   */
   dateFrom?: string;
-  /** Inclusive ISO bound on created_at (end of range). */
+  /** Inclusive ISO bound on `delivered_at` (end of the window). */
   dateTo?: string;
+  /**
+   * When true, `dateTo` is exclusive: the instant it names opens the next
+   * window. A custom 06:00 -> 06:00 range is one operational day, so 06:00:00
+   * must belong to the day that starts, not the one that ends.
+   */
+  dateToExclusive?: boolean;
 };
 
 import {
@@ -658,6 +675,18 @@ export async function fetchDashboardDeliveryRows(
 }
 
 /**
+ * Turn an exclusive end instant into the last instant an inclusive `<=` bound
+ * may use. Only needed for the count RPC and other inclusive contracts; the
+ * list itself sends `lt` and passes the instant through untouched.
+ */
+function inclusiveUpperBound(to: string, exclusive?: boolean): string {
+  if (!exclusive) return to;
+  const ms = Date.parse(to);
+  if (!Number.isFinite(ms)) return to;
+  return new Date(ms - 1).toISOString();
+}
+
+/**
  * Fetch one page of deliveries for the infinite-scroll list. Filters, search,
  * ordering, and pagination all run in Postgres; only the current page's rows
  * are mapped, and GPS-mock badges are resolved for just those rows.
@@ -674,6 +703,7 @@ export async function fetchDeliveriesPage(
 
   const search = params.search?.trim() ?? "";
   const searchDriverIds = search ? await resolveSearchDriverIds(supabase, search) : [];
+  const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
 
   const applyListFilters = <T extends {
     eq: Function;
@@ -681,6 +711,7 @@ export async function fetchDeliveriesPage(
     or: Function;
     gte: Function;
     lte: Function;
+    lt: Function;
   }>(query: T): T => {
     let next = query;
     if (params.status && params.status !== "all") {
@@ -702,8 +733,16 @@ export async function fetchDeliveriesPage(
     if (params.cancelReason && params.cancelReason !== "all") {
       next = next.or(buildCancelReasonOrFilter(params.cancelReason)) as T;
     }
-    if (params.dateFrom) next = next.gte("created_at", params.dateFrom) as T;
-    if (params.dateTo) next = next.lte("created_at", params.dateTo) as T;
+    // `delivered_at` is NOT NULL-checked implicitly: a null delivered_at fails
+    // both bounds, so pending / in-transit / cancelled rows leave the window.
+    if (params.dateFrom) next = next.gte("delivered_at", params.dateFrom) as T;
+    if (params.dateTo) {
+      next = (
+        params.dateToExclusive
+          ? next.lt("delivered_at", params.dateTo)
+          : next.lte("delivered_at", params.dateTo)
+      ) as T;
+    }
     if (search) {
       next = next.or(buildSearchOrFilter(search, searchDriverIds)) as T;
     }
@@ -712,8 +751,14 @@ export async function fetchDeliveriesPage(
 
   let query = applyListFilters(supabase.from("deliveries").select(DELIVERY_LIST_SELECT));
 
-  const { data, error } = await query
-    .order("created_at", { ascending: false })
+  // With a date window the list is chronological by completion time; without
+  // one it keeps the all-time `created_at` order so the unfiltered view does
+  // not change. Both are served by their matching `..._id_idx`.
+  const ordered = hasDateWindow
+    ? query.order("delivered_at", { ascending: false })
+    : query.order("created_at", { ascending: false });
+
+  const { data, error } = await ordered
     .order("id", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -735,27 +780,40 @@ export async function fetchDeliveriesPage(
       "admin_deliveries_status_counts",
       {
         p_from: params.dateFrom ?? undefined,
-        p_to: params.dateTo ?? undefined,
+        p_to: params.dateTo
+          ? inclusiveUpperBound(params.dateTo, params.dateToExclusive)
+          : undefined,
         p_zone_id:
           params.zoneId && params.zoneId !== "all" ? params.zoneId : undefined,
         p_partner_id:
           params.partnerId && params.partnerId !== "all"
             ? params.partnerId
             : undefined,
+        // A window means the KPIs must count the same completed rows the list
+        // shows; with no window the legacy `created_at` basis is preserved.
+        p_date_basis: hasDateWindow ? "delivered" : undefined,
       },
     );
-    if (countError) throw countError;
-    total = listTotalFromStatusCounts(
-      parseDeliveriesStatusCounts(rawCounts),
-      params.status,
-    );
+    // The status-counts RPC is a KPI optimisation, never the source of the
+    // rows themselves. When it times out (`57014`) or fails, the page must
+    // still render the rows it already fetched instead of replacing the whole
+    // list with "Could not load deliveries" — the same tolerance the
+    // filtered-count branch above already applies.
+    if (countError) {
+      total = offset + rows.length;
+    } else {
+      total = listTotalFromStatusCounts(
+        parseDeliveriesStatusCounts(rawCounts),
+        params.status,
+      );
+    }
   }
 
   const gpsFlags = await fetchGpsMockFlagsByDeliveryIds(rows.map((r) => r.id));
   const mapped = await mapDeliveryDbRowsToListRows(rows, gpsFlags, {
     resolveAssets: false,
   });
-  // Keep the server (created_at desc) order — re-sorting would break paging.
+  // Keep the server order (delivered_at or created_at desc) — re-sorting breaks paging.
   const enriched = await enrichDeliveryListRows(supabase, mapped);
 
   return {
@@ -784,12 +842,14 @@ export type DeliveryCountsByFilters = {
 };
 
 /**
- * Same WHERE as fetchDeliveriesPage (created_at, zone, partner) but count/head
- * only — never select order rows. Used by Staff Assistant v1 (B).
+ * Same WHERE as fetchDeliveriesPage (delivered_at when a window is given, zone,
+ * partner) but count/head only — never select order rows. Used by Staff
+ * Assistant v1 (B), so its numbers match the list's `Showing X of Y`.
  */
 export async function countDeliveriesByFilters(params: {
   dateFrom?: string;
   dateTo?: string;
+  dateToExclusive?: boolean;
   zoneId?: string;
   partnerId?: string;
   driverId?: string;
@@ -805,6 +865,7 @@ export async function countDeliveriesByFilters(params: {
     restaurantId: params.restaurantId,
   });
   const supabase = await createClient();
+  const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
 
   // One DEFINER scan for all seven numbers. The previous shape issued seven
   // parallel `count: exact` requests, each of which ran the deliveries RLS
@@ -813,12 +874,15 @@ export async function countDeliveriesByFilters(params: {
   // same WHERE semantics — inclusive bounds, absent filter = no filter.
   const { data, error } = await supabase.rpc("admin_deliveries_counts_by_filters", {
     p_from: params.dateFrom ?? undefined,
-    p_to: params.dateTo ?? undefined,
+    p_to: params.dateTo
+      ? inclusiveUpperBound(params.dateTo, params.dateToExclusive)
+      : undefined,
     p_zone_id: params.zoneId && params.zoneId !== "all" ? params.zoneId : undefined,
     p_partner_id:
       params.partnerId && params.partnerId !== "all" ? params.partnerId : undefined,
     p_driver_id: params.driverId ?? undefined,
     p_restaurant_id: params.restaurantId ?? undefined,
+    p_date_basis: hasDateWindow ? "delivered" : undefined,
   });
 
   if (error) throw error;
@@ -884,7 +948,13 @@ export async function fetchDeliveryFilterOptions(): Promise<DeliveryFilterOption
   };
 }
 
-/** Fetch all matching rows (lightweight) for CSV export, honoring filters. */
+/**
+ * Fetch all matching rows (lightweight) for CSV export, honoring filters.
+ *
+ * Pages in 1,000-row windows because PostgREST caps every response there; the
+ * ceiling and the walk live in `export-pagination.ts` so `DELIVERIES_EXPORT_MAX_ROWS`
+ * stays the single number the page shell compares its result against.
+ */
 export async function fetchDeliveriesForExport(
   params: DeliveriesQueryFilter,
 ): Promise<DeliveryExportRow[]> {
@@ -892,14 +962,15 @@ export async function fetchDeliveriesForExport(
   void logAdminRead("deliveries", "fetchDeliveriesForExport");
   const supabase = await createClient();
 
-  const EXPORT_CAP = 10000;
   const search = params.search?.trim() ?? "";
   const searchDriverIds = search ? await resolveSearchDriverIds(supabase, search) : [];
+  const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
 
-  let query = supabase
-    .from("deliveries")
-    .select(
-      `
+  const buildQuery = () => {
+    let query = supabase
+      .from("deliveries")
+      .select(
+        `
       id,
       status,
       external_order_id,
@@ -911,36 +982,39 @@ export async function fetchDeliveriesForExport(
       restaurants (name),
       zones (name)
     `,
-    );
+      );
 
-  if (params.status && params.status !== "all") {
-    if (params.status === "in_progress") {
-      query = query.in("status", [...IN_PROGRESS_DELIVERY_STATUSES]);
-    } else {
-      const statusValue = normalizeDeliveryStatusFilter(
-        params.status,
-      ) as DeliveryStatus;
-      query = query.eq("status", statusValue);
+    if (params.status && params.status !== "all") {
+      if (params.status === "in_progress") {
+        query = query.in("status", [...IN_PROGRESS_DELIVERY_STATUSES]);
+      } else {
+        const statusValue = normalizeDeliveryStatusFilter(
+          params.status,
+        ) as DeliveryStatus;
+        query = query.eq("status", statusValue);
+      }
     }
-  }
-  if (params.zoneId && params.zoneId !== "all") query = query.eq("zone_id", params.zoneId);
-  if (params.partnerId && params.partnerId !== "all") {
-    query = query.eq("partner_id", params.partnerId);
-  }
-  if (params.cancelReason && params.cancelReason !== "all") {
-    query = query.or(buildCancelReasonOrFilter(params.cancelReason));
-  }
-  if (params.dateFrom) query = query.gte("created_at", params.dateFrom);
-  if (params.dateTo) query = query.lte("created_at", params.dateTo);
-  if (search) {
-    query = query.or(buildSearchOrFilter(search, searchDriverIds));
-  }
-
-  const { data, error } = await query
-    .order("created_at", { ascending: false })
-    .range(0, EXPORT_CAP - 1);
-
-  if (error) throw error;
+    if (params.zoneId && params.zoneId !== "all") query = query.eq("zone_id", params.zoneId);
+    if (params.partnerId && params.partnerId !== "all") {
+      query = query.eq("partner_id", params.partnerId);
+    }
+    if (params.cancelReason && params.cancelReason !== "all") {
+      query = query.or(buildCancelReasonOrFilter(params.cancelReason));
+    }
+    // Same date basis as the list, so the file and the screen agree.
+    if (params.dateFrom) query = query.gte("delivered_at", params.dateFrom);
+    if (params.dateTo) {
+      query = params.dateToExclusive
+        ? query.lt("delivered_at", params.dateTo)
+        : query.lte("delivered_at", params.dateTo);
+    }
+    if (search) {
+      query = query.or(buildSearchOrFilter(search, searchDriverIds));
+    }
+    return hasDateWindow
+      ? query.order("delivered_at", { ascending: false })
+      : query.order("created_at", { ascending: false });
+  };
 
   type ExportDbRow = {
     id: string;
@@ -958,7 +1032,17 @@ export async function fetchDeliveriesForExport(
     zones: { name: string } | { name: string }[] | null;
   };
 
-  return ((data ?? []) as unknown as ExportDbRow[]).map((row) => {
+  // `id` is the tiebreaker so the pages cannot overlap or skip a row when many
+  // deliveries share the same second.
+  const collected = await collectExportPages<ExportDbRow>(async (offset, limit) => {
+    const { data, error } = await buildQuery()
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return (data ?? []) as unknown as ExportDbRow[];
+  });
+
+  return collected.map((row) => {
     const driverRel = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
     const profileRel = driverRel?.profiles;
     const profile = Array.isArray(profileRel) ? profileRel[0] : profileRel;
@@ -1106,35 +1190,48 @@ export async function updateDeliveryStatus(
     context: { driver_id: existing.driver_id, delivered_at: existing.delivered_at },
   });
 
-  const affectsEarnings =
-    existing.status === "verified" ||
-    status === "verified";
-  if (affectsEarnings && existing.delivered_at) {
-    await recalcEarningsForDelivery(
+  // Everything below is a *consequence* of a write that has already committed.
+  // A failure here used to throw out of the action, so React Query never saw
+  // `{ ok: true }`, `onSuccess` never ran, the optimistic patch was rolled back
+  // and the operator was shown a failure for a status that was in fact saved.
+  // The row is the source of truth; a recalc, a verification mirror or a push
+  // must never be able to contradict it.
+  try {
+    const affectsEarnings =
+      existing.status === "verified" ||
+      status === "verified";
+    if (affectsEarnings && existing.delivered_at) {
+      await recalcEarningsForDelivery(
+        supabase,
+        existing.driver_id,
+        existing.delivered_at,
+      );
+    }
+
+    // Mirror the admin's decision into DPD verifications so the verification
+    // page stays in sync without a manual entry.
+    await syncVerificationForDelivery(
       supabase,
-      existing.driver_id,
-      existing.delivered_at,
+      {
+        id: existing.id,
+        driver_id: existing.driver_id,
+        delivered_at: existing.delivered_at ?? new Date().toISOString(),
+        partner_id: (existing as { partner_id: string | null }).partner_id ?? null,
+        restaurant_id:
+          resolvedRestaurantId ??
+          ((existing as { restaurant_id: string | null }).restaurant_id ?? null),
+      },
+      session.id,
     );
-  }
 
-  // Mirror the admin's decision into DPD verifications so the verification
-  // page stays in sync without a manual entry.
-  await syncVerificationForDelivery(
-    supabase,
-    {
-      id: existing.id,
-      driver_id: existing.driver_id,
-      delivered_at: existing.delivered_at ?? new Date().toISOString(),
-      partner_id: (existing as { partner_id: string | null }).partner_id ?? null,
-      restaurant_id:
-        resolvedRestaurantId ??
-        ((existing as { restaurant_id: string | null }).restaurant_id ?? null),
-    },
-    session.id,
-  );
-
-  if (status === "verified") {
-    await sendDpdCongratsFor([existing.driver_id]);
+    if (status === "verified") {
+      await sendDpdCongratsFor([existing.driver_id]);
+    }
+  } catch (sideEffectError) {
+    console.error(
+      "[updateDeliveryStatus] post-update side effect failed",
+      sideEffectError,
+    );
   }
 
   return { ok: true };
@@ -1223,12 +1320,21 @@ export async function bulkUpdateDeliveries(
   });
 
   if (status === "verified" && updated > 0) {
-    const { data: rows } = await supabase
-      .from("deliveries")
-      .select("driver_id")
-      .in("id", ids)
-      .eq("status", "verified");
-    await sendDpdCongratsFor((rows ?? []).map((r) => r.driver_id));
+    // The RPC has already committed. A push failure must not be reported as a
+    // failed bulk update, or the list would keep showing the old statuses.
+    try {
+      const { data: rows } = await supabase
+        .from("deliveries")
+        .select("driver_id")
+        .in("id", ids)
+        .eq("status", "verified");
+      await sendDpdCongratsFor((rows ?? []).map((r) => r.driver_id));
+    } catch (sideEffectError) {
+      console.error(
+        "[bulkUpdateDeliveries] congrats push failed",
+        sideEffectError,
+      );
+    }
   }
 
   return { ok: true, updated, skipped, failed };
@@ -1300,7 +1406,13 @@ export async function deleteDelivery(
   });
 
   if (row.status === "verified" && row.delivered_at) {
-    await recalcEarningsForDelivery(supabase, row.driver_id, row.delivered_at);
+    // The row is already gone; a recalc failure cannot un-delete it, so it must
+    // not be reported as a failed delete.
+    try {
+      await recalcEarningsForDelivery(supabase, row.driver_id, row.delivered_at);
+    } catch (sideEffectError) {
+      console.error("[deleteDelivery] earnings recalc failed", sideEffectError);
+    }
   }
 
   return { ok: true };

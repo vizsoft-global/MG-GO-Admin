@@ -1046,7 +1046,10 @@ export function dayStatusLabel(status: DayStatus): string {
 export function dayGridLabel(status: DayStatus, hours: number): string {
   switch (status) {
     case "work":
-      return "12";
+      // A full SOP day keeps the bare `12`; a day attendance measured shorter
+      // prints what it actually was, so the grid cannot claim a full day for a
+      // 4 h shift.
+      return hours > 0 && hours !== 12 ? `${formatHoursToken(hours)}h` : "12";
     case "reduced3":
       return "3h";
     case "off":
@@ -1075,6 +1078,38 @@ export function dayGridLabel(status: DayStatus, hours: number): string {
       return _never;
     }
   }
+}
+
+/** `9`, `9.5` — one decimal at most, no trailing `.0`. */
+function formatHoursToken(hours: number): string {
+  const rounded = Math.round(hours * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+/**
+ * The hours a grid cell should print for a day.
+ *
+ * A `work` cell used to print a flat `12` no matter what attendance recorded,
+ * so a 9 h shift and a 50-minute shift both read as a full SOP day. The cell now
+ * carries the logged hours whenever attendance measured any, a still-open
+ * check-in carries the hours elapsed so far (`elapsedHours`, today only), and a
+ * day with no attendance reading at all falls back to the SOP credit. This is
+ * display only — the rule engine still decides the day from `loggedHours`.
+ */
+export function dayDisplayHours(
+  status: DayStatus,
+  info:
+    | { loggedHours?: number; elapsedHours?: number; creditedHours?: number }
+    | undefined,
+): number {
+  if (!info) return 0;
+  const credited = info.creditedHours ?? 0;
+  if (status !== "work") return credited;
+  const logged = info.loggedHours ?? 0;
+  if (logged > 0) return logged;
+  const elapsed = info.elapsedHours ?? 0;
+  if (elapsed > 0) return elapsed;
+  return credited;
 }
 
 export function formatPayrollPct(value: number, digits = 1): string {

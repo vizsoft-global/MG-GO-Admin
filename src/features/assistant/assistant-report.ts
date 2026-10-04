@@ -16,6 +16,7 @@ import {
 } from "@/features/performance/performance-actions";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
 import { fetchAdminRequestDetail, fetchAdminRequestsList } from "@/features/requests/requests-actions";
+import { requestStatusLabel } from "@/features/requests/request-status-utils";
 import type { RequestDatePreset } from "@/features/requests/types";
 import { fetchRestaurantAssignedDrivers, fetchRestaurantDetail } from "@/features/restaurants/restaurants-actions";
 import { listZonesForAssistant } from "@/features/zones/zones-read-actions";
@@ -150,7 +151,12 @@ async function vehicleConditionCounts(): Promise<Record<string, number>> {
   return counts;
 }
 
-async function driverReport(session: SessionUser, id: string, range: { from: string; to: string }) {
+async function driverReport(
+  session: SessionUser,
+  id: string,
+  range: { from: string; to: string },
+  summaryOnly = false,
+) {
   const showContact = allowed(session, "drivers.view");
   const detail = allowed(session, "drivers.view") ? await fetchDriverDetail(id) : null;
   const summary = detail
@@ -158,6 +164,29 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
     : sectionDenied("/drivers");
 
   const sections: Record<string, unknown> = { summary };
+
+  const focus = {
+    entity_type: "driver" as const,
+    id,
+    label: detail?.full_name ?? undefined,
+    driver_id: id,
+  };
+
+  // `entity_summary` asks for the identity card and nothing else. Running the
+  // full fan-out and then throwing eight of the nine results away is what made
+  // a driver lookup sit long enough to hit the statement timeout.
+  if (summaryOnly) {
+    const zoneId =
+      detail && typeof detail === "object" && "zone_id" in detail
+        ? String(detail.zone_id || "") || undefined
+        : undefined;
+    return {
+      entity: { type: "driver" as const, id, label: detail?.full_name ?? undefined, zone_id: zoneId },
+      window: range,
+      sections,
+      focus: { ...focus, zone_id: zoneId },
+    };
+  }
 
   const tasks: Array<Promise<void>> = [];
 
@@ -177,9 +206,13 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
 
   if (detail && typeof detail === "object" && "vehicle_id" in detail && detail.vehicle_id) {
     tasks.push(
-      vehicleById(String(detail.vehicle_id)).then((vehicle) => {
-        sections.vehicle = vehicle ? stripVehicleRow(vehicle) : null;
-      }),
+      vehicleById(String(detail.vehicle_id))
+        .then((vehicle) => {
+          sections.vehicle = vehicle ? stripVehicleRow(vehicle) : null;
+        })
+        .catch(() => {
+          sections.vehicle = sectionUnavailable("vehicle_failed");
+        }),
     );
   }
 
@@ -188,17 +221,21 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
       Promise.all([
         fetchDriverPerformanceDetail(id, range.from, range.to),
         fetchDriverPerformanceRank(id, range.from, range.to),
-      ]).then(([row, rank]) => {
-        sections.performance = row
-          ? {
-              ...stripPerformanceRow(row as unknown as Record<string, unknown>),
-              band: rank.band,
-              rank: rank.rank,
-              total: rank.total,
-              window: range,
-            }
-          : { window: range, empty: true };
-      }),
+      ])
+        .then(([row, rank]) => {
+          sections.performance = row
+            ? {
+                ...stripPerformanceRow(row as unknown as Record<string, unknown>),
+                band: rank.band,
+                rank: rank.rank,
+                total: rank.total,
+                window: range,
+              }
+            : { window: range, empty: true };
+        })
+        .catch(() => {
+          sections.performance = sectionUnavailable("performance_failed");
+        }),
     );
   } else {
     sections.performance = sectionDenied("/performance");
@@ -214,21 +251,25 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
           driverId: id,
         }),
         fetchRecentDeliveriesForDriver(id, 10),
-      ]).then(([counts, head]) => {
-        sections.deliveries = {
-          counts: {
-            total: counts.total,
-            verified: counts.verified,
-            pending: counts.pending,
-            rejected: counts.rejected,
-            cancelled: counts.cancelled,
-            in_transit: counts.in_transit,
-            under_review: counts.under_review,
-          },
-          head: head.map((row) => stripDeliveryHead(row as unknown as Record<string, unknown>)),
-          window: range,
-        };
-      }),
+      ])
+        .then(([counts, head]) => {
+          sections.deliveries = {
+            counts: {
+              total: counts.total,
+              verified: counts.verified,
+              pending: counts.pending,
+              rejected: counts.rejected,
+              cancelled: counts.cancelled,
+              in_transit: counts.in_transit,
+              under_review: counts.under_review,
+            },
+            head: head.map((row) => stripDeliveryHead(row as unknown as Record<string, unknown>)),
+            window: range,
+          };
+        })
+        .catch(() => {
+          sections.deliveries = sectionUnavailable("deliveries_failed");
+        }),
     );
   } else {
     sections.deliveries = sectionDenied("/deliveries");
@@ -236,15 +277,19 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
 
   if (allowed(session, "attendance.view")) {
     tasks.push(
-      fetchDriverAttendanceRange(id, range.from, range.to).then((days) => {
-        sections.attendance = {
-          window: range,
-          days: days.slice(0, ASSISTANT_LIST_CAP).map((day) =>
-            stripAttendanceDay(day as unknown as Record<string, unknown>),
-          ),
-          count: days.length,
-        };
-      }),
+      fetchDriverAttendanceRange(id, range.from, range.to)
+        .then((days) => {
+          sections.attendance = {
+            window: range,
+            days: days.slice(0, ASSISTANT_LIST_CAP).map((day) =>
+              stripAttendanceDay(day as unknown as Record<string, unknown>),
+            ),
+            count: days.length,
+          };
+        })
+        .catch(() => {
+          sections.attendance = sectionUnavailable("attendance_failed");
+        }),
     );
   } else {
     sections.attendance = sectionDenied("/attendance");
@@ -267,18 +312,31 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
           limit: 10,
           offset: 0,
         }),
-      ]).then(([all, complaints]) => {
-        sections.requests = {
-          kpi: all.kpi,
-          count: all.filteredTotal,
-          head: all.rows.map((row) => stripRequestRow(row as unknown as Record<string, unknown>)),
-        };
-        sections.complaints = {
-          kpi: complaints.kpi,
-          count: complaints.filteredTotal,
-          head: complaints.rows.map((row) => stripRequestRow(row as unknown as Record<string, unknown>)),
-        };
-      }),
+      ])
+        .then(([all, complaints]) => {
+          sections.requests = {
+            kpi: all.kpi,
+            status_counts: all.statusCounts,
+            count: all.filteredTotal,
+            head: all.rows.map((row) => ({
+              ...stripRequestRow(row as unknown as Record<string, unknown>),
+              status_label: requestStatusLabel(String(row.status)),
+            })),
+          };
+          sections.complaints = {
+            kpi: complaints.kpi,
+            status_counts: complaints.statusCounts,
+            count: complaints.filteredTotal,
+            head: complaints.rows.map((row) => ({
+              ...stripRequestRow(row as unknown as Record<string, unknown>),
+              status_label: requestStatusLabel(String(row.status)),
+            })),
+          };
+        })
+        .catch(() => {
+          sections.requests = sectionUnavailable("requests_failed");
+          sections.complaints = sectionUnavailable("requests_failed");
+        }),
     );
   } else {
     sections.requests = sectionDenied("/requests");
@@ -287,25 +345,29 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
 
   if (allowed(session, "payroll.view")) {
     tasks.push(
-      fetchPayrollMonthSnapshot({ monthKey: monthKeyFromYmd(range.to) }).then((snap) => {
-        const rider = snap.riders.find((row) => row.driverId === id);
-        sections.payroll = {
-          month: snap.month,
-          kpis: snap.payrollKpis,
-          rider: rider
-            ? {
-                name: rider.name,
-                amId: rider.amId,
-                workDays: rider.workDays,
-                totalHours: rider.totalHours,
-                absentDays: rider.absentDays,
-                sickDays: rider.sickDays,
-                efficiency: rider.efficiency,
-                status: rider.status,
-              }
-            : null,
-        };
-      }),
+      fetchPayrollMonthSnapshot({ monthKey: monthKeyFromYmd(range.to) })
+        .then((snap) => {
+          const rider = snap.riders.find((row) => row.driverId === id);
+          sections.payroll = {
+            month: snap.month,
+            kpis: snap.payrollKpis,
+            rider: rider
+              ? {
+                  name: rider.name,
+                  amId: rider.amId,
+                  workDays: rider.workDays,
+                  totalHours: rider.totalHours,
+                  absentDays: rider.absentDays,
+                  sickDays: rider.sickDays,
+                  efficiency: rider.efficiency,
+                  status: rider.status,
+                }
+              : null,
+          };
+        })
+        .catch(() => {
+          sections.payroll = sectionUnavailable("payroll_failed");
+        }),
     );
   } else {
     sections.payroll = sectionDenied("/payroll");
@@ -313,23 +375,27 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
 
   if (allowed(session, "earnings.view")) {
     tasks.push(
-      fetchIncentiveDailyReport({ from: range.from, to: range.to, driverId: id }).then((report) => {
-        const first = report.rows[0];
-        sections.incentives = {
-          from: report.from,
-          to: report.to,
-          rider: first
-            ? { name: first.driver_name, driver_code: first.driver_code, employee_id: first.employee_id }
-            : null,
-          days: report.rows.slice(0, ASSISTANT_LIST_CAP).map((row) => ({
-            earn_date: row.earn_date,
-            restaurant_name: row.restaurant_name,
-            deliveries: row.deliveries,
-            daily_amount_kwd: row.daily_amount_kwd,
-          })),
-          total_kwd: report.rows.reduce((sum, row) => sum + row.daily_amount_kwd, 0),
-        };
-      }),
+      fetchIncentiveDailyReport({ from: range.from, to: range.to, driverId: id })
+        .then((report) => {
+          const first = report.rows[0];
+          sections.incentives = {
+            from: report.from,
+            to: report.to,
+            rider: first
+              ? { name: first.driver_name, driver_code: first.driver_code, employee_id: first.employee_id }
+              : null,
+            days: report.rows.slice(0, ASSISTANT_LIST_CAP).map((row) => ({
+              earn_date: row.earn_date,
+              restaurant_name: row.restaurant_name,
+              deliveries: row.deliveries,
+              daily_amount_kwd: row.daily_amount_kwd,
+            })),
+            total_kwd: report.rows.reduce((sum, row) => sum + row.daily_amount_kwd, 0),
+          };
+        })
+        .catch(() => {
+          sections.incentives = sectionUnavailable("incentives_failed");
+        }),
     );
   } else {
     sections.incentives = sectionDenied("/earnings");
@@ -337,9 +403,13 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
 
   if (allowed(session, "driver_ops.view")) {
     tasks.push(
-      fetchDriverOperationTimeline(id, 10).then((events) => {
-        sections.activity = events.map((event) => stripActivityEvent(event as unknown as Record<string, unknown>));
-      }),
+      fetchDriverOperationTimeline(id, 10)
+        .then((events) => {
+          sections.activity = events.map((event) => stripActivityEvent(event as unknown as Record<string, unknown>));
+        })
+        .catch(() => {
+          sections.activity = sectionUnavailable("activity_failed");
+        }),
     );
   } else {
     sections.activity = sectionDenied("/drivers");
@@ -356,7 +426,12 @@ async function driverReport(session: SessionUser, id: string, range: { from: str
   };
 }
 
-async function zoneReport(session: SessionUser, id: string, range: { from: string; to: string }) {
+async function zoneReport(
+  session: SessionUser,
+  id: string,
+  range: { from: string; to: string },
+  summaryOnly = false,
+) {
   const zones = allowed(session, "zones.view") ? await listZonesForAssistant() : [];
   const zone = zones.find((row) => row.id === id);
   if (!zone && !allowed(session, "zones.view")) {
@@ -365,6 +440,14 @@ async function zoneReport(session: SessionUser, id: string, range: { from: strin
   const sections: Record<string, unknown> = {
     summary: zone ?? { id },
   };
+  if (summaryOnly) {
+    return {
+      entity: { type: "zone" as const, id, label: zone?.name },
+      window: range,
+      sections,
+      focus: { entity_type: "zone" as const, id, label: zone?.name, zone_id: id },
+    };
+  }
   if (allowed(session, "restaurants.view")) {
     sections.restaurants = await restaurantsInZone(id);
   } else {
@@ -399,7 +482,12 @@ async function zoneReport(session: SessionUser, id: string, range: { from: strin
   };
 }
 
-async function restaurantReport(session: SessionUser, id: string, range: { from: string; to: string }) {
+async function restaurantReport(
+  session: SessionUser,
+  id: string,
+  range: { from: string; to: string },
+  summaryOnly = false,
+) {
   const sections: Record<string, unknown> = {};
   if (!allowed(session, "restaurants.view")) {
     return { entity: { type: "restaurant", id }, window: range, sections: { summary: sectionDenied("/restaurants") } };
@@ -407,6 +495,29 @@ async function restaurantReport(session: SessionUser, id: string, range: { from:
   const detail = await fetchRestaurantDetail(id);
   if (!detail) {
     return { entity: { type: "restaurant", id }, window: range, sections: { summary: sectionUnavailable("not_found") } };
+  }
+  if (summaryOnly) {
+    return {
+      entity: { type: "restaurant" as const, id, label: detail.name, zone_id: detail.zone_id ?? undefined },
+      window: range,
+      sections: {
+        summary: {
+          id: detail.id,
+          name: detail.name,
+          status: detail.status,
+          partner_name: detail.partner_name,
+          zone_name: detail.zone_name,
+          zone_id: detail.zone_id,
+          driver_count: detail.driver_count,
+        },
+      },
+      focus: {
+        entity_type: "restaurant" as const,
+        id,
+        label: detail.name,
+        zone_id: detail.zone_id ?? undefined,
+      },
+    };
   }
   sections.summary = {
     id: detail.id,
@@ -480,29 +591,21 @@ export async function buildEntityReport(input: {
 }) {
   const session = await requireAssistantModule(ENTITY_MODULE_PERMISSION[input.entity_type]);
   const range = resolveAssistantDateRange(input.range ?? { preset: "this_month" });
+  const summaryOnly = input.summaryOnly === true;
   void logAdminRead("assistant", "assistant.tool", {
-    tool: input.summaryOnly ? "entity_summary" : "entity_report",
+    tool: summaryOnly ? "entity_summary" : "entity_report",
     entity_type: input.entity_type,
     id: input.id,
     window: range,
   });
 
   switch (input.entity_type) {
-    case "driver": {
-      const report = await driverReport(session, input.id, range);
-      if (input.summaryOnly) return { ...report, sections: { summary: report.sections.summary } };
-      return report;
-    }
-    case "zone": {
-      const report = await zoneReport(session, input.id, range);
-      if (input.summaryOnly) return { ...report, sections: { summary: report.sections.summary } };
-      return report;
-    }
-    case "restaurant": {
-      const report = await restaurantReport(session, input.id, range);
-      if (input.summaryOnly) return { ...report, sections: { summary: report.sections.summary } };
-      return report;
-    }
+    case "driver":
+      return driverReport(session, input.id, range, summaryOnly);
+    case "zone":
+      return zoneReport(session, input.id, range, summaryOnly);
+    case "restaurant":
+      return restaurantReport(session, input.id, range, summaryOnly);
     case "vehicle": {
       const row = await vehicleById(input.id);
       const summary = row ? stripVehicleRow(row) : sectionUnavailable("not_found");

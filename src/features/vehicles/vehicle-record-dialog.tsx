@@ -54,9 +54,9 @@ export function VehicleRecordDialog({
       <DialogContent
         showCloseButton
         closeOutside
-        className="w-[min(1200px,96vw)] overflow-visible px-5 py-4"
+        className="flex max-h-[min(92vh,880px)] w-[min(1200px,96vw)] max-w-none flex-col gap-0 overflow-visible rounded-xl p-0 sm:max-w-[min(1200px,96vw)]"
       >
-        <div className="space-y-3 pt-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pt-4 pb-3">
           {vehicle.replaces_vehicle_id ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/40 bg-warning-bg px-3 py-2 text-xs text-warning">
               <p>
@@ -144,7 +144,9 @@ export function VehicleRecordDialog({
               ) : null}
             </div>
           </div>
+        </div>
 
+        <div className="px-5 pb-4">
           <AppModalFooter
             title={vehicle.reg_number || vehicle.bike_id}
             subtitle={subtitle || t("recordSubtitle")}

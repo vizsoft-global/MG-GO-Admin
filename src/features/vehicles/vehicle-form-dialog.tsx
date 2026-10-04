@@ -169,10 +169,10 @@ export function VehicleFormDialog({
       <DialogContent
         showCloseButton
         closeOutside
-        className="w-[min(1200px,96vw)] overflow-visible px-5 py-4"
+        className="flex max-h-[min(92vh,880px)] w-[min(1200px,96vw)] max-w-none flex-col gap-0 overflow-visible rounded-xl p-0 sm:max-w-[min(1200px,96vw)]"
       >
         <form
-          className="space-y-3 pt-4"
+          className="flex min-h-0 flex-1 flex-col"
           onSubmit={(event) => {
             event.preventDefault();
             const error = validateVehicleForm({
@@ -231,6 +231,7 @@ export function VehicleFormDialog({
             });
           }}
         >
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pt-4 pb-3">
           <SectionHeading icon={Car} accent="primary">
             {t("sectionIdentity")}
           </SectionHeading>
@@ -575,14 +576,17 @@ export function VehicleFormDialog({
             </FieldBlock>
           </div>
 
-          <AppModalFooter title={vehicle ? t("editTitle") : t("addTitle")} subtitle={t("formSubtitle")}>
-            <Button type="button" variant="outline" className="h-9" onClick={() => onOpenChange(false)}>
-              {t("cancel")}
-            </Button>
-            <Button type="submit" className="h-9" disabled={pending}>
-              {t("save")}
-            </Button>
-          </AppModalFooter>
+          </div>
+          <div className="px-5 pb-4">
+            <AppModalFooter title={vehicle ? t("editTitle") : t("addTitle")} subtitle={t("formSubtitle")}>
+              <Button type="button" variant="outline" className="h-9" onClick={() => onOpenChange(false)}>
+                {t("cancel")}
+              </Button>
+              <Button type="submit" className="h-9" disabled={pending}>
+                {t("save")}
+              </Button>
+            </AppModalFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

@@ -33,8 +33,13 @@ export function parseReschedulePayload(payload: unknown): ParsedReschedule | nul
   else if (accepted === false) status = "declined";
 
   return {
-    proposedStart: asText(block.proposed_start),
-    proposedEnd: asText(block.proposed_end),
+    // The RPCs write `proposed_start_date` / `proposed_end_date` (see
+    // `driver_respond_reschedule` and the admin reschedule writers), but the
+    // reader shipped asking for `proposed_start` / `proposed_end`, so every
+    // proposed window rendered as "—". Read the real key first and keep the
+    // short form as a fallback for anything already stored the old way.
+    proposedStart: asText(block.proposed_start_date) ?? asText(block.proposed_start),
+    proposedEnd: asText(block.proposed_end_date) ?? asText(block.proposed_end),
     note: asText(block.note),
     proposedBy: asText(block.proposed_by),
     proposedAt: asText(block.proposed_at),

@@ -5,9 +5,11 @@ import { useTranslations } from "next-intl";
 import { Download, Info } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/app";
 import { cn } from "@/lib/utils";
 import {
   dayGridLabel,
+  dayDisplayHours,
   isoDayLabel,
   payrollRiderMatchesSearch,
   type PayrollPeriod,
@@ -113,11 +115,11 @@ export function PayrollAttendanceOrdersTab({
       <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
         <b>{t("ao.bannerTitle")}</b> {t("ao.bannerBody")}
       </div>
-      <Input
-        className="h-9"
+      <SearchField
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={setSearch}
         placeholder={t("searchPlaceholder")}
+        clearLabel={t("clearSearch")}
       />
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         {chips.length || sort ? (
@@ -258,7 +260,9 @@ export function PayrollAttendanceOrdersTab({
                                 adjusted && "outline outline-2 outline-orange-400",
                               )}
                             >
-                              {status === "blank" ? "—" : dayGridLabel(status, info?.creditedHours ?? 0)}
+                              {status === "blank"
+                                ? "—"
+                                : dayGridLabel(status, dayDisplayHours(status, info))}
                               {adjusted ? (
                                 <span className="absolute end-0 top-0 size-0 border-e-[6px] border-t-[6px] border-e-transparent border-t-orange-500" />
                               ) : null}

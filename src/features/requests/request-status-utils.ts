@@ -30,9 +30,67 @@ export const REQUEST_DECIDED_STATUSES = new Set([
   "closed",
 ]);
 
-/** A row the bulk bar can act on — approve, reject, or both. */
+/** A row the All Requests bulk bar can act on — approve, reject, or both. */
+/**
+ * Whether the All Requests list paints a selection checkbox on a row.
+ *
+ * Selectable: `submitted`, `pending`, `in_review`, `needs_clarification`,
+ * `rescheduled` and `overdue` — every status the bulk bar can still act on.
+ * (`overdue` is derived from the SLA breach rather than stored, and rows reached
+ * through that filter still carry one of the open statuses above.)
+ *
+ * Not selectable: `approved`, `rejected`, `solved`, `responded`, `closed`. Those
+ * are decided outcomes and the bulk bar offers no verb for them — the only
+ * remaining action is the per-row Archive on the detail page — so a checkbox on
+ * one is a control whose sole outcome is an error, which reads as broken rather
+ * than as "not applicable".
+ *
+ * Deliberately the complement of `REQUEST_DECIDED_STATUSES` instead of its own
+ * allowlist, so the two can never disagree: a new status added to the enum
+ * arrives with a checkbox rather than silently without one.
+ *
+ * A box promises a tick, not every button: `admin_decide_request` still refuses
+ * per action — Approve is rejected on a `needs_clarification` row while Reject is
+ * allowed — and the bulk bar narrows its buttons to the actions that apply.
+ */
 export function canBulkSelectRequest(status: string): boolean {
   return !REQUEST_DECIDED_STATUSES.has(status);
+}
+
+/**
+ * The stored statuses whose queue is still waiting on someone. `overdue` is
+ * deliberately absent: it is derived from the SLA breach, not a stored state, so
+ * it belongs to the filter list rather than to this one.
+ */
+export const REQUEST_OPEN_STATUSES = [
+  "pending",
+  "submitted",
+  "in_review",
+  "needs_clarification",
+  "rescheduled",
+] as const;
+
+/**
+ * Enum → the wording a person reads. The database stores `in_review`; the panel
+ * and the rider app show "In Progress", and an assistant answer that echoes the
+ * raw enum reads as a different status to the operator.
+ */
+export const REQUEST_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  submitted: "Submitted",
+  in_review: "In Progress",
+  needs_clarification: "Needs clarification",
+  rescheduled: "Rescheduled",
+  approved: "Approved",
+  rejected: "Rejected",
+  solved: "Solved",
+  responded: "Responded",
+  closed: "Closed",
+  overdue: "Overdue",
+};
+
+export function requestStatusLabel(status: string): string {
+  return REQUEST_STATUS_LABELS[status] ?? status;
 }
 
 /**
@@ -89,6 +147,23 @@ export function isAwaitingRescheduleReply(
   payload?: Record<string, unknown> | null,
 ): boolean {
   return status === "rescheduled" && Boolean(payload?.awaiting_driver_reschedule);
+}
+
+/**
+ * The approver asked a question and the rider has not answered yet.
+ *
+ * `admin_decide_request` refuses to advance the request in this state
+ * (`awaiting_driver_clarification`), so the detail page must not offer Approve /
+ * Solve / Reschedule. Unlike a reschedule there is nothing to wait on in the
+ * payload — the status itself is the fact — and Reject / Clarify stay allowed.
+ */
+export function isAwaitingDriverClarification(status: string): boolean {
+  return status === "needs_clarification";
+}
+
+/** An advancing action the server refuses while the rider owes an answer. */
+export function isAdvancingRequestAction(action: string): boolean {
+  return action !== "reject" && action !== "clarify" && action !== "close";
 }
 
 /** A request that has been decided can be archived, but only once. */

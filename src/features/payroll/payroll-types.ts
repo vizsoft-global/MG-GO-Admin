@@ -47,6 +47,14 @@ export type PayrollDayInfo = {
   adjustmentReason: string | null;
   /** Credited hours for this day. */
   creditedHours: number;
+  /**
+   * Hours elapsed so far on a check-in that has not been closed yet — today
+   * only. `loggedHours` stays 0 for an open log because the snapshot does not
+   * invent a length for a shift that has no end, so this is display-only: the
+   * grid prints it while a rider is still clocked in and the rule engine never
+   * sees it.
+   */
+  elapsedHours?: number;
   /** What the day would be with no hand adjustment, and which rule said so. */
   autoStatus: DayStatus;
   autoHours: number;

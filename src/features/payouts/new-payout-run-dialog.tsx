@@ -89,6 +89,7 @@ export function NewPayoutRunDialog({
               <Input
                 id="payout-start"
                 type="date"
+                openPickerOnFocus={false}
                 value={periodStart}
                 onChange={(e) => {
                   setPeriodStart(e.target.value);
@@ -104,6 +105,7 @@ export function NewPayoutRunDialog({
               <Input
                 id="payout-end"
                 type="date"
+                openPickerOnFocus={false}
                 value={periodEnd}
                 onChange={(e) => {
                   setPeriodEnd(e.target.value);

@@ -17,7 +17,7 @@ import {
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Pill, SignalBars, StatusDot, type Tone } from "@/components/ui/metric-tile";
 import { cn } from "@/lib/utils";
-import { isGpsLive } from "@/features/locations/location-status";
+import { isGpsLive, liveMotion } from "@/features/locations/location-status";
 import type { DriverLiveLocation } from "@/features/locations/types";
 import {
   formatBatteryLevel,
@@ -33,6 +33,7 @@ import {
   type FleetStatusKey,
 } from "./tracking-status";
 import { TrackingGlassCard } from "./tracking-shell";
+import { useReverseGeocode } from "./use-reverse-geocode";
 import type { LiveDriverMeta } from "./live-tracking-types";
 import type { TrackingMapLayerPrefs } from "./tracking-map-layer-prefs";
 import { TrackingMapLayersPopover } from "./tracking-map-layers-popover";
@@ -237,6 +238,9 @@ export function TrackingSelectedDriverPopup({
   onClose?: () => void;
 }) {
   const t = useTranslations("pages.liveTracking");
+  // QA #47: the readable street for this fix, or nothing — the line below falls back to
+  // coordinates rather than blanking when Google has no street for the position.
+  const address = useReverseGeocode(driver.latitude, driver.longitude);
   const gpsLive = isGpsLive(driver.lastSeenAt);
   const fleetStatus = fleetStatusFromLocation({
     pinStatus: driver.pinStatus,
@@ -244,10 +248,24 @@ export function TrackingSelectedDriverPopup({
     isOnDuty: driver.isOnDuty,
     isBlocked: driver.isBlocked,
     speedMps: driver.speedMps,
+    movedMeters: driver.movedMeters,
     lastSeenAt: driver.lastSeenAt,
     activeDeliveryId: driver.activeDeliveryId,
   });
   const speed = formatSpeedKmh(driver.speedMps);
+  /*
+    QA #48: `On delivery` stays the primary status, and this is its motion half — a rider
+    carrying an order is either progressing or parked, and the two look identical on the map.
+    Read through `liveMotion`, i.e. the same `speed or >= 15 m moved` rule behind the status,
+    so the two cannot disagree.
+  */
+  const onDelivery =
+    driver.trackingStatus === "delivery_submit" && Boolean(driver.activeDeliveryId);
+  const coords =
+    Number.isFinite(driver.latitude) && Number.isFinite(driver.longitude)
+      ? `${driver.latitude.toFixed(5)}, ${driver.longitude.toFixed(5)}`
+      : null;
+  const locationLine = address ?? coords;
   const gpsQuality = gpsQualityFromAccuracy(driver.accuracyMeters);
   const dutyLabel = driver.isBlocked
     ? t("chipBlocked")
@@ -302,6 +320,14 @@ export function TrackingSelectedDriverPopup({
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-300">
             {driver.driverCode} <span className="mx-1">·</span> {speed}
           </p>
+          {onDelivery ? (
+            <p className="mt-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+              {t("statusDeliverySubmit")} ·{" "}
+              {liveMotion(driver) === "moving"
+                ? `${t("statusMoving")} • ${speed}`
+                : t("statusIdle")}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -329,6 +355,14 @@ export function TrackingSelectedDriverPopup({
       <p className="mt-2 truncate text-[11px] text-slate-500 dark:text-slate-300">
         {meta?.zoneName ?? "—"}
       </p>
+      {locationLine ? (
+        <p
+          className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-300"
+          title={address ? `${t("streetAddress")}: ${address}` : undefined}
+        >
+          {locationLine}
+        </p>
+      ) : null}
 
       <div className="mt-3 grid grid-cols-4 divide-x divide-slate-200 rounded-lg border border-slate-200 bg-white dark:divide-slate-700 dark:border-slate-700 dark:bg-slate-900">
         <OverlayAction

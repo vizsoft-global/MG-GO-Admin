@@ -19,7 +19,15 @@ import {
 } from "@/components/ui/select";
 import { queryKeys } from "@/lib/query/query-keys";
 import { selectOptionsFrom } from "@/lib/select-items";
+import {
+  deliveryRuleFieldForError,
+  hasDeliveryRuleValidationErrors,
+  validateDeliveryRuleForm,
+  type DeliveryRuleFormErrors,
+  type DeliveryRuleFormField,
+} from "./delivery-rule-form-validation";
 import { isDpdErrorKey, saveDeliveryRule } from "./dpd-actions";
+import type { DpdErrorKey } from "./dpd-errors";
 import { ScopePicker } from "./scope-picker";
 import {
   INCENTIVE_PERIODS,
@@ -30,6 +38,15 @@ import {
   type RuleScopeType,
   type RuleStatus,
 } from "./types";
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <p className="text-[11px] text-destructive" role="alert">
+      {message}
+    </p>
+  );
+}
 
 export function RuleFormSheet({
   rule,
@@ -48,6 +65,14 @@ export function RuleFormSheet({
   );
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
+  const [fieldErrors, setFieldErrors] = useState<DeliveryRuleFormErrors>({});
+  const [showErrors, setShowErrors] = useState(false);
+  // A rejection the client could not have proved on its own (a scope id the DB
+  // no longer holds, say) still has to land on the field that caused it.
+  const [serverError, setServerError] = useState<{
+    field: DeliveryRuleFormField;
+    key: DpdErrorKey;
+  } | null>(null);
   const isEdit = Boolean(rule);
 
   const [name, setName] = useState(rule?.name ?? "");
@@ -70,6 +95,9 @@ export function RuleFormSheet({
 
   useEffect(() => {
     if (!open) return;
+    setFieldErrors({});
+    setShowErrors(false);
+    setServerError(null);
     setName(rule?.name ?? "");
     setStatus(rule?.status ?? "draft");
     setScopeType(rule?.scope_type ?? "zone");
@@ -83,12 +111,58 @@ export function RuleFormSheet({
     setDpdPeriod(rule?.dpd_period ?? "");
   }, [open, rule]);
 
+  const errorMessage = (key?: DpdErrorKey) => (key ? t(`errors.${key}`) : undefined);
+
+  const clearFieldError = (field: DeliveryRuleFormField) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+    setServerError((prev) => (prev?.field === field ? null : prev));
+  };
+
+  const showFieldError = (field: DeliveryRuleFormField) => {
+    if (!showErrors) return undefined;
+    const key =
+      fieldErrors[field] ??
+      (serverError?.field === field ? serverError.key : undefined);
+    return errorMessage(key);
+  };
+
+  const clearAllScopeErrors = () => {
+    clearFieldError("scopeIds");
+  };
+
   const errorToast = (error?: string) => {
     if (error && isDpdErrorKey(error)) return t(`errors.${error}`);
     return t("errors.save_failed");
   };
 
   const handleSave = () => {
+    const validation = validateDeliveryRuleForm({
+      name,
+      scopeType,
+      zoneIds,
+      partnerIds,
+      restaurantIds,
+      startDate,
+      endDate,
+      dpdTarget,
+      priority,
+    });
+    setShowErrors(true);
+    setFieldErrors(validation);
+    setServerError(null);
+    if (hasDeliveryRuleValidationErrors(validation)) {
+      const firstKey = Object.values(validation)[0];
+      if (firstKey && firstKey !== "missing_fields") {
+        toast.error(errorMessage(firstKey) ?? t("errors.save_failed"));
+      }
+      return;
+    }
+
     startTransition(async () => {
       const formData = new FormData();
       if (rule?.id) formData.append("id", rule.id);
@@ -110,12 +184,19 @@ export function RuleFormSheet({
 
       const result = await saveDeliveryRule(formData);
       if (result.error) {
-        toast.error(errorToast(result.error), {
-          description: result.errorDetail,
-          duration: result.errorDetail ? 8000 : 4000,
-        });
+        const field = deliveryRuleFieldForError(result.error);
+        if (field && isDpdErrorKey(result.error)) {
+          setServerError({ field, key: result.error });
+        } else {
+          toast.error(errorToast(result.error), {
+            description: result.errorDetail,
+            duration: result.errorDetail ? 8000 : 4000,
+          });
+        }
         return;
       }
+      setFieldErrors({});
+      setServerError(null);
       toast.success(isEdit ? t("deliveryRuleUpdated") : t("deliveryRuleCreated"));
 
       void queryClient.invalidateQueries({ queryKey: queryKeys.dpd.all() });
@@ -138,9 +219,14 @@ export function RuleFormSheet({
             <Input
               id="rule-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                clearFieldError("name");
+              }}
+              aria-invalid={Boolean(showFieldError("name"))}
               className="rounded-lg"
             />
+            <FieldError message={showFieldError("name")} />
           </div>
           <div className="space-y-1.5">
             <Label>{t("fields.status")}</Label>
@@ -172,11 +258,22 @@ export function RuleFormSheet({
               setZoneIds([]);
               setPartnerIds([]);
               setRestaurantIds([]);
+              clearAllScopeErrors();
             }}
-            onZoneIdsChange={setZoneIds}
-            onPartnerIdsChange={setPartnerIds}
-            onRestaurantIdsChange={setRestaurantIds}
+            onZoneIdsChange={(ids) => {
+              setZoneIds(ids);
+              clearAllScopeErrors();
+            }}
+            onPartnerIdsChange={(ids) => {
+              setPartnerIds(ids);
+              clearAllScopeErrors();
+            }}
+            onRestaurantIdsChange={(ids) => {
+              setRestaurantIds(ids);
+              clearAllScopeErrors();
+            }}
             options={options}
+            scopeError={showFieldError("scopeIds")}
             disabled={isPending}
           />
 
@@ -187,9 +284,15 @@ export function RuleFormSheet({
                 id="start-date"
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  clearFieldError("startDate");
+                  clearFieldError("endDate");
+                }}
+                aria-invalid={Boolean(showFieldError("startDate"))}
                 className="rounded-lg"
               />
+              <FieldError message={showFieldError("startDate")} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="end-date">{t("fields.endDate")}</Label>
@@ -197,9 +300,15 @@ export function RuleFormSheet({
                 id="end-date"
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  clearFieldError("endDate");
+                  clearFieldError("startDate");
+                }}
+                aria-invalid={Boolean(showFieldError("endDate"))}
                 className="rounded-lg"
               />
+              <FieldError message={showFieldError("endDate")} />
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -210,9 +319,14 @@ export function RuleFormSheet({
                 type="number"
                 min={0}
                 value={dpdTarget}
-                onChange={(e) => setDpdTarget(e.target.value)}
+                onChange={(e) => {
+                  setDpdTarget(e.target.value);
+                  clearFieldError("dpdTarget");
+                }}
+                aria-invalid={Boolean(showFieldError("dpdTarget"))}
                 className="h-9 rounded-lg"
               />
+              <FieldError message={showFieldError("dpdTarget")} />
             </div>
             <div className="space-y-1.5">
               <Label>{t("fields.dpdPeriod")}</Label>
@@ -253,10 +367,15 @@ export function RuleFormSheet({
               id="priority"
               type="number"
               value={priority}
-              onChange={(e) => setPriority(e.target.value)}
+              onChange={(e) => {
+                setPriority(e.target.value);
+                clearFieldError("priority");
+              }}
+              aria-invalid={Boolean(showFieldError("priority"))}
               placeholder={t("placeholders.priority")}
               className="rounded-lg"
             />
+            <FieldError message={showFieldError("priority")} />
           </div>
         </div>
         <AppModalFooter title={title} subtitle={t("fields.ruleName")}>

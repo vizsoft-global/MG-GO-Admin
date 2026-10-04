@@ -92,3 +92,66 @@ export function excelPayloadForRpc(rows: ReconResolvedRow[]) {
       excel_orders: r.excel_orders,
     }));
 }
+
+/**
+ * One preview entry per (rider, store, reason) instead of one per melted cell.
+ *
+ * The AM workbook is wide — one column per Kuwait day — so the melt produces a
+ * row for every date. A single unknown ID therefore listed the same line thirty
+ * times and the preview read as thirty problems when it was one. Dates are
+ * folded into a span and the day count travels with the entry, so nothing is
+ * hidden: only the repetition is.
+ */
+export type ReconIssueRow = {
+  employee_id: string;
+  employee_name: string;
+  store_name: string;
+  unresolved_reason: "unknown_id" | "unknown_store";
+  days: number;
+  first_date: string;
+  last_date: string;
+  excel_orders: number;
+};
+
+export function collapseReconIssues(rows: ReconResolvedRow[]): ReconIssueRow[] {
+  const groups = new Map<string, ReconIssueRow>();
+  for (const row of rows) {
+    if (row.status !== "unresolved" || !row.unresolved_reason) continue;
+    // Captured as a const: TS drops the property narrowing across the map call below.
+    const reason = row.unresolved_reason;
+    // Grouped on the raw value the operator sees, not on `normalizeEmployeeId`:
+    // that returns null for exactly the IDs that land here, which would merge
+    // every unknown rider into a single line.
+    const key = [
+      row.employee_id.trim().toLowerCase(),
+      normalizeStoreKey(row.store_name),
+      reason,
+    ].join("\u0000");
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, {
+        employee_id: row.employee_id,
+        employee_name: row.employee_name,
+        store_name: row.store_name,
+        unresolved_reason: reason,
+        days: 1,
+        first_date: row.work_date,
+        last_date: row.work_date,
+        excel_orders: row.excel_orders,
+      });
+      continue;
+    }
+    existing.days += 1;
+    existing.excel_orders += row.excel_orders;
+    // work_date is YYYY-MM-DD, so a plain string compare is the date order.
+    if (row.work_date < existing.first_date) existing.first_date = row.work_date;
+    if (row.work_date > existing.last_date) existing.last_date = row.work_date;
+  }
+  return [...groups.values()].sort(
+    (a, b) =>
+      a.employee_id.localeCompare(b.employee_id) ||
+      a.store_name.localeCompare(b.store_name) ||
+      a.unresolved_reason.localeCompare(b.unresolved_reason) ||
+      a.first_date.localeCompare(b.first_date),
+  );
+}

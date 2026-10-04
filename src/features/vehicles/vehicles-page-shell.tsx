@@ -23,7 +23,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { AppListCard, AppPage } from "@/components/app";
+import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useRouter } from "@/i18n/navigation";
 import { Link } from "@/i18n/navigation";
 import {
@@ -61,6 +61,7 @@ import {
 import { formatReplacementSince } from "@/features/fleet/fleet-labels";
 import { VehicleBulkImportDialog } from "./import/vehicle-bulk-import-dialog";
 import { downloadVehicleListXlsx } from "./import/vehicle-import-sheet";
+import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { VehicleFormDialog } from "./vehicle-form-dialog";
 import { VehiclesColumnHeader } from "./vehicles-column-header";
 import { useVehicleTypes, useVehicleUseTypes, useVehiclesList } from "./use-vehicles";
@@ -337,7 +338,12 @@ export function VehiclesPageShell({
   const isRefreshing = isFetching && !isLoading;
 
   return (
-    <AppPage className="space-y-4">
+    <AppPage>
+      <AppPageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={<ClearAllModuleButton entity="vehicles" />}
+      />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         {kpis.map((kpi) => (
           <div
@@ -599,7 +605,10 @@ function VehicleRow({
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
           <VehicleStatusBadge status={row.status} />
           {row.assigned_on_duty ? (
-            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900">
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900"
+              title={row.assigned_shift_label ? t("shiftPlan", { range: row.assigned_shift_label }) : undefined}
+            >
               <CircleDot className="size-2.5" />
               {t("tabOnDuty")}
             </span>

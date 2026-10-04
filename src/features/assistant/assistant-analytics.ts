@@ -1,5 +1,6 @@
 import { fetchAttendanceAnalyticsSummary } from "@/features/attendance/attendance-reporting-actions";
 import { fetchAssetsCatalog } from "@/features/assets/assets-actions";
+import { countDeliveriesByFilters } from "@/features/deliveries/deliveries-actions";
 import { fetchFleetOpsCounts } from "@/features/driver-tracking/tracking-read-actions";
 import { listNotificationCampaignsPage } from "@/features/notifications/notifications-actions";
 import { fetchPayrollMonthSnapshot } from "@/features/payroll/payroll-actions";
@@ -11,11 +12,15 @@ import {
 } from "@/features/performance/performance-actions";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
 import { fetchAdminRequestsList } from "@/features/requests/requests-actions";
+import {
+  REQUEST_OPEN_STATUSES,
+  requestStatusLabel,
+} from "@/features/requests/request-status-utils";
 import { listZonesForAssistant } from "@/features/zones/zones-read-actions";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
 import { createClient } from "@/lib/supabase/server";
 import type { Permission } from "@/lib/auth/permissions";
-import { monthKeyFromYmd, resolveAssistantDateRange } from "./assistant-dates";
+import { kuwaitDayCreatedAtBounds, monthKeyFromYmd, resolveAssistantDateRange } from "./assistant-dates";
 import { assistantModuleAllowed, requireAssistantModule } from "./assistant-gates";
 import { ASSISTANT_RANK_CAP, ASSISTANT_RANK_ZONE_CAP } from "./assistant-entity";
 import { sectionDenied, sectionUnavailable, stripNotificationRow, stripPerformanceRow } from "./assistant-strip";
@@ -173,6 +178,11 @@ export async function compareWindows(input: DateInput & {
   };
 }
 
+function finiteNumber(value: unknown): number | null {
+  const n = Number(value);
+  return value == null || !Number.isFinite(n) ? null : n;
+}
+
 export async function compareDriverWindows(input: DateInput & {
   driver_id: string;
   previous_preset?: string;
@@ -186,9 +196,21 @@ export async function compareDriverWindows(input: DateInput & {
     from: input.previous_from,
     to: input.previous_to,
   });
-  const [a, b] = await Promise.all([
+  const curBounds = kuwaitDayCreatedAtBounds(current.from, current.to);
+  const prevBounds = kuwaitDayCreatedAtBounds(previous.from, previous.to);
+  const [a, b, curCounts, prevCounts] = await Promise.all([
     fetchDriverPerformanceDetail(input.driver_id, current.from, current.to),
     fetchDriverPerformanceDetail(input.driver_id, previous.from, previous.to),
+    countDeliveriesByFilters({
+      driverId: input.driver_id,
+      dateFrom: curBounds.dateFrom,
+      dateTo: curBounds.dateTo,
+    }),
+    countDeliveriesByFilters({
+      driverId: input.driver_id,
+      dateFrom: prevBounds.dateFrom,
+      dateTo: prevBounds.dateTo,
+    }),
   ]);
   void logAdminRead("assistant", "assistant.tool", {
     tool: "compare_driver_windows",
@@ -198,30 +220,52 @@ export async function compareDriverWindows(input: DateInput & {
   });
   const curr = a ? stripPerformanceRow(a as unknown as Record<string, unknown>) : null;
   const prev = b ? stripPerformanceRow(b as unknown as Record<string, unknown>) : null;
+
+  // `absent_days` is `COALESCE(..., 0)` in the rollup, so a window with no
+  // record and a genuinely clean window both read 0. Deliveries come from
+  // `admin_deliveries_counts_by_filters` so a month the performance rollup has
+  // not written still reports the orders that were actually delivered, and
+  // absence is only stated when the window has a record to speak from.
+  const hasRecord = (row: Record<string, unknown> | null): boolean =>
+    row != null && (finiteNumber(row.eligible_days) ?? 0) > 0;
+  const absentOf = (row: Record<string, unknown> | null): number | null =>
+    hasRecord(row) ? finiteNumber(row!.absent_days) : null;
+
   return {
     driver_id: input.driver_id,
-    current: { window: current, row: curr },
-    previous: { window: previous, row: prev },
-    comparison:
+    current: {
+      window: current,
+      row: curr,
+      deliveries: curCounts,
+    },
+    previous: {
+      window: previous,
+      row: prev,
+      deliveries: prevCounts,
+    },
+    comparison: compareScalars(
+      {
+        overall_score: finiteNumber(curr?.overall_score),
+        deliveries: curCounts.total,
+        verified_deliveries: curCounts.verified,
+        worked_days: finiteNumber(curr?.worked_days),
+        absent_days: absentOf(curr),
+        compliance_score: finiteNumber(curr?.compliance_score),
+      },
+      {
+        overall_score: finiteNumber(prev?.overall_score),
+        deliveries: prevCounts.total,
+        verified_deliveries: prevCounts.verified,
+        worked_days: finiteNumber(prev?.worked_days),
+        absent_days: absentOf(prev),
+        compliance_score: finiteNumber(prev?.compliance_score),
+      },
+    ),
+    record_note:
       curr && prev
-        ? compareScalars(
-            {
-              overall_score: Number(curr.overall_score),
-              actual_deliveries: Number(curr.actual_deliveries),
-              worked_days: Number(curr.worked_days),
-              absent_days: Number(curr.absent_days),
-              compliance_score: Number(curr.compliance_score),
-            },
-            {
-              overall_score: Number(prev.overall_score),
-              actual_deliveries: Number(prev.actual_deliveries),
-              worked_days: Number(prev.worked_days),
-              absent_days: Number(prev.absent_days),
-              compliance_score: Number(prev.compliance_score),
-            },
-          )
-        : null,
-    source: "fetchDriverPerformanceDetail",
+        ? undefined
+        : "one or both windows have no performance record; deliveries still come from admin_deliveries_counts_by_filters",
+    source: "fetchDriverPerformanceDetail + admin_deliveries_counts_by_filters",
   };
 }
 
@@ -291,7 +335,29 @@ export async function runAnalyticsQuery(input: DateInput & {
       limit: 1,
       offset: 0,
     });
-    return { kind, window: range, kpi: list.kpi, status_counts: list.statusCounts };
+    // The queue is the open statuses group — `kpi.pending` alone cannot name
+    // which of them are waiting, and the raw enum (`in_review`) is not the
+    // wording the panel or the rider app shows.
+    const pendingOpen = REQUEST_OPEN_STATUSES.reduce(
+      (sum, key) => sum + (list.statusCounts[key] ?? 0),
+      0,
+    );
+    return {
+      kind,
+      window: range,
+      kpi: list.kpi,
+      filtered_total: list.filteredTotal,
+      pending_open: pendingOpen,
+      pending_label: "Pending / In Progress",
+      open_statuses: REQUEST_OPEN_STATUSES.map((key) => ({
+        key,
+        label: requestStatusLabel(key),
+        count: list.statusCounts[key] ?? 0,
+      })),
+      status_counts: Object.fromEntries(
+        Object.entries(list.statusCounts).map(([key, value]) => [requestStatusLabel(key), value]),
+      ),
+    };
   }
 
   if (kind === "payroll_kpis") {

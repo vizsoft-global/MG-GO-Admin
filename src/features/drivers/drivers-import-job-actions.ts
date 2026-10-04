@@ -126,7 +126,7 @@ export async function startDriverImportJob(payload: {
   duplicateStrategy: "skip" | "update";
   approveImmediately: boolean;
 }): Promise<{ job: DriverImportJobSummary } | { error: string }> {
-  const auth = await requireDriversManager();
+  const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
 
   const supabase = await createClient();
@@ -192,7 +192,7 @@ export async function processDriverImportChunk(
     }
   | { error: string }
 > {
-  const auth = await requireDriversManager();
+  const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
   if (!jobId) return { error: "missing_fields" };
 

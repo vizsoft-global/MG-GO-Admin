@@ -104,9 +104,18 @@ function writePayload(snapshot: VehicleSheetSnapshot) {
   };
 }
 
-export async function listVehicleImportBatches(): Promise<VehicleImportBatchRow[]> {
+/**
+ * Import history, with the failure kept distinct from "no history yet".
+ * Returning `[]` on error made Undo/Redo look permanently disabled with nothing on
+ * screen to explain why, which is the whole of QA #12.
+ */
+export type VehicleImportBatchesResult =
+  | { ok: true; batches: VehicleImportBatchRow[] }
+  | { ok: false; error: string };
+
+export async function listVehicleImportBatches(): Promise<VehicleImportBatchesResult> {
   const auth = await requireCreate();
-  if ("error" in auth) return [];
+  if ("error" in auth) return { ok: false, error: auth.error ?? "not_authorized" };
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("vehicle_import_batches")
@@ -115,18 +124,21 @@ export async function listVehicleImportBatches(): Promise<VehicleImportBatchRow[
     )
     .order("created_at", { ascending: false })
     .limit(50);
-  if (error) return [];
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    fileName: row.file_name,
-    status: row.status === "undone" ? "undone" : "applied",
-    totalRows: row.total_rows,
-    appliedRows: row.applied_rows,
-    failedRows: row.failed_rows,
-    createdAt: row.created_at,
-    undoSeq: row.undo_seq,
-    redoable: row.redoable,
-  }));
+  if (error) return { ok: false, error: error.message };
+  return {
+    ok: true,
+    batches: (data ?? []).map((row) => ({
+      id: row.id,
+      fileName: row.file_name,
+      status: row.status === "undone" ? "undone" : "applied",
+      totalRows: row.total_rows,
+      appliedRows: row.applied_rows,
+      failedRows: row.failed_rows,
+      createdAt: row.created_at,
+      undoSeq: row.undo_seq,
+      redoable: row.redoable,
+    })),
+  };
 }
 
 export async function listVehicleImportRows(batchId: string): Promise<VehicleImportLogRow[]> {
@@ -262,15 +274,15 @@ export async function applyVehicleImport(input: {
   return { applied, failed };
 }
 
-export async function undoVehicleImport(): Promise<{ error?: string }> {
+export async function undoVehicleImport(): Promise<{ error?: string; changed?: number }> {
   return replay("undo");
 }
 
-export async function redoVehicleImport(): Promise<{ error?: string }> {
+export async function redoVehicleImport(): Promise<{ error?: string; changed?: number }> {
   return replay("redo");
 }
 
-async function replay(direction: "undo" | "redo"): Promise<{ error?: string }> {
+async function replay(direction: "undo" | "redo"): Promise<{ error?: string; changed?: number }> {
   const auth = await requireCreate();
   if ("error" in auth) return { error: auth.error };
   const supabase = await createClient();
@@ -296,6 +308,8 @@ async function replay(direction: "undo" | "redo"): Promise<{ error?: string }> {
     .eq("batch_id", target);
   if (rowsError) return { error: rowsError.message };
 
+  // Rows actually touched, so the dialog can say what the gesture did rather than just closing.
+  let changed = 0;
   for (const row of rows ?? []) {
     const outcome = row.outcome === "create" || row.outcome === "update" ? row.outcome : "failed";
     if (direction === "undo") {
@@ -312,6 +326,7 @@ async function replay(direction: "undo" | "redo"): Promise<{ error?: string }> {
           .eq("id", plan.vehicleId);
         if (updateError) return { error: updateError.message };
       }
+      changed += 1;
     } else {
       const plan = redoRowPlan({ outcome, vehicleId: row.vehicle_id, after: row.after });
       if (!plan) continue;
@@ -328,6 +343,7 @@ async function replay(direction: "undo" | "redo"): Promise<{ error?: string }> {
             .update(writePayload(snapshot))
             .eq("id", plan.vehicleId);
           if (updateError) return { error: updateError.message };
+          changed += 1;
           continue;
         }
       }
@@ -337,6 +353,7 @@ async function replay(direction: "undo" | "redo"): Promise<{ error?: string }> {
         created_by: auth.session.id,
       });
       if (insertError) return { error: insertError.message };
+      changed += 1;
     }
   }
 
@@ -364,7 +381,7 @@ async function replay(direction: "undo" | "redo"): Promise<{ error?: string }> {
     entityType: "vehicle_import",
     entityId: target,
     routeName: "/vehicles",
-    after: { direction },
+    after: { direction, changed },
   });
-  return {};
+  return { changed };
 }

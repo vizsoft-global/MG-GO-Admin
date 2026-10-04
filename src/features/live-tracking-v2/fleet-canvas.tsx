@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { readSelectedDriverId, writeSelectedDriverId } from "@/lib/browser/tracking-selection";
 
 import { FleetMap, type FleetMapHandle, type FleetRouteStop } from "./fleet-map";
 import { FleetRail } from "./fleet-rail";
@@ -74,6 +75,44 @@ export function FleetCanvas() {
 
   useEffect(() => {
     setShowInsightsWhileSelected(false);
+  }, [selectedDriverId]);
+
+  /*
+   * QA #49: the rider that was open when the operator followed a card to the driver detail page.
+   *
+   * Read from the URL once, at mount, before the write effect below can clear it — the two would
+   * otherwise race over the same parameter. Waiting for the rider to exist is what makes this
+   * survive a cold load: `getDriver` is null until the room's first snapshot (or the polling
+   * rail's) has landed, so the effect re-runs as the fleet streams in and restores on the pass
+   * where the rider is finally there.
+   */
+  const requestedDriverRef = useRef<string | null | undefined>(undefined);
+  const restoredDriverRef = useRef(false);
+  useEffect(() => {
+    if (restoredDriverRef.current) return;
+    if (requestedDriverRef.current === undefined) {
+      requestedDriverRef.current = readSelectedDriverId();
+    }
+    const requested = requestedDriverRef.current;
+    if (!requested) return;
+    if (!store.getDriver(requested)) return;
+    restoredDriverRef.current = true;
+    // `selectDriver` toggles, so the guard is what makes a restore idempotent.
+    if (snapshot.selectedDriverId !== requested) store.selectDriver(requested);
+  }, [snapshot, store]);
+
+  /*
+   * The write half. The first run is skipped on purpose: at mount the URL is the *source* of the
+   * selection, and replacing it there would delete the rider the effect above is about to
+   * restore. Every later change is a real selection or a real deselect.
+   */
+  const selectionWrittenRef = useRef(false);
+  useEffect(() => {
+    if (!selectionWrittenRef.current) {
+      selectionWrittenRef.current = true;
+      return;
+    }
+    writeSelectedDriverId(selectedDriverId);
   }, [selectedDriverId]);
 
   /*

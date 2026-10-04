@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { DriverLocationsMap } from "@/features/locations/driver-locations-map";
@@ -18,6 +18,8 @@ import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator"
 import {
   DEFAULT_LIVE_TRACKING_FILTERS,
   matchesLiveTrackingFilters,
+  persistLiveTrackingFilters,
+  readLiveTrackingFilters,
   resetLiveTrackingFilters,
   type LiveTrackingFilterState,
 } from "./live-tracking-filters";
@@ -55,6 +57,7 @@ import {
 } from "./tracking-map-layer-prefs";
 import { cn } from "@/lib/utils";
 import { useVisibleInterval } from "@/lib/browser/use-visible-interval";
+import { readSelectedDriverId, writeSelectedDriverId } from "@/lib/browser/tracking-selection";
 import type { TrackingViewTab } from "./tracking-tab-switcher";
 
 export function LiveTrackingLiveView({
@@ -95,6 +98,29 @@ export function LiveTrackingLiveView({
   useEffect(() => {
     setMapPrefs(loadTrackingMapPrefs());
   }, []);
+
+  /*
+   * QA #49, the filters half: the narrowing that was applied when the operator left for a driver
+   * detail page comes back with them.
+   *
+   * Loaded in an effect rather than in the `useState` initialiser, because the first render is
+   * the server's and `localStorage` does not exist there — reading it during render would paint
+   * one set of pins on the server and another on the client, which React treats as a hydration
+   * mismatch. The cost is one frame at the defaults, which is cheaper than that.
+   *
+   * The write effect is gated on `filtersHydrated`, because persisting before the read would
+   * overwrite the stored narrowing with the defaults the very first render holds.
+   */
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the hydration-safe read: localStorage does not exist on the server, so the first render has to be the defaults and the stored narrowing can only land here
+    setFilters(readLiveTrackingFilters());
+    setFiltersHydrated(true);
+  }, []);
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    persistLiveTrackingFilters(filters);
+  }, [filters, filtersHydrated]);
 
   // Paused while the tab is hidden, caught up on return: a backgrounded v1 map was
   // re-rendering its whole tree — including the driver list — ten seconds at a time.
@@ -148,7 +174,15 @@ export function LiveTrackingLiveView({
         partnerName: row.partner_name ?? null,
         intakeId: row.id,
         phone: row.phone ?? null,
-        detailHref: `/drivers/${row.id}?tab=location&from=live-tracking`,
+        /*
+         * `driver` carries the id the map selects by (`driver_locations.driver_id`, which is the
+         * linked profile id — the key this very meta record is filed under), so pressing Back on
+         * the detail page re-opens this rider instead of an empty map (QA #49). The route segment
+         * stays `row.id`, exactly as before.
+         */
+        detailHref: `/drivers/${row.id}?tab=location&from=live-tracking&driver=${
+          row.linked_profile_id ?? row.id
+        }`,
         avatarUrl: row.avatar_display_url ?? null,
         isBlocked: row.is_blocked,
       });
@@ -216,6 +250,7 @@ export function LiveTrackingLiveView({
         isOnDuty: loc.isOnDuty,
         isBlocked: loc.isBlocked,
         speedMps: loc.speedMps,
+        movedMeters: loc.movedMeters,
         lastSeenAt: loc.lastSeenAt,
         now: nowTick,
         activeDeliveryId: loc.activeDeliveryId,
@@ -234,6 +269,43 @@ export function LiveTrackingLiveView({
       setSelectedId(null);
     }
   }, [selectedId, liveDrivers]);
+
+  /*
+   * QA #49: the rider that was open when the operator left for the driver detail page.
+   *
+   * Read from the URL once, at mount, before the write effect below can clear it — the two
+   * would otherwise race over the same parameter. Waiting for the rider to appear in
+   * `liveDrivers` is what makes this survive a cold load: the position stream arrives
+   * asynchronously, so the first passes have nothing to match against.
+   */
+  const requestedDriverRef = useRef<string | null | undefined>(undefined);
+  const restoredDriverRef = useRef(false);
+  useEffect(() => {
+    if (restoredDriverRef.current) return;
+    if (requestedDriverRef.current === undefined) {
+      requestedDriverRef.current = readSelectedDriverId();
+    }
+    const requested = requestedDriverRef.current;
+    if (!requested) return;
+    if (!liveDrivers.some((d) => d.driverId === requested)) return;
+    restoredDriverRef.current = true;
+    setSelectedId(requested);
+  }, [liveDrivers]);
+
+  /*
+   * The write half, so the parameter describes the map the operator is actually looking at.
+   *
+   * The first run is skipped on purpose: at mount the URL is the *source* of the selection, and
+   * replacing it there would delete the rider the effect above is about to restore.
+   */
+  const selectionWrittenRef = useRef(false);
+  useEffect(() => {
+    if (!selectionWrittenRef.current) {
+      selectionWrittenRef.current = true;
+      return;
+    }
+    writeSelectedDriverId(selectedId);
+  }, [selectedId]);
 
   const selectedMeta = selectedDriver ? profileMeta.get(selectedDriver.driverId) : undefined;
 

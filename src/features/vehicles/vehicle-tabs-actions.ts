@@ -3,6 +3,7 @@
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { putObject } from "@/lib/storage/r2-client";
 import { buildVehicleFileKey, extensionFromMime } from "@/lib/storage/r2-keys";
 import { createClient } from "@/lib/supabase/server";
@@ -70,6 +71,18 @@ async function requireVehicles(permission: "vehicles.view" | "vehicles.manage") 
 
 function empty(value: FormDataEntryValue | null): string {
   return String(value ?? "").trim();
+}
+
+/** A calendar date (YYYY-MM-DD) that is later than today in Asia/Kuwait. */
+function isFutureYmd(ymd: string): boolean {
+  return ymd.localeCompare(kuwaitTodayYmd()) > 0;
+}
+
+/** A datetime-local value that is later than now, with a one-minute clock-skew tolerance. */
+function isFutureDateTime(value: string): boolean {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.getTime() > Date.now() + 60_000;
 }
 
 async function uploadOptional(
@@ -328,7 +341,11 @@ export async function createVehicleHandover(formData: FormData): Promise<{ error
   if ("error" in auth) return auth;
   const vehicleId = empty(formData.get("vehicleId"));
   const handedAt = empty(formData.get("handedAt"));
+  const fromDriverId = empty(formData.get("fromDriverId"));
+  const toDriverId = empty(formData.get("toDriverId"));
   if (!vehicleId || !handedAt) return { error: "missing_fields" };
+  if (!fromDriverId || !toDriverId) return { error: "invalid_drivers" };
+  if (fromDriverId === toDriverId) return { error: "same_driver" };
   const file = formData.get("file");
   const uploaded = await uploadOptional(
     vehicleId,
@@ -341,8 +358,8 @@ export async function createVehicleHandover(formData: FormData): Promise<{ error
   const { error } = await supabase.from("vehicle_handovers").insert({
     vehicle_id: vehicleId,
     handed_at: new Date(handedAt).toISOString(),
-    from_driver_id: empty(formData.get("fromDriverId")) || null,
-    to_driver_id: empty(formData.get("toDriverId")) || null,
+    from_driver_id: fromDriverId,
+    to_driver_id: toDriverId,
     notes: empty(formData.get("notes")) || null,
     storage_key: uploaded.key,
     created_by: auth.session.id,
@@ -364,6 +381,9 @@ export async function createVehicleAccident(formData: FormData): Promise<{ error
   const occurredAt = empty(formData.get("occurredAt"));
   const severity = empty(formData.get("severity")) || "medium";
   if (!vehicleId || !occurredAt) return { error: "missing_fields" };
+  if (isFutureDateTime(occurredAt)) return { error: "future_date" };
+  const locationText = empty(formData.get("locationText"));
+  if (!locationText) return { error: "location_required" };
   if (!["low", "medium", "high"].includes(severity)) return { error: "missing_fields" };
   const file = formData.get("file");
   const uploaded = await uploadOptional(
@@ -377,7 +397,7 @@ export async function createVehicleAccident(formData: FormData): Promise<{ error
   const { error } = await supabase.from("vehicle_accidents").insert({
     vehicle_id: vehicleId,
     occurred_at: new Date(occurredAt).toISOString(),
-    location_text: empty(formData.get("locationText")) || null,
+    location_text: locationText,
     severity,
     notes: empty(formData.get("notes")) || null,
     storage_key: uploaded.key,
@@ -402,10 +422,14 @@ export async function createVehicleDocument(formData: FormData): Promise<{ error
   if (!vehicleId || !docType || !(file instanceof File) || file.size === 0) {
     return { error: "missing_fields" };
   }
+  if (!["registration", "insurance", "other"].includes(docType)) {
+    return { error: "invalid_option" };
+  }
   const uploaded = await uploadOptional(vehicleId, "docs", file, auth.session.id);
   if ("error" in uploaded) return { error: uploaded.error };
   if (!uploaded.key) return { error: "missing_fields" };
   const expiresAt = empty(formData.get("expiresAt"));
+  if (expiresAt && expiresAt < kuwaitTodayYmd()) return { error: "expiry_in_past" };
   const supabase = await createClient();
   const { error } = await supabase.from("vehicle_documents").insert({
     vehicle_id: vehicleId,
@@ -432,6 +456,7 @@ export async function createVehicleService(formData: FormData): Promise<{ error?
   const servicedAt = empty(formData.get("servicedAt"));
   const kind = empty(formData.get("kind")) || "service";
   if (!vehicleId || !servicedAt) return { error: "missing_fields" };
+  if (isFutureYmd(servicedAt)) return { error: "future_date" };
   const odometerRaw = empty(formData.get("odometer"));
   const costRaw = empty(formData.get("costKwd"));
   const supabase = await createClient();

@@ -1,7 +1,8 @@
 import type { AssistantFocus } from "./assistant-entity";
 import { focusLine } from "./assistant-focus";
+import { ASSISTANT_LANGUAGE_DIRECTIVE } from "./assistant-language";
 
-const SHARED_RULES_EN = `You are the DPD Admin staff assistant. Read-only. Answer in English.
+const SHARED_RULES_EN = `You are the DPD Admin staff assistant. Read-only.
 
 Use tools. Never invent numbers, names, or explanations. Cite only fields present in tool JSON.
 If a section is not_authorized, name the existing page. If unavailable or empty, say so.
@@ -25,7 +26,7 @@ Never claim you changed data. No write tools.
 Do not dump large tables; summarise counts and heads.
 Call export_report only when the user asks to download an A–D Excel.`;
 
-const SHARED_RULES_AR = `أنت مساعد موظفي لوحة DPD. للقراءة فقط. أجب بالعربية.
+const SHARED_RULES_AR = `أنت مساعد موظفي لوحة DPD. للقراءة فقط.
 
 استخدم الأدوات. لا تخترع أرقاماً أو أسماء أو تفسيرات. استشهد فقط بالحقول الموجودة في JSON الناتج.
 إذا كان القسم not_authorized فسمِّ الصفحة الحالية. إذا كانت البيانات غير متاحة أو فارغة فقل ذلك.
@@ -48,9 +49,17 @@ const SHARED_RULES_AR = `أنت مساعد موظفي لوحة DPD. للقراء
 لا تدّعِ أنك غيّرت بيانات. لا أدوات كتابة.
 لخّص الأعداد. استدعِ export_report فقط عند طلب تنزيل Excel لـ A–D.`;
 
+/**
+ * QA #2 — the answer's language is a parameter, not a side effect of the panel
+ * locale. The route resolves it from the operator's own text (see
+ * `responseLocaleFor`) and passes it here, so an Arabic question answered while
+ * the chrome is English still gets Arabic prose. The language directive leads
+ * the prompt because everything after it — the rules, the tool list, the focus
+ * line — is written to be read under it.
+ */
 export function assistantSystemPrompt(locale: "en" | "ar", focus: AssistantFocus | null): string {
   const rules = locale === "ar" ? SHARED_RULES_AR : SHARED_RULES_EN;
-  return `${rules}\n\n${focusLine(focus)}`;
+  return `${ASSISTANT_LANGUAGE_DIRECTIVE[locale]}\n\n${rules}\n\n${focusLine(focus)}`;
 }
 
 export const ASSISTANT_V1_SYSTEM_PROMPT = assistantSystemPrompt("en", null);

@@ -13,6 +13,13 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -23,6 +30,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import { getSignedStorageUrl } from "@/lib/storage/storage-actions";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { AssetFormSheet } from "@/features/assets/asset-form-sheet";
 import type { VehicleListRow } from "./types";
 import {
@@ -41,6 +49,15 @@ import {
 } from "./vehicle-tabs-actions";
 
 type TabId = "handover" | "accident" | "documents" | "service" | "assets";
+
+const DOC_TYPE_VALUES = ["registration", "insurance", "other"] as const;
+
+/** Local "now" in the `datetime-local` wire format, used as an input `max`. */
+function localDateTimeInputMax(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
 
 export function VehicleDetailTabs({
   tab,
@@ -118,8 +135,13 @@ function HandoverTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
         open={open}
         title={t("addHandover")}
         subtitle={t("handoverSubtitle")}
+        successMessage={t("handoverSaved")}
         onClose={() => setOpen(false)}
         onSubmit={async (form) => {
+          const from = String(form.get("fromDriverId") ?? "").trim();
+          const to = String(form.get("toDriverId") ?? "").trim();
+          if (!from || !to) return "invalid_drivers";
+          if (from === to) return "same_driver";
           form.set("vehicleId", vehicleId);
           const result = await createVehicleHandover(form);
           if (result.error) return result.error;
@@ -132,8 +154,8 @@ function HandoverTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
           {t("colWhen")}
           <Input name="handedAt" type="datetime-local" required className="h-9" />
         </label>
-        <DriverField name="fromDriverId" label={t("colFrom")} items={drivers.data ?? []} />
-        <DriverField name="toDriverId" label={t("colTo")} items={drivers.data ?? []} />
+        <DriverField name="fromDriverId" label={t("colFrom")} items={drivers.data ?? []} required />
+        <DriverField name="toDriverId" label={t("colTo")} items={drivers.data ?? []} required />
         <label className="space-y-1 text-xs">
           {t("colNotes")}
           <Input name="notes" className="h-9" />
@@ -177,6 +199,7 @@ function AccidentTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
         open={open}
         title={t("addAccident")}
         subtitle={t("accidentSubtitle")}
+        successMessage={t("accidentSaved")}
         onClose={() => setOpen(false)}
         onSubmit={async (form) => {
           form.set("vehicleId", vehicleId);
@@ -189,11 +212,20 @@ function AccidentTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
       >
         <label className="space-y-1 text-xs">
           {t("colWhen")}
-          <Input name="occurredAt" type="datetime-local" required className="h-9" />
+          <Input
+            name="occurredAt"
+            type="datetime-local"
+            required
+            max={open ? localDateTimeInputMax() : undefined}
+            className="h-9"
+          />
         </label>
         <label className="space-y-1 text-xs">
-          {t("colLocation")}
-          <Input name="locationText" className="h-9" />
+          <span>
+            {t("colLocation")}
+            <span className="text-destructive"> *</span>
+          </span>
+          <Input name="locationText" required className="h-9" />
         </label>
         <label className="space-y-1 text-xs">
           {t("colSeverity")}
@@ -225,6 +257,17 @@ function DocumentsTab({ vehicleId, canManage }: { vehicleId: string; canManage: 
     queryFn: () => listVehicleDocuments(vehicleId),
   });
   const rows = list.data ?? [];
+  const docTypeItems = [
+    { value: "registration", label: t("docType.registration") },
+    { value: "insurance", label: t("docType.insurance") },
+    { value: "other", label: t("docType.other") },
+  ];
+  const docTypeLabel = (value: string): string => {
+    if (value === "registration") return t("docType.registration");
+    if (value === "insurance") return t("docType.insurance");
+    if (value === "other") return t("docType.other");
+    return value;
+  };
   return (
     <div className="space-y-3">
       {canManage ? <AddButton onClick={() => setOpen(true)} label={t("addDocument")} /> : null}
@@ -234,7 +277,7 @@ function DocumentsTab({ vehicleId, canManage }: { vehicleId: string; canManage: 
         <TabTable
           heads={[t("colDocType"), t("colExpires"), t("colFile")]}
           rows={rows.map((row) => [
-            row.doc_type,
+            docTypeLabel(row.doc_type),
             row.expires_at ?? "—",
             <FileLink key={row.id} storageKey={row.storage_key} />,
           ])}
@@ -244,6 +287,7 @@ function DocumentsTab({ vehicleId, canManage }: { vehicleId: string; canManage: 
         open={open}
         title={t("addDocument")}
         subtitle={t("documentsSubtitle")}
+        successMessage={t("documentSaved")}
         onClose={() => setOpen(false)}
         onSubmit={async (form) => {
           form.set("vehicleId", vehicleId);
@@ -256,11 +300,22 @@ function DocumentsTab({ vehicleId, canManage }: { vehicleId: string; canManage: 
       >
         <label className="space-y-1 text-xs">
           {t("colDocType")}
-          <Input name="docType" required className="h-9" />
+          <Select name="docType" defaultValue="registration" items={docTypeItems}>
+            <SelectTrigger className="h-9 w-full" aria-label={t("colDocType")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DOC_TYPE_VALUES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {docTypeLabel(value)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
         <label className="space-y-1 text-xs">
           {t("colExpires")}
-          <Input name="expiresAt" type="date" className="h-9" />
+          <Input name="expiresAt" type="date" min={open ? kuwaitTodayYmd() : undefined} className="h-9" />
         </label>
         <label className="space-y-1 text-xs">
           {t("colFile")}
@@ -302,6 +357,7 @@ function ServiceTab({ vehicleId, canManage }: { vehicleId: string; canManage: bo
         open={open}
         title={t("addService")}
         subtitle={t("serviceSubtitle")}
+        successMessage={t("serviceSaved")}
         onClose={() => setOpen(false)}
         onSubmit={async (form) => {
           form.set("vehicleId", vehicleId);
@@ -314,7 +370,13 @@ function ServiceTab({ vehicleId, canManage }: { vehicleId: string; canManage: bo
       >
         <label className="space-y-1 text-xs">
           {t("colWhen")}
-          <Input name="servicedAt" type="date" required className="h-9" />
+          <Input
+            name="servicedAt"
+            type="date"
+            required
+            max={open ? kuwaitTodayYmd() : undefined}
+            className="h-9"
+          />
         </label>
         <label className="space-y-1 text-xs">
           {t("colKind")}
@@ -505,15 +567,20 @@ function DriverField({
   name,
   label,
   items,
+  required,
 }: {
   name: string;
   label: string;
   items: Array<{ id: string; label: string }>;
+  required?: boolean;
 }) {
   const [value, setValue] = useState<string | null>(null);
   return (
     <label className="space-y-1 text-xs">
-      {label}
+      <span>
+        {label}
+        {required ? <span className="text-destructive"> *</span> : null}
+      </span>
       <input type="hidden" name={name} value={value ?? ""} />
       <SearchSelect
         items={items.map((item) => ({ value: item.id, label: item.label }))}
@@ -531,6 +598,7 @@ function LedgerDialog({
   open,
   title,
   subtitle,
+  successMessage,
   onClose,
   onSubmit,
   children,
@@ -538,6 +606,7 @@ function LedgerDialog({
   open: boolean;
   title: string;
   subtitle: string;
+  successMessage?: string;
   onClose: () => void;
   onSubmit: (form: FormData) => Promise<string | null>;
   children: ReactNode;
@@ -547,27 +616,34 @@ function LedgerDialog({
   const [pending, startTransition] = useTransition();
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
-      <DialogContent showCloseButton closeOutside className="w-[min(1200px,96vw)] overflow-visible p-0">
+      <DialogContent
+        showCloseButton
+        closeOutside
+        className="flex max-h-[min(92vh,880px)] w-[min(1200px,96vw)] max-w-none flex-col gap-0 overflow-visible rounded-xl p-0 sm:max-w-[min(1200px,96vw)]"
+      >
         <form
+          className="flex min-h-0 flex-1 flex-col"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
             startTransition(async () => {
               const error = await onSubmit(form);
               if (error) toast.error(tDetail(`errors.${error}` as "errors.save_failed"));
-              else toast.success(t("saved"));
+              else toast.success(successMessage ?? t("saved"));
             });
           }}
         >
-          <div className="space-y-3 px-5 py-4">{children}</div>
-          <AppModalFooter title={title} subtitle={subtitle}>
-            <Button type="button" variant="outline" className="h-9" onClick={onClose}>
-              {t("cancel")}
-            </Button>
-            <Button type="submit" className="h-9" disabled={pending}>
-              {t("save")}
-            </Button>
-          </AppModalFooter>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pt-4 pb-3">{children}</div>
+          <div className="px-5 pb-4">
+            <AppModalFooter title={title} subtitle={subtitle}>
+              <Button type="button" variant="outline" className="h-9" onClick={onClose}>
+                {t("cancel")}
+              </Button>
+              <Button type="submit" className="h-9" disabled={pending}>
+                {t("save")}
+              </Button>
+            </AppModalFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

@@ -143,6 +143,70 @@ describe("liveListStatus", () => {
       "delivery_submit",
     );
   });
+
+  /*
+   * QA #50. `speed_mps` is the field a coarse network fix is least able to guarantee — it
+   * arrives carrying the previous fix's value, or 0 — so a rider crossing the city on weak
+   * GPS was painted Idle while their coordinates plainly travelled. Displacement cannot be
+   * fabricated that way, and it is the same 15 m rule the rider app applies.
+   */
+  it("shows Moving for a travelling fix that reports 0 m/s", () => {
+    assert.equal(
+      liveListStatus({
+        isOnDuty: true,
+        trackingStatus: "idle",
+        speedMps: 0,
+        movedMeters: 18,
+        lastSeenAt: fresh,
+        now: NOW,
+      }),
+      "moving",
+    );
+  });
+
+  it("keeps a parked phone Idle when neither speed nor displacement says moving", () => {
+    assert.equal(
+      liveListStatus({
+        isOnDuty: true,
+        trackingStatus: "idle",
+        speedMps: 0,
+        movedMeters: 4,
+        lastSeenAt: fresh,
+        now: NOW,
+      }),
+      "idle",
+    );
+    // An unknown previous fix must not be read as "did not move".
+    assert.equal(
+      liveListStatus({
+        isOnDuty: true,
+        trackingStatus: "idle",
+        speedMps: 0,
+        movedMeters: null,
+        lastSeenAt: fresh,
+        now: NOW,
+      }),
+      "idle",
+    );
+  });
+
+  it("keeps On Delivery primary whether the rider is parked or progressing (QA #48)", () => {
+    for (const movedMeters of [0, 40]) {
+      assert.equal(
+        liveListStatus({
+          isOnDuty: true,
+          trackingStatus: "delivery_submit",
+          speedMps: 0,
+          movedMeters,
+          lastSeenAt: fresh,
+          now: NOW,
+          activeDeliveryId: "del-1",
+        }),
+        "delivery_submit",
+        `movedMeters=${movedMeters}`,
+      );
+    }
+  });
 });
 
 describe("liveListStatusTone", () => {

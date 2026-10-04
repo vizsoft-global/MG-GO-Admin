@@ -463,7 +463,12 @@ export async function fetchRequestsAuditLogs(): Promise<{
       "id, action, route_name, entity_id, created_at, admin_user_id, admin_role_slug, context, changed_fields, error_message",
     )
     .eq("entity_type", "requests")
+    // Deterministic: two rows can share a `created_at`, and a single-key order
+    // lets Postgres return them in either order — which the operator reads as
+    // the log changing between refreshes. `id` breaks the tie the same way every
+    // time, so the sequence is stable.
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(400);
 
   if (error) return { rows: [], error: error.message };

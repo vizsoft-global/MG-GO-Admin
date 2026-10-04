@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
 import {
+  ArrowLeft,
   CalendarRange,
   ChevronLeft,
   ChevronRight,
@@ -29,7 +30,7 @@ import { ProjectBadge } from "@/features/fleet/fleet-badges";
 import { fuelPaymentLabel, toKuwaitYmd } from "@/features/fleet/fleet-labels";
 import { requestStatusLabelKey, requestStatusVariant } from "@/features/requests/request-status-utils";
 import { useRouter } from "@/i18n/navigation";
-import { formatKuwaitDayLabel, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { formatKuwaitDateLabel, formatKuwaitDayLabel, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { toast } from "sonner";
 import { FleetRequestDialog } from "./fleet-request-dialog";
 import { fetchFuelFillAttachmentUrl } from "./fuel-actions";
@@ -62,6 +63,13 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
     [anchor, appliedFrom, appliedTo, mode],
   );
   const range = resolved.ok ? resolved.range : { start: anchor, end: anchor, days: [anchor] };
+  // Without this the month arrows were changing the query but nothing on screen
+  // said which month was showing, so a correct move to a quiet month read as
+  // "the arrow does nothing" — an empty table with no explanation.
+  const rangeTitle =
+    range.start === range.end
+      ? formatKuwaitDateLabel(range.start)
+      : `${formatKuwaitDateLabel(range.start)} – ${formatKuwaitDateLabel(range.end)}`;
   const headerQuery = useFuelDriverHeader(driverId);
   const fillsQuery = useFuelFills({ from: range.start, to: range.end, driverId });
   const fuelRequests = useFleetRequests("fuel", driverId);
@@ -106,6 +114,25 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
   };
   const shownMode: FuelRangeMode = customOpen ? "custom" : mode;
 
+  // A functional update, because two quick clicks used to read the same
+  // `anchor` and land one month short. `stopPropagation` keeps the click off
+  // anything the toolbar sits above; the arrow is a range control, not a
+  // navigation.
+  const shiftMonthlyRange =
+    (direction: -1 | 1) => (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setRangeError(null);
+      setAnchor((prev) => shiftFuelAnchor("monthly", prev, direction));
+    };
+
+  const resetToThisMonth = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setRangeError(null);
+    setAnchor(kuwaitTodayYmd());
+  };
+
   const openAttachment = async (storageKey: string) => {
     const result = await fetchFuelFillAttachmentUrl(storageKey);
     if (!result.url) {
@@ -118,6 +145,9 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
   const loading = headerQuery.isPending || fillsQuery.isPending;
   const requestRows = tab === "fuel" ? (fuelRequests.data?.rows ?? []) : refundRequests.data?.rows ?? [];
   const requestLoading = tab === "fuel" ? fuelRequests.isPending : refundRequests.isPending;
+  // An RPC refusal and a genuinely empty month used to paint the same empty
+  // state, which is how a broken query stayed invisible behind "no rows".
+  const requestError = tab === "fuel" ? fuelRequests.isError : refundRequests.isError;
 
   return (
     <AppPage>
@@ -128,7 +158,13 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
         actions={
           <div className="flex items-center gap-2">
             <ProjectBadge value={projectKey} />
-            <Button type="button" variant="outline" className="h-9" onClick={() => router.push("/fuel")}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 gap-1.5"
+              onClick={() => router.push("/fuel")}
+            >
+              <ArrowLeft className="h-4 w-4" />
               {t("driver.back")}
             </Button>
           </div>
@@ -149,6 +185,7 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
         ]}
       />
       <AppListCard
+        title={rangeTitle}
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
             <ToggleChip
@@ -221,19 +258,19 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
                   type="button"
                   variant="outline"
                   className="h-9 w-9 p-0"
-                  onClick={() => setAnchor(shiftFuelAnchor("monthly", anchor, -1))}
+                  onClick={shiftMonthlyRange(-1)}
                   aria-label={t("prevRange")}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <Button type="button" variant="outline" className="h-9" onClick={() => setAnchor(kuwaitTodayYmd())}>
+                <Button type="button" variant="outline" className="h-9" onClick={resetToThisMonth}>
                   {t("thisMonth")}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   className="h-9 w-9 p-0"
-                  onClick={() => setAnchor(shiftFuelAnchor("monthly", anchor, 1))}
+                  onClick={shiftMonthlyRange(1)}
                   aria-label={t("nextRange")}
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -253,6 +290,8 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
             <div className="flex h-48 items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : fillsQuery.isError ? (
+            <AppEmptyState title={t("driver.loadFailed")} description={t("driver.loadFailedHint")} />
           ) : fills.length === 0 ? (
             <AppEmptyState title={t("driver.emptyFills")} description={t("driver.emptyFillsHint")} />
           ) : (
@@ -283,6 +322,8 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
+        ) : requestError ? (
+          <AppEmptyState title={t("driver.loadFailed")} description={t("driver.loadFailedHint")} />
         ) : requestRows.length === 0 ? (
           <AppEmptyState
             title={tab === "fuel" ? t("driver.emptyRequests") : t("driver.emptyRefunds")}

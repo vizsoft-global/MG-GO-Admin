@@ -270,14 +270,33 @@ export function OrderReconImportDialog({
                       </p>
                       {preview.unresolvedCount > 0 ? (
                         <ul className="max-h-32 overflow-auto rounded-lg border border-border p-2">
-                          {preview.resolved
-                            .filter((r) => r.status === "unresolved")
-                            .slice(0, 40)
-                            .map((r, i) => (
-                              <li key={`${r.employee_id}-${r.store_name}-${i}`}>
-                                {r.employee_id || "—"} · {r.store_name || "—"} · {r.unresolved_reason}
-                              </li>
-                            ))}
+                          {preview.issues.slice(0, 40).map((issue) => (
+                            <li
+                              key={`${issue.employee_id}-${issue.store_name}-${issue.unresolved_reason}`}
+                              className="flex flex-wrap items-center gap-x-1.5"
+                            >
+                              <span className="font-medium">
+                                {issue.employee_id || "—"}
+                              </span>
+                              <span className="text-muted-foreground">·</span>
+                              <span>{issue.store_name || "—"}</span>
+                              <span className="text-muted-foreground">·</span>
+                              <span className="text-amber-700">
+                                {issue.unresolved_reason === "unknown_id"
+                                  ? t("reasonUnknownId")
+                                  : t("reasonUnknownStore")}
+                              </span>
+                              <span className="ms-auto text-[10px] text-muted-foreground">
+                                {t("issueDays", { count: issue.days })}
+                                {issue.days > 1
+                                  ? ` · ${t("issueRange", {
+                                      from: issue.first_date,
+                                      to: issue.last_date,
+                                    })}`
+                                  : ""}
+                              </span>
+                            </li>
+                          ))}
                         </ul>
                       ) : null}
                     </div>

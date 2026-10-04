@@ -44,6 +44,7 @@ import {
   parseIsoDate,
   previewIncentiveRuleRows,
   uniqueRestaurantIds,
+  type IncentiveImportInputRow,
 } from "./incentive-rule-import";
 import {
   applyableDpdTargetRows,
@@ -51,6 +52,11 @@ import {
   type DpdTargetImportInputRow,
   type DpdTargetImportPreviewRow,
 } from "./delivery-rule-dpd-import";
+import {
+  FIXED_REWARD_STEP_KWD,
+  isOnRewardStep,
+  PER_DELIVERY_REWARD_STEP_KWD,
+} from "./incentive-rule-form-validation";
 
 export type {
   DpdTargetImportInputRow,
@@ -285,9 +291,12 @@ async function replaceDeliveryRuleScopes(
 function parseDates(formData: FormData): { startDate: string; endDate: string } | { error: DpdErrorKey } {
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
-  if (!startDate || !endDate || endDate < startDate) {
-    return { error: "invalid_dates" };
-  }
+  // A blank date and a reversed window are different mistakes and now say so.
+  // The client validator names the same key for each, so a row that somehow
+  // reaches the server without a date is not answered with "end date must be
+  // on or after start date", which is what an empty start date used to say.
+  if (!startDate || !endDate) return { error: "missing_fields" };
+  if (endDate < startDate) return { error: "invalid_dates" };
   return { startDate, endDate };
 }
 
@@ -383,8 +392,8 @@ export async function fetchDeliveryRulesForAdmin(): Promise<DeliveryRuleRow[]> {
        dpd_target, dpd_period,
        delivery_rule_scopes (zone_id, partner_id, restaurant_id)`,
     )
-    .order("priority", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("priority", { ascending: false });
 
   if (error) throw error;
 
@@ -394,12 +403,23 @@ export async function fetchDeliveryRulesForAdmin(): Promise<DeliveryRuleRow[]> {
     const scopes = extractScopeIds(
       row.delivery_rule_scopes as RuleScopeRow[] | null,
     );
-    const activeIds =
+    const junctionIds =
       row.scope_type === "zone"
         ? scopes.zone_ids
         : row.scope_type === "partner"
           ? scopes.partner_ids
           : scopes.restaurant_ids;
+    // Legacy rows predate `delivery_rule_scopes`: their only scope is the
+    // single-FK column. Without this fallback their scope label and search
+    // text are empty, so a zone/partner/restaurant search returns nothing.
+    const legacyId =
+      row.scope_type === "zone"
+        ? row.zone_id
+        : row.scope_type === "partner"
+          ? row.partner_id
+          : row.restaurant_id;
+    const activeIds =
+      junctionIds.length > 0 ? junctionIds : legacyId ? [legacyId] : [];
     return {
       id: row.id,
       name: row.name,
@@ -472,75 +492,116 @@ function mapIncentiveTierRow(
   };
 }
 
+const INCENTIVE_RULE_SELECT = `id, name, status, scope_type, zone_id, partner_id, restaurant_id, period,
+       target_mode, base_minimum_deliveries, target_deliveries, reward_mode,
+       reward_kwd, reward_per_delivery_kwd, payout_mode, overrides_others,
+       start_date, end_date, priority,
+       incentive_rule_scopes (zone_id, partner_id, restaurant_id),
+       incentive_rule_tiers (id, threshold_deliveries, reward_mode, reward_kwd, reward_per_delivery_kwd, sort_order)`;
+
+type ScopeLabelMaps = Awaited<ReturnType<typeof loadScopeLabelMaps>>;
+
+function mapIncentiveRuleRow(
+  row: IncentiveRuleDbRow,
+  maps: ScopeLabelMaps,
+): IncentiveRuleRow {
+  const scopes = extractScopeIds(
+    (row as IncentiveRuleDbRow & { incentive_rule_scopes?: RuleScopeRow[] })
+      .incentive_rule_scopes,
+  );
+  const restaurant_ids = uniqueRestaurantIds([
+    ...scopes.restaurant_ids,
+    row.restaurant_id,
+  ]);
+  const activeIds =
+    row.scope_type === "zone"
+      ? scopes.zone_ids
+      : row.scope_type === "partner"
+        ? scopes.partner_ids
+        : restaurant_ids;
+  const tiers = (row.incentive_rule_tiers ?? [])
+    .map(mapIncentiveTierRow)
+    .sort(
+      (a, b) =>
+        a.sort_order - b.sort_order ||
+        a.threshold_deliveries - b.threshold_deliveries,
+    );
+  return {
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    scope_type: row.scope_type,
+    zone_id: null,
+    partner_id: null,
+    restaurant_id: null,
+    zone_ids: scopes.zone_ids,
+    partner_ids: scopes.partner_ids,
+    restaurant_ids,
+    scope_label: scopeLabelMulti(row.scope_type, activeIds, maps),
+    period: row.period,
+    target_mode: row.target_mode ?? "single",
+    base_minimum_deliveries: row.base_minimum_deliveries ?? 0,
+    target_deliveries: row.target_deliveries,
+    reward_mode: row.reward_mode ?? "fixed",
+    reward_kwd: Number(row.reward_kwd),
+    reward_per_delivery_kwd:
+      row.reward_per_delivery_kwd != null
+        ? Number(row.reward_per_delivery_kwd)
+        : null,
+    payout_mode: row.payout_mode ?? "milestone",
+    overrides_others: row.overrides_others ?? false,
+    tiers,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    priority: row.priority,
+  };
+}
+
 export async function fetchIncentiveRulesForAdmin(): Promise<IncentiveRuleRow[]> {
   await requireEarningsView();
   void logAdminRead("incentive_rules", "fetchIncentiveRulesForAdmin");
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("incentive_rules")
-    .select(
-      `id, name, status, scope_type, zone_id, partner_id, restaurant_id, period,
-       target_mode, base_minimum_deliveries, target_deliveries, reward_mode,
-       reward_kwd, reward_per_delivery_kwd, payout_mode, overrides_others,
-       start_date, end_date, priority,
-       incentive_rule_scopes (zone_id, partner_id, restaurant_id),
-       incentive_rule_tiers (id, threshold_deliveries, reward_mode, reward_kwd, reward_per_delivery_kwd, sort_order)`,
-    )
-    .order("priority", { ascending: false })
-    .order("created_at", { ascending: false });
+    .select(INCENTIVE_RULE_SELECT)
+    // Newest first, priority as the tie-break. A new rule defaults to
+    // priority 10, so ordering by priority first sank it below every 20/30/50
+    // rule and QA read that as "the rule was not saved". Payout precedence is
+    // resolved in SQL (`incentive_rule_matches_driver`), never by this order.
+    .order("created_at", { ascending: false })
+    .order("priority", { ascending: false });
 
   if (error) throw error;
 
   const maps = await loadScopeLabelMaps(supabase);
 
-  return ((data ?? []) as IncentiveRuleDbRow[]).map((row) => {
-    const scopes = extractScopeIds(
-      (row as IncentiveRuleDbRow & { incentive_rule_scopes?: RuleScopeRow[] })
-        .incentive_rule_scopes,
-    );
-    const restaurant_ids = uniqueRestaurantIds([
-      ...scopes.restaurant_ids,
-      row.restaurant_id,
-    ]);
-    const activeIds =
-      row.scope_type === "zone"
-        ? scopes.zone_ids
-        : row.scope_type === "partner"
-          ? scopes.partner_ids
-          : restaurant_ids;
-    const tiers = (row.incentive_rule_tiers ?? [])
-      .map(mapIncentiveTierRow)
-      .sort((a, b) => a.sort_order - b.sort_order || a.threshold_deliveries - b.threshold_deliveries);
-    return {
-      id: row.id,
-      name: row.name,
-      status: row.status,
-      scope_type: row.scope_type,
-      zone_id: null,
-      partner_id: null,
-      restaurant_id: null,
-      zone_ids: scopes.zone_ids,
-      partner_ids: scopes.partner_ids,
-      restaurant_ids,
-      scope_label: scopeLabelMulti(row.scope_type, activeIds, maps),
-      period: row.period,
-      target_mode: row.target_mode ?? "single",
-      base_minimum_deliveries: row.base_minimum_deliveries ?? 0,
-      target_deliveries: row.target_deliveries,
-      reward_mode: row.reward_mode ?? "fixed",
-      reward_kwd: Number(row.reward_kwd),
-      reward_per_delivery_kwd:
-        row.reward_per_delivery_kwd != null
-          ? Number(row.reward_per_delivery_kwd)
-          : null,
-      payout_mode: row.payout_mode ?? "milestone",
-      overrides_others: row.overrides_others ?? false,
-      tiers,
-      start_date: row.start_date,
-      end_date: row.end_date,
-      priority: row.priority,
-    };
-  });
+  return ((data ?? []) as IncentiveRuleDbRow[]).map((row) =>
+    mapIncentiveRuleRow(row, maps),
+  );
+}
+
+/**
+ * One rule for the read-only detail page. Deliberately a single-row read rather
+ * than a re-use of the list query: the list is the whole table, and a detail
+ * deep link should not pay for rules it is going to throw away. Both paths go
+ * through `mapIncentiveRuleRow`, so they cannot drift.
+ */
+export async function getIncentiveRuleById(
+  id: string,
+): Promise<IncentiveRuleRow | null> {
+  await requireEarningsView();
+  if (!id) return null;
+  void logAdminRead("incentive_rules", "getIncentiveRuleById");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("incentive_rules")
+    .select(INCENTIVE_RULE_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const maps = await loadScopeLabelMaps(supabase);
+  return mapIncentiveRuleRow(data as unknown as IncentiveRuleDbRow, maps);
 }
 
 export async function saveRestaurant(formData: FormData): Promise<DpdMutationResult> {
@@ -668,8 +729,20 @@ export async function saveDeliveryRule(formData: FormData): Promise<DpdMutationR
   const name = String(formData.get("name") ?? "").trim();
   const status = String(formData.get("status") ?? "draft").trim() as RuleStatus;
   const priorityRaw = String(formData.get("priority") ?? "").trim();
+  const dpdTargetRaw = String(formData.get("dpdTarget") ?? "").trim();
 
-  if (!name) return { error: "missing_fields" };
+  // Per-field validation: each failure names the field so the form can
+  // highlight exactly what is missing instead of a generic "missing fields".
+  if (!name) return { error: "name_required" };
+  if (priorityRaw && !Number.isFinite(Number(priorityRaw))) {
+    return { error: "invalid_priority" };
+  }
+  if (dpdTargetRaw) {
+    const target = Number(dpdTargetRaw);
+    if (!Number.isFinite(target) || target <= 0) {
+      return { error: "invalid_target" };
+    }
+  }
 
   const scope = parseScopeFromForm(formData);
   if ("error" in scope) return { error: scope.error };
@@ -832,8 +905,18 @@ function parseTiersJson(raw: string): TierInput[] | { error: DpdErrorKey } {
           ? Number(row.reward_per_delivery_kwd)
           : null;
       if (rewardMode === "fixed") {
-        if (!Number.isFinite(rewardKwd!) || rewardKwd! < 0) return { error: "invalid_reward" };
-      } else if (!Number.isFinite(perDelivery!) || perDelivery! < 0) {
+        if (
+          !Number.isFinite(rewardKwd!) ||
+          rewardKwd! < 0 ||
+          !isOnRewardStep(rewardKwd!, FIXED_REWARD_STEP_KWD)
+        ) {
+          return { error: "invalid_reward" };
+        }
+      } else if (
+        !Number.isFinite(perDelivery!) ||
+        perDelivery! < 0 ||
+        !isOnRewardStep(perDelivery!, PER_DELIVERY_REWARD_STEP_KWD)
+      ) {
         return { error: "invalid_reward" };
       }
       tiers.push({
@@ -877,7 +960,8 @@ export async function saveIncentiveRule(formData: FormData): Promise<DpdMutation
   const tiersRaw = String(formData.get("tiersJson") ?? "").trim();
   const priorityRaw = String(formData.get("priority") ?? "").trim();
 
-  if (!name || !period) return { error: "missing_fields" };
+  if (!name) return { error: "name_required" };
+  if (!period) return { error: "missing_fields" };
   if (targetMode !== "single" && targetMode !== "tiered") return { error: "invalid_target" };
 
   const baseMinimum = Number(baseRaw);
@@ -908,11 +992,23 @@ export async function saveIncentiveRule(formData: FormData): Promise<DpdMutation
     }
     if (rewardMode === "fixed") {
       const reward = Number(rewardRaw);
-      if (!Number.isFinite(reward) || reward < 0) return { error: "invalid_reward" };
+      if (
+        !Number.isFinite(reward) ||
+        reward < 0 ||
+        !isOnRewardStep(reward, FIXED_REWARD_STEP_KWD)
+      ) {
+        return { error: "invalid_reward" };
+      }
       rewardKwd = reward;
     } else {
       const rate = Number(perDeliveryRaw);
-      if (!Number.isFinite(rate) || rate < 0) return { error: "invalid_reward" };
+      if (
+        !Number.isFinite(rate) ||
+        rate < 0 ||
+        !isOnRewardStep(rate, PER_DELIVERY_REWARD_STEP_KWD)
+      ) {
+        return { error: "invalid_reward" };
+      }
       rewardPerDeliveryKwd = rate;
     }
   } else {
@@ -1196,12 +1292,19 @@ export async function applyDpdTargetImport(
   let created = 0;
   for (const row of applyableDpdTargetRows(preview)) {
     const period = row.dpd_period.trim().toLowerCase();
+    // Only overwrite a window the sheet actually stated. A sheet written
+    // against the old template carries no dates, and blanking a live rule's
+    // end date would silently end it.
+    const window = row.start_date && row.end_date
+      ? { start_date: row.start_date, end_date: row.end_date }
+      : null;
     if (row.status === "ok" && row.rule_id) {
       const { error } = await supabase
         .from("delivery_rules")
         .update({
           dpd_target: Number(row.dpd_target),
           dpd_period: period,
+          ...(window ?? {}),
           updated_at: new Date().toISOString(),
         } as never)
         .eq("id", row.rule_id);
@@ -1222,7 +1325,8 @@ export async function applyDpdTargetImport(
       p_scope_id: row.scope_id,
       p_dpd_target: Number(row.dpd_target),
       p_dpd_period: period,
-    });
+      ...(window ? { p_start_date: window.start_date, p_end_date: window.end_date } : {}),
+    } as never);
     if (error) {
       logPgError("admin_insert_delivery_rule_with_scope", error);
       return { error: "save_failed" };
@@ -1247,12 +1351,7 @@ export async function applyDpdTargetImport(
 }
 
 async function previewIncentiveRuleImportRows(
-  rows: Array<{
-    restaurant?: string;
-    start?: string;
-    end?: string;
-    tiers?: string;
-  }>,
+  rows: IncentiveImportInputRow[],
 ) {
   const [scopes, rules] = await Promise.all([
     fetchDpdScopeOptions(),
@@ -1276,26 +1375,14 @@ async function previewIncentiveRuleImportRows(
   });
 }
 
-export async function previewIncentiveRuleImport(
-  rows: Array<{
-    restaurant?: string;
-    start?: string;
-    end?: string;
-    tiers?: string;
-  }>,
-) {
+export async function previewIncentiveRuleImport(rows: IncentiveImportInputRow[]) {
   const auth = await requireEarningsView();
   if (auth.error) return [];
   return previewIncentiveRuleImportRows(rows);
 }
 
 export async function applyIncentiveRuleImport(
-  rows: Array<{
-    restaurant?: string;
-    start?: string;
-    end?: string;
-    tiers?: string;
-  }>,
+  rows: IncentiveImportInputRow[],
 ): Promise<{ applied: number; replaced: number; rejected: number } | { error: string }> {
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
@@ -1310,7 +1397,8 @@ export async function applyIncentiveRuleImport(
   let replaced = 0;
 
   for (const row of ready) {
-    if (!row.restaurant_id || row.parsed_tiers.length === 0) continue;
+    if (!row.restaurant_id) continue;
+    if (row.target_mode === "tiered" && row.parsed_tiers.length === 0) continue;
     const start = parseIsoDate(row.start);
     const end = parseIsoDate(row.end);
     if (!start || !end) continue;
@@ -1346,24 +1434,26 @@ export async function applyIncentiveRuleImport(
     }
 
     const payload = {
-      name: `${row.restaurant} ${uploadedStart}`,
-      status: "active" as const,
+      name: row.rule_name,
+      status: row.rule_status,
       scope_type: "restaurant" as const,
       zone_id: null,
       partner_id: null,
       restaurant_id: row.restaurant_id,
-      period: "daily" as const,
-      target_mode: "tiered" as const,
-      base_minimum_deliveries: 0,
-      target_deliveries: null,
-      reward_mode: "fixed" as const,
-      reward_kwd: 0,
-      reward_per_delivery_kwd: null,
+      period: row.period,
+      target_mode: row.target_mode,
+      base_minimum_deliveries: row.base_minimum_deliveries,
+      target_deliveries:
+        row.target_mode === "single" ? row.target_deliveries : null,
+      reward_mode: row.reward_mode,
+      reward_kwd: row.reward_mode === "fixed" ? row.reward_kwd : 0,
+      reward_per_delivery_kwd:
+        row.reward_mode === "per_delivery" ? row.reward_per_delivery_kwd : null,
       payout_mode: "milestone" as const,
-      overrides_others: false,
+      overrides_others: row.overrides_others,
       start_date: effectiveStart,
       end_date: end,
-      priority: defaultPriority("restaurant"),
+      priority: row.priority ?? defaultPriority("restaurant"),
       updated_at: new Date().toISOString(),
     };
 
@@ -1381,18 +1471,25 @@ export async function applyIncentiveRuleImport(
     }
 
     const ruleId = insert.data.id;
-    const tierRows = row.parsed_tiers.map((tier, index) => ({
-      incentive_rule_id: ruleId,
-      sort_order: index,
-      threshold_deliveries: tier.threshold_deliveries,
-      reward_mode: tier.reward_mode,
-      reward_kwd: tier.reward_mode === "fixed" ? tier.amount : null,
-      reward_per_delivery_kwd: tier.reward_mode === "per_delivery" ? tier.amount : null,
-    }));
-    const { error: tierErr } = await supabase.from("incentive_rule_tiers").insert(tierRows);
-    if (tierErr) {
-      const retry = await createAdminClient().from("incentive_rule_tiers").insert(tierRows);
-      if (retry.error) return { error: "save_failed" };
+    if (row.target_mode === "tiered") {
+      const tierRows = row.parsed_tiers.map((tier, index) => ({
+        incentive_rule_id: ruleId,
+        sort_order: index,
+        threshold_deliveries: tier.threshold_deliveries,
+        reward_mode: tier.reward_mode,
+        reward_kwd: tier.reward_mode === "fixed" ? tier.amount : null,
+        reward_per_delivery_kwd:
+          tier.reward_mode === "per_delivery" ? tier.amount : null,
+      }));
+      const { error: tierErr } = await supabase
+        .from("incentive_rule_tiers")
+        .insert(tierRows);
+      if (tierErr) {
+        const retry = await createAdminClient()
+          .from("incentive_rule_tiers")
+          .insert(tierRows);
+        if (retry.error) return { error: "save_failed" };
+      }
     }
 
     const scopeErr = await replaceIncentiveRuleScopes(

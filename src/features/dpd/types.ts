@@ -216,6 +216,13 @@ type IncentivePreviewRule = Pick<
  * Where the per-order bands start (SQL _incentive_band_start), or null when
  * the rule keeps the legacy math. `dpdTarget` is the restaurant's daily
  * delivery_rules.dpd_target when known.
+ *
+ * QA #51 (option A): a resolved target gates the bands wherever it sits, not
+ * only when it is below the first threshold, and the rule's own base stays the
+ * floor. SQL gates every payout on the same target
+ * (`_incentive_rule_dpd_target` inside `compute_incentive_amount`) — including
+ * fixed / single-target / overrides_others rules — so this mirror must not
+ * disagree with it for the band rules it models.
  */
 export function incentiveBandStart(
   rule: Pick<IncentiveRuleRow, "target_mode" | "base_minimum_deliveries" | "tiers">,
@@ -233,10 +240,10 @@ export function incentiveBandStart(
     (a, b) => a - b,
   );
   const first = thresholds[0];
-  if (dpdTarget != null && dpdTarget > 0 && Math.ceil(dpdTarget) < first) {
-    return Math.ceil(dpdTarget);
-  }
   const base = rule.base_minimum_deliveries;
+  if (dpdTarget != null && dpdTarget > 0) {
+    return Math.max(Math.ceil(dpdTarget), base > 0 ? base : 0);
+  }
   if (base > 0 && base < first) return base;
   const second = thresholds[1];
   if (second != null && first - (second - first) >= 0) return first - (second - first);

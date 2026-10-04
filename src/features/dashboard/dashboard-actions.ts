@@ -32,7 +32,12 @@ import type {
   WorkforceStatus,
 } from "./types";
 
-const KUWAIT_TZ = "Asia/Kuwait";
+import {
+  currentOperationalDayYmd,
+  operationalDayBounds,
+  operationalDayStartIso,
+} from "@/lib/date/operational-day";
+
 const SILENT_HOURS = 3;
 
 /**
@@ -54,18 +59,6 @@ type DeliveryActivityRow = Pick<
   | "delivered_at"
   | "cancelled_at"
 >;
-
-function kuwaitToday(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: KUWAIT_TZ }).format(new Date());
-}
-
-function kuwaitDayBounds(date?: string): { start: string; end: string } {
-  const today = date ?? kuwaitToday();
-  return {
-    start: `${today}T00:00:00+03:00`,
-    end: `${today}T23:59:59.999+03:00`,
-  };
-}
 
 function addDays(isoDate: string, days: number): string {
   const d = new Date(`${isoDate}T12:00:00`);
@@ -510,9 +503,15 @@ export async function fetchDashboardSnapshot(locale = "en"): Promise<DashboardSn
   const session = await requireDashboardView();
   void logAdminRead("dashboard", "fetchDashboardSnapshot");
   const perms = buildPermissions(session);
-  const today = kuwaitToday();
-  const { start, end } = kuwaitDayBounds(today);
+  const today = currentOperationalDayYmd();
+  // The dashboard's "today" is the operational day, not the calendar day: the
+  // client counts Sep 30 as 06:00 Sep 30 -> 06:00 Oct 1, and a calendar window
+  // put Oct 1 00:00-06:00 orders in the wrong day's tile -- which is exactly the
+  // discrepancy the report had. Both the day tile and the 7-day tile use the
+  // same boundary the report does.
+  const { from: start, to: end } = operationalDayBounds(today);
   const weekStart = addDays(today, -6);
+  const weekStartIso = operationalDayStartIso(weekStart);
 
   let drivers: DriverListRow[] = [];
   let deliveries: DeliveryActivityRow[] = [];
@@ -533,7 +532,7 @@ export async function fetchDashboardSnapshot(locale = "en"): Promise<DashboardSn
   if (perms.deliveries) {
     try {
       deliveries = await fetchDashboardDeliveryRows(
-        new Date(`${weekStart}T00:00:00+03:00`).toISOString(),
+        new Date(weekStartIso).toISOString(),
       );
     } catch {
       deliveries = [];
@@ -545,7 +544,7 @@ export async function fetchDashboardSnapshot(locale = "en"): Promise<DashboardSn
     return at >= start && at <= end;
   });
   const weekDeliveries = deliveries.filter(
-    (d) => deliveryActivityAt(d) >= `${weekStart}T00:00:00+03:00`,
+    (d) => deliveryActivityAt(d) >= weekStartIso,
   );
 
   const supabase = await createClient();

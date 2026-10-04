@@ -44,6 +44,7 @@ export async function dispatchDpdShiftNotices(options: {
     body: string;
     campaignId: string;
     dispatchItemId: string | null;
+    priority: "high" | "normal";
     params: Record<string, string>;
   }> = [];
 
@@ -60,6 +61,9 @@ export async function dispatchDpdShiftNotices(options: {
     if (claimed !== true) continue;
 
     const message = buildDpdNoticeMessage(c);
+    // The inbox row and the FCM payload must agree on priority: a warning the
+    // rider may miss is the whole point of the notice.
+    const noticePriority = c.kind === "warning" ? "high" : "normal";
     const params = {
       record_type: "dpd_target",
       kind: c.kind,
@@ -73,7 +77,7 @@ export async function dispatchDpdShiftNotices(options: {
       p_body: message.body,
       p_deep_link: "musallam:///home",
       p_category: "incentive",
-      p_priority: c.kind === "warning" ? "high" : "normal",
+      p_priority: noticePriority,
       p_action_params: params,
     });
     const payload = (sent ?? {}) as { ok?: boolean; campaign_id?: string; dispatch_item_id?: string };
@@ -102,6 +106,7 @@ export async function dispatchDpdShiftNotices(options: {
       body: message.body,
       campaignId: payload.campaign_id,
       dispatchItemId: payload.dispatch_item_id ?? null,
+      priority: noticePriority,
       params,
     });
   }
@@ -136,7 +141,7 @@ export async function dispatchDpdShiftNotices(options: {
           dispatchItemId: p.dispatchItemId,
           action,
           category: "incentive",
-          priority: "normal",
+          priority: p.priority,
         }),
       });
     }

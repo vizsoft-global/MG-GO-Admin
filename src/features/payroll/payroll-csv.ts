@@ -2,6 +2,7 @@ import { downloadCsv, toCsv } from "@/features/performance/performance-ops-table
 import {
   bucketOf,
   dayGridLabel,
+  dayDisplayHours,
   formatPayrollPct,
   isoDayLabel,
   PAYROLL_EFF_BUCKETS,
@@ -154,7 +155,7 @@ export function exportPayrollAttendanceOrdersCsv(
         row.finalOrders,
         Number(row.actualHours.toFixed(2)),
         ...dates.flatMap((_, i) => [
-          dayGridLabel(row.days[i] ?? "blank", row.dayInfo[i]?.creditedHours ?? 0),
+          dayGridLabel(row.days[i] ?? "blank", dayDisplayHours(row.days[i] ?? "blank", row.dayInfo[i])),
           row.dayInfo[i]?.orders ? row.dayInfo[i]!.orders : "–",
         ]),
       ]),

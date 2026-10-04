@@ -1,4 +1,4 @@
-import { gpsOfflineGraceSecondsFor } from "@/features/live-tracking-v2/fleet-status";
+import { fleetMotion, gpsOfflineGraceSecondsFor, hasMotion } from "@/features/live-tracking-v2/fleet-status";
 
 import type { DriverLiveLocation, PinStatus, TrackingStatus, ZoneStatus } from "./types";
 
@@ -110,6 +110,7 @@ export function derivePinStatus(input: {
   lastSeenAt: string;
   isOnDuty?: boolean;
   speedMps?: number | null;
+  movedMeters?: number | null;
   isBlocked?: boolean;
   activeDeliveryId?: string | null;
 }): PinStatus {
@@ -129,10 +130,10 @@ export function derivePinStatus(input: {
   if (input.zoneStatus === "out_of_zone") return "alert";
   const onDelivery =
     input.trackingStatus === "delivery_submit" && Boolean(input.activeDeliveryId);
-  const moving =
-    input.trackingStatus === "moving" ||
-    onDelivery ||
-    isMovingSpeed(input.speedMps);
+  // `hasMotion` — not a bare speed test — so a rider whose coarse fix reports 0 m/s while the
+  // coordinates travel still paints Active instead of Idle (QA #50). An open delivery keeps
+  // painting Active on its own, exactly as before.
+  const moving = onDelivery || hasMotion(input);
   if (moving) return "active";
   return "idle";
 }
@@ -193,6 +194,7 @@ export function liveLocationPayloadChanged(
         | "isOnDuty"
         | "isBlocked"
         | "speedMps"
+        | "movedMeters"
         | "batteryPct"
         | "activeDeliveryId"
         | "lastSeenAt"
@@ -209,6 +211,7 @@ export function liveLocationPayloadChanged(
     | "isOnDuty"
     | "isBlocked"
     | "speedMps"
+    | "movedMeters"
     | "batteryPct"
     | "activeDeliveryId"
     | "lastSeenAt"
@@ -224,23 +227,63 @@ export function liveLocationPayloadChanged(
   if (prev.isOnDuty !== next.isOnDuty) return true;
   if (prev.isBlocked !== next.isBlocked) return true;
   if ((prev.speedMps ?? 0) !== (next.speedMps ?? 0)) return true;
+  // Same coordinates but a different displacement is a real change: it is what flips the
+  // Moving / Idle sub-label while an On Delivery rider's pin stays Active either way.
+  if ((prev.movedMeters ?? 0) !== (next.movedMeters ?? 0)) return true;
   if (prev.batteryPct !== next.batteryPct) return true;
   if (prev.lastSeenAt !== next.lastSeenAt) return true;
   if (prev.vehicleType !== next.vehicleType) return true;
   return false;
 }
 
+/**
+ * Moving / Idle for the sub-label a rider on delivery carries (QA #48), in V1's vocabulary.
+ *
+ * Delegates to the shared `fleetMotion` rule so the V1 cards cannot answer this differently
+ * from V2, or from the status machine that produced the primary status beside it.
+ */
+export function liveMotion(input: {
+  trackingStatus: TrackingStatus;
+  speedMps?: number | null;
+  movedMeters?: number | null;
+}): "moving" | "idle" {
+  return fleetMotion(input);
+}
+
+/**
+ * Metres between the fix we already held for this driver and the one arriving now.
+ *
+ * `null` when there is no previous fix (first sighting of the session, or a driver whose row
+ * was dropped) — an unknown displacement must not be read as "did not move", because that is
+ * what would keep a moving rider Idle until their next update.
+ */
+function displacementMeters(
+  previous: { latitude: number; longitude: number } | null | undefined,
+  next: { latitude: number; longitude: number },
+): number | null {
+  if (!previous) return null;
+  const fromLat = Number(previous.latitude);
+  const fromLng = Number(previous.longitude);
+  if (!Number.isFinite(fromLat) || !Number.isFinite(fromLng)) return null;
+  if (!Number.isFinite(next.latitude) || !Number.isFinite(next.longitude)) return null;
+  return haversineMeters(fromLat, fromLng, next.latitude, next.longitude);
+}
+
 export function enrichLiveLocation(
   row: Omit<DriverLiveLocation, "pinStatus">,
+  previous?: { latitude: number; longitude: number; lastSeenAt?: string } | null,
 ): DriverLiveLocation {
+  const movedMeters = displacementMeters(previous, row) ?? row.movedMeters ?? null;
   return {
     ...row,
+    movedMeters,
     pinStatus: derivePinStatus({
       zoneStatus: row.zoneStatus,
       trackingStatus: row.trackingStatus,
       lastSeenAt: row.lastSeenAt,
       isOnDuty: row.isOnDuty,
       speedMps: row.speedMps,
+      movedMeters,
       isBlocked: row.isBlocked,
       activeDeliveryId: row.activeDeliveryId,
     }),

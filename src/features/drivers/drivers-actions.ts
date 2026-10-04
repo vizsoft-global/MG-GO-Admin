@@ -8,7 +8,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { hasOpsAssignment } from "./driver-assignment";
@@ -93,11 +93,11 @@ const ALLOWED_DOC_MIME = new Set([
   "image/webp",
 ]);
 
-async function requireDriversManager() {
+async function requireDriversManager(verb: "create" | "edit" | "delete" = "edit") {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "drivers.manage", session.isSuperAdmin)
+    !hasPermissionInSet(session.permissions, `drivers.${verb}` as Permission, session.isSuperAdmin)
   ) {
     return { error: "not_authorized" as const };
   }
@@ -332,7 +332,7 @@ async function uploadIntakeDocument(
 export async function createDriverIntake(
   formData: FormData,
 ): Promise<DriverMutationResult> {
-  const auth = await requireDriversManager();
+  const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
 
   const fullName = String(formData.get("fullName") ?? "").trim();
@@ -919,7 +919,7 @@ export async function fetchDriversForAdmin(options?: {
 export async function archiveDriverIntake(
   intakeId: string,
 ): Promise<DriverMutationResult> {
-  const auth = await requireDriversManager();
+  const auth = await requireDriversManager("delete");
   if (auth.error) return { error: auth.error };
   if (!intakeId) return { error: "missing_fields" };
 

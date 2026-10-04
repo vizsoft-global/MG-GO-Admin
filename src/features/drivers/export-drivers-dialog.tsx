@@ -72,12 +72,15 @@ export function DriversExportDialog({
   open,
   onOpenChange,
   rowCount,
+  selectedCount = 0,
   loadRows,
   customFields,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   rowCount: number;
+  /** Riders ticked on the list. When > 0 the export is scoped to them. */
+  selectedCount?: number;
   loadRows: () => Promise<{ rows: DriverListPageRow[]; truncated: boolean }>;
   customFields: DriverExportCustomField[];
 }) {
@@ -137,6 +140,11 @@ export function DriversExportDialog({
         closeOutside
       >
         <div className="space-y-3 px-5 pt-4 pb-3">
+          {selectedCount > 0 ? (
+            <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+              {t("scopeSelected", { rows: selectedCount })}
+            </p>
+          ) : null}
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               {t("columnsTitle")}
@@ -208,10 +216,14 @@ export function DriversExportDialog({
         </div>
         <AppModalFooter
           title={t("title")}
-          subtitle={t("subtitle", {
-            rows: rowCount,
-            columns: columnCount,
-          })}
+          subtitle={
+            selectedCount > 0
+              ? t("subtitleSelected", { rows: selectedCount, columns: columnCount })
+              : t("subtitle", {
+                  rows: rowCount,
+                  columns: columnCount,
+                })
+          }
         >
           <Button
             type="button"

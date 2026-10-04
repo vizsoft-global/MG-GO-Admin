@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Award, Clock, Hand, Percent, UserCheck, Users } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import { Input } from "@/components/ui/input";
+import { SearchField } from "@/components/app";
 import {
   payrollRiderMatchesSearch,
   type PayrollKpis,
@@ -75,11 +75,11 @@ export function PayrollTab({
           accent="warning"
         />
       </div>
-      <Input
-        className="h-9"
+      <SearchField
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={setSearch}
         placeholder={t("searchPlaceholder")}
+        clearLabel={t("clearSearch")}
       />
       <PayrollSummaryTable
         rows={searched}
