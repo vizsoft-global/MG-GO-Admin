@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Building2, Lock, Pencil, Plus } from "lucide-react";
+import { Building2, Eye, Lock, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppFormSection } from "@/components/app";
@@ -12,7 +12,7 @@ import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { SegmentOption, ToggleChip } from "@/components/app/toggle-chip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -64,6 +64,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
   const queryClient = useQueryClient();
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [viewing, setViewing] = useState<SourceCompanyWithUsage | null>(null);
 
   const openNew = () =>
     setDraft({
@@ -180,7 +181,11 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
           </TableHeader>
           <TableBody>
             {companies.map((c) => (
-              <TableRow key={c.key}>
+              <TableRow
+                key={c.key}
+                onClick={() => setViewing(c)}
+                className="cursor-pointer"
+              >
                 <TableCell className="font-medium">
                   <span className="inline-flex items-center gap-1.5">
                     <Building2 className="size-3.5 text-muted-foreground" aria-hidden />
@@ -239,18 +244,36 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                 </TableCell>
                 <TableCell className="text-end tabular-nums">{c.driver_count}</TableCell>
                 <TableCell className="text-end">
-                  {canEdit ? (
+                  <span className="inline-flex items-center gap-1">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       className="h-8 text-primary hover:bg-primary/10"
-                      onClick={() => openEdit(c)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setViewing(c);
+                      }}
                     >
-                      <Pencil className="size-3.5" aria-hidden />
-                      {t("edit")}
+                      <Eye className="size-3.5" aria-hidden />
+                      {t("view")}
                     </Button>
-                  ) : null}
+                    {canEdit ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-primary hover:bg-primary/10"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openEdit(c);
+                        }}
+                      >
+                        <Pencil className="size-3.5" aria-hidden />
+                        {t("edit")}
+                      </Button>
+                    ) : null}
+                  </span>
                 </TableCell>
               </TableRow>
             ))}
@@ -498,6 +521,138 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                 </Button>
               </AppModalFooter>
             </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={viewing !== null} onOpenChange={(open) => (open ? null : setViewing(null))}>
+        <DialogContent
+          showCloseButton
+          closeOutside
+          className="flex w-[min(720px,96vw)] max-w-[min(720px,96vw)] flex-col overflow-visible p-0"
+        >
+          {viewing ? (
+            <>
+              <div className="space-y-3 px-5 py-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Building2 className="size-4 text-muted-foreground" aria-hidden />
+                  <DialogTitle className="text-base font-semibold">{viewing.name}</DialogTitle>
+                  {viewing.is_system ? (
+                    <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">
+                      {t("system")}
+                    </Badge>
+                  ) : null}
+                  {viewing.is_active ? (
+                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                      {t("active")}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      {t("inactive")}
+                    </Badge>
+                  )}
+                </div>
+                <DialogDescription className="text-[10px] text-muted-foreground">
+                  {t("keyHint", { key: viewing.key })}
+                </DialogDescription>
+
+                <dl className="grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <dt className="text-[10px] text-muted-foreground">{t("colClientId")}</dt>
+                    <dd className="mt-1 font-mono text-sm">
+                      {viewing.client_code ? (
+                        viewing.client_code
+                      ) : (
+                        <span className="text-muted-foreground">{t("notSet")}</span>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <dt className="text-[10px] text-muted-foreground">{t("colDrivers")}</dt>
+                    <dd className="mt-1 text-sm tabular-nums">{viewing.driver_count}</dd>
+                  </div>
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <dt className="text-[10px] text-muted-foreground">{t("dpdTarget")}</dt>
+                    <dd className="mt-1 text-sm tabular-nums">
+                      {viewing.dpd_target != null ? (
+                        <Badge variant="outline" className="border-primary/20 bg-primary/10 font-mono text-primary">
+                          {t("dpdBadge", { target: viewing.dpd_target })}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">{t("notSet")}</span>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <dt className="text-[10px] text-muted-foreground">{t("incentiveScheme")}</dt>
+                    <dd className="mt-1 text-sm">
+                      {viewing.incentive_enabled ? (
+                        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                          {t("incentiveSchemeOn")}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">{t("inactive")}</span>
+                      )}
+                    </dd>
+                  </div>
+                  {viewing.incentive_enabled ? (
+                    <>
+                      <div className="rounded-lg border border-border bg-card p-3">
+                        <dt className="text-[10px] text-muted-foreground">{t("aboveKwd")}</dt>
+                        <dd className="mt-1 font-mono text-sm tabular-nums text-emerald-700">
+                          {viewing.incentive_above_kwd != null
+                            ? viewing.incentive_above_kwd.toFixed(3)
+                            : "—"}
+                        </dd>
+                      </div>
+                      <div className="rounded-lg border border-border bg-card p-3">
+                        <dt className="text-[10px] text-muted-foreground">{t("belowKwd")}</dt>
+                        <dd className="mt-1 font-mono text-sm tabular-nums text-destructive">
+                          {viewing.incentive_below_kwd != null
+                            ? viewing.incentive_below_kwd.toFixed(3)
+                            : "—"}
+                        </dd>
+                      </div>
+                      <div className="rounded-lg border border-border bg-card p-3 sm:col-span-2">
+                        <dt className="text-[10px] text-muted-foreground">{t("effectiveFrom")}</dt>
+                        <dd className="mt-1 text-sm tabular-nums">
+                          {viewing.effective_from ?? (
+                            <span className="text-muted-foreground">{t("notSet")}</span>
+                          )}
+                        </dd>
+                      </div>
+                    </>
+                  ) : null}
+                </dl>
+
+                <p className="text-[10px] text-muted-foreground">{t("companyConfigNote")}</p>
+              </div>
+
+              <AppModalFooter title={t("viewTitle")} subtitle={viewing.name}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => setViewing(null)}
+                >
+                  {t("close")}
+                </Button>
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    className="h-9"
+                    onClick={() => {
+                      const target = viewing;
+                      setViewing(null);
+                      openEdit(target);
+                    }}
+                  >
+                    <Pencil className="size-3.5" aria-hidden />
+                    {t("edit")}
+                  </Button>
+                ) : null}
+              </AppModalFooter>
+            </>
           ) : null}
         </DialogContent>
       </Dialog>

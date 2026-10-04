@@ -128,6 +128,12 @@ const DRIVER_BACK_TARGETS: Record<
 
 const REQUEST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Same shape as a request id — a rider is addressed by the same uuid — and kept separate so the
+ * two parameters are validated for what they are rather than sharing a name that reads wrong.
+ */
+const DRIVER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function DetailSkeleton() {
   return (
     <AppPage className="space-y-4 animate-pulse">
@@ -387,16 +393,30 @@ function DriverDetailContent({ id }: { id: string }) {
    * reload there is no history entry to go back to. An unrecognised value falls through to the
    * list rather than being trusted as a path, so the parameter cannot be used to point the
    * button at an arbitrary URL.
+   *
+   * The tracking pages additionally carry the rider that was open (`?driver=`, QA #49), handed
+   * back so the map re-selects them instead of returning empty. It is passed through only when
+   * it is a uuid and only onto an allowlisted target, so the same "never trust the URL as a
+   * path" rule covers it.
    */
   const from = searchParams.get("from");
   const requestId = searchParams.get("requestId");
+  const trackingTarget = DRIVER_BACK_TARGETS[from ?? ""];
+  const requestedDriverId = searchParams.get("driver") ?? "";
+  const backDriverId =
+    trackingTarget && DRIVER_ID_RE.test(requestedDriverId) ? requestedDriverId : null;
   const backTarget =
     from === "requests" && requestId && REQUEST_ID_RE.test(requestId)
       ? { href: `/requests/${requestId}`, labelKey: "backToRequest" as const }
-      : (DRIVER_BACK_TARGETS[from ?? ""] ?? {
-          href: "/drivers",
-          labelKey: "backToList" as const,
-        });
+      : trackingTarget
+        ? {
+            href: backDriverId ? `${trackingTarget.href}?driver=${backDriverId}` : trackingTarget.href,
+            labelKey: trackingTarget.labelKey,
+          }
+        : {
+            href: "/drivers",
+            labelKey: "backToList" as const,
+          };
 
   const handleEditOpenChange = (open: boolean) => {
     if (!open) {

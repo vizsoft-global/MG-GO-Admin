@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { queryKeys } from "@/lib/query/query-keys";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
 import {
@@ -26,6 +27,7 @@ import {
   listVehicleImportRows,
   redoVehicleImport,
   undoVehicleImport,
+  type VehicleImportBatchRow,
 } from "../vehicle-import-actions";
 import type { VehicleImportField } from "./vehicle-import-columns";
 import { previewVehicleImport, type VehicleImportExisting } from "./vehicle-import-preview";
@@ -111,6 +113,8 @@ export function VehicleBulkImportDialog({
   const [headers, setHeaders] = useState<string[]>([]);
   const [sheetRows, setSheetRows] = useState<string[][]>([]);
   const [pending, startTransition] = useTransition();
+  /** What the last undo/redo actually did, so the gesture leaves a visible trace in the dialog. */
+  const [notice, setNotice] = useState<{ key: "undoDone" | "redoDone"; count: number } | null>(null);
 
   const batches = useQuery({
     queryKey: queryKeys.vehicles.imports(),
@@ -123,15 +127,20 @@ export function VehicleBulkImportDialog({
     enabled: open && Boolean(logBatchId),
   });
 
-  const tips = (batches.data ?? []).map((batch) => ({
+  // A failed history read must not read as "no imports yet" — that is QA #12, where
+  // Undo/Redo sat permanently disabled with nothing on screen to explain it.
+  const historyFailed = batches.isError || (batches.data != null && !batches.data.ok);
+  const historyRows = batches.data?.ok ? batches.data.batches : [];
+
+  const tips = historyRows.map((batch) => ({
     id: batch.id,
     status: batch.status,
     createdAt: batch.createdAt,
     undoSeq: batch.undoSeq,
     redoable: batch.redoable,
   }));
-  const canUndo = Boolean(undoTargetId(tips));
-  const canRedo = Boolean(redoTargetId(tips));
+  const canUndo = !historyFailed && Boolean(undoTargetId(tips));
+  const canRedo = !historyFailed && Boolean(redoTargetId(tips));
 
   const preview = useMemo(
     () =>
@@ -187,6 +196,10 @@ export function VehicleBulkImportDialog({
         return;
       }
       toast.success(t("undone"));
+      setNotice({ key: "undoDone", count: result.changed ?? 0 });
+      // The history tab is where the batch that just changed is listed.
+      setLogBatchId(null);
+      setPanel("history");
       await refresh();
     });
   };
@@ -199,6 +212,9 @@ export function VehicleBulkImportDialog({
         return;
       }
       toast.success(t("redone"));
+      setNotice({ key: "redoDone", count: result.changed ?? 0 });
+      setLogBatchId(null);
+      setPanel("history");
       await refresh();
     });
   };
@@ -316,8 +332,10 @@ export function VehicleBulkImportDialog({
                 </div>
               ) : (
                 <HistoryTable
-                  rows={batches.data ?? []}
+                  rows={historyRows}
                   loading={batches.isLoading}
+                  error={historyFailed}
+                  onRetry={() => void batches.refetch()}
                   onView={setLogBatchId}
                 />
               )}
@@ -325,31 +343,53 @@ export function VehicleBulkImportDialog({
           )}
         </div>
         <div className="px-5 pb-4">
-          <AppModalFooter title={t("title")} subtitle={t("subtitle")}>
+          <AppModalFooter
+            title={t("title")}
+            subtitle={t("subtitle")}
+            meta={notice ? t(notice.key, { count: notice.count }) : undefined}
+          >
             {logBatchId ? (
               <Button type="button" variant="outline" className="h-9" onClick={() => setLogBatchId(null)}>
                 {t("back")}
               </Button>
             ) : (
               <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9"
-                  disabled={!canUndo || pending}
-                  onClick={undo}
-                >
-                  {t("undo")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9"
-                  disabled={!canRedo || pending}
-                  onClick={redo}
-                >
-                  {t("redo")}
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={<span className="inline-flex" tabIndex={canUndo ? -1 : 0} />}
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9"
+                      disabled={!canUndo || pending}
+                      onClick={undo}
+                    >
+                      {t("undo")}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {historyFailed ? t("historyError") : t("undoHint")}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={<span className="inline-flex" tabIndex={canRedo ? -1 : 0} />}
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9"
+                      disabled={!canRedo || pending}
+                      onClick={redo}
+                    >
+                      {t("redo")}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {historyFailed ? t("historyError") : t("redoHint")}
+                  </TooltipContent>
+                </Tooltip>
                 {panel === "new" && !logBatchId ? (
                   <Button
                     type="button"
@@ -373,14 +413,28 @@ export function VehicleBulkImportDialog({
 function HistoryTable({
   rows,
   loading,
+  error,
+  onRetry,
   onView,
 }: {
-  rows: Awaited<ReturnType<typeof listVehicleImportBatches>>;
+  rows: VehicleImportBatchRow[];
   loading: boolean;
+  error: boolean;
+  onRetry: () => void;
   onView: (id: string) => void;
 }) {
   const t = useTranslations("pages.vehicles.import");
   if (loading) return <p className="text-xs text-muted-foreground">{t("loading")}</p>;
+  if (error) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+        <p className="text-xs text-destructive">{t("historyError")}</p>
+        <Button type="button" variant="outline" className="h-9 cursor-pointer" onClick={onRetry}>
+          {t("retry")}
+        </Button>
+      </div>
+    );
+  }
   if (!rows.length) return <p className="text-xs text-muted-foreground">{t("historyEmpty")}</p>;
   return (
     <div className="overflow-x-auto rounded-xl border border-border">

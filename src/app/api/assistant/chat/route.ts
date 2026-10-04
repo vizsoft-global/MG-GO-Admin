@@ -8,6 +8,7 @@ import { lastUserText, refuseCopy } from "@/features/assistant/assistant-copy";
 import { ASSISTANT_V1_MAX_STEPS, ASSISTANT_V1_MODEL, isGatewayConfigured } from "@/features/assistant/assistant-contract";
 import { lastEntityFocus } from "@/features/assistant/assistant-focus";
 import { assistantSystemPrompt } from "@/features/assistant/assistant-prompt";
+import { responseLocaleFor } from "@/features/assistant/assistant-language";
 import { refuseUserText } from "@/features/assistant/assistant-refuse";
 import { createAssistantTools } from "@/features/assistant/assistant-tools";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
@@ -36,16 +37,24 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json()) as { messages?: UIMessage[]; locale?: string };
-  const locale = localeFromRequest(req, body.locale);
+  const uiLocale = localeFromRequest(req, body.locale);
   const messages = body.messages ?? [];
   const userText = lastUserText(messages);
+  // QA #2 — the question's language decides the answer's language, not the UI
+  // locale. `looksArabic` pins Arabic, Latin text pins English, and a
+  // letters-free follow-up ("2 more?" / "1042") keeps the UI language.
+  const locale = responseLocaleFor(userText, uiLocale);
   const refused = refuseUserText(userText);
   if (refused) {
     return Response.json({ error: refused, message: refuseCopy(refused, locale) }, { status: 400 });
   }
 
   const focus = lastEntityFocus(messages);
-  void logAdminRead("assistant", "assistant.chat", { tools: "allowlist", locale });
+  void logAdminRead("assistant", "assistant.chat", {
+    tools: "allowlist",
+    locale,
+    ui_locale: uiLocale,
+  });
 
   const result = streamText({
     model: ASSISTANT_V1_MODEL,

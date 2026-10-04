@@ -29,6 +29,7 @@ import {
   activeFleetFlags,
   displaySpeedKmh,
   fleetFlagTone,
+  fleetMotion,
   fleetStatusTone,
   hasLiveTelemetry,
 } from "./fleet-status";
@@ -160,6 +161,19 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             </span>
             <span className="truncate">{meta.currentZoneName ?? meta.zoneName ?? t("rail.noZone")}</span>
           </div>
+          {/*
+            QA #48: On Delivery stays the badge above; this is its second half — progressing or
+            parked. `fleetMotion` runs the same `speed or >= 15 m moved` rule the status machine
+            used, so the sub-label cannot contradict the pill beside it.
+          */}
+          {driver.status === "on_delivery" ? (
+            <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+              {t("status.on_delivery")} ·{" "}
+              {fleetMotion(driver) === "moving"
+                ? `${t("status.moving")} • ${speedLabel}`
+                : t("status.idle")}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -283,7 +297,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             <MapIcon className="size-3.5" aria-hidden />
           </button>
           <Link
-            href={`/drivers/${driverId}?from=live-tracking-v2`}
+            href={`/drivers/${driverId}?from=live-tracking-v2&driver=${driverId}`}
             onClick={(event) => event.stopPropagation()}
             className="rounded px-1 text-[10px] font-medium text-primary transition-colors duration-150 hover:bg-primary/10"
           >

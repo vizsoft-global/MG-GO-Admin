@@ -3,7 +3,7 @@
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import {
@@ -17,11 +17,11 @@ import { mapPartnerDbError } from "./partner-errors";
 import { resolvePartnerLogoMeta } from "./partner-logo";
 import type { PartnerRow } from "./types";
 
-async function requirePartnersManager() {
+async function requirePartnersManager(verb: "create" | "edit" | "delete" = "edit") {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "partners.manage", session.isSuperAdmin)
+    !hasPermissionInSet(session.permissions, `partners.${verb}` as Permission, session.isSuperAdmin)
   ) {
     return { error: "not_authorized" as const };
   }
@@ -132,7 +132,7 @@ export async function fetchPartnersForAdmin(): Promise<PartnerRow[]> {
 }
 
 export async function createPartner(formData: FormData): Promise<PartnerMutationResult> {
-  const auth = await requirePartnersManager();
+  const auth = await requirePartnersManager("create");
   if ("error" in auth) return auth;
 
   const name = String(formData.get("name") ?? "").trim();
@@ -184,7 +184,7 @@ export async function createPartner(formData: FormData): Promise<PartnerMutation
 }
 
 export async function updatePartner(formData: FormData): Promise<PartnerMutationResult> {
-  const auth = await requirePartnersManager();
+  const auth = await requirePartnersManager("edit");
   if ("error" in auth) return auth;
 
   const id = String(formData.get("id") ?? "").trim();
@@ -251,7 +251,7 @@ export async function updatePartner(formData: FormData): Promise<PartnerMutation
 }
 
 export async function deletePartner(id: string): Promise<PartnerMutationResult> {
-  const auth = await requirePartnersManager();
+  const auth = await requirePartnersManager("delete");
   if ("error" in auth) return auth;
 
   const supabase = await createClient();

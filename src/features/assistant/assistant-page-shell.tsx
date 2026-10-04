@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { downloadAssistantExport } from "./assistant-export";
 import { latestExportSpecFromMessages } from "./assistant-export-spec";
 import { refuseCopy } from "./assistant-copy";
+import { looksArabic } from "./assistant-refuse";
 
 function downloadBase64Xlsx(filename: string, base64: string) {
   const bytes = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
@@ -68,21 +69,33 @@ export function AssistantPageShell({ gatewayReady }: { gatewayReady: boolean }) 
             {messages.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("empty")}</p>
             ) : null}
-            {messages.map((message) => (
-              <div key={message.id} className="space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {message.role === "user" ? t("you") : t("assistant")}
-                </p>
-                <div className="whitespace-pre-wrap text-sm text-foreground">
-                  {message.parts.map((part, index) => {
-                    if (part.type === "text") {
-                      return <span key={`${message.id}-${index}`}>{part.text}</span>;
-                    }
-                    return null;
-                  })}
+            {messages.map((message) => {
+              // QA #2 — direction follows the message's own language. The panel
+              // chrome may be English while an Arabic answer streams into it,
+              // and a left-to-right layout of Arabic prose is unreadable.
+              const text = message.parts
+                .map((part) => (part.type === "text" ? part.text : ""))
+                .join("");
+              const rtl = looksArabic(text);
+              return (
+                <div key={message.id} className="space-y-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {message.role === "user" ? t("you") : t("assistant")}
+                  </p>
+                  <div
+                    dir={rtl ? "rtl" : "ltr"}
+                    className="whitespace-pre-wrap text-sm text-foreground"
+                  >
+                    {message.parts.map((part, index) => {
+                      if (part.type === "text") {
+                        return <span key={`${message.id}-${index}`}>{part.text}</span>;
+                      }
+                      return null;
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {errorCopy ? <p className="text-sm text-destructive">{errorCopy}</p> : null}
             {!gatewayReady ? (
               <p className="text-sm text-amber-800">{t("gateway")}</p>

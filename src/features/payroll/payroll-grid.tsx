@@ -725,7 +725,7 @@ export function PayrollDayGrid({
                                   }
                                 : undefined
                             }
-                            className={cn(
+                        className={cn(
                               "relative min-w-[52px] px-1 py-1.5 text-center text-[11px] font-semibold select-none",
                               dayClass(st),
                               selected && "ring-2 ring-inset ring-primary/60",
@@ -759,7 +759,7 @@ export function PayrollDayGrid({
                                 className="absolute -bottom-0.5 -end-0.5 size-2 cursor-crosshair rounded-[2px] border border-white bg-emerald-500"
                               />
                             ) : null}
-                          </td>
+                      </td>
                         );
                       })}
                     </tr>
@@ -1038,7 +1038,7 @@ export function PayrollLegend({
   const total = riders ? countedRiderDays(riders) : 0;
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2">
         {PAYROLL_STATUS_FILTERS.map((id) => (
           <ToggleChip
             key={id}

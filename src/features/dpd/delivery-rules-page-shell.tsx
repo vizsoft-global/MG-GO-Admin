@@ -6,7 +6,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
-import { AppEmptyState, AppListCard, AppListToolbar, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppEmptyState,
+  AppListCard,
+  AppListToolbar,
+  AppPage,
+  AppPageHeader,
+  SearchField,
+} from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { useAuth } from "@/contexts/auth-context";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
@@ -107,9 +114,15 @@ export function DeliveryRulesPageShell() {
         toolbar={
           !isLoading && (deliveryRules?.length ?? 0) > 0 ? (
             <AppListToolbar
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={tPage("searchPlaceholder")}
+              filterSlot={
+                <SearchField
+                  value={search}
+                  onChange={setSearch}
+                  placeholder={tPage("searchPlaceholder")}
+                  clearLabel={tPage("clearSearch")}
+                  className="w-full sm:max-w-xs"
+                />
+              }
             />
           ) : undefined
         }

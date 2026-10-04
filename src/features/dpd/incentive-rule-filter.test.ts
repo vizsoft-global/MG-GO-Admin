@@ -24,6 +24,9 @@ const rows: IncentiveRuleFilterable[] = [
   row({ name: "September HQ", scope_label: "Talabat · HQ", status: "active", period: "daily" }),
   row({ name: "Weekend bonus", scope_label: "Zone · Hawally", status: "draft", period: "weekly" }),
   row({ name: "Month closer", scope_label: "Partner · Careem", status: "ended", period: "monthly" }),
+  // Mirrors the production label shape built by `scopeLabelMulti`, which is
+  // `Name (CODE)` for a zone — the incentive list has its own search builder.
+  row({ name: "North zone weekly", scope_label: "Farwaniya (FRW)", status: "active", period: "weekly" }),
 ];
 
 const open: IncentiveRuleListFilter = { query: "", status: "all", period: "all" };
@@ -47,6 +50,19 @@ test("query matches restaurant or scope label", () => {
   assert.deepEqual(
     filterIncentiveRules(rows, { ...open, query: "hawally" }).map((r) => r.name),
     ["Weekend bonus"],
+  );
+});
+
+// QA #26: the incentive list has its own search builder, so a zone name and a
+// zone code both have to match through the scope label and nowhere else.
+test("query matches a zone name and a zone code from the scope label", () => {
+  assert.deepEqual(
+    filterIncentiveRules(rows, { ...open, query: "farwaniya" }).map((r) => r.name),
+    ["North zone weekly"],
+  );
+  assert.deepEqual(
+    filterIncentiveRules(rows, { ...open, query: "frw" }).map((r) => r.name),
+    ["North zone weekly"],
   );
 });
 

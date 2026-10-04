@@ -14,11 +14,15 @@ import {
   isVehicleFuelType,
   kuwaitYmdToIso,
 } from "@/features/fleet/fleet-labels";
-import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { kuwaitTodayYmd, addKuwaitDays } from "@/lib/date/kuwait-dates";
+import {
+  findActiveShiftRow,
+  type ShiftRow,
+} from "@/features/driver-tracking/shift-flags";
 import { assignedDriverProjectWrite } from "./vehicles-list-utils";
 import { validateVehicleForm } from "./vehicle-form-validation";
 import { plateToBikeId } from "./plate-id";
-import { vehicleAssignedOnDuty } from "./vehicle-on-duty";
+import { vehicleAssignedOnDuty, vehicleShiftLabel } from "./vehicle-on-duty";
 import type {
   VehicleCarType,
   VehicleCondition,
@@ -110,6 +114,9 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
 
   const supabase = await createClient();
   const today = kuwaitTodayYmd();
+  // An overnight shift is logged on yesterday's Kuwait date, so both windows below are
+  // [today, yesterday] rather than today alone.
+  const yesterday = addKuwaitDays(today, -1);
   const [vehiclesRes, typesRes, driversRes, partnersRes, zonesRes, useTypesRes, logsRes, shiftsRes] =
     await Promise.all([
     supabase
@@ -132,7 +139,10 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
     supabase
       .from("attendance_logs")
       .select("driver_id")
-      .eq("log_date", today)
+      // On Duty is the open attendance row itself: `check_out_at IS NULL`, not "checked in
+      // today". A shift that began 22:00 yesterday is logged on yesterday's date, and the
+      // auto-checkout cron closes anything genuinely stale.
+      .gte("log_date", yesterday)
       .not("check_in_at", "is", null)
       .is("check_out_at", null),
     supabase
@@ -140,7 +150,7 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       .select(
         "driver_id, shift_date, shift_type, session1_start, session1_end, session1_end_day_offset, session2_start, session2_end, session2_start_day_offset, session2_end_day_offset",
       )
-      .eq("shift_date", today),
+      .in("shift_date", [today, yesterday]),
   ]);
 
   if (vehiclesRes.error) throw new Error(vehiclesRes.error.message);
@@ -207,20 +217,20 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
   const openAttendance = new Set(
     ((logsRes.data ?? []) as Array<{ driver_id: string }>).map((row) => row.driver_id),
   );
-  const shiftByDriver = new Map(
-    ((shiftsRes.data ?? []) as Array<{
-      driver_id: string;
-      shift_date: string;
-      shift_type: string;
-      session1_start: string;
-      session1_end: string;
-      session1_end_day_offset: number;
-      session2_start: string | null;
-      session2_end: string | null;
-      session2_start_day_offset: number;
-      session2_end_day_offset: number;
-    }>).map((row) => [row.driver_id, row]),
-  );
+  // One row per driver per Kuwait day, so a driver can legitimately hold two here across
+  // the two-day window; `findActiveShiftRow` picks the one still current (today's, or
+  // yesterday's overnight).
+  const shiftRowsByDriver = new Map<string, ShiftRow[]>();
+  for (const row of (shiftsRes.data ?? []) as ShiftRow[]) {
+    const list = shiftRowsByDriver.get(row.driver_id);
+    if (list) list.push(row);
+    else shiftRowsByDriver.set(row.driver_id, [row]);
+  }
+  const activeShiftByDriver = new Map<string, ShiftRow>();
+  for (const [driverId, rows] of shiftRowsByDriver) {
+    const active = findActiveShiftRow(rows, today);
+    if (active) activeShiftByDriver.set(driverId, active);
+  }
 
   void logAdminRead("vehicles", "/vehicles");
 
@@ -266,8 +276,8 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       assigned_on_duty: vehicleAssignedOnDuty({
         assignedDriverId: driver?.id ?? null,
         hasOpenAttendance: Boolean(driver && openAttendance.has(driver.id)),
-        shift: driver ? shiftByDriver.get(driver.id) ?? null : null,
       }),
+      assigned_shift_label: driver ? vehicleShiftLabel(activeShiftByDriver.get(driver.id)) : null,
       created_at: row.created_at,
     };
   });

@@ -6,7 +6,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Download, Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
-import { AppEmptyState, AppListCard, AppListToolbar, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppEmptyState,
+  AppListCard,
+  AppListToolbar,
+  AppPage,
+  AppPageHeader,
+  SearchField,
+} from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
@@ -183,11 +190,15 @@ export function IncentiveRulesPageShell() {
         toolbar={
           !isLoading && (incentiveRules?.length ?? 0) > 0 ? (
             <AppListToolbar
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={tPage("searchPlaceholder")}
               filterSlot={
                 <div className="flex flex-wrap items-center gap-2">
+                  <SearchField
+                    value={search}
+                    onChange={setSearch}
+                    placeholder={tPage("searchPlaceholder")}
+                    clearLabel={tPage("clearSearch")}
+                    className="w-56 flex-none"
+                  />
                   <Select
                     items={statusItems}
                     value={statusFilter}

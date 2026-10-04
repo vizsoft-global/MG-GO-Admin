@@ -3,7 +3,8 @@
 import { cn } from "@/lib/utils";
 import { Pill, StatusDot, type Tone } from "@/components/ui/metric-tile";
 import type { PinStatus, TrackingStatus } from "@/features/locations/types";
-import { isGpsLive, isMovingSpeed } from "@/features/locations/location-status";
+import { isGpsLive } from "@/features/locations/location-status";
+import { hasMotion } from "@/features/live-tracking-v2/fleet-status";
 
 export type FleetStatusKey =
   | "available"
@@ -36,6 +37,8 @@ export function liveListStatus(input: {
   isOnDuty: boolean;
   trackingStatus: TrackingStatus;
   speedMps: number | null;
+  /** Metres since the previous fix — the motion half a coarse `speed_mps` cannot report. */
+  movedMeters?: number | null;
   lastSeenAt: string;
   now?: number;
   isBlocked?: boolean;
@@ -59,7 +62,9 @@ export function liveListStatus(input: {
     return "delivery_submit";
   }
   if (input.trackingStatus === "moving") return "moving";
-  if (isMovingSpeed(input.speedMps)) return "moving";
+  // One shared motion rule (`speed or >= 15 m displacement`), so a rider who is travelling on
+  // a coarse fix that reports 0 m/s reads Moving instead of Idle (QA #50).
+  if (hasMotion(input)) return "moving";
   return "idle";
 }
 
@@ -79,6 +84,8 @@ export function fleetStatusFromLocation(input: {
   trackingStatus: TrackingStatus;
   isOnDuty: boolean;
   speedMps?: number | null;
+  /** Metres since the previous fix — see `liveListStatus`. */
+  movedMeters?: number | null;
   lastSeenAt?: string;
   now?: number;
   isBlocked?: boolean;
@@ -102,8 +109,7 @@ export function fleetStatusFromLocation(input: {
   if (input.trackingStatus === "delivery_submit" && input.activeDeliveryId) {
     return "delivering";
   }
-  if (input.trackingStatus === "moving") return "available";
-  if (isMovingSpeed(input.speedMps)) return "available";
+  if (hasMotion(input)) return "available";
   return "idle";
 }
 

@@ -164,7 +164,14 @@ export function VehicleDetailPageShell({
               <VehicleStatusBadge status={vehicle.status} />
               {vehicle.car_type ? <CarTypeBadge value={vehicle.car_type} /> : null}
               {vehicle.assigned_on_duty ? (
-                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-400/50">
+                <span
+                  className="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-400/50"
+                  title={
+                    vehicle.assigned_shift_label
+                      ? t("shiftPlan", { range: vehicle.assigned_shift_label })
+                      : undefined
+                  }
+                >
                   <CircleDot className="size-3" />
                   {t("tabOnDuty")}
                 </span>

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { OpsSortButton } from "@/features/performance/ops/ops-header-filter";
 import { cn } from "@/lib/utils";
-import { filterPlate } from "./vehicle-form-validation";
+import { filterPlateSearch } from "./vehicle-form-validation";
 import {
   isFilterActive,
   isListFilter,
@@ -133,7 +133,7 @@ export function VehiclesColumnHeader({
                 autoFocus
                 value={draftText}
                 onChange={(e) =>
-                  setDraftText(column === "plate" ? filterPlate(e.target.value) : e.target.value)
+                  setDraftText(column === "plate" ? filterPlateSearch(e.target.value) : e.target.value)
                 }
                 placeholder={labels.contains}
                 className="h-9"

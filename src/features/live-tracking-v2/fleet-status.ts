@@ -213,6 +213,16 @@ export function fleetThresholdsAsSettings(
   return out;
 }
 
+/**
+ * Displacement, in metres, that counts as travel even when the reported speed says otherwise.
+ *
+ * Matches the driver app's own rule (`>= 15 m displacement`), so both ends of the wire agree
+ * on what Moving means. 15 m sits above an urban parked-phone's jitter (~5–10 m) and below a
+ * single fix of real travel at any speed the fleet reaches — even a rider creeping at 5 km/h
+ * covers 7 m per 5 s fix, and one at 20 km/h covers 28 m.
+ */
+export const MOVED_METERS_MOTION_FLOOR = 15;
+
 export type FleetEntitySignals = {
   isBlocked?: boolean | null;
   /** `drivers.status` — anything other than `active` reads as Inactive. */
@@ -227,6 +237,19 @@ export type FleetEntitySignals = {
   lastFixAtMs: number | null;
   trackingStatus: FleetTrackingStatus;
   speedMps?: number | null;
+  /**
+   * Metres travelled since the previous applied fix.
+   *
+   * This is the half of the app's motion rule that the admin side was missing. The driver
+   * app classifies `idle` / `moving` from "**live GPS sample (speed or ≥15 m displacement)**"
+   * (see `docs/DRIVER_APP_HANDOFF.md` § Live Tracking map), but both tracking pages only ever
+   * read `speed_mps` — and speed is the field the phone is least able to guarantee, because a
+   * coarse network fix arrives with the previous fix's speed, or 0. A rider crossing the city
+   * on weak GPS therefore landed on `speedMps: 0` and was painted Idle while the coordinates
+   * plainly moved (QA #50). Displacement cannot be fabricated that way: nothing but travel
+   * changes the position between two fixes, and a parked phone's jitter stays under the floor.
+   */
+  movedMeters?: number | null;
   activeDeliveryId?: string | null;
   batteryPct?: number | null;
   isMocked?: boolean | null;
@@ -257,6 +280,62 @@ export function isMovingSpeed(
     Number.isFinite(speedMps) &&
     speedMps >= thresholds.movingSpeedMps
   );
+}
+
+/**
+ * Whether this fix is evidence the rider is actually travelling — the one motion rule shared by
+ * the status machine, the V1 list, the V2 rail and both driver cards.
+ *
+ * Three inputs, in this order, because each is weaker than the one before it:
+ *
+ * 1. `trackingStatus === "moving"` — the app's own claim, made from its live sample.
+ * 2. Speed at or above `movingSpeedMps` — the historical rule, still the only signal on a fix
+ *    that arrived without displacement (a replayed or first fix, a client that has not yet
+ *    seen two positions).
+ * 3. Displacement at or above `MOVED_METERS_MOTION_FLOOR` — the rule the *app* also uses, and
+ *    the one that was missing here. Speed is a platform reading that a coarse fix leaves at 0,
+ *    so it could not see a rider who is moving with a bad GPS fix; the distance between two
+ *    consecutive positions can only be produced by travel.
+ *
+ * Rule 3 deliberately returns true without touching the speed floor: this asks "is there
+ * motion", not "how fast", and `displaySpeedKmh` still floors a sub-threshold speed to 0 so an
+ * Idle card cannot read `1 km/h`. The card keeps its honest number and gains the right label.
+ */
+export function hasMotion(
+  input: {
+    trackingStatus?: FleetTrackingStatus | null;
+    speedMps?: number | null;
+    movedMeters?: number | null;
+  },
+  thresholds: FleetThresholds = FLEET_DEFAULT_THRESHOLDS,
+): boolean {
+  if (input.trackingStatus === "moving") return true;
+  if (isMovingSpeed(input.speedMps, thresholds)) return true;
+  return (
+    input.movedMeters != null &&
+    Number.isFinite(input.movedMeters) &&
+    input.movedMeters >= MOVED_METERS_MOTION_FLOOR
+  );
+}
+
+/**
+ * The Moving / Idle half of a status, for the sub-label a rider on delivery carries (QA #48).
+ *
+ * `on_delivery` is the primary status and stays exactly as it is — the operator must be able to
+ * see at a glance who is carrying an order. What this adds is the second question the primary
+ * status cannot answer: is that rider progressing or parked. It is derived from `hasMotion`
+ * rather than from a fresh speed test so the sub-label can never contradict the status beside
+ * it when a rider is Moving on displacement alone.
+ */
+export function fleetMotion(
+  input: {
+    trackingStatus?: FleetTrackingStatus | null;
+    speedMps?: number | null;
+    movedMeters?: number | null;
+  },
+  thresholds: FleetThresholds = FLEET_DEFAULT_THRESHOLDS,
+): "moving" | "idle" {
+  return hasMotion(input, thresholds) ? "moving" : "idle";
 }
 
 /**
@@ -400,8 +479,7 @@ export function fleetStatus(
    * speed, which was the v1 defect this ordering was written to avoid.
    */
   if (signals.activeDeliveryId) return "on_delivery";
-  if (signals.trackingStatus === "moving") return "moving";
-  if (isMovingSpeed(signals.speedMps, thresholds)) return "moving";
+  if (hasMotion(signals, thresholds)) return "moving";
   return "idle";
 }
 

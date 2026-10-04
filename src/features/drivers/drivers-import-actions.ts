@@ -4,7 +4,7 @@ import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { employeeIdKey, normalizeEmployeeId } from "./driver-errors";
 import {
@@ -64,11 +64,11 @@ import type { DriverImportLookups } from "./import/lookups";
 
 type ImportApplyClient = Awaited<ReturnType<typeof createClient>>;
 
-export async function requireDriversManager() {
+export async function requireDriversManager(verb: "create" | "edit" | "delete" = "edit") {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "drivers.manage", session.isSuperAdmin)
+    !hasPermissionInSet(session.permissions, `drivers.${verb}` as Permission, session.isSuperAdmin)
   ) {
     return { error: "not_authorized" as const };
   }
@@ -129,7 +129,7 @@ function syntheticDriverEmail(driverCode: string): string {
 export async function approveDriverIntake(
   intakeId: string,
 ): Promise<ApproveDriverResult> {
-  const auth = await requireDriversManager();
+  const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
   if (!intakeId) return { error: "missing_fields" };
 
@@ -874,7 +874,7 @@ export async function applyDriverImportChunk(payload: {
     }
   | { error: string }
 > {
-  const auth = await requireDriversManager();
+  const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
 
   const ready = payload.rows.filter((r) =>

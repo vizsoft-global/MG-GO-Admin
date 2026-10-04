@@ -147,7 +147,7 @@ function rowToLocation(row: LiveRow): DriverLiveLocation {
     zoneStatus: parseZoneStatus(row.zone_status),
     lastSeenAt: latestGpsAt(row.last_seen_at, row.last_report_at),
     updatedAt: row.updated_at,
-  });
+  }, cacheById.get(row.driver_id) ?? null);
 }
 
 /** Skip no-op payloads (same coords / status) that still flood realtime after coalescing edges. */

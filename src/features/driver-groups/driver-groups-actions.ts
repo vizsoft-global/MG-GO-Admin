@@ -3,7 +3,7 @@
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
 import { searchActiveDrivers } from "@/features/drivers/search-active-drivers";
 import { lookupToImportMatch } from "@/features/drivers/resolve-import-row";
@@ -30,11 +30,15 @@ async function requireDriverGroupsView() {
   return session;
 }
 
-async function requireDriverGroupsManage() {
+async function requireDriverGroupsManage(verb: "create" | "edit" | "delete" = "edit") {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "driver_groups.manage", session.isSuperAdmin)
+    !hasPermissionInSet(
+      session.permissions,
+      `driver_groups.${verb}` as Permission,
+      session.isSuperAdmin,
+    )
   ) {
     return null;
   }
@@ -154,7 +158,7 @@ export type SaveDriverGroupInput = {
 export async function createDriverGroup(
   input: SaveDriverGroupInput,
 ): Promise<{ id: string } | { error: string }> {
-  const session = await requireDriverGroupsManage();
+  const session = await requireDriverGroupsManage("create");
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim()) return { error: "invalid_input" };
 
@@ -188,7 +192,7 @@ export async function updateDriverGroup(
   id: string,
   input: SaveDriverGroupInput,
 ): Promise<{ ok: true } | { error: string }> {
-  const session = await requireDriverGroupsManage();
+  const session = await requireDriverGroupsManage("edit");
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim()) return { error: "invalid_input" };
 
@@ -218,7 +222,7 @@ export async function updateDriverGroup(
 }
 
 export async function deleteDriverGroup(id: string): Promise<{ ok: true } | { error: string }> {
-  const session = await requireDriverGroupsManage();
+  const session = await requireDriverGroupsManage("delete");
   if (!session) return { error: "not_authorized" };
 
   const supabase = (await createClient()) as any;

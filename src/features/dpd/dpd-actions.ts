@@ -291,9 +291,12 @@ async function replaceDeliveryRuleScopes(
 function parseDates(formData: FormData): { startDate: string; endDate: string } | { error: DpdErrorKey } {
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
-  if (!startDate || !endDate || endDate < startDate) {
-    return { error: "invalid_dates" };
-  }
+  // A blank date and a reversed window are different mistakes and now say so.
+  // The client validator names the same key for each, so a row that somehow
+  // reaches the server without a date is not answered with "end date must be
+  // on or after start date", which is what an empty start date used to say.
+  if (!startDate || !endDate) return { error: "missing_fields" };
+  if (endDate < startDate) return { error: "invalid_dates" };
   return { startDate, endDate };
 }
 
@@ -957,7 +960,8 @@ export async function saveIncentiveRule(formData: FormData): Promise<DpdMutation
   const tiersRaw = String(formData.get("tiersJson") ?? "").trim();
   const priorityRaw = String(formData.get("priority") ?? "").trim();
 
-  if (!name || !period) return { error: "missing_fields" };
+  if (!name) return { error: "name_required" };
+  if (!period) return { error: "missing_fields" };
   if (targetMode !== "single" && targetMode !== "tiered") return { error: "invalid_target" };
 
   const baseMinimum = Number(baseRaw);

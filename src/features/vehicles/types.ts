@@ -53,6 +53,8 @@ export type VehicleListRow = {
   assigned_partner_name: string | null;
   assigned_zone_name: string | null;
   assigned_on_duty: boolean;
+  /** The rider's current shift, e.g. `10:00–14:00`. Annotation on the On Duty badge only. */
+  assigned_shift_label?: string | null;
   created_at: string;
 };
 

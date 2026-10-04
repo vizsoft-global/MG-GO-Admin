@@ -33,7 +33,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 
-import { displaySpeedKmh, fleetStatusTone, hasLiveTelemetry } from "./fleet-status";
+import { displaySpeedKmh, fleetMotion, fleetStatusTone, hasLiveTelemetry } from "./fleet-status";
 import { FLEET_TONE_BADGE, FLEET_TONE_DOT } from "./fleet-tone";
 import { useFleetDriver } from "./use-fleet";
 
@@ -224,6 +224,15 @@ export function FleetDriverDetails({
               </span>
             </div>
             <p className="mt-0.5 font-mono text-[10px] text-primary">{meta.driverCode}</p>
+            {/* QA #48: the motion half of On Delivery, from the same source as the status. */}
+            {driver.status === "on_delivery" ? (
+              <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+                {t("status.on_delivery")} ·{" "}
+                {fleetMotion(driver) === "moving"
+                  ? `${t("status.moving")} • ${speedLabel}`
+                  : t("status.idle")}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -323,7 +332,9 @@ export function FleetDriverDetails({
             driverId={driverId}
             limit={4}
             onViewAll={() =>
-              router.push(`/drivers/${driverId}?tab=activity&from=live-tracking-v2`)
+              router.push(
+                `/drivers/${driverId}?tab=activity&from=live-tracking-v2&driver=${driverId}`,
+              )
             }
             className="rounded-none border-0 bg-transparent px-2 py-2"
           />

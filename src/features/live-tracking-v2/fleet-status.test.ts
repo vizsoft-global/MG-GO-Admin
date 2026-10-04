@@ -9,7 +9,9 @@ import {
   FLEET_STATUSES,
   fleetDistributionBarSegments,
   fleetDistributionBucket,
+  fleetMotion,
   hasLiveTelemetry,
+  hasMotion,
   fleetEventSeverity,
   fleetFlags,
   fleetStatus,
@@ -22,6 +24,7 @@ import {
   isLowBattery,
   isOverspeeding,
   isReservedFleetStatus,
+  MOVED_METERS_MOTION_FLOOR,
   normalizeBatteryPct,
   resolveFleetThresholds,
   type FleetEntitySignals,
@@ -584,3 +587,80 @@ describe("displaySpeedKmh", () => {
     assert.equal(displaySpeedKmh(1.2, undefined, "idle"), 0);
   });
 });
+
+/*
+ * QA #50 and #48. The one motion rule, and the reason it is displacement-aware.
+ *
+ * `speed_mps` is the field the phone is least able to guarantee: a coarse network fix arrives
+ * carrying the previous fix's speed, or 0. Both tracking pages read only speed, so a rider
+ * crossing Kuwait on weak GPS was painted Idle while their coordinates plainly moved (QA #50).
+ * Displacement cannot be fabricated that way — nothing but travel changes the position between
+ * two fixes — and it is also the rule the driver app itself applies (15 m).
+ */
+describe("hasMotion / fleetMotion", () => {
+  it("takes the app's own Moving claim with no other evidence", () => {
+    assert.equal(hasMotion({ trackingStatus: "moving", speedMps: 0, movedMeters: 0 }), true);
+  });
+
+  it("takes speed at or above the floor", () => {
+    assert.equal(hasMotion({ trackingStatus: "idle", speedMps: 1.5, movedMeters: 0 }), true);
+    assert.equal(hasMotion({ trackingStatus: "idle", speedMps: 1.4, movedMeters: 0 }), false);
+  });
+
+  it("takes displacement on a coarse fix that reports no speed", () => {
+    assert.equal(
+      hasMotion({
+        trackingStatus: "idle",
+        speedMps: 0,
+        movedMeters: MOVED_METERS_MOTION_FLOOR,
+      }),
+      true,
+    );
+  });
+
+  it("keeps a parked phone's jitter and a missing fix under the floor", () => {
+    assert.equal(hasMotion({ trackingStatus: "idle", speedMps: 0, movedMeters: 4 }), false);
+    assert.equal(
+      hasMotion({ trackingStatus: "idle", speedMps: null, movedMeters: null }),
+      false,
+    );
+  });
+
+  it("never calls a moving fix idle, whichever signal carries the motion", () => {
+    assert.equal(fleetMotion({ trackingStatus: "moving", speedMps: 0, movedMeters: 0 }), "moving");
+    assert.equal(fleetMotion({ trackingStatus: "idle", speedMps: 9, movedMeters: 0 }), "moving");
+    assert.equal(fleetMotion({ trackingStatus: "idle", speedMps: 0, movedMeters: 22 }), "moving");
+    assert.equal(fleetMotion({ trackingStatus: "idle", speedMps: 0, movedMeters: 2 }), "idle");
+  });
+
+  it("promotes a displacement-only rider out of Idle in the status machine too", () => {
+    assert.equal(
+      fleetStatus(signals({ trackingStatus: "idle", speedMps: 0, movedMeters: 18 }), NOW),
+      "moving",
+    );
+    assert.equal(
+      fleetStatus(signals({ trackingStatus: "idle", speedMps: 0, movedMeters: 3 }), NOW),
+      "idle",
+    );
+  });
+
+  it("keeps On Delivery primary while its motion half reports Idle (QA #48)", () => {
+    // A rider sitting at a pickup is still carrying an order; only the sub-label may move.
+    const parked = signals({ activeDeliveryId: "d1", speedMps: 0, movedMeters: 0 });
+    assert.equal(fleetStatus(parked, NOW), "on_delivery");
+    assert.equal(fleetMotion(parked), "idle");
+
+    const riding = signals({ activeDeliveryId: "d1", speedMps: 0, movedMeters: 40 });
+    assert.equal(fleetStatus(riding, NOW), "on_delivery");
+    assert.equal(fleetMotion(riding), "moving");
+  });
+
+  it("honours a custom moving threshold for speed but not for displacement", () => {
+    const slow = resolveFleetThresholds({ movingSpeedMps: 4 });
+    assert.equal(hasMotion({ trackingStatus: "idle", speedMps: 2, movedMeters: 0 }, slow), false);
+    // The question displacement answers is "is there motion", not "how fast" — a rider creeping
+    // at 2 m/s has plainly travelled 30 m, and `displaySpeedKmh` keeps the honest number.
+    assert.equal(hasMotion({ trackingStatus: "idle", speedMps: 2, movedMeters: 30 }, slow), true);
+  });
+});
+

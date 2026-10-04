@@ -338,7 +338,7 @@ export function VehiclesPageShell({
   const isRefreshing = isFetching && !isLoading;
 
   return (
-    <AppPage className="space-y-4">
+    <AppPage>
       <AppPageHeader
         title={t("title")}
         description={t("subtitle")}
@@ -605,7 +605,10 @@ function VehicleRow({
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
           <VehicleStatusBadge status={row.status} />
           {row.assigned_on_duty ? (
-            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900">
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900"
+              title={row.assigned_shift_label ? t("shiftPlan", { range: row.assigned_shift_label }) : undefined}
+            >
               <CircleDot className="size-2.5" />
               {t("tabOnDuty")}
             </span>

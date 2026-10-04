@@ -629,7 +629,7 @@ export function assemblePayrollSnapshot(input: {
           adjustment: adjustmentPerDate.get(date) ?? null,
         };
         const resolved = dayInfoFrom(date, facts, {
-          today: input.today,
+        today: input.today,
           client,
           rules,
           zoneName,

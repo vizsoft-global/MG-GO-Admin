@@ -7,8 +7,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "@/i18n/navigation";
 import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitives";
 import type { DriverLiveLocation } from "@/features/locations/types";
-import { isGpsLive } from "@/features/locations/location-status";
+import { isGpsLive, liveMotion } from "@/features/locations/location-status";
 import { formatDistanceMeters } from "@/features/locations/location-status";
+import { useReverseGeocode } from "./use-reverse-geocode";
 import {
   formatAccuracyMeters,
   formatBatteryLevel,
@@ -50,6 +51,13 @@ export function LiveDriverDetailsPanel({
   onViewAllActivity?: () => void;
 }) {
   const t = useTranslations("pages.liveTracking");
+  /*
+    Both of these are resolved before the `!driver` early return below, because hooks may not
+    be skipped: the address belongs to the rider's coordinates (QA #47) and the motion half of
+    an On Delivery status belongs to the fix, not to this component instance (QA #48).
+  */
+  const address = useReverseGeocode(driver?.latitude, driver?.longitude);
+  const deliveryMotion = driver ? deliveryMotionText(t, driver) : null;
 
   if (!driver) {
     if (variant === "stacked") return null;
@@ -125,6 +133,19 @@ export function LiveDriverDetailsPanel({
               <p className="truncate text-[11px] text-slate-500 dark:text-slate-300">
                 {driver.driverCode} · {meta?.zoneName ?? "—"}
               </p>
+              {deliveryMotion ? (
+                <p className="truncate text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                  {t("statusDeliverySubmit")} · {deliveryMotion}
+                </p>
+              ) : null}
+              {address ? (
+                <p
+                  className="truncate text-[10px] text-slate-500 dark:text-slate-300"
+                  title={`${t("streetAddress")}: ${address}`}
+                >
+                  {address}
+                </p>
+              ) : null}
             </div>
             {meta?.phone ? (
               <a href={`tel:${meta.phone}`} className="shrink-0">
@@ -242,6 +263,19 @@ export function LiveDriverDetailsPanel({
                 {driver.driverCode}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-300">{meta?.zoneName ?? "—"}</p>
+              {deliveryMotion ? (
+                <p className="text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                  {t("statusDeliverySubmit")} · {deliveryMotion}
+                </p>
+              ) : null}
+              {address ? (
+                <p
+                  className="truncate text-[10px] text-slate-500 dark:text-slate-300"
+                  title={`${t("streetAddress")}: ${address}`}
+                >
+                  {address}
+                </p>
+              ) : null}
               <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                 {driver.vehicleType === "car" ? (
                   <Car className="h-3 w-3" />
@@ -408,6 +442,27 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
       </p>
     </div>
   );
+}
+
+/**
+ * The Moving / Idle half of an On Delivery status (QA #48).
+ *
+ * `On delivery` stays the primary status — whether a rider is carrying an order is the fact an
+ * operator scans the board for. What the primary status cannot say is whether that rider is
+ * progressing or parked, and both look identical on the map once a bike stops at a light or at
+ * the restaurant door. The motion comes from `liveMotion`, i.e. the same `speed or >= 15 m
+ * displacement` rule that produced the status beside it, so the two can never disagree.
+ *
+ * `null` for every other status, so a Moving rider is not labelled twice.
+ */
+function deliveryMotionText(
+  t: ReturnType<typeof useTranslations<"pages.liveTracking">>,
+  driver: DriverLiveLocation,
+): string | null {
+  if (driver.trackingStatus !== "delivery_submit" || !driver.activeDeliveryId) return null;
+  return liveMotion(driver) === "moving"
+    ? `${t("statusMoving")} • ${formatSpeedKmh(driver.speedMps)}`
+    : t("statusIdle");
 }
 
 function deliveryStatusLabel(

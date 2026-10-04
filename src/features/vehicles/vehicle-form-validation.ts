@@ -61,10 +61,25 @@ export function filterPlate(raw: string): string {
   return out;
 }
 
+/**
+ * Plate search box variant: digits and one slash, with no length cap.
+ *
+ * `filterPlate` is the *form* rule (at most 3 digits, slash, at most 6), which is right
+ * for storing a Kuwait plate but wrong for a live filter — typing `6767` to find `5/6767`
+ * was capped to `676`, and a partial like `5/6` had to be typed in the exact shape. The
+ * list matches on substring, so the search box must accept whatever the operator half-
+ * remembers (QA #32).
+ */
+export function filterPlateSearch(raw: string): string {
+  const cleaned = raw.replace(/[^0-9/]/g, "");
+  const firstSlash = cleaned.indexOf("/");
+  if (firstSlash === -1) return cleaned;
+  return `${cleaned.slice(0, firstSlash)}/${cleaned.slice(firstSlash + 1).replace(/\//g, "")}`;
+}
+
 export function filterChassis(raw: string): string {
   return raw.replace(/[^A-Za-z0-9]/g, "").slice(0, 17);
 }
-
 export function filterMakeModel(raw: string): string {
   return raw.replace(/[^\p{L}\p{N} \-]/gu, "").slice(0, 40);
 }

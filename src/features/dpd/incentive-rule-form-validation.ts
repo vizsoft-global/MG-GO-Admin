@@ -83,7 +83,7 @@ export function validateIncentiveRuleForm(
   const errors: IncentiveRuleFormErrors = {};
 
   if (!input.name.trim()) {
-    errors.name = "missing_fields";
+    errors.name = "name_required";
   }
 
   if (!input.period.trim()) {

@@ -3,7 +3,7 @@
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import {
   suggestZoneCode,
   validateZoneGeometry,
@@ -51,11 +51,11 @@ async function upsertZoneGeofenceSettings(
   if (error) throw error;
 }
 
-async function requireZonesManager() {
+async function requireZonesManager(verb: "create" | "edit" | "delete" = "edit") {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "zones.manage", session.isSuperAdmin)
+    !hasPermissionInSet(session.permissions, `zones.${verb}` as Permission, session.isSuperAdmin)
   ) {
     return { error: "not_authorized" as const };
   }
@@ -72,7 +72,7 @@ export async function createZone(input: {
   geometry: ZoneGeoFeature;
   geofence?: Partial<ZoneGeofenceInput>;
 }): Promise<ZoneMutationResult> {
-  const auth = await requireZonesManager();
+  const auth = await requireZonesManager("create");
   if ("error" in auth) return auth;
 
   const name = input.name.trim();
@@ -137,7 +137,7 @@ export async function updateZone(input: {
   geometry: ZoneGeoFeature;
   geofence?: Partial<ZoneGeofenceInput>;
 }): Promise<ZoneMutationResult> {
-  const auth = await requireZonesManager();
+  const auth = await requireZonesManager("edit");
   if ("error" in auth) return auth;
 
   const name = input.name.trim();
@@ -214,7 +214,7 @@ export async function updateZone(input: {
 }
 
 export async function deleteZone(id: string, force = false): Promise<ZoneMutationResult> {
-  const auth = await requireZonesManager();
+  const auth = await requireZonesManager("delete");
   if ("error" in auth) return auth;
 
   const supabase = await createClient();

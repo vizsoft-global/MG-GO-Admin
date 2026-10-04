@@ -1044,7 +1044,16 @@ function DriversPageContent() {
         open={exportOpen}
         onOpenChange={setExportOpen}
         rowCount={filteredTotal}
-        loadRows={() => fetchDriversForExport(query)}
+        selectedCount={selectedIds.size}
+        loadRows={async () => {
+          const result = await fetchDriversForExport(query);
+          if (selectedIds.size === 0) return result;
+          // Export exactly the ticked riders, not the whole filtered page.
+          return {
+            rows: result.rows.filter((row) => selectedIds.has(row.id)),
+            truncated: false,
+          };
+        }}
         customFields={activeCustomDefs.map((d) => ({ key: d.key, label: d.label }))}
       />
       {canCreate ? (

@@ -30,14 +30,37 @@ export const REQUEST_DECIDED_STATUSES = new Set([
   "closed",
 ]);
 
-/** A row the bulk bar can act on — approve, reject, or both. */
+/** A row the All Requests bulk bar can act on — approve, reject, or both. */
+/**
+ * Whether the All Requests list paints a selection checkbox on a row.
+ *
+ * Selectable: `submitted`, `pending`, `in_review`, `needs_clarification`,
+ * `rescheduled` and `overdue` — every status the bulk bar can still act on.
+ * (`overdue` is derived from the SLA breach rather than stored, and rows reached
+ * through that filter still carry one of the open statuses above.)
+ *
+ * Not selectable: `approved`, `rejected`, `solved`, `responded`, `closed`. Those
+ * are decided outcomes and the bulk bar offers no verb for them — the only
+ * remaining action is the per-row Archive on the detail page — so a checkbox on
+ * one is a control whose sole outcome is an error, which reads as broken rather
+ * than as "not applicable".
+ *
+ * Deliberately the complement of `REQUEST_DECIDED_STATUSES` instead of its own
+ * allowlist, so the two can never disagree: a new status added to the enum
+ * arrives with a checkbox rather than silently without one.
+ *
+ * A box promises a tick, not every button: `admin_decide_request` still refuses
+ * per action — Approve is rejected on a `needs_clarification` row while Reject is
+ * allowed — and the bulk bar narrows its buttons to the actions that apply.
+ */
 export function canBulkSelectRequest(status: string): boolean {
   return !REQUEST_DECIDED_STATUSES.has(status);
 }
 
 /**
- * The complement of `REQUEST_DECIDED_STATUSES`: a status whose queue is still
- * waiting on someone. Kept beside the decided set so the two cannot drift.
+ * The stored statuses whose queue is still waiting on someone. `overdue` is
+ * deliberately absent: it is derived from the SLA breach, not a stored state, so
+ * it belongs to the filter list rather than to this one.
  */
 export const REQUEST_OPEN_STATUSES = [
   "pending",
