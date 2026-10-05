@@ -7323,7 +7323,10 @@
             "name": "الاسم",
             "zoneType": "نوع المنطقة",
             "scopeType": "النطاق",
-            "period": "الفترة"
+            "period": "الفترة",
+            "month": "الشهر",
+            "source": "المصدر",
+            "offDays": "أيام الراحة"
           },
           "columnOverrides": {
             "drivers": { "todayDeliveries": "توصيلات اليوم" },

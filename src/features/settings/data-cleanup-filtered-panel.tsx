@@ -24,8 +24,9 @@ import { PURGE_FILTER_ENTITIES, purgeFilterColumnLabel } from "./purge-filter-ca
  *
  * The entity list is the client catalogue rather than the Clear-all list: the
  * catalogue mirrors `admin_purge_filter_columns`, so a module is only offered
- * where the server has a filter spec, and Payroll — which today has none —
- * simply does not appear instead of opening a dialog that can only say so.
+ * where the server has a filter spec, and a module whose spec has not been
+ * written yet (rather than one that has none by nature) simply does not appear
+ * instead of opening a dialog that can only say so.
  */
 export function DataCleanupFilteredPanel() {
   const t = useTranslations("pages.settings.dataCleanup.filtered");

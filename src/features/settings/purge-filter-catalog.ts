@@ -239,6 +239,15 @@ export const PURGE_FILTER_ENTITIES: readonly PurgeFilterEntityColumns[] = [
       { key: "name", kind: "text" },
     ],
   },
+  {
+    entity: "payroll",
+    columns: [
+      { key: "driver", kind: "text" },
+      { key: "month", kind: "list" },
+      { key: "source", kind: "list" },
+      { key: "offDays", kind: "range" },
+    ],
+  },
 ];
 
 export const PURGE_FILTER_ENTITY_SET: ReadonlySet<string> = new Set(
@@ -295,6 +304,9 @@ export const PURGE_FILTER_COLUMN_LABELS: Readonly<Record<string, string>> = {
   zoneType: "Zone type",
   scopeType: "Scope",
   period: "Period",
+  month: "Month",
+  source: "Source",
+  offDays: "OFF days",
 };
 
 /**

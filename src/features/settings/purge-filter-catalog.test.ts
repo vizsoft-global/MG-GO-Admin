@@ -27,12 +27,18 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
-const MIGRATION = join(
-  root,
-  "supabase",
-  "migrations",
+/**
+ * Every migration that re-creates `admin_purge_filter_columns` in full. Each one
+ * replaces the whole `CASE` rather than appending to it, so the **latest** file
+ * is the live definition and an earlier one would pin the client to a catalogue
+ * the database no longer serves.
+ */
+const CATALOGUE_MIGRATIONS = [
   "20261117000000_purge_filtered.sql",
-);
+  "20261117000100_purge_filtered_payroll.sql",
+].map((file) => join(root, "supabase", "migrations", file));
+
+const COLUMNS_MARKER = "FUNCTION public.admin_purge_filter_columns(";
 
 /* ------------------------------------------------------------------ */
 /* The server is the source of `{key, kind}` — so this file proves the  */
@@ -51,8 +57,12 @@ type ParsedEntity = {
  * lines are its columns, and the branch closes on a bare `)`.
  */
 function parseServerCatalogue(): ParsedEntity[] {
-  const sql = readFileSync(MIGRATION, "utf8");
-  const start = sql.indexOf("FUNCTION public.admin_purge_filter_columns(");
+  const source = [...CATALOGUE_MIGRATIONS]
+    .reverse()
+    .find((file) => readFileSync(file, "utf8").includes(COLUMNS_MARKER));
+  assert.ok(source, "no migration defines admin_purge_filter_columns");
+  const sql = readFileSync(source, "utf8");
+  const start = sql.indexOf(COLUMNS_MARKER);
   assert.ok(start >= 0, "migration has no admin_purge_filter_columns");
   const end = sql.indexOf("$$;", start);
   assert.ok(end > start, "admin_purge_filter_columns is not terminated");

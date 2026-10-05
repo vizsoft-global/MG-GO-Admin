@@ -7323,7 +7323,10 @@
             "name": "Name",
             "zoneType": "Zone type",
             "scopeType": "Scope",
-            "period": "Period"
+            "period": "Period",
+            "month": "Month",
+            "source": "Source",
+            "offDays": "OFF days"
           },
           "columnOverrides": {
             "drivers": { "todayDeliveries": "Deliveries today" },
