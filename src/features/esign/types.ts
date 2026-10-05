@@ -126,6 +126,73 @@ export type EsignListRow = {
   /** The last reminder a sender logged against this row, and how many. */
   last_reminded_at?: string | null;
   reminder_count?: number;
+  awaiting_counter_signature?: boolean;
+  counter_signature_state?: EsignCounterSignatureState;
+};
+
+export const ESIGN_STAFF_SIGNER_ROLES = [
+  "countersigner",
+  "manager",
+  "witness",
+] as const;
+export type EsignStaffSignerRole = (typeof ESIGN_STAFF_SIGNER_ROLES)[number];
+
+export const ESIGN_COUNTER_SIGNATURE_STATES = [
+  "none",
+  "pending",
+  "signed",
+  "declined",
+] as const;
+export type EsignCounterSignatureState =
+  (typeof ESIGN_COUNTER_SIGNATURE_STATES)[number];
+
+export type EsignSignerRow = {
+  id: string;
+  request_id: string;
+  role: string;
+  sort_order: number;
+  status: string;
+  driver_id: string | null;
+  staff_user_id: string | null;
+  display_name: string | null;
+  employee_id: string | null;
+  driver_code: string | null;
+  staff_contact: string | null;
+  is_staff_signer: boolean;
+  viewed_at: string | null;
+  signed_at: string | null;
+  declined_at: string | null;
+  declined_reason: string | null;
+  created_at: string;
+};
+
+export type EsignSignerOption = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+};
+
+export type EsignMySignatureRow = {
+  signer_id: string;
+  request_id: string;
+  role: string;
+  signer_status: string;
+  assigned_at: string;
+  request_code: string;
+  title: string;
+  request_status: EsignRequestStatus;
+  created_at: string;
+  signed_at: string | null;
+  due_at: string | null;
+  category_key: string | null;
+  category_label: string | null;
+  driver_id: string | null;
+  driver_name: string | null;
+  driver_code: string | null;
+  screenshot_restricted: boolean;
+  ready: boolean;
+  declined_reason: string | null;
 };
 
 /**

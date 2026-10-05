@@ -207,6 +207,10 @@ export const queryKeys = {
       ["esign", "reminder-state", [...ids].sort().join(",")] as const,
     drafts: () => ["esign", "drafts"] as const,
     draft: (id: string) => ["esign", "draft", id] as const,
+    signers: (requestId: string) => ["esign", "signers", requestId] as const,
+    signerOptions: () => ["esign", "signer-options"] as const,
+    mySignatures: (readyOnly: boolean) =>
+      ["esign", "my-signatures", readyOnly] as const,
   },
   visits: {
     all: () => ["visits"] as const,

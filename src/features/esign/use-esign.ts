@@ -14,6 +14,16 @@ import {
   updateEsignScreenshotDefault,
 } from "./esign-actions";
 import {
+  addEsignSigner,
+  declineMyEsignSignature,
+  fetchEsignSignerOptions,
+  fetchEsignSigners,
+  fetchMyEsignSignatures,
+  removeEsignSigner,
+  submitMyEsignSignature,
+  uploadStaffEsignSignature,
+} from "./esign-signer-actions";
+import {
   createEsignFromTemplate,
   deleteEsignDraft,
   fetchEsignBatch,
@@ -253,6 +263,76 @@ export function useDeleteEsignDraft() {
     mutationFn: deleteEsignDraft,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.esign.drafts() });
+    },
+  });
+}
+
+export function useEsignSigners(requestId: string) {
+  return useQuery({
+    queryKey: queryKeys.esign.signers(requestId),
+    queryFn: () => fetchEsignSigners(requestId),
+    enabled: Boolean(requestId),
+  });
+}
+
+export function useEsignSignerOptions() {
+  return useQuery({
+    queryKey: queryKeys.esign.signerOptions(),
+    queryFn: () => fetchEsignSignerOptions(),
+    staleTime: 60_000,
+  });
+}
+
+export function useAddEsignSigner(requestId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: addEsignSigner,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.esign.signers(requestId) });
+    },
+  });
+}
+
+export function useRemoveEsignSigner(requestId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: removeEsignSigner,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.esign.signers(requestId) });
+    },
+  });
+}
+
+export function useMyEsignSignatures(readyOnly = true) {
+  return useQuery({
+    queryKey: queryKeys.esign.mySignatures(readyOnly),
+    queryFn: () => fetchMyEsignSignatures(readyOnly),
+  });
+}
+
+export function useSubmitMyEsignSignature() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { request_id: string; pngBase64: string }) => {
+      const uploaded = await uploadStaffEsignSignature(input.pngBase64);
+      if (!uploaded.ok) return uploaded;
+      return submitMyEsignSignature({
+        request_id: input.request_id,
+        signature_storage_key: uploaded.key,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.esign.all() });
+    },
+  });
+}
+
+export function useDeclineMyEsignSignature() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: declineMyEsignSignature,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.esign.all() });
     },
   });
 }

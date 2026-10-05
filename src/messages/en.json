@@ -53,10 +53,12 @@
       "apply": "Apply"
     },
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "backToApps": "Back to all apps"
   },
   "nav": {
-    "dashboard": "Dashboard",
+    "dashboard": "Apps",
+    "dashboardOps": "Control Tower",
     "drivers": "Drivers",
     "driverGroups": "Driver groups",
     "liveTracking": "Live tracking",
@@ -787,6 +789,36 @@
         "queue_created": "Offline queue created",
         "queue_flushed": "Offline queue flushed",
         "client_error": "Client error"
+      }
+    },
+    "launcher": {
+      "title": "Apps",
+      "subtitle": "Open the module you need. The sidebar follows the app you are in.",
+      "apps": {
+        "employeedesk": {
+          "title": "EmployeeDesk",
+          "body": "Requests, e-sign, visits and staff inboxes."
+        },
+        "fleet": {
+          "title": "Fleet",
+          "body": "Vehicles, fuel, assets and their queues."
+        },
+        "operations": {
+          "title": "Operations",
+          "body": "Partners, restaurants, zones, rules and performance."
+        },
+        "payroll": {
+          "title": "Payroll",
+          "body": "Attendance payroll, combined grid and settings."
+        },
+        "live": {
+          "title": "Live tracking",
+          "body": "The fleet map and live driver status."
+        },
+        "settings": {
+          "title": "Settings",
+          "body": "Roles, branding, access and system switches."
+        }
       }
     },
     "dashboard": {
@@ -4934,6 +4966,46 @@
             "draftTemplate": "Pick a template before saving a draft",
             "draftFailed": "Could not save the draft"
           }
+        },
+        "signers": {
+          "title": "Staff signers",
+          "subtitle": "Optional. The employee signs first; these staff countersign after.",
+          "staff": "Staff",
+          "staffPlaceholder": "Search staff…",
+          "staffSearch": "Search name or email",
+          "role": "Role",
+          "add": "Add",
+          "empty": "No staff signers yet. The request can still be sent.",
+          "addFailed": "Could not add signer",
+          "removeFailed": "Could not remove signer",
+          "roles": {
+            "countersigner": "Countersigner",
+            "manager": "Manager",
+            "witness": "Witness"
+          }
+        },
+        "toSign": {
+          "title": "To sign",
+          "subtitle": "Documents assigned to you that the employee has already signed.",
+          "emptyTitle": "Nothing waiting",
+          "emptyBody": "When a rider signs a document that names you, it appears here.",
+          "colCode": "Code",
+          "colTitle": "Title",
+          "colRider": "Employee",
+          "colRole": "Role",
+          "open": "Sign",
+          "draw": "Your signature",
+          "clear": "Clear",
+          "declineReason": "Decline reason",
+          "decline": "Decline",
+          "sign": "Submit signature",
+          "signed": "Signature submitted",
+          "declined": "Signature declined",
+          "signFailed": "Could not submit the signature",
+          "declineFailed": "Could not decline",
+          "roleCountersigner": "Countersigner",
+          "roleManager": "Manager",
+          "roleWitness": "Witness"
         },
         "bulk": {
           "title": "Bulk import",
@@ -9122,7 +9194,7 @@
             },
             "signing": {
               "title": "To sign",
-              "body": "The riders who have not opened their document yet. A reminder cannot reach anyone who has not seen it."
+              "body": "Documents assigned to you after the employee has signed. Counter-sign or decline from this inbox."
             },
             "batches": {
               "title": "Batches",

@@ -10,6 +10,7 @@ import {
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 import {
+  ArrowLeft,
   Check,
   ChevronRight,
   LayoutDashboard,
@@ -32,6 +33,7 @@ import { signOut } from "@/features/auth/actions";
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { useNavBadges } from "@/hooks/use-nav-badges";
 import { useSidebarMenu } from "@/hooks/use-sidebar-menu";
+import { scopeSidebar } from "@/lib/menu/app-scope";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -563,7 +565,10 @@ function SidebarUserMenu() {
 
 export function AppSidebar() {
   const mounted = useHasMounted();
+  const pathname = usePathname();
+  const t = useTranslations();
   const { tree } = useSidebarMenu();
+  const scoped = scopeSidebar(tree, pathname);
 
   return (
     <Sidebar
@@ -576,7 +581,18 @@ export function AppSidebar() {
         <SidebarCollapseTrigger />
       </SidebarHeader>
       <SidebarContent className="flex-1 px-1.5 py-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0">
-        {mounted ? <NavTree nodes={tree} /> : <SidebarNavSkeleton />}
+        {mounted && scoped.appId ? (
+          <div className="mb-1 px-1 group-data-[collapsible=icon]:hidden">
+            <Link
+              href="/dashboard"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              <ArrowLeft className="size-3.5" />
+              {t("common.backToApps")}
+            </Link>
+          </div>
+        ) : null}
+        {mounted ? <NavTree nodes={scoped.nodes} /> : <SidebarNavSkeleton />}
       </SidebarContent>
       <SidebarUserMenu />
     </Sidebar>

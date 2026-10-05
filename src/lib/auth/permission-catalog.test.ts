@@ -18,7 +18,17 @@ describe("permission catalog", () => {
         CATALOG_SLUG_SET.has(item.permission),
         `Menu item ${item.id} uses unknown permission: ${item.permission}`,
       );
+      for (const slug of item.permissionAnyOf ?? []) {
+        assert.ok(
+          CATALOG_SLUG_SET.has(slug),
+          `Menu item ${item.id} uses unknown permissionAnyOf: ${slug}`,
+        );
+      }
     }
+  });
+
+  it("catalog includes esign.sign", () => {
+    assert.ok(CATALOG_SLUG_SET.has("esign.sign"));
   });
 
   it("catalog has no duplicate slugs", () => {

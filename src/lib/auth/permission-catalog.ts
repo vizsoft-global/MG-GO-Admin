@@ -177,6 +177,11 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     category: "employeedesk",
   },
   {
+    slug: "esign.sign",
+    label: "Counter-sign documents assigned to me",
+    category: "employeedesk",
+  },
+  {
     slug: "visits.view",
     label: "View visit bookings (Head Office)",
     category: "visits",

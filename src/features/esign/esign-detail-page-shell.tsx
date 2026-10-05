@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { esignDocumentHref } from "./esign-storage-key";
+import { EsignSignersEditor } from "./esign-signers-editor";
 import { useEsignDocumentLinks, useEsignRequestDetail } from "./use-esign";
 import type { EsignRequestStatus } from "./types";
 
@@ -253,6 +254,8 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               )}
             </ol>
           </AppListCard>
+
+          <EsignSignersEditor requestId={request.id} />
 
           <AppListCard className="space-y-2 p-4">
             <h3 className="text-sm font-semibold">{t("detailsSection")}</h3>
