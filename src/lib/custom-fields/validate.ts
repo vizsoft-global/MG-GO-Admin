@@ -265,7 +265,7 @@ export function validateCustomFieldValues(
     | "letters_only"
   >[],
   input: CustomFieldValues,
-  opts?: { allowInactiveKeys?: boolean },
+  opts?: { allowLegacyKeys?: boolean },
 ): { values: CustomFieldValues; errors: CustomFieldValidationError[] } {
   const activeDefs = defs.filter((d) => d.is_active && !d.archived_at);
   const byKey = new Map(defs.map((d) => [d.key, d]));
@@ -278,14 +278,22 @@ export function validateCustomFieldValues(
 
   for (const key of Object.keys(input)) {
     const def = byKey.get(key);
+    // A key the driver row already carries but the settings list no longer
+    // offers — an archived field, a deactivated one, or a definition that was
+    // removed outright. The form only renders active definitions, so the
+    // operator can neither see nor correct such a value: failing the save here
+    // is a dead end that blocks every unrelated edit on that driver. Pass the
+    // stored value through untouched instead of refusing the write.
     if (!def) {
+      if (opts?.allowLegacyKeys) {
+        values[key] = input[key] ?? null;
+        continue;
+      }
       errors.push({ key, code: "unknown_key" });
       continue;
     }
     if (!def.is_active || def.archived_at) {
-      if (opts?.allowInactiveKeys) {
-        values[key] = input[key] ?? null;
-      }
+      if (opts?.allowLegacyKeys) values[key] = input[key] ?? null;
       continue;
     }
     const coerced = coerceCustomFieldValue(

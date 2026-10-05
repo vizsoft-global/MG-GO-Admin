@@ -139,6 +139,10 @@ export function DriverFormSheet({
     () => customFieldDefs.filter((d) => d.is_active && !d.archived_at),
     [customFieldDefs],
   );
+  const customFieldLabelByKey = useMemo(
+    () => new Map(activeCustomDefs.map((def) => [def.key, def.label] as const)),
+    [activeCustomDefs],
+  );
 
   useEffect(() => {
     if (!open || assetCatalogLoading || !isEdit) return;
@@ -440,7 +444,13 @@ export function DriverFormSheet({
     });
     setShowErrors(true);
     setFieldErrors(validation);
-    const cfResult = validateCustomFieldValues(activeCustomDefs, customFieldValues);
+    // An edit submits every key the driver row already carries, including ones
+    // whose definition has since been archived — the form cannot render those,
+    // so it must not refuse to save over them. Create has no stored keys to
+    // preserve, so it stays strict.
+    const cfResult = validateCustomFieldValues(activeCustomDefs, customFieldValues, {
+      allowLegacyKeys: isEdit,
+    });
     const cfErrMap: Record<string, string> = {};
     for (const err of cfResult.errors) {
       cfErrMap[err.key] =
@@ -463,13 +473,21 @@ export function DriverFormSheet({
     }
     if (cfResult.errors.length > 0) {
       const firstCf = cfResult.errors[0];
-      toast.error(
-        firstCf?.code === "invalid_letters"
+      // The custom-field card sits below the fold in the modal, so a toast that
+      // does not name the field reads as an error with nothing wrong on screen.
+      const label = customFieldLabelByKey.get(firstCf.key) ?? firstCf.key;
+      const reason =
+        firstCf.code === "invalid_letters"
           ? tNew("errors.custom_field_letters_only")
-          : firstCf?.code === "negative_number"
+          : firstCf.code === "negative_number"
             ? tNew("errors.custom_field_non_negative")
-            : driverErrorToast(tNew, "invalid_custom_fields"),
-      );
+            : firstCf.code === "required"
+              ? tNew("errors.custom_field_required")
+              : tNew("errors.invalid_custom_fields");
+      toast.error(`${label} — ${reason}`);
+      document
+        .getElementById(`cf_${firstCf.key}`)
+        ?.scrollIntoView({ block: "center" });
       return;
     }
     if (needsR2ForSubmit) {

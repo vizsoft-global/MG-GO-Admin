@@ -8,6 +8,7 @@ import {
 export function parseCustomFieldsFromFormData(
   formData: FormData,
   defs: CustomFieldDefinition[],
+  opts?: { allowLegacyKeys?: boolean },
 ): ReturnType<typeof validateCustomFieldValues> {
   const raw: CustomFieldValues = {};
   for (const def of defs) {
@@ -49,7 +50,7 @@ export function parseCustomFieldsFromFormData(
     }
   }
 
-  return validateCustomFieldValues(defs, raw);
+  return validateCustomFieldValues(defs, raw, opts);
 }
 
 export function customFieldsToFormEntries(values: CustomFieldValues): [string, string][] {
