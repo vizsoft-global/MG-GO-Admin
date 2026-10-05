@@ -4,11 +4,14 @@ import { EsignBulkShell } from "@/features/esign/esign-bulk-shell";
 
 export default async function EsignBulkPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ draft?: string }>;
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
   await requirePermission(locale, "requests.manage");
-  return <EsignBulkShell />;
+  const { draft } = await searchParams;
+  return <EsignBulkShell initialDraftId={draft} />;
 }

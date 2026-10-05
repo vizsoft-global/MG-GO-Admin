@@ -30,8 +30,69 @@ import type {
  */
 const SYSTEM_SAMPLES = employeeSampleValues();
 
+/**
+ * The payslip layout, declared as the reference draws it.
+ *
+ * Panel C2 does not print a payslip as an Item / Value list. It prints the month
+ * block first, then the day counts, then the money — and each money row carries
+ * the **column code the bulk sheet uses** (`BASIC`, `NET`, `All`, `Ded`) beside
+ * its label, because the reader of a payslip is comparing the sheet against the
+ * voucher and the code is what the two have in common. Without the codes the
+ * screen shows the right numbers in the right order and still cannot be held
+ * against the sheet a payroll clerk is reading.
+ *
+ * The `label` half of each row is *not* declared here: it is the field's own
+ * `label_en` / `label_ar`, printed from the template. A hard-coded English label
+ * would read as English inside an Arabic document, which is the one thing the
+ * reference's Arabic subtitle exists to avoid.
+ *
+ * A key this template does not carry is skipped rather than printed blank: a
+ * payslip whose author removed `Gross salary` must not grow an empty row back.
+ */
+const PAYSLIP_GROUPS = [
+  { key: "month", fieldKeys: ["slip_month"] },
+  { key: "period", fieldKeys: ["period_from", "period_to"] },
+  { key: "computedOn", fieldKeys: ["computed_on"] },
+  { key: "workingDays", fieldKeys: ["fixed_working_days", "actual_working_days"] },
+  {
+    key: "money",
+    fieldKeys: [
+      "gross_salary_kwd",
+      "deduction_amount_kwd",
+      "basic_salary_kwd",
+      "extra_input_kwd",
+      "net_salary_kwd",
+      "rate_kwd",
+      "amount",
+    ],
+  },
+  { key: "reason", fieldKeys: ["deduction_reason"] },
+] as const;
+
+/**
+ * Sheet column code per money row, exactly the four panel C2 prints.
+ *
+ * Only the four that appear on the reference's own sheet are mapped. It would be
+ * easy to coin a fifth for `Gross salary` — and wrong: the example sheet's
+ * columns are Employee ID, Date from, Date to, Computed on, Actual days,
+ * Administration deduction, Extra input, Basic salary, Net salary, Civil ID, so a
+ * `GROSS` chip would print a column code that no sheet the operator can download
+ * actually has. A row with no code renders as a plain row instead.
+ */
+const PAYSLIP_COLUMN_CODES: Record<string, string> = {
+  basic_salary_kwd: "BASIC",
+  net_salary_kwd: "NET",
+  extra_input_kwd: "All",
+  deduction_amount_kwd: "Ded",
+};
+
 function sampleFor(field: EsignTemplateFieldRow): string {
   if (SYSTEM_SAMPLES[field.field_key]) return SYSTEM_SAMPLES[field.field_key];
+  // A field's own saved sample outranks the type default. The reference draws a
+  // *filled* payslip — `August 2026`, `26`, `260.000` — so a preview whose every
+  // entry row is an em-dash cannot be held against it. This is preview-only
+  // content on the field row, never a value the request or the PDF renderer sees.
+  if (field.preview_value) return field.preview_value;
   const source = resolveFieldSource(field);
   if (source === "system") return "—";
   if (source === "fixed") return field.options[0] ?? "—";
@@ -133,6 +194,20 @@ export function EsignDocumentPreview({
    */
   const employeeRef = values.employee_id?.trim() || SYSTEM_SAMPLES.employee_id || "—";
 
+  /**
+   * The payslip rows, in the reference's reading order.
+   *
+   * Built by walking `PAYSLIP_GROUPS` and keeping only the keys this template
+   * actually carries, so a removed row stays removed and the flat list the panel
+   * draws comes out in the panel's order. The label is the field's own, which is
+   * what keeps an Arabic payslip Arabically labelled.
+   */
+  const payslipRows = documentKind === "payslip"
+    ? PAYSLIP_GROUPS.flatMap((group) => group.fieldKeys)
+        .map((key) => documentBodyFields.find((f) => f.field_key === key))
+        .filter((field): field is EsignTemplateFieldRow => Boolean(field))
+    : [];
+
   return (
     <div
       dir={dir}
@@ -214,9 +289,47 @@ export function EsignDocumentPreview({
               ? t("penaltyDetails")
               : documentKind === "loan"
                 ? t("loanDetails")
-                : t("documentDetails")}
+                : documentKind === "payslip"
+                  ? t("payslipDetails")
+                  : t("documentDetails")}
           </SectionTitle>
-          {documentBodyFields.length === 0 ? (
+          {documentKind === "payslip" ? (
+            /* Panel C2's shape: one flat ruled list, month → period → days →
+               money → reason, with the bulk sheet's column code beside every
+               money row. No sub-headings — the reference draws none, and adding
+               them would put a heading on screen that the printed PDF lacks. */
+            payslipRows.length === 0 ? (
+              <p className="rounded border border-dashed border-neutral-300 px-2 py-3 text-center text-[10px] text-neutral-400">
+                {t("noDocumentFields")}
+              </p>
+            ) : (
+              <ul className="divide-y divide-neutral-200 rounded border border-neutral-200">
+                {payslipRows.map((field) => {
+                  const code = PAYSLIP_COLUMN_CODES[field.field_key];
+                  return (
+                    <li
+                      key={field.id || field.field_key}
+                      className="flex items-baseline justify-between gap-3 px-2.5 py-1.5"
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        {code ? (
+                          <span className="shrink-0 rounded border border-neutral-300 bg-neutral-100 px-1 py-px font-mono text-[8.5px] font-semibold uppercase tracking-wide text-neutral-600">
+                            {code}
+                          </span>
+                        ) : null}
+                        <span className="truncate text-neutral-700">
+                          {locale === "ar" ? field.label_ar || field.label_en : field.label_en}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-medium tabular-nums">
+                        {valueOf(field) || "—"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )
+          ) : documentBodyFields.length === 0 ? (
             <p className="rounded border border-dashed border-neutral-300 px-2 py-3 text-center text-[10px] text-neutral-400">
               {t("noDocumentFields")}
             </p>

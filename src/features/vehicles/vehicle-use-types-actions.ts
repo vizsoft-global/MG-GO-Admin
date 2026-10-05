@@ -46,7 +46,9 @@ export async function listVehicleUseTypes(): Promise<VehicleUseType[]> {
 }
 
 export async function listVehicleUseTypesWithUsage(): Promise<VehicleUseTypeWithUsage[]> {
-  await requireSlug("settings.view");
+  // OperationsHub owns this list and gates it on `vehicles.manage`; `settings.*`
+  // would hand an operations user a card that opens a permission error.
+  await requireSlug("vehicles.manage");
   const supabase = await createClient();
   const [types, { data: vehicles, error }] = await Promise.all([
     listVehicleUseTypes(),
@@ -68,7 +70,7 @@ export async function upsertVehicleUseType(input: {
   isNew: boolean;
 }): Promise<{ ok: true } | { error: VehicleUseTypeError }> {
   try {
-    await requireSlug("settings.manage");
+    await requireSlug("vehicles.manage");
   } catch {
     return { error: "not_authorized" };
   }

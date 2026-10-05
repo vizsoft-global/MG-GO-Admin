@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   AlertTriangle,
@@ -10,9 +10,11 @@ import {
   CheckCircle2,
   Database,
   Download,
+  FileClock,
   FileSpreadsheet,
   Loader2,
   PenLine,
+  Save,
   Send,
   Upload,
   UserRoundSearch,
@@ -53,9 +55,10 @@ import {
   createEsignBatch,
   processEsignBatchChunk,
   resolveEsignEmployees,
+  saveEsignDraft,
 } from "@/features/esign/esign-sender-actions";
 import { templateFieldLabel } from "@/features/esign/template-source";
-import { useEsignTemplate, useEsignTemplates } from "@/features/esign/use-esign";
+import { useEsignDraft, useEsignTemplate, useEsignTemplates } from "@/features/esign/use-esign";
 import type {
   EsignLocale,
   EsignResolveRow,
@@ -103,7 +106,19 @@ const PAGE_SIZE = 8;
  * `createEsignBatch` + `processEsignBatchChunk` are shared, so a hand-off from
  * either door lands in one queue and there is no second definition of "sendable".
  */
-export function BulkImportShell({ initialTemplateId }: { initialTemplateId?: string }) {
+export function BulkImportShell({
+  initialTemplateId,
+  /**
+   * `?draft=<id>` — the drafts list resumes a saved bulk sheet back into this
+   * wizard. A bulk draft is worth keeping precisely because step 3 is where the
+   * work is: the rows are already mapped and the unresolvable ones already
+   * corrected, and rebuilding that from the file is the slow part.
+   */
+  initialDraftId,
+}: {
+  initialTemplateId?: string;
+  initialDraftId?: string;
+}) {
   const t = useTranslations("pages.employeedesk.esign.bulk");
   /**
    * The **page** language for the column chips, which is not the batch's
@@ -136,6 +151,57 @@ export function BulkImportShell({ initialTemplateId }: { initialTemplateId?: str
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(0);
   const [fixRow, setFixRow] = useState<number | null>(null);
+
+  /** The draft being edited, so a second save updates rather than duplicates. */
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const draftQuery = useEsignDraft(initialDraftId ?? "");
+  /**
+   * One-shot. A draft payload is the *starting* state, so re-applying it on a
+   * refetch would silently undo the rows the operator has since corrected —
+   * which is the work the draft exists to protect.
+   */
+  const draftAppliedRef = useRef(false);
+
+  /**
+   * Rehydrate a resumed draft.
+   *
+   * The rows are re-resolved rather than trusted from the payload because the
+   * preview's whole job is to state each rider's *current* status: a draft saved
+   * days ago could hold a rider who has since been archived or blocked, and a
+   * stored `ok` would print a green row that the send would then refuse. It also
+   * lands on step 3, because a resumed draft is exactly the operator's review
+   * step — that is where they left off.
+   */
+  useEffect(() => {
+    const draft = draftQuery.data?.draft;
+    if (!draft || draftAppliedRef.current) return;
+    draftAppliedRef.current = true;
+    if (draft.template_id) setTemplateId(draft.template_id);
+    setLocale(draft.language);
+    if (draft.title) setTitle(draft.title);
+    if (draft.due_at) setDueAt(draft.due_at.slice(0, 10));
+    if (draft.source_filename) setFileName(draft.source_filename);
+    const restored: EsignBulkDraftRow[] = draft.rows.map((row, index) => ({
+      row_index: index,
+      employee_id: row.employee_id,
+      description: row.description ?? "",
+      field_values: row.field_values ?? {},
+    }));
+    setDrafts(restored);
+    setPage(0);
+    setStep(3);
+    if (restored.length === 0) return;
+    setBusy(true);
+    void resolveEsignEmployees(restored.map((row) => row.employee_id)).then((result) => {
+      setBusy(false);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setResolved(result.rows);
+    });
+  }, [draftQuery.data?.draft]);
 
   const templateItems = useMemo(
     () =>
@@ -260,6 +326,50 @@ export function BulkImportShell({ initialTemplateId }: { initialTemplateId?: str
     setFixRow(null);
   }
 
+  /**
+   * Save the mapping as a draft.
+   *
+   * Every parsed row is stored, including the ones that did not resolve — those
+   * are precisely the rows an operator has to come back and correct, and dropping
+   * them would mean the resume was missing the work they were mid-way through.
+   * The resolution is deliberately not stored (see the hydrate effect).
+   */
+  async function saveDraft() {
+    if (!templateId) {
+      toast.error(t("errors.draftTemplate"));
+      return;
+    }
+    if (drafts.length === 0) {
+      toast.error(t("errors.draftEmpty"));
+      return;
+    }
+    setSavingDraft(true);
+    const result = await saveEsignDraft({
+      id: draftId,
+      kind: "bulk",
+      template_id: templateId,
+      template_version: template?.version ?? null,
+      language: locale,
+      title: title.trim() || template?.name_en || null,
+      due_at: dueAt || null,
+      field_values: {},
+      rows: drafts.map((draft, i) => ({
+        employee_id: draft.employee_id,
+        driver_id: resolved[i]?.driver_id,
+        description: draft.description || undefined,
+        field_values: draft.field_values,
+      })),
+      source_filename: fileName || null,
+    });
+    setSavingDraft(false);
+    if (!result.ok) {
+      toast.error(result.error ?? t("errors.draftFailed"));
+      return;
+    }
+    setDraftId(result.id ?? draftId);
+    toast.success(t("draftSaved"));
+  }
+
   async function confirm() {
     if (!templateId || !template) return;
     const usable = drafts
@@ -323,18 +433,29 @@ export function BulkImportShell({ initialTemplateId }: { initialTemplateId?: str
         title={t("title")}
         description={t("subtitle")}
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9"
-            // Same destination as the templates list's identical control. It
-            // used to point at the template library, so the one label the
-            // reference repeats on two panels landed in two different places.
-            render={<Link href="/employeedesk/esign" />}
-          >
-            <ArrowLeft className="size-3.5" aria-hidden />
-            {t("backToOutgoing")}
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-xs font-medium text-muted-foreground hover:text-foreground"
+              render={<Link href="/requests/esign/drafts" />}
+            >
+              <FileClock className="size-3.5" aria-hidden />
+              {t("allDrafts")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              // Same destination as the templates list's identical control. It
+              // used to point at the template library, so the one label the
+              // reference repeats on two panels landed in two different places.
+              render={<Link href="/employeedesk/esign" />}
+            >
+              <ArrowLeft className="size-3.5" aria-hidden />
+              {t("backToOutgoing")}
+            </Button>
+          </>
         }
       />
 
@@ -678,6 +799,27 @@ export function BulkImportShell({ initialTemplateId }: { initialTemplateId?: str
           >
             {t("reviewRows")}
             <ArrowRight className="size-3.5" aria-hidden />
+          </Button>
+        ) : null}
+        {/*
+          Draft sits to the left of Send and only on the review step, which is
+          the only step that has rows worth keeping. A `Save draft` on step 1
+          would store an empty payload, and one beside `Continue` would make two
+          primary-looking buttons on the step that has nothing to decide yet.
+        */}
+        {step === 3 ? (
+          <Button
+            variant="outline"
+            className="h-9"
+            disabled={savingDraft || busy || drafts.length === 0}
+            onClick={() => void saveDraft()}
+          >
+            {savingDraft ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Save className="size-3.5" aria-hidden />
+            )}
+            {draftId ? t("updateDraft") : t("saveDraft")}
           </Button>
         ) : null}
         {step === 3 ? (

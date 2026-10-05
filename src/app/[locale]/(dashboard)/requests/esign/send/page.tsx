@@ -4,11 +4,14 @@ import { EsignSendShell } from "@/features/esign/esign-send-shell";
 
 export default async function EsignSendPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ draft?: string }>;
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
   await requirePermission(locale, "requests.manage");
-  return <EsignSendShell />;
+  const { draft } = await searchParams;
+  return <EsignSendShell initialDraftId={draft} />;
 }

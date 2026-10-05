@@ -23,7 +23,13 @@ export function AppPageHeader({
   className,
 }: {
   title: string;
-  description?: string;
+  /**
+   * A plain string for the common case, or a node when a title carries a second
+   * line the caller has to build itself — the eSign builder prints the template's
+   * Arabic name under the English one, and that line is RTL-directioned and
+   * conditional, which a string cannot express.
+   */
+  description?: ReactNode;
   actions?: ReactNode;
   breadcrumbs?: AppBreadcrumbItem[];
   tabs?: ReactNode;
@@ -55,7 +61,7 @@ export function AppPageHeader({
             {title}
           </h1>
           {description ? (
-            <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+            <div className="mt-0.5 text-sm text-muted-foreground">{description}</div>
           ) : null}
         </div>
         {actions ? (

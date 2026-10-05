@@ -76,7 +76,16 @@ const CATEGORIES = [
   { key: "general", labelKey: "categoryGeneral" },
 ] as const;
 
-const DOCUMENT_KINDS: EsignDocumentKind[] = ["penalty", "loan", "general"];
+/**
+ * The kinds the picker offers, in the order the reference's own documents run.
+ *
+ * `payslip` is here and not merely in `ESIGN_DOCUMENT_KINDS` because the picker
+ * reads *this* list: a kind the type system knows and the dropdown does not offer
+ * is a kind no author can choose, which is exactly how the panel C2 payslip
+ * built from `Salary Deduction Acknowledgement` would have been unreachable from
+ * a new template.
+ */
+const DOCUMENT_KINDS: EsignDocumentKind[] = ["penalty", "loan", "payslip", "general"];
 
 type DraftField = EsignTemplateFieldRow & {
   /** Set on a row created in this session — no server id to delete yet. */
@@ -102,6 +111,7 @@ function blankField(templateId: string, sortOrder: number): DraftField {
     source_kind: "entry",
     section_key: "document",
     options_source: null,
+    preview_value: null,
     isNew: true,
   };
 }
@@ -159,7 +169,23 @@ export function TemplateBuilderShell({
   const [previewLocale, setPreviewLocale] = useState<EsignLocale>(
     template.default_language as EsignLocale,
   );
-  const [values, setValues] = useState<Record<string, string>>({});
+  /**
+   * The preview's sample values, keyed by `field_key`.
+   *
+   * Seeded from the fields' saved `preview_value` rather than starting empty, so
+   * a template opens showing the document it will actually produce — the
+   * reference draws a filled payslip, and a preview that starts as a column of
+   * em-dashes cannot be compared against it. Editing the box below the field list
+   * writes back through the field save, so the sample is content the operator
+   * keeps rather than something a page reload discards.
+   */
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const seeded: Record<string, string> = {};
+    for (const field of template.fields) {
+      if (field.preview_value) seeded[field.field_key] = field.preview_value;
+    }
+    return seeded;
+  });
   const [saving, setSaving] = useState(false);
   /**
    * Which section tab the field list is showing.
@@ -346,6 +372,10 @@ export function TemplateBuilderShell({
           source_kind: resolveFieldSource(field),
           section_key: field.section_key,
           options_source: field.options_source,
+          // The inspector's box is the editor for the persisted sample, and an
+          // empty box clears it — which is the only way to get an em-dash back
+          // for a row the operator does not want pre-filled.
+          preview_value: values[field.field_key] ?? field.preview_value ?? "",
         });
         if (!res.ok) throw new Error(res.error ?? "failed");
       }

@@ -2,8 +2,10 @@
 
 import { useTranslations } from "next-intl";
 import {
+  BellRing,
   CalendarDays,
   ChevronRight,
+  FileClock,
   FileSignature,
   Layers,
   LayoutTemplate,
@@ -22,8 +24,10 @@ const TILES = [
   { href: "/requests/esign/templates", key: "templates", icon: LayoutTemplate },
   { href: "/requests/esign/send", key: "send", icon: Send },
   { href: "/requests/esign/bulk", key: "bulk", icon: Upload },
+  { href: "/requests/esign/drafts", key: "drafts", icon: FileClock },
   { href: "/requests/esign/batches", key: "batches", icon: Layers },
   { href: "/requests/esign/sent", key: "sent", icon: FileSignature },
+  { href: "/requests/esign/waiting", key: "waiting", icon: BellRing },
   { href: "/requests/esign/signatures", key: "signatures", icon: ListChecks },
   { href: "/requests/esign/categories", key: "categories", icon: Tags },
   { href: "/visit-bookings/calendar?from=requests-esign", key: "calendar", icon: CalendarDays },
@@ -40,6 +44,11 @@ export function EsignHubShell() {
     switch (key) {
       case "sent":
         return t("tilesMeta.sent", { total: counts.all, pending: counts.pending });
+      case "waiting":
+        // The call list is the number that changes what an operator does next,
+        // so the hub surfaces `not_opened` rather than the wider waiting total
+        // the tile already shows in its own strip.
+        return t("tilesMeta.waiting", { notOpened: counts.notOpened });
       case "signatures":
         return t("tilesMeta.signatures", { pending: counts.pending });
       case "categories":
@@ -48,6 +57,7 @@ export function EsignHubShell() {
       case "templates":
       case "send":
       case "bulk":
+      case "drafts":
       case "batches":
         return null;
       default: {

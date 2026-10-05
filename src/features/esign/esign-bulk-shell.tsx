@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Download, Loader2, Upload } from "lucide-react";
+import { Download, FileClock, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -25,8 +25,9 @@ import {
   createEsignBatch,
   processEsignBatchChunk,
   resolveEsignEmployees,
+  saveEsignDraft,
 } from "./esign-sender-actions";
-import { useEsignTemplate, useEsignTemplates } from "./use-esign";
+import { useEsignDraft, useEsignTemplate, useEsignTemplates } from "./use-esign";
 import type { EsignLocale, EsignResolveRow } from "./types";
 
 function statusVariant(status: string): "success" | "warning" | "danger" | "neutral" {
@@ -35,7 +36,25 @@ function statusVariant(status: string): "success" | "warning" | "danger" | "neut
   return "warning";
 }
 
-export function EsignBulkShell() {
+export function EsignBulkShell({
+  /**
+   * A template chosen upstream — the V2 builder's "Import a sheet" passes the
+   * template the author is looking at, so the wizard opens on that document's
+   * example sheet rather than on an empty picker. Prop rather than a
+   * `useSearchParams` hook for the same reason the send shell takes it that way.
+   */
+  initialTemplateId,
+  /**
+   * `?draft=<id>` — the drafts list resumes a saved bulk send by navigating back
+   * here with the draft id. The draft carries the already-mapped rows, so the
+   * operator lands on the preview they left rather than on the raw sheet, which
+   * is the mapping work the draft exists to protect.
+   */
+  initialDraftId,
+}: {
+  initialTemplateId?: string;
+  initialDraftId?: string;
+}) {
   const t = useTranslations("pages.requests.esign.bulk");
   const tHub = useTranslations("pages.requests.esign.hub");
   const router = useRouter();
@@ -44,7 +63,7 @@ export function EsignBulkShell() {
     () => (templatesData?.rows ?? []).filter((row) => row.is_active),
     [templatesData?.rows],
   );
-  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null);
   const { data: templateData } = useEsignTemplate(templateId ?? "");
   const template = templateData?.template;
   const [locale, setLocale] = useState<EsignLocale>("en");
@@ -54,6 +73,13 @@ export function EsignBulkShell() {
   const [drafts, setDrafts] = useState<EsignBulkDraftRow[]>([]);
   const [resolved, setResolved] = useState<EsignResolveRow[]>([]);
   const [busy, setBusy] = useState(false);
+
+  /** The draft being edited, so the second save updates rather than duplicates. */
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const draftQuery = useEsignDraft(initialDraftId ?? "");
+  /** One-shot — a refetch must never clobber the rows the operator has corrected. */
+  const draftAppliedRef = useRef(false);
 
   const templateItems = useMemo(
     () =>
@@ -65,6 +91,42 @@ export function EsignBulkShell() {
       })),
     [templates],
   );
+
+  /**
+   * Rehydrate a resumed draft.
+   *
+   * The rows are re-resolved rather than trusted from the payload because the
+   * preview's whole job is to state each rider's *current* status: a draft saved
+   * three days ago could hold a rider who has since been archived or blocked, and
+   * a stored `ok` would print a green row that the send would then refuse.
+   */
+  useEffect(() => {
+    const draft = draftQuery.data?.draft;
+    if (!draft || draftAppliedRef.current) return;
+    draftAppliedRef.current = true;
+    if (draft.template_id) setTemplateId(draft.template_id);
+    setLocale(draft.language);
+    if (draft.title) setTitle(draft.title);
+    if (draft.due_at) setDueAt(draft.due_at.slice(0, 10));
+    if (draft.source_filename) setFileName(draft.source_filename);
+    const restored: EsignBulkDraftRow[] = draft.rows.map((row, index) => ({
+      row_index: index,
+      employee_id: row.employee_id,
+      description: row.description ?? "",
+      field_values: row.field_values ?? {},
+    }));
+    setDrafts(restored);
+    if (restored.length === 0) return;
+    setBusy(true);
+    void resolveEsignEmployees(restored.map((row) => row.employee_id)).then((result) => {
+      setBusy(false);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setResolved(result.rows);
+    });
+  }, [draftQuery.data?.draft]);
 
   function downloadTemplate() {
     const headers = ["Employee ID", "Description", ...(template?.fields.map((f) => f.field_key) ?? [])];
@@ -107,6 +169,50 @@ export function EsignBulkShell() {
     draft,
     resolve: resolved[i],
   }));
+
+  /**
+   * Save the mapping as a draft.
+   *
+   * Every parsed row is stored, including the ones that did not resolve — those
+   * are precisely the rows an operator has to come back and correct, and dropping
+   * them would mean the resume was missing the work they were mid-way through.
+   * The resolution is deliberately not stored either (see the hydrate effect).
+   */
+  async function saveDraft() {
+    if (!templateId) {
+      toast.error(t("errors.draftTemplate"));
+      return;
+    }
+    if (drafts.length === 0) {
+      toast.error(t("errors.draftEmpty"));
+      return;
+    }
+    setSavingDraft(true);
+    const result = await saveEsignDraft({
+      id: draftId,
+      kind: "bulk",
+      template_id: templateId,
+      template_version: template?.version ?? null,
+      language: locale,
+      title: title.trim() || template?.name_en || null,
+      due_at: dueAt || null,
+      field_values: {},
+      rows: preview.map(({ draft, resolve }) => ({
+        employee_id: draft.employee_id,
+        driver_id: resolve?.driver_id,
+        description: draft.description || undefined,
+        field_values: draft.field_values,
+      })),
+      source_filename: fileName || null,
+    });
+    setSavingDraft(false);
+    if (!result.ok) {
+      toast.error(result.error ?? t("errors.draftFailed"));
+      return;
+    }
+    setDraftId(result.id ?? draftId);
+    toast.success(t("draftSaved"));
+  }
 
   async function confirm() {
     if (!templateId || !template) return;
@@ -275,14 +381,34 @@ export function EsignBulkShell() {
         )}
       </AppListCard>
 
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] text-muted-foreground">
-          {t("readyCount", { ok: okRows.length, total: preview.length })}
-        </p>
-        <Button className="h-9" disabled={busy || okRows.length === 0} onClick={() => void confirm()}>
-          {busy ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-          {t("confirm")}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-9 cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground"
+          render={<Link href="/requests/esign/drafts" />}
+        >
+          <FileClock className="me-1.5 h-3.5 w-3.5" />
+          {t("draftsLink")}
         </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[11px] text-muted-foreground">
+            {t("readyCount", { ok: okRows.length, total: preview.length })}
+          </p>
+          <Button
+            variant="outline"
+            className="h-9 cursor-pointer"
+            disabled={savingDraft || busy || !templateId || drafts.length === 0}
+            onClick={() => void saveDraft()}
+          >
+            {savingDraft ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+            {draftId ? t("updateDraft") : t("saveDraft")}
+          </Button>
+          <Button className="h-9" disabled={busy || okRows.length === 0} onClick={() => void confirm()}>
+            {busy ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+            {t("confirm")}
+          </Button>
+        </div>
       </div>
     </AppPage>
   );

@@ -2,6 +2,7 @@ import {
   DEFAULT_GROUPS,
   DEFAULT_GROUP_META,
   MENU_REGISTRY,
+  OPERATIONS_HUB_GROUP,
   type MenuRegistryItem,
 } from "@/lib/menu/menu-registry";
 import type { MenuNode } from "@/services/menu-config-service";
@@ -128,8 +129,12 @@ export function mergeMenu(config: MenuNode[]): {
   }
   return {
     tree: relocateStaffAccessItem(
-      relocateOrderReconItem(
-        relocatePayrollItem(relocateAssistantItem(relocateFleetItems(pruned))),
+      relocateSettingsSplit(
+        relocateOrderReconItem(
+          relocatePayrollItem(
+            relocateAssistantItem(relocateFleetItems(relocateOperationsHubItems(pruned))),
+          ),
+        ),
       ),
     ),
     unassignedIds: unassigned,
@@ -350,6 +355,208 @@ function relocateOrderReconItem(tree: MenuNode[]): MenuNode[] {
   return next;
 }
 
+const SETTINGS_GROUP_ID = "group-settings";
+const SYSTEM_GROUP_ID = "group-system";
+
+/**
+ * Settings keeps platform **administration** — the staff who may use the panel,
+ * the roles they hold, the branding, the audit log. Each module's own
+ * configuration sits beside that module, and platform **configuration** gets its
+ * own System group.
+ *
+ * `buildDefaultTree()` already derives that shape from `MENU_REGISTRY`, so this
+ * is not needed for a fresh install — it exists for the saved `menu_configs`. A
+ * tenant who opened the Menu Editor before this split has all seventeen items
+ * sitting inside `group-settings`, and pruning alone would leave every one of
+ * them there. Without this the IA change would apply to new accounts and to
+ * nobody else, which is the difference between shipping a menu and shipping a
+ * default.
+ *
+ * The operational half of that split is not here — it belongs to
+ * `relocateOperationsHubItems`, which must run *before* this so an item it moves
+ * is not left looking like a System item.
+ */
+const SETTINGS_SPLIT: ReadonlyArray<{ id: string; group: string; after?: string }> = [
+  { id: "driver-app", group: SYSTEM_GROUP_ID },
+  { id: "storage", group: SYSTEM_GROUP_ID },
+  { id: "maintenance", group: SYSTEM_GROUP_ID },
+  { id: "languages", group: SYSTEM_GROUP_ID },
+  { id: "data-cleanup", group: SYSTEM_GROUP_ID },
+];
+
+const SETTINGS_SPLIT_BY_ID = new Map(SETTINGS_SPLIT.map((entry) => [entry.id, entry]));
+
+const OPERATIONS_HUB_GROUP_ID = "group-operationshub";
+
+/**
+ * Operational configuration lives in OperationsHub, never in Settings.
+ *
+ * `buildDefaultTree()` derives that from `defaultGroup` on `MENU_REGISTRY`, so a
+ * fresh install is already correct. This exists for saved `menu_configs`, where a
+ * tenant who opened the Menu Editor before the split has `partners`,
+ * `restaurants`, `zones`, `delivery-rules`, `incentive-rules`, `driver-fields`
+ * and `attendance-settings` living inside `group-settings`, and `vehicle-types`,
+ * `vehicle-uses` and `source-companies` inside `group-fleet`.
+ *
+ * It deliberately runs **before** `relocateFleetItems`: that function rebuilds
+ * the Fleet group from the registry, so an item parked there whose
+ * `defaultGroup` is no longer `Fleet` would be dropped on the floor before this
+ * could collect it.
+ *
+ * Order inside the group is registry order (`operations-hub` first, then
+ * ascending `defaultOrder`), and any customisation the tenant made — label,
+ * icon, hidden — is carried over from the node that was found.
+ */
+const OPERATIONS_HUB_IDS = [
+  "operations-hub",
+  "partners",
+  "restaurants",
+  "zones",
+  "delivery-rules",
+  "incentive-rules",
+  "driver-fields",
+  "attendance-settings",
+  "vehicle-types",
+  "vehicle-uses",
+  "source-companies",
+] as const;
+
+const OPERATIONS_HUB_ID_SET = new Set<string>(OPERATIONS_HUB_IDS);
+
+function relocateOperationsHubItems(tree: MenuNode[]): MenuNode[] {
+  const collected = new Map<string, MenuNode>();
+
+  const strip = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "item") {
+        if (OPERATIONS_HUB_ID_SET.has(node.id)) {
+          collected.set(node.id, node);
+          return [];
+        }
+        return [node];
+      }
+      // An older OperationsHub group is rebuilt below, so it is removed whole
+      // rather than nested inside the fresh one.
+      if (node.id === OPERATIONS_HUB_GROUP_ID) {
+        for (const child of node.children ?? []) {
+          if (child.type === "item") collected.set(child.id, child);
+        }
+        return [];
+      }
+      const children = node.children ? strip(node.children) : [];
+      return [{ ...node, children }];
+    });
+
+  const stripped = strip(tree);
+  const children = OPERATIONS_HUB_IDS.filter((id) => collected.has(id)).map((id) => {
+    const existing = collected.get(id)!;
+    // The hub itself is a nav entry the operations team depends on, so it is
+    // never left hidden — matching how Fleet is pinned.
+    return id === "operations-hub" ? { ...existing, hidden: false } : existing;
+  });
+
+  if (children.length === 0) return stripped;
+
+  const meta = DEFAULT_GROUP_META.OperationsHub;
+  const hub: MenuNode = {
+    id: OPERATIONS_HUB_GROUP_ID,
+    type: "group",
+    label: "OperationsHub",
+    icon: meta?.icon ?? "Building2",
+    displayMode: meta?.displayMode,
+    children,
+  };
+
+  // Placed by its DEFAULT_GROUPS rank, so it lands beside EmployeeDesk whichever
+  // of its neighbours happen to exist in this tenant's tree.
+  const hubRank = DEFAULT_GROUPS.indexOf("OperationsHub");
+  let insertAt = 0;
+  stripped.forEach((node, index) => {
+    const label = DEFAULT_GROUPS.find((g) => `group-${g.toLowerCase()}` === node.id);
+    if (label && DEFAULT_GROUPS.indexOf(label) < hubRank) insertAt = index + 1;
+  });
+
+  const next = [...stripped];
+  next.splice(insertAt, 0, hub);
+  return next.filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
+}
+
+function groupNodeFor(groupId: string): MenuNode {
+  const label = DEFAULT_GROUPS.find((g) => `group-${g.toLowerCase()}` === groupId) ?? "Unorganised";
+  const meta = DEFAULT_GROUP_META[label];
+  return {
+    id: groupId,
+    type: "group",
+    label,
+    icon: meta?.icon ?? "Folder",
+    displayMode: meta?.displayMode,
+    children: [],
+  };
+}
+
+function relocateSettingsSplit(tree: MenuNode[]): MenuNode[] {
+  const collected = new Map<string, MenuNode>();
+
+  const strip = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "item") {
+        if (SETTINGS_SPLIT_BY_ID.has(node.id)) {
+          collected.set(node.id, node);
+          return [];
+        }
+        return [node];
+      }
+      const children = node.children ? strip(node.children) : [];
+      return [{ ...node, children }];
+    });
+
+  let next = strip(tree);
+  if (collected.size === 0) return next;
+
+  // Created lazily and placed next to Settings, so an install whose saved config
+  // never had a System group does not gain an empty heading.
+  const needsSystem = SETTINGS_SPLIT.some(
+    (entry) => entry.group === SYSTEM_GROUP_ID && collected.has(entry.id),
+  );
+  if (needsSystem && !next.some((node) => node.id === SYSTEM_GROUP_ID)) {
+    const system = groupNodeFor(SYSTEM_GROUP_ID);
+    const settingsIdx = next.findIndex((node) => node.id === SETTINGS_GROUP_ID);
+    next =
+      settingsIdx >= 0
+        ? [...next.slice(0, settingsIdx + 1), system, ...next.slice(settingsIdx + 1)]
+        : [...next, system];
+  }
+
+  for (const entry of SETTINGS_SPLIT) {
+    const item = collected.get(entry.id);
+    if (!item) continue;
+
+    const groupIdx = next.findIndex((node) => node.id === entry.group);
+    if (groupIdx < 0) {
+      // Nowhere to put it: hand it back to Settings rather than dropping it out
+      // of the tree, because a node no group holds disappears from the sidebar.
+      const fallbackIdx = next.findIndex((node) => node.id === SETTINGS_GROUP_ID);
+      if (fallbackIdx < 0) continue;
+      const fallback = next[fallbackIdx];
+      next[fallbackIdx] = {
+        ...fallback,
+        children: [...(fallback.children ?? []), item],
+      };
+      continue;
+    }
+
+    const group = next[groupIdx];
+    const children = [...(group.children ?? [])];
+    const anchorIdx = entry.after
+      ? children.findIndex((child) => child.id === entry.after)
+      : -1;
+    children.splice(anchorIdx >= 0 ? anchorIdx + 1 : children.length, 0, item);
+    next = [...next.slice(0, groupIdx), { ...group, children }, ...next.slice(groupIdx + 1)];
+  }
+
+  return next;
+}
+
 function relocateStaffAccessItem(tree: MenuNode[]): MenuNode[] {
   const STAFF_ACCESS_ID = "staff-access";
   let found: MenuNode | null = null;
@@ -415,6 +622,8 @@ export function resolveForSidebar(
         if (r.superAdminOnly && !isSuperAdmin) continue;
         if (r.id === "restaurants") {
           if (!can("restaurants.view") && !can("earnings.view")) continue;
+        } else if (r.permissionAnyOf && r.permissionAnyOf.length > 0) {
+          if (!r.permissionAnyOf.some((p) => can(p))) continue;
         } else if (r.permission && !can(r.permission)) continue;
         out.push({
           id: n.id,
