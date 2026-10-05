@@ -8707,6 +8707,299 @@
         "saveFailed": "Could not save force flags",
         "exportFailed": "Export failed"
       }
+    },
+    "employeedesk": {
+      "hub": {
+        "title": "EmployeeDesk",
+        "subtitle": "Every employee document and request in one place.",
+        "breadcrumb": "EmployeeDesk",
+        "open": "Open",
+        "cards": {
+          "esign": {
+            "title": "E-Signature",
+            "body": "Templates, bulk sending, batches and signatures."
+          },
+          "requests": {
+            "title": "Requests & Complaints",
+            "body": "Loans, leave, fuel, assets and complaints."
+          },
+          "visits": {
+            "title": "Visit bookings",
+            "body": "Branch visits, slots and reception."
+          },
+          "reports": {
+            "title": "Reports",
+            "body": "Request, visit and e-signature reporting."
+          },
+          "settings": {
+            "title": "EmployeeDesk settings",
+            "body": "Workflows, categories, templates and staff access."
+          }
+        }
+      },
+      "esign": {
+        "hub": {
+          "title": "E-Signature",
+          "subtitle": "Author templates, send them for signature and track every batch.",
+          "breadcrumbHub": "EmployeeDesk",
+          "breadcrumb": "E-Signature",
+          "cards": {
+            "templates": {
+              "title": "Templates",
+              "body": "Build the document once, with the fields the system fills and the ones a person signs."
+            },
+            "send": {
+              "title": "Send for signature",
+              "body": "One rider, or a sheet of riders in a single batch."
+            },
+            "sent": {
+              "title": "Sent requests",
+              "body": "Who has opened, signed or declined, and what is still pending."
+            },
+            "batches": {
+              "title": "Batches",
+              "body": "Progress for every bulk send, with retry on the rows that failed."
+            }
+          }
+        },
+        "templates": {
+          "breadcrumbRcm": "Request & Complaint",
+          "breadcrumbHub": "EmployeeDesk",
+          "breadcrumbEsign": "E-Signature",
+          "title": "Templates",
+          "subtitle": "Each template has an example sheet. Import the Employee ID and the system fills in the personal details.",
+          "newTemplate": "Create from template",
+          "loadFailed": "Templates could not be loaded.",
+          "emptyTitle": "No templates yet",
+          "emptyBody": "Create a template to define what the rider reads and signs.",
+          "fieldCount": "{count} fields",
+          "versionLabel": "v{version}",
+          "open": "See the document",
+          "banner": "Bulk sign and return",
+          "backToOutgoing": "Back to Outgoing",
+          "chips": {
+            "employeeId": "Employee ID",
+            "filledFromSystem": "Filled from the system",
+            "youEnter": "You enter",
+            "signatureRows": "Has signature rows"
+          },
+          "statusActive": "Active",
+          "statusDraft": "Draft",
+          "statusInactive": "Inactive",
+          "tabs": {
+            "all": "All",
+            "active": "Active",
+            "draft": "Draft",
+            "inactive": "Inactive"
+          },
+          "kinds": {
+            "penalty": "Penalty",
+            "loan": "Loan",
+            "general": "General"
+          }
+        },
+        "templateBuilder": {
+          "breadcrumbRcm": "Request & Complaint",
+          "breadcrumbHub": "EmployeeDesk",
+          "breadcrumbTemplates": "Templates",
+          "untitled": "Untitled template",
+          "builderSubtitle": "Every row says where its value comes from, and the page beside it is what the rider will read.",
+          "backToList": "Back to templates",
+          "save": "Save template",
+          "saveDraft": "Save draft",
+          "draftSaved": "Draft saved",
+          "saving": "Saving…",
+          "saved": "Template saved",
+          "saveFailed": "The template could not be saved.",
+          "downloadExampleSheet": "Download example sheet",
+          "exampleSheetDownloaded": "Example sheet downloaded",
+          "importSheet": "Import a sheet",
+          "sendForSignature": "Send for e-signature",
+          "useForOneEmployee": "Use for one employee",
+          "saveBeforeSending": "Save the template before you send from it.",
+          "youSend": "You send",
+          "detailsTitle": "Document",
+          "nameEn": "Name (English)",
+          "nameAr": "Name (Arabic)",
+          "category": "Category",
+          "documentKind": "Layout",
+          "defaultLanguage": "Language",
+          "status": "Status",
+          "langEn": "English",
+          "langAr": "Arabic",
+          "bodyEn": "Opening paragraph",
+          "declarationEn": "Declaration",
+          "fieldsTitle": "Fields ({count})",
+          "requiredCount": "{count} required",
+          "addField": "Add field",
+          "noFields": "No fields yet. The system section and the signature block are always on the document.",
+          "untitledField": "Untitled field",
+          "required": "Required",
+          "requiredField": "Required on the form",
+          "moveUp": "Move up",
+          "moveDown": "Move down",
+          "removeField": "Remove field",
+          "fieldInspector": "Selected field",
+          "fieldLabelEn": "Label (English)",
+          "fieldLabelAr": "Label (Arabic)",
+          "fieldKey": "Field key",
+          "fieldType": "Field type",
+          "fieldSource": "Where the value comes from",
+          "fieldSection": "Where it appears",
+          "fixedValue": "Fixed text on the document",
+            "options": "Options",
+            "optionsHint": "The rider picks one of these.",
+            "optionPlaceholder": "Option text",
+            "addOption": "Add option",
+            "removeOption": "Remove option",
+          "previewValue": "Sample value",
+          "previewValuePlaceholder": "Shown on the preview only",
+          "previewTitle": "Live preview",
+          "previewCompany": "Musallam Delivery",
+          "previewEmployeeSignature": "Employee Authorized signature",
+          "previewStaffSignature": "HR signature",
+          "previewHint": "This is the page the rider receives, at A4 proportions.",
+          "kinds": {
+            "penalty": "Penalty notice",
+            "loan": "Loan agreement",
+            "general": "General document"
+          },
+          "sections": {
+            "employee": "Employee Information",
+            "document": "Employee Details"
+          },
+          "sources": {
+            "fromSystem": "From the system",
+            "youEnter": "You enter",
+            "fixed": "Fixed",
+            "signedByPerson": "Signed by a person"
+          },
+          "types": {
+            "text": "Text",
+            "textarea": "Long text",
+            "number": "Number",
+            "date": "Date",
+            "select": "Choose one"
+          },
+          "errors": {
+            "fixedNeedsValue": "A fixed field needs the text that appears on the document.",
+            "signatureNotDropdown": "A field signed by a person cannot be a list to choose from."
+          },
+          "preview": {
+            "internalDocument": "Internal document",
+            "company": "Company",
+            "untitled": "Untitled template",
+            "employeeInformation": "Employee information",
+            "noEmployeeFields": "No employee fields yet",
+            "penaltyDetails": "Penalty details",
+            "loanDetails": "Loan details",
+            "documentDetails": "Document details",
+            "noDocumentFields": "No document fields yet",
+            "columnItem": "Item",
+            "columnValue": "Value",
+            "managementUseOnly": "Management Use Only",
+            "ceoDecision": "CEO Decision",
+            "approved": "Approved",
+            "notApproved": "Not approved",
+            "hrAdminDepartment": "HR / Admin Department",
+            "generalManager": "General Manager",
+            "approvalStatus": "Approval Status",
+            "decision": "Decision",
+            "loanNotReceived": "In case of not receiving the loan",
+            "refPrefix": "MG HR Ref Emp.",
+            "pageOf": "Page {page} of {total}",
+            "signatureDate": "Signature and date"
+          },
+          "statusActive": "Active",
+          "statusDraft": "Draft",
+          "statusInactive": "Inactive",
+          "systemRowsTitle": "Always on the document",
+          "systemRowsHint": "The system fills these from the employee record at send time. They cannot be edited and they are on every document.",
+          "noEmployeeFieldsHint": "No fields added to this section yet. Add one if the employee block needs a value the system does not hold."
+        },
+        "bulk": {
+          "title": "Bulk import from Excel",
+          "subtitle": "Works with any template. The Employee ID pulls the personal details from the system.",
+          "breadcrumbRcm": "Request & Complaint",
+          "breadcrumbHub": "EmployeeDesk",
+          "breadcrumbEsign": "E-Signature",
+          "backToOutgoing": "Back to Outgoing",
+          "steps": {
+            "template": "Choose template",
+            "upload": "Upload sheet",
+            "review": "Review rows"
+          },
+          "footerHint1": "Pick the template. The columns your sheet needs come from it.",
+          "footerHint2": "One row per employee. Employee ID is the only column a sheet cannot do without.",
+          "sendNote": "Each employee is notified to e-sign as soon as you send. Signed copies come back together.",
+          "sheetColumnsTitle": "What this sheet asks for",
+          "groups": {
+            "system": "Filled from the system",
+            "sheet": "You add in the sheet"
+          },
+          "requiredTag": "Required",
+          "sheetHeaderNote": "Your file has {count} columns. Column names are matched to the template, so a renamed column is ignored rather than guessed.",
+          "fieldTemplate": "Template",
+          "fieldTemplatePlaceholder": "Select a template",
+          "fieldTemplateSearch": "Search templates",
+          "fieldTitle": "Batch title",
+          "fieldLocale": "PDF language",
+          "fieldDue": "Due date",
+          "downloadExample": "Download example sheet",
+          "exampleDownloaded": "Example sheet downloaded",
+          "dropHere": "Drop your Excel sheet here, or click to browse",
+          "dropMeta": ".xlsx, .xls or .csv · up to {cap} rows",
+          "beforeUpload": "Download the example sheet and fill it in — the column names have to match.",
+          "checks": {
+            "employeeId": "Employee ID column found",
+            "columns": "Column names match the template",
+            "dates": "Dates read as YYYY-MM-DD"
+          },
+          "summaryRows": "{count} rows",
+          "summaryReady": "{count} ready",
+          "summaryFix": "{count} need fixing",
+          "footerCounts": "{ready} of {total} ready to send",
+          "colEmployeeId": "Employee ID",
+          "colEmployee": "Employee",
+          "colStatus": "Status",
+          "colActions": "Action",
+          "readyRow": "Ready",
+          "replace": "Replace",
+          "showingRange": "Showing {from}–{to} of {total}",
+          "prevPage": "Previous",
+          "nextPage": "Next",
+          "emptyTitle": "No rows read from the sheet",
+          "emptyDescription": "Every row was blank, or the Employee ID column was empty on each one.",
+          "continue": "Continue",
+          "reviewRows": "Review rows",
+          "back": "Back",
+          "send": "Send for e-signature",
+          "queued": "Batch {code} queued",
+          "status": {
+            "ok": "Ready",
+            "unknown_id": "Unknown employee ID",
+            "archived": "Employee archived",
+            "blocked": "Employee blocked",
+            "ambiguous": "Matches more than one employee",
+            "invalid": "Not valid"
+          },
+          "errors": {
+            "missing_employee_id": "The sheet has no Employee ID column.",
+            "batch_cap": "Too many rows in one import. Split the sheet and send it in parts.",
+            "tooLarge": "That file is larger than 5 MB.",
+            "unreadable": "That file could not be read as a spreadsheet.",
+            "noOkRows": "No row in the sheet resolved to an employee, so there is nothing to send.",
+            "createFailed": "The batch could not be created.",
+            "processFailed": "The batch was created, but generating the documents stopped part way."
+          },
+          "fix": {
+            "title": "Fix this row",
+            "subtitle": "Row {row} — the Employee ID did not resolve",
+            "hint": "Type the employee ID exactly as it appears on the Drivers list.",
+            "save": "Save row"
+          }
+        }
+      }
     }
   }
 }

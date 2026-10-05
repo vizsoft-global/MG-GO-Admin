@@ -8707,6 +8707,299 @@
         "saveFailed": "تعذر حفظ العلم",
         "exportFailed": "فشل التصدير"
       }
+    },
+    "employeedesk": {
+      "hub": {
+        "title": "مكتب الموظفين",
+        "subtitle": "كل مستندات وطلبات الموظفين في مكان واحد.",
+        "breadcrumb": "مكتب الموظفين",
+        "open": "فتح",
+        "cards": {
+          "esign": {
+            "title": "التوقيع الإلكتروني",
+            "body": "القوالب والإرسال الجماعي والدفعات والتوقيعات."
+          },
+          "requests": {
+            "title": "الطلبات والشكاوى",
+            "body": "السلف والإجازات والوقود والعهد والشكاوى."
+          },
+          "visits": {
+            "title": "حجوزات الزيارة",
+            "body": "زيارات الفروع والمواعيد والاستقبال."
+          },
+          "reports": {
+            "title": "التقارير",
+            "body": "تقارير الطلبات والزيارات والتوقيع الإلكتروني."
+          },
+          "settings": {
+            "title": "إعدادات مكتب الموظفين",
+            "body": "المسارات والفئات والقوالب وصلاحيات الموظفين."
+          }
+        }
+      },
+      "esign": {
+        "hub": {
+          "title": "التوقيع الإلكتروني",
+          "subtitle": "أنشئ القوالب وأرسلها للتوقيع وتابع كل دفعة.",
+          "breadcrumbHub": "مكتب الموظفين",
+          "breadcrumb": "التوقيع الإلكتروني",
+          "cards": {
+            "templates": {
+              "title": "القوالب",
+              "body": "ابنِ المستند مرة واحدة، بالحقول التي يملأها النظام وتلك التي يوقّعها الشخص."
+            },
+            "send": {
+              "title": "إرسال للتوقيع",
+              "body": "لمندوب واحد، أو لكشف كامل من المندوبين في دفعة واحدة."
+            },
+            "sent": {
+              "title": "الطلبات المرسلة",
+              "body": "من فتح ومن وقّع ومن رفض، وما زال معلقاً."
+            },
+            "batches": {
+              "title": "الدفعات",
+              "body": "تقدم كل إرسال جماعي، مع إعادة المحاولة للصفوف التي فشلت."
+            }
+          }
+        },
+        "templates": {
+          "breadcrumbRcm": "الطلبات والشكاوى",
+          "breadcrumbHub": "مكتب الموظفين",
+          "breadcrumbEsign": "التوقيع الإلكتروني",
+          "title": "القوالب",
+          "subtitle": "لكل قالب ورقة مثال. استورد رقم الموظف فيكمل النظام البيانات الشخصية.",
+          "newTemplate": "إنشاء من قالب",
+          "loadFailed": "تعذّر تحميل القوالب.",
+          "emptyTitle": "لا توجد قوالب بعد",
+          "emptyBody": "أنشئ قالباً لتحديد ما يقرأه المندوب ويوقّع عليه.",
+          "fieldCount": "{count} حقول",
+          "versionLabel": "إصدار {version}",
+          "open": "عرض المستند",
+          "banner": "توقيع جماعي وإرجاع",
+          "backToOutgoing": "رجوع إلى الصادر",
+          "chips": {
+            "employeeId": "رقم الموظف",
+            "filledFromSystem": "يُملأ من النظام",
+            "youEnter": "أنت تُدخل",
+            "signatureRows": "يحتوي صفوف توقيع"
+          },
+          "statusActive": "نشط",
+          "statusDraft": "مسودة",
+          "statusInactive": "غير نشط",
+          "tabs": {
+            "all": "الكل",
+            "active": "نشط",
+            "draft": "مسودة",
+            "inactive": "غير نشط"
+          },
+          "kinds": {
+            "penalty": "جزاء",
+            "loan": "سلفة",
+            "general": "عام"
+          }
+        },
+        "bulk": {
+          "title": "استيراد جماعي من Excel",
+          "subtitle": "يعمل مع أي قالب. رقم الموظف يجلب البيانات الشخصية من النظام.",
+          "breadcrumbRcm": "الطلبات والشكاوى",
+          "breadcrumbHub": "مكتب الموظف",
+          "breadcrumbEsign": "التوقيع الإلكتروني",
+          "backToOutgoing": "رجوع إلى الصادر",
+          "steps": {
+            "template": "اختيار القالب",
+            "upload": "تحميل الملف",
+            "review": "مراجعة الصفوف"
+          },
+          "footerHint1": "اختر القالب، ومنه تأتي أعمدة الملف.",
+          "footerHint2": "صف واحد لكل موظف. رقم الموظف هو العمود الوحيد الذي لا يمكن حذفه.",
+          "sendNote": "يُشعَر كل موظف للتوقيع بمجرد الإرسال. وتعود النسخ الموقّعة معًا.",
+          "sheetColumnsTitle": "ما يطلبه هذا الملف",
+          "groups": {
+            "system": "يُملأ من النظام",
+            "sheet": "تضيفه في الملف"
+          },
+          "requiredTag": "مطلوب",
+          "sheetHeaderNote": "يحتوي ملفك على {count} عمودًا. تُطابق أسماء الأعمدة مع القالب، لذا يُتجاهل العمود المعاد تسميته بدلًا من تخمينه.",
+          "fieldTemplate": "القالب",
+          "fieldTemplatePlaceholder": "اختر قالبًا",
+          "fieldTemplateSearch": "بحث في القوالب",
+          "fieldTitle": "عنوان الدفعة",
+          "fieldLocale": "لغة PDF",
+          "fieldDue": "تاريخ الاستحقاق",
+          "downloadExample": "تنزيل الملف النموذجي",
+          "exampleDownloaded": "تم تنزيل الملف النموذجي",
+          "dropHere": "أفلت ملف Excel هنا، أو اضغط للاختيار",
+          "dropMeta": "‏.xlsx أو .xls أو .csv · حتى {cap} صفًا",
+          "beforeUpload": "نزّل الملف النموذجي واملأه — يجب أن تتطابق أسماء الأعمدة.",
+          "checks": {
+            "employeeId": "تم العثور على عمود رقم الموظف",
+            "columns": "أسماء الأعمدة تطابق القالب",
+            "dates": "قُرئت التواريخ بصيغة YYYY-MM-DD"
+          },
+          "summaryRows": "{count} صفًا",
+          "summaryReady": "{count} جاهز",
+          "summaryFix": "{count} يحتاج تصحيحًا",
+          "footerCounts": "{ready} من {total} جاهز للإرسال",
+          "colEmployeeId": "رقم الموظف",
+          "colEmployee": "الموظف",
+          "colStatus": "الحالة",
+          "colActions": "الإجراء",
+          "readyRow": "جاهز",
+          "replace": "استبدال",
+          "showingRange": "عرض {from}–{to} من {total}",
+          "prevPage": "السابق",
+          "nextPage": "التالي",
+          "emptyTitle": "لم تُقرأ أي صفوف من الملف",
+          "emptyDescription": "كل الصفوف فارغة، أو عمود رقم الموظف فارغ في كل صف.",
+          "continue": "متابعة",
+          "reviewRows": "مراجعة الصفوف",
+          "back": "رجوع",
+          "send": "إرسال للتوقيع الإلكتروني",
+          "queued": "تمت جدولة الدفعة {code}",
+          "status": {
+            "ok": "جاهز",
+            "unknown_id": "رقم موظف غير معروف",
+            "archived": "الموظف مؤرشف",
+            "blocked": "الموظف محظور",
+            "ambiguous": "يطابق أكثر من موظف",
+            "invalid": "غير صالح"
+          },
+          "errors": {
+            "missing_employee_id": "لا يوجد عمود رقم الموظف في الملف.",
+            "batch_cap": "عدد الصفوف في الاستيراد كبير جدًا. قسّم الملف وأرسله على أجزاء.",
+            "tooLarge": "حجم الملف أكبر من 5 ميغابايت.",
+            "unreadable": "تعذّرت قراءة هذا الملف كجدول بيانات.",
+            "noOkRows": "لم يُطابق أي صف موظفًا، لذا لا يوجد ما يُرسل.",
+            "createFailed": "تعذّر إنشاء الدفعة.",
+            "processFailed": "أُنشئت الدفعة، لكن توليد المستندات توقف في المنتصف."
+          },
+          "fix": {
+            "title": "تصحيح هذا الصف",
+            "subtitle": "الصف {row} — لم يُطابق رقم الموظف",
+            "hint": "اكتب رقم الموظف كما يظهر في قائمة السائقين.",
+            "save": "حفظ الصف"
+          }
+        },
+        "templateBuilder": {
+          "breadcrumbRcm": "الطلبات والشكاوى",
+          "breadcrumbHub": "مكتب الموظفين",
+          "breadcrumbTemplates": "القوالب",
+          "untitled": "قالب بدون اسم",
+          "builderSubtitle": "كل صف يوضّح مصدر قيمته، والصفحة المجاورة هي ما سيقرأه المندوب.",
+          "backToList": "رجوع إلى القوالب",
+          "save": "حفظ القالب",
+          "saveDraft": "حفظ كمسودة",
+          "draftSaved": "تم حفظ المسودة",
+          "saving": "جارٍ الحفظ…",
+          "saved": "تم حفظ القالب",
+          "saveFailed": "تعذّر حفظ القالب.",
+          "downloadExampleSheet": "تنزيل ورقة المثال",
+          "exampleSheetDownloaded": "تم تنزيل ورقة المثال",
+          "importSheet": "استيراد ورقة",
+          "sendForSignature": "إرسال للتوقيع الإلكتروني",
+          "useForOneEmployee": "استخدام لموظف واحد",
+          "saveBeforeSending": "احفظ القالب قبل الإرسال منه.",
+          "youSend": "أنت المُرسِل",
+          "detailsTitle": "المستند",
+          "nameEn": "الاسم (بالإنجليزية)",
+          "nameAr": "الاسم (بالعربية)",
+          "category": "الفئة",
+          "documentKind": "التخطيط",
+          "defaultLanguage": "اللغة",
+          "status": "الحالة",
+          "langEn": "الإنجليزية",
+          "langAr": "العربية",
+          "bodyEn": "الفقرة الافتتاحية",
+          "declarationEn": "الإقرار",
+          "fieldsTitle": "الحقول ({count})",
+          "requiredCount": "{count} مطلوب",
+          "addField": "إضافة حقل",
+          "noFields": "لا توجد حقول بعد. قسم النظام ومربع التوقيع موجودان دائماً في المستند.",
+          "untitledField": "حقل بدون اسم",
+          "required": "مطلوب",
+          "requiredField": "مطلوب في النموذج",
+          "moveUp": "تحريك لأعلى",
+          "moveDown": "تحريك لأسفل",
+          "removeField": "حذف الحقل",
+          "fieldInspector": "الحقل المحدد",
+          "fieldLabelEn": "التسمية (بالإنجليزية)",
+          "fieldLabelAr": "التسمية (بالعربية)",
+          "fieldKey": "مفتاح الحقل",
+          "fieldType": "نوع الحقل",
+          "fieldSource": "مصدر القيمة",
+          "fieldSection": "مكان الظهور",
+          "fixedValue": "نص ثابت في المستند",
+            "options": "الخيارات",
+            "optionsHint": "يختار المندوب أحد هذه الخيارات.",
+            "optionPlaceholder": "نص الخيار",
+            "addOption": "إضافة خيار",
+            "removeOption": "حذف الخيار",
+          "previewValue": "قيمة تجريبية",
+          "previewValuePlaceholder": "تظهر في المعاينة فقط",
+          "previewTitle": "معاينة مباشرة",
+          "previewCompany": "مسلم للتوصيل",
+          "previewEmployeeSignature": "توقيع الموظف المعتمد",
+          "previewStaffSignature": "توقيع الموارد البشرية",
+          "previewHint": "هذه هي الصفحة التي يستلمها المندوب، بمقاس A4.",
+          "kinds": {
+            "penalty": "إشعار جزاء",
+            "loan": "عقد سلفة",
+            "general": "مستند عام"
+          },
+          "sections": {
+            "employee": "معلومات الموظف",
+            "document": "تفاصيل الموظف"
+          },
+          "sources": {
+            "fromSystem": "من النظام",
+            "youEnter": "أنت تُدخله",
+            "fixed": "ثابت",
+            "signedByPerson": "يوقّعه شخص"
+          },
+          "types": {
+            "text": "نص",
+            "textarea": "نص طويل",
+            "number": "رقم",
+            "date": "تاريخ",
+            "select": "اختيار واحد"
+          },
+          "errors": {
+            "fixedNeedsValue": "الحقل الثابت يحتاج النص الذي يظهر في المستند.",
+            "signatureNotDropdown": "الحقل الذي يوقّعه شخص لا يمكن أن يكون قائمة اختيار."
+          },
+          "preview": {
+            "internalDocument": "مستند داخلي",
+            "company": "الشركة",
+            "untitled": "قالب بدون اسم",
+            "employeeInformation": "بيانات الموظف",
+            "noEmployeeFields": "لا توجد حقول موظف بعد",
+            "penaltyDetails": "تفاصيل الجزاء",
+            "loanDetails": "تفاصيل السلفة",
+            "documentDetails": "تفاصيل المستند",
+            "noDocumentFields": "لا توجد حقول مستند بعد",
+            "columnItem": "البند",
+            "columnValue": "القيمة",
+            "managementUseOnly": "للاستخدام الإداري فقط",
+            "ceoDecision": "قرار الرئيس التنفيذي",
+            "approved": "موافق",
+            "notApproved": "غير موافق",
+            "hrAdminDepartment": "إدارة الموارد البشرية / الإدارة",
+            "generalManager": "المدير العام",
+            "approvalStatus": "حالة الموافقة",
+            "decision": "القرار",
+            "loanNotReceived": "في حال عدم استلام السلفة",
+            "refPrefix": "مرجع الموارد البشرية",
+            "pageOf": "صفحة {page} من {total}",
+            "signatureDate": "التوقيع والتاريخ"
+          },
+          "statusActive": "نشط",
+          "statusDraft": "مسودة",
+          "statusInactive": "غير نشط",
+          "systemRowsTitle": "دائماً في المستند",
+          "systemRowsHint": "يملأ النظام هذه الحقول من ملف الموظف وقت الإرسال. غير قابلة للتعديل وتظهر في كل مستند.",
+          "noEmployeeFieldsHint": "لم تُضف حقول إلى هذا القسم بعد. أضف حقلاً إذا كان قسم الموظف يحتاج قيمة لا يملكها النظام."
+        }
+      }
     }
   }
 }
