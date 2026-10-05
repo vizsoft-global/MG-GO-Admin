@@ -41,7 +41,9 @@ type Draft = {
 export function VehicleUseTypesPanel({ types }: { types: VehicleUseTypeWithUsage[] }) {
   const t = useTranslations("pages.settings.vehicleUses");
   const { can } = useAuth();
-  const canManage = can("settings.manage");
+  // Cannot be `settings.manage`: this panel is reached from OperationsHub, which
+  // an operations user opens with `vehicles.manage` alone.
+  const canManage = can("vehicles.manage");
   const router = useRouter();
   const queryClient = useQueryClient();
   const [pending, startTransition] = useTransition();

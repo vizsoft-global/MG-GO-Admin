@@ -1092,7 +1092,9 @@ async function updateDriverIntakeInner(
   const customFieldDefs = await listCustomFieldDefinitions("driver", {
     includeInactive: true,
   });
-  const customParsed = parseCustomFieldsFromFormData(formData, customFieldDefs);
+  const customParsed = parseCustomFieldsFromFormData(formData, customFieldDefs, {
+    allowLegacyKeys: true,
+  });
   if (customParsed.errors.length > 0) {
     return { error: "invalid_custom_fields" };
   }

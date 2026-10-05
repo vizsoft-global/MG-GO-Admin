@@ -7,6 +7,7 @@ import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { effectiveEsignStatus, isEsignDueDateAllowed } from "./esign-due-date";
 import { esignDocumentHref } from "./esign-storage-key";
+import { esignRecipientStage, isEsignRecipientStage } from "./esign-recipient-stage";
 import type {
   EsignCategoryRow,
   EsignDetail,
@@ -19,9 +20,17 @@ import type {
 
 async function requireRequestsManage() {
   const session = await getSessionUser();
+  // EmployeeDesk V2 is gated on `employeedesk.manage` and reuses these reads and
+  // writes verbatim, so the gate accepts either slug rather than forcing a
+  // second, drifting copy of every action for the new module.
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "requests.manage", session.isSuperAdmin)
+    (!hasPermissionInSet(session.permissions, "requests.manage", session.isSuperAdmin) &&
+      !hasPermissionInSet(
+        session.permissions,
+        "employeedesk.manage",
+        session.isSuperAdmin,
+      ))
   ) {
     throw new Error("not_authorized");
   }
@@ -61,6 +70,15 @@ function mapListRow(r: Record<string, unknown>): EsignListRow {
     batch_id: r.batch_id != null ? String(r.batch_id) : null,
     batch_code: r.batch_code != null ? String(r.batch_code) : null,
     description: r.description != null ? String(r.description) : null,
+    // The server derives the recipient stage in `admin_list_esign_requests`
+    // beside `display_status`. Read when present so the tracker and the RPC
+    // cannot disagree, and left undefined when a caller's payload predates the
+    // column — `esignRecipientStage` then derives the same answer locally.
+    recipient_stage: isEsignRecipientStage(r.recipient_stage)
+      ? r.recipient_stage
+      : undefined,
+    last_reminded_at: r.last_reminded_at != null ? String(r.last_reminded_at) : null,
+    reminder_count: Number(r.reminder_count ?? 0),
   };
 }
 
@@ -134,7 +152,9 @@ export async function fetchEsignStatusCounts(): Promise<EsignStatusCounts> {
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
 
   const [requests, categories] = await Promise.all([
-    (supabase as any).from("esign_requests").select("status, due_at, created_at, signed_at"),
+    (supabase as any)
+      .from("esign_requests")
+      .select("status, due_at, created_at, signed_at, viewed_at"),
     supabase
       .from("esign_categories")
       .select("id", { count: "exact", head: true })
@@ -147,9 +167,28 @@ export async function fetchEsignStatusCounts(): Promise<EsignStatusCounts> {
     due_at: string | null;
     created_at: string | null;
     signed_at: string | null;
+    viewed_at: string | null;
   }[];
   const count = (status: string) =>
     rows.filter((row) => effectiveEsignStatus(row.status, row.due_at, today) === status).length;
+  /**
+   * The opened / not-opened split, derived exactly the way the list RPC derives
+   * it: terminal status first, then expiry, then the `viewed_at` test.
+   *
+   * Taking the effective status first is what keeps the tile honest — an
+   * overdue-but-unopened row is `expired` on both sides, so it is in neither
+   * half rather than inflating "not opened" with work that is no longer the
+   * operator's to chase. `esignRecipientStage` is the same helper the tracker
+   * and the batch detail use, so there is one rule and not three.
+   */
+  const recipientStageCount = (stage: "opened" | "not_opened") =>
+    rows.filter(
+      (row) =>
+        esignRecipientStage({
+          status: effectiveEsignStatus(row.status, row.due_at, today),
+          viewed_at: row.viewed_at,
+        }) === stage,
+    ).length;
 
   return {
     all: rows.length,
@@ -158,6 +197,8 @@ export async function fetchEsignStatusCounts(): Promise<EsignStatusCounts> {
     declined: count("declined"),
     expired: count("expired"),
     cancelled: count("cancelled"),
+    opened: recipientStageCount("opened"),
+    notOpened: recipientStageCount("not_opened"),
     signedLast30d: rows.filter((row) => row.signed_at != null && row.signed_at >= since).length,
     sentLast30d: rows.filter((row) => row.created_at != null && row.created_at >= since).length,
     categories: categories.count ?? 0,

@@ -106,13 +106,26 @@
     "assistant": "مساعد الموظفين",
     "payroll": "الرواتب والطلبات",
     "driverDevices": "أجهزة السائقين",
-    "sourceCompanies": "الشركات"
+    "sourceCompanies": "الشركات",
+    "employeedesk": "مكتب الموظفين",
+    "employeedeskAll": "كل الطلبات",
+    "employeedeskIncoming": "الواردة",
+    "employeedeskOutgoing": "الصادرة",
+    "employeedeskEsign": "التوقيع الإلكتروني",
+    "employeedeskEsignSigning": "للتوقيع",
+    "employeedeskVisits": "حجوزات الزيارة",
+    "employeedeskReports": "التقارير",
+    "employeedeskSettings": "إعدادات مكتب الموظفين",
+    "operationsHub": "مركز العمليات"
   },
   "appNavGroups": {
     "overview": "نظرة عامة",
+    "employeedesk": "مكتب الموظفين",
+    "operationsHub": "مركز العمليات",
     "fleet": "الأسطول",
     "operations": "العمليات",
     "payroll": "الرواتب",
+    "settings": "الإعدادات",
     "system": "النظام",
     "wip": "قيد التطوير",
     "unorganised": "غير منظّم",
@@ -4691,6 +4704,7 @@
           "colShare": "النسبة",
           "emptyTitle": "لا توجد طلبات هذا الشهر",
           "emptyDescription": "تظهر الإجماليات الشهرية عند وجود طلبات.",
+          "exportTruncated": "يحتوي ملف CSV على أحدث {shown} من {total}",
           "deltaVsPrev": "{delta} مقارنة بالفترة السابقة",
           "deltaFaster": "أسرع بـ {days} يوم",
           "deltaSlower": "أبطأ بـ {days} يوم",
@@ -4793,8 +4807,10 @@
             "templates": "القوالب",
             "send": "جديد من قالب",
             "bulk": "استيراد جماعي",
+            "drafts": "المسودات",
             "batches": "الدفعات",
             "sent": "الطلبات المرسلة",
+            "waiting": "بانتظار التوقيع",
             "signatures": "التوقيعات الإلكترونية",
             "categories": "فئات التوقيع",
             "screenshot": "إعدادات التوقيع الإلكتروني",
@@ -4804,8 +4820,10 @@
             "templates": "قوالب HTML وحقول الفئة",
             "send": "إنشاء PDF وإشعار سائق واحد",
             "bulk": "رقم الموظف من إكسل → PDF لكل سائق",
+            "drafts": "شاشات إرسال غير مُرسَلة يمكنك متابعتها",
             "batches": "تتبع دفعات BAT-####",
             "sent": "تتبع الطلبات التي أرسلتها وحالتها",
+            "waiting": "من لم يفتح المستند قط، ومن قرأه وتوقف، مع إمكانية تذكير كل سائق.",
             "signatures": "المعلقة والموقعة والمرفوضة والمنتهية",
             "categories": "الفئات والأيقونات وسياسة لقطة الشاشة",
             "screenshot": "فئات التوقيع والأيقونات وسياسة لقطة الشاشة",
@@ -4813,6 +4831,7 @@
           },
           "tilesMeta": {
             "sent": "{total} طلب · {pending} قيد الانتظار",
+            "waiting": "{notOpened} لم يفتحوا",
             "signatures": "{pending} قيد الانتظار",
             "categories": "{count} فئة",
             "calendar": "عرض التقويم"
@@ -4904,10 +4923,16 @@
           "company": "الشركة",
           "employeeName": "اسم الموظف",
           "employeeId": "رقم MG",
+          "saveDraft": "حفظ كمسودة",
+          "updateDraft": "تحديث المسودة",
+          "draftSaved": "تم حفظ المسودة",
+          "draftsLink": "كل المسودات",
           "errors": {
             "missingFields": "القالب والموظف والعنوان مطلوبة",
             "createFailed": "تعذر إنشاء الطلب",
-            "due_in_past": "لا يمكن أن يكون تاريخ الاستحقاق في الماضي"
+            "due_in_past": "لا يمكن أن يكون تاريخ الاستحقاق في الماضي",
+            "draftTemplate": "اختر قالباً قبل حفظ المسودة",
+            "draftFailed": "تعذر حفظ المسودة"
           }
         },
         "bulk": {
@@ -4932,6 +4957,10 @@
           "confirm": "تأكيد وإرسال",
           "queued": "تم وضع الدفعة {code} في الانتظار",
           "readyCount": "{ok} جاهز من {total}",
+          "saveDraft": "حفظ كمسودة",
+          "updateDraft": "تحديث المسودة",
+          "draftSaved": "تم حفظ المسودة",
+          "draftsLink": "كل المسودات",
           "status": {
             "ok": "جاهز",
             "unknown_id": "رقم غير معروف",
@@ -4945,8 +4974,40 @@
             "batch_cap": "صفوف أكثر من حد الدفعة",
             "noOkRows": "لا أرقام موظفين قابلة للحل",
             "createFailed": "تعذر إنشاء الدفعة",
-            "processFailed": "فشلت دفعة — افتح الدفعة للمتابعة"
+            "processFailed": "فشلت دفعة — افتح الدفعة للمتابعة",
+            "draftTemplate": "اختر قالباً قبل حفظ المسودة",
+            "draftEmpty": "ارفع ملفاً قبل حفظ المسودة",
+            "draftFailed": "تعذر حفظ المسودة"
           }
+        },
+        "drafts": {
+          "title": "المسودات",
+          "subtitle": "شاشات إرسال لم تُرسَل بعد — لا مستند ولا رمز SIG هنا.",
+          "back": "رجوع",
+          "newDraft": "مسودة جديدة",
+          "tabAll": "الكل",
+          "tabSingle": "فردي",
+          "tabBulk": "جماعي",
+          "kindSingle": "فردي",
+          "kindBulk": "جماعي",
+          "untitled": "مسودة بلا عنوان",
+          "resume": "متابعة",
+          "remove": "حذف المسودة",
+          "removeTitle": "حذف هذه المسودة؟",
+          "removeConfirm": "سيتم إهمال \"{name}\". لم يُرسل شيء، فلا يتأثر أي سائق.",
+          "removeSubmit": "حذف المسودة",
+          "removeDone": "تم حذف المسودة",
+          "removeFailed": "تعذر حذف المسودة",
+          "emptyTitle": "لا مسودات",
+          "emptyDescription": "حفظ إرسال أو استيراد جماعي كمسودة يضعه هنا.",
+          "emptyFiltered": "لا مسودات من هذا النوع",
+          "colDraft": "المسودة",
+          "colTemplate": "القالب",
+          "colRecipients": "المستلمون",
+          "colLanguage": "اللغة",
+          "colAuthor": "المُنشئ",
+          "colUpdated": "آخر حفظ",
+          "colActions": "إجراءات"
         },
         "batches": {
           "title": "الدفعات",
@@ -4980,6 +5041,187 @@
           },
           "errors": {
             "processFailed": "تعذر معالجة الدفعة التالية"
+          }
+        },
+        "tracker": {
+          "title": "أُرسل للتوقيع",
+          "subtitle": "كل دفعة، ومن وقّع، ومن ما زال يحتفظ بالمستند",
+          "kpiBatches30d": "دفعات مرسلة (30 يوم)",
+          "kpiWaiting": "في الانتظار",
+          "kpiSigned": "موقّع بالكامل",
+          "kpiDeclined": "مرفوض",
+          "searchPlaceholder": "ابحث بالدفعة أو العنوان أو القالب",
+          "templateAll": "كل القوالب",
+          "tabs": {
+            "all": "الكل",
+            "waiting": "في الانتظار",
+            "inProgress": "قيد التقدم",
+            "completed": "مكتمل",
+            "hasDeclines": "به رفض"
+          },
+          "batchStatus": {
+            "waiting": "في الانتظار",
+            "inProgress": "قيد التقدم",
+            "completed": "مكتمل",
+            "hasDeclines": "به رفض"
+          },
+          "recipientStatus": {
+            "signed": "موقّع",
+            "opened": "فُتح ولم يوقّع",
+            "notOpened": "لم يُفتح",
+            "declined": "مرفوض",
+            "expired": "منتهي",
+            "cancelled": "ملغى"
+          },
+          "colBatch": "الدفعة",
+          "colTitle": "العنوان",
+          "colTemplate": "القالب",
+          "colProgress": "التقدم",
+          "colStatus": "الحالة",
+          "colSent": "أُرسل",
+          "colReminded": "التذكيرات",
+          "colActions": "إجراءات",
+          "progressLabel": "{signed} من {total} موقّع",
+          "progressHint": "{waiting} في الانتظار · {declined} مرفوض",
+          "remind": "تذكير المنتظرين",
+          "remindShort": "تذكير",
+          "remindNone": "لا أحد بحاجة إلى تذكير",
+          "remindSent": "أُرسل {count} تذكير",
+          "remindCooldownBlocked": "{count} ما زالوا داخل مهلة {hours} ساعة",
+          "remindCooldownBadge": "{count} تذكير مُرسل",
+          "remindCooldownTooltip": "تم التذكير {count} مرة · {hours} ساعة بين التذكيرات",
+          "retry": "إعادة المحاولة للفاشلة",
+          "retryShort": "إعادة",
+          "retrying": "جارٍ إعادة المحاولة…",
+          "retryDone": "{created} أُرسل · {failed} ما زال فاشلاً",
+          "retryNone": "لا صفوف فاشلة",
+          "download": "تنزيل الموقّع",
+          "downloadShort": "ZIP",
+          "downloadNone": "لا شيء موقّع بعد",
+          "emptyTitle": "لا دفعات بعد",
+          "emptyDescription": "الاستيراد الجماعي للتوقيع ينشئ دفعة هنا.",
+          "emptyFiltered": "لا دفعات تطابق هذه المرشحات",
+          "clearFilters": "مسح المرشحات",
+          "errors": {
+            "loadFailed": "تعذر تحميل الدفعات",
+            "remindFailed": "تعذر إرسال التذكيرات",
+            "retryFailed": "تعذر إعادة المحاولة للصفوف الفاشلة",
+            "downloadFailed": "تعذر إنشاء الملف المضغوط"
+          }
+        },
+        "waiting": {
+          "title": "بانتظار التوقيع",
+          "subtitle": "السائقون الذين لم يوقّعوا بعد، مقسّمون حسب فتحهم المستند",
+          "back": "رجوع",
+          "refresh": "تحديث",
+          "viewDetails": "عرض التفاصيل",
+          "remindOne": "تذكير",
+          "remindAllNotOpened": "تذكير كل من لم يفتح",
+          "remindFailed": "تعذّر إرسال التذكير",
+          "reminded": "تم إرسال {count} تذكير",
+          "cooldownToast": "تم تذكير كل المحدَّدين خلال آخر {hours} ساعة",
+          "cooldownTooltip": "التذكير التالي بعد {hours} ساعة",
+          "never": "أبداً",
+          "sentToday": "أُرسل اليوم",
+          "sentDaysAgo": "أُرسل قبل {count} يوم",
+          "stageOpened": "فُتح ولم يوقَّع",
+          "stageNotOpened": "لم يُفتح",
+          "tabAll": "كل المنتظرين",
+          "tabNotOpened": "لم يُفتح",
+          "tabOpened": "فُتح",
+          "kpiWaiting": "بانتظار التوقيع",
+          "kpiWaitingCaption": "لا يزال قيد المعالجة",
+          "kpiNotOpened": "لم يُفتح",
+          "kpiNotOpenedCaption": "قائمة الاتصال — قد لا يُقرأ التذكير",
+          "kpiOpened": "فُتح",
+          "kpiOpenedCaption": "قُرئ وبانتظار التوقيع",
+          "kpiExpired": "منتهي",
+          "kpiExpiredCaption": "تجاوز تاريخ الاستحقاق",
+          "colCode": "رقم الطلب",
+          "colDriver": "السائق",
+          "colDocument": "المستند",
+          "colStage": "المرحلة",
+          "colDue": "تاريخ الاستحقاق",
+          "colReminded": "آخر تذكير",
+          "colActions": "إجراءات",
+          "emptyTitle": "لا يوجد ما هو بانتظار",
+          "emptyDescription": "تمّت الإجابة عن كل طلبات التوقيع.",
+          "emptyFiltered": "لا يوجد سائق في هذه الفئة حالياً."
+        },
+        "batchDetail": {
+          "back": "كل الدفعات",
+          "viewDetails": "عرض التفاصيل",
+          "meta": "{created} أُرسل · {failed} فشل · {total} صف · {status}",
+          "progressLabel": "{signed} من {total} موقّع",
+          "recipientTabs": {
+            "all": "الكل",
+            "signed": "موقّع",
+            "waiting": "في الانتظار",
+            "declined": "مرفوض"
+          },
+          "colRow": "الصف",
+          "colEmployee": "رقم الموظف",
+          "colName": "الاسم",
+          "colStage": "المرحلة",
+          "colDue": "الاستحقاق",
+          "colReminded": "التذكيرات",
+          "colRequest": "الطلب",
+          "colActions": "إجراءات",
+          "viewRequest": "فتح",
+          "repair": "تصحيح الصف",
+          "repairShort": "تصحيح",
+          "repairTitle": "تصحيح صف الدفعة",
+          "repairSubtitle": "الصف {row} — صحّح رقم الموظف أو قيم الجدول ثم أرسل هذا الصف فقط",
+          "repairSubmit": "حفظ وإرسال",
+          "repairSaved": "تم تصحيح الصف وإرساله",
+          "repairFailed": "تعذر تصحيح الصف",
+          "repairNoFields": "لا توجد أعمدة جدول لتصحيحها في هذا القالب",
+          "remove": "حذف الصف",
+          "removeShort": "حذف",
+          "removeTitle": "حذف صف من الدفعة",
+          "removeConfirm": "حذف الصف {row} من هذه الدفعة؟ لن يتم إرساله.",
+          "removeSubmit": "حذف",
+          "removeDone": "تم حذف الصف",
+          "removeFailed": "تعذر حذف الصف",
+          "declinedTitle": "سبب الرفض",
+          "declinedSubtitle": "ما كتبه السائق عند الرفض",
+          "declinedEmpty": "لم يترك السائق سببًا",
+          "remindTitle": "إرسال تذكيرات",
+          "remindSubtitle": "يظهر فقط من لم يوقّع بعد",
+          "remindSelected": "تذكير {count} محدد",
+          "remindOne": "تذكير هذا السائق",
+          "selectAll": "تحديد الكل",
+          "noRemindable": "الجميع في هذه الدفعة قد ردّ",
+          "cooldownHint": "تم التذكير {count} مرة · {hours} ساعة بين التذكيرات",
+          "never": "أبدًا",
+          "cancel": "إلغاء",
+          "stageOpened": "فُتح، لم يوقّع",
+          "stageNotOpened": "لم يُفتح",
+          "stageSigned": "موقّع",
+          "stageDeclined": "مرفوض",
+          "stageExpired": "منتهي",
+          "stageCancelled": "ملغى",
+          "progressHint": "{waiting} بانتظار · {declined} مرفوض · {failed} فشل",
+          "downloadNone": "لا مستندات موقّعة في هذه الدفعة بعد",
+          "retryDone": "{created} أُرسل · {failed} ما زال فاشلًا",
+          "retryNone": "لا صفوف فاشلة لإعادة المحاولة",
+          "rowIdentity": "الصف المرفوع",
+          "rowSheetValues": "قيم الجدول",
+          "rowError": "سبب الفشل",
+          "emptyRows": "لا صفوف في هذه الدفعة",
+          "emptyFiltered": "لا مستلمين في هذا التبويب",
+          "retry": "إعادة المحاولة للصفوف الفاشلة",
+          "resume": "متابعة الإرسال",
+          "download": "تنزيل الموقّع",
+          "errors": {
+            "notFound": "الدفعة غير موجودة",
+            "loadFailed": "تعذر تحميل الدفعة",
+            "downloadFailed": "تعذر إنشاء الملف المضغوط"
+          },
+          "rowStage": {
+            "pending": "قيد الانتظار",
+            "created": "أُرسل",
+            "failed": "فشل"
           }
         },
         "status": {
@@ -5273,25 +5515,14 @@
             "remarks": "سجل الملاحظات",
             "internalNotes": "ملاحظات داخلية"
           }
-        },
-        "reports": {
-          "requests": "الطلبات",
-          "title": "تقارير RCM",
-          "subtitle": "مؤشرات سريعة للشهر الحالي",
-          "fullReports": "التقارير الكاملة",
-          "stubTitle": "التحليلات التفصيلية قريباً",
-          "stubBody": "ستظهر اتجاهات الحل ومعدلات إكمال التوقيع في إصدار لاحق. استخدم الإعدادات ← التقارير للعنصر النائب.",
-          "kpi": {
-            "total": "إجمالي الطلبات",
-            "pending": "معلق",
-            "overdue": "متأخر (15 ي)",
-            "avgResolution": "متوسط الحل"
-          }
         }
       },
       "export": "تصدير",
       "colDepartment": "القسم",
       "resultCount": "عرض {shown} من {total}",
+      "pageOf": "الصفحة {page} من {total}",
+      "prevPage": "السابق",
+      "nextPage": "التالي",
       "bulk": {
         "selected": "{count} محدد",
         "selectAll": "تحديد كل الصفوف",
@@ -6945,7 +7176,9 @@
           "blockers": {
             "blocked_by_deliveries": "لا تزال هناك عمليات توصيل مرتبطة بهذه الصفوف.",
             "blocked_by_restaurants": "لا تزال هناك مطاعم مرتبطة بهذه الصفوف.",
-            "blocked_by_fuel": "لا تزال سجلات الوقود مرتبطة بهذه المركبات."
+            "blocked_by_fuel": "لا تزال سجلات الوقود مرتبطة بهذه المركبات.",
+            "blocked_by_drivers": "لا يزال هناك سائقون معيّنون على هذه الصفوف.",
+            "blocked_by_intakes": "لا تزال استمارات السائقين تشير إلى هذه الصفوف."
           },
           "nouns": {
             "deliveries": "تسليم",
@@ -6999,6 +7232,125 @@
             "verifications": "ملفات تحقق DPD وصفوفها.",
             "payroll": "لقطات الرواتب وصفوفها."
           }
+        },
+        "filtered": {
+          "button": "مسح حسب الفلتر",
+          "tab": "مسح حسب الفلتر",
+          "title": "مسح {module} حسب الفلتر",
+          "subtitle": "اختر قيماً من عمود واحد أو أكثر، راجع الصفوف المطابقة، ثم احذف تلك فقط.",
+          "bannerTitle": "هذا يحذف الصفوف المطابقة فقط",
+          "bannerBody": "اختر عموداً، ثم اختر قيمة أو اكتبها، وأضفها كفلتر. تُحذف فقط الصفوف المطابقة لكل الفلاتر — مع ملفاتها المخزّنة ومستخدمي Auth المرتبطين. لا يمكن التراجع.",
+          "column": "العمود",
+          "columnPlaceholder": "اختر عموداً…",
+          "loadingColumns": "جارٍ تحميل الأعمدة…",
+          "noColumns": "{module} لا يحتوي على أعمدة قابلة للفلترة بعد. استخدم «مسح الكل» بدلاً من ذلك.",
+          "value": "القيمة",
+          "valuePlaceholder": "اختر قيمة…",
+          "loadingValues": "جارٍ تحميل القيم…",
+          "valueSearch": "ابحث في القيم…",
+          "noValues": "لا توجد قيم للاختيار.",
+          "selectAll": "تحديد الكل",
+          "clear": "إلغاء التحديد",
+          "valueCount": "{count} محددة",
+          "rangeSeparator": "إلى",
+          "min": "الحد الأدنى",
+          "max": "الحد الأعلى",
+          "textPlaceholder": "اكتب للبحث…",
+          "addFilter": "إضافة فلتر",
+          "clearDraft": "إلغاء",
+          "activeFilters": "الفلاتر النشطة ({count})",
+          "noFilters": "لا توجد فلاتر بعد — كل صفوف الوحدة ستُطابق.",
+          "editFilter": "تعديل هذا الفلتر",
+          "matchCount": "{count} صف مطابق",
+          "reviewEmpty": "لا توجد صفوف في هذه الصفحة.",
+          "blockedBody": "{module} يحتوي على صفوف ما زالت وحدات لاحقة تشير إليها. احذف الفلتر الذي يختارها، أو امسح الوحدة اللاحقة أولاً.",
+          "deleteMatching": "حذف {count}",
+          "cancel": "إلغاء",
+          "success": "تم حذف {count} صف مطابق.",
+          "confirmTitle": "حذف الصفوف المطابقة",
+          "confirmItemName": "{count} صف مطابق في {module}",
+          "confirmPhrase": "احذف {count} {noun}",
+          "warning": "هذا يحذف نهائياً كل صف يطابق الفلاتر، مع ملفات التخزين الخاصة به، ويزيل مستخدمي Auth المرتبطين بالسائقين. لا تراجع.",
+          "errors": {
+            "emptyValue": "أضف قيمة قبل تطبيق الفلتر."
+          },
+          "range": {
+            "any": "أي"
+          },
+          "values": {
+            "empty": "(فارغ)",
+            "yes": "نعم",
+            "no": "لا",
+            "active": "نشط",
+            "inactive": "غير نشط",
+            "unassigned": "غير معيّن"
+          },
+          "columns": {
+            "zone": "المنطقة",
+            "riderCategory": "فئة السائق",
+            "companyName": "اسم الشركة",
+            "status": "الحالة",
+            "attendance": "الحضور",
+            "restaurants": "المطاعم",
+            "platformName": "المنصة",
+            "vehicleType": "نوع المركبة",
+            "todayDeliveries": "توصيلات اليوم",
+            "kind": "النوع",
+            "condition": "الحالة الفنية",
+            "carType": "نوع السيارة",
+            "typeOfUse": "نوع الاستخدام",
+            "fuelType": "نوع الوقود",
+            "fuelCompany": "شركة الوقود",
+            "carsCompany": "شركة السيارات",
+            "empCompany": "شركة الموظف",
+            "project": "المشروع",
+            "replacement": "بديل",
+            "driver": "السائق",
+            "year": "سنة الصنع",
+            "partner": "الشريك",
+            "restaurant": "المطعم",
+            "type": "نوع الطلب",
+            "department": "القسم",
+            "category": "التصنيف",
+            "priority": "الأولوية",
+            "actionType": "نوع الإجراء",
+            "severity": "الخطورة",
+            "docType": "نوع المستند",
+            "tracking": "متابعة الانتهاء",
+            "file": "اسم الملف",
+            "station": "المحطة",
+            "active": "نشط",
+            "name": "الاسم",
+            "zoneType": "نوع المنطقة",
+            "scopeType": "النطاق",
+            "period": "الفترة",
+            "month": "الشهر",
+            "source": "المصدر",
+            "offDays": "أيام الراحة"
+          },
+          "columnOverrides": {
+            "drivers": { "todayDeliveries": "توصيلات اليوم" },
+            "vehicles": { "year": "سنة الصنع", "kind": "النوع" },
+            "deliveries": { "date": "تاريخ الإنشاء" },
+            "attendance": { "date": "تاريخ السجل" },
+            "earnings": { "date": "تاريخ الاستحقاق" },
+            "payouts": { "date": "بداية الفترة" },
+            "requests": { "date": "تاريخ الإنشاء" },
+            "visits": { "date": "تاريخ الزيارة" },
+            "notifications": { "date": "تاريخ الإنشاء" },
+            "esign": { "date": "تاريخ الإرسال" },
+            "fuel": { "date": "تاريخ التعبئة" },
+            "wrong_actions": { "date": "تاريخ الوقوع" },
+            "documents": { "date": "تاريخ الانتهاء" },
+            "order_recon": { "date": "تاريخ البداية" },
+            "verifications": { "date": "تاريخ الخدمة" }
+          },
+          "panelBannerTitle": "«مسح حسب الفلتر» حذف نهائي",
+          "panelBannerBody": "اختر وحدة، ثم اختر قيماً من أعمدتها وراجع الصفوف المطابقة قبل الحذف. تُحذف فقط الصفوف المطابقة لكل الفلاتر، مع ملفاتها المخزّنة ومستخدمي Auth المرتبطين.",
+          "panelModule": "الوحدة",
+          "panelModulePlaceholder": "اختر وحدة…",
+          "panelStart": "اختر القيم",
+          "panelColumns": "الأعمدة القابلة للفلترة:"
         },
         "modules": {
           "deliveries": "التسليمات",
@@ -8706,6 +9058,462 @@
         "tooManyDrivers": "عدد كبير جدًا (الحد 200)",
         "saveFailed": "تعذر حفظ العلم",
         "exportFailed": "فشل التصدير"
+      }
+    },
+    "employeedesk": {
+      "hub": {
+        "title": "مكتب الموظفين",
+        "subtitle": "كل مستندات وطلبات الموظفين في مكان واحد.",
+        "breadcrumb": "مكتب الموظفين",
+        "open": "فتح",
+        "cards": {
+          "esign": {
+            "title": "التوقيع الإلكتروني",
+            "body": "القوالب والإرسال الجماعي والدفعات والتوقيعات."
+          },
+          "requests": {
+            "title": "الطلبات والشكاوى",
+            "body": "السلف والإجازات والوقود والعهد والشكاوى."
+          },
+          "visits": {
+            "title": "حجوزات الزيارة",
+            "body": "زيارات الفروع والمواعيد والاستقبال."
+          },
+          "reports": {
+            "title": "التقارير",
+            "body": "تقارير الطلبات والزيارات والتوقيع الإلكتروني."
+          },
+          "settings": {
+            "title": "إعدادات مكتب الموظفين",
+            "body": "المسارات والفئات والقوالب وصلاحيات الموظفين."
+          }
+        }
+      },
+      "esign": {
+        "hub": {
+          "title": "التوقيع الإلكتروني",
+          "subtitle": "أنشئ القوالب وأرسلها للتوقيع وتابع كل دفعة.",
+          "breadcrumbHub": "مكتب الموظفين",
+          "breadcrumb": "التوقيع الإلكتروني",
+          "cards": {
+            "templates": {
+              "title": "القوالب",
+              "body": "ابنِ المستند مرة واحدة، بالحقول التي يملأها النظام وتلك التي يوقّعها الشخص."
+            },
+            "send": {
+              "title": "إرسال للتوقيع",
+              "body": "لمندوب واحد: اختر القالب، واملأ ما لا يعرفه النظام، ثم أرسل."
+            },
+            "bulk": {
+              "title": "إرسال كشف جماعي",
+              "body": "ثلاث خطوات: اختر القالب، وحمّل الكشف، ثم أرسل الصفوف التي اجتازت كل الفحوص فقط."
+            },
+            "drafts": {
+              "title": "المسودات",
+              "body": "إرسالات وكشوف غير مكتملة. لا يُخصص شيء قبل الإرسال."
+            },
+            "sent": {
+              "title": "الطلبات المرسلة",
+              "body": "من فتح ومن وقّع ومن رفض، وما زال معلقاً."
+            },
+            "waiting": {
+              "title": "بانتظار التوقيع",
+              "body": "قسّم الطلبات المعلّقة حسب فتح السائق للمستند، وتابع من يحتاج إلى اتصال."
+            },
+            "signing": {
+              "title": "بحاجة إلى توقيع",
+              "body": "المندوبون الذين لم يفتحوا مستندهم بعد. التذكير لا يصل إلى من لم يره."
+            },
+            "batches": {
+              "title": "الدفعات",
+              "body": "تقدم كل إرسال جماعي، مع إعادة المحاولة للصفوف التي فشلت."
+            }
+          }
+        },
+        "templates": {
+          "breadcrumbRcm": "الطلبات والشكاوى",
+          "breadcrumbHub": "مكتب الموظفين",
+          "breadcrumbEsign": "التوقيع الإلكتروني",
+          "title": "القوالب",
+          "subtitle": "لكل قالب ورقة مثال. استورد رقم الموظف فيكمل النظام البيانات الشخصية.",
+          "newTemplate": "إنشاء من قالب",
+          "loadFailed": "تعذّر تحميل القوالب.",
+          "emptyTitle": "لا توجد قوالب بعد",
+          "emptyBody": "أنشئ قالباً لتحديد ما يقرأه المندوب ويوقّع عليه.",
+          "fieldCount": "{count} حقول",
+          "versionLabel": "إصدار {version}",
+          "open": "عرض المستند",
+          "banner": "توقيع جماعي وإرجاع",
+          "backToOutgoing": "رجوع إلى الصادر",
+          "chips": {
+            "employeeId": "رقم الموظف",
+            "filledFromSystem": "يُملأ من النظام",
+            "youEnter": "أنت تُدخل",
+            "signatureRows": "يحتوي صفوف توقيع"
+          },
+          "statusActive": "نشط",
+          "statusDraft": "مسودة",
+          "statusInactive": "غير نشط",
+          "tabs": {
+            "all": "الكل",
+            "active": "نشط",
+            "draft": "مسودة",
+            "inactive": "غير نشط"
+          },
+          "kinds": {
+            "penalty": "جزاء",
+            "loan": "سلفة",
+            "general": "عام"
+          }
+        },
+        "bulk": {
+          "title": "استيراد جماعي من Excel",
+          "subtitle": "يعمل مع أي قالب. رقم الموظف يجلب البيانات الشخصية من النظام.",
+          "breadcrumbRcm": "الطلبات والشكاوى",
+          "breadcrumbHub": "مكتب الموظف",
+          "breadcrumbEsign": "التوقيع الإلكتروني",
+          "backToOutgoing": "رجوع إلى الصادر",
+          "steps": {
+            "template": "اختيار القالب",
+            "upload": "تحميل الملف",
+            "review": "مراجعة الصفوف"
+          },
+          "footerHint1": "اختر القالب، ومنه تأتي أعمدة الملف.",
+          "footerHint2": "صف واحد لكل موظف. رقم الموظف هو العمود الوحيد الذي لا يمكن حذفه.",
+          "sendNote": "يُشعَر كل موظف للتوقيع بمجرد الإرسال. وتعود النسخ الموقّعة معًا.",
+          "sheetColumnsTitle": "ما يطلبه هذا الملف",
+          "groups": {
+            "system": "يُملأ من النظام",
+            "sheet": "تضيفه في الملف"
+          },
+          "requiredTag": "مطلوب",
+          "sheetHeaderNote": "يحتوي ملفك على {count} عمودًا. تُطابق أسماء الأعمدة مع القالب، لذا يُتجاهل العمود المعاد تسميته بدلًا من تخمينه.",
+          "fieldTemplate": "القالب",
+          "fieldTemplatePlaceholder": "اختر قالبًا",
+          "fieldTemplateSearch": "بحث في القوالب",
+          "fieldTitle": "عنوان الدفعة",
+          "fieldLocale": "لغة PDF",
+          "fieldDue": "تاريخ الاستحقاق",
+          "downloadExample": "تنزيل الملف النموذجي",
+          "exampleDownloaded": "تم تنزيل الملف النموذجي",
+          "dropHere": "أفلت ملف Excel هنا، أو اضغط للاختيار",
+          "dropMeta": "‏.xlsx أو .xls أو .csv · حتى {cap} صفًا",
+          "beforeUpload": "نزّل الملف النموذجي واملأه — يجب أن تتطابق أسماء الأعمدة.",
+          "checks": {
+            "employeeId": "تم العثور على عمود رقم الموظف",
+            "columns": "أسماء الأعمدة تطابق القالب",
+            "dates": "قُرئت التواريخ بصيغة YYYY-MM-DD"
+          },
+          "summaryRows": "{count} صفًا",
+          "summaryReady": "{count} جاهز",
+          "summaryFix": "{count} يحتاج تصحيحًا",
+          "footerCounts": "{ready} من {total} جاهز للإرسال",
+          "colEmployeeId": "رقم الموظف",
+          "colEmployee": "الموظف",
+          "colStatus": "الحالة",
+          "colActions": "الإجراء",
+          "readyRow": "جاهز",
+          "replace": "استبدال",
+          "showingRange": "عرض {from}–{to} من {total}",
+          "prevPage": "السابق",
+          "nextPage": "التالي",
+          "emptyTitle": "لم تُقرأ أي صفوف من الملف",
+          "emptyDescription": "كل الصفوف فارغة، أو عمود رقم الموظف فارغ في كل صف.",
+          "continue": "متابعة",
+          "reviewRows": "مراجعة الصفوف",
+          "back": "رجوع",
+          "send": "إرسال للتوقيع الإلكتروني",
+          "saveDraft": "حفظ المسودة",
+          "updateDraft": "تحديث المسودة",
+          "draftSaved": "تم حفظ المسودة",
+          "allDrafts": "كل المسودات",
+          "queued": "تمت جدولة الدفعة {code}",
+          "status": {
+            "ok": "جاهز",
+            "unknown_id": "رقم موظف غير معروف",
+            "archived": "الموظف مؤرشف",
+            "blocked": "الموظف محظور",
+            "ambiguous": "يطابق أكثر من موظف",
+            "invalid": "غير صالح"
+          },
+          "errors": {
+            "missing_employee_id": "لا يوجد عمود رقم الموظف في الملف.",
+            "batch_cap": "عدد الصفوف في الاستيراد كبير جدًا. قسّم الملف وأرسله على أجزاء.",
+            "tooLarge": "حجم الملف أكبر من 5 ميغابايت.",
+            "unreadable": "تعذّرت قراءة هذا الملف كجدول بيانات.",
+            "noOkRows": "لم يُطابق أي صف موظفًا، لذا لا يوجد ما يُرسل.",
+            "createFailed": "تعذّر إنشاء الدفعة.",
+            "processFailed": "أُنشئت الدفعة، لكن توليد المستندات توقف في المنتصف.",
+            "draftTemplate": "اختر قالبًا قبل حفظ المسودة",
+            "draftEmpty": "حمّل ملفًا قبل حفظ المسودة",
+            "draftFailed": "تعذّر حفظ المسودة"
+          },
+          "fix": {
+            "title": "تصحيح هذا الصف",
+            "subtitle": "الصف {row} — لم يُطابق رقم الموظف",
+            "hint": "اكتب رقم الموظف كما يظهر في قائمة السائقين.",
+            "save": "حفظ الصف"
+          }
+        },
+        "templateBuilder": {
+          "breadcrumbRcm": "الطلبات والشكاوى",
+          "breadcrumbHub": "مكتب الموظفين",
+          "breadcrumbTemplates": "القوالب",
+          "untitled": "قالب بدون اسم",
+          "builderSubtitle": "كل صف يوضّح مصدر قيمته، والصفحة المجاورة هي ما سيقرأه المندوب.",
+          "backToList": "رجوع إلى القوالب",
+          "save": "حفظ القالب",
+          "saveDraft": "حفظ كمسودة",
+          "draftSaved": "تم حفظ المسودة",
+          "saving": "جارٍ الحفظ…",
+          "saved": "تم حفظ القالب",
+          "saveFailed": "تعذّر حفظ القالب.",
+          "downloadExampleSheet": "تنزيل ورقة المثال",
+          "exampleSheetDownloaded": "تم تنزيل ورقة المثال",
+          "importSheet": "استيراد ورقة",
+          "sendForSignature": "إرسال للتوقيع الإلكتروني",
+          "useForOneEmployee": "استخدام لموظف واحد",
+          "saveBeforeSending": "احفظ القالب قبل الإرسال منه.",
+          "youSend": "أنت المُرسِل",
+          "detailsTitle": "المستند",
+          "nameEn": "الاسم (بالإنجليزية)",
+          "nameAr": "الاسم (بالعربية)",
+          "category": "الفئة",
+          "noCategories": "لا توجد فئات بعد — أضف فئة من إعدادات التوقيع الإلكتروني.",
+          "documentKind": "التخطيط",
+          "defaultLanguage": "اللغة",
+          "status": "الحالة",
+          "langEn": "الإنجليزية",
+          "langAr": "العربية",
+          "bodyEn": "الفقرة الافتتاحية",
+          "declarationEn": "الإقرار",
+          "fieldsTitle": "الحقول ({count})",
+          "requiredCount": "{count} مطلوب",
+          "addField": "إضافة حقل",
+          "noFields": "لا توجد حقول بعد. قسم النظام ومربع التوقيع موجودان دائماً في المستند.",
+          "untitledField": "حقل بدون اسم",
+          "required": "مطلوب",
+          "requiredField": "مطلوب في النموذج",
+          "moveUp": "تحريك لأعلى",
+          "moveDown": "تحريك لأسفل",
+          "removeField": "حذف الحقل",
+          "fieldInspector": "الحقل المحدد",
+          "fieldLabelEn": "التسمية (بالإنجليزية)",
+          "fieldLabelAr": "التسمية (بالعربية)",
+          "fieldKey": "مفتاح الحقل",
+          "fieldType": "نوع الحقل",
+          "fieldSource": "مصدر القيمة",
+          "fieldSection": "مكان الظهور",
+          "fixedValue": "نص ثابت في المستند",
+          "options": "الخيارات",
+          "optionsHint": "يختار المندوب أحد هذه الخيارات.",
+          "optionPlaceholder": "نص الخيار",
+          "addOption": "إضافة خيار",
+          "removeOption": "حذف الخيار",
+          "previewValue": "قيمة تجريبية",
+          "previewValuePlaceholder": "تظهر في المعاينة فقط",
+          "previewTitle": "معاينة مباشرة",
+          "previewCompany": "مسلم للتوصيل",
+          "previewEmployeeSignature": "توقيع الموظف المعتمد",
+          "previewStaffSignature": "توقيع الموارد البشرية",
+          "previewHint": "هذه هي الصفحة التي يستلمها المندوب، بمقاس A4.",
+          "kinds": {
+            "penalty": "إشعار جزاء",
+            "loan": "عقد سلفة",
+            "general": "مستند عام",
+            "payslip": "قسيمة راتب"
+          },
+          "sections": {
+            "employee": "معلومات الموظف",
+            "document": "تفاصيل الموظف"
+          },
+          "sources": {
+            "fromSystem": "من النظام",
+            "youEnter": "أنت تُدخله",
+            "fixed": "ثابت",
+            "signedByPerson": "يوقّعه شخص"
+          },
+          "types": {
+            "text": "نص",
+            "textarea": "نص طويل",
+            "number": "رقم",
+            "date": "تاريخ",
+            "select": "اختيار واحد"
+          },
+          "errors": {
+            "fixedNeedsValue": "الحقل الثابت يحتاج النص الذي يظهر في المستند.",
+            "signatureNotDropdown": "الحقل الذي يوقّعه شخص لا يمكن أن يكون قائمة اختيار."
+          },
+          "preview": {
+            "internalDocument": "مستند داخلي",
+            "company": "الشركة",
+            "untitled": "قالب بدون اسم",
+            "employeeInformation": "بيانات الموظف",
+            "noEmployeeFields": "لا توجد حقول موظف بعد",
+            "penaltyDetails": "تفاصيل الجزاء",
+            "loanDetails": "تفاصيل السلفة",
+            "documentDetails": "تفاصيل المستند",
+            "noDocumentFields": "لا توجد حقول مستند بعد",
+            "columnItem": "البند",
+            "columnValue": "القيمة",
+            "managementUseOnly": "للاستخدام الإداري فقط",
+            "ceoDecision": "قرار الرئيس التنفيذي",
+            "approved": "موافق",
+            "notApproved": "غير موافق",
+            "hrAdminDepartment": "إدارة الموارد البشرية / الإدارة",
+            "generalManager": "المدير العام",
+            "approvalStatus": "حالة الموافقة",
+            "decision": "القرار",
+            "loanNotReceived": "في حال عدم استلام السلفة",
+            "refPrefix": "مرجع الموارد البشرية",
+            "pageOf": "صفحة {page} من {total}",
+            "signatureDate": "التوقيع والتاريخ",
+            "payslipDetails": "تفاصيل قسيمة الراتب"
+          },
+          "statusActive": "نشط",
+          "statusDraft": "مسودة",
+          "statusInactive": "غير نشط",
+          "systemRowsTitle": "دائماً في المستند",
+          "systemRowsHint": "يملأ النظام هذه الحقول من ملف الموظف وقت الإرسال. غير قابلة للتعديل وتظهر في كل مستند.",
+          "noEmployeeFieldsHint": "لم تُضف حقول إلى هذا القسم بعد. أضف حقلاً إذا كان قسم الموظف يحتاج قيمة لا يملكها النظام."
+        }
+      },
+      "settings": {
+        "title": "الإعدادات",
+        "subtitle": "ضبط مسارات الموافقة والتصنيفات والأصول والصلاحيات للطلبات والشكاوى",
+        "groups": {
+          "workflow": "مسار الموافقة",
+          "catalog": "التصنيفات",
+          "app": "التوقيع والسجل"
+        },
+        "links": {
+          "workflows": "مسارات الموافقة",
+          "types": "أنواع الطلبات وحقولها",
+          "departments": "الأقسام والموظفون",
+          "roles": "الأدوار وصلاحيات الوصول",
+          "categories": "تصنيفات الشكاوى",
+          "tenure": "مدد السلف المتاحة",
+          "assets": "كتالوج الأصول",
+          "screenshot": "إعدادات لقطات الشاشة",
+          "esign": "إعدادات التوقيع الإلكتروني",
+          "importExport": "الاستيراد والتصدير الجماعي",
+          "audit": "سجل التدقيق"
+        },
+        "linksDesc": {
+          "workflows": "تحديد خطوات الموافقة ومهل الإنجاز ومسارات التصعيد",
+          "types": "إدارة أنواع الطلبات والحقول المخصصة ولقطات الشاشة",
+          "departments": "الفرق والأعضاء وقواعد الإسناد",
+          "roles": "دوران: للعرض فقط، وللاعتماد أو الرفض، بمصفوفة لكل نوع",
+          "categories": "إدارة خيارات تصنيفات الشكاوى",
+          "tenure": "مدد سداد السلف التي يمكن للمندوب اختيارها",
+          "assets": "الأصناف التي يمكن للمندوب طلبها مع أرصدة المخزون",
+          "screenshot": "منع لقطات الشاشة لكل نوع طلب ومستند",
+          "esign": "تصنيفات التوقيع والأيقونات وسياسة لقطات الشاشة",
+          "importExport": "استيراد المندوبين والأصول وتصدير بيانات التقارير",
+          "audit": "تتبع كل إجراء وتغيير على الطلبات"
+        },
+        "linksMeta": {
+          "workflows": "{count, plural, =0 {لا مسارات} one {مسار واحد} two {مساران} few {# مسارات} many {# مسارًا} other {# مسار}}",
+          "types": "{count, plural, =0 {لا أنواع} one {نوع واحد} two {نوعان} few {# أنواع} many {# نوعًا} other {# نوع}}",
+          "assets": "{count, plural, =0 {لا أصول} one {أصل واحد} two {أصلان} few {# أصول} many {# أصلًا} other {# أصل}}",
+          "departments": "{count, plural, =0 {لا أقسام} one {قسم واحد} two {قسمان} few {# أقسام} many {# قسمًا} other {# قسم}}",
+          "roles": "{count, plural, =0 {لا أدوار} one {دور واحد} two {دوران} few {# أدوار} many {# دورًا} other {# دور}}",
+          "esign": "{count, plural, =0 {لا تصنيفات} one {تصنيف واحد} two {تصنيفان} few {# تصنيفات} many {# تصنيفًا} other {# تصنيف}}"
+        }
+      },
+      "reports": {
+        "title": "التقارير",
+        "subtitle": "الطلبات والزيارات والتوقيع الإلكتروني جنبًا إلى جنب خلال هذا الشهر (الكويت)",
+        "kpi": {
+          "requests": "طلبات هذا الشهر",
+          "pending": "بانتظار الاعتماد",
+          "overdue": "متأخرة",
+          "esignPending": "توقيعات معلّقة",
+          "visitsToday": "زيارات اليوم",
+          "avgResolution": "متوسط الحل"
+        },
+        "modulesHeading": "التقارير الكاملة",
+        "links": {
+          "requests": "تقارير الطلبات",
+          "visits": "تقارير الزيارات",
+          "audit": "سجل تدقيق الطلبات"
+        },
+        "linksDesc": {
+          "requests": "الحجم وعبء الأقسام مع التصدير",
+          "visits": "الحجوزات وتسجيل الحضور وعدم الحضور والتصدير",
+          "audit": "كل إجراء وتغيير مسجّل على الطلب"
+        },
+        "meta": {
+          "requests": "{count, plural, =0 {لا طلبات} one {طلب واحد} two {طلبان} few {# طلبات} many {# طلبًا} other {# طلب}}",
+          "visits": "{count, plural, =0 {لا زيارات قادمة} one {زيارة قادمة} two {زيارتان قادمتان} few {# زيارات قادمة} many {# زيارة قادمة} other {# زيارة قادمة}}"
+        },
+        "workload": {
+          "title": "عبء العمل حسب القسم",
+          "subtitle": "حجم الاعتمادات وزمن القرار لكل قسم خلال هذا الشهر (الكويت)",
+          "window": "هذا الشهر",
+          "managersOnly": "يحتاج تفصيل الأقسام إلى صلاحية مدير الطلبات. أما صفحات التقارير أعلاه فتبقى متاحة لك.",
+          "empty": "لا نشاط اعتماد هذا الشهر",
+          "emptyBody": "تظهر الأقسام هنا بعد وصول طلب إلى إحدى خطوات اعتمادها.",
+          "failed": "تفصيل الأقسام غير متاح",
+          "failedBody": "تعذّر قراءة التقرير. حاول مرة أخرى بعد قليل.",
+          "columns": {
+            "department": "القسم",
+            "requests": "الطلبات",
+            "approved": "معتمدة",
+            "rejected": "مرفوضة",
+            "avgStep": "متوسط الخطوة"
+          }
+        },
+        "adminOnly": "للمديرين فقط"
+      }
+    },
+    "operationsHub": {
+      "hub": {
+        "title": "مركز العمليات",
+        "subtitle": "القواعد والشركاء والمناطق والجداول التشغيلية التي يتبعها كل توصيل.",
+        "breadcrumb": "مركز العمليات",
+        "cards": {
+          "partners": {
+            "title": "الشركاء",
+            "body": "طلبات ودورداش وأوبر إيتس والعقود المرتبطة بها."
+          },
+          "restaurants": {
+            "title": "المطاعم",
+            "body": "دليل المتاجر والنطاقات الجغرافية للتوصيل والسائقون المعيّنون لها."
+          },
+          "zones": {
+            "title": "المناطق",
+            "body": "مناطق التوصيل والنطاقات الجغرافية والسائقون المعيّنون إليها."
+          },
+          "deliveryRules": {
+            "title": "قواعد التوصيل",
+            "body": "أهداف عدد الطلبات لكل مطعم ومنطقة وقواعد الطلب."
+          },
+          "incentiveRules": {
+            "title": "قواعد الحوافز",
+            "body": "الشرائح والمكافآت والفترات التي تُطبَّق فيها."
+          },
+          "driverFields": {
+            "title": "حقول السائق",
+            "body": "حقول إضافية تُسجَّل في ملف السائق."
+          },
+          "attendanceSettings": {
+            "title": "حدود الحضور",
+            "body": "قواعد السماح والغياب والخروج التلقائي للأسطول."
+          },
+          "vehicleTypes": {
+            "title": "أنواع المركبات",
+            "body": "الكتالوج الذي تُصنَّف به المركبة."
+          },
+          "vehicleUses": {
+            "title": "استخدامات المركبات",
+            "body": "تشغيلية أو تدريبية أو احتياطية — الغرض من المركبة."
+          },
+          "sourceCompanies": {
+            "title": "الشركات",
+            "body": "الشركات التي يُورَّد من خلالها السائقون."
+          }
+        }
       }
     }
   }

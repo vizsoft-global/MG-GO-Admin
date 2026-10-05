@@ -10,7 +10,10 @@ export default async function VehicleUsesSettingsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requirePermission(locale, "settings.manage");
+  // Operations owns this list — it is reached from OperationsHub, whose card is
+  // gated on `vehicles.manage`. Requiring `settings.manage` here would show the
+  // tile to an operations user and then bounce them to /unauthorized.
+  await requirePermission(locale, "vehicles.manage");
 
   const types = await listVehicleUseTypesWithUsage();
   return <VehicleUseTypesPanel types={types} />;

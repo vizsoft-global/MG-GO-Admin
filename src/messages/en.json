@@ -106,13 +106,26 @@
     "assistant": "Staff Assistant",
     "payroll": "Payroll & Requests",
     "driverDevices": "Driver devices",
-    "sourceCompanies": "Companies"
+    "sourceCompanies": "Companies",
+    "employeedesk": "EmployeeDesk",
+    "employeedeskAll": "All requests",
+    "employeedeskIncoming": "Incoming",
+    "employeedeskOutgoing": "Outgoing",
+    "employeedeskEsign": "E-Signature",
+    "employeedeskEsignSigning": "To sign",
+    "employeedeskVisits": "Visit bookings",
+    "employeedeskReports": "Reports",
+    "employeedeskSettings": "EmployeeDesk settings",
+    "operationsHub": "OperationsHub"
   },
   "appNavGroups": {
     "overview": "Overview",
+    "employeedesk": "EmployeeDesk",
+    "operationsHub": "OperationsHub",
     "fleet": "Fleet",
     "operations": "Operations",
     "payroll": "Payroll",
+    "settings": "Settings",
     "system": "System",
     "wip": "Work in Progress",
     "unorganised": "Unorganised",
@@ -4691,6 +4704,7 @@
           "colShare": "Share",
           "emptyTitle": "No requests this month",
           "emptyDescription": "Monthly aggregates appear once requests exist.",
+          "exportTruncated": "CSV holds the newest {shown} of {total}",
           "deltaVsPrev": "{delta} vs last period",
           "deltaFaster": "{days}d faster",
           "deltaSlower": "{days}d slower",
@@ -4793,8 +4807,10 @@
             "templates": "Templates",
             "send": "New from template",
             "bulk": "Bulk import",
+            "drafts": "Drafts",
             "batches": "Batches",
             "sent": "Sent requests",
+            "waiting": "Waiting for signature",
             "signatures": "E-signatures",
             "categories": "Signature categories",
             "screenshot": "E-Signature settings",
@@ -4804,8 +4820,10 @@
             "templates": "HTML templates and category fields",
             "send": "Generate a PDF and notify one rider",
             "bulk": "Excel Employee ID → one PDF per rider",
+            "drafts": "Unsent send screens you can resume",
             "batches": "Track BAT-#### upload runs",
             "sent": "Track requests you have sent and their status",
+            "waiting": "Who never opened the document, who read it and stopped, and a reminder per rider.",
             "signatures": "Pending, signed, rejected and expired signatures",
             "categories": "Categories, icons and screenshot policy",
             "screenshot": "Signature categories, icons and screenshot policy",
@@ -4813,6 +4831,7 @@
           },
           "tilesMeta": {
             "sent": "{total} requests · {pending} pending",
+            "waiting": "{notOpened} not opened",
             "signatures": "{pending} pending",
             "categories": "{count} categories",
             "calendar": "View calendar"
@@ -4904,10 +4923,16 @@
           "company": "Company",
           "employeeName": "Employee name",
           "employeeId": "MG ID",
+          "saveDraft": "Save draft",
+          "updateDraft": "Update draft",
+          "draftSaved": "Draft saved",
+          "draftsLink": "All drafts",
           "errors": {
             "missingFields": "Template, employee and title are required",
             "createFailed": "Could not create request",
-            "due_in_past": "Due date cannot be in the past"
+            "due_in_past": "Due date cannot be in the past",
+            "draftTemplate": "Pick a template before saving a draft",
+            "draftFailed": "Could not save the draft"
           }
         },
         "bulk": {
@@ -4932,6 +4957,10 @@
           "confirm": "Confirm and send",
           "queued": "Batch {code} queued",
           "readyCount": "{ok} ready of {total}",
+          "saveDraft": "Save draft",
+          "updateDraft": "Update draft",
+          "draftSaved": "Draft saved",
+          "draftsLink": "All drafts",
           "status": {
             "ok": "Ready",
             "unknown_id": "Unknown ID",
@@ -4945,8 +4974,40 @@
             "batch_cap": "Too many rows for one batch",
             "noOkRows": "No resolvable Employee IDs",
             "createFailed": "Could not create batch",
-            "processFailed": "A chunk failed — open the batch to resume"
+            "processFailed": "A chunk failed — open the batch to resume",
+            "draftTemplate": "Pick a template before saving a draft",
+            "draftEmpty": "Upload a sheet before saving a draft",
+            "draftFailed": "Could not save the draft"
           }
+        },
+        "drafts": {
+          "title": "Drafts",
+          "subtitle": "Unsent send screens — nothing here has a document or a SIG code yet.",
+          "back": "Back",
+          "newDraft": "New draft",
+          "tabAll": "All",
+          "tabSingle": "Single",
+          "tabBulk": "Bulk",
+          "kindSingle": "Single",
+          "kindBulk": "Bulk",
+          "untitled": "Untitled draft",
+          "resume": "Resume",
+          "remove": "Delete draft",
+          "removeTitle": "Delete this draft?",
+          "removeConfirm": "\"{name}\" will be discarded. Nothing was sent, so no rider is affected.",
+          "removeSubmit": "Delete draft",
+          "removeDone": "Draft deleted",
+          "removeFailed": "Could not delete the draft",
+          "emptyTitle": "No drafts",
+          "emptyDescription": "Saving a send or a bulk import as a draft puts it here.",
+          "emptyFiltered": "No drafts of this kind",
+          "colDraft": "Draft",
+          "colTemplate": "Template",
+          "colRecipients": "Recipients",
+          "colLanguage": "Language",
+          "colAuthor": "Author",
+          "colUpdated": "Last saved",
+          "colActions": "Actions"
         },
         "batches": {
           "title": "Batches",
@@ -4980,6 +5041,187 @@
           },
           "errors": {
             "processFailed": "Could not process the next chunk"
+          }
+        },
+        "tracker": {
+          "title": "Sent for signature",
+          "subtitle": "Every batch, who has signed, and who is still holding it",
+          "kpiBatches30d": "Batches sent (30d)",
+          "kpiWaiting": "Waiting",
+          "kpiSigned": "Fully signed",
+          "kpiDeclined": "Declined",
+          "searchPlaceholder": "Search batch, title or template",
+          "templateAll": "All templates",
+          "tabs": {
+            "all": "All",
+            "waiting": "Waiting",
+            "inProgress": "In progress",
+            "completed": "Completed",
+            "hasDeclines": "Has declines"
+          },
+          "batchStatus": {
+            "waiting": "Waiting",
+            "inProgress": "In progress",
+            "completed": "Completed",
+            "hasDeclines": "Has declines"
+          },
+          "recipientStatus": {
+            "signed": "Signed",
+            "opened": "Opened, not signed",
+            "notOpened": "Not opened",
+            "declined": "Declined",
+            "expired": "Expired",
+            "cancelled": "Cancelled"
+          },
+          "colBatch": "Batch",
+          "colTitle": "Title",
+          "colTemplate": "Template",
+          "colProgress": "Progress",
+          "colStatus": "Status",
+          "colSent": "Sent",
+          "colReminded": "Reminded",
+          "colActions": "Actions",
+          "progressLabel": "{signed} of {total} signed",
+          "progressHint": "{waiting} waiting · {declined} declined",
+          "remind": "Remind waiting",
+          "remindShort": "Remind",
+          "remindNone": "Nobody left to remind",
+          "remindSent": "{count} reminder(s) sent",
+          "remindCooldownBlocked": "{count} still inside the {hours}h cooldown",
+          "remindCooldownBadge": "{count} reminders sent",
+          "remindCooldownTooltip": "Reminded {count} time(s) · {hours}h between reminders",
+          "retry": "Retry failed",
+          "retryShort": "Retry",
+          "retrying": "Retrying…",
+          "retryDone": "{created} sent · {failed} still failing",
+          "retryNone": "No failed rows",
+          "download": "Download signed",
+          "downloadShort": "ZIP",
+          "downloadNone": "Nothing signed yet",
+          "emptyTitle": "No batches yet",
+          "emptyDescription": "A bulk e-sign import creates a batch here.",
+          "emptyFiltered": "No batches match these filters",
+          "clearFilters": "Clear filters",
+          "errors": {
+            "loadFailed": "Could not load batches",
+            "remindFailed": "Could not send reminders",
+            "retryFailed": "Could not retry the failed rows",
+            "downloadFailed": "Could not build the archive"
+          }
+        },
+        "waiting": {
+          "title": "Waiting for signature",
+          "subtitle": "Riders who have not signed yet, split by whether they opened the document",
+          "back": "Back",
+          "refresh": "Refresh",
+          "viewDetails": "View details",
+          "remindOne": "Remind",
+          "remindAllNotOpened": "Remind all not opened",
+          "remindFailed": "Could not send the reminder",
+          "reminded": "{count} reminder(s) sent",
+          "cooldownToast": "Everyone selected was reminded within the last {hours}h",
+          "cooldownTooltip": "Next reminder in {hours}h",
+          "never": "Never",
+          "sentToday": "Sent today",
+          "sentDaysAgo": "Sent {count}d ago",
+          "stageOpened": "Opened, not signed",
+          "stageNotOpened": "Not opened",
+          "tabAll": "All waiting",
+          "tabNotOpened": "Not opened",
+          "tabOpened": "Opened",
+          "kpiWaiting": "Waiting",
+          "kpiWaitingCaption": "Still in flight",
+          "kpiNotOpened": "Not opened",
+          "kpiNotOpenedCaption": "Call list — a reminder may not be read",
+          "kpiOpened": "Opened",
+          "kpiOpenedCaption": "Read, awaiting signature",
+          "kpiExpired": "Expired",
+          "kpiExpiredCaption": "Past the due date",
+          "colCode": "Request ID",
+          "colDriver": "Driver",
+          "colDocument": "Document",
+          "colStage": "Stage",
+          "colDue": "Due date",
+          "colReminded": "Last reminded",
+          "colActions": "Actions",
+          "emptyTitle": "Nothing is waiting",
+          "emptyDescription": "Every signature request has been answered.",
+          "emptyFiltered": "No rider is in this bucket right now."
+        },
+        "batchDetail": {
+          "back": "All batches",
+          "viewDetails": "View details",
+          "meta": "{created} sent · {failed} failed · {total} rows · {status}",
+          "progressLabel": "{signed} of {total} signed",
+          "recipientTabs": {
+            "all": "All",
+            "signed": "Signed",
+            "waiting": "Waiting",
+            "declined": "Declined"
+          },
+          "colRow": "Row",
+          "colEmployee": "Employee ID",
+          "colName": "Name",
+          "colStage": "Stage",
+          "colDue": "Due",
+          "colReminded": "Reminded",
+          "colRequest": "Request",
+          "colActions": "Actions",
+          "viewRequest": "Open",
+          "repair": "Fix row",
+          "repairShort": "Fix",
+          "repairTitle": "Fix batch row",
+          "repairSubtitle": "Row {row} — correct the Employee ID or the sheet values, then send only this row",
+          "repairSubmit": "Save and send",
+          "repairSaved": "Row fixed and sent",
+          "repairFailed": "Could not fix the row",
+          "repairNoFields": "This template has no sheet columns to correct",
+          "remove": "Remove row",
+          "removeShort": "Remove",
+          "removeTitle": "Remove batch row",
+          "removeConfirm": "Remove row {row} from this batch? It will not be sent.",
+          "removeSubmit": "Remove",
+          "removeDone": "Row removed",
+          "removeFailed": "Could not remove the row",
+          "declinedTitle": "Declined reason",
+          "declinedSubtitle": "What the rider wrote when declining",
+          "declinedEmpty": "The rider did not leave a reason",
+          "remindTitle": "Send reminders",
+          "remindSubtitle": "Only riders who have not signed are listed",
+          "remindSelected": "Remind {count} selected",
+          "remindOne": "Remind this rider",
+          "selectAll": "Select all",
+          "noRemindable": "Everyone in this batch has answered",
+          "cooldownHint": "Reminded {count} time(s) · {hours}h between reminders",
+          "never": "Never",
+          "cancel": "Cancel",
+          "stageOpened": "Opened, not signed",
+          "stageNotOpened": "Not opened",
+          "stageSigned": "Signed",
+          "stageDeclined": "Declined",
+          "stageExpired": "Expired",
+          "stageCancelled": "Cancelled",
+          "progressHint": "{waiting} waiting · {declined} declined · {failed} failed",
+          "downloadNone": "No signed documents in this batch yet",
+          "retryDone": "{created} sent · {failed} still failing",
+          "retryNone": "No failed rows to retry",
+          "rowIdentity": "Uploaded row",
+          "rowSheetValues": "Sheet values",
+          "rowError": "Why it failed",
+          "emptyRows": "This batch has no rows",
+          "emptyFiltered": "No recipients in this tab",
+          "retry": "Retry failed rows",
+          "resume": "Continue sending",
+          "download": "Download signed",
+          "errors": {
+            "notFound": "Batch not found",
+            "loadFailed": "Could not load the batch",
+            "downloadFailed": "Could not build the archive"
+          },
+          "rowStage": {
+            "pending": "Pending",
+            "created": "Sent",
+            "failed": "Failed"
           }
         },
         "status": {
@@ -5273,25 +5515,14 @@
             "remarks": "Remarks history",
             "internalNotes": "Internal notes"
           }
-        },
-        "reports": {
-          "requests": "Requests",
-          "title": "RCM reports",
-          "subtitle": "Quick KPIs for the current month",
-          "fullReports": "Full reports",
-          "stubTitle": "Detailed analytics coming soon",
-          "stubBody": "Resolution trends and e-sign completion rates will appear in a future release. Use Settings → Reports for the RCM stub.",
-          "kpi": {
-            "total": "Total requests",
-            "pending": "Pending",
-            "overdue": "Overdue (15d)",
-            "avgResolution": "Avg. resolution"
-          }
         }
       },
       "export": "Export",
       "colDepartment": "Department",
       "resultCount": "Showing {shown} of {total}",
+      "pageOf": "Page {page} of {total}",
+      "prevPage": "Previous",
+      "nextPage": "Next",
       "bulk": {
         "selected": "{count} selected",
         "selectAll": "Select all rows",
@@ -6945,7 +7176,9 @@
           "blockers": {
             "blocked_by_deliveries": "Deliveries still point at these rows.",
             "blocked_by_restaurants": "Restaurants still point at these rows.",
-            "blocked_by_fuel": "Fuel log rows still point at these vehicles."
+            "blocked_by_fuel": "Fuel log rows still point at these vehicles.",
+            "blocked_by_drivers": "Drivers are still assigned to these rows.",
+            "blocked_by_intakes": "Driver intakes still point at these rows."
           },
           "nouns": {
             "deliveries": "DELIVERIES",
@@ -6999,6 +7232,125 @@
             "verifications": "DPD verification imports and their rows.",
             "payroll": "Payroll snapshots and their rows."
           }
+        },
+        "filtered": {
+          "button": "Clear by filter",
+          "tab": "Clear by filter",
+          "title": "Clear {module} by filter",
+          "subtitle": "Pick values from one or more columns, review the matching rows, then delete only those.",
+          "bannerTitle": "This deletes only the rows that match",
+          "bannerBody": "Choose a column, pick or type a value, and add it as a filter. Only rows matching every filter are deleted — with their storage objects and linked Auth users. There is no undo.",
+          "column": "Column",
+          "columnPlaceholder": "Choose a column…",
+          "loadingColumns": "Loading columns…",
+          "noColumns": "{module} has no filterable columns yet. Use Clear all instead.",
+          "value": "Value",
+          "valuePlaceholder": "Pick a value…",
+          "loadingValues": "Loading values…",
+          "valueSearch": "Search values…",
+          "noValues": "No values to pick.",
+          "selectAll": "Select all",
+          "clear": "Clear",
+          "valueCount": "{count} selected",
+          "rangeSeparator": "to",
+          "min": "Minimum",
+          "max": "Maximum",
+          "textPlaceholder": "Type to match…",
+          "addFilter": "Add filter",
+          "clearDraft": "Cancel",
+          "activeFilters": "Active filters ({count})",
+          "noFilters": "No filters yet — every row in the module would match.",
+          "editFilter": "Edit this filter",
+          "matchCount": "{count} row(s) match",
+          "reviewEmpty": "No rows on this page.",
+          "blockedBody": "{module} has rows a later module still points at. Remove the filter that selects them, or clear the later module first.",
+          "deleteMatching": "Delete {count}",
+          "cancel": "Cancel",
+          "success": "Deleted {count} matching row(s).",
+          "confirmTitle": "Delete matching rows",
+          "confirmItemName": "{count} matching row(s) in {module}",
+          "confirmPhrase": "DELETE {count} {noun}",
+          "warning": "This permanently deletes every row matching your filters, together with its storage objects, and removes linked driver Auth users. There is no undo.",
+          "errors": {
+            "emptyValue": "Add a value before applying the filter."
+          },
+          "range": {
+            "any": "any"
+          },
+          "values": {
+            "empty": "(empty)",
+            "yes": "Yes",
+            "no": "No",
+            "active": "Active",
+            "inactive": "Inactive",
+            "unassigned": "Unassigned"
+          },
+          "columns": {
+            "zone": "Zone",
+            "riderCategory": "Rider category",
+            "companyName": "Company name",
+            "status": "Status",
+            "attendance": "Attendance",
+            "restaurants": "Restaurants",
+            "platformName": "Platform",
+            "vehicleType": "Vehicle type",
+            "todayDeliveries": "Deliveries today",
+            "kind": "Kind",
+            "condition": "Condition",
+            "carType": "Car type",
+            "typeOfUse": "Type of use",
+            "fuelType": "Fuel type",
+            "fuelCompany": "Fuel company",
+            "carsCompany": "Cars company",
+            "empCompany": "Employee company",
+            "project": "Project",
+            "replacement": "Replacement",
+            "driver": "Driver",
+            "year": "Model year",
+            "partner": "Partner",
+            "restaurant": "Restaurant",
+            "type": "Request type",
+            "department": "Department",
+            "category": "Category",
+            "priority": "Priority",
+            "actionType": "Action type",
+            "severity": "Severity",
+            "docType": "Document type",
+            "tracking": "Expiry tracking",
+            "file": "File name",
+            "station": "Station",
+            "active": "Active",
+            "name": "Name",
+            "zoneType": "Zone type",
+            "scopeType": "Scope",
+            "period": "Period",
+            "month": "Month",
+            "source": "Source",
+            "offDays": "OFF days"
+          },
+          "columnOverrides": {
+            "drivers": { "todayDeliveries": "Deliveries today" },
+            "vehicles": { "year": "Model year", "kind": "Kind" },
+            "deliveries": { "date": "Created date" },
+            "attendance": { "date": "Log date" },
+            "earnings": { "date": "Earn date" },
+            "payouts": { "date": "Period start" },
+            "requests": { "date": "Created date" },
+            "visits": { "date": "Scheduled date" },
+            "notifications": { "date": "Created date" },
+            "esign": { "date": "Sent date" },
+            "fuel": { "date": "Filled date" },
+            "wrong_actions": { "date": "Occurred date" },
+            "documents": { "date": "Expiry date" },
+            "order_recon": { "date": "From date" },
+            "verifications": { "date": "Service date" }
+          },
+          "panelBannerTitle": "Clear by filter is a permanent delete",
+          "panelBannerBody": "Pick a module, then choose values from its columns and review the matching rows before deleting. Only rows matching every filter are removed, with their storage objects and linked Auth users.",
+          "panelModule": "Module",
+          "panelModulePlaceholder": "Choose a module…",
+          "panelStart": "Choose values",
+          "panelColumns": "Filterable columns:"
         },
         "modules": {
           "deliveries": "Deliveries",
@@ -8706,6 +9058,462 @@
         "tooManyDrivers": "Too many drivers in one batch (max 200)",
         "saveFailed": "Could not save force flags",
         "exportFailed": "Export failed"
+      }
+    },
+    "employeedesk": {
+      "hub": {
+        "title": "EmployeeDesk",
+        "subtitle": "Every employee document and request in one place.",
+        "breadcrumb": "EmployeeDesk",
+        "open": "Open",
+        "cards": {
+          "esign": {
+            "title": "E-Signature",
+            "body": "Templates, bulk sending, batches and signatures."
+          },
+          "requests": {
+            "title": "Requests & Complaints",
+            "body": "Loans, leave, fuel, assets and complaints."
+          },
+          "visits": {
+            "title": "Visit bookings",
+            "body": "Branch visits, slots and reception."
+          },
+          "reports": {
+            "title": "Reports",
+            "body": "Request, visit and e-signature reporting."
+          },
+          "settings": {
+            "title": "EmployeeDesk settings",
+            "body": "Workflows, categories, templates and staff access."
+          }
+        }
+      },
+      "esign": {
+        "hub": {
+          "title": "E-Signature",
+          "subtitle": "Author templates, send them for signature and track every batch.",
+          "breadcrumbHub": "EmployeeDesk",
+          "breadcrumb": "E-Signature",
+          "cards": {
+            "templates": {
+              "title": "Templates",
+              "body": "Build the document once, with the fields the system fills and the ones a person signs."
+            },
+            "send": {
+              "title": "Send for signature",
+              "body": "One rider: pick a template, fill what the system cannot know, send."
+            },
+            "bulk": {
+              "title": "Bulk send a sheet",
+              "body": "Three steps: choose the template, upload the sheet, then send only the rows that passed every check."
+            },
+            "drafts": {
+              "title": "Drafts",
+              "body": "Unfinished sends and bulk sheets. Nothing is allocated until you send."
+            },
+            "sent": {
+              "title": "Sent requests",
+              "body": "Who has opened, signed or declined, and what is still pending."
+            },
+            "waiting": {
+              "title": "Waiting for signature",
+              "body": "Split pending requests by whether the rider opened the document, and chase the ones that need a call."
+            },
+            "signing": {
+              "title": "To sign",
+              "body": "The riders who have not opened their document yet. A reminder cannot reach anyone who has not seen it."
+            },
+            "batches": {
+              "title": "Batches",
+              "body": "Progress for every bulk send, with retry on the rows that failed."
+            }
+          }
+        },
+        "templates": {
+          "breadcrumbRcm": "Request & Complaint",
+          "breadcrumbHub": "EmployeeDesk",
+          "breadcrumbEsign": "E-Signature",
+          "title": "Templates",
+          "subtitle": "Each template has an example sheet. Import the Employee ID and the system fills in the personal details.",
+          "newTemplate": "Create from template",
+          "loadFailed": "Templates could not be loaded.",
+          "emptyTitle": "No templates yet",
+          "emptyBody": "Create a template to define what the rider reads and signs.",
+          "fieldCount": "{count} fields",
+          "versionLabel": "v{version}",
+          "open": "See the document",
+          "banner": "Bulk sign and return",
+          "backToOutgoing": "Back to Outgoing",
+          "chips": {
+            "employeeId": "Employee ID",
+            "filledFromSystem": "Filled from the system",
+            "youEnter": "You enter",
+            "signatureRows": "Has signature rows"
+          },
+          "statusActive": "Active",
+          "statusDraft": "Draft",
+          "statusInactive": "Inactive",
+          "tabs": {
+            "all": "All",
+            "active": "Active",
+            "draft": "Draft",
+            "inactive": "Inactive"
+          },
+          "kinds": {
+            "penalty": "Penalty",
+            "loan": "Loan",
+            "general": "General"
+          }
+        },
+        "templateBuilder": {
+          "breadcrumbRcm": "Request & Complaint",
+          "breadcrumbHub": "EmployeeDesk",
+          "breadcrumbTemplates": "Templates",
+          "untitled": "Untitled template",
+          "builderSubtitle": "Every row says where its value comes from, and the page beside it is what the rider will read.",
+          "backToList": "Back to templates",
+          "save": "Save template",
+          "saveDraft": "Save draft",
+          "draftSaved": "Draft saved",
+          "saving": "Saving…",
+          "saved": "Template saved",
+          "saveFailed": "The template could not be saved.",
+          "downloadExampleSheet": "Download example sheet",
+          "exampleSheetDownloaded": "Example sheet downloaded",
+          "importSheet": "Import a sheet",
+          "sendForSignature": "Send for e-signature",
+          "useForOneEmployee": "Use for one employee",
+          "saveBeforeSending": "Save the template before you send from it.",
+          "youSend": "You send",
+          "detailsTitle": "Document",
+          "nameEn": "Name (English)",
+          "nameAr": "Name (Arabic)",
+          "category": "Category",
+          "noCategories": "No categories yet — add one under E-signature settings.",
+          "documentKind": "Layout",
+          "defaultLanguage": "Language",
+          "status": "Status",
+          "langEn": "English",
+          "langAr": "Arabic",
+          "bodyEn": "Opening paragraph",
+          "declarationEn": "Declaration",
+          "fieldsTitle": "Fields ({count})",
+          "requiredCount": "{count} required",
+          "addField": "Add field",
+          "noFields": "No fields yet. The system section and the signature block are always on the document.",
+          "untitledField": "Untitled field",
+          "required": "Required",
+          "requiredField": "Required on the form",
+          "moveUp": "Move up",
+          "moveDown": "Move down",
+          "removeField": "Remove field",
+          "fieldInspector": "Selected field",
+          "fieldLabelEn": "Label (English)",
+          "fieldLabelAr": "Label (Arabic)",
+          "fieldKey": "Field key",
+          "fieldType": "Field type",
+          "fieldSource": "Where the value comes from",
+          "fieldSection": "Where it appears",
+          "fixedValue": "Fixed text on the document",
+          "options": "Options",
+          "optionsHint": "The rider picks one of these.",
+          "optionPlaceholder": "Option text",
+          "addOption": "Add option",
+          "removeOption": "Remove option",
+          "previewValue": "Sample value",
+          "previewValuePlaceholder": "Shown on the preview only",
+          "previewTitle": "Live preview",
+          "previewCompany": "Musallam Delivery",
+          "previewEmployeeSignature": "Employee Authorized signature",
+          "previewStaffSignature": "HR signature",
+          "previewHint": "This is the page the rider receives, at A4 proportions.",
+          "kinds": {
+            "penalty": "Penalty notice",
+            "loan": "Loan agreement",
+            "general": "General document",
+            "payslip": "Payslip"
+          },
+          "sections": {
+            "employee": "Employee Information",
+            "document": "Employee Details"
+          },
+          "sources": {
+            "fromSystem": "From the system",
+            "youEnter": "You enter",
+            "fixed": "Fixed",
+            "signedByPerson": "Signed by a person"
+          },
+          "types": {
+            "text": "Text",
+            "textarea": "Long text",
+            "number": "Number",
+            "date": "Date",
+            "select": "Choose one"
+          },
+          "errors": {
+            "fixedNeedsValue": "A fixed field needs the text that appears on the document.",
+            "signatureNotDropdown": "A field signed by a person cannot be a list to choose from."
+          },
+          "preview": {
+            "internalDocument": "Internal document",
+            "company": "Company",
+            "untitled": "Untitled template",
+            "employeeInformation": "Employee information",
+            "noEmployeeFields": "No employee fields yet",
+            "penaltyDetails": "Penalty details",
+            "loanDetails": "Loan details",
+            "documentDetails": "Document details",
+            "noDocumentFields": "No document fields yet",
+            "columnItem": "Item",
+            "columnValue": "Value",
+            "managementUseOnly": "Management Use Only",
+            "ceoDecision": "CEO Decision",
+            "approved": "Approved",
+            "notApproved": "Not approved",
+            "hrAdminDepartment": "HR / Admin Department",
+            "generalManager": "General Manager",
+            "approvalStatus": "Approval Status",
+            "decision": "Decision",
+            "loanNotReceived": "In case of not receiving the loan",
+            "refPrefix": "MG HR Ref Emp.",
+            "pageOf": "Page {page} of {total}",
+            "signatureDate": "Signature and date",
+            "payslipDetails": "Payslip details"
+          },
+          "statusActive": "Active",
+          "statusDraft": "Draft",
+          "statusInactive": "Inactive",
+          "systemRowsTitle": "Always on the document",
+          "systemRowsHint": "The system fills these from the employee record at send time. They cannot be edited and they are on every document.",
+          "noEmployeeFieldsHint": "No fields added to this section yet. Add one if the employee block needs a value the system does not hold."
+        },
+        "bulk": {
+          "title": "Bulk import from Excel",
+          "subtitle": "Works with any template. The Employee ID pulls the personal details from the system.",
+          "breadcrumbRcm": "Request & Complaint",
+          "breadcrumbHub": "EmployeeDesk",
+          "breadcrumbEsign": "E-Signature",
+          "backToOutgoing": "Back to Outgoing",
+          "steps": {
+            "template": "Choose template",
+            "upload": "Upload sheet",
+            "review": "Review rows"
+          },
+          "footerHint1": "Pick the template. The columns your sheet needs come from it.",
+          "footerHint2": "One row per employee. Employee ID is the only column a sheet cannot do without.",
+          "sendNote": "Each employee is notified to e-sign as soon as you send. Signed copies come back together.",
+          "sheetColumnsTitle": "What this sheet asks for",
+          "groups": {
+            "system": "Filled from the system",
+            "sheet": "You add in the sheet"
+          },
+          "requiredTag": "Required",
+          "sheetHeaderNote": "Your file has {count} columns. Column names are matched to the template, so a renamed column is ignored rather than guessed.",
+          "fieldTemplate": "Template",
+          "fieldTemplatePlaceholder": "Select a template",
+          "fieldTemplateSearch": "Search templates",
+          "fieldTitle": "Batch title",
+          "fieldLocale": "PDF language",
+          "fieldDue": "Due date",
+          "downloadExample": "Download example sheet",
+          "exampleDownloaded": "Example sheet downloaded",
+          "dropHere": "Drop your Excel sheet here, or click to browse",
+          "dropMeta": ".xlsx, .xls or .csv · up to {cap} rows",
+          "beforeUpload": "Download the example sheet and fill it in — the column names have to match.",
+          "checks": {
+            "employeeId": "Employee ID column found",
+            "columns": "Column names match the template",
+            "dates": "Dates read as YYYY-MM-DD"
+          },
+          "summaryRows": "{count} rows",
+          "summaryReady": "{count} ready",
+          "summaryFix": "{count} need fixing",
+          "footerCounts": "{ready} of {total} ready to send",
+          "colEmployeeId": "Employee ID",
+          "colEmployee": "Employee",
+          "colStatus": "Status",
+          "colActions": "Action",
+          "readyRow": "Ready",
+          "replace": "Replace",
+          "showingRange": "Showing {from}–{to} of {total}",
+          "prevPage": "Previous",
+          "nextPage": "Next",
+          "emptyTitle": "No rows read from the sheet",
+          "emptyDescription": "Every row was blank, or the Employee ID column was empty on each one.",
+          "continue": "Continue",
+          "reviewRows": "Review rows",
+          "back": "Back",
+          "send": "Send for e-signature",
+          "saveDraft": "Save draft",
+          "updateDraft": "Update draft",
+          "draftSaved": "Draft saved",
+          "allDrafts": "All drafts",
+          "queued": "Batch {code} queued",
+          "status": {
+            "ok": "Ready",
+            "unknown_id": "Unknown employee ID",
+            "archived": "Employee archived",
+            "blocked": "Employee blocked",
+            "ambiguous": "Matches more than one employee",
+            "invalid": "Not valid"
+          },
+          "errors": {
+            "missing_employee_id": "The sheet has no Employee ID column.",
+            "batch_cap": "Too many rows in one import. Split the sheet and send it in parts.",
+            "tooLarge": "That file is larger than 5 MB.",
+            "unreadable": "That file could not be read as a spreadsheet.",
+            "noOkRows": "No row in the sheet resolved to an employee, so there is nothing to send.",
+            "createFailed": "The batch could not be created.",
+            "processFailed": "The batch was created, but generating the documents stopped part way.",
+            "draftTemplate": "Pick a template before saving a draft",
+            "draftEmpty": "Upload a sheet before saving a draft",
+            "draftFailed": "Could not save the draft"
+          },
+          "fix": {
+            "title": "Fix this row",
+            "subtitle": "Row {row} — the Employee ID did not resolve",
+            "hint": "Type the employee ID exactly as it appears on the Drivers list.",
+            "save": "Save row"
+          }
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "subtitle": "Configure workflows, categories, assets and access for requests and complaints",
+        "groups": {
+          "workflow": "Approval workflow",
+          "catalog": "Catalogues",
+          "app": "Signing & audit"
+        },
+        "links": {
+          "workflows": "Approval workflows",
+          "types": "Request types & fields",
+          "departments": "Departments & staff",
+          "roles": "Roles & access rights",
+          "categories": "Complaint categories",
+          "tenure": "Loan tenure options",
+          "assets": "Asset catalog",
+          "screenshot": "Screenshot settings",
+          "esign": "E-Signature settings",
+          "importExport": "Bulk import & export",
+          "audit": "Audit log"
+        },
+        "linksDesc": {
+          "workflows": "Define approval steps, SLAs and escalation paths",
+          "types": "Manage request types, custom fields and screenshots",
+          "departments": "Teams, members and assignment rules",
+          "roles": "Two roles: view-only and approve/reject, per-type matrix",
+          "categories": "Manage complaint category options",
+          "tenure": "Which loan repayment periods riders can choose",
+          "assets": "Items riders can request with stock levels",
+          "screenshot": "Block screenshots per request type and document",
+          "esign": "Signature categories, icons and screenshot policy",
+          "importExport": "Import riders and assets, export report data",
+          "audit": "Track every action and change across requests"
+        },
+        "linksMeta": {
+          "workflows": "{count, plural, =0 {No workflows} one {# workflow} other {# workflows}}",
+          "types": "{count, plural, =0 {No request types} one {# request type} other {# request types}}",
+          "assets": "{count, plural, =0 {No assets} one {# asset} other {# assets}}",
+          "departments": "{count, plural, =0 {No departments} one {# department} other {# departments}}",
+          "roles": "{count, plural, =0 {No roles} one {# role} other {# roles}}",
+          "esign": "{count, plural, =0 {No categories} one {# category} other {# categories}}"
+        }
+      },
+      "reports": {
+        "title": "Reports",
+        "subtitle": "Requests, visits and e-signature side by side over this Kuwait month",
+        "kpi": {
+          "requests": "Requests this month",
+          "pending": "Awaiting approval",
+          "overdue": "Overdue",
+          "esignPending": "Signatures pending",
+          "visitsToday": "Visits today",
+          "avgResolution": "Avg. resolution"
+        },
+        "modulesHeading": "Full reports",
+        "links": {
+          "requests": "Request reports",
+          "visits": "Visit reports",
+          "audit": "Requests audit log"
+        },
+        "linksDesc": {
+          "requests": "Volume and department workload with export",
+          "visits": "Bookings, check-ins, no-shows and export",
+          "audit": "Every action and change filed against a request"
+        },
+        "meta": {
+          "requests": "{count, plural, =0 {No requests} one {# request} other {# requests}}",
+          "visits": "{count, plural, =0 {No upcoming visits} one {# upcoming visit} other {# upcoming visits}}"
+        },
+        "workload": {
+          "title": "Department workload",
+          "subtitle": "Approval volume and decision time per department for this Kuwait month",
+          "window": "This month",
+          "managersOnly": "The department breakdown needs the Requests manager permission. The report pages above stay available to you.",
+          "empty": "No approval activity this month",
+          "emptyBody": "Departments appear here once a request reaches one of their approval steps.",
+          "failed": "Department breakdown unavailable",
+          "failedBody": "The report could not be read. Try again in a moment.",
+          "columns": {
+            "department": "Department",
+            "requests": "Requests",
+            "approved": "Approved",
+            "rejected": "Rejected",
+            "avgStep": "Avg step"
+          }
+        },
+        "adminOnly": "Managers only"
+      }
+    },
+    "operationsHub": {
+      "hub": {
+        "title": "OperationsHub",
+        "subtitle": "Rules, partners, zones and the operational tables every delivery follows.",
+        "breadcrumb": "OperationsHub",
+        "cards": {
+          "partners": {
+            "title": "Partners",
+            "body": "Talabat, DoorDash, UberEats and the contracts behind them."
+          },
+          "restaurants": {
+            "title": "Restaurants",
+            "body": "Merchant directory, delivery geofences and assigned riders."
+          },
+          "zones": {
+            "title": "Zones",
+            "body": "Delivery areas, geofences and the drivers assigned to them."
+          },
+          "deliveryRules": {
+            "title": "Delivery rules",
+            "body": "Per-restaurant and per-zone DPD targets and order rules."
+          },
+          "incentiveRules": {
+            "title": "Incentive rules",
+            "body": "Tiers, rewards and the periods they apply to."
+          },
+          "driverFields": {
+            "title": "Driver fields",
+            "body": "Extra fields captured on a rider profile."
+          },
+          "attendanceSettings": {
+            "title": "Attendance thresholds",
+            "body": "Grace, absence and auto-checkout rules for the fleet."
+          },
+          "vehicleTypes": {
+            "title": "Vehicle types",
+            "body": "The catalog a vehicle is classified by."
+          },
+          "vehicleUses": {
+            "title": "Vehicle uses",
+            "body": "Operational, trainer and standby — what a vehicle is for."
+          },
+          "sourceCompanies": {
+            "title": "Companies",
+            "body": "The companies riders are supplied through."
+          }
+        }
       }
     }
   }

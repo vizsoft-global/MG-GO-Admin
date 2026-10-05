@@ -114,6 +114,23 @@ export function statusFiltersForRequestType(
 }
 
 /**
+ * Coerce an untrusted status string into a tab the list can actually show.
+ *
+ * The status tab is seeded from a route (`/employeedesk/incoming` opens on the
+ * queue), and a route segment is just a string: passing `?status=` or a typo
+ * straight into state would select a tab that does not exist, and the list would
+ * then filter by a status nothing matches — an empty table that looks like a
+ * broken query rather than a bad link. An unknown value falls back to `all`,
+ * which is the only tab guaranteed to render something.
+ */
+export function normalizeStatusFilter(value: string | null | undefined): RequestStatusFilter {
+  if (!value) return "all";
+  return (REQUEST_STATUS_FILTERS as readonly string[]).includes(value)
+    ? (value as RequestStatusFilter)
+    : "all";
+}
+
+/**
  * Distinct color per status so adjacent rows pass the squint test (ui-system.mdc §5).
  * Figma "Status & Acknowledgement Conventions" (node 4321:8349):
  * Pending/needs_clarification = orange, In review/submitted = blue, Approved/Solved = green,

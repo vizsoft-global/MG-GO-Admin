@@ -14,6 +14,7 @@ import {
   isR2ObjectKey,
 } from "@/lib/storage/r2-keys";
 import type { DriverDocumentType } from "@/features/drivers/types";
+import type { Json } from "@/types/database";
 import { deleteObject, deleteObjects } from "@/lib/storage/r2-client";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import {
@@ -700,6 +701,299 @@ export async function runPurgeAllModule(
     entityType: `data_cleanup_${entity}_all`,
     routeName: "runPurgeAllModule",
     context: { entity, deleted, remaining, rounds, storage_key_count: storageKeyCount },
+    after: { entity, deleted, remaining, blockers },
+  });
+
+  if (failure && deleted === 0) {
+    return { error: "purge_failed", errorDetail: failure };
+  }
+
+  return {
+    ok: true,
+    entity,
+    deleted,
+    remaining,
+    blockers,
+    rounds,
+    done: blockers.length === 0 && remaining === 0,
+    warning: failure ?? undefined,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Clear by filter — the same delete path, narrowed to a subset        */
+/* ------------------------------------------------------------------ */
+
+export type PurgeFilterColumnInfo = {
+  key: string;
+  kind: string;
+};
+
+export type PurgeFilterFacet = {
+  value: string;
+  /** The server's readable label, or `null` for a raw token. */
+  label: string | null;
+};
+
+export type PurgeFilteredRow = {
+  id: string;
+  label: string;
+  sublabel: string;
+  status: string;
+  kind: string;
+};
+
+export type PurgeFilteredPreview = {
+  count: number;
+  breakdown: Record<string, number>;
+  blockers: string[];
+  sample: PurgeFilteredRow[];
+};
+
+export type PurgeFilteredPage = {
+  rows: PurgeFilteredRow[];
+  total: number;
+  hasMore: boolean;
+};
+
+export type PurgeFilteredRunResult =
+  | {
+      ok: true;
+      entity: string;
+      deleted: number;
+      remaining: number;
+      blockers: string[];
+      rounds: number;
+      done: boolean;
+      warning?: string;
+    }
+  | { error: string; errorDetail?: string };
+
+const PURGE_FILTERED_PAGE_SIZE = 25;
+
+/**
+ * Filtered purge is super admin only, exactly like the row-by-row candidate
+ * tab and for the same reason: it sweeps storage objects and removes Auth
+ * users. The `*.bulk_delete` tick Clear all checks is deliberately *not*
+ * accepted here — a bulk_delete tick is permission to empty a module, and
+ * choosing an arbitrary subset is a different, wider power.
+ */
+async function requireFilteredPurgeAccess() {
+  const session = await getSessionUser();
+  if (!session?.isSuperAdmin) {
+    return { error: "not_authorized" as const };
+  }
+  return { session };
+}
+
+function parseFilteredRows(payload: unknown): PurgeFilteredRow[] {
+  if (!Array.isArray(payload)) return [];
+  return payload.map((entry) => {
+    const row = (entry ?? {}) as Record<string, unknown>;
+    return {
+      id: String(row.id ?? ""),
+      label: String(row.label ?? ""),
+      sublabel: String(row.sublabel ?? ""),
+      status: String(row.status ?? ""),
+      kind: String(row.kind ?? ""),
+    };
+  });
+}
+
+/** The server's word on which columns this entity can be filtered by. */
+export async function fetchPurgeFilterColumns(
+  entity: string,
+): Promise<PurgeFilterColumnInfo[] | { error: string; errorDetail?: string }> {
+  const auth = await requireFilteredPurgeAccess();
+  if (auth.error) return { error: auth.error };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_purge_filter_columns", {
+    p_entity: entity,
+  });
+  if (error) return { error: "fetch_failed", errorDetail: error.message };
+  if (!Array.isArray(data)) {
+    // `NULL` is the server saying this module has no filter spec yet — an
+    // empty list, not a failure, so the dialog can say so plainly.
+    return [];
+  }
+
+  return data.map((entry) => {
+    const row = (entry ?? {}) as Record<string, unknown>;
+    return { key: String(row.key ?? ""), kind: String(row.kind ?? "text") };
+  });
+}
+
+/**
+ * Distinct values for one column, honouring every *other* active filter — the
+ * same contract the drivers list facets use, so a value that cannot match is
+ * not offered.
+ */
+export async function fetchPurgeFilterValues(
+  entity: string,
+  column: string,
+  filters: Record<string, unknown>,
+): Promise<PurgeFilterFacet[] | { error: string; errorDetail?: string }> {
+  const auth = await requireFilteredPurgeAccess();
+  if (auth.error) return { error: auth.error };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_purge_filtered_values", {
+    p_entity: entity,
+    p_column: column,
+    p_filters: filters as unknown as Json,
+  });
+  if (error) return { error: "fetch_failed", errorDetail: error.message };
+  if (!Array.isArray(data)) return [];
+
+  return data.map((entry) => {
+    const row = (entry ?? {}) as Record<string, unknown>;
+    return {
+      value: String(row.value ?? ""),
+      label: row.label == null ? null : String(row.label),
+    };
+  });
+}
+
+export async function previewFilteredPurge(
+  entity: string,
+  filters: Record<string, unknown>,
+): Promise<PurgeFilteredPreview | { error: string; errorDetail?: string }> {
+  const auth = await requireFilteredPurgeAccess();
+  if (auth.error) return { error: auth.error };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_purge_filtered_preview", {
+    p_entity: entity,
+    p_filters: filters as unknown as Json,
+  });
+  if (error) return { error: "preview_failed", errorDetail: error.message };
+
+  const payload = (data ?? {}) as Record<string, unknown>;
+  const blockers = Array.isArray(payload.blockers) ? payload.blockers : [];
+  return {
+    count: Number(payload.count ?? 0),
+    breakdown: (payload.breakdown ?? {}) as Record<string, number>,
+    blockers: blockers.map((entry) => String(entry)),
+    sample: parseFilteredRows(payload.sample),
+  };
+}
+
+export async function pageFilteredPurge(
+  entity: string,
+  filters: Record<string, unknown>,
+  page: number,
+): Promise<PurgeFilteredPage | { error: string; errorDetail?: string }> {
+  const auth = await requireFilteredPurgeAccess();
+  if (auth.error) return { error: auth.error };
+
+  const offset = Math.max(0, (page - 1) * PURGE_FILTERED_PAGE_SIZE);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_purge_filtered_page", {
+    p_entity: entity,
+    p_filters: filters as unknown as Json,
+    p_limit: PURGE_FILTERED_PAGE_SIZE,
+    p_offset: offset,
+  });
+  if (error) return { error: "preview_failed", errorDetail: error.message };
+
+  const payload = (data ?? {}) as Record<string, unknown>;
+  return {
+    rows: parseFilteredRows(payload.rows),
+    total: Number(payload.total ?? 0),
+    hasMore: Boolean(payload.hasMore),
+  };
+}
+
+/**
+ * Deletes the matched subset in 500-row rounds.
+ *
+ * The loop, the budget and the storage/Auth sweep are the Clear all loop,
+ * because a filtered purge must be no more destructive than emptying the
+ * module — only narrower. The filters are re-sent to every round rather than
+ * the ids being pinned up front: a row the operator's filter no longer matches
+ * (a delivery verified between the preview and the run) must not be deleted on
+ * a stale id, and the blockers are re-checked by the RPC each round.
+ */
+export async function runFilteredPurge(
+  entity: string,
+  filters: Record<string, unknown>,
+): Promise<PurgeFilteredRunResult> {
+  const auth = await requireFilteredPurgeAccess();
+  if (auth.error) return { error: auth.error };
+
+  const supabase = await createClient();
+  const startedAt = Date.now();
+  const storageEntries = new Set<string>();
+  const authUserIds = new Set<string>();
+
+  let deleted = 0;
+  let remaining = 0;
+  let blockers: string[] = [];
+  let rounds = 0;
+  let failure: string | null = null;
+  let storageKeyCount = 0;
+
+  for (let round = 0; round < PURGE_ALL_MAX_ROUNDS; round += 1) {
+    if (round > 0 && Date.now() - startedAt > PURGE_ALL_BUDGET_MS) break;
+
+    const { data, error } = await supabase.rpc("admin_purge_filtered_run", {
+      p_entity: entity,
+      p_filters: filters as unknown as Json,
+      p_limit: PURGE_ALL_BATCH,
+    });
+    if (error) {
+      failure = error.message;
+      break;
+    }
+
+    rounds += 1;
+    const payload = (data ?? {}) as {
+      deleted?: number;
+      remaining?: number;
+      blockers?: string[] | null;
+      storage_keys?: string[] | null;
+      manifest?: Array<{ auth_user_id?: string | null }> | null;
+    };
+
+    const roundDeleted = payload.deleted ?? 0;
+    deleted += roundDeleted;
+    remaining = payload.remaining ?? 0;
+    blockers = payload.blockers ?? [];
+
+    for (const entry of payload.storage_keys ?? []) {
+      if (entry) {
+        storageEntries.add(entry);
+        storageKeyCount += 1;
+      }
+    }
+    for (const entry of payload.manifest ?? []) {
+      if (entry?.auth_user_id) authUserIds.add(entry.auth_user_id);
+    }
+
+    if (blockers.length > 0 || roundDeleted === 0 || remaining === 0) break;
+  }
+
+  if (storageEntries.size > 0) {
+    await cleanupStorageEntries([...storageEntries]);
+  }
+
+  if (authUserIds.size > 0) {
+    const admin = createAdminClient();
+    for (const authUserId of authUserIds) {
+      try {
+        await admin.auth.admin.deleteUser(authUserId);
+      } catch {
+        /* best-effort — the profile row is already gone */
+      }
+    }
+  }
+
+  void logAdminMutation({
+    action: "delete",
+    entityType: `data_cleanup_${entity}_filtered`,
+    routeName: "runFilteredPurge",
+    context: { entity, deleted, remaining, rounds, storage_key_count: storageKeyCount, filters },
     after: { entity, deleted, remaining, blockers },
   });
 

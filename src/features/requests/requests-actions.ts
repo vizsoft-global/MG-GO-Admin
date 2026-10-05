@@ -218,6 +218,98 @@ export async function fetchAdminRequestsList(
   };
 }
 
+export type RequestsTrendBucket = { label: string; count: number };
+
+export type RequestsTrend = {
+  total: number;
+  pendingAck: number;
+  approved: number;
+  rejected: number;
+  byType: Record<string, number>;
+  byStatus: Record<string, number>;
+  volume: RequestsTrendBucket[];
+  error?: string;
+};
+
+function numberMap(value: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(asRecord(value))) {
+    out[key] = Number(raw ?? 0);
+  }
+  return out;
+}
+
+/**
+ * The Reports page's aggregates, computed in the database over the whole filtered
+ * window instead of over a capped page of rows.
+ *
+ * The page used to derive its total, breakdowns, acknowledgement count, approval
+ * rate and twelve weekly bars from `fetchAdminRequestsList({ limit: 1000 })`, so
+ * the figures were only correct while the window held fewer than 1000 requests —
+ * and above that they were all short at once, with the current week's bar (the
+ * one an operator looks at) short by the most. One statement over the filtered
+ * set means the numbers cannot be capped by a limit that exists for a different
+ * consumer.
+ *
+ * The filter predicate matches `admin_list_requests`, so this page and the list
+ * it links from still describe one population.
+ */
+export async function fetchAdminRequestsTrend(
+  filters: Pick<
+    RequestListFilters,
+    "datePreset" | "type" | "status" | "departmentKey" | "zoneId" | "search"
+  > & { weeks?: number },
+): Promise<RequestsTrend> {
+  await requireRequestsView();
+  const supabase = await createClient();
+  const { from, to } = datePresetToBounds(filters.datePreset);
+
+  const { data, error } = await supabase.rpc("admin_requests_trend", {
+    p_date_from: from ?? undefined,
+    p_date_to: to ?? undefined,
+    p_type: filters.type || undefined,
+    p_status: filters.status || undefined,
+    p_department_key: filters.departmentKey || undefined,
+    p_zone_id: filters.zoneId || undefined,
+    p_search: filters.search?.trim() || undefined,
+    p_weeks: filters.weeks ?? 12,
+  });
+
+  if (error) return { ...emptyTrend(), error: error.message };
+
+  const payload = asRecord(data);
+  if (payload.ok === false) {
+    return { ...emptyTrend(), error: String(payload.error ?? "failed") };
+  }
+
+  const volumeRaw = Array.isArray(payload.volume) ? payload.volume : [];
+
+  return {
+    total: Number(payload.total ?? 0),
+    pendingAck: Number(payload.pending_ack ?? 0),
+    approved: Number(payload.approved ?? 0),
+    rejected: Number(payload.rejected ?? 0),
+    byType: numberMap(payload.by_type),
+    byStatus: numberMap(payload.by_status),
+    volume: volumeRaw.map((bucket) => {
+      const b = asRecord(bucket);
+      return { label: String(b.label ?? ""), count: Number(b.count ?? 0) };
+    }),
+  };
+}
+
+function emptyTrend(): RequestsTrend {
+  return {
+    total: 0,
+    pendingAck: 0,
+    approved: 0,
+    rejected: 0,
+    byType: {},
+    byStatus: {},
+    volume: [],
+  };
+}
+
 function emptyKpi(): RequestKpis {
   return {
     total: 0,

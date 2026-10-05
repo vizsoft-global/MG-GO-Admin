@@ -24,7 +24,7 @@ import { buildCsv, downloadCsv } from "@/features/driver-tracking/csv-export";
 import { useEsignStatusCounts } from "@/features/esign/use-esign";
 import { queryKeys } from "@/lib/query/query-keys";
 import { selectOptions, selectOptionsFrom } from "@/lib/select-items";
-import { fetchAdminRequestsList } from "./requests-actions";
+import { fetchAdminRequestsList, fetchAdminRequestsTrend } from "./requests-actions";
 import {
   fetchAppointmentStatusCounts,
   fetchRequestDepartmentReport,
@@ -75,25 +75,8 @@ function formatDays(seconds: number | null | undefined): string {
   return `${(seconds / 86400).toFixed(1)}`;
 }
 
-const WEEK_MS = 7 * 24 * 3600 * 1000;
 const CHART_WEEKS = 12;
-
-/** Trailing 12 ISO weeks of created volume — Figma "Requests over time". */
-function weeklyVolume(rows: { created_at: string }[]): { label: string; count: number }[] {
-  const now = Date.now();
-  const buckets = Array.from({ length: CHART_WEEKS }, (_, i) => ({
-    label: `W${i + 1}`,
-    count: 0,
-  }));
-  for (const row of rows) {
-    const created = Date.parse(row.created_at);
-    if (Number.isNaN(created)) continue;
-    const weeksAgo = Math.floor((now - created) / WEEK_MS);
-    if (weeksAgo < 0 || weeksAgo >= CHART_WEEKS) continue;
-    buckets[CHART_WEEKS - 1 - weeksAgo].count += 1;
-  }
-  return buckets;
-}
+const EXPORT_ROW_CAP = 1000;
 
 export function RequestsReportsPanel() {
   const t = useTranslations("pages.requests.settings.reports");
@@ -119,7 +102,18 @@ export function RequestsReportsPanel() {
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.requests.list({ reports: true, from, to }),
-    queryFn: () => fetchAdminRequestsList({ datePreset, limit: 1000, offset: 0 }),
+    queryFn: () => fetchAdminRequestsList({ datePreset, limit: EXPORT_ROW_CAP, offset: 0 }),
+  });
+
+  /**
+   * Every figure on this page comes from the trend RPC, not from the capped row
+   * array beside it. The list read above exists only to feed the CSV export, so
+   * a window with more than `EXPORT_ROW_CAP` requests can shorten the sheet
+   * without moving a single number on the screen.
+   */
+  const { data: trend } = useQuery({
+    queryKey: queryKeys.requests.trend({ from, to, weeks: CHART_WEEKS }),
+    queryFn: () => fetchAdminRequestsTrend({ datePreset, weeks: CHART_WEEKS }),
   });
 
   const rows = data?.rows ?? [];
@@ -142,30 +136,32 @@ export function RequestsReportsPanel() {
 
   const byType = useMemo(() => {
     const map = Object.fromEntries(REQUEST_TYPES.map((k) => [k, 0])) as Record<string, number>;
-    for (const row of rows) map[row.request_type] = (map[row.request_type] ?? 0) + 1;
+    for (const [key, value] of Object.entries(trend?.byType ?? {})) {
+      map[key] = value;
+    }
     return map;
-  }, [rows]);
+  }, [trend?.byType]);
 
   const byStatus = useMemo(() => {
     const map = Object.fromEntries(REQUEST_STATUSES.map((k) => [k, 0])) as Record<string, number>;
-    for (const row of rows) map[row.status] = (map[row.status] ?? 0) + 1;
+    for (const [key, value] of Object.entries(trend?.byStatus ?? {})) {
+      map[key] = value;
+    }
     return map;
-  }, [rows]);
+  }, [trend?.byStatus]);
 
-  const volume = useMemo(() => weeklyVolume(rows), [rows]);
+  const volume = useMemo(() => trend?.volume ?? [], [trend?.volume]);
   const maxVolume = useMemo(
     () => volume.reduce((max, bucket) => Math.max(max, bucket.count), 0),
     [volume],
   );
-  const pendingAck = useMemo(
-    () => rows.filter((row) => row.awaiting_driver_ack).length,
-    [rows],
-  );
+  const totalCount = trend?.total ?? 0;
+  const pendingAck = trend?.pendingAck ?? 0;
 
   const totalDelta = useMemo(() => {
-    if (kpi?.prev_total == null) return null;
-    return rows.length - kpi.prev_total;
-  }, [kpi?.prev_total, rows.length]);
+    if (kpi?.prev_total == null || trend == null) return null;
+    return trend.total - kpi.prev_total;
+  }, [kpi?.prev_total, trend]);
 
   const resolutionDelta = useMemo(() => {
     if (kpi?.avg_resolution_seconds == null || kpi?.prev_avg_resolution_seconds == null) {
@@ -175,11 +171,12 @@ export function RequestsReportsPanel() {
   }, [kpi?.avg_resolution_seconds, kpi?.prev_avg_resolution_seconds]);
 
   const approvalRate = useMemo(() => {
-    const decided = rows.filter((r) => r.status === "approved" || r.status === "rejected");
-    if (decided.length === 0) return null;
-    const approved = decided.filter((r) => r.status === "approved").length;
-    return Math.round((approved / decided.length) * 100);
-  }, [rows]);
+    const approved = trend?.approved ?? 0;
+    const rejected = trend?.rejected ?? 0;
+    const decided = approved + rejected;
+    if (decided === 0) return null;
+    return Math.round((approved / decided) * 100);
+  }, [trend?.approved, trend?.rejected]);
 
   function exportCsv() {
     const csv = buildCsv(
@@ -258,11 +255,27 @@ export function RequestsReportsPanel() {
               variant="outline"
               className="h-9"
               disabled={rows.length === 0}
+              title={
+                totalCount > rows.length
+                  ? t("exportTruncated", {
+                      shown: `${rows.length}`,
+                      total: `${totalCount}`,
+                    })
+                  : undefined
+              }
               onClick={exportCsv}
             >
               <Download className="me-1.5 h-3.5 w-3.5" />
               {t("export")}
             </Button>
+            {totalCount > rows.length ? (
+              <p className="text-[10px] text-muted-foreground">
+                {t("exportTruncated", {
+                  shown: `${rows.length}`,
+                  total: `${totalCount}`,
+                })}
+              </p>
+            ) : null}
           </div>
         }
       />
@@ -278,7 +291,7 @@ export function RequestsReportsPanel() {
             items={[
               {
                 label: t("kpiTotal"),
-                value: String(rows.length),
+                value: String(totalCount),
                 icon: FileText,
                 caption:
                   totalDelta == null
@@ -453,15 +466,15 @@ export function RequestsReportsPanel() {
                   { id: "share", label: t("colShare") },
                 ]}
                 empty={
-                  rows.length === 0 ? (
+                  totalCount === 0 ? (
                     <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty>
                   ) : undefined
                 }
               >
-                {rows.length === 0 ? null : (
+                {totalCount === 0 ? null : (
                   REQUEST_TYPES.map((type) => {
                     const count = byType[type] ?? 0;
-                    const share = rows.length > 0 ? Math.round((count / rows.length) * 100) : 0;
+                    const share = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
                     return (
                       <AppDataTableRow key={type}>
                         <TableCell className="text-sm">{tTypes(type)}</TableCell>
@@ -483,15 +496,15 @@ export function RequestsReportsPanel() {
                   { id: "share", label: t("colShare") },
                 ]}
                 empty={
-                  rows.length === 0 ? (
+                  totalCount === 0 ? (
                     <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty>
                   ) : undefined
                 }
               >
-                {rows.length === 0 ? null : (
+                {totalCount === 0 ? null : (
                   REQUEST_STATUSES.map((status) => {
                     const count = byStatus[status] ?? 0;
-                    const share = rows.length > 0 ? Math.round((count / rows.length) * 100) : 0;
+                    const share = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
                     return (
                       <AppDataTableRow key={status}>
                         <TableCell className="text-sm">{tStatus(status)}</TableCell>

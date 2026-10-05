@@ -62,6 +62,7 @@ import { FleetRequestDialog } from "@/features/fuel/fleet-request-dialog";
 import { RequestCreateDialog } from "./request-create-dialog";
 import {
   canBulkSelectRequest,
+  normalizeStatusFilter,
   requestStatusLabelKey,
   requestStatusVariant,
   statusFiltersForRequestType,
@@ -77,6 +78,14 @@ function formatAvgDays(seconds: number | null): string {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Server-side page size. The list RPC already honoured `p_limit` / `p_offset`
+ * but the shell pinned both to `50 / 0`, so a queue with 300 rows could only
+ * ever show its newest 50 with no way to reach the rest. The same value is the
+ * page stride here, so "Showing 50 of 300" and the footer cannot disagree.
+ */
+const PAGE_SIZE = 50;
 
 /** "12 Jul" — built from parts so the day stays first regardless of runtime locale. */
 function shortDate(value: string | null): string {
@@ -187,9 +196,21 @@ function exportRowsToCsv(rows: RequestListRow[], fileName: string) {
 export function RequestsPageShell({
   initialType = "all",
   initialDatePreset,
+  initialStatus = "all",
 }: {
   initialType?: string;
   initialDatePreset?: string;
+  /**
+   * Which status tab opens selected.
+   *
+   * Added for the EmployeeDesk tree, where "Incoming" and "Outgoing" are the
+   * same list entered through a different door, and the door decides the queue:
+   * without this the two routes would render byte-identical pages and the
+   * sidebar would be advertising two names for one screen. The value is seeded
+   * like the other initial props — a tab the operator clicks afterwards is the
+   * operator's choice, not the route's.
+   */
+  initialStatus?: string;
 }) {
   const t = useTranslations("pages.requests");
   const router = useRouter();
@@ -197,11 +218,25 @@ export function RequestsPageShell({
     parseRequestDatePreset(initialDatePreset),
   );
   const [type, setType] = useState<string>(normalizeTypeFilter(initialType));
-  const [status, setStatus] = useState<RequestStatusFilter>("all");
+  const [status, setStatus] = useState<RequestStatusFilter>(
+    normalizeStatusFilter(initialStatus),
+  );
   const [departmentKey, setDepartmentKey] = useState<string>("all");
   const [zoneId, setZoneId] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
+  /**
+   * Server-side paging over the list RPC's `p_limit` / `p_offset`.
+   *
+   * The page index is stored *with the filter signature it belongs to* and read
+   * back through it, so a filter change cannot leave the operator on page 4 of a
+   * result set that no longer exists. Deriving it beats an effect that calls
+   * `setPage(0)`: the URL-mirroring effects below set the same filters, so an
+   * effect keyed on them would reset the page twice on every Back/Forward, and
+   * setting state from an effect is the cascading-render shape this repo lints
+   * against.
+   */
+  const [pageState, setPageState] = useState({ signature: "", page: 0 });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -224,10 +259,40 @@ export function RequestsPageShell({
     setDatePreset((current) => (current === next ? current : next));
   }, [initialDatePreset]);
 
+  // Same URL-mirroring reason as the type filter above: two EmployeeDesk routes
+  // (`/employeedesk/all` and `/employeedesk/incoming`) render this one shell, and
+  // navigating between them changes only the prop. Without this the second route
+  // would keep whichever tab the first had selected and the two doors would show
+  // the same queue.
+  useEffect(() => {
+    const next = normalizeStatusFilter(initialStatus);
+    setStatus((current) => (current === next ? current : next));
+  }, [initialStatus]);
+
   const { can } = useAuth();
   const canDecide = can("requests.approve") || can("requests.manage");
   const canCreate = can("requests.create");
   const bulkDecide = useBulkDecideRequests();
+
+  // The identity the stored page index is valid for. Any change here makes the
+  // index meaningless, so it reads back as page 0 rather than as an empty page.
+  const filterSignature = [
+    datePreset,
+    type,
+    status,
+    departmentKey,
+    zoneId,
+    searchApplied,
+  ].join("|");
+  const page = pageState.signature === filterSignature ? pageState.page : 0;
+  const setPage = (next: number | ((current: number) => number)) =>
+    setPageState((current) => {
+      const base = current.signature === filterSignature ? current.page : 0;
+      return {
+        signature: filterSignature,
+        page: Math.max(0, typeof next === "function" ? next(base) : next),
+      };
+    });
 
   const filters = useMemo(
     () => ({
@@ -237,10 +302,10 @@ export function RequestsPageShell({
       departmentKey: departmentKey === "all" ? null : departmentKey,
       zoneId: zoneId === "all" ? null : zoneId,
       search: searchApplied,
-      limit: 50,
-      offset: 0,
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
     }),
-    [datePreset, type, status, departmentKey, zoneId, searchApplied],
+    [datePreset, type, status, departmentKey, zoneId, searchApplied, page],
   );
 
   const { data, isLoading, isFetching, refetch } = useAdminRequestsList(filters);
@@ -249,6 +314,7 @@ export function RequestsPageShell({
   const kpi = data?.kpi;
   const statusCounts = data?.statusCounts ?? {};
   const filteredTotal = data?.filteredTotal ?? rows.length;
+  const pageCount = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
   const departmentOptions = data?.departmentOptions ?? [];
 
   const visibleStatusFilters = useMemo(
@@ -773,6 +839,36 @@ export function RequestsPageShell({
             ))}
           </AppDataTable>
         )}
+
+        {!isLoading && rows.length > 0 && pageCount > 1 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2">
+            <p className="text-xs text-muted-foreground tabular-nums">
+              {t("pageOf", { page: `${page + 1}`, total: `${pageCount}` })}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={page === 0 || isFetching}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                {t("prevPage")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={page + 1 >= pageCount || isFetching}
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              >
+                {t("nextPage")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </AppListCard>
 
       <RequestCreateDialog

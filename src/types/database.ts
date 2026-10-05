@@ -554,6 +554,7 @@ export type Database = {
           driver_ops_log_retention_days: number
           driver_telemetry_max_events_per_hour: number
           driver_telemetry_retention_days: number
+          esign_reminder_cooldown_hours: number
           esign_screenshot_default: boolean
           feature_two_stage_delivery: boolean
           fleet_events_retention_days: number
@@ -610,6 +611,7 @@ export type Database = {
           driver_ops_log_retention_days?: number
           driver_telemetry_max_events_per_hour?: number
           driver_telemetry_retention_days?: number
+          esign_reminder_cooldown_hours?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           fleet_events_retention_days?: number
@@ -666,6 +668,7 @@ export type Database = {
           driver_ops_log_retention_days?: number
           driver_telemetry_max_events_per_hour?: number
           driver_telemetry_retention_days?: number
+          esign_reminder_cooldown_hours?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
           fleet_events_retention_days?: number
@@ -3926,6 +3929,141 @@ export type Database = {
         }
         Relationships: []
       }
+      esign_drafts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_at: string | null
+          field_values: Json
+          id: string
+          kind: string
+          language: string
+          rows: Json
+          source_filename: string | null
+          template_id: string | null
+          template_version: number | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_at?: string | null
+          field_values?: Json
+          id?: string
+          kind?: string
+          language?: string
+          rows?: Json
+          source_filename?: string | null
+          template_id?: string | null
+          template_version?: number | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_at?: string | null
+          field_values?: Json
+          id?: string
+          kind?: string
+          language?: string
+          rows?: Json
+          source_filename?: string | null
+          template_id?: string | null
+          template_version?: number | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "esign_drafts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_drafts_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "esign_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      esign_request_signers: {
+        Row: {
+          created_at: string
+          declined_at: string | null
+          driver_id: string | null
+          id: string
+          request_id: string
+          role: string
+          signature_storage_key: string | null
+          signed_at: string | null
+          signed_document_storage_key: string | null
+          signer_display_name: string | null
+          signer_meta: Json
+          sort_order: number
+          status: string
+          updated_at: string
+          viewed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          declined_at?: string | null
+          driver_id?: string | null
+          id?: string
+          request_id: string
+          role?: string
+          signature_storage_key?: string | null
+          signed_at?: string | null
+          signed_document_storage_key?: string | null
+          signer_display_name?: string | null
+          signer_meta?: Json
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          declined_at?: string | null
+          driver_id?: string | null
+          id?: string
+          request_id?: string
+          role?: string
+          signature_storage_key?: string | null
+          signed_at?: string | null
+          signed_document_storage_key?: string | null
+          signer_display_name?: string | null
+          signer_meta?: Json
+          sort_order?: number
+          status?: string
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "esign_request_signers_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_request_signers_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "esign_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       esign_requests: {
         Row: {
           batch_id: string | null
@@ -3941,6 +4079,8 @@ export type Database = {
           employee_snapshot: Json
           field_values: Json
           id: string
+          last_reminded_at: string | null
+          reminder_count: number
           request_code: string
           screenshot_restricted: boolean
           sent_at: string
@@ -3973,6 +4113,8 @@ export type Database = {
           employee_snapshot?: Json
           field_values?: Json
           id?: string
+          last_reminded_at?: string | null
+          reminder_count?: number
           request_code?: string
           screenshot_restricted?: boolean
           sent_at?: string
@@ -4005,6 +4147,8 @@ export type Database = {
           employee_snapshot?: Json
           field_values?: Json
           id?: string
+          last_reminded_at?: string | null
+          reminder_count?: number
           request_code?: string
           screenshot_restricted?: boolean
           sent_at?: string
@@ -4071,7 +4215,11 @@ export type Database = {
           label_ar: string | null
           label_en: string
           options: Json
+          options_source: string | null
+          preview_value: string | null
+          section_key: string
           sort_order: number
+          source_kind: string
           template_id: string
           updated_at: string
         }
@@ -4084,7 +4232,11 @@ export type Database = {
           label_ar?: string | null
           label_en: string
           options?: Json
+          options_source?: string | null
+          preview_value?: string | null
+          section_key?: string
           sort_order?: number
+          source_kind?: string
           template_id: string
           updated_at?: string
         }
@@ -4097,7 +4249,11 @@ export type Database = {
           label_ar?: string | null
           label_en?: string
           options?: Json
+          options_source?: string | null
+          preview_value?: string | null
+          section_key?: string
           sort_order?: number
+          source_kind?: string
           template_id?: string
           updated_at?: string
         }
@@ -4121,10 +4277,12 @@ export type Database = {
           declaration_ar: string
           declaration_en: string
           default_language: string
+          document_kind: string
           header_ar: string
           header_en: string
           id: string
           is_active: boolean
+          is_draft: boolean
           name_ar: string | null
           name_en: string
           updated_at: string
@@ -4139,10 +4297,12 @@ export type Database = {
           declaration_ar?: string
           declaration_en?: string
           default_language?: string
+          document_kind?: string
           header_ar?: string
           header_en?: string
           id?: string
           is_active?: boolean
+          is_draft?: boolean
           name_ar?: string | null
           name_en: string
           updated_at?: string
@@ -4157,10 +4317,12 @@ export type Database = {
           declaration_ar?: string
           declaration_en?: string
           default_language?: string
+          document_kind?: string
           header_ar?: string
           header_en?: string
           id?: string
           is_active?: boolean
+          is_draft?: boolean
           name_ar?: string | null
           name_en?: string
           updated_at?: string
@@ -8920,6 +9082,7 @@ export type Database = {
         Args: { p_driver_id: string; p_reason?: string }
         Returns: undefined
       }
+      _esign_batch_recount: { Args: { p_batch_id: string }; Returns: undefined }
       _fleet_caller_is_service_role: { Args: never; Returns: boolean }
       _fleet_settings: { Args: never; Returns: Json }
       _haversine_meters: {
@@ -8927,6 +9090,10 @@ export type Database = {
         Returns: number
       }
       _incentive_band_start: {
+        Args: { p_on_date: string; p_rule_id: string }
+        Returns: number
+      }
+      _incentive_rule_dpd_target: {
         Args: { p_on_date: string; p_rule_id: string }
         Returns: number
       }
@@ -9092,7 +9259,7 @@ export type Database = {
         Returns: Json
       }
       admin_claim_esign_batch_rows: {
-        Args: { p_batch_id: string; p_limit: number }
+        Args: { p_batch_id: string; p_limit?: number; p_mode?: string }
         Returns: Json
       }
       admin_clear_request_attention: {
@@ -9179,6 +9346,7 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_delete_esign_draft: { Args: { p_id: string }; Returns: Json }
       admin_delete_payroll_client: { Args: { p_key: string }; Returns: Json }
       admin_delete_performance_rating_criterion: {
         Args: { p_id: string }
@@ -9186,6 +9354,7 @@ export type Database = {
       }
       admin_deliveries_counts_by_filters: {
         Args: {
+          p_date_basis?: string
           p_driver_id?: string
           p_from?: string
           p_partner_id?: string
@@ -9197,6 +9366,7 @@ export type Database = {
       }
       admin_deliveries_status_counts: {
         Args: {
+          p_date_basis?: string
           p_from?: string
           p_partner_id?: string
           p_to?: string
@@ -9296,6 +9466,8 @@ export type Database = {
           source_company: string
           status_key: string
           today_deliveries: number
+          vehicle_type_key: string
+          vehicle_type_name: string
           workflow_status: string
           zone_id: string
           zone_name: string
@@ -9325,6 +9497,7 @@ export type Database = {
         Args: { p_filters: Json }
         Returns: undefined
       }
+      admin_esign_reminder_state: { Args: { p_ids: string[] }; Returns: Json }
       admin_esign_resolve_employees: { Args: { p_rows: Json }; Returns: Json }
       admin_expire_esign_requests: { Args: never; Returns: number }
       admin_expire_stale_pickups: { Args: never; Returns: number }
@@ -9336,6 +9509,7 @@ export type Database = {
         Args: { p_date?: string; p_driver_id: string; p_tolerance_m?: number }
         Returns: Json
       }
+      admin_get_esign_draft: { Args: { p_id: string }; Returns: Json }
       admin_get_fuel_fill: { Args: { p_id: string }; Returns: Json }
       admin_get_request: { Args: { p_request_id: string }; Returns: Json }
       admin_get_shift_adherence: {
@@ -9423,6 +9597,7 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_list_esign_drafts: { Args: { p_limit?: number }; Returns: Json }
       admin_list_esign_requests: {
         Args: { p_limit?: number; p_offset?: number; p_status?: string }
         Returns: Json
@@ -9572,16 +9747,97 @@ export type Database = {
         Returns: Json
       }
       admin_purge_asset_catalog: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_col_matches: {
+        Args: { p_f: Json; p_kind: string; p_v: Json }
+        Returns: boolean
+      }
       admin_purge_deliveries: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_delivery_rules: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_drivers: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_filter_columns: { Args: { p_entity: string }; Returns: Json }
+      admin_purge_filter_kind_of: {
+        Args: { p_entity: string; p_key: string }
+        Returns: string
+      }
+      admin_purge_filtered_page: {
+        Args: {
+          p_entity: string
+          p_filters: Json
+          p_limit: number
+          p_offset: number
+        }
+        Returns: Json
+      }
+      admin_purge_filtered_preview: {
+        Args: { p_entity: string; p_filters: Json }
+        Returns: Json
+      }
+      admin_purge_filtered_run: {
+        Args: { p_entity: string; p_filters: Json; p_limit?: number }
+        Returns: Json
+      }
+      admin_purge_filtered_values: {
+        Args: { p_column: string; p_entity: string; p_filters: Json }
+        Returns: Json
+      }
       admin_purge_incentive_rules: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_matched_rows: {
+        Args: { p_entity: string; p_filters: Json }
+        Returns: {
+          purge_id: string
+          purge_kind: string
+          row_json: Json
+        }[]
+      }
       admin_purge_preview_all: { Args: { p_entity: string }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_row_matches: {
+        Args: { p_entity: string; p_filters: Json; p_r: Json }
+        Returns: boolean
+      }
+      admin_purge_row_value: {
+        Args: { p_entity: string; p_key: string; p_r: Json }
+        Returns: Json
+      }
+      admin_purge_rows_of: {
+        Args: { p_entity: string }
+        Returns: {
+          purge_id: string
+          purge_kind: string
+          row_json: Json
+        }[]
+      }
       admin_purge_run_all: {
         Args: { p_entity: string; p_limit?: number }
         Returns: Json
+      }
+      admin_purge_validate_filters: {
+        Args: { p_entity: string; p_filters: Json }
+        Returns: undefined
+      }
+      admin_purge_value_in: {
+        Args: { p_in: Json; p_v: Json }
+        Returns: boolean
+      }
+      admin_purge_value_in_range: {
+        Args: { p_f: Json; p_v: Json }
+        Returns: boolean
+      }
+      admin_purge_value_labels: {
+        Args: { p_column: string; p_entity: string }
+        Returns: {
+          label: string
+          value: string
+        }[]
+      }
+      admin_purge_value_text: { Args: { p_v: Json }; Returns: string }
+      admin_purge_vehicle_filter_rows: {
+        Args: never
+        Returns: {
+          r: Json
+          vehicle_id: string
+        }[]
       }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
       admin_rebuild_driver_performance_daily: {
@@ -9593,8 +9849,26 @@ export type Database = {
         Returns: Json
       }
       admin_record_fleet_events: { Args: { p_events: Json }; Returns: Json }
+      admin_remind_esign_requests: { Args: { p_ids: string[] }; Returns: Json }
+      admin_remove_esign_batch_row: {
+        Args: { p_row_id: string }
+        Returns: Json
+      }
       admin_request_department_report: {
         Args: { p_date_from?: string; p_date_to?: string }
+        Returns: Json
+      }
+      admin_requests_trend: {
+        Args: {
+          p_date_from?: string
+          p_date_to?: string
+          p_department_key?: string
+          p_search?: string
+          p_status?: string
+          p_type?: string
+          p_weeks?: number
+          p_zone_id?: string
+        }
         Returns: Json
       }
       admin_reschedule_visit: {
@@ -9633,6 +9907,7 @@ export type Database = {
         Returns: Json
       }
       admin_run_request_sla_sweep: { Args: never; Returns: number }
+      admin_save_esign_draft: { Args: { p_draft: Json }; Returns: Json }
       admin_save_payroll_client: {
         Args: {
           p_average_threshold: number
@@ -9711,6 +9986,10 @@ export type Database = {
       }
       admin_sync_branch_slots_to_working_days: {
         Args: { p_branch_id: string }
+        Returns: Json
+      }
+      admin_update_esign_batch_row: {
+        Args: { p_employee_id: string; p_field_values?: Json; p_row_id: string }
         Returns: Json
       }
       admin_update_performance_components: {

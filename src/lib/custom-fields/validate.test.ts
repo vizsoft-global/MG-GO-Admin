@@ -52,6 +52,57 @@ describe("custom field number non-negative", () => {
   });
 });
 
+describe("legacy custom field keys", () => {
+  const archivedDef = {
+    key: "req",
+    field_type: "checkbox" as const,
+    required: false,
+    options: [],
+    is_active: false,
+    archived_at: "2026-08-22T13:13:13.789+00:00",
+  };
+  const activeDef = {
+    key: "passport",
+    field_type: "number" as const,
+    required: false,
+    options: [],
+    is_active: true,
+    archived_at: null,
+  };
+
+  it("preserves an archived key when it came from the stored record", () => {
+    const result = validateCustomFieldValues([archivedDef, activeDef], { req: [], passport: 77888 }, {
+      allowLegacyKeys: true,
+    });
+    assert.deepEqual(result.errors, []);
+    // Retained, not dropped — a save must not erase a value the form cannot show.
+    assert.deepEqual(result.values.req, []);
+    assert.equal(result.values.passport, 77888);
+  });
+
+  it("preserves a key whose definition is gone entirely", () => {
+    const result = validateCustomFieldValues([activeDef], { gone: "x" }, {
+      allowLegacyKeys: true,
+    });
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.values.gone, "x");
+  });
+
+  it("still reports an unknown key when legacy keys are not allowed", () => {
+    const result = validateCustomFieldValues([activeDef], { gone: "x" });
+    assert.equal(result.errors.some((e) => e.key === "gone" && e.code === "unknown_key"), true);
+  });
+
+  it("never blocks an edit over an archived key, is_active or not", () => {
+    const inactiveDef = { ...activeDef, key: "num", is_active: false, archived_at: null };
+    const result = validateCustomFieldValues([inactiveDef], { num: false }, {
+      allowLegacyKeys: true,
+    });
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.values.num, false);
+  });
+});
+
 describe("parseOptions", () => {
   it("keeps a label-only checkbox choice instead of dropping it", () => {
     assert.deepEqual(parseOptions([{ label: "Helmet" }]), [

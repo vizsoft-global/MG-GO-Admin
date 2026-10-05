@@ -16,7 +16,13 @@ import {
   KeyRound,
   Languages,
   LayoutDashboard,
+  LayoutGrid,
   LifeBuoy,
+  PenLine,
+  Send,
+  Building2,
+  Cog,
+  AppWindow,
   ListTree,
   MapPin,
   Package,
@@ -53,6 +59,15 @@ export type MenuRegistryItem = {
   defaultGroup: string;
   defaultOrder: number;
   permission?: Permission;
+  /**
+   * Show when the holder has **any** of these, for the rows that are a door to
+   * several modules rather than one (the OperationsHub tile). A single
+   * `permission` cannot express "any operations writer", and gating the hub on
+   * `settings.view` would show it to platform admins only — the exact opposite
+   * of the requirement that the operations team reach their own rules without
+   * full Settings access.
+   */
+  permissionAnyOf?: readonly Permission[];
   superAdminOnly?: boolean;
   footer?: boolean;
 };
@@ -100,6 +115,12 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   FormInput,
   Gauge,
   GitCompareArrows,
+  LayoutGrid,
+  PenLine,
+  Send,
+  Building2,
+  Cog,
+  AppWindow,
 };
 
 export const ICON_NAMES = Object.keys(ICON_MAP);
@@ -108,12 +129,38 @@ export function resolveIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? LayoutDashboard;
 }
 
+export const OPERATIONS_HUB_GROUP = "OperationsHub";
+
+/**
+ * OperationsHub is a **settings section**, not a permission of its own.
+ *
+ * The requirement is that the operations team manages partners, restaurants,
+ * zones and the rule tables without holding `settings.*`, so the hub (and its
+ * sidebar group) opens for anyone who can read or write any one of its
+ * children. Gating it on a slug of its own would have meant either a new
+ * permission to seed and grant everywhere, or — worse — a `settings.view`
+ * gate that shows the hub to platform admins and hides it from operations.
+ */
+export const OPERATIONS_HUB_PERMISSIONS = [
+  "partners.view",
+  "restaurants.view",
+  "zones.view",
+  "earnings.view",
+  "drivers.manage",
+  "vehicles.manage",
+  "attendance.manage",
+  "companies.view",
+] as const satisfies readonly Permission[];
+
 export const DEFAULT_GROUPS = [
   "Overview",
+  "EmployeeDesk",
+  "OperationsHub",
   "Fleet",
   "Operations",
   "Payroll",
   "Settings",
+  "System",
   "WIP",
   "Unorganised",
 ];
@@ -123,10 +170,13 @@ export const DEFAULT_GROUP_META: Record<
   { icon: string; displayMode?: "inline" | "panel" }
 > = {
   Overview: { icon: "Folder" },
+  EmployeeDesk: { icon: "Inbox", displayMode: "panel" },
+  OperationsHub: { icon: "Building2", displayMode: "panel" },
   Fleet: { icon: "Car", displayMode: "panel" },
   Operations: { icon: "Folder", displayMode: "panel" },
   Payroll: { icon: "CalendarClock", displayMode: "panel" },
   Settings: { icon: "Settings", displayMode: "inline" },
+  System: { icon: "Cog", displayMode: "inline" },
   WIP: { icon: "AlertTriangle", displayMode: "panel" },
   Unorganised: { icon: "Folder" },
 };
@@ -142,8 +192,98 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "dashboard.view",
   },
   {
+    id: "employeedesk",
+    defaultLabel: "EmployeeDesk",
+    defaultIcon: "Inbox",
+    href: "/employeedesk",
+    defaultGroup: "EmployeeDesk",
+    defaultOrder: 0,
+    permission: "requests.view",
+  },
+  {
+    id: "employeedesk-all",
+    defaultLabel: "All requests",
+    defaultIcon: "ClipboardList",
+    href: "/employeedesk/all",
+    defaultGroup: "EmployeeDesk",
+    defaultOrder: 1,
+    permission: "requests.view",
+  },
+  {
+    id: "employeedesk-incoming",
+    defaultLabel: "Incoming",
+    defaultIcon: "Download",
+    href: "/employeedesk/incoming",
+    defaultGroup: "EmployeeDesk",
+    defaultOrder: 2,
+    permission: "requests.view",
+  },
+  {
+    id: "employeedesk-outgoing",
+    defaultLabel: "Outgoing",
+    defaultIcon: "Send",
+    href: "/employeedesk/outgoing",
+    defaultGroup: "EmployeeDesk",
+    defaultOrder: 3,
+    permission: "requests.view",
+  },
+  {
+    id: "employeedesk-esign",
+    defaultLabel: "eSign",
+    defaultIcon: "PenLine",
+    href: "/employeedesk/esign",
+    defaultGroup: "EmployeeDesk",
+    defaultOrder: 4,
+    permission: "requests.view",
+  },
+  {
+    id: "employeedesk-esign-signing",
+    defaultLabel: "To sign",
+    defaultIcon: "KeyRound",
+    href: "/employeedesk/esign/signing",
+    defaultGroup: "EmployeeDesk",
+    defaultOrder: 5,
+    permission: "requests.manage",
+  },
+  {
+    id: "employeedesk-visits",
+    defaultLabel: "Visits",
+    defaultIcon: "CalendarCheck",
+    href: "/employeedesk/visits",
+    defaultGroup: "EmployeeDesk",
+    defaultOrder: 6,
+    permission: "visits.view",
+  },
+  {
+    id: "employeedesk-reports",
+    defaultLabel: "Reports",
+    defaultIcon: "ScrollText",
+    href: "/employeedesk/reports",
+    defaultGroup: "EmployeeDesk",
+    defaultOrder: 7,
+    permission: "requests.view",
+  },
+  {
+    id: "employeedesk-settings",
+    defaultLabel: "EmployeeDesk settings",
+    defaultIcon: "Settings",
+    href: "/employeedesk/settings",
+    defaultGroup: "EmployeeDesk",
+    defaultOrder: 8,
+    permission: "requests.manage",
+  },
+  {
+    id: "operations-hub",
+    defaultLabel: "OperationsHub",
+    defaultIcon: "Building2",
+    href: "/operations",
+    defaultGroup: "OperationsHub",
+    defaultOrder: 0,
+    permissionAnyOf: OPERATIONS_HUB_PERMISSIONS,
+  },
+  {
     id: "drivers",
-    defaultLabel: "Drivers",
+    defaultLabel: "Employees",
     defaultIcon: "Users",
     href: "/drivers",
     defaultGroup: "Operations",
@@ -191,8 +331,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Partners",
     defaultIcon: "Handshake",
     href: "/partners",
-    defaultGroup: "Operations",
-    defaultOrder: 2,
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 1,
     permission: "partners.view",
   },
   {
@@ -254,8 +394,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Restaurants",
     defaultIcon: "UtensilsCrossed",
     href: "/restaurants",
-    defaultGroup: "Operations",
-    defaultOrder: 3,
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 2,
     permission: "restaurants.view",
   },
   {
@@ -362,8 +502,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Delivery rules",
     defaultIcon: "ListTree",
     href: "/delivery-rules",
-    defaultGroup: "Operations",
-    defaultOrder: 9,
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 4,
     permission: "earnings.view",
   },
   {
@@ -371,8 +511,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Incentive rules",
     defaultIcon: "Wallet",
     href: "/incentive-rules",
-    defaultGroup: "Operations",
-    defaultOrder: 10,
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 5,
     permission: "earnings.view",
   },
   {
@@ -434,8 +574,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Driver App",
     defaultIcon: "Smartphone",
     href: "/settings/app",
-    defaultGroup: "Settings",
-    defaultOrder: 2,
+    defaultGroup: "System",
+    defaultOrder: 0,
     permission: "settings.manage",
   },
   {
@@ -443,8 +583,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Vehicle types",
     defaultIcon: "Car",
     href: "/settings/vehicle-types",
-    defaultGroup: "Settings",
-    defaultOrder: 2.5,
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 8,
     permission: "vehicles.manage",
   },
   {
@@ -452,17 +592,17 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Vehicle uses",
     defaultIcon: "Car",
     href: "/settings/vehicle-uses",
-    defaultGroup: "Settings",
-    defaultOrder: 2.55,
-    permission: "settings.manage",
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 9,
+    permission: "vehicles.manage",
   },
   {
     id: "source-companies",
     defaultLabel: "Companies",
     defaultIcon: "Handshake",
     href: "/settings/source-companies",
-    defaultGroup: "Settings",
-    defaultOrder: 2.6,
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 10,
     permission: "companies.view",
   },
   {
@@ -470,8 +610,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Attendance thresholds",
     defaultIcon: "ClipboardCheck",
     href: "/settings/attendance",
-    defaultGroup: "Settings",
-    defaultOrder: 3,
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 7,
     permission: "attendance.manage",
   },
   {
@@ -479,8 +619,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Driver custom fields",
     defaultIcon: "FormInput",
     href: "/settings/driver-fields",
-    defaultGroup: "Settings",
-    defaultOrder: 3,
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 6,
     permission: "drivers.manage",
   },
   {
@@ -488,8 +628,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Cloudflare R2",
     defaultIcon: "Cloud",
     href: "/settings/storage",
-    defaultGroup: "Settings",
-    defaultOrder: 3,
+    defaultGroup: "System",
+    defaultOrder: 1,
     superAdminOnly: true,
   },
   {
@@ -498,7 +638,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultIcon: "Shield",
     href: "/settings/roles",
     defaultGroup: "Settings",
-    defaultOrder: 4,
+    defaultOrder: 2,
     superAdminOnly: true,
   },
   {
@@ -507,7 +647,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultIcon: "KeyRound",
     href: "/settings/staff-access",
     defaultGroup: "Settings",
-    defaultOrder: 4.5,
+    defaultOrder: 3,
     superAdminOnly: true,
   },
   {
@@ -516,7 +656,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultIcon: "UserCheck",
     href: "/settings/access-requests",
     defaultGroup: "Settings",
-    defaultOrder: 5,
+    defaultOrder: 4,
     superAdminOnly: true,
   },
   {
@@ -524,8 +664,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Maintenance",
     defaultIcon: "ToggleLeft",
     href: "/settings/maintenance",
-    defaultGroup: "Settings",
-    defaultOrder: 6,
+    defaultGroup: "System",
+    defaultOrder: 2,
     superAdminOnly: true,
   },
   {
@@ -533,8 +673,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Data cleanup",
     defaultIcon: "Trash2",
     href: "/settings/data-cleanup",
-    defaultGroup: "Settings",
-    defaultOrder: 6.5,
+    defaultGroup: "System",
+    defaultOrder: 4,
     permission: "data.cleanup",
   },
   {
@@ -543,7 +683,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultIcon: "ListTree",
     href: "/settings/menu-editor",
     defaultGroup: "Settings",
-    defaultOrder: 7,
+    defaultOrder: 6,
     superAdminOnly: true,
   },
   {
@@ -551,8 +691,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Languages",
     defaultIcon: "Languages",
     href: "/settings/languages",
-    defaultGroup: "Settings",
-    defaultOrder: 8,
+    defaultGroup: "System",
+    defaultOrder: 3,
     superAdminOnly: true,
   },
   {
@@ -561,7 +701,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultIcon: "ScrollText",
     href: "/settings/logs",
     defaultGroup: "Settings",
-    defaultOrder: 9,
+    defaultOrder: 5,
     permission: "audit.view",
   },
   {
@@ -578,8 +718,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Zones",
     defaultIcon: "MapPin",
     href: "/zones",
-    defaultGroup: "Operations",
-    defaultOrder: 6,
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 3,
     permission: "zones.view",
   },
 ];
@@ -587,10 +727,27 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
 /** Map menu item id → next-intl nav key (without `nav.` prefix). */
 export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "group-overview": "overview",
+  "group-employeedesk": "employeedesk",
+  "group-operationshub": "operationsHub",
+  "group-fleet": "fleet",
   "group-operations": "operations",
   "group-payroll": "payroll",
+  "group-settings": "settings",
   "group-system": "system",
+  "group-wip": "wip",
+  "group-unorganised": "unorganised",
+  "group-unassigned": "unassigned",
   dashboard: "dashboard",
+  employeedesk: "employeedesk",
+  "employeedesk-all": "employeedeskAll",
+  "employeedesk-incoming": "employeedeskIncoming",
+  "employeedesk-outgoing": "employeedeskOutgoing",
+  "employeedesk-esign": "employeedeskEsign",
+  "employeedesk-esign-signing": "employeedeskEsignSigning",
+  "employeedesk-visits": "employeedeskVisits",
+  "employeedesk-reports": "employeedeskReports",
+  "employeedesk-settings": "employeedeskSettings",
+  "operations-hub": "operationsHub",
   drivers: "drivers",
   "driver-groups": "driverGroups",
   "driver-devices": "driverDevices",

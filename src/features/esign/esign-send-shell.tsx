@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { FileClock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -15,17 +15,39 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { driverSearchOptions } from "@/lib/search-options";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { isEsignDueDateAllowed } from "./esign-due-date";
-import { fetchEsignSnapshot } from "./esign-sender-actions";
+import { fetchEsignSnapshot, saveEsignDraft } from "./esign-sender-actions";
 import {
   useCreateEsignFromTemplate,
   useEsignDriverOptions,
+  useEsignDraft,
   useEsignTemplate,
   useEsignTemplates,
 } from "./use-esign";
 import type { EsignEmployeeSnapshot } from "./render/esign-placeholders";
 import type { EsignLocale } from "./types";
 
-export function EsignSendShell() {
+export function EsignSendShell({
+  /**
+   * A template chosen upstream — the V2 builder's "Send for e-signature" passes
+   * the template the author is looking at, so the send screen opens on that
+   * document instead of making them find it again in the picker.
+   *
+   * It arrives as a prop rather than being read from `useSearchParams` in here,
+   * because the page component is already handed the query string and a hook in
+   * a client child would need a Suspense boundary it does not otherwise need.
+   */
+  initialTemplateId,
+  /**
+   * `?draft=<id>` — the drafts list resumes a saved single send by navigating
+   * back here with the draft id. The composer rehydrates from the payload rather
+   * than from a route param per field, because a draft carries the per-field
+   * values and a URL long enough to hold them is not a URL anyone can share.
+   */
+  initialDraftId,
+}: {
+  initialTemplateId?: string;
+  initialDraftId?: string;
+}) {
   const t = useTranslations("pages.requests.esign.send");
   const tHub = useTranslations("pages.requests.esign.hub");
   const router = useRouter();
@@ -37,7 +59,7 @@ export function EsignSendShell() {
     () => (templatesData?.rows ?? []).filter((row) => row.is_active),
     [templatesData?.rows],
   );
-  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null);
   const { data: templateData } = useEsignTemplate(templateId ?? "");
   const template = templateData?.template;
 
@@ -48,6 +70,22 @@ export function EsignSendShell() {
   const [dueAt, setDueAt] = useState("");
   const [description, setDescription] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
+
+  /**
+   * The draft this composer is editing, if any. Held as state rather than read
+   * from the prop so the first "Save draft" turns a fresh send into a draft and
+   * every later save updates that same row instead of piling up copies.
+   */
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const draftQuery = useEsignDraft(initialDraftId ?? "");
+  /**
+   * One-shot. A draft payload is the *starting* state, so it may only be
+   * applied once: re-applying it on every refetch would silently undo whatever
+   * the operator has typed since, which is exactly the work the draft exists to
+   * protect. Same reason the template default effect below defers to it.
+   */
+  const draftAppliedRef = useRef(false);
 
   const driverItems = useMemo(
     () =>
@@ -73,7 +111,25 @@ export function EsignSendShell() {
   );
 
   useEffect(() => {
+    const draft = draftQuery.data?.draft;
+    if (!draft || draftAppliedRef.current) return;
+    draftAppliedRef.current = true;
+    if (draft.template_id) setTemplateId(draft.template_id);
+    setLocale(draft.language);
+    if (draft.title) setTitle(draft.title);
+    if (draft.due_at) setDueAt(draft.due_at.slice(0, 10));
+    if (draft.description) setDescription(draft.description);
+    setValues(draft.field_values);
+    const firstRow = draft.rows[0];
+    if (firstRow?.driver_id) setDriverId(firstRow.driver_id);
+  }, [draftQuery.data?.draft]);
+
+  useEffect(() => {
     if (!template) return;
+    // A resumed draft is authoritative: its title, language and field values are
+    // what the operator last saw, and re-seeding them from the template would
+    // quietly replace that with the template's own defaults.
+    if (draftAppliedRef.current) return;
     setTitle((prev) => prev || template.name_en);
     setLocale(template.default_language);
     setValues((prev) => {
@@ -119,6 +175,50 @@ export function EsignSendShell() {
     }
     toast.success(t("created", { code: result.request_code ?? "" }));
     if (result.id) router.push(`/requests/esign/${result.id}`);
+  }
+
+  /**
+   * Save the composer as it stands.
+   *
+   * Only two things are required to save — a template and a title — and
+   * deliberately not a driver: the value of a draft is that a half-built send
+   * survives a reload, and the driver is frequently the last thing an operator
+   * picks after filling the fields they had to look up. Requiring one here would
+   * keep the draft feature from saving exactly the state it exists for.
+   */
+  async function saveDraft() {
+    if (!templateId) {
+      toast.error(t("errors.draftTemplate"));
+      return;
+    }
+    setSavingDraft(true);
+    const driver = (driversData?.rows ?? []).find((row) => row.id === driverId);
+    const result = await saveEsignDraft({
+      id: draftId,
+      kind: "single",
+      template_id: templateId,
+      template_version: template?.version ?? null,
+      language: locale,
+      title: title.trim() || template?.name_en || null,
+      due_at: dueAt || null,
+      description: description.trim() || null,
+      field_values: values,
+      rows: driverId
+        ? [
+            {
+              employee_id: driver?.employee_id ?? snapshot?.employee_id ?? "",
+              driver_id: driverId,
+            },
+          ]
+        : [],
+    });
+    setSavingDraft(false);
+    if (!result.ok) {
+      toast.error(result.error ?? t("errors.draftFailed"));
+      return;
+    }
+    setDraftId(result.id ?? draftId);
+    toast.success(t("draftSaved"));
   }
 
   return (
@@ -255,15 +355,35 @@ export function EsignSendShell() {
         </AppListCard>
       ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Button
-          className="h-9"
-          disabled={create.isPending || !driverId || !templateId || !title.trim()}
-          onClick={() => void submit()}
+          variant="ghost"
+          size="sm"
+          className="h-9 cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground"
+          render={<Link href="/requests/esign/drafts" />}
         >
-          {create.isPending ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-          {t("send")}
+          <FileClock className="me-1.5 h-3.5 w-3.5" />
+          {t("draftsLink")}
         </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            className="h-9 cursor-pointer"
+            disabled={savingDraft || !templateId || !title.trim()}
+            onClick={() => void saveDraft()}
+          >
+            {savingDraft ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+            {draftId ? t("updateDraft") : t("saveDraft")}
+          </Button>
+          <Button
+            className="h-9"
+            disabled={create.isPending || !driverId || !templateId || !title.trim()}
+            onClick={() => void submit()}
+          >
+            {create.isPending ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+            {t("send")}
+          </Button>
+        </div>
       </div>
     </AppPage>
   );

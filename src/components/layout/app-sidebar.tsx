@@ -103,9 +103,11 @@ function useItemLabel() {
 
 const GROUP_I18N_KEY: Record<
   string,
-  "overview" | "fleet" | "operations" | "payroll" | "wip" | "unorganised"
+  "overview" | "employeedesk" | "operationsHub" | "fleet" | "operations" | "payroll" | "wip" | "unorganised"
 > = {
   Overview: "overview",
+  EmployeeDesk: "employeedesk",
+  OperationsHub: "operationsHub",
   Fleet: "fleet",
   Operations: "operations",
   Payroll: "payroll",

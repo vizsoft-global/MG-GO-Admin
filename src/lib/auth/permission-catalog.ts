@@ -167,6 +167,16 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     category: "requests",
   },
   {
+    slug: "employeedesk.view",
+    label: "View EmployeeDesk (HR & e-signature hub)",
+    category: "employeedesk",
+  },
+  {
+    slug: "employeedesk.manage",
+    label: "Manage EmployeeDesk templates, batches and documents",
+    category: "employeedesk",
+  },
+  {
     slug: "visits.view",
     label: "View visit bookings (Head Office)",
     category: "visits",

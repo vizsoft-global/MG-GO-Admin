@@ -172,6 +172,22 @@ export const queryKeys = {
     list: (filters: Record<string, unknown> = {}) => ["requests", "list", filters] as const,
     detail: (id: string) => ["requests", "detail", id] as const,
     typeCounts: () => ["requests", "typeCounts"] as const,
+    /**
+     * Department workload (EmployeeDesk → Reports). Its own key rather than a
+     * `list` variant because the panel and the hub read the same RPC over
+     * different windows — sharing `list` would let one screen's filter
+     * signature cache-collide with the other's row set.
+     */
+    departmentReport: (from: string | null, to: string | null) =>
+      ["requests", "departmentReport", { from, to }] as const,
+    /**
+     * Reports-page aggregates (total, breakdowns, weekly volume). Its own key
+     * rather than a `list` variant for `departmentReport`'s reason: this is a
+     * bucket summary over the whole window, not a page of rows, and sharing
+     * `list` would let a `limit`/`offset` signature cache-collide with it.
+     */
+    trend: (filters: Record<string, unknown> = {}) =>
+      ["requests", "trend", filters] as const,
   },
   esign: {
     all: () => ["esign"] as const,
@@ -184,6 +200,13 @@ export const queryKeys = {
     template: (id: string) => ["esign", "template", id] as const,
     batches: () => ["esign", "batches"] as const,
     batch: (id: string) => ["esign", "batch", id] as const,
+    /** Minimal recipient rows every batch's progress cell is rolled up from. */
+    trackerRecipients: () => ["esign", "tracker-recipients"] as const,
+    /** The reminder cooldown, per recipient id. */
+    reminderState: (ids: string[]) =>
+      ["esign", "reminder-state", [...ids].sort().join(",")] as const,
+    drafts: () => ["esign", "drafts"] as const,
+    draft: (id: string) => ["esign", "draft", id] as const,
   },
   visits: {
     all: () => ["visits"] as const,
@@ -308,6 +331,20 @@ export const queryKeys = {
     ) => ["data-cleanup", "candidates", tab, search, page, archivedOnly] as const,
     purgeAll: (entities: readonly string[]) =>
       ["data-cleanup", "purge-all", [...entities].sort().join(",")] as const,
+    purgeFilterColumns: (entity: string) =>
+      ["data-cleanup", "filter-columns", entity] as const,
+    purgeFilterValues: (
+      entity: string,
+      column: string,
+      filters: Record<string, unknown>,
+    ) => ["data-cleanup", "filter-values", entity, column, filters] as const,
+    purgeFilteredPreview: (entity: string, filters: Record<string, unknown>) =>
+      ["data-cleanup", "filtered-preview", entity, filters] as const,
+    purgeFilteredPage: (
+      entity: string,
+      filters: Record<string, unknown>,
+      page: number,
+    ) => ["data-cleanup", "filtered-page", entity, filters, page] as const,
   },
   notifications: {
     all: () => ["notifications"] as const,

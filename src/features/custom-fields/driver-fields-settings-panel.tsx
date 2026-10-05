@@ -37,6 +37,7 @@ import {
   type CustomFieldType,
 } from "@/lib/custom-fields/types";
 import { normalizeFieldKey, parseOptions } from "@/lib/custom-fields/validate";
+import { selectOptions } from "@/lib/select-items";
 import {
   useArchiveCustomFieldDefinition,
   useCustomFieldDefinitions,
@@ -435,6 +436,12 @@ export function DriverFieldsSettingsPanel() {
               <div className="space-y-1.5">
                 <Label>{t("type")}</Label>
                 <Select
+                  items={selectOptions(
+                    CUSTOM_FIELD_TYPES.map((type) => ({
+                      value: type,
+                      label: t(`types.${type}`),
+                    })),
+                  )}
                   value={draft.field_type}
                   onValueChange={(v) =>
                     setDraft((d) => {

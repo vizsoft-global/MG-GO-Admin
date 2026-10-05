@@ -15,6 +15,14 @@ const PURGE_BLOCKER_KEYS = [
   "blocked_by_deliveries",
   "blocked_by_restaurants",
   "blocked_by_fuel",
+  /**
+   * Raised only on the filtered path, and only because the per-id purger
+   * refuses them: a restaurant a rider is assigned to, a zone an intake still
+   * points at. Clear all reports the coarser `has_*` family from the candidate
+   * preview, so both spellings have to be readable.
+   */
+  "blocked_by_drivers",
+  "blocked_by_intakes",
 ] as const;
 
 export function isPurgeBlocker(code: string): boolean {
