@@ -331,6 +331,20 @@ export const queryKeys = {
     ) => ["data-cleanup", "candidates", tab, search, page, archivedOnly] as const,
     purgeAll: (entities: readonly string[]) =>
       ["data-cleanup", "purge-all", [...entities].sort().join(",")] as const,
+    purgeFilterColumns: (entity: string) =>
+      ["data-cleanup", "filter-columns", entity] as const,
+    purgeFilterValues: (
+      entity: string,
+      column: string,
+      filters: Record<string, unknown>,
+    ) => ["data-cleanup", "filter-values", entity, column, filters] as const,
+    purgeFilteredPreview: (entity: string, filters: Record<string, unknown>) =>
+      ["data-cleanup", "filtered-preview", entity, filters] as const,
+    purgeFilteredPage: (
+      entity: string,
+      filters: Record<string, unknown>,
+      page: number,
+    ) => ["data-cleanup", "filtered-page", entity, filters, page] as const,
   },
   notifications: {
     all: () => ["notifications"] as const,

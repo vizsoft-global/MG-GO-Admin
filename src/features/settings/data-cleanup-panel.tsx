@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Loader2, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Filter, Loader2, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppPage } from "@/components/app/app-page";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
@@ -28,6 +28,7 @@ import type {
   CleanupTab,
 } from "./data-cleanup-actions";
 import { DataCleanupClearAllPanel } from "./data-cleanup-clear-all-panel";
+import { DataCleanupFilteredPanel } from "./data-cleanup-filtered-panel";
 import type { PurgeAllEntity } from "./purge-entities";
 import { useCleanupCandidates, useCleanupPreview, useCleanupPurge } from "./use-data-cleanup";
 
@@ -42,7 +43,11 @@ const TABS: CleanupTab[] = [
 ];
 
 const CLEAR_ALL_TAB = "clear_all" as const;
-type CleanupPanelTab = CleanupTab | typeof CLEAR_ALL_TAB;
+const CLEAR_FILTERED_TAB = "clear_filtered" as const;
+type CleanupPanelTab =
+  | CleanupTab
+  | typeof CLEAR_ALL_TAB
+  | typeof CLEAR_FILTERED_TAB;
 
 function selectionKey(item: CleanupPurgeSelection): string {
   return `${item.purgeType}:${item.purgeId}`;
@@ -268,6 +273,7 @@ function CleanupTabPanel({
 export function DataCleanupPanel({
   purgeEntities = [],
   canUseCandidateCleanup = false,
+  canUseFilteredPurge = canUseCandidateCleanup,
 }: {
   purgeEntities?: readonly PurgeAllEntity[];
   /**
@@ -277,6 +283,13 @@ export function DataCleanupPanel({
    * server.
    */
   canUseCandidateCleanup?: boolean;
+  /**
+   * Clear by filter is super admin only for the same reason — and stricter than
+   * Clear all, whose tick a Manager can hold. Defaults to the candidate gate so
+   * a caller that already knows it is not super admin cannot accidentally open
+   * the tab.
+   */
+  canUseFilteredPurge?: boolean;
 }) {
   const t = useTranslations("pages.settings.dataCleanup");
   // Nothing to clear all means an empty tab bar, so fall back to the candidate
@@ -304,7 +317,7 @@ export function DataCleanupPanel({
 
   const currentSelections = useMemo(
     () =>
-      activeTab === CLEAR_ALL_TAB
+      activeTab === CLEAR_ALL_TAB || activeTab === CLEAR_FILTERED_TAB
         ? []
         : [...(selectedByTab[activeTab as CleanupTab]?.values() ?? [])],
     [selectedByTab, activeTab],
@@ -363,7 +376,9 @@ export function DataCleanupPanel({
   };
 
   const handlePurge = async () => {
-    if (activeTab === CLEAR_ALL_TAB) return;
+    // Both the Clear all and Clear filtered tabs own their own confirm flow and
+    // their own action, so neither reaches this per-candidate purge.
+    if (activeTab === CLEAR_ALL_TAB || activeTab === CLEAR_FILTERED_TAB) return;
     try {
       const result = await purgeMutation.mutateAsync(currentSelections);
       if (result.errors.length > 0) {
@@ -381,11 +396,13 @@ export function DataCleanupPanel({
 
   const hasBlockers = previewItems.some((item) => item.blockers.length > 0);
   const confirmText =
-    activeTab === CLEAR_ALL_TAB
+    activeTab === CLEAR_ALL_TAB || activeTab === CLEAR_FILTERED_TAB
       ? ""
       : confirmPhrase(activeTab, currentSelections.length, t);
   const showSelectionFooter =
-    showCandidateTabs && activeTab !== CLEAR_ALL_TAB;
+    showCandidateTabs &&
+    activeTab !== CLEAR_ALL_TAB &&
+    activeTab !== CLEAR_FILTERED_TAB;
 
   return (
     <AppPage>
@@ -428,6 +445,12 @@ export function DataCleanupPanel({
               <span className="ms-1.5">{t("clearAll.tab")}</span>
             </TabsTrigger>
           ) : null}
+          {canUseFilteredPurge ? (
+            <TabsTrigger value={CLEAR_FILTERED_TAB} className="cursor-pointer rounded-lg">
+              <Filter className="h-4 w-4" />
+              <span className="ms-1.5">{t("filtered.tab")}</span>
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         {showCandidateTabs
@@ -447,6 +470,12 @@ export function DataCleanupPanel({
         {purgeEntities.length > 0 ? (
           <TabsContent value={CLEAR_ALL_TAB}>
             <DataCleanupClearAllPanel entities={purgeEntities} />
+          </TabsContent>
+        ) : null}
+
+        {canUseFilteredPurge ? (
+          <TabsContent value={CLEAR_FILTERED_TAB}>
+            <DataCleanupFilteredPanel />
           </TabsContent>
         ) : null}
       </Tabs>

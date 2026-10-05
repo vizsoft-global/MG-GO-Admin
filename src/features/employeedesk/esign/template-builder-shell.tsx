@@ -40,6 +40,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { selectOptions } from "@/lib/select-items";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   deleteEsignTemplateField,
@@ -67,14 +68,7 @@ import type {
 } from "@/features/esign/types";
 import { FieldSourceBadge } from "./field-source-badge";
 import { EsignDocumentPreview } from "./document-preview";
-
-const CATEGORIES = [
-  { key: "penalty", labelKey: "categoryPenalty" },
-  { key: "loan", labelKey: "categoryLoan" },
-  { key: "warning", labelKey: "categoryWarning" },
-  { key: "handover", labelKey: "categoryHandover" },
-  { key: "general", labelKey: "categoryGeneral" },
-] as const;
+import { resolveEsignCategoryKey } from "./blank-template";
 
 /**
  * The kinds the picker offers, in the order the reference's own documents run.
@@ -144,10 +138,22 @@ export function TemplateBuilderShell({
   const router = useRouter();
   const queryClient = useQueryClient();
 
+  /**
+   * Options come only from the live catalogue.
+   *
+   * There used to be a hardcoded fallback list here, and both halves of it were
+   * stale: its keys (`penalty`, `warning`, `handover`, …) are not rows in
+   * `esign_categories`, and its message keys are not in `en.json` or `ar.json`, so an
+   * author who saw it at all saw raw key paths. It was reachable whenever the
+   * category fetch returned nothing, which is exactly the moment a wrong control is
+   * most confusing. An empty catalogue now renders an empty state instead.
+   */
+  const categoryOptions = categories.map((c) => ({ key: c.key, label: c.label_en }));
+
   const [draft, setDraft] = useState({
     name_en: template.name_en,
     name_ar: template.name_ar ?? "",
-    category_key: template.category_key,
+    category_key: resolveEsignCategoryKey(template.category_key, categoryOptions),
     document_kind: template.document_kind,
     default_language: template.default_language as EsignLocale,
     is_active: template.is_active,
@@ -232,9 +238,6 @@ export function TemplateBuilderShell({
     [visibleFields],
   );
   const selected = visibleFields.find((f) => f.id === selectedId) ?? null;
-  const categoryOptions = categories.length
-    ? categories.map((c) => ({ key: c.key, label: c.label_en }))
-    : CATEGORIES.map((c) => ({ key: c.key, label: t(c.labelKey) }));
 
   function patchDraft<K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -306,8 +309,16 @@ export function TemplateBuilderShell({
       )
     : null;
 
+  /**
+   * `category_key` is a real FK to `esign_categories(key)`, so an empty or unknown
+   * value is refused by Postgres (`23503`) rather than stored. Gating Save here is
+   * what turns that into a disabled button instead of a generic "could not be saved"
+   * toast over a field the author cannot fix from this screen — the control above
+   * already says why.
+   */
   const canSave =
     draft.name_en.trim().length > 0 &&
+    draft.category_key.trim().length > 0 &&
     visibleFields.every(
       (f) =>
         f.label_en.trim().length > 0 &&
@@ -554,24 +565,41 @@ export function TemplateBuilderShell({
                   />
                 </Field>
                 <Field label={t("category")}>
-                  <Select
-                    value={draft.category_key}
-                    onValueChange={(v) => patchDraft("category_key", v ?? "")}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categoryOptions.map((c) => (
-                        <SelectItem key={c.key} value={c.key}>
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {categoryOptions.length > 0 ? (
+                    <Select
+                      items={selectOptions(
+                        categoryOptions.map((c) => ({ value: c.key, label: c.label })),
+                      )}
+                      value={draft.category_key}
+                      onValueChange={(v) => patchDraft("category_key", v ?? "")}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categoryOptions.map((c) => (
+                          <SelectItem key={c.key} value={c.key}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    /**
+                     * No catalogue, no picker. A select with zero options can only
+                     * show the draft's raw key, which is how `penalty` — a category
+                     * that does not exist — ended up painted in this control.
+                     */
+                    <p className="flex h-9 items-center text-[11px] text-muted-foreground">
+                      {t("noCategories")}
+                    </p>
+                  )}
                 </Field>
                 <Field label={t("documentKind")}>
                   <Select
+                    items={selectOptions(
+                      DOCUMENT_KINDS.map((k) => ({ value: k, label: t(`kinds.${k}`) })),
+                    )}
                     value={draft.document_kind}
                     onValueChange={(v) =>
                       patchDraft("document_kind", v as EsignDocumentKind)
@@ -873,6 +901,12 @@ export function TemplateBuilderShell({
                   </Field>
                   <Field label={t("fieldType")}>
                     <Select
+                      items={selectOptions(
+                        ESIGN_FIELD_TYPE_ORDER.map((type) => ({
+                          value: type,
+                          label: t(`types.${type}`),
+                        })),
+                      )}
                       value={selected.field_type}
                       onValueChange={(v) =>
                         patchField(selected.id, {

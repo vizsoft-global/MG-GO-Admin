@@ -27,10 +27,10 @@ export function ProfileSettingsPanel({ profile }: { profile: ProfileData }) {
   const [isChangingPw, startChangingPw] = useTransition();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <AppFormSection title={t("profile.title")} description={t("profile.subtitle")}>
           <form
-            className="grid gap-4 sm:grid-cols-2"
+            className="grid gap-3 sm:grid-cols-2"
             action={(formData) => {
               startSaving(async () => {
                 const result = await updateProfile(formData);
@@ -93,7 +93,7 @@ export function ProfileSettingsPanel({ profile }: { profile: ProfileData }) {
         description={t("profile.changePasswordHint")}
       >
           <form
-            className="grid gap-4 sm:grid-cols-2"
+            className="grid gap-3 sm:grid-cols-2"
             action={(formData) => {
               startChangingPw(async () => {
                 const pw = String(formData.get("password") ?? "");
@@ -145,7 +145,7 @@ export function ProfileSettingsPanel({ profile }: { profile: ProfileData }) {
           </form>
       </AppFormSection>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2">
         <AppFormSection title={t("localeLabel")}>
           <LocaleSwitcher />
         </AppFormSection>

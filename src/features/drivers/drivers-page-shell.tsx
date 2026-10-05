@@ -87,6 +87,7 @@ import {
 } from "./drivers-list-query";
 import { riderCategoryMessageKey } from "./driver-rider-category";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import { ClearFilteredModuleButton } from "@/features/settings/filtered-purge-dialog";
 import { type DriverAccountStatus, type DriverListPageRow } from "./types";
 
 function shouldIgnoreRowNavigation(target: EventTarget | null): boolean {
@@ -661,6 +662,7 @@ function DriversPageContent() {
                 </Tooltip>
               ) : null}
               <ClearAllModuleButton entity="drivers" />
+              <ClearFilteredModuleButton entity="drivers" />
               {canCreate ? (
                 <Button
                   type="button"

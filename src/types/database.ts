@@ -9466,6 +9466,8 @@ export type Database = {
           source_company: string
           status_key: string
           today_deliveries: number
+          vehicle_type_key: string
+          vehicle_type_name: string
           workflow_status: string
           zone_id: string
           zone_name: string
@@ -9745,16 +9747,97 @@ export type Database = {
         Returns: Json
       }
       admin_purge_asset_catalog: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_col_matches: {
+        Args: { p_f: Json; p_kind: string; p_v: Json }
+        Returns: boolean
+      }
       admin_purge_deliveries: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_delivery_rules: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_drivers: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_filter_columns: { Args: { p_entity: string }; Returns: Json }
+      admin_purge_filter_kind_of: {
+        Args: { p_entity: string; p_key: string }
+        Returns: string
+      }
+      admin_purge_filtered_page: {
+        Args: {
+          p_entity: string
+          p_filters: Json
+          p_limit: number
+          p_offset: number
+        }
+        Returns: Json
+      }
+      admin_purge_filtered_preview: {
+        Args: { p_entity: string; p_filters: Json }
+        Returns: Json
+      }
+      admin_purge_filtered_run: {
+        Args: { p_entity: string; p_filters: Json; p_limit?: number }
+        Returns: Json
+      }
+      admin_purge_filtered_values: {
+        Args: { p_column: string; p_entity: string; p_filters: Json }
+        Returns: Json
+      }
       admin_purge_incentive_rules: { Args: { p_ids: string[] }; Returns: Json }
       admin_purge_intakes: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_matched_rows: {
+        Args: { p_entity: string; p_filters: Json }
+        Returns: {
+          purge_id: string
+          purge_kind: string
+          row_json: Json
+        }[]
+      }
       admin_purge_preview_all: { Args: { p_entity: string }; Returns: Json }
       admin_purge_restaurants: { Args: { p_ids: string[] }; Returns: Json }
+      admin_purge_row_matches: {
+        Args: { p_entity: string; p_filters: Json; p_r: Json }
+        Returns: boolean
+      }
+      admin_purge_row_value: {
+        Args: { p_entity: string; p_key: string; p_r: Json }
+        Returns: Json
+      }
+      admin_purge_rows_of: {
+        Args: { p_entity: string }
+        Returns: {
+          purge_id: string
+          purge_kind: string
+          row_json: Json
+        }[]
+      }
       admin_purge_run_all: {
         Args: { p_entity: string; p_limit?: number }
         Returns: Json
+      }
+      admin_purge_validate_filters: {
+        Args: { p_entity: string; p_filters: Json }
+        Returns: undefined
+      }
+      admin_purge_value_in: {
+        Args: { p_in: Json; p_v: Json }
+        Returns: boolean
+      }
+      admin_purge_value_in_range: {
+        Args: { p_f: Json; p_v: Json }
+        Returns: boolean
+      }
+      admin_purge_value_labels: {
+        Args: { p_column: string; p_entity: string }
+        Returns: {
+          label: string
+          value: string
+        }[]
+      }
+      admin_purge_value_text: { Args: { p_v: Json }; Returns: string }
+      admin_purge_vehicle_filter_rows: {
+        Args: never
+        Returns: {
+          r: Json
+          vehicle_id: string
+        }[]
       }
       admin_purge_zones: { Args: { p_ids: string[] }; Returns: Json }
       admin_rebuild_driver_performance_daily: {

@@ -27,6 +27,7 @@ export default async function DataCleanupPage({
     <DataCleanupPanel
       purgeEntities={entities}
       canUseCandidateCleanup={session.isSuperAdmin}
+      canUseFilteredPurge={session.isSuperAdmin}
     />
   );
 }
