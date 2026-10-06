@@ -38,10 +38,15 @@ function contentDisposition(
 
 export async function GET(request: Request) {
   const session = await getSessionUser();
-  if (
-    !session ||
-    !hasPermissionInSet(session.permissions, "requests.manage", session.isSuperAdmin)
-  ) {
+  const canManage =
+    Boolean(session) &&
+    (hasPermissionInSet(session!.permissions, "requests.manage", session!.isSuperAdmin) ||
+      hasPermissionInSet(session!.permissions, "employeedesk.manage", session!.isSuperAdmin));
+  const canSign =
+    canManage ||
+    (Boolean(session) &&
+      hasPermissionInSet(session!.permissions, "esign.sign", session!.isSuperAdmin));
+  if (!session || !canSign) {
     return NextResponse.json({ error: "not_authorized" }, { status: 403 });
   }
 
@@ -54,8 +59,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any)
+  const reader = canManage ? await createClient() : createAdminClient();
+  if (!canManage) {
+    const assigned = await (reader as any)
+      .from("esign_request_signers")
+      .select("id")
+      .eq("request_id", id)
+      .eq("staff_user_id", session.id)
+      .limit(1)
+      .maybeSingle();
+    if (assigned.error || !assigned.data) {
+      return NextResponse.json({ error: "not_authorized" }, { status: 403 });
+    }
+  }
+
+  const { data, error } = await (reader as any)
     .from("esign_requests")
     .select("document_storage_key, signature_storage_key, signed_document_storage_key")
     .eq("id", id)

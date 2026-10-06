@@ -46,6 +46,10 @@
     {
       "path": "/api/cron/performance-rollup",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/esign-batch-drain",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

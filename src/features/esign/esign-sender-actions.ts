@@ -205,11 +205,10 @@ export async function fetchEsignTemplates(): Promise<{
   };
 }
 
-export async function fetchEsignTemplate(
+async function loadEsignTemplate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
   id: string,
 ): Promise<{ template: EsignTemplateDetail | null; error?: string }> {
-  await requireRequestsManage();
-  const supabase = await createClient();
   const { data, error } = await (supabase as any)
     .from("esign_templates")
     .select("*, esign_template_fields(*)")
@@ -221,8 +220,19 @@ export async function fetchEsignTemplate(
   const fields = (Array.isArray(row.esign_template_fields) ? row.esign_template_fields : [])
     .map((f) => mapField(asRecord(f)))
     .sort((a, b) => a.sort_order - b.sort_order);
-  await logAdminRead("esign_templates", "esign.templates.detail", { id });
   return { template: { ...mapTemplate(row, fields.length), fields } };
+}
+
+export async function fetchEsignTemplate(
+  id: string,
+): Promise<{ template: EsignTemplateDetail | null; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const loaded = await loadEsignTemplate(supabase, id);
+  if (loaded.template) {
+    await logAdminRead("esign_templates", "esign.templates.detail", { id });
+  }
+  return loaded;
 }
 
 export async function upsertEsignTemplate(input: {
@@ -343,14 +353,15 @@ export async function deleteEsignTemplateField(
   return { ok: true };
 }
 
-export async function resolveEsignEmployees(
+async function resolveEmployeesOnClient(
+  supabase: Awaited<ReturnType<typeof createClient>>,
   employeeIds: string[],
+  asWorker: boolean,
 ): Promise<{ rows: EsignResolveRow[]; error?: string }> {
-  await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_esign_resolve_employees", {
-    p_rows: employeeIds.map((employee_id) => ({ employee_id })),
-  });
+  const { data, error } = await (supabase as any).rpc(
+    asWorker ? "esign_worker_resolve_employees" : "admin_esign_resolve_employees",
+    { p_rows: employeeIds.map((employee_id) => ({ employee_id })) },
+  );
   if (error) return { rows: [], error: error.message };
   const payload = asRecord(data);
   if (payload.ok === false) return { rows: [], error: String(payload.error ?? "failed") };
@@ -368,6 +379,14 @@ export async function resolveEsignEmployees(
       };
     }),
   };
+}
+
+export async function resolveEsignEmployees(
+  employeeIds: string[],
+): Promise<{ rows: EsignResolveRow[]; error?: string }> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  return resolveEmployeesOnClient(supabase, employeeIds, false);
 }
 
 export async function fetchEsignSnapshot(
@@ -917,10 +936,14 @@ async function recountBatch(
  * filter because the claim is what holds the row lock: filtering in TypeScript
  * would hand the worker rows another concurrent claim had already taken.
  */
-export async function processEsignBatchChunk(
-  batchId: string,
-  mode: EsignBatchChunkMode = "pending",
-): Promise<{
+export async function runEsignBatchChunk(input: {
+  // Session client or service-role admin client — same PostgREST surface.
+  supabase: any;
+  batchId: string;
+  mode?: EsignBatchChunkMode;
+  asWorker?: boolean;
+  actorId?: string | null;
+}): Promise<{
   ok: boolean;
   processed: number;
   created: number;
@@ -929,13 +952,17 @@ export async function processEsignBatchChunk(
   batch_status?: EsignBatchStatus;
   error?: string;
 }> {
-  await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_claim_esign_batch_rows", {
-    p_batch_id: batchId,
-    p_limit: CHUNK_SIZE,
-    p_mode: mode,
-  });
+  const mode = input.mode ?? "pending";
+  const supabase = input.supabase;
+  const { data, error } = await (supabase as any).rpc(
+    input.asWorker ? "esign_worker_claim_batch_rows" : "admin_claim_esign_batch_rows",
+    {
+      p_batch_id: input.batchId,
+      p_limit: CHUNK_SIZE,
+      p_mode: mode,
+      ...(input.asWorker ? { p_actor: input.actorId ?? null } : {}),
+    },
+  );
   if (error) return { ok: false, processed: 0, created: 0, failed: 0, remaining: 0, error: error.message };
   const payload = asRecord(data);
   if (payload.ok === false) {
@@ -943,7 +970,7 @@ export async function processEsignBatchChunk(
   }
   const claimed = Array.isArray(payload.rows) ? payload.rows.map(asRecord) : [];
   if (claimed.length === 0) {
-    const totals = await recountBatch(supabase, batchId);
+    const totals = await recountBatch(supabase, input.batchId);
     return {
       ok: true,
       processed: 0,
@@ -957,10 +984,10 @@ export async function processEsignBatchChunk(
   const batchRow = await (supabase as any)
     .from("esign_batches")
     .select("template_id, language, title, due_at")
-    .eq("id", batchId)
+    .eq("id", input.batchId)
     .maybeSingle();
   const batch = asRecord(batchRow.data);
-  const loaded = await fetchEsignTemplate(String(batch.template_id ?? ""));
+  const loaded = await loadEsignTemplate(supabase, String(batch.template_id ?? ""));
   if (!loaded.template) {
     return { ok: false, processed: 0, created: 0, failed: 0, remaining: 0, error: loaded.error ?? "invalid_template" };
   }
@@ -977,9 +1004,16 @@ export async function processEsignBatchChunk(
       const rowIndex = Number(row.row_index ?? 0);
       const employeeId = String(row.employee_id ?? "");
       let driverId = row.driver_id != null ? String(row.driver_id) : "";
-      let snapshot = driverId ? (await fetchEsignSnapshot(driverId)).snapshot : null;
+      let snapshot = null as EsignEmployeeSnapshot | null | undefined;
+      if (driverId && !input.asWorker) {
+        const { data: snapData, error: snapError } = await (supabase as any).rpc(
+          "esign_employee_snapshot",
+          { p_driver_id: driverId },
+        );
+        if (!snapError) snapshot = mapSnapshot(snapData) ?? null;
+      }
       if (!snapshot || !driverId) {
-        const resolved = await resolveEsignEmployees([employeeId]);
+        const resolved = await resolveEmployeesOnClient(supabase, [employeeId], Boolean(input.asWorker));
         const hit = resolved.rows[0];
         if (!hit?.ok || !hit.driver_id || !hit.snapshot) {
           await (supabase as any)
@@ -1018,7 +1052,7 @@ export async function processEsignBatchChunk(
         const upload = await uploadPdfBytes(supabase, pdf);
         if (!upload.ok) throw new Error(upload.error);
         const { data: createdRow, error: createError } = await (supabase as any).rpc(
-          "admin_create_esign_request",
+          input.asWorker ? "esign_worker_create_request" : "admin_create_esign_request",
           {
             p_driver_id: driverId,
             p_title: title,
@@ -1027,10 +1061,11 @@ export async function processEsignBatchChunk(
             p_document_storage_key: upload.key,
             p_screenshot_restricted: undefined,
             p_template_id: loaded.template.id,
-            p_batch_id: batchId,
+            p_batch_id: input.batchId,
             p_batch_row: rowIndex,
             p_description: row.description || undefined,
             p_field_values: values,
+            ...(input.asWorker ? { p_actor: input.actorId ?? null } : {}),
           },
         );
         if (createError) throw new Error(createError.message);
@@ -1053,7 +1088,7 @@ export async function processEsignBatchChunk(
     await browser.close();
   }
 
-  const totals = await recountBatch(supabase, batchId);
+  const totals = await recountBatch(supabase, input.batchId);
   return {
     ok: true,
     processed: claimed.length,
@@ -1062,6 +1097,23 @@ export async function processEsignBatchChunk(
     remaining: totals.pending,
     batch_status: totals.status,
   };
+}
+
+export async function processEsignBatchChunk(
+  batchId: string,
+  mode: EsignBatchChunkMode = "pending",
+): Promise<{
+  ok: boolean;
+  processed: number;
+  created: number;
+  failed: number;
+  remaining: number;
+  batch_status?: EsignBatchStatus;
+  error?: string;
+}> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  return runEsignBatchChunk({ supabase, batchId, mode });
 }
 
 /**

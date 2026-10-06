@@ -192,6 +192,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "dashboard.view",
   },
   {
+    id: "dashboard-ops",
+    defaultLabel: "Control Tower",
+    defaultIcon: "Gauge",
+    href: "/dashboard/ops",
+    defaultGroup: "Overview",
+    defaultOrder: 0.5,
+    permission: "dashboard.view",
+  },
+  {
     id: "employeedesk",
     defaultLabel: "EmployeeDesk",
     defaultIcon: "Inbox",
@@ -243,7 +252,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/employeedesk/esign/signing",
     defaultGroup: "EmployeeDesk",
     defaultOrder: 5,
-    permission: "requests.manage",
+    permission: "esign.sign",
+    permissionAnyOf: ["esign.sign", "requests.manage", "employeedesk.manage"],
   },
   {
     id: "employeedesk-visits",
@@ -738,6 +748,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "group-unorganised": "unorganised",
   "group-unassigned": "unassigned",
   dashboard: "dashboard",
+  "dashboard-ops": "dashboardOps",
   employeedesk: "employeedesk",
   "employeedesk-all": "employeedeskAll",
   "employeedesk-incoming": "employeedeskIncoming",

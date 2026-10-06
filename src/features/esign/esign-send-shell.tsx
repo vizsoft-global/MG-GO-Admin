@@ -15,6 +15,8 @@ import { Link, useRouter } from "@/i18n/navigation";
 import { driverSearchOptions } from "@/lib/search-options";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { isEsignDueDateAllowed } from "./esign-due-date";
+import { addEsignSigner } from "./esign-signer-actions";
+import { EsignSignersEditor, type EsignDraftStaffSigner } from "./esign-signers-editor";
 import { fetchEsignSnapshot, saveEsignDraft } from "./esign-sender-actions";
 import {
   useCreateEsignFromTemplate,
@@ -78,6 +80,7 @@ export function EsignSendShell({
    */
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [staffSigners, setStaffSigners] = useState<EsignDraftStaffSigner[]>([]);
   const draftQuery = useEsignDraft(initialDraftId ?? "");
   /**
    * One-shot. A draft payload is the *starting* state, so it may only be
@@ -172,6 +175,17 @@ export function EsignSendShell({
     if (!result.ok) {
       toast.error(result.error ?? t("errors.createFailed"));
       return;
+    }
+    if (result.id) {
+      for (const signer of staffSigners) {
+        const added = await addEsignSigner({
+          request_id: result.id,
+          staff_user_id: signer.staff_user_id,
+          role: signer.role,
+          display_name: signer.display_name,
+        });
+        if (!added.ok) toast.error(added.error ?? t("errors.createFailed"));
+      }
     }
     toast.success(t("created", { code: result.request_code ?? "" }));
     if (result.id) router.push(`/requests/esign/${result.id}`);
@@ -354,6 +368,8 @@ export function EsignSendShell({
           </div>
         </AppListCard>
       ) : null}
+
+      <EsignSignersEditor draft={staffSigners} onDraftChange={setStaffSigners} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button

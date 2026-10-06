@@ -554,6 +554,7 @@ export type Database = {
           driver_ops_log_retention_days: number
           driver_telemetry_max_events_per_hour: number
           driver_telemetry_retention_days: number
+          esign_batch_worker_minutes: number
           esign_reminder_cooldown_hours: number
           esign_screenshot_default: boolean
           feature_two_stage_delivery: boolean
@@ -611,6 +612,7 @@ export type Database = {
           driver_ops_log_retention_days?: number
           driver_telemetry_max_events_per_hour?: number
           driver_telemetry_retention_days?: number
+          esign_batch_worker_minutes?: number
           esign_reminder_cooldown_hours?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
@@ -668,6 +670,7 @@ export type Database = {
           driver_ops_log_retention_days?: number
           driver_telemetry_max_events_per_hour?: number
           driver_telemetry_retention_days?: number
+          esign_batch_worker_minutes?: number
           esign_reminder_cooldown_hours?: number
           esign_screenshot_default?: boolean
           feature_two_stage_delivery?: boolean
@@ -4009,6 +4012,7 @@ export type Database = {
           signer_display_name: string | null
           signer_meta: Json
           sort_order: number
+          staff_user_id: string | null
           status: string
           updated_at: string
           viewed_at: string | null
@@ -4026,6 +4030,7 @@ export type Database = {
           signer_display_name?: string | null
           signer_meta?: Json
           sort_order?: number
+          staff_user_id?: string | null
           status?: string
           updated_at?: string
           viewed_at?: string | null
@@ -4043,6 +4048,7 @@ export type Database = {
           signer_display_name?: string | null
           signer_meta?: Json
           sort_order?: number
+          staff_user_id?: string | null
           status?: string
           updated_at?: string
           viewed_at?: string | null
@@ -4060,6 +4066,13 @@ export type Database = {
             columns: ["request_id"]
             isOneToOne: false
             referencedRelation: "esign_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_request_signers_staff_user_id_fkey"
+            columns: ["staff_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -9082,7 +9095,21 @@ export type Database = {
         Args: { p_driver_id: string; p_reason?: string }
         Returns: undefined
       }
+      _esign_awaiting_counter_signature: {
+        Args: { p_request_id: string }
+        Returns: boolean
+      }
       _esign_batch_recount: { Args: { p_batch_id: string }; Returns: undefined }
+      _esign_counter_signature_state: {
+        Args: { p_request_id: string }
+        Returns: string
+      }
+      _esign_next_signer_order: {
+        Args: { p_request_id: string }
+        Returns: number
+      }
+      _esign_worker_actor: { Args: never; Returns: string }
+      _esign_worker_mode: { Args: never; Returns: boolean }
       _fleet_caller_is_service_role: { Args: never; Returns: boolean }
       _fleet_settings: { Args: never; Returns: Json }
       _haversine_meters: {
@@ -9201,6 +9228,15 @@ export type Database = {
           p_zone_type: Database["public"]["Enums"]["zone_geometry_type"]
         }
         Returns: unknown
+      }
+      admin_add_esign_signer: {
+        Args: {
+          p_display_name?: string
+          p_request_id: string
+          p_role?: string
+          p_staff_user_id: string
+        }
+        Returns: Json
       }
       admin_add_payroll_client: {
         Args: {
@@ -9336,6 +9372,10 @@ export type Database = {
           p_reason?: string
           p_request_id: string
         }
+        Returns: Json
+      }
+      admin_decline_esign_signature: {
+        Args: { p_reason?: string; p_request_id: string }
         Returns: Json
       }
       admin_delete_driver_performance_rating: {
@@ -9499,6 +9539,7 @@ export type Database = {
       }
       admin_esign_reminder_state: { Args: { p_ids: string[] }; Returns: Json }
       admin_esign_resolve_employees: { Args: { p_rows: Json }; Returns: Json }
+      admin_esign_signer_options: { Args: never; Returns: Json }
       admin_expire_esign_requests: { Args: never; Returns: number }
       admin_expire_stale_pickups: { Args: never; Returns: number }
       admin_force_sign_out_driver: {
@@ -9602,6 +9643,10 @@ export type Database = {
         Args: { p_limit?: number; p_offset?: number; p_status?: string }
         Returns: Json
       }
+      admin_list_esign_signers: {
+        Args: { p_request_id: string }
+        Returns: Json
+      }
       admin_list_fleet_events: {
         Args: {
           p_cursor_detected_at?: string
@@ -9626,6 +9671,10 @@ export type Database = {
           p_to?: string
           p_vehicle_type_key?: string
         }
+        Returns: Json
+      }
+      admin_list_my_esign_signatures: {
+        Args: { p_ready_only?: boolean }
         Returns: Json
       }
       admin_list_performance_components: { Args: never; Returns: Json }
@@ -9854,6 +9903,14 @@ export type Database = {
         Args: { p_row_id: string }
         Returns: Json
       }
+      admin_remove_esign_signer: {
+        Args: { p_signer_id: string }
+        Returns: Json
+      }
+      admin_reorder_esign_signers: {
+        Args: { p_request_id: string; p_signer_ids: string[] }
+        Returns: Json
+      }
       admin_request_department_report: {
         Args: { p_date_from?: string; p_date_to?: string }
         Returns: Json
@@ -9982,6 +10039,14 @@ export type Database = {
       }
       admin_set_visit_note_to_rider: {
         Args: { p_booking_id: string; p_note: string }
+        Returns: Json
+      }
+      admin_submit_esign_signature: {
+        Args: {
+          p_request_id: string
+          p_signature_storage_key: string
+          p_signer_meta?: Json
+        }
         Returns: Json
       }
       admin_sync_branch_slots_to_working_days: {
@@ -10724,6 +10789,37 @@ export type Database = {
         Returns: string
       }
       esign_employee_snapshot: { Args: { p_driver_id: string }; Returns: Json }
+      esign_worker_claim_batch_rows: {
+        Args: {
+          p_actor?: string
+          p_batch_id: string
+          p_limit?: number
+          p_mode?: string
+        }
+        Returns: Json
+      }
+      esign_worker_create_request: {
+        Args: {
+          p_actor?: string
+          p_batch_id?: string
+          p_batch_row?: number
+          p_category_key?: string
+          p_description?: string
+          p_document_storage_key?: string
+          p_driver_id: string
+          p_due_at?: string
+          p_field_values?: Json
+          p_screenshot_restricted?: boolean
+          p_template_id?: string
+          p_title: string
+        }
+        Returns: Json
+      }
+      esign_worker_drainable_batches: {
+        Args: { p_limit?: number; p_stale_minutes?: number }
+        Returns: Json
+      }
+      esign_worker_resolve_employees: { Args: { p_rows: Json }; Returns: Json }
       estimate_notification_audience: {
         Args: {
           p_exclusion_spec?: Json
