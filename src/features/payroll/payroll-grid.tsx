@@ -55,8 +55,15 @@ import {
   riderColumnValue,
   type PayrollRiderColumn,
 } from "./payroll-rider-columns";
-import { cellsFromSelection, tilePasteOntoSelection } from "./payroll-snapshot";
+import { cellsFromSelection, fillTargetCells, tilePasteOntoSelection } from "./payroll-snapshot";
 import type { PayrollAdjustmentCell, PayrollRiderRow } from "./payroll-types";
+import { PayrollCellMenu, type PayrollCellMenuState } from "./payroll-cell-menu";
+import {
+  columnHiddenIn,
+  resolveColumnLabel,
+  type PayrollColumnConfigRow,
+} from "./payroll-column-config";
+import { PayrollHeadingLabel, stickyIdentityOffset, stickyIdentityStyle } from "./payroll-heading";
 
 export function dayClass(status: DayStatus): string {
   switch (status) {
@@ -120,6 +127,7 @@ export type PayrollAdjustRequest = {
   dayCount: number;
   mode: "click" | "select" | "fill" | "paste";
   anchor: { top: number; left: number; width: number; height: number };
+  anchorEl?: HTMLElement | null;
   auto: {
     status: DayStatus;
     hours: number;
@@ -152,6 +160,20 @@ function stickyClass(index: number, head = false): string | undefined {
   return undefined;
 }
 
+export function PayrollFillHandle({
+  onMouseDown,
+}: {
+  onMouseDown: (event: React.MouseEvent<HTMLSpanElement>) => void;
+}) {
+  return (
+    <span
+      role="presentation"
+      onMouseDown={onMouseDown}
+      className="absolute -bottom-0.5 -end-0.5 size-2.5 cursor-crosshair rounded-[2px] border border-white bg-emerald-500 after:absolute after:-inset-2.5 after:content-['']"
+    />
+  );
+}
+
 function normalizeRect(rect: CellRect): { top: number; bottom: number; left: number; right: number } {
   return {
     top: Math.min(rect.r0, rect.r1),
@@ -169,6 +191,8 @@ export function PayrollDayGrid({
   onExport,
   empty,
   editor,
+  headingConfig,
+  headingManage = false,
 }: {
   dates: readonly string[];
   rows: readonly PayrollRiderRow[];
@@ -177,6 +201,8 @@ export function PayrollDayGrid({
   onExport: (rows: readonly PayrollRiderRow[]) => void;
   empty: string;
   editor?: PayrollGridEditor;
+  headingConfig?: ReadonlyMap<string, PayrollColumnConfigRow>;
+  headingManage?: boolean;
 }) {
   const t = useTranslations("pages.payroll");
   const parentRef = useRef<HTMLDivElement>(null);
@@ -185,9 +211,14 @@ export function PayrollDayGrid({
   const [rect, setRect] = useState<CellRect | null>(null);
   const [fillPreview, setFillPreview] = useState<CellRect | null>(null);
   const lastAnchor = useRef<DOMRect | null>(null);
+  const lastAnchorEl = useRef<HTMLElement | null>(null);
+  const [menu, setMenu] = useState<PayrollCellMenuState | null>(null);
 
   const editable = Boolean(editor?.canManage);
-  const identity = COMBINED_IDENTITY_COLUMNS;
+  const identity = useMemo(() => {
+    if (!headingConfig) return COMBINED_IDENTITY_COLUMNS;
+    return COMBINED_IDENTITY_COLUMNS.filter((column) => !columnHiddenIn(column.id, "combined", headingConfig));
+  }, [headingConfig]);
   const days = dates.length;
   const identityCount = identity.length;
 
@@ -283,13 +314,14 @@ export function PayrollDayGrid({
       if (rejected > 0) editor?.onNotice?.(t("adjust.someSkipped", { count: rejected }));
       const ridersTouched = new Set(cells.map((c) => c.driverId));
       const datesTouched = new Set(cells.map((c) => c.date));
-      const anchor = lastAnchor.current ?? { top: 80, left: 80, width: 40, height: 28 };
+      const rect = lastAnchor.current ?? { top: 80, left: 80, width: 40, height: 28 };
       editor?.onRequestAdjust({
         cells,
         riderCount: ridersTouched.size,
         dayCount: datesTouched.size,
         mode,
-        anchor,
+        anchor: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+        anchorEl: lastAnchorEl.current,
         auto: first ? autoFor(first.row, first.dayIndex) : null,
         context: first ? contextFor(first.row, first.dayIndex) : null,
         note: mode === "fill" || mode === "paste" ? t("adjust.patternNote") : undefined,
@@ -307,27 +339,26 @@ export function PayrollDayGrid({
       return;
     }
     if (active.mode === "fill") {
-      const width = active.c1 - active.c0 + 1;
-      const height = active.r1 - active.r0 + 1;
       const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
       let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
-      for (let r = Math.min(active.r0, current.r1); r <= Math.max(active.r1, current.r1); r += 1) {
-        for (let c = Math.min(active.c0, current.c1); c <= Math.max(active.c1, current.c1); c += 1) {
-          const sourceRow = visibleRows[active.r0 + ((r - active.r0) % height)];
-          const sourceDay = active.c0 + ((c - active.c0) % width) - identityCount;
-          const targetRow = visibleRows[r];
-          const targetDay = c - identityCount;
-          if (!sourceRow || !targetRow) continue;
-          if (sourceDay < 0 || sourceDay >= days || targetDay < 0 || targetDay >= days) continue;
-          if (r <= active.r1 && c <= active.c1) continue;
-          inputs.push({
-            driverId: targetRow.driverId,
-            date: dates[targetDay] ?? "",
-            text: dayClipboardToken(sourceRow, sourceDay),
-            currentHours: targetRow.dayInfo[targetDay]?.creditedHours ?? 0,
-          });
-          first ??= { row: targetRow, dayIndex: targetDay };
-        }
+      for (const target of fillTargetCells(
+        { r0: active.r0, c0: active.c0, r1: active.r1, c1: active.c1 },
+        current.r1,
+        current.c1,
+      )) {
+        const sourceRow = visibleRows[target.srcR];
+        const sourceDay = target.srcC - identityCount;
+        const targetRow = visibleRows[target.r];
+        const targetDay = target.c - identityCount;
+        if (!sourceRow || !targetRow) continue;
+        if (sourceDay < 0 || sourceDay >= days || targetDay < 0 || targetDay >= days) continue;
+        inputs.push({
+          driverId: targetRow.driverId,
+          date: dates[targetDay] ?? "",
+          text: dayClipboardToken(sourceRow, sourceDay),
+          currentHours: targetRow.dayInfo[targetDay]?.creditedHours ?? 0,
+        });
+        first ??= { row: targetRow, dayIndex: targetDay };
       }
       setFillPreview(null);
       openAdjust(inputs, "fill", t("adjust.nothingFilled"), first);
@@ -521,8 +552,11 @@ export function PayrollDayGrid({
     );
 
   const labelOf = (columnId: string) => {
-    const known = identity.find((c) => c.id === columnId);
-    if (known) return t(`riderCols.${known.labelKey}`);
+    const known = COMBINED_IDENTITY_COLUMNS.find((c) => c.id === columnId);
+    if (known) {
+      const fallback = t(`riderCols.${known.labelKey}`);
+      return headingConfig ? resolveColumnLabel(columnId, fallback, headingConfig) : fallback;
+    }
     if (/^d\d+$/.test(columnId)) {
       const index = Number(columnId.slice(1)) - 1;
       return dates[index] ? isoDayLabel(dates[index]) : columnId;
@@ -609,10 +643,28 @@ export function PayrollDayGrid({
           </colgroup>
           <thead className="sticky top-0 z-10 bg-card">
             <tr>
-              {identity.map((column, index) => (
+              {identity.map((column, index) => {
+                const fallback = t(`riderCols.${column.labelKey}`);
+                const sticky = headingConfig
+                  ? stickyIdentityStyle(
+                      column.id,
+                      identity.slice(0, index).reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
+                    )
+                  : null;
+                return (
                 <PayrollColumnHeader
                   key={column.id}
-                  label={t(`riderCols.${column.labelKey}`)}
+                  label={headingConfig ? resolveColumnLabel(column.id, fallback, headingConfig) : fallback}
+                  heading={
+                    headingConfig ? (
+                      <PayrollHeadingLabel
+                        columnKey={column.id}
+                        fallback={fallback}
+                        config={headingConfig}
+                        canManage={headingManage}
+                      />
+                    ) : undefined
+                  }
                   columnId={column.id}
                   values={rows.map((row) => String(riderColumnValue(row, column.id) ?? ""))}
                   filter={filters[column.id]}
@@ -620,9 +672,11 @@ export function PayrollDayGrid({
                   sort={sort}
                   onSort={setSort}
                   numeric={column.numeric}
-                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", stickyClass(index, true))}
+                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", sticky?.className ?? stickyClass(index, true))}
+                  style={sticky?.style}
                 />
-              ))}
+                );
+              })}
               {dates.map((date, index) => (
                 <PayrollColumnHeader
                   key={date}
@@ -656,14 +710,27 @@ export function PayrollDayGrid({
                   const row = visibleRows[item.index];
                   return (
                     <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
-                      {identity.map((column, index) => (
+                      {identity.map((column, index) => {
+                        const sticky = headingConfig
+                          ? stickyIdentityStyle(
+                              column.id,
+                              identity.slice(0, index).reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
+                            )
+                          : null;
+                        return (
                         <td
                           key={column.id}
-                          className={cn("whitespace-nowrap px-2 py-1.5", stickyClass(index), index === 2 && "font-medium")}
+                          className={cn(
+                            "whitespace-nowrap px-2 py-1.5",
+                            sticky?.className ?? stickyClass(index),
+                            column.id === "name" && "font-medium",
+                          )}
+                          style={sticky?.style}
                         >
                           {renderIdentityCell(row, column)}
                         </td>
-                      ))}
+                        );
+                      })}
                       {dates.map((date, i) => {
                         const columnIndex = identityCount + i;
                         const selected = isSelected(item.index, columnIndex);
@@ -686,12 +753,28 @@ export function PayrollDayGrid({
                               // logged` beside a cell that prints 0.8h.
                               logged: info?.loggedHours || (info?.elapsedHours ?? 0),
                             })}
+                            onContextMenu={
+                              editable
+                                ? (event) => {
+                                    event.preventDefault();
+                                    lastAnchor.current = event.currentTarget.getBoundingClientRect();
+                                    lastAnchorEl.current = event.currentTarget;
+                                    setMenu({
+                                      x: event.clientX,
+                                      y: event.clientY,
+                                      driverId: row.driverId,
+                                      date,
+                                    });
+                                  }
+                                : undefined
+                            }
                             onMouseDown={
                               editable
                                 ? (event) => {
                                     if (event.button !== 0) return;
                                     event.preventDefault();
                                     lastAnchor.current = event.currentTarget.getBoundingClientRect();
+                                    lastAnchorEl.current = event.currentTarget;
                                     const next = {
                                       r0: item.index,
                                       c0: columnIndex,
@@ -741,8 +824,7 @@ export function PayrollDayGrid({
                               />
                             ) : null}
                             {editable && selected && bounds?.bottom === item.index && bounds?.right === columnIndex ? (
-                              <span
-                                role="presentation"
+                              <PayrollFillHandle
                                 onMouseDown={(event) => {
                                   if (event.button !== 0) return;
                                   event.preventDefault();
@@ -756,7 +838,6 @@ export function PayrollDayGrid({
                                     c1: bounds.right,
                                   };
                                 }}
-                                className="absolute -bottom-0.5 -end-0.5 size-2 cursor-crosshair rounded-[2px] border border-white bg-emerald-500"
                               />
                             ) : null}
                       </td>
@@ -794,6 +875,52 @@ export function PayrollDayGrid({
           {exportLabel}
         </button>
       </div>
+      <PayrollCellMenu
+        state={menu}
+        onClose={() => setMenu(null)}
+        onEdit={() => {
+          if (!menu) return;
+          const rowIndex = visibleRows.findIndex((row) => row.driverId === menu.driverId);
+          const dayIndex = dates.indexOf(menu.date);
+          const row = visibleRows[rowIndex];
+          setMenu(null);
+          if (!row || dayIndex < 0) return;
+          openAdjust(
+            [
+              {
+                driverId: row.driverId,
+                date: menu.date,
+                text: dayClipboardToken(row, dayIndex),
+                currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
+              },
+            ],
+            "click",
+            t("adjust.nothingSelected"),
+            { row, dayIndex },
+          );
+        }}
+        onHistory={() => {
+          if (!menu) return;
+          const rowIndex = visibleRows.findIndex((row) => row.driverId === menu.driverId);
+          const dayIndex = dates.indexOf(menu.date);
+          const row = visibleRows[rowIndex];
+          setMenu(null);
+          if (!row || dayIndex < 0) return;
+          openAdjust(
+            [
+              {
+                driverId: row.driverId,
+                date: menu.date,
+                text: dayClipboardToken(row, dayIndex),
+                currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
+              },
+            ],
+            "click",
+            t("adjust.nothingSelected"),
+            { row, dayIndex },
+          );
+        }}
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   addPayrollClient,
   applyPayrollAdjustments,
   deletePayrollClient,
+  fetchPayrollColumnConfig,
   fetchPayrollAdjustmentAudit,
   fetchPayrollMonthSnapshot,
   fetchPayrollRuleConfig,
@@ -16,6 +17,7 @@ import {
   resetPayrollClientRules,
   savePayrollClient,
   savePayrollClientRules,
+  savePayrollColumnConfig,
   savePayrollZoneOverride,
   savePayrollZoneSettings,
 } from "./payroll-actions";
@@ -197,6 +199,27 @@ export function useApplyPayrollAdjustments() {
     mutationFn: applyPayrollAdjustments,
     onSuccess: (result) => {
       if (!("error" in result)) invalidate();
+    },
+  });
+}
+
+export function usePayrollColumnConfig() {
+  return useQuery({
+    queryKey: queryKeys.payroll.columnConfig(),
+    queryFn: fetchPayrollColumnConfig,
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useSavePayrollColumnConfig() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: savePayrollColumnConfig,
+    onSuccess: (result) => {
+      if (!("error" in result)) {
+        void client.invalidateQueries({ queryKey: queryKeys.payroll.columnConfig() });
+      }
     },
   });
 }

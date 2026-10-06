@@ -1,14 +1,13 @@
 import { downloadCsv, toCsv } from "@/features/performance/performance-ops-table";
 import {
   bucketOf,
-  dayGridLabel,
-  dayDisplayHours,
   formatPayrollPct,
   isoDayLabel,
   PAYROLL_EFF_BUCKETS,
   type PayrollEffBucketId,
 } from "./payroll-formulas";
-import { dayClipboardToken, payrollVehicleKind } from "./payroll-rider-columns";
+import { cellParticular } from "./payroll-particulars";
+import { payrollVehicleKind } from "./payroll-rider-columns";
 import type { PayrollRequestRow, PayrollRiderRow } from "./payroll-types";
 
 export const PAYROLL_VIEW_HEADERS = [
@@ -51,6 +50,16 @@ export const COMBINED_IDENTITY_HEADERS = [
   "Vehicle",
 ] as const;
 
+export const COMBINED_IDENTITY_KEYS = [
+  "amId",
+  "mgId",
+  "name",
+  "zone",
+  "zoneCategory",
+  "partner",
+  "vehicleKind",
+] as const;
+
 export const AO_LEAD_HEADERS = [
   "AM ID",
   "Driver ID",
@@ -62,6 +71,59 @@ export const AO_LEAD_HEADERS = [
   "Final orders",
   "Actual hours",
 ] as const;
+
+export const AO_LEAD_KEYS = [
+  "amId",
+  "mgId",
+  "name",
+  "partner",
+  "zone",
+  "zoneCategory",
+  "vehicleKind",
+  "finalOrders",
+  "actualHours",
+] as const;
+
+export type PayrollExportOptions = {
+  labels?: Readonly<Record<string, string>>;
+  hidden?: ReadonlySet<string>;
+};
+
+function headerFor(
+  key: string,
+  fallback: string,
+  options?: PayrollExportOptions,
+): string | null {
+  if (options?.hidden?.has(key)) return null;
+  const custom = options?.labels?.[key]?.trim();
+  return custom || fallback;
+}
+
+function visibleIdentity(
+  headers: readonly string[],
+  keys: readonly string[],
+  options: PayrollExportOptions | undefined,
+  cellsOf: (row: PayrollRiderRow) => Array<string | number>,
+): {
+  headers: string[];
+  cells: (row: PayrollRiderRow) => Array<string | number>;
+} {
+  const keep: number[] = [];
+  const outHeaders: string[] = [];
+  keys.forEach((key, index) => {
+    const header = headerFor(key, headers[index] ?? key, options);
+    if (header == null) return;
+    keep.push(index);
+    outHeaders.push(header);
+  });
+  return {
+    headers: outHeaders,
+    cells: (row) => {
+      const all = cellsOf(row);
+      return keep.map((index) => all[index] ?? "");
+    },
+  };
+}
 
 function summaryCells(row: PayrollRiderRow): Array<string | number> {
   return [
@@ -120,15 +182,22 @@ export function exportCombinedPayrollCsv(
   fileKey: string,
   dates: readonly string[],
   rows: readonly PayrollRiderRow[],
+  options?: PayrollExportOptions,
 ) {
-  const headers = [...COMBINED_IDENTITY_HEADERS, ...dates.map(isoDayLabel)];
+  const identity = visibleIdentity(
+    COMBINED_IDENTITY_HEADERS,
+    COMBINED_IDENTITY_KEYS,
+    options,
+    combinedIdentityCells,
+  );
+  const headers = [...identity.headers, ...dates.map(isoDayLabel)];
   downloadCsv(
     `MGGO-payroll-combined-${fileKey}`,
     toCsv(
       headers,
       rows.map((row) => [
-        ...combinedIdentityCells(row),
-        ...dates.map((_, i) => dayClipboardToken(row, i)),
+        ...identity.cells(row),
+        ...dates.map((_, i) => cellParticular(row, i)),
       ]),
     ),
   );
@@ -138,29 +207,37 @@ export function exportPayrollAttendanceOrdersCsv(
   fileKey: string,
   dates: readonly string[],
   rows: readonly PayrollRiderRow[],
+  options?: PayrollExportOptions,
 ) {
+  const identity = visibleIdentity(AO_LEAD_HEADERS, AO_LEAD_KEYS, options, aoLeadCells);
   const dayHeaders = dates.flatMap((date) => [`${isoDayLabel(date)} · Payroll`, `${isoDayLabel(date)} · Orders`]);
   downloadCsv(
     `MGGO-payroll-attendance-orders-${fileKey}`,
     toCsv(
-      [...AO_LEAD_HEADERS, ...dayHeaders],
+      [...identity.headers, ...dayHeaders],
       rows.map((row) => [
-        row.amId,
-        row.mgId,
-        row.name,
-        row.partner,
-        row.zone,
-        row.zoneCategory,
-        payrollVehicleKind(row.vehicleKey),
-        row.finalOrders,
-        Number(row.actualHours.toFixed(2)),
+        ...identity.cells(row),
         ...dates.flatMap((_, i) => [
-          dayGridLabel(row.days[i] ?? "blank", dayDisplayHours(row.days[i] ?? "blank", row.dayInfo[i])),
+          cellParticular(row, i),
           row.dayInfo[i]?.orders ? row.dayInfo[i]!.orders : "–",
         ]),
       ]),
     ),
   );
+}
+
+function aoLeadCells(row: PayrollRiderRow): Array<string | number> {
+  return [
+    row.amId,
+    row.mgId,
+    row.name,
+    row.partner,
+    row.zone,
+    row.zoneCategory,
+    payrollVehicleKind(row.vehicleKey),
+    row.finalOrders,
+    Number(row.actualHours.toFixed(2)),
+  ];
 }
 
 export function exportPayrollDistributionCsv(

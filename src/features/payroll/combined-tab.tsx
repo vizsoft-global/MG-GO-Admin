@@ -5,13 +5,14 @@ import { useTranslations } from "next-intl";
 import { Hand } from "lucide-react";
 import { toast } from "sonner";
 import { TABLE_HEAD_CLASS } from "@/components/app";
-import { Input } from "@/components/ui/input";
 import { SearchField } from "@/components/app";
 import { payrollRiderMatchesSearch, type PayrollPeriod } from "./payroll-formulas";
 import { AdjustmentDialog, type AdjustmentDialogState } from "./adjustment-dialog";
 import { PayrollDayGrid, PayrollLegend, type PayrollAdjustRequest } from "./payroll-grid";
 import { exportCombinedPayrollCsv } from "./payroll-csv";
-import { useApplyPayrollAdjustments, usePayrollAdjustmentAudit } from "./use-payroll";
+import { configByKey, exportLabelsFromConfig, hiddenSetFor } from "./payroll-column-config";
+import { PayrollColumnsMenu } from "./payroll-heading";
+import { useApplyPayrollAdjustments, usePayrollAdjustmentAudit, usePayrollColumnConfig } from "./use-payroll";
 import type { PayrollAdjustmentCell, PayrollRiderRow } from "./payroll-types";
 
 export function CombinedPayrollTab({
@@ -30,6 +31,8 @@ export function CombinedPayrollTab({
   const [adjust, setAdjust] = useState<AdjustmentDialogState | null>(null);
   const apply = useApplyPayrollAdjustments();
   const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
+  const headings = usePayrollColumnConfig();
+  const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
 
   const searched = useMemo(
     () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
@@ -63,16 +66,26 @@ export function CombinedPayrollTab({
     });
   }
 
+  const fallbackLabel = useCallback((key: string) => t(`riderCols.${key}`), [t]);
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
           <b>{t("combinedBannerTitle")}</b> {t("combinedBannerBody")}
         </div>
-        <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-orange-300 bg-orange-50 px-3 text-[11px] font-semibold text-orange-800">
-          <Hand className="size-3.5" />
-          {t("adjust.adjustedCells", { count: adjustedCells })}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <PayrollColumnsMenu
+            view="combined"
+            config={headingConfig}
+            fallbackLabel={fallbackLabel}
+            canManage={canManage}
+          />
+          <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-orange-300 bg-orange-50 px-3 text-[11px] font-semibold text-orange-800">
+            <Hand className="size-3.5" />
+            {t("adjust.adjustedCells", { count: adjustedCells })}
+          </span>
+        </div>
       </div>
       <SearchField
         value={search}
@@ -85,8 +98,15 @@ export function CombinedPayrollTab({
         rows={searched}
         empty={t("emptyRiders")}
         exportLabel={t("downloadTable")}
+        headingConfig={headingConfig}
+        headingManage={canManage}
         onExport={(visible) => {
-          if (canExport) exportCombinedPayrollCsv(month.key, month.dates, visible);
+          if (canExport) {
+            exportCombinedPayrollCsv(month.key, month.dates, visible, {
+              labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
+              hidden: hiddenSetFor("combined", headingConfig),
+            });
+          }
         }}
         editor={canManage ? { canManage, onRequestAdjust, onNotice } : undefined}
         footer={t("tableFootRange", {

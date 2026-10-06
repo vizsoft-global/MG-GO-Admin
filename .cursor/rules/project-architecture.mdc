@@ -237,6 +237,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-06` — **Payroll grid editor, headings and filters.** Combined + Attendance & Orders share the same `dayGridLabel` particular (`12`, `3h`, `Half`, `OFF`, `Sick`, `Acc`, `Veh`, `Absent`, `Abs·LH`, `Abs·LO`, `{n}h`) across editor / cell / filter / Excel. Existing `ADJUSTMENT_STATUSES` stay; `half` is 6 Hours. Pinned no-backdrop adjust popover, larger fill handle, per-cell audit, list-mode column filters (search + counts), org-wide `payroll_column_config` (labels shared, visibility per view). AO payroll cells are editable. Migration `20261120000000`. **No git / Vercel / Play until verification.**
+
 - `[admin only] 2026-10-06` — **Launcher tiles are one MG-logo teal.** `/dashboard` no longer paints a rainbow per module; every 72px tile uses `LAUNCHER_BRAND_TINT` (`#0F766E`). Sidebar chips and Roles app cards keep `moduleTint(id)`. **No git / Vercel / Play.**
 
 - `[admin only] 2026-10-06` — **User-facing module name is EmployeeDesk again.** Launcher, sidebar group, hub/breadcrumbs, Roles app card and `employeedesk.*` permission labels no longer say Requests and Complaints. Routes and slugs stay `/employeedesk`. Saved menus with the old group label still map through `GROUP_I18N_KEY`. **No git / Vercel / Play.**

@@ -25,6 +25,7 @@ import {
   type RawPayrollRuleSnapshot,
 } from "./payroll-snapshot";
 import { parseRules } from "./payroll-rules-engine";
+import type { PayrollColumnConfigRow, PayrollHeadingView } from "./payroll-column-config";
 import type {
   OffStructureBulkResult,
   PayrollAdjustmentAuditRow,
@@ -965,4 +966,52 @@ export async function fetchPayrollAdjustmentAudit(input: {
       adjustedAt: String(o.adjustedAt ?? ""),
     };
   });
+}
+
+type LooseRpc = {
+  rpc: (
+    fn: string,
+    args?: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+
+export async function fetchPayrollColumnConfig(): Promise<PayrollColumnConfigRow[]> {
+  await requirePayrollView();
+  const supabase = (await createClient()) as unknown as LooseRpc;
+  const { data, error } = await supabase.rpc("admin_list_payroll_column_config");
+  if (error) throw new Error(error.message);
+  const list = Array.isArray(data) ? data : [];
+  return list.map((item) => {
+    const o = (item ?? {}) as Record<string, unknown>;
+    const views = Array.isArray(o.hidden_views) ? o.hidden_views : [];
+    return {
+      columnKey: String(o.column_key ?? ""),
+      label: o.label == null || String(o.label).trim() === "" ? null : String(o.label),
+      hiddenViews: views.filter((view): view is PayrollHeadingView => view === "combined" || view === "ao"),
+    };
+  });
+}
+
+export async function savePayrollColumnConfig(input: {
+  columnKey: string;
+  label: string | null;
+  hiddenViews: readonly PayrollHeadingView[];
+}): Promise<{ error: string } | { ok: true }> {
+  await requirePayrollPermission("payroll.manage");
+  const supabase = (await createClient()) as unknown as LooseRpc;
+  const { error } = await supabase.rpc("admin_set_payroll_column_config", {
+    p_column_key: input.columnKey,
+    p_label: input.label,
+    p_hidden_views: [...input.hiddenViews],
+  });
+  if (error) return { error: error.message };
+  await logAdminActivity({
+    action: "update",
+    entityType: "payroll_column_config",
+    entityId: input.columnKey,
+    pagePath: "/payroll",
+    routeName: "payroll",
+    after: { label: input.label, hiddenViews: input.hiddenViews },
+  });
+  return { ok: true };
 }
