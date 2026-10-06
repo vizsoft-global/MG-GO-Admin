@@ -20,7 +20,7 @@ import {
   visibleLauncherTiles,
 } from "@/lib/menu/launcher-modules";
 import { APP_NAV_KEY_BY_ID, resolveIcon } from "@/lib/menu/menu-registry";
-import { LAUNCHER_BRAND_TINT } from "@/lib/menu/module-colors";
+import { LAUNCHER_BRAND } from "@/lib/menu/module-colors";
 import type { Permission } from "@/lib/auth/permissions";
 import { APP_PANEL_VERSION } from "@/lib/app/build-id";
 import {
@@ -91,10 +91,15 @@ export function AppLauncherShell() {
   const roleLabel = formatAdminRole(adminRoleSlug);
 
   return (
-    <div className="flex min-h-svh flex-col bg-[#0B1220] px-8 py-5 text-white">
+    <div className="flex min-h-svh flex-col px-8 py-5 text-white" style={{ backgroundColor: LAUNCHER_BRAND.canvas }}>
       <header className="grid grid-cols-[1fr_minmax(280px,420px)_1fr] items-center gap-4">
         <Link href="/dashboard" className="flex items-center gap-2.5 justify-self-start">
-          <Logo size="sm" framed priority />
+          <span
+            className="grid size-8 place-items-center overflow-hidden rounded-2xl"
+            style={{ backgroundColor: LAUNCHER_BRAND.tile }}
+          >
+            <Logo size="sm" priority />
+          </span>
           <span className="flex min-w-0 flex-col leading-tight">
             <span className="truncate text-[15px] font-semibold tracking-tight">
               {branding.appName}
@@ -174,8 +179,8 @@ export function AppLauncherShell() {
               href={item.href}
               className="group flex flex-col items-center gap-2 text-center"
             >
-              <span className="relative grid size-[72px] place-items-center rounded-2xl" style={{ backgroundColor: LAUNCHER_BRAND_TINT.tile }}>
-                <Icon className="size-7 text-white" aria-hidden />
+              <span className="relative grid size-[72px] place-items-center rounded-2xl" style={{ backgroundColor: LAUNCHER_BRAND.tile }}>
+                <Icon className="size-7" style={{ color: LAUNCHER_BRAND.icon }} aria-hidden />
                 {badge ? (
                   <span className="absolute -end-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold tabular-nums text-white">
                     {badge > 999 ? "999+" : badge}

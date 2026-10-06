@@ -8,6 +8,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { DriverImportJobProvider } from "@/features/drivers/import/driver-import-job-provider";
 import { cn } from "@/lib/utils";
+import { LAUNCHER_BRAND } from "@/lib/menu/module-colors";
 
 export function DashboardFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -15,7 +16,7 @@ export function DashboardFrame({ children }: { children: ReactNode }) {
 
   if (isLauncher) {
     return (
-      <div className="flex h-svh w-full overflow-hidden bg-[#0B1220]">
+      <div className="flex h-svh w-full overflow-hidden" style={{ backgroundColor: LAUNCHER_BRAND.canvas }}>
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
     );

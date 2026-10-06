@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  AO_HEADING_KEYS,
   columnHiddenIn,
   configByKey,
   hiddenSetFor,
@@ -24,5 +25,15 @@ describe("payroll column config", () => {
     assert.equal(columnHiddenIn("amId", "ao", config), false);
     assert.deepEqual([...hiddenSetFor("combined", config)], ["amId"]);
     assert.deepEqual([...hiddenSetFor("ao", config)], []);
+  });
+
+  it("keeps restaurant identity on Attendance & Orders headings", () => {
+    assert.deepEqual([...AO_HEADING_KEYS].slice(0, 5), [
+      "amId",
+      "mgId",
+      "name",
+      "restaurant",
+      "restaurantId",
+    ]);
   });
 });

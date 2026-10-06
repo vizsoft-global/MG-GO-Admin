@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { CalendarOff, Download, FilterX, Loader2 } from "lucide-react";
@@ -35,8 +35,13 @@ import { PayrollAttendanceOrdersTab } from "./payroll-attendance-orders-tab";
 import { PayrollSettingsTab } from "./payroll-settings-tab";
 import { RequestsTab } from "./requests-tab";
 import { OffStructureDialog } from "./off-structure-dialog";
-import { exportPayrollViewCsv } from "./payroll-csv";
-import { usePayrollRangeSnapshot } from "./use-payroll";
+import {
+  configByKey,
+  exportLabelsFromConfig,
+  hiddenSetFor,
+} from "./payroll-column-config";
+import { exportPayrollHubCsv } from "./payroll-csv";
+import { usePayrollColumnConfig, usePayrollRangeSnapshot } from "./use-payroll";
 import type { PayrollHubTab, PayrollSlicers } from "./payroll-types";
 
 const TABS: PayrollHubTab[] = ["payroll", "combined", "attendance-orders", "requests", "settings"];
@@ -63,8 +68,11 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   );
 
   const query = usePayrollRangeSnapshot(period, slicers);
+  const headings = usePayrollColumnConfig();
   const data = query.data;
   const month = data?.month ?? period;
+  const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
+  const fallbackLabel = useCallback((key: string) => t(`riderCols.${key}`), [t]);
 
   const filteredRiders = useMemo(() => {
     const byStatus = filterRidersByStatus(data?.riders ?? [], statusFilter);
@@ -124,7 +132,22 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
 
   function exportHeader() {
     if (!canExport || !data) return;
-    exportPayrollViewCsv(month.key, month.dates, filteredRiders);
+    const view = tab === "combined" ? "combined" : tab === "attendance-orders" ? "ao" : null;
+    exportPayrollHubCsv({
+      tab,
+      fileKey: month.key,
+      dates: month.dates,
+      riders: filteredRiders,
+      requests: data.requests,
+      options: view
+        ? {
+            labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
+            hidden: hiddenSetFor(view, headingConfig),
+          }
+        : undefined,
+      tileLabel: (key) => t(`tiles.${key}`),
+      statusLabel: (status) => t(`status.${status}`),
+    });
   }
 
   function refreshSnapshot() {
@@ -148,7 +171,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
               <FilterX className="size-3.5" />
               {t("clearFilters")}
             </Button>
-            {canExport ? (
+            {canExport && tab !== "settings" ? (
               <Button type="button" className="h-9" onClick={exportHeader}>
                 <Download className="size-3.5" />
                 {t("export")}

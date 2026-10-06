@@ -56,6 +56,8 @@ export const AO_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "amId", numeric: false, labelKey: "amId" },
   { id: "mgId", numeric: false, labelKey: "mgId" },
   { id: "name", numeric: false, labelKey: "name" },
+  { id: "restaurant", numeric: false, labelKey: "restaurant" },
+  { id: "restaurantId", numeric: false, labelKey: "restaurantId" },
   { id: "partner", numeric: false, labelKey: "partner" },
   { id: "zone", numeric: false, labelKey: "zone" },
   { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
@@ -97,6 +99,8 @@ export function riderColumnValue(
       return row.name;
     case "restaurant":
       return row.restaurant;
+    case "restaurantId":
+      return row.restaurantId;
     case "zone":
       return row.zone;
     case "zoneCategory":

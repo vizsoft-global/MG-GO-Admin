@@ -8,7 +8,7 @@ import {
 } from "./payroll-formulas";
 import { cellParticular } from "./payroll-particulars";
 import { payrollVehicleKind } from "./payroll-rider-columns";
-import type { PayrollRequestRow, PayrollRiderRow } from "./payroll-types";
+import type { PayrollHubTab, PayrollRequestRow, PayrollRiderRow } from "./payroll-types";
 
 export const PAYROLL_VIEW_HEADERS = [
   "AM ID",
@@ -64,6 +64,8 @@ export const AO_LEAD_HEADERS = [
   "AM ID",
   "Driver ID",
   "Name",
+  "Restaurant",
+  "Restaurant ID",
   "Partner",
   "Zone",
   "Zone category",
@@ -76,6 +78,8 @@ export const AO_LEAD_KEYS = [
   "amId",
   "mgId",
   "name",
+  "restaurant",
+  "restaurantId",
   "partner",
   "zone",
   "zoneCategory",
@@ -231,6 +235,8 @@ function aoLeadCells(row: PayrollRiderRow): Array<string | number> {
     row.amId,
     row.mgId,
     row.name,
+    row.restaurant,
+    row.restaurantId ?? "",
     row.partner,
     row.zone,
     row.zoneCategory,
@@ -238,6 +244,58 @@ function aoLeadCells(row: PayrollRiderRow): Array<string | number> {
     row.finalOrders,
     Number(row.actualHours.toFixed(2)),
   ];
+}
+
+export function payrollHubExportKind(
+  tab: PayrollHubTab,
+): "payroll" | "combined" | "ao" | "requests" | null {
+  switch (tab) {
+    case "payroll":
+      return "payroll";
+    case "combined":
+      return "combined";
+    case "attendance-orders":
+      return "ao";
+    case "requests":
+      return "requests";
+    case "settings":
+      return null;
+    default: {
+      const never: never = tab;
+      return never;
+    }
+  }
+}
+
+export function exportPayrollHubCsv(input: {
+  tab: PayrollHubTab;
+  fileKey: string;
+  dates: readonly string[];
+  riders: readonly PayrollRiderRow[];
+  requests?: readonly PayrollRequestRow[];
+  options?: PayrollExportOptions;
+  tileLabel?: (tile: PayrollRequestRow["tile"]) => string;
+  statusLabel?: (status: PayrollRequestRow["uiStatus"]) => string;
+}): boolean {
+  const kind = payrollHubExportKind(input.tab);
+  if (kind === "payroll") {
+    exportPayrollViewCsv(input.fileKey, input.dates, input.riders);
+    return true;
+  }
+  if (kind === "combined") {
+    exportCombinedPayrollCsv(input.fileKey, input.dates, input.riders, input.options);
+    return true;
+  }
+  if (kind === "ao") {
+    exportPayrollAttendanceOrdersCsv(input.fileKey, input.dates, input.riders, input.options);
+    return true;
+  }
+  if (kind === "requests") {
+    if (!input.requests || !input.tileLabel || !input.statusLabel) return false;
+    exportRequestsCsv(input.fileKey, input.requests, input.tileLabel, input.statusLabel);
+    return true;
+  }
+  return false;
 }
 
 export function exportPayrollDistributionCsv(
