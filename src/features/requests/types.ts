@@ -18,6 +18,11 @@ export type RequestListFilters = {
   offset?: number;
   departmentKey?: string | null;
   zoneId?: string | null;
+  assignedToMe?: boolean;
+  forwardedToMe?: boolean;
+  handledByMe?: boolean;
+  dueToday?: boolean;
+  sort?: string | null;
 };
 
 export type RequestDepartmentOption = {
@@ -47,6 +52,7 @@ export type RequestListRow = {
   /** Derived from the current approval step's role, not a column on `requests`. */
   department_key: string | null;
   department_label: string | null;
+  is_confidential: boolean;
 };
 
 export type RequestKpis = {
@@ -221,6 +227,15 @@ export type RequestDetail = {
   closed_at: string | null;
   /** Fuel only — the approver's payout choice, never rider input. */
   fuel_transfer_type: FuelTransferType | null;
+  is_confidential: boolean;
+};
+
+export type RequestComment = {
+  id: string;
+  body: string;
+  author_id: string;
+  author_name: string | null;
+  created_at: string;
 };
 
 export const FUEL_TRANSFER_TYPES = ["cash", "salary"] as const;

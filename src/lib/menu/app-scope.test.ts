@@ -48,17 +48,10 @@ describe("app scope", () => {
     assert.equal(deriveActiveApp("/en/payroll/combined"), "payroll");
   });
 
-  it("hides other apps from the sidebar", () => {
+  it("keeps the full tree on every path (flat sidebar)", () => {
     const scoped = scopeSidebar(tree, "/en/employeedesk/esign");
-    assert.equal(scoped.appId, "employeedesk");
-    assert.deepEqual(
-      scoped.nodes.map((node) => node.id),
-      ["group-employeedesk"],
-    );
-    const payroll = scopeSidebar(tree, "/en/payroll");
-    assert.equal(payroll.appId, "payroll");
-    const hrefs = (payroll.nodes[0]?.children ?? []).map((child) => child.href);
-    assert.deepEqual(hrefs, ["/payroll"]);
+    assert.equal(scoped.appId, null);
+    assert.equal(scoped.nodes.length, tree.length);
   });
 
   it("filters launcher tiles by permission", () => {

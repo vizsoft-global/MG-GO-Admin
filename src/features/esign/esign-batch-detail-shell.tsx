@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { canResendEsign, esignResendHref } from "./esign-resend";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -833,6 +834,32 @@ function DeclinedReasonDialog({
         </div>
 
         <AppModalFooter title={t("declinedTitle")} subtitle={t("declinedSubtitle")}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 cursor-pointer rounded-md"
+            render={<Link href="/settings/logs?module=requests" />}
+          >
+            {t("viewAudit")}
+          </Button>
+          {row?.request_id && canResendEsign(row.recipient_status) ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 cursor-pointer rounded-md"
+              render={
+                <Link
+                  href={esignResendHref({
+                    requestId: row.request_id,
+                    driverId: row.driver_id,
+                  })}
+                />
+              }
+            >
+              {t("correctAndResend")}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"

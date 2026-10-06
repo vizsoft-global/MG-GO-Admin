@@ -199,6 +199,7 @@ export const queryKeys = {
     templates: () => ["esign", "templates"] as const,
     template: (id: string) => ["esign", "template", id] as const,
     batches: () => ["esign", "batches"] as const,
+    batchKpis: () => ["esign", "batch-kpis"] as const,
     batch: (id: string) => ["esign", "batch", id] as const,
     /** Minimal recipient rows every batch's progress cell is rolled up from. */
     trackerRecipients: () => ["esign", "tracker-recipients"] as const,

@@ -5,14 +5,21 @@ import { getAllAdminRoles } from "@/lib/auth/get-role-permissions";
 import { syncAdminPermissionsFromCatalog } from "@/lib/auth/sync-admin-permissions";
 import { createClient } from "@/lib/supabase/server";
 import { getRoleUsageCounts } from "@/features/settings/roles-actions";
-import { RolesPermissionsPanel } from "@/features/settings/roles-permissions-panel";
+import {
+  listRequestTypeOptions,
+  listStaffAccess,
+} from "@/features/settings/staff-access-actions";
+import { RolesAccessPage } from "@/features/settings/access-control/roles-access-page";
 
 export default async function RolesPermissionsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ user?: string; tab?: string }>;
 }) {
   const { locale } = await params;
+  const query = await searchParams;
   setRequestLocale(locale);
   await requireSuperAdmin(locale);
   void logAdminPageView("/settings/roles", "RolesPermissionsPage");
@@ -20,22 +27,24 @@ export default async function RolesPermissionsPage({
   await syncAdminPermissionsFromCatalog();
 
   const supabase = await createClient();
-  const [allRoles, usageCounts] = await Promise.all([
+  const [allRoles, usageCounts, listed, requestTypes, permissionsResult] = await Promise.all([
     getAllAdminRoles(),
     getRoleUsageCounts(),
+    listStaffAccess(),
+    listRequestTypeOptions(),
+    supabase.from("admin_permissions").select("slug, label, category").order("category").order("label"),
   ]);
-
-  const { data: permissions } = await supabase
-    .from("admin_permissions")
-    .select("slug, label, category")
-    .order("category")
-    .order("label");
 
   return (
     <div className="w-full min-w-0 max-w-none">
-      <RolesPermissionsPanel
+      <RolesAccessPage
+        tab={query.tab === "roles" ? "roles" : "staff"}
+        userId={query.user ?? null}
+        rows={listed.rows ?? []}
+        loadError={listed.error}
         roles={allRoles}
-        permissions={permissions ?? []}
+        requestTypes={requestTypes.rows ?? []}
+        permissions={permissionsResult.data ?? []}
         usageCounts={usageCounts}
       />
     </div>

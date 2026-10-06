@@ -10,7 +10,6 @@ import {
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 import {
-  ArrowLeft,
   Check,
   ChevronRight,
   LayoutDashboard,
@@ -33,7 +32,7 @@ import { signOut } from "@/features/auth/actions";
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { useNavBadges } from "@/hooks/use-nav-badges";
 import { useSidebarMenu } from "@/hooks/use-sidebar-menu";
-import { scopeSidebar } from "@/lib/menu/app-scope";
+import { moduleChipStyle } from "@/lib/menu/module-colors";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -90,13 +89,29 @@ function MenuIcon({ name, className }: { name: string; className?: string }) {
   return <Icon className={className} />;
 }
 
+/** Saved menu_configs still hold the pre-rename English/Arabic module names. */
+const SUPERSEDED_NAV_LABELS = new Set([
+  "Drivers",
+  "Request & Complaint",
+  "Requests & Complaints",
+  "EmployeeDesk",
+  "السائقون",
+  "مكتب الموظفين",
+  "مكتب الموظف",
+]);
+
 function useItemLabel() {
   const t = useTranslations();
   return (node: ResolvedMenuNode) => {
     const navKey = APP_NAV_KEY_BY_ID[node.id];
     if (!navKey) return node.label;
     const translated = t(`nav.${navKey}`);
-    if (node.label && node.label !== translated && node.label !== navKey) {
+    if (
+      node.label &&
+      node.label !== translated &&
+      node.label !== navKey &&
+      !SUPERSEDED_NAV_LABELS.has(node.label)
+    ) {
       return node.label;
     }
     return translated;
@@ -105,10 +120,21 @@ function useItemLabel() {
 
 const GROUP_I18N_KEY: Record<
   string,
-  "overview" | "employeedesk" | "operationsHub" | "fleet" | "operations" | "payroll" | "wip" | "unorganised"
+  | "overview"
+  | "employeedesk"
+  | "operationsHub"
+  | "fleet"
+  | "operations"
+  | "payroll"
+  | "wip"
+  | "unorganised"
+  | "apps"
 > = {
   Overview: "overview",
   EmployeeDesk: "employeedesk",
+  "Request & Complaint": "employeedesk",
+  "Requests & Complaints": "employeedesk",
+  "Requests and Complaints": "employeedesk",
   OperationsHub: "operationsHub",
   Fleet: "fleet",
   Operations: "operations",
@@ -117,6 +143,7 @@ const GROUP_I18N_KEY: Record<
   "Work in Progress": "wip",
   Unorganised: "unorganised",
   Unorganized: "unorganised",
+  Apps: "apps",
 };
 
 function useGroupLabel() {
@@ -169,13 +196,18 @@ function NavItemLink({
       <SidebarMenuButton
         isActive={isActive}
         tooltip={label}
-        className="h-8 cursor-pointer rounded-md px-2.5 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground focus-visible:ring-0 data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground"
+        className="h-8 cursor-pointer rounded-md px-2.5 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-semibold data-active:text-slate-900 data-active:shadow-sm"
         render={
           <Link href={node.href} prefetch>
-            <MenuIcon name={node.icon} className="h-3.5 w-3.5 shrink-0" />
+            <span
+              className="grid size-5 shrink-0 place-items-center rounded-md"
+              style={moduleChipStyle(node.id)}
+            >
+              <MenuIcon name={node.icon} className="h-3 w-3" />
+            </span>
             <span>{label}</span>
             {badge ? (
-              <span className="ms-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-sidebar-accent px-1 text-[10px] font-semibold tabular-nums text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden">
+              <span className="ms-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-semibold tabular-nums text-white group-data-[collapsible=icon]:hidden">
                 {badge > 999 ? "999+" : badge}
               </span>
             ) : null}
@@ -231,7 +263,7 @@ function NavGroup({
         <SidebarMenuButton
           isActive={isActive}
           tooltip={groupLabel}
-          className="h-8 cursor-pointer rounded-md px-2.5 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground focus-visible:ring-0 data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground"
+          className="h-8 cursor-pointer rounded-md px-2.5 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-semibold data-active:text-slate-900 data-active:shadow-sm"
           render={
             <Link href={href} prefetch>
               <MenuIcon name={node.icon} className="h-3.5 w-3.5 shrink-0" />
@@ -565,10 +597,7 @@ function SidebarUserMenu() {
 
 export function AppSidebar() {
   const mounted = useHasMounted();
-  const pathname = usePathname();
-  const t = useTranslations();
   const { tree } = useSidebarMenu();
-  const scoped = scopeSidebar(tree, pathname);
 
   return (
     <Sidebar
@@ -580,19 +609,8 @@ export function AppSidebar() {
         <SidebarBrand />
         <SidebarCollapseTrigger />
       </SidebarHeader>
-      <SidebarContent className="flex-1 px-1.5 py-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0">
-        {mounted && scoped.appId ? (
-          <div className="mb-1 px-1 group-data-[collapsible=icon]:hidden">
-            <Link
-              href="/dashboard"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            >
-              <ArrowLeft className="size-3.5" />
-              {t("common.backToApps")}
-            </Link>
-          </div>
-        ) : null}
-        {mounted ? <NavTree nodes={scoped.nodes} /> : <SidebarNavSkeleton />}
+      <SidebarContent className="no-scrollbar flex-1 px-1.5 py-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:overflow-x-hidden group-data-[collapsible=icon]:overflow-y-auto group-data-[collapsible=icon]:!overflow-y-auto group-data-[collapsible=icon]:px-0">
+        {mounted ? <NavTree nodes={tree} /> : <SidebarNavSkeleton />}
       </SidebarContent>
       <SidebarUserMenu />
     </Sidebar>

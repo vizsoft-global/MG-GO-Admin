@@ -32,6 +32,7 @@ import type {
 } from "./types";
 import { normalizeDocumentKind } from "./document-kind";
 import { effectiveEsignStatus } from "./esign-due-date";
+import { parseEsignBatchKpis, type EsignBatchKpis } from "./esign-batch-kpis";
 import { esignRecipientStage } from "./esign-recipient-stage";
 import { ESIGN_RESERVED_FIELD_KEYS } from "./types";
 
@@ -447,6 +448,7 @@ export async function createEsignFromTemplate(input: {
   due_at?: string | null;
   description?: string | null;
   field_values?: Record<string, string>;
+  resent_from_id?: string | null;
 }): Promise<{ ok: boolean; id?: string; request_code?: string; error?: string }> {
   await requireRequestsManage();
   if (!isEsignDueDateAllowed(input.due_at ?? "", kuwaitTodayYmd())) {
@@ -506,9 +508,21 @@ export async function createEsignFromTemplate(input: {
       routeName: "esign.create.template",
       after: { request_code: result.request_code, template_id: input.template_id },
     });
+    const id = result.id != null ? String(result.id) : undefined;
+    if (id && input.resent_from_id) {
+      const linked = await (supabase as any).rpc("admin_link_esign_resend", {
+        p_id: id,
+        p_from_id: input.resent_from_id,
+      });
+      if (linked.error) return { ok: false, error: linked.error.message };
+      const linkPayload = asRecord(linked.data);
+      if (linkPayload.ok === false) {
+        return { ok: false, error: String(linkPayload.error ?? "invalid_resend") };
+      }
+    }
     return {
       ok: true,
-      id: result.id != null ? String(result.id) : undefined,
+      id,
       request_code: result.request_code != null ? String(result.request_code) : undefined,
     };
   } finally {
@@ -597,6 +611,7 @@ function mapBatch(r: Record<string, unknown>): EsignBatchRow {
  */
 export async function remindEsignRequests(
   ids: string[],
+  message?: string | null,
 ): Promise<{
   ok: boolean;
   sent: number;
@@ -619,6 +634,7 @@ export async function remindEsignRequests(
   const supabase = await createClient();
   const { data, error } = await (supabase as any).rpc("admin_remind_esign_requests", {
     p_ids: ids,
+    p_message: message?.trim() || undefined,
   });
   if (error) {
     return {
@@ -820,6 +836,18 @@ export async function fetchEsignBatches(): Promise<{
   if (error) return { rows: [], error: error.message };
   await logAdminRead("esign_batches", "esign.batches.list", {});
   return { rows: ((data ?? []) as Record<string, unknown>[]).map(mapBatch) };
+}
+
+export async function fetchEsignBatchKpis(): Promise<{
+  kpis: EsignBatchKpis | null;
+  error?: string;
+}> {
+  await requireRequestsManage();
+  const supabase = await createClient();
+  const { data, error } = await (supabase as any).rpc("admin_esign_batch_kpis");
+  if (error) return { kpis: null, error: error.message };
+  const kpis = parseEsignBatchKpis(asRecord(data));
+  return { kpis };
 }
 
 export async function fetchEsignBatch(id: string): Promise<{

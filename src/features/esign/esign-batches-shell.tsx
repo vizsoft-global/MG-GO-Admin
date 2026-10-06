@@ -35,13 +35,12 @@ import {
   filterTrackerBatches,
   formatEsignTrackerDate,
   trackerFilterOptions,
-  trackerKpis,
   trackerTabCounts,
   type EsignTrackerBatch,
   type EsignTrackerTab,
 } from "./esign-tracker";
 import { retryFailedEsignBatchRows } from "./esign-sender-actions";
-import { useEsignBatches, useEsignTrackerRecipients } from "./use-esign";
+import { useEsignBatchKpis, useEsignBatches, useEsignTrackerRecipients } from "./use-esign";
 import type { EsignBatchStage } from "./esign-recipient-stage";
 import type { EsignBatchRow, EsignTrackerRecipient } from "./types";
 
@@ -69,9 +68,8 @@ const NO_RECIPIENTS: EsignTrackerRecipient[] = [];
  * here and read by the KPI tile, the tab, the progress cell and the filter —
  * four places that must never disagree.
  *
- * The four tiles come from one roll-up pass (`trackerKpis`) over the same rows
- * the table draws, so the count above the table cannot describe a different set
- * than the rows under it.
+ * The four tiles come from `admin_esign_batch_kpis`, not a capped page
+ * roll-up, so a 200-row list cannot under-count the fleet.
  */
 export function EsignBatchesShell() {
   const t = useTranslations("pages.requests.esign.tracker");
@@ -81,6 +79,7 @@ export function EsignBatchesShell() {
 
   const batchesQuery = useEsignBatches();
   const recipientsQuery = useEsignTrackerRecipients();
+  const kpisQuery = useEsignBatchKpis();
 
   const [tab, setTab] = useState<EsignTrackerTab>("all");
   const [search, setSearch] = useState("");
@@ -100,14 +99,12 @@ export function EsignBatchesShell() {
     () => buildEsignTracker(batches, recipients),
     [batches, recipients],
   );
-  // Read once, at mount, through a state initialiser — the one place React's
-  // purity rule sanctions reading a clock. The value is right to the day, which
-  // is all the "30d" window needs, and `trackerKpis` receives it rather than
-  // calling the clock itself so the tile and the window cannot disagree by
-  // however long two renders were apart.
-  const [nowMs] = useState(() => Date.now());
-
-  const kpis = useMemo(() => trackerKpis(tracker, nowMs), [tracker, nowMs]);
+  const kpis = kpisQuery.data?.kpis ?? {
+    batchesSent: 0,
+    waitingSignatures: 0,
+    fullySigned: 0,
+    declined: 0,
+  };
   const tabCounts = useMemo(() => trackerTabCounts(tracker), [tracker]);
   const options = useMemo(() => trackerFilterOptions(tracker), [tracker]);
 
@@ -300,13 +297,13 @@ export function EsignBatchesShell() {
         items={[
           {
             label: t("kpiBatches30d"),
-            value: kpis.batchesSent30d,
+            value: kpis.batchesSent,
             icon: FileSignature,
             accent: "primary",
           },
           {
             label: t("kpiWaiting"),
-            value: kpis.waiting,
+            value: kpis.waitingSignatures,
             icon: Hourglass,
             accent: "warning",
           },

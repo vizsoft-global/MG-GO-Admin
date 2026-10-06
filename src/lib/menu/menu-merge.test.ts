@@ -43,12 +43,13 @@ describe("relocateFleetItems", () => {
       "fuel",
       "fuel-requests",
       "fuel-refunds",
-      "assets",
       "asset-requests",
     ]);
     assert.equal(fleet?.children?.every((child) => child.hidden !== true), true);
     assert.equal(fleet?.children?.find((child) => child.id === "fuel")?.label, "Fuel Log");
-    assert.equal(fleet?.children?.find((child) => child.id === "assets")?.label, "Fleet Assets");
+    const apps = tree.find((node) => node.id === "group-apps");
+    assert.ok(apps);
+    assert.ok((apps?.children ?? []).some((child) => child.id === "assets"));
     const opsIds = (tree.find((node) => node.id === "group-operations")?.children ?? []).map(
       (child) => child.id,
     );
@@ -84,8 +85,8 @@ describe("relocateOrderReconItem", () => {
   });
 });
 
-describe("relocateStaffAccessItem", () => {
-  it("pins Staff access after Roles in Settings", () => {
+describe("stripStaffAccessItem", () => {
+  it("drops the leftover Staff access item from saved Settings menus", () => {
     const { tree } = mergeMenu([
       {
         id: "group-settings",
@@ -94,17 +95,16 @@ describe("relocateStaffAccessItem", () => {
         icon: "Settings",
         children: [
           { id: "roles", type: "item", label: "Roles", icon: "Shield" },
+          { id: "staff-access", type: "item", label: "Staff access", icon: "KeyRound" },
           { id: "access-requests", type: "item", label: "Access", icon: "UserCheck" },
         ],
       },
     ]);
     const settings = tree.find((node) => node.id === "group-settings");
     const ids = (settings?.children ?? []).map((child) => child.id);
-    const rolesAt = ids.indexOf("roles");
-    const staffAt = ids.indexOf("staff-access");
-    assert.ok(staffAt >= 0);
-    assert.equal(staffAt, rolesAt + 1);
-    assert.equal(settings?.children?.find((child) => child.id === "staff-access")?.hidden, false);
+    assert.equal(ids.includes("staff-access"), false);
+    assert.ok(ids.includes("roles"));
+    assert.ok(ids.includes("access-requests"));
   });
 });
 

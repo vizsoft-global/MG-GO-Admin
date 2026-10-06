@@ -27,6 +27,7 @@ import {
   createEsignFromTemplate,
   deleteEsignDraft,
   fetchEsignBatch,
+  fetchEsignBatchKpis,
   fetchEsignBatches,
   fetchEsignDraft,
   fetchEsignDrafts,
@@ -126,6 +127,13 @@ export function useEsignBatches() {
   });
 }
 
+export function useEsignBatchKpis() {
+  return useQuery({
+    queryKey: queryKeys.esign.batchKpis(),
+    queryFn: () => fetchEsignBatchKpis(),
+  });
+}
+
 export function useEsignBatch(id: string) {
   return useQuery({
     queryKey: queryKeys.esign.batch(id),
@@ -196,7 +204,10 @@ export function useEsignReminderState(ids: string[]) {
 export function useRemindEsignRequests() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: remindEsignRequests,
+    mutationFn: (input: string[] | { ids: string[]; message?: string }) =>
+      Array.isArray(input)
+        ? remindEsignRequests(input)
+        : remindEsignRequests(input.ids, input.message),
     onSuccess: async () => {
       // The reminder moved `last_reminded_at`, which is what the cooldown and
       // the Waiting badge both read, so every esign key is stale — not just the

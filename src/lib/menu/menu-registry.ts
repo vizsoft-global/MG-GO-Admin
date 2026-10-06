@@ -163,6 +163,7 @@ export const DEFAULT_GROUPS = [
   "System",
   "WIP",
   "Unorganised",
+  "Apps",
 ];
 
 export const DEFAULT_GROUP_META: Record<
@@ -179,6 +180,7 @@ export const DEFAULT_GROUP_META: Record<
   System: { icon: "Cog", displayMode: "inline" },
   WIP: { icon: "AlertTriangle", displayMode: "panel" },
   Unorganised: { icon: "Folder" },
+  Apps: { icon: "AppWindow", displayMode: "panel" },
 };
 
 export const MENU_REGISTRY: MenuRegistryItem[] = [
@@ -473,7 +475,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   },
   {
     id: "requests",
-    defaultLabel: "Request & Complaint",
+    defaultLabel: "EmployeeDesk",
     defaultIcon: "Inbox",
     href: "/requests",
     defaultGroup: "WIP",
@@ -652,15 +654,6 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     superAdminOnly: true,
   },
   {
-    id: "staff-access",
-    defaultLabel: "Staff access",
-    defaultIcon: "KeyRound",
-    href: "/settings/staff-access",
-    defaultGroup: "Settings",
-    defaultOrder: 3,
-    superAdminOnly: true,
-  },
-  {
     id: "access-requests",
     defaultLabel: "Access Requests",
     defaultIcon: "UserCheck",
@@ -747,6 +740,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "group-wip": "wip",
   "group-unorganised": "unorganised",
   "group-unassigned": "unassigned",
+  "group-apps": "apps",
   dashboard: "dashboard",
   "dashboard-ops": "dashboardOps",
   employeedesk: "employeedesk",
@@ -797,7 +791,6 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "source-companies": "sourceCompanies",
   storage: "storage",
   roles: "roles",
-  "staff-access": "staffAccess",
   "access-requests": "accessRequests",
   maintenance: "maintenance",
   "data-cleanup": "dataCleanup",

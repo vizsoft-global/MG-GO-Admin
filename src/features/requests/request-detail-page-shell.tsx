@@ -11,6 +11,7 @@ import {
   Check,
   Download,
   FileUp,
+  Forward,
   Loader2,
   MessageCircleQuestion,
   Paperclip,
@@ -37,6 +38,8 @@ import { RequestFieldRow } from "./request-field-row";
 import { RequestFuelTransferCard } from "./request-fuel-transfer-card";
 import { RequestRescheduleDialog } from "./request-reschedule-dialog";
 import { RequestRescheduleSummary } from "./request-reschedule-summary";
+import { RequestCommentsThread } from "./request-comments-thread";
+import { RequestForwardDialog } from "./request-forward-dialog";
 import { RequestTypedDrawer } from "./request-typed-drawer";
 import {
   formatFieldValue,
@@ -73,6 +76,7 @@ import type {
 import {
   useAdminRequestDetail,
   useDecideRequest,
+  useEscalateRequest,
   useSaveDecisionTerms,
   useUploadStaffRequestAttachments,
 } from "./use-requests";
@@ -145,6 +149,8 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     null,
   );
   const [heldTerms, setHeldTerms] = useState<RequestDecisionTerms | null>(null);
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const escalate = useEscalateRequest();
 
   useEffect(() => {
     if (!requestId) return;
@@ -159,6 +165,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const steps = data?.steps ?? [];
   const clarifications = data?.clarifications ?? [];
   const attachments = data?.attachments ?? [];
+  const comments = data?.comments ?? [];
   const rows = request ? getTypedFieldRows(request) : [];
   const subjectRow = rows.find((row) => row.key === "subject" && row.value !== "—");
   const detailRows = rows.filter((row) => row.key !== "subject" && row.key !== "description");
@@ -323,6 +330,12 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         }
       />
 
+      {request.is_confidential ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+          {t("detail.confidentialBanner")}
+        </p>
+      ) : null}
+
       <RequestRecordBody
         summary={request.amount_kwd != null ? `${request.amount_kwd.toFixed(3)} KWD` : undefined}
         requester={
@@ -405,6 +418,9 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         approval={
           <>
             <RequestApprovalTimeline steps={steps} />
+            <div className="mt-3">
+              <RequestCommentsThread requestId={requestId} comments={comments} />
+            </div>
             {clarifications.length > 0 ? (
               <div className="mt-3 space-y-2">
                 <h3 className="text-xs font-semibold text-muted-foreground">{t("detail.clarifications")}</h3>
@@ -552,6 +568,30 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 <MessageCircleQuestion className="me-1.5 h-3.5 w-3.5" />
                 {t("detail.clarify")}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9"
+                disabled={decidePending}
+                onClick={() => setForwardOpen(true)}
+              >
+                <Forward className="me-1.5 h-3.5 w-3.5" />
+                {t("detail.forward")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9"
+                disabled={decidePending || escalate.isPending}
+                onClick={async () => {
+                  const result = await escalate.mutateAsync({ requestId, note: reason });
+                  if (!result.ok) toast.error(result.error ?? t("detail.escalateFailed"));
+                  else toast.success(t("detail.escalated"));
+                }}
+              >
+                <AlertCircle className="me-1.5 h-3.5 w-3.5" />
+                {t("detail.escalate")}
+              </Button>
             </div>
           </section>
         ) : null}
@@ -687,6 +727,12 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
           }}
         />
       ) : null}
+
+      <RequestForwardDialog
+        open={forwardOpen}
+        onOpenChange={setForwardOpen}
+        requestId={requestId}
+      />
 
       <RequestRescheduleDialog
         open={rescheduleOpen}

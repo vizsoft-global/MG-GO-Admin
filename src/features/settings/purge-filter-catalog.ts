@@ -259,6 +259,16 @@ export function isPurgeFilterEntity(entity: string): boolean {
 }
 
 /**
+ * Distinct values exist for `list` and `text`. The dialog used to fetch only
+ * `list`, so Name on Partners (and every other typed column) was a bare input
+ * with no suggestions even though `admin_purge_filtered_values` already
+ * returns them. `range` is the one kind with nothing to offer.
+ */
+export function purgeColumnOffersValues(kind: PurgeFilterKind): boolean {
+  return kind === "list" || kind === "text";
+}
+
+/**
  * The shared label for a column key, used when no entity override exists.
  *
  * One entry per *distinct* key rather than one per (entity, key): `status` means

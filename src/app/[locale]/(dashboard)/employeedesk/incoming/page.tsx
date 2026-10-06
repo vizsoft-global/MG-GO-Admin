@@ -1,21 +1,29 @@
 import { setRequestLocale } from "next-intl/server";
+import { redirect } from "@/i18n/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { RequestsPageShell } from "@/features/requests/requests-page-shell";
+import { parseRequestListScope } from "@/features/requests/request-list-scopes";
 
-/**
- * EmployeeDesk → Incoming.
- *
- * `submitted` is the queue of requests the riders have filed and nobody has
- * decided yet. It is the same shell as All requests; the seeded status is what
- * makes this a door rather than a second name for one screen.
- */
+const SCOPES = new Set(["assigned", "forwarded", "action", "due"]);
+
 export default async function EmployeeDeskIncomingPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ scope?: string }>;
 }) {
   const { locale } = await params;
+  const { scope } = await searchParams;
   setRequestLocale(locale);
   await requirePermission(locale, "requests.view");
-  return <RequestsPageShell initialStatus="submitted" />;
+  if (!scope || !SCOPES.has(scope)) {
+    redirect({ href: "/employeedesk?tab=incoming", locale });
+  }
+  return (
+    <RequestsPageShell
+      listScope={parseRequestListScope(scope)}
+      initialDatePreset="all"
+    />
+  );
 }

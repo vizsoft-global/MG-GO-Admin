@@ -15,6 +15,7 @@ import {
   humaniseFilterKey,
   isPurgeDateRangeColumn,
   isPurgeFilterEntity,
+  purgeColumnOffersValues,
   kuwaitYmdFromDate,
   parsePurgeDate,
   purgeFilterColumnLabelKey,
@@ -154,6 +155,17 @@ describe("purge filter catalogue", () => {
     assert.deepEqual(client, server);
     for (const entity of client) assert.equal(isPurgeFilterEntity(entity), true);
     assert.equal(isPurgeFilterEntity("driverss"), false);
+  });
+
+  it("offers suggestions for typed columns so Partners Name is not a bare input", () => {
+    assert.equal(purgeColumnOffersValues("list"), true);
+    assert.equal(purgeColumnOffersValues("text"), true);
+    assert.equal(purgeColumnOffersValues("range"), false);
+    const partnersName = PURGE_FILTER_ENTITIES.find((entry) => entry.entity === "partners")
+      ?.columns.find((column) => column.key === "name");
+    assert.ok(partnersName);
+    assert.equal(partnersName.kind, "text");
+    assert.equal(purgeColumnOffersValues(partnersName.kind), true);
   });
 
   it("every catalogued column resolves to a real label in both locales", () => {

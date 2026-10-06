@@ -32,46 +32,13 @@ export function visibleApps(
   );
 }
 
-function itemMatchesApp(node: ResolvedMenuNode, app: AppDefinition): boolean {
-  if (node.type === "item") {
-    const href = node.href ?? "";
-    return app.prefixes.some((prefix) => pathMatches(href, prefix));
-  }
-  if (app.groups.includes(node.label)) return true;
-  return (node.children ?? []).some((child) => itemMatchesApp(child, app));
-}
-
-function filterNode(node: ResolvedMenuNode, app: AppDefinition): ResolvedMenuNode | null {
-  if (node.type === "item") {
-    return itemMatchesApp(node, app) ? node : null;
-  }
-  if (app.groups.includes(node.label)) {
-    const children = (node.children ?? [])
-      .map((child) => filterNode(child, app))
-      .filter((child): child is ResolvedMenuNode => child != null);
-    if (children.length === 0) return null;
-    return { ...node, children };
-  }
-  const children = (node.children ?? [])
-    .map((child) => filterNode(child, app))
-    .filter((child): child is ResolvedMenuNode => child != null);
-  if (children.length === 0) return null;
-  return { ...node, children };
-}
-
-/** Keep only the groups/items that belong to the app the operator is inside. */
+/**
+ * SUPERSEDED: the reference sidebar is the full flat list on every page.
+ * Kept so saved callers compile; it never filters.
+ */
 export function scopeSidebar(
   tree: ResolvedMenuNode[],
-  pathname: string,
+  _pathname: string,
 ): { appId: AppId | null; nodes: ResolvedMenuNode[] } {
-  const appId = deriveActiveApp(pathname);
-  if (!appId) return { appId: null, nodes: tree };
-  const app = appById(appId);
-  if (!app) return { appId: null, nodes: tree };
-  return {
-    appId,
-    nodes: tree
-      .map((node) => filterNode(node, app))
-      .filter((node): node is ResolvedMenuNode => node != null),
-  };
+  return { appId: null, nodes: tree };
 }

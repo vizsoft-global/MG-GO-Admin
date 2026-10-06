@@ -14,7 +14,7 @@ import {
   type ResolvedMenuNode,
 } from "@/lib/menu/menu-merge";
 
-const MENU_CACHE_VERSION = "v16";
+const MENU_CACHE_VERSION = "v20";
 const cacheByRole = new Map<string, ResolvedMenuNode[]>();
 
 function menuStorageKey(role: string) {

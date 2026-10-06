@@ -59,7 +59,7 @@
   "nav": {
     "dashboard": "التطبيقات",
     "dashboardOps": "برج المراقبة",
-    "drivers": "السائقون",
+    "drivers": "الموظفون",
     "driverGroups": "مجموعات السائقين",
     "liveTracking": "التتبع المباشر",
     "liveTrackingV2": "التتبع المباشر (الإصدار 2)",
@@ -76,7 +76,7 @@
     "attendance": "الحضور",
     "attendanceSettings": "حدود الحضور",
     "driverFields": "حقول السائق المخصصة",
-    "requests": "الطلبات والشكاوى",
+    "requests": "EmployeeDesk",
     "visitBookings": "حجوزات الزيارة",
     "wrongActions": "المخالفات",
     "earnings": "الأرباح والحوافز",
@@ -109,7 +109,7 @@
     "payroll": "الرواتب والطلبات",
     "driverDevices": "أجهزة السائقين",
     "sourceCompanies": "الشركات",
-    "employeedesk": "مكتب الموظفين",
+    "employeedesk": "EmployeeDesk",
     "employeedeskAll": "كل الطلبات",
     "employeedeskIncoming": "الواردة",
     "employeedeskOutgoing": "الصادرة",
@@ -117,13 +117,14 @@
     "employeedeskEsignSigning": "للتوقيع",
     "employeedeskVisits": "حجوزات الزيارة",
     "employeedeskReports": "التقارير",
-    "employeedeskSettings": "إعدادات مكتب الموظفين",
+    "employeedeskSettings": "إعدادات EmployeeDesk",
     "operationsHub": "مركز العمليات"
   },
   "appNavGroups": {
     "overview": "نظرة عامة",
-    "employeedesk": "مكتب الموظفين",
+    "employeedesk": "EmployeeDesk",
     "operationsHub": "مركز العمليات",
+    "apps": "تطبيقات",
     "fleet": "الأسطول",
     "operations": "العمليات",
     "payroll": "الرواتب",
@@ -266,7 +267,7 @@
         "searchPartner": "ابحث في الشركاء"
       },
       "rail": {
-        "heading": "السائقون",
+        "heading": "الموظفون",
         "showing": "{visible} من {total}",
         "collapse": "إخفاء قائمة السائقين",
         "expand": "إظهار قائمة السائقين",
@@ -792,33 +793,142 @@
       "lastGpsUpdate": "آخر تحديث GPS"
     },
     "launcher": {
-      "title": "التطبيقات",
-      "subtitle": "افتح الوحدة التي تحتاجها. الشريط الجانبي يتبع التطبيق الذي أنت فيه.",
-      "apps": {
-        "employeedesk": {
-          "title": "مكتب الموظفين",
-          "body": "الطلبات والتوقيع الإلكتروني والزيارات وصناديق الموظفين."
-        },
-        "fleet": {
-          "title": "الأسطول",
-          "body": "المركبات والوقود والأصول وطوابيرها."
-        },
-        "operations": {
-          "title": "العمليات",
-          "body": "الشركاء والمطاعم والمناطق والقواعد والأداء."
-        },
-        "payroll": {
-          "title": "الرواتب",
-          "body": "رواتب الحضور والشبكة المجمّعة والإعدادات."
-        },
-        "live": {
-          "title": "التتبع المباشر",
-          "body": "خريطة الأسطول وحالة السائقين المباشرة."
-        },
-        "settings": {
-          "title": "الإعدادات",
-          "body": "الأدوار والهوية البصرية والوصول ومفاتيح النظام."
+      "title": "الرئيسية",
+      "subtitle": "اختر وحدة للبدء",
+      "colleague": "هناك",
+      "hello": "مرحباً، {name}",
+      "searchPlaceholder": "ابحث",
+      "searchHint": "⌘K",
+      "greeting": {
+        "morning": "صباح الخير",
+        "afternoon": "طاب يومك",
+        "evening": "مساء الخير"
+      },
+      "footer": "{name} · {subtitle} v{version} · صُنع بـ ♥ بواسطة websitek"
+    },
+    "rcmV2": {
+      "breadcrumb": "EmployeeDesk",
+      "outgoing": "الصادرة",
+      "incoming": "الواردة",
+      "outgoingHint": "ترسل للتوقيع",
+      "incomingHint": "تستقبل وتعالج",
+      "yourAccess": "صلاحيتك",
+      "youSend": "أنت ترسل",
+      "youReceive": "أنت تستقبل",
+      "createFromTemplate": "إنشاء من قالب",
+      "templateHint": "كل قالب يأتي بورقة مثال",
+      "seeAllTemplates": "كل القوالب ←",
+      "sendToMany": "إرسال إلى موظفين كثر دفعة واحدة",
+      "sendToManyHint": "ارفع ورقة Excel برقم الموظف وتفاصيل إضافية. يُملأ المكان والمسمى والقسم من النظام، ويُبلَّغ كل موظف للتوقيع.",
+      "importExcel": "استيراد ورقة Excel",
+      "downloadExample": "تنزيل ورقة مثال",
+      "sentForSignature": "أُرسل للتوقيع",
+      "signedProgress": "{signed} / {total} وقّعوا",
+      "signedOf": "{signed} من {total} ({percent}٪)",
+      "batchEmployees": "{count} موظف · أُرسل {date}",
+      "batchEmployeesBulk": "{count} موظف · أُرسل {date} · جماعي",
+      "inProgress": "قيد التنفيذ",
+      "completed": "مكتمل",
+      "track": "تتبع",
+      "viewAll": "عرض الكل",
+      "adminOnly": "للإدارة فقط",
+      "outgoingTitle": "الصادرة",
+      "outgoingSubtitle": "القوالب والإرسال الجماعي والتذكيرات",
+      "incomingTitle": "الواردة",
+      "incomingSubtitle": "الطوابير التي تملكها والمستندات التي تسجّلها",
+      "templatesHeading": "القوالب",
+      "pipelineHeading": "المسار",
+      "queuesHeading": "طوابيرك",
+      "typesHeading": "أنواع الطلبات",
+      "adminHeading": "الإدارة",
+      "access": {
+        "sender": "مرسل",
+        "receiver": "مستقبل"
+      },
+      "admin": {
+        "templates": "إدارة القوالب",
+        "all": "كل الطلبات",
+        "reports": "التقارير",
+        "audit": "سجل التدقيق",
+        "settings": "الإعدادات",
+        "visits": "الاجتماعات والمواعيد"
+      },
+      "templates": "القوالب",
+      "bulk": "إرسال جماعي",
+      "sent": "المرسلة",
+      "batches": "الدفعات",
+      "toSign": "للتوقيع",
+      "assignedToYou": "المسندة إليك",
+      "forwardedToYou": "المحوّلة إليك",
+      "needsAction": "تحتاج إجراءك",
+      "dueToday": "مستحقة اليوم",
+      "uploadIncoming": "رفع وارد",
+      "uploadDocument": "رفع مستند",
+      "penaltyMore": "أنواع الغرامة",
+      "penaltyCategory": "فئة الغرامة",
+      "queuesWaiting": "طوابير بانتظارك",
+      "filterAll": "الكل · {count}",
+      "forwardedToMe": "محوّل إليّ",
+      "oldestFirst": "الأقدم أولاً",
+      "newestFirst": "الأحدث أولاً",
+      "review": "مراجعة",
+      "fromEmployee": "من: {name}",
+      "fromEmployeeDept": "من: {name} — ثم {department}",
+      "confidentialSender": "يظهر المرسل بعد الفتح فقط",
+      "confidentialLine": "سري — يظهر المرسل بعد الفتح فقط",
+      "incomingFootnote": "فئات الواردة بلا قوالب، فيُرفع كل مستند يدوياً.",
+      "emptyAction": "لا شيء بانتظارك.",
+      "emptyBatches": "لا دفعات قيد التنفيذ.",
+      "ageMinutes": "قبل {n} د",
+      "ageHours": "قبل {n} س",
+      "ageToday": "اليوم",
+      "ageDay": "يوم واحد",
+      "ageDays": "{n} أيام",
+      "types": {
+        "leave": "إجازة",
+        "asset": "أصل",
+        "fuel": "وقود",
+        "fuel_refund": "استرداد وقود",
+        "loan": "سلفة",
+        "complaint": "شكوى",
+        "document": "مستندات",
+        "salary_justification": "تبرير الراتب",
+        "sick_leave": "مرض وحوادث"
+      },
+      "upload": {
+        "title": "رفع مستند وارد",
+        "subtitle": "سجّل مستنداً على سائق",
+        "driver": "السائق",
+        "driverPlaceholder": "ابحث عن سائق",
+        "category": "الفئة",
+        "receivedOn": "تاريخ الاستلام",
+        "subject": "الموضوع",
+        "files": "الملفات",
+        "startRoute": "ابدأ مسار الاعتماد",
+        "cancel": "إلغاء",
+        "submit": "رفع",
+        "required": "السائق والموضوع وملف مطلوبون",
+        "failed": "فشل الرفع",
+        "saved": "سُجّل {code}",
+        "categories": {
+          "letter": "خطاب",
+          "memo": "مذكرة",
+          "legal": "قانوني",
+          "hr": "موارد بشرية",
+          "other": "أخرى"
         }
+      },
+      "forward": {
+        "title": "تحويل الطلب",
+        "subtitle": "الملاحظة مطلوبة",
+        "staff": "الموظف",
+        "staffPlaceholder": "ابحث عن موظف",
+        "note": "ملاحظة",
+        "cancel": "إلغاء",
+        "submit": "تحويل",
+        "required": "الموظف والملاحظة مطلوبان",
+        "failed": "تعذّر التحويل",
+        "saved": "تم التحويل"
       }
     },
     "dashboard": {
@@ -1024,9 +1134,9 @@
       "distanceTodayLabel": "المسافة اليوم"
     },
     "drivers": {
-      "title": "السائقون",
-      "subtitle": "مراقبة وإدارة سائقي التوصيل",
-      "addDriver": "إضافة سائق",
+      "title": "الموظفون",
+      "subtitle": "مراقبة وإدارة الموظفين",
+      "addDriver": "إضافة موظف",
       "bulkImport": "استيراد جماعي",
       "driverGroupsLink": "مجموعات السائقين",
       "approveAction": "تحقق واعتماد",
@@ -1109,7 +1219,7 @@
       "tabArchived": "مؤرشف",
       "totalDrivers": "{count, plural, one {سائق واحد} other {# سائقين}}",
       "ofTotal": "من {total} إجمالي",
-      "emptySearchTitle": "لا يوجد سائقون يطابقون البحث",
+      "emptySearchTitle": "لا يوجد موظفون يطابقون البحث",
       "emptySearchDescription": "جرّب اسمًا أو هاتفًا أو رقم سائق مختلفًا.",
       "kpiTotal": "إجمالي السائقين",
       "kpiActiveToday": "السائقون النشطون (اليوم)",
@@ -1186,8 +1296,8 @@
       "errors": {
         "save_failed": "تعذر تحديث الحالة. حاول مرة أخرى."
       },
-      "emptyTitle": "لا يوجد سائقون بعد",
-      "emptyDescription": "أضف أول سائق للبدء",
+      "emptyTitle": "لا يوجد موظفون بعد",
+      "emptyDescription": "أضف أول موظف للبدء",
       "passcode": {
         "copied": "تم نسخ الرمز",
         "copyFailed": "تعذر نسخ الرمز",
@@ -1196,7 +1306,7 @@
         "hide": "إخفاء الرمز"
       },
       "import": {
-        "title": "استيراد سائقين جماعي",
+        "title": "استيراد موظفين جماعي",
         "dropHint": "أسقط ملف Excel أو CSV هنا، أو انقر للتصفح",
         "formats": "يدعم .xlsx و .xls و .csv",
         "downloadSample": "تنزيل قالب نموذجي",
@@ -1609,14 +1719,14 @@
       "notSet": "غير محدد"
     },
     "driverDetail": {
-      "title": "تفاصيل السائق",
+      "title": "تفاصيل الموظف",
       "subtitle": "الملف والسجل التشغيلي",
-      "backToList": "العودة إلى السائقين",
+      "backToList": "العودة إلى الموظفين",
       "backToLiveTracking": "العودة إلى التتبع المباشر",
       "backToRequest": "العودة إلى الطلب",
       "backToDriverDevices": "العودة إلى أجهزة السائقين",
       "comingSoon": "قريباً",
-      "editDriver": "تعديل السائق",
+      "editDriver": "تعديل الموظف",
       "approveAction": "تحقق واعتماد",
       "approveConfirmBody": "إنشاء حساب السائق وتفعيله وإصدار رمز دخول من 6 أرقام؟",
       "approveSuccess": "تم اعتماد السائق",
@@ -1672,8 +1782,8 @@
       "documentsEmptyDescription": "ارفع الرخصة أو البطاقة المدنية أو تصريح العمل أو جواز السفر من تعديل السائق.",
       "documentsUploadViaEdit": "الرفع من تعديل السائق",
       "documentsManage": "إدارة المستندات",
-      "notFoundTitle": "السائق غير موجود",
-      "notFoundDescription": "ربما تم حذف هذا السائق أو أن الرابط غير صالح.",
+      "notFoundTitle": "الموظف غير موجود",
+      "notFoundDescription": "ربما تم حذف هذا الموظف أو أن الرابط غير صالح.",
       "tabHistory": "السجل",
       "history": {
         "filterAll": "الكل",
@@ -2070,9 +2180,9 @@
       }
     },
     "driverNew": {
-      "title": "إضافة سائق",
-      "subtitle": "أنشئ ملف سائق جديد وحدد البيانات الأساسية.",
-      "createDriver": "إنشاء سائق",
+      "title": "إضافة موظف",
+      "subtitle": "أنشئ ملف موظف جديد وحدد البيانات الأساسية.",
+      "createDriver": "إنشاء موظف",
       "r2NotConfigured": "تخزين الملفات غير مُعد. أضف بيانات Cloudflare R2 قبل رفع مستندات السائق.",
       "r2NotConfiguredOptional": "تخزين الملفات (R2) غير مُعد. يمكنك إنشاء السائق بدون مستندات، أو إعداد R2 لرفع الملفات الآن.",
       "configureStorage": "إعداد تخزين R2",
@@ -4132,10 +4242,16 @@
       }
     },
     "requests": {
-      "title": "الطلبات والشكاوى",
+      "title": "EmployeeDesk",
       "overviewTitle": "كل الطلبات",
       "hubLink": "الرئيسية",
       "subtitle": "قائمة RCM — الموافقة والتوضيح وحل طلبات السائقين",
+      "scope": {
+        "waiting": "المسندة إليّ",
+        "forwarded": "المحوّلة إليّ",
+        "handled": "التي عالجتها",
+        "all": "الكل"
+      },
       "hub": {
         "subtitle": "اختر وحدة لإدارة الطلبات وقوائم الانتظار والإعدادات",
         "requestTypesHeading": "أنواع الطلبات",
@@ -4187,7 +4303,7 @@
         "senderBulk": "استيراد جماعي",
         "senderSent": "الطلبات المرسلة",
         "senderBatches": "الدفعات",
-        "title": "الطلبات والشكاوى"
+        "title": "EmployeeDesk"
       },
       "refresh": "تحديث",
       "settingsLink": "الإعدادات",
@@ -4195,6 +4311,7 @@
       "search": "بحث",
       "searchPlaceholder": "الرمز أو اسم السائق أو رقم السائق",
       "attentionBadge": "يحتاج انتباهاً",
+      "confidential": "سري",
       "viewDetails": "عرض التفاصيل",
       "open": "فتح",
       "zoneLabel": "المنطقة {zone}",
@@ -4285,10 +4402,24 @@
         "approve": "الموافقة على الخطوة",
         "reject": "رفض",
         "clarify": "طلب توضيح",
+        "forward": "تحويل",
+        "escalate": "تصعيد",
+        "escalated": "تم التصعيد",
+        "escalateFailed": "تعذّر التصعيد",
         "solve": "حل / إغلاق",
         "awaitingClarification": "بانتظار رد السائق على التوضيح. تبقى الموافقة والحل وإعادة الجدولة معطّلة حتى يرد أو ترفض الطلب.",
         "actionOk": "تم التحديث",
         "actionFailed": "فشل الإجراء",
+        "confidentialBanner": "سري — يُسجَّل هذا العرض",
+        "comments": {
+          "title": "تعليقات داخلية",
+          "empty": "لا تعليقات بعد",
+          "placeholder": "أضف تعليقاً للموظفين فقط",
+          "submit": "إضافة تعليق",
+          "required": "اكتب تعليقاً أولاً",
+          "failed": "تعذّر إضافة التعليق",
+          "saved": "تمت إضافة التعليق"
+        },
         "attachments": "المرفقات",
         "noAttachments": "لا توجد ملفات مرفقة",
         "viewDrawer": "عرض الدرج",
@@ -4830,7 +4961,7 @@
       },
       "esign": {
         "hub": {
-          "requests": "الطلبات",
+          "requests": "EmployeeDesk",
           "title": "طلبات الإدارة والتوقيع الإلكتروني",
           "subtitle": "إنشاء الطلبات وجمع التوقيعات الإلكترونية وإدارة الردود",
           "newRequest": "طلب جديد",
@@ -5258,8 +5389,14 @@
           "declinedTitle": "سبب الرفض",
           "declinedSubtitle": "ما كتبه السائق عند الرفض",
           "declinedEmpty": "لم يترك السائق سببًا",
+          "viewAudit": "عرض سجل التدقيق",
+          "correctAndResend": "تصحيح وإعادة إرسال",
+          "channelApp": "التطبيق",
+          "channelSms": "رسالة نصية",
+          "channelEmail": "البريد",
           "remindTitle": "إرسال تذكيرات",
           "remindSubtitle": "يظهر فقط من لم يوقّع بعد",
+          "remindMessage": "رسالة اختيارية",
           "remindSelected": "تذكير {count} محدد",
           "remindOne": "تذكير هذا السائق",
           "selectAll": "تحديد الكل",
@@ -7067,6 +7204,107 @@
           "copyFailed": "تعذر نسخ قالب الدور."
         }
       },
+      "accessControl": {
+        "tabStaff": "صلاحيات الموظفين",
+        "tabRoles": "قوالب الأدوار",
+        "usersTitle": "الموظفون",
+        "inviteUser": "دعوة مستخدم",
+        "searchUsers": "بحث عن موظف…",
+        "clearSearch": "مسح البحث",
+        "emptyUsers": "لا يوجد موظفون موافق عليهم في هذا التصفية.",
+        "noRole": "بدون دور",
+        "modulesSelected": "{count, plural, =0 {لا وحدات محددة} one {وحدة واحدة محددة} other {# وحدات محددة}}",
+        "deptAll": "الكل",
+        "deptHr": "الموارد البشرية",
+        "deptAccounts": "الحسابات",
+        "deptAdmin": "الإدارة",
+        "deptOperations": "العمليات والأسطول",
+        "department": "القسم",
+        "departmentUnset": "بدون قسم",
+        "dept": {
+          "hr": "الموارد البشرية",
+          "accounts": "الحسابات",
+          "admin": "الإدارة",
+          "operations_fleet": "العمليات والأسطول"
+        },
+        "fullAccessManager": "وصول كامل (مدير)",
+        "kindUser": "مستخدم",
+        "copyAccess": "نسخ الصلاحيات من…",
+        "resetRole": "إعادة إلى قالب الدور",
+        "lastChanged": "آخر تغيير بواسطة {name} · {date}",
+        "lastChangedNever": "لا توجد تغييرات مسجّلة بعد",
+        "someone": "شخص ما",
+        "filterAll": "كل التطبيقات",
+        "filterWith": "مع صلاحية",
+        "filterNone": "بدون صلاحية",
+        "searchApps": "بحث في التطبيقات…",
+        "levelNone": "بدون وصول",
+        "levelViewer": "عارض",
+        "levelUser": "مستخدم",
+        "levelManager": "مدير",
+        "custom": "مخصص",
+        "visibleSubViews": "العروض الفرعية الظاهرة",
+        "sides": "الجوانب",
+        "outgoingSender": "الصادر · مرسل",
+        "incomingReceiver": "الوارد · مستلم",
+        "requestTypes": "أنواع الطلبات",
+        "previewTitle": "ما الذي سيراه {name}",
+        "launcherShows": "المشغّل يعرض {shown} من {total} تطبيقات",
+        "unsavedCount": "{count, plural, =0 {لا تغييرات غير محفوظة} one {تغيير غير محفوظ} other {# تغييرات غير محفوظة}}",
+        "discard": "تجاهل",
+        "save": "حفظ الصلاحيات",
+        "saving": "جاري الحفظ…",
+        "saved": "تم حفظ صلاحيات الموظف",
+        "selectedUser": "المستخدم المحدد",
+        "copyTitle": "نسخ الصلاحيات",
+        "copySubtitle": "اعرض الفرق ثم طبّقه على المسودة",
+        "copyFromUser": "من مستخدم",
+        "copyFromRole": "من قالب دور",
+        "copyUserPlaceholder": "اختر موظفاً",
+        "copyRolePlaceholder": "اختر دوراً",
+        "keepSubViews": "الاحتفاظ باختيارات العروض الفرعية",
+        "copyPreviewHint": "اعرض الفرق قبل التطبيق.",
+        "previewDiff": "معاينة الفرق",
+        "applyCopy": "تطبيق على المسودة",
+        "diffAdded": "+{count, plural, one {تطبيق} other {# تطبيقات}}",
+        "diffRemoved": "−{count, plural, one {تطبيق} other {# تطبيقات}}",
+        "diffLevels": "{count, plural, one {تغيير مستوى} other {# تغييرات مستوى}}",
+        "diffSubViews": "+{added} / −{removed} عروض فرعية",
+        "resetApplied": "تم نسخ قالب الدور — احفظ للتطبيق",
+        "downgradeTitle": "التحويل إلى مستخدم؟",
+        "downgradeDescription": "يجب تعيين العلامات الآن. سنملأ الكتالوج كاملاً ليبقى الوصول قائماً؛ راجع وأزل ما لا يجب أن يملكه.",
+        "downgradeConfirm": "تعيين العلامات الآن",
+        "leaveTitle": "مغادرة التغييرات غير المحفوظة؟",
+        "leaveDescription": "تغيير المستخدم يتجاهل المسودة الحالية.",
+        "leaveConfirm": "مغادرة دون حفظ",
+        "subViews": {
+          "activity": "النشاط",
+          "diagnostics": "التشخيص",
+          "devices": "الأجهزة",
+          "orderRecon": "مطابقة الطلبات",
+          "toSign": "للتوقيع",
+          "visitOperate": "الاستقبال",
+          "visitCatalog": "الفهرس",
+          "notifySend": "إرسال",
+          "notifyApprove": "موافقة",
+          "users": "المستخدمون",
+          "companies": "الشركات",
+          "activityLog": "سجل النشاط",
+          "assetRequests": "طلبات الأصول",
+          "fuel": "سجل الوقود",
+          "fuelRequests": "طلبات الوقود",
+          "fuelRefunds": "استرداد الوقود",
+          "analyze": "التحليل",
+          "rate": "التقييم"
+        },
+        "errors": {
+          "loadFailed": "تعذر تحميل صلاحيات الموظفين.",
+          "saveFailed": "تعذر حفظ صلاحيات الموظفين.",
+          "copyFailed": "تعذر نسخ الصلاحيات.",
+          "copySourceRequired": "اختر المصدر أولاً.",
+          "noRole": "لا يوجد قالب دور لإعادة هذا المستخدم إليه."
+        }
+      },
       "roles": {
         "title": "الأدوار والصلاحيات",
         "subtitle": "قوالب للمستخدمين الجدد — حفظ الدور لا يغيّر علامات المستخدم الحالية",
@@ -7119,7 +7357,7 @@
         "categories": {
           "admin": "الإدارة",
           "dashboard": "لوحة التحكم",
-          "drivers": "السائقون",
+          "drivers": "الموظفون",
           "partners": "الشركاء",
           "restaurants": "المطاعم",
           "vehicles": "المركبات",
@@ -7128,7 +7366,7 @@
           "zones": "المناطق",
           "attendance": "الحضور",
           "performance": "الأداء",
-          "requests": "الطلبات",
+          "requests": "EmployeeDesk",
           "compliance": "الامتثال",
           "earnings": "الأرباح",
           "notifications": "الإشعارات",
@@ -9134,9 +9372,9 @@
     },
     "employeedesk": {
       "hub": {
-        "title": "مكتب الموظفين",
+        "title": "EmployeeDesk",
         "subtitle": "كل مستندات وطلبات الموظفين في مكان واحد.",
-        "breadcrumb": "مكتب الموظفين",
+        "breadcrumb": "EmployeeDesk",
         "open": "فتح",
         "cards": {
           "esign": {
@@ -9144,7 +9382,7 @@
             "body": "القوالب والإرسال الجماعي والدفعات والتوقيعات."
           },
           "requests": {
-            "title": "الطلبات والشكاوى",
+            "title": "EmployeeDesk",
             "body": "السلف والإجازات والوقود والعهد والشكاوى."
           },
           "visits": {
@@ -9156,7 +9394,7 @@
             "body": "تقارير الطلبات والزيارات والتوقيع الإلكتروني."
           },
           "settings": {
-            "title": "إعدادات مكتب الموظفين",
+            "title": "إعدادات EmployeeDesk",
             "body": "المسارات والفئات والقوالب وصلاحيات الموظفين."
           }
         }
@@ -9165,7 +9403,7 @@
         "hub": {
           "title": "التوقيع الإلكتروني",
           "subtitle": "أنشئ القوالب وأرسلها للتوقيع وتابع كل دفعة.",
-          "breadcrumbHub": "مكتب الموظفين",
+          "breadcrumbHub": "EmployeeDesk",
           "breadcrumb": "التوقيع الإلكتروني",
           "cards": {
             "templates": {
@@ -9203,8 +9441,8 @@
           }
         },
         "templates": {
-          "breadcrumbRcm": "الطلبات والشكاوى",
-          "breadcrumbHub": "مكتب الموظفين",
+          "breadcrumbRcm": "EmployeeDesk",
+          "breadcrumbHub": "EmployeeDesk",
           "breadcrumbEsign": "التوقيع الإلكتروني",
           "title": "القوالب",
           "subtitle": "لكل قالب ورقة مثال. استورد رقم الموظف فيكمل النظام البيانات الشخصية.",
@@ -9241,8 +9479,8 @@
         "bulk": {
           "title": "استيراد جماعي من Excel",
           "subtitle": "يعمل مع أي قالب. رقم الموظف يجلب البيانات الشخصية من النظام.",
-          "breadcrumbRcm": "الطلبات والشكاوى",
-          "breadcrumbHub": "مكتب الموظف",
+          "breadcrumbRcm": "EmployeeDesk",
+          "breadcrumbHub": "EmployeeDesk",
           "breadcrumbEsign": "التوقيع الإلكتروني",
           "backToOutgoing": "رجوع إلى الصادر",
           "steps": {
@@ -9328,8 +9566,8 @@
           }
         },
         "templateBuilder": {
-          "breadcrumbRcm": "الطلبات والشكاوى",
-          "breadcrumbHub": "مكتب الموظفين",
+          "breadcrumbRcm": "EmployeeDesk",
+          "breadcrumbHub": "EmployeeDesk",
           "breadcrumbTemplates": "القوالب",
           "untitled": "قالب بدون اسم",
           "builderSubtitle": "كل صف يوضّح مصدر قيمته، والصفحة المجاورة هي ما سيقرأه المندوب.",

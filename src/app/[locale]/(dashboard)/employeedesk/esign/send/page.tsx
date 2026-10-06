@@ -27,12 +27,18 @@ export default async function EmployeeDeskEsignSendPage({
   const query = await searchParams;
   const template = query.template;
   const draft = query.draft;
+  const category = query.category;
+  const driver = query.driver;
+  const resentFrom = query.resentFrom;
   setRequestLocale(locale);
   await requireAnyPermission(locale, ["employeedesk.manage", "requests.manage"]);
   return (
     <EsignSendShell
       initialTemplateId={typeof template === "string" ? template : undefined}
       initialDraftId={typeof draft === "string" ? draft : undefined}
+      initialCategoryKey={typeof category === "string" ? category : undefined}
+      initialDriverId={typeof driver === "string" ? driver : undefined}
+      initialResentFromId={typeof resentFrom === "string" ? resentFrom : undefined}
     />
   );
 }

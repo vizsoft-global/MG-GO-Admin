@@ -18,6 +18,19 @@ import type {
   EsignStatusCounts,
 } from "./types";
 
+async function requireRequestsView() {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    (!hasPermissionInSet(session.permissions, "requests.view", session.isSuperAdmin) &&
+      !hasPermissionInSet(session.permissions, "employeedesk.view", session.isSuperAdmin) &&
+      !hasPermissionInSet(session.permissions, "requests.manage", session.isSuperAdmin))
+  ) {
+    throw new Error("not_authorized");
+  }
+  return session;
+}
+
 async function requireRequestsManage() {
   const session = await getSessionUser();
   // EmployeeDesk V2 is gated on `employeedesk.manage` and reuses these reads and
@@ -386,12 +399,12 @@ export async function fetchEsignCategories(): Promise<{
   rows: EsignCategoryRow[];
   error?: string;
 }> {
-  await requireRequestsManage();
+  await requireRequestsView();
   const supabase = await createClient();
   const { data, error } = await (supabase as any)
     .from("esign_categories")
     .select(
-      "id, key, label_en, description, icon_key, screenshot_restricted, is_active, sort_order",
+      "id, key, label_en, description, icon_key, screenshot_restricted, is_active, sort_order, parent_key",
     )
     .order("sort_order")
     .order("label_en");
@@ -420,6 +433,7 @@ export async function fetchEsignCategories(): Promise<{
       screenshot_restricted: row.screenshot_restricted,
       is_active: row.is_active,
       sort_order: row.sort_order,
+      parent_key: row.parent_key != null ? String(row.parent_key) : null,
       signed_count: signedByKey.get(row.key) ?? 0,
     })),
   };

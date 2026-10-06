@@ -3902,6 +3902,7 @@ export type Database = {
           is_active: boolean
           key: string
           label_en: string
+          parent_key: string | null
           screenshot_restricted: boolean
           sort_order: number
           updated_at: string
@@ -3914,6 +3915,7 @@ export type Database = {
           is_active?: boolean
           key: string
           label_en: string
+          parent_key?: string | null
           screenshot_restricted?: boolean
           sort_order?: number
           updated_at?: string
@@ -3926,11 +3928,20 @@ export type Database = {
           is_active?: boolean
           key?: string
           label_en?: string
+          parent_key?: string | null
           screenshot_restricted?: boolean
           sort_order?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "esign_categories_parent_key_fkey"
+            columns: ["parent_key"]
+            isOneToOne: false
+            referencedRelation: "esign_categories"
+            referencedColumns: ["key"]
+          },
+        ]
       }
       esign_drafts: {
         Row: {
@@ -4095,6 +4106,7 @@ export type Database = {
           last_reminded_at: string | null
           reminder_count: number
           request_code: string
+          resent_from_id: string | null
           screenshot_restricted: boolean
           sent_at: string
           sent_by: string | null
@@ -4129,6 +4141,7 @@ export type Database = {
           last_reminded_at?: string | null
           reminder_count?: number
           request_code?: string
+          resent_from_id?: string | null
           screenshot_restricted?: boolean
           sent_at?: string
           sent_by?: string | null
@@ -4163,6 +4176,7 @@ export type Database = {
           last_reminded_at?: string | null
           reminder_count?: number
           request_code?: string
+          resent_from_id?: string | null
           screenshot_restricted?: boolean
           sent_at?: string
           sent_by?: string | null
@@ -4200,6 +4214,13 @@ export type Database = {
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_requests_resent_from_id_fkey"
+            columns: ["resent_from_id"]
+            isOneToOne: false
+            referencedRelation: "esign_requests"
             referencedColumns: ["id"]
           },
           {
@@ -6654,6 +6675,7 @@ export type Database = {
           locale: string
           phone: string | null
           role: Database["public"]["Enums"]["app_role"]
+          staff_department: string | null
           updated_at: string
           zone_id: string | null
         }
@@ -6673,6 +6695,7 @@ export type Database = {
           locale?: string
           phone?: string | null
           role?: Database["public"]["Enums"]["app_role"]
+          staff_department?: string | null
           updated_at?: string
           zone_id?: string | null
         }
@@ -6692,6 +6715,7 @@ export type Database = {
           locale?: string
           phone?: string | null
           role?: Database["public"]["Enums"]["app_role"]
+          staff_department?: string | null
           updated_at?: string
           zone_id?: string | null
         }
@@ -6779,6 +6803,7 @@ export type Database = {
       request_approval_steps: {
         Row: {
           actor_display_name: string | null
+          assigned_user_id: string | null
           breach_action: string | null
           created_at: string
           decided_at: string | null
@@ -6798,6 +6823,7 @@ export type Database = {
         }
         Insert: {
           actor_display_name?: string | null
+          assigned_user_id?: string | null
           breach_action?: string | null
           created_at?: string
           decided_at?: string | null
@@ -6817,6 +6843,7 @@ export type Database = {
         }
         Update: {
           actor_display_name?: string | null
+          assigned_user_id?: string | null
           breach_action?: string | null
           created_at?: string
           decided_at?: string | null
@@ -6835,6 +6862,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "request_approval_steps_assigned_user_id_fkey"
+            columns: ["assigned_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "request_approval_steps_decided_by_fkey"
             columns: ["decided_by"]
@@ -6961,6 +6995,78 @@ export type Database = {
             columns: ["request_id"]
             isOneToOne: false
             referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_comments: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          id: string
+          request_id: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          id?: string
+          request_id: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_comments_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_confidential_views: {
+        Row: {
+          request_id: string
+          viewed_at: string
+          viewer_id: string
+        }
+        Insert: {
+          request_id: string
+          viewed_at?: string
+          viewer_id: string
+        }
+        Update: {
+          request_id?: string
+          viewed_at?: string
+          viewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_confidential_views_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_confidential_views_viewer_id_fkey"
+            columns: ["viewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -7123,6 +7229,65 @@ export type Database = {
           },
         ]
       }
+      request_forwards: {
+        Row: {
+          created_at: string
+          from_user: string
+          id: string
+          note: string
+          request_id: string
+          step_id: string | null
+          to_user: string
+        }
+        Insert: {
+          created_at?: string
+          from_user: string
+          id?: string
+          note: string
+          request_id: string
+          step_id?: string | null
+          to_user: string
+        }
+        Update: {
+          created_at?: string
+          from_user?: string
+          id?: string
+          note?: string
+          request_id?: string
+          step_id?: string | null
+          to_user?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_forwards_from_user_fkey"
+            columns: ["from_user"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_forwards_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_forwards_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "request_approval_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "request_forwards_to_user_fkey"
+            columns: ["to_user"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       request_staff_access: {
         Row: {
           access_level: Database["public"]["Enums"]["request_access_level"]
@@ -7246,6 +7411,7 @@ export type Database = {
           end_date: string | null
           fuel_transfer_type: string | null
           id: string
+          is_confidential: boolean
           needs_attention: boolean
           payload: Json
           request_code: string
@@ -7281,6 +7447,7 @@ export type Database = {
           end_date?: string | null
           fuel_transfer_type?: string | null
           id?: string
+          is_confidential?: boolean
           needs_attention?: boolean
           payload?: Json
           request_code: string
@@ -7316,6 +7483,7 @@ export type Database = {
           end_date?: string | null
           fuel_transfer_type?: string | null
           id?: string
+          is_confidential?: boolean
           needs_attention?: boolean
           payload?: Json
           request_code?: string
@@ -9249,6 +9417,10 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_add_request_comment: {
+        Args: { p_body: string; p_request_id: string }
+        Returns: Json
+      }
       admin_app_release_adoption: {
         Args: { p_channel?: string; p_platform?: string }
         Returns: Json
@@ -9537,6 +9709,14 @@ export type Database = {
         Args: { p_filters: Json }
         Returns: undefined
       }
+      admin_escalate_request: {
+        Args: { p_note: string; p_request_id: string }
+        Returns: Json
+      }
+      admin_esign_batch_kpis: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: Json
+      }
       admin_esign_reminder_state: { Args: { p_ids: string[] }; Returns: Json }
       admin_esign_resolve_employees: { Args: { p_rows: Json }; Returns: Json }
       admin_esign_signer_options: { Args: never; Returns: Json }
@@ -9545,6 +9725,10 @@ export type Database = {
       admin_force_sign_out_driver: {
         Args: { p_driver_id: string }
         Returns: undefined
+      }
+      admin_forward_request: {
+        Args: { p_note: string; p_request_id: string; p_to_user: string }
+        Returns: Json
       }
       admin_get_driver_day_route: {
         Args: { p_date?: string; p_driver_id: string; p_tolerance_m?: number }
@@ -9578,6 +9762,10 @@ export type Database = {
           p_start_date?: string
         }
         Returns: string
+      }
+      admin_link_esign_resend: {
+        Args: { p_from_id: string; p_id: string }
+        Returns: Json
       }
       admin_list_attendance_daily: {
         Args: {
@@ -9682,12 +9870,17 @@ export type Database = {
       admin_list_performance_target_dpd: { Args: never; Returns: Json }
       admin_list_requests: {
         Args: {
+          p_assigned_to_me?: boolean
           p_date_from?: string
           p_date_to?: string
           p_department_key?: string
+          p_due_today?: boolean
+          p_forwarded_to_me?: boolean
+          p_handled_by_me?: boolean
           p_limit?: number
           p_offset?: number
           p_search?: string
+          p_sort?: string
           p_status?: string
           p_type?: string
           p_zone_id?: string
@@ -9898,7 +10091,10 @@ export type Database = {
         Returns: Json
       }
       admin_record_fleet_events: { Args: { p_events: Json }; Returns: Json }
-      admin_remind_esign_requests: { Args: { p_ids: string[] }; Returns: Json }
+      admin_remind_esign_requests: {
+        Args: { p_ids: string[]; p_message?: string }
+        Returns: Json
+      }
       admin_remove_esign_batch_row: {
         Args: { p_row_id: string }
         Returns: Json
@@ -10067,6 +10263,17 @@ export type Database = {
           p_new_date?: string
           p_new_slot_id?: string
           p_status: Database["public"]["Enums"]["visit_booking_status"]
+        }
+        Returns: Json
+      }
+      admin_upload_incoming_document: {
+        Args: {
+          p_attachments?: Json
+          p_category: string
+          p_driver_id: string
+          p_received_on: string
+          p_start_route?: boolean
+          p_subject: string
         }
         Returns: Json
       }
