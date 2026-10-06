@@ -1122,6 +1122,7 @@ export function payrollRiderMatchesSearch(
     name: string;
     zone: string;
     restaurant: string;
+    restaurantId?: string | null;
     amId: string;
     mgId: string;
   },
@@ -1129,7 +1130,7 @@ export function payrollRiderMatchesSearch(
 ): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return [row.name, row.zone, row.restaurant, row.amId, row.mgId].some((value) =>
+  return [row.name, row.zone, row.restaurant, row.restaurantId ?? "", row.amId, row.mgId].some((value) =>
     value.toLowerCase().includes(needle),
   );
 }

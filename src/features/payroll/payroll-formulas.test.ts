@@ -78,6 +78,7 @@ describe("fixedDays / month selector", () => {
       name: "Jenson Doe",
       zone: "Hawally",
       restaurant: "Keeta Mall",
+      restaurantId: "rest-88",
       amId: "AM-12",
       mgId: "MG-9",
     };
@@ -85,6 +86,7 @@ describe("fixedDays / month selector", () => {
     assert.equal(payrollRiderMatchesSearch(row, "jenson"), true);
     assert.equal(payrollRiderMatchesSearch(row, "hawally"), true);
     assert.equal(payrollRiderMatchesSearch(row, "keeta"), true);
+    assert.equal(payrollRiderMatchesSearch(row, "rest-88"), true);
     assert.equal(payrollRiderMatchesSearch(row, "am-12"), true);
     assert.equal(payrollRiderMatchesSearch(row, "mg-9"), true);
     assert.equal(payrollRiderMatchesSearch(row, "unknown"), false);

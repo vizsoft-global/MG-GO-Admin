@@ -47,10 +47,17 @@ const BY_ID: Record<string, ModuleTint> = {
 };
 
 /**
- * Home launcher tiles share the MG logo teal. Sidebar chips and Roles cards
- * still use `moduleTint(id)` so this is scoped to `/dashboard`.
+ * Home launcher: canvas is the MG teal, not navy-grey. Tiles and icons use
+ * the same mark as `/logo` (teal square, mint glyph). Sidebar chips and
+ * Roles cards still use `moduleTint(id)`.
  */
 export const LAUNCHER_BRAND_TINT: ModuleTint = PALETTE[0];
+
+export const LAUNCHER_BRAND = {
+  canvas: "#042F2E",
+  tile: LAUNCHER_BRAND_TINT.tile,
+  icon: LAUNCHER_BRAND_TINT.ink,
+} as const;
 
 function hashId(id: string): number {
   let h = 0;

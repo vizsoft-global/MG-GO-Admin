@@ -237,6 +237,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-06` — **Launcher canvas is MG teal, not navy-grey; payroll header export follows the selected tab; Attendance & Orders adds Restaurant + Restaurant ID.** `/dashboard` canvas `#042F2E`, logo chip and every hub tile/icon `LAUNCHER_BRAND` (`#0F766E` / `#ECFDF5`). Header **Export to Excel** writes the open tab (Payroll / Combined / Attendance & Orders / Requests) and hides on Settings. AO lead columns + heading allowlist + Excel get `restaurant` / `restaurantId`. Migration `20261121000000` already on `eoksxkdssptgyqyywdju`. **No Play.**
+
 - `[admin only] 2026-10-06` — **Payroll grid editor, headings and filters.** Combined + Attendance & Orders share the same `dayGridLabel` particular (`12`, `3h`, `Half`, `OFF`, `Sick`, `Acc`, `Veh`, `Absent`, `Abs·LH`, `Abs·LO`, `{n}h`) across editor / cell / filter / Excel. Existing `ADJUSTMENT_STATUSES` stay; `half` is 6 Hours. Pinned no-backdrop adjust popover, larger fill handle, per-cell audit, list-mode column filters (search + counts), org-wide `payroll_column_config` (labels shared, visibility per view). AO payroll cells are editable. Migration `20261120000000`. **No git / Vercel / Play until verification.**
 
 - `[admin only] 2026-10-06` — **Launcher tiles are one MG-logo teal.** `/dashboard` no longer paints a rainbow per module; every 72px tile uses `LAUNCHER_BRAND_TINT` (`#0F766E`). Sidebar chips and Roles app cards keep `moduleTint(id)`. **No git / Vercel / Play.**
