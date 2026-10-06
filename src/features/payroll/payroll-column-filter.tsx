@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { ArrowDownAZ, ArrowUpAZ, Check, ListFilter, X } from "lucide-react";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { countValueOccurrences, sortParticularValues } from "./payroll-particulars";
 
 /**
  * The one Excel-style header filter the three payroll grids share.
@@ -184,6 +185,17 @@ export function PayrollFilterChips({
  * turns on Range mode. Sort is a pair of buttons rather than a third mode, since
  * sorting and filtering compose.
  */
+function defaultFilterMode(
+  filter: ColumnFilterValue | undefined,
+  values: readonly string[] | undefined,
+  numeric: boolean,
+): ColumnFilterValue["kind"] {
+  if (filter?.kind) return filter.kind;
+  if (values && values.length > 0) return "list";
+  if (numeric) return "range";
+  return "text";
+}
+
 export function PayrollColumnHeader({
   label,
   columnId,
@@ -194,6 +206,8 @@ export function PayrollColumnHeader({
   onSort,
   numeric = false,
   className,
+  style,
+  heading,
 }: {
   label: string;
   columnId: string;
@@ -204,22 +218,27 @@ export function PayrollColumnHeader({
   onSort: (next: ColumnSort) => void;
   numeric?: boolean;
   className?: string;
+  style?: CSSProperties;
+  heading?: ReactNode;
 }) {
   const t = useTranslations("pages.payroll.columnFilter");
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<ColumnFilterValue["kind"]>(filter?.kind ?? "text");
+  const [mode, setMode] = useState<ColumnFilterValue["kind"]>(defaultFilterMode(filter, values, numeric));
   const [text, setText] = useState(filter?.kind === "text" ? filter.text : "");
   const [picked, setPicked] = useState<string[]>(
     filter?.kind === "list" ? [...filter.values] : [],
   );
   const [min, setMin] = useState(filter?.kind === "range" && filter.min !== null ? String(filter.min) : "");
   const [max, setMax] = useState(filter?.kind === "range" && filter.max !== null ? String(filter.max) : "");
+  const [search, setSearch] = useState("");
 
-  const uniqueValues = useMemo(() => {
-    const set = new Set<string>();
-    for (const value of values ?? []) set.add(value);
-    return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  }, [values]);
+  const counts = useMemo(() => countValueOccurrences(values ?? []), [values]);
+  const uniqueValues = useMemo(() => sortParticularValues([...new Set(values ?? [])]), [values]);
+  const visibleValues = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return uniqueValues;
+    return uniqueValues.filter((value) => value.toLowerCase().includes(needle));
+  }, [uniqueValues, search]);
 
   const active = columnFilterActive(filter);
   const sorted = sort?.columnId === columnId ? sort.dir : null;
@@ -227,11 +246,12 @@ export function PayrollColumnHeader({
   function openChanged(next: boolean) {
     setOpen(next);
     if (next) {
-      setMode(filter?.kind ?? "text");
+      setMode(defaultFilterMode(filter, values, numeric));
       setText(filter?.kind === "text" ? filter.text : "");
       setPicked(filter?.kind === "list" ? [...filter.values] : []);
       setMin(filter?.kind === "range" && filter.min !== null ? String(filter.min) : "");
       setMax(filter?.kind === "range" && filter.max !== null ? String(filter.max) : "");
+      setSearch("");
     }
   }
 
@@ -263,15 +283,18 @@ export function PayrollColumnHeader({
   }
 
   function toggleAll() {
-    setPicked((prev) => (prev.length === uniqueValues.length && uniqueValues.length > 0 ? [] : [...uniqueValues]));
+    const pool = search.trim() ? visibleValues : uniqueValues;
+    setPicked((prev) => (pool.length > 0 && pool.every((value) => prev.includes(value)) ? [] : [...pool]));
   }
 
-  const allTicked = uniqueValues.length > 0 && picked.length === uniqueValues.length;
+  const allTicked =
+    (search.trim() ? visibleValues : uniqueValues).length > 0 &&
+    (search.trim() ? visibleValues : uniqueValues).every((value) => picked.includes(value));
 
   return (
-    <th className={cn("whitespace-nowrap px-2 py-2 text-start align-bottom", className)}>
+    <th className={cn("whitespace-nowrap px-2 py-2 text-start align-bottom", className)} style={style}>
       <span className="inline-flex items-center gap-1">
-        <span>{label}</span>
+        {heading ?? <span>{label}</span>}
         <Popover open={open} onOpenChange={openChanged}>
           <PopoverTrigger
             className={cn(
@@ -315,43 +338,53 @@ export function PayrollColumnHeader({
                 placeholder={t("textPlaceholder")}
               />
             ) : mode === "list" ? (
-              <div className="max-h-44 overflow-auto rounded-md border border-border">
-                <button
-                  type="button"
-                  onClick={toggleAll}
-                  className="flex w-full items-center gap-2 border-b border-border px-2 py-1.5 text-[11px] font-semibold hover:bg-muted/50"
-                >
-                  <span
-                    className={cn(
-                      "flex size-3.5 items-center justify-center rounded-sm border",
-                      allTicked ? "border-emerald-500 bg-emerald-500 text-white" : "border-border",
-                    )}
+              <div className="space-y-2">
+                <Input
+                  className="h-9"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t("searchPlaceholder")}
+                />
+                <div className="max-h-44 overflow-auto rounded-md border border-border">
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="flex w-full items-center gap-2 border-b border-border px-2 py-1.5 text-[11px] font-semibold hover:bg-muted/50"
                   >
-                    {allTicked ? <Check className="size-2.5" /> : null}
-                  </span>
-                  {t("all")}
-                </button>
-                {uniqueValues.map((value) => {
-                  const ticked = picked.includes(value);
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => toggleValue(value)}
-                      className="flex w-full items-center gap-2 px-2 py-1.5 text-start text-[11px] hover:bg-muted/50"
+                    <span
+                      className={cn(
+                        "flex size-3.5 items-center justify-center rounded-sm border",
+                        allTicked ? "border-emerald-500 bg-emerald-500 text-white" : "border-border",
+                      )}
                     >
-                      <span
-                        className={cn(
-                          "flex size-3.5 shrink-0 items-center justify-center rounded-sm border",
-                          ticked ? "border-emerald-500 bg-emerald-500 text-white" : "border-border",
-                        )}
+                      {allTicked ? <Check className="size-2.5" /> : null}
+                    </span>
+                    {t("all")}
+                  </button>
+                  {visibleValues.map((value) => {
+                    const ticked = picked.includes(value);
+                    const count = counts.get(value) ?? 0;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => toggleValue(value)}
+                        className="flex w-full items-center gap-2 px-2 py-1.5 text-start text-[11px] hover:bg-muted/50"
                       >
-                        {ticked ? <Check className="size-2.5" /> : null}
-                      </span>
-                      <span className="truncate">{value || t("blank")}</span>
-                    </button>
-                  );
-                })}
+                        <span
+                          className={cn(
+                            "flex size-3.5 shrink-0 items-center justify-center rounded-sm border",
+                            ticked ? "border-emerald-500 bg-emerald-500 text-white" : "border-border",
+                          )}
+                        >
+                          {ticked ? <Check className="size-2.5" /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{value || t("blank")}</span>
+                        <span className="tabular-nums text-muted-foreground">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
               <div className="space-y-2">

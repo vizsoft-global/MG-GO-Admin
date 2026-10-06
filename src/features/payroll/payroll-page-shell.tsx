@@ -238,6 +238,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           month={month}
           riders={filteredRiders}
           canExport={canExport}
+          canManage={canManage}
         />
       ) : tab === "requests" ? (
         <RequestsTab

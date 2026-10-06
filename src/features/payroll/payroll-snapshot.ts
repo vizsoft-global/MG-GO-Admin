@@ -1142,20 +1142,53 @@ export function parseAdjustmentCellText(
   if (["auto", "reset", "clear", "-"].includes(lower)) {
     return { status: "auto", hours: null };
   }
-  if (lower === "12" || lower === "work" || lower === "full") return { status: "12", hours: null };
-  if (lower === "3h" || lower === "3" || lower === "reduced") return { status: "3h", hours: null };
-  if (lower === "half" || lower === "6" || lower === "6h") return { status: "half", hours: null };
+  if (lower === "12" || lower === "work" || lower === "full" || lower === "12 hours") {
+    return { status: "12", hours: null };
+  }
+  if (lower === "3h" || lower === "3" || lower === "reduced" || lower === "3 hours") {
+    return { status: "3h", hours: null };
+  }
+  if (
+    lower === "half" ||
+    lower === "6" ||
+    lower === "6h" ||
+    lower === "6 hours" ||
+    lower === "half day"
+  ) {
+    return { status: "half", hours: null };
+  }
   if (lower === "off") return { status: "off", hours: null };
   if (lower === "absent" || lower === "abs") return { status: "absent", hours: null };
-  if (lower === "abs.lh" || lower === "abs_lh" || lower === "alh") return { status: "abs_lh", hours: null };
-  if (lower === "abs.lo" || lower === "abs_lo" || lower === "alo") return { status: "abs_lo", hours: null };
+  if (
+    lower === "abs.lh" ||
+    lower === "abs_lh" ||
+    lower === "alh" ||
+    lower === "abs·lh" ||
+    lower === "absent less hours" ||
+    lower === "abs lh"
+  ) {
+    return { status: "abs_lh", hours: null };
+  }
+  if (
+    lower === "abs.lo" ||
+    lower === "abs_lo" ||
+    lower === "alo" ||
+    lower === "abs·lo" ||
+    lower === "absent less orders" ||
+    lower === "abs lo"
+  ) {
+    return { status: "abs_lo", hours: null };
+  }
   if (lower === "sick") return { status: "sick", hours: null };
-  if (lower === "accident") return { status: "accident", hours: null };
-  if (["vehicle", "vehicle issue", "vehicle_issue"].includes(lower)) {
+  if (lower === "accident" || lower === "acc") return { status: "accident", hours: null };
+  if (["vehicle", "vehicle issue", "vehicle_issue", "veh"].includes(lower)) {
     return { status: "vehicle", hours: null };
   }
-  if (lower === "act" || lower === "actual") {
+  if (lower === "act" || lower === "actual" || lower === "actual hours") {
     return { status: "actual", hours: null };
+  }
+  if (lower === "cus" || lower === "custom" || lower === "custom hours") {
+    return { status: "custom", hours: currentHours };
   }
   const hours = Number(lower.replace(/h$/, ""));
   if (Number.isFinite(hours) && hours >= 0 && hours <= 24) {
@@ -1214,6 +1247,33 @@ export function tilePasteOntoSelection(
       row.push(matrix[r % height]?.[c % width] ?? "");
     }
     out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Cells the fill handle paints, using the same skip rule the Combined grid
+ * already used (source rectangle is left untouched; the rest tiles).
+ */
+export function fillTargetCells(
+  source: { r0: number; c0: number; r1: number; c1: number },
+  hoverR: number,
+  hoverC: number,
+): Array<{ r: number; c: number; srcR: number; srcC: number }> {
+  const width = source.c1 - source.c0 + 1;
+  const height = source.r1 - source.r0 + 1;
+  if (width <= 0 || height <= 0) return [];
+  const out: Array<{ r: number; c: number; srcR: number; srcC: number }> = [];
+  for (let r = Math.min(source.r0, hoverR); r <= Math.max(source.r1, hoverR); r += 1) {
+    for (let c = Math.min(source.c0, hoverC); c <= Math.max(source.c1, hoverC); c += 1) {
+      if (r <= source.r1 && c <= source.c1) continue;
+      out.push({
+        r,
+        c,
+        srcR: source.r0 + ((r - source.r0) % height),
+        srcC: source.c0 + ((c - source.c0) % width),
+      });
+    }
   }
   return out;
 }

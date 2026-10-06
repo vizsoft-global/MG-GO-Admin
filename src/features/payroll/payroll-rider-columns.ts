@@ -2,6 +2,7 @@
 
 import { vehicleLabel } from "@/features/performance/performance-ops-format";
 import { PAYROLL_DAY_HOURS, type DayStatus } from "./payroll-formulas";
+import { cellParticular } from "./payroll-particulars";
 import { ADJUSTMENT_STATUS_TO_DAY } from "./payroll-rules-engine";
 import type { PayrollRiderRow } from "./payroll-types";
 
@@ -155,8 +156,8 @@ export function riderColumnValue(
     default:
       if (/^d\d+$/.test(columnId)) {
         const index = Number(columnId.slice(1)) - 1;
-        const status = row.days[index];
-        return status && status !== "blank" ? dayColumnValue(status) : null;
+        const particular = cellParticular(row, index);
+        return particular || null;
       }
       if (/^o\d+$/.test(columnId)) {
         const index = Number(columnId.slice(1)) - 1;

@@ -8487,7 +8487,8 @@
         "min": "Min",
         "max": "Max",
         "sortSmallest": "Smallest first",
-        "sortLargest": "Largest first"
+        "sortLargest": "Largest first",
+        "searchPlaceholder": "Search values"
       },
       "adjust": {
         "title": "Adjust payroll days",
@@ -8530,6 +8531,12 @@
         "clearSelection": "Clear",
         "selectionBar": "{cells} cells selected · {riders} riders × {days} days",
         "adjustedCells": "{count} hand-adjusted cells",
+        "history": "Edit history",
+        "historyEmpty": "No edits on this cell yet.",
+        "historyLoading": "Loading history…",
+        "lastEdited": "Last edited by {who} · {when}",
+        "edit": "Edit",
+        "viewHistory": "History",
         "errors": {
           "reason_required": "A reason is required.",
           "no_cells": "Select at least one day.",
@@ -8557,7 +8564,16 @@
         "ordersColumn": "Orders · day {day}",
         "payrollShort": "Payroll",
         "ordersShort": "Orders",
-        "footNote": "Read-only. Adjust a day on the Combined tab, where a reason is required."
+        "footNote": "Payroll cells are editable. Orders stay read-only. A reason is required for every change."
+      },
+      "headings": {
+        "columns": "Columns",
+        "title": "Show and rename columns",
+        "hint": "Labels are shared with Combined Payroll. Visibility is for this sheet only.",
+        "rename": "Rename column",
+        "renameHint": "Double-click to rename",
+        "show": "Show column",
+        "hide": "Hide column"
       },
       "settings": {
         "bannerTitle": "Client rules replace the legacy day classification.",

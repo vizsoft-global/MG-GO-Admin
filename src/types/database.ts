@@ -6253,6 +6253,38 @@ export type Database = {
         }
         Relationships: []
       }
+      payroll_column_config: {
+        Row: {
+          column_key: string
+          hidden_views: string[]
+          label: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          column_key: string
+          hidden_views?: string[]
+          label?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          column_key?: string
+          hidden_views?: string[]
+          label?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_column_config_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payroll_manual_adjustments: {
         Row: {
           adjusted_at: string
@@ -9865,6 +9897,14 @@ export type Database = {
         Args: { p_ready_only?: boolean }
         Returns: Json
       }
+      admin_list_payroll_column_config: {
+        Args: never
+        Returns: {
+          column_key: string
+          hidden_views: string[]
+          label: string
+        }[]
+      }
       admin_list_performance_components: { Args: never; Returns: Json }
       admin_list_performance_rating_teams: { Args: never; Returns: Json }
       admin_list_performance_target_dpd: { Args: never; Returns: Json }
@@ -10223,6 +10263,14 @@ export type Database = {
       }
       admin_set_fuel_transfer_type: {
         Args: { p_request_id: string; p_transfer_type: string }
+        Returns: Json
+      }
+      admin_set_payroll_column_config: {
+        Args: {
+          p_column_key: string
+          p_hidden_views?: string[]
+          p_label?: string
+        }
         Returns: Json
       }
       admin_set_performance_team_member: {
