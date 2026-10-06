@@ -35,9 +35,9 @@ export function usePurgeFilterColumns(entity: string | null) {
 }
 
 /**
- * Distinct values for one column. Only fetched once the operator picks a
- * `list` column — a `text` column is typed, a `range` column is two bounds, and
- * neither has a value list to read.
+ * Distinct values for one column. Fetched for `list` and `text` — text still
+ * matches as `contains`, but the picker needs the live names so Partners /
+ * restaurants / driver fields are not a blind input. `range` has no list.
  */
 export function usePurgeFilterValues(
   entity: string | null,

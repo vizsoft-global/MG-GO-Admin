@@ -160,6 +160,16 @@ Never pair two plain `variant="ghost"` text buttons with the same size/color sid
 
 Match density, column count, and architecture from user-provided screenshots. Ask before diverging.
 
+### Sanctioned exception — Home Launcher, sidebar and RCM V2
+
+The PDFs *New Musallam DPD Home Launcher* and *New Musallam RCM* (plus the 21 screenshots) are the mandatory UI source for `/dashboard` (launcher), the global sidebar, and the RCM V2 surfaces under `/employeedesk` (hub, templates, outgoing, incoming, remind / decline / forward / upload / decision modals). Where they conflict with this rulebook, the reference wins. Scoped to those screens only:
+
+- **Dark full-bleed launcher** on `/dashboard`: no sidebar, dark canvas, every tile the MG logo teal (`LAUNCHER_BRAND_TINT`). The rest of the panel keeps the Shopify-style light shell.
+- **Sidebar active state:** white pill (`bg-white text-slate-900`) instead of `data-active:bg-sidebar-accent`. Hover stays a subtle navy highlight.
+- **RCM V2 modals:** title header + body + action footer (reference layout), not footer-first. Close may sit in the header. Every other rule still applies — `h-9` controls, no `transition-all`, motion ≤300ms, reduced motion, `SearchSelect` for dynamic lists, emerald for selected chips.
+
+Do not port these three exceptions to other modules.
+
 ---
 
 ## 11. Pre-ship checklist

@@ -33,6 +33,10 @@ import type { EsignDraftKind, EsignDraftRow } from "./types";
  * fetch payloads: a bulk draft can carry 400 rows, and pulling all of them to
  * draw a count would put the wizard's payload on a page that only prints
  * numbers. The rows arrive when a draft is resumed, from `admin_get_esign_draft`.
+ *
+ * Canonical route is `/requests/esign/drafts`. There is no EmployeeDesk twin —
+ * `/employeedesk/esign/drafts` answers 404 on purpose so a second URL cannot
+ * fork the screen. Every hub tile (RCM V1 and EmployeeDesk eSign) points here.
  */
 export function EsignDraftsShell() {
   const t = useTranslations("pages.requests.esign.drafts");

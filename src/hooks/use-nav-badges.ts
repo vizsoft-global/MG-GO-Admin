@@ -25,5 +25,7 @@ export function useNavBadges(): Record<string, number> {
     0,
   );
 
-  return pending > 0 ? { requests: pending } : {};
+  return pending > 0
+    ? { requests: pending, employeedesk: pending }
+    : {};
 }

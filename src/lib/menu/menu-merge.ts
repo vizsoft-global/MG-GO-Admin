@@ -128,11 +128,13 @@ export function mergeMenu(config: MenuNode[]): {
     }
   }
   return {
-    tree: relocateStaffAccessItem(
-      relocateSettingsSplit(
-        relocateOrderReconItem(
-          relocatePayrollItem(
-            relocateAssistantItem(relocateFleetItems(relocateOperationsHubItems(pruned))),
+    tree: relocateAppsAndUnorganised(
+      stripStaffAccessItem(
+        relocateSettingsSplit(
+          relocateOrderReconItem(
+            relocatePayrollItem(
+              relocateAssistantItem(relocateFleetItems(relocateOperationsHubItems(pruned))),
+            ),
           ),
         ),
       ),
@@ -557,14 +559,15 @@ function relocateSettingsSplit(tree: MenuNode[]): MenuNode[] {
   return next;
 }
 
-function relocateStaffAccessItem(tree: MenuNode[]): MenuNode[] {
-  const STAFF_ACCESS_ID = "staff-access";
-  let found: MenuNode | null = null;
+const APPS_GROUP_IDS = new Set(["driver-app", "document-expiry", "assets"]);
+
+function relocateAppsAndUnorganised(tree: MenuNode[]): MenuNode[] {
+  const collected: MenuNode[] = [];
   const strip = (nodes: MenuNode[]): MenuNode[] =>
     nodes.flatMap((node) => {
       if (node.type === "item") {
-        if (node.id === STAFF_ACCESS_ID) {
-          found = { ...node, hidden: false };
+        if (APPS_GROUP_IDS.has(node.id)) {
+          collected.push({ ...node, hidden: false });
           return [];
         }
         return [node];
@@ -573,36 +576,33 @@ function relocateStaffAccessItem(tree: MenuNode[]): MenuNode[] {
       return [{ ...node, children }];
     });
 
-  const stripped = strip(tree);
-  const item: MenuNode = found ?? {
-    id: STAFF_ACCESS_ID,
-    type: "item",
-    label: "Staff access",
-    icon: "KeyRound",
-    hidden: false,
+  const next = strip(tree);
+  if (collected.length === 0) return next;
+
+  const order = ["driver-app", "document-expiry", "assets"];
+  collected.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+
+  const idx = next.findIndex((node) => node.id === "group-apps");
+  const group: MenuNode = {
+    id: "group-apps",
+    type: "group",
+    label: "Apps",
+    icon: "AppWindow",
+    displayMode: "panel",
+    children: collected,
   };
+  if (idx < 0) return [...next, group];
+  return [...next.slice(0, idx), { ...next[idx], children: collected }, ...next.slice(idx + 1)];
+}
 
-  const settingsIdx = stripped.findIndex((node) => node.id === "group-settings");
-  if (settingsIdx < 0) {
-    return [
-      ...stripped,
-      {
-        id: "group-settings",
-        type: "group",
-        label: "Settings",
-        icon: "Settings",
-        children: [item],
-      },
-    ];
-  }
-
-  const settings = stripped[settingsIdx];
-  const children = [...(settings.children ?? [])].filter((child) => child.id !== STAFF_ACCESS_ID);
-  const rolesIdx = children.findIndex((child) => child.id === "roles");
-  children.splice(rolesIdx >= 0 ? rolesIdx + 1 : children.length, 0, item);
-  const next = [...stripped];
-  next[settingsIdx] = { ...settings, children };
-  return next;
+function stripStaffAccessItem(tree: MenuNode[]): MenuNode[] {
+  const strip = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "item" && node.id === "staff-access") return [];
+      if (node.children) return [{ ...node, children: strip(node.children) }];
+      return [node];
+    });
+  return strip(tree);
 }
 
 export function resolveForSidebar(

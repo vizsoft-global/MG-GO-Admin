@@ -1,6 +1,7 @@
 import { setRequestLocale } from "next-intl/server";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { RequestsPageShell } from "@/features/requests/requests-page-shell";
+import { parseRequestListScope } from "@/features/requests/request-list-scopes";
 
 /**
  * EmployeeDesk → All requests.
@@ -14,11 +15,18 @@ export default async function EmployeeDeskAllPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ type?: string; preset?: string }>;
+  searchParams: Promise<{ type?: string; preset?: string; scope?: string }>;
 }) {
   const { locale } = await params;
-  const { type, preset } = await searchParams;
+  const { type, preset, scope } = await searchParams;
   setRequestLocale(locale);
   await requirePermission(locale, "requests.view");
-  return <RequestsPageShell initialType={type ?? "all"} initialDatePreset={preset} />;
+  return (
+    <RequestsPageShell
+      initialType={type ?? "all"}
+      initialDatePreset={preset}
+      listScope={parseRequestListScope(scope) ?? "all"}
+      scopeTabs
+    />
+  );
 }

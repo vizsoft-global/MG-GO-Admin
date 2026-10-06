@@ -112,11 +112,13 @@ Legend: **[EXISTS]** reuse as-is · **[PARTIAL]** piece exists, needs extension 
 - UI: "Retry failed" on batch detail when `failed_count > 0`; clears each row's `error`.
 - Test: `src/features/esign/esign-batch-reclaim.test.ts` — failed rows re-claimed under `mode='failed'`; counts recomputed.
 
-### F11 — Drafts — [MISSING]
-- Plan: new route `/employeedesk/esign/drafts`; new component `src/features/esign/esign-drafts-shell.tsx`; "Save draft" on send + bulk.
-- DB (migration `20261115000200`): `esign_drafts(id, template_id, language, title, due_at, field_values jsonb, rows jsonb, source_filename, status, created_by, created_at, updated_at)` + staff RLS; RPCs `admin_save_esign_draft`, `admin_list_esign_drafts`, `admin_get_esign_draft`, `admin_delete_esign_draft`.
-- Permission: `requests.manage`.
-- Test: `src/features/esign/esign-drafts.test.ts` — save/list/get/delete round-trip; a stored bulk draft resumes to `createEsignBatch`.
+### F11 — Drafts — [IMPLEMENTED on the V1 route]
+- Canonical route: `/requests/esign/drafts` (`EsignDraftsShell`). There is **no** `/employeedesk/esign/drafts` page — that URL answers 404 on purpose so a second address cannot fork the screen.
+- Hub tiles (V1 eSign hub + EmployeeDesk eSign hub) and send/bulk "Drafts" links all point at `/requests/esign/drafts`. Resume is `?draft=` on `/requests/esign/send` or `/requests/esign/bulk`.
+- Save: `saveEsignDraft` → `admin_save_esign_draft` from send + bulk (template required; rider optional). A successful send/batch deletes the draft.
+- DB: `esign_drafts` + RPCs `admin_save_esign_draft`, `admin_list_esign_drafts`, `admin_get_esign_draft`, `admin_delete_esign_draft` (`20261116000600`).
+- Permission: `requests.manage` (page + every action).
+- Test: `src/features/esign/esign-drafts-routes.test.ts` — V1 page exists, V2 twin does not, both hubs point at V1.
 
 ### F12 — Template list / detail / builder — [EXISTS]
 - Routes `/requests/esign/templates` + `/templates/[id]`; components [esign-templates-shell.tsx](src/features/esign/esign-templates-shell.tsx) + [esign-template-builder-shell.tsx](src/features/esign/esign-template-builder-shell.tsx); actions listed in §2.2.

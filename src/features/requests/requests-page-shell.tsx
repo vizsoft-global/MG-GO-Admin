@@ -69,6 +69,7 @@ import {
   type RequestStatusFilter,
 } from "./request-status-utils";
 import { parseRequestDatePreset, REQUEST_DATE_PRESETS } from "./date-presets";
+import { listScopeFlags, type RequestListScope } from "./request-list-scopes";
 import { DECISION_TERM_TYPES, type RequestDatePreset, type RequestListRow } from "./types";
 import { useAdminRequestsList, useBulkDecideRequests } from "./use-requests";
 
@@ -197,9 +198,13 @@ export function RequestsPageShell({
   initialType = "all",
   initialDatePreset,
   initialStatus = "all",
+  listScope,
+  scopeTabs = false,
 }: {
   initialType?: string;
   initialDatePreset?: string;
+  listScope?: RequestListScope;
+  scopeTabs?: boolean;
   /**
    * Which status tab opens selected.
    *
@@ -225,6 +230,7 @@ export function RequestsPageShell({
   const [zoneId, setZoneId] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
+  const [scope, setScope] = useState<RequestListScope>(listScope ?? (scopeTabs ? "all" : null));
   /**
    * Server-side paging over the list RPC's `p_limit` / `p_offset`.
    *
@@ -283,6 +289,7 @@ export function RequestsPageShell({
     departmentKey,
     zoneId,
     searchApplied,
+    scope ?? "",
   ].join("|");
   const page = pageState.signature === filterSignature ? pageState.page : 0;
   const setPage = (next: number | ((current: number) => number)) =>
@@ -304,8 +311,9 @@ export function RequestsPageShell({
       search: searchApplied,
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
+      ...listScopeFlags(scope),
     }),
-    [datePreset, type, status, departmentKey, zoneId, searchApplied, page],
+    [datePreset, type, status, departmentKey, zoneId, searchApplied, page, scope],
   );
 
   const { data, isLoading, isFetching, refetch } = useAdminRequestsList(filters);
@@ -456,6 +464,21 @@ export function RequestsPageShell({
       />
 
       <AppListCard>
+        {scopeTabs ? (
+          <div className="border-b border-border px-3 py-1">
+            <TabBar
+              items={[
+                { id: "assigned", label: t("scope.waiting") },
+                { id: "forwarded", label: t("scope.forwarded") },
+                { id: "handled", label: t("scope.handled") },
+                { id: "all", label: t("scope.all") },
+              ]}
+              activeId={scope ?? "all"}
+              className="flex-nowrap gap-4 border-b-0 [&>button]:pb-2"
+              onSelect={(id) => setScope(id as RequestListScope)}
+            />
+          </div>
+        ) : null}
         <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1">
           {/* Nine data-backed queues do not fit one line next to the actions, so the
               strip scrolls sideways instead of wrapping into a second row. */}
@@ -780,10 +803,10 @@ export function RequestsPageShell({
                     </Avatar>
                     <div className="min-w-0">
                       <p className="truncate text-[13px] font-medium leading-tight">
-                        {row.driver_name}
+                        {row.is_confidential ? t("confidential") : row.driver_name}
                       </p>
                       <p className="text-[11px] leading-tight text-muted-foreground tabular-nums">
-                        {row.driver_code || "—"}
+                        {row.is_confidential ? "—" : row.driver_code || "—"}
                       </p>
                     </div>
                   </div>

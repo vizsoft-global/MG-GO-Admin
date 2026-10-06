@@ -473,6 +473,7 @@ export type EsignCategoryRow = {
   screenshot_restricted: boolean;
   is_active: boolean;
   sort_order: number;
+  parent_key: string | null;
   /** Signed requests filed under this category — the Figma SIGNED column. */
   signed_count: number;
 };

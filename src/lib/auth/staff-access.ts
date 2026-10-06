@@ -32,7 +32,7 @@ export const RESOURCE_CRUD_LABELS: Record<
   ResourceCrudModule,
   { noun: string; category: string }
 > = {
-  drivers: { noun: "drivers", category: "drivers" },
+  drivers: { noun: "employees", category: "drivers" },
   driver_groups: { noun: "driver groups", category: "drivers" },
   partners: { noun: "partners", category: "partners" },
   restaurants: { noun: "restaurants", category: "restaurants" },

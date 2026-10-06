@@ -8,6 +8,7 @@ import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { esignRecipientStage } from "./esign-recipient-stage";
 import { useEsignReminderState, useRemindEsignRequests } from "./use-esign";
 
@@ -66,6 +67,7 @@ export function EsignRemindDialog({
   const t = useTranslations("pages.requests.esign.batchDetail");
   const remind = useRemindEsignRequests();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [message, setMessage] = useState("");
 
   const waiting = useMemo(() => {
     const seen = new Set<string>();
@@ -153,7 +155,7 @@ export function EsignRemindDialog({
     // Re-filtered at submit rather than trusted from state: the cooldown can
     // expire, or a rider can sign, between the tick and the click.
     if (selectedIds.length === 0) return;
-    const result = await remind.mutateAsync(selectedIds);
+    const result = await remind.mutateAsync({ ids: selectedIds, message });
     if (!result.ok) {
       toast.error(result.error ?? t("errors.loadFailed"));
       return;
@@ -272,6 +274,23 @@ export function EsignRemindDialog({
               })}
             </ul>
           )}
+          <Textarea
+            className="mt-3 min-h-16 text-sm"
+            placeholder={t("remindMessage")}
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+          />
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800">
+              {t("channelApp")}
+            </span>
+            <span className="rounded-md border border-amber-200 bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-800">
+              {t("channelSms")} · Coming soon
+            </span>
+            <span className="rounded-md border border-amber-200 bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-800">
+              {t("channelEmail")} · Coming soon
+            </span>
+          </div>
         </div>
 
         <AppModalFooter title={t("remindTitle")} subtitle={t("remindSubtitle")}>

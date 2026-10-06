@@ -17,7 +17,7 @@ import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { isEsignDueDateAllowed } from "./esign-due-date";
 import { addEsignSigner } from "./esign-signer-actions";
 import { EsignSignersEditor, type EsignDraftStaffSigner } from "./esign-signers-editor";
-import { fetchEsignSnapshot, saveEsignDraft } from "./esign-sender-actions";
+import { deleteEsignDraft, fetchEsignSnapshot, saveEsignDraft } from "./esign-sender-actions";
 import {
   useCreateEsignFromTemplate,
   useEsignDriverOptions,
@@ -46,9 +46,15 @@ export function EsignSendShell({
    * values and a URL long enough to hold them is not a URL anyone can share.
    */
   initialDraftId,
+  initialCategoryKey,
+  initialDriverId,
+  initialResentFromId,
 }: {
   initialTemplateId?: string;
   initialDraftId?: string;
+  initialCategoryKey?: string;
+  initialDriverId?: string;
+  initialResentFromId?: string;
 }) {
   const t = useTranslations("pages.requests.esign.send");
   const tHub = useTranslations("pages.requests.esign.hub");
@@ -62,10 +68,19 @@ export function EsignSendShell({
     [templatesData?.rows],
   );
   const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null);
+  const [categorySeeded, setCategorySeeded] = useState(false);
+  useEffect(() => {
+    if (categorySeeded || templateId || !initialCategoryKey) return;
+    const match = templates.find((row) => row.category_key === initialCategoryKey);
+    if (match) {
+      setTemplateId(match.id);
+      setCategorySeeded(true);
+    }
+  }, [categorySeeded, initialCategoryKey, templateId, templates]);
   const { data: templateData } = useEsignTemplate(templateId ?? "");
   const template = templateData?.template;
 
-  const [driverId, setDriverId] = useState<string | null>(null);
+  const [driverId, setDriverId] = useState<string | null>(initialDriverId ?? null);
   const [snapshot, setSnapshot] = useState<EsignEmployeeSnapshot | null>(null);
   const [title, setTitle] = useState("");
   const [locale, setLocale] = useState<EsignLocale>("en");
@@ -171,6 +186,7 @@ export function EsignSendShell({
       due_at: dueAt || null,
       description: description.trim() || null,
       field_values: values,
+      resent_from_id: initialResentFromId ?? null,
     });
     if (!result.ok) {
       toast.error(result.error ?? t("errors.createFailed"));
@@ -188,6 +204,10 @@ export function EsignSendShell({
       }
     }
     toast.success(t("created", { code: result.request_code ?? "" }));
+    if (draftId) {
+      const consumed = await deleteEsignDraft(draftId);
+      if (!consumed.ok) toast.error(consumed.error ?? t("errors.draftFailed"));
+    }
     if (result.id) router.push(`/requests/esign/${result.id}`);
   }
 

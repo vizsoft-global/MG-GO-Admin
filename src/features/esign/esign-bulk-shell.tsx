@@ -23,6 +23,7 @@ import { BATCH_CAP } from "./render/esign-batch-cap";
 import { parseEsignBulkRows, type EsignBulkDraftRow } from "./esign-bulk-parse";
 import {
   createEsignBatch,
+  deleteEsignDraft,
   processEsignBatchChunk,
   resolveEsignEmployees,
   saveEsignDraft,
@@ -252,6 +253,10 @@ export function EsignBulkShell({
     }
     setBusy(false);
     toast.success(t("queued", { code: created.batch_code ?? "" }));
+    if (draftId) {
+      const consumed = await deleteEsignDraft(draftId);
+      if (!consumed.ok) toast.error(consumed.error ?? t("errors.draftFailed"));
+    }
     router.push(`/requests/esign/batches/${created.id}`);
   }
 

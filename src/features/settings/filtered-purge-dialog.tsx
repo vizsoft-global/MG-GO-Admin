@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { MultiCombobox } from "@/components/multi-combobox";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -37,6 +38,7 @@ import {
   isPurgeDateRangeColumn,
   isPurgeFilterEntity,
   parsePurgeDate,
+  purgeColumnOffersValues,
   purgeFilterColumnLabel,
   purgeFilterValueLabel,
   sanitisePurgeFilters,
@@ -186,7 +188,7 @@ export function PurgeFilteredDialog({
     open ? entity : null,
     draftColumn?.key ?? null,
     otherFilters,
-    draftColumn?.kind === "list",
+    Boolean(draftColumn && purgeColumnOffersValues(draftColumn.kind)),
   );
 
   const preview = usePurgeFilteredPreview(entity, active, open);
@@ -257,10 +259,13 @@ export function PurgeFilteredDialog({
 
   const valueItems = useMemo(
     () =>
-      (valuesQuery.data ?? []).map((facet) => ({
-        value: facet.value,
-        label: purgeFilterValueLabel(tl, facet.value, facet.label),
-      })),
+      (valuesQuery.data ?? [])
+        .filter((facet) => facet.value !== "")
+        .map((facet) => ({
+          value: facet.value,
+          label: purgeFilterValueLabel(tl, facet.value, facet.label),
+          keywords: [facet.value, facet.label ?? ""],
+        })),
     [tl, valuesQuery.data],
   );
 
@@ -394,6 +399,23 @@ export function PurgeFilteredDialog({
                         className="h-9 rounded-lg"
                       />
                     </div>
+                  ) : valueItems.length > 0 || valuesQuery.isFetching ? (
+                    <SearchSelect
+                      items={valueItems}
+                      value={draft.text || null}
+                      onChange={(next) =>
+                        setDraft((d) => ({ ...d, text: next ?? "" }))
+                      }
+                      placeholder={
+                        valuesQuery.isFetching
+                          ? t("filtered.loadingValues")
+                          : t("filtered.valuePlaceholder")
+                      }
+                      searchPlaceholder={t("filtered.valueSearch")}
+                      emptyText={t("filtered.noValues")}
+                      recentsKey={`purge-filter-text:${entity}:${draftColumn?.key ?? "name"}`}
+                      disabled={!draftColumn || (valuesQuery.isFetching && valueItems.length === 0)}
+                    />
                   ) : (
                     <Input
                       value={draft.text}

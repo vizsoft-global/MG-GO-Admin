@@ -21,6 +21,7 @@ import type {
   RequestApprovalStep,
   RequestAttachment,
   RequestClarification,
+  RequestComment,
   RequestCreateInput,
   RequestCreateKindFile,
   RequestCreateOptions,
@@ -121,6 +122,11 @@ export async function fetchAdminRequestsList(
     p_offset: filters.offset ?? 0,
     p_department_key: filters.departmentKey || undefined,
     p_zone_id: filters.zoneId || undefined,
+    p_assigned_to_me: filters.assignedToMe || undefined,
+    p_forwarded_to_me: filters.forwardedToMe || undefined,
+    p_handled_by_me: filters.handledByMe || undefined,
+    p_due_today: filters.dueToday || undefined,
+    p_sort: filters.sort || undefined,
   });
 
   if (error) {
@@ -192,6 +198,7 @@ export async function fetchAdminRequestsList(
         department_key: r.department_key != null ? String(r.department_key) : null,
         department_label:
           r.department_label != null ? String(r.department_label) : null,
+        is_confidential: Boolean(r.is_confidential),
       };
     }),
     kpi: {
@@ -334,6 +341,7 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
   steps: RequestApprovalStep[];
   clarifications: RequestClarification[];
   attachments: RequestAttachment[];
+  comments: RequestComment[];
   error?: string;
 }> {
   await requireRequestsView();
@@ -348,6 +356,7 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
       steps: [],
       clarifications: [],
       attachments: [],
+      comments: [],
       error: error.message,
     };
   }
@@ -359,12 +368,14 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
       steps: [],
       clarifications: [],
       attachments: [],
+      comments: [],
       error: String(payload.error ?? "failed"),
     };
   }
 
   const r = asRecord(payload.request);
   const requesterRaw = asRecord(payload.requester);
+  const senderRaw = asRecord(payload.sender);
   return {
     request: {
       id: String(r.id),
@@ -378,10 +389,10 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
         r.current_step_order != null ? Number(r.current_step_order) : null,
       driver_id: String(r.driver_id ?? ""),
       requester:
-        requesterRaw.name != null
+        requesterRaw.name != null || senderRaw.name != null
           ? {
-              name: String(requesterRaw.name),
-              code: requesterRaw.code != null ? String(requesterRaw.code) : "",
+              name: String(requesterRaw.name ?? senderRaw.name ?? ""),
+              code: String(requesterRaw.code ?? senderRaw.driver_code ?? ""),
               phone: requesterRaw.phone != null ? String(requesterRaw.phone) : null,
               zone: requesterRaw.zone != null ? String(requesterRaw.zone) : null,
             }
@@ -402,7 +413,18 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
       fuel_transfer_type: isFuelTransferType(r.fuel_transfer_type)
         ? r.fuel_transfer_type
         : null,
+      is_confidential: Boolean(r.is_confidential ?? payload.confidential_revealed),
     },
+    comments: (Array.isArray(payload.comments) ? payload.comments : []).map((row) => {
+      const comment = asRecord(row);
+      return {
+        id: String(comment.id),
+        body: String(comment.body ?? ""),
+        author_id: String(comment.author_id ?? ""),
+        author_name: comment.author_name != null ? String(comment.author_name) : null,
+        created_at: String(comment.created_at ?? ""),
+      };
+    }),
     steps: (Array.isArray(payload.steps) ? payload.steps : []).map((step) => {
       const s = asRecord(step);
       return {
@@ -1087,4 +1109,121 @@ export async function saveRequestDecisionTerms(input: {
   });
 
   return { ok: true };
+}
+
+export async function fetchStaffForForward(): Promise<
+  Array<{ id: string; full_name: string; email: string | null }>
+> {
+  await requireRequestsDecide();
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .eq("role", "staff")
+    .eq("approval_status", "approved")
+    .order("full_name");
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    full_name: row.full_name ?? "—",
+    email: row.email,
+  }));
+}
+
+export async function forwardAdminRequest(input: {
+  requestId: string;
+  toUserId: string;
+  note: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsDecide();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_forward_request", {
+    p_request_id: input.requestId,
+    p_to_user: input.toUserId,
+    p_note: input.note,
+  });
+  if (error) return { ok: false, error: error.message };
+  const payload = asRecord(data);
+  if (payload.ok === false) return { ok: false, error: String(payload.error ?? "failed") };
+  await logAdminMutation({
+    action: "update",
+    entityType: "requests",
+    entityId: input.requestId,
+    routeName: "requests.forward",
+    context: { to: input.toUserId },
+  });
+  return { ok: true };
+}
+
+export async function escalateAdminRequest(input: {
+  requestId: string;
+  note?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsDecide();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_escalate_request", {
+    p_request_id: input.requestId,
+    p_note: input.note ?? "",
+  });
+  if (error) return { ok: false, error: error.message };
+  const payload = asRecord(data);
+  if (payload.ok === false) return { ok: false, error: String(payload.error ?? "failed") };
+  return { ok: true };
+}
+
+export async function addAdminRequestComment(input: {
+  requestId: string;
+  body: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsView();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_add_request_comment", {
+    p_request_id: input.requestId,
+    p_body: input.body,
+  });
+  if (error) return { ok: false, error: error.message };
+  const payload = asRecord(data);
+  if (payload.ok === false) return { ok: false, error: String(payload.error ?? "failed") };
+  return { ok: true };
+}
+
+export async function uploadIncomingDocument(input: {
+  driverId: string;
+  category: string;
+  subject: string;
+  receivedOn: string;
+  startRoute: boolean;
+  files: Array<{ name: string; type: string; base64: string }>;
+}): Promise<{ ok: boolean; id?: string; request_code?: string; error?: string }> {
+  const session = await requireRequestsManage();
+  if (input.files.length === 0) return { ok: false, error: "attachment_required" };
+  const uploaded = await uploadOnBehalfCreateKindFiles(
+    session.id,
+    input.files.map((file) => ({
+      name: file.name,
+      type: file.type,
+      base64: file.base64,
+      title: file.name,
+      kind: "incoming",
+    })),
+  );
+  if (!uploaded.ok || !uploaded.attachments) {
+    return { ok: false, error: uploaded.error ?? "upload_failed" };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_upload_incoming_document", {
+    p_driver_id: input.driverId,
+    p_category: input.category,
+    p_subject: input.subject,
+    p_received_on: input.receivedOn,
+    p_attachments: uploaded.attachments,
+    p_start_route: input.startRoute,
+  });
+  if (error) return { ok: false, error: error.message };
+  const payload = asRecord(data);
+  if (payload.ok === false) return { ok: false, error: String(payload.error ?? "failed") };
+  return {
+    ok: true,
+    id: payload.id != null ? String(payload.id) : undefined,
+    request_code: payload.request_code != null ? String(payload.request_code) : undefined,
+  };
 }

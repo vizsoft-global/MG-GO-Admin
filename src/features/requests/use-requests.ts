@@ -6,6 +6,10 @@ import {
   createRequestOnBehalf,
   decideAdminRequest,
   decideAdminRequestsBulk,
+  escalateAdminRequest,
+  addAdminRequestComment,
+  forwardAdminRequest,
+  uploadIncomingDocument,
   uploadStaffRequestAttachments,
   fetchAdminRequestDetail,
   fetchAdminRequestsList,
@@ -117,6 +121,48 @@ export function useSetFuelTransferType(requestId: string) {
         queryKey: queryKeys.requests.detail(requestId),
       });
       await queryClient.invalidateQueries({ queryKey: queryKeys.fuel.all() });
+    },
+  });
+}
+
+export function useForwardRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: forwardAdminRequest,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.requests.all() });
+    },
+  });
+}
+
+export function useEscalateRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: escalateAdminRequest,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.requests.all() });
+    },
+  });
+}
+
+export function useAddRequestComment(requestId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) => addAdminRequestComment({ requestId, body }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.requests.detail(requestId),
+      });
+    },
+  });
+}
+
+export function useUploadIncomingDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: uploadIncomingDocument,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.requests.all() });
     },
   });
 }
