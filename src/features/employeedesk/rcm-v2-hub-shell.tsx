@@ -15,6 +15,7 @@ import {
   Folder,
   Fuel,
   Inbox,
+  LayoutDashboard,
   Package,
   Plus,
   Search,
@@ -290,9 +291,18 @@ export function RcmV2HubShell() {
       : RCM_ADMIN_CHIPS;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-4">
       <header className="grid grid-cols-1 items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
-        <p className="text-[13px] font-semibold text-foreground">{t("breadcrumb")}</p>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[12px] font-semibold text-primary hover:bg-primary/10"
+          >
+            <LayoutDashboard className="size-3.5" aria-hidden />
+            {t("backToDashboard")}
+          </Link>
+          <p className="text-[13px] font-semibold text-foreground">{t("breadcrumb")}</p>
+        </div>
         <div className="flex items-stretch justify-center rounded-2xl bg-muted/70 p-1">
           <button
             type="button"

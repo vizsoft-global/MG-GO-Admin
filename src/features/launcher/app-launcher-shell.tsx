@@ -20,7 +20,7 @@ import {
   visibleLauncherTiles,
 } from "@/lib/menu/launcher-modules";
 import { APP_NAV_KEY_BY_ID, resolveIcon } from "@/lib/menu/menu-registry";
-import { LAUNCHER_BRAND } from "@/lib/menu/module-colors";
+import { LAUNCHER_BRAND, moduleTint } from "@/lib/menu/module-colors";
 import type { Permission } from "@/lib/auth/permissions";
 import { APP_PANEL_VERSION } from "@/lib/app/build-id";
 import {
@@ -173,6 +173,9 @@ export function AppLauncherShell() {
         {visible.map((item) => {
           const Icon = resolveIcon(item.defaultIcon);
           const badge = badges[item.id];
+          const tint = moduleTint(item.id);
+          const glyph =
+            tint.tile.toLowerCase() === LAUNCHER_BRAND.tile.toLowerCase() ? tint.ink : tint.tile;
           return (
             <Link
               key={item.id}
@@ -180,7 +183,7 @@ export function AppLauncherShell() {
               className="group flex flex-col items-center gap-2 text-center"
             >
               <span className="relative grid size-[72px] place-items-center rounded-2xl" style={{ backgroundColor: LAUNCHER_BRAND.tile }}>
-                <Icon className="size-7" style={{ color: LAUNCHER_BRAND.icon }} aria-hidden />
+                <Icon className="size-7" style={{ color: glyph }} aria-hidden />
                 {badge ? (
                   <span className="absolute -end-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold tabular-nums text-white">
                     {badge > 999 ? "999+" : badge}

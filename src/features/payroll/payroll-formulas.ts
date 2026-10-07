@@ -1042,14 +1042,16 @@ export function dayStatusLabel(status: DayStatus): string {
   }
 }
 
-/** Grid cell token. Actual / custom show credited hours, never ACT / CUS. */
+/**
+ * PAYROLL cell token. This is the rules-engine (or manual adjustment) result.
+ * Logged hours never appear here — those stay on the Actual Hours column.
+ * Actual / custom still print their credited hours, never ACT / CUS, at one
+ * decimal so a cell, a filter value and the Excel sheet agree on the string.
+ */
 export function dayGridLabel(status: DayStatus, hours: number): string {
   switch (status) {
     case "work":
-      // A full SOP day keeps the bare `12`; a day attendance measured shorter
-      // prints what it actually was, so the grid cannot claim a full day for a
-      // 4 h shift.
-      return hours > 0 && hours !== 12 ? `${formatHoursToken(hours)}h` : "12";
+      return "12h";
     case "reduced3":
       return "3h";
     case "off":
@@ -1061,12 +1063,12 @@ export function dayGridLabel(status: DayStatus, hours: number): string {
     case "vehicle":
       return "Veh";
     case "absent":
-      return "Absent";
+      return "ABS";
     case "half":
-      return "Half";
+      return "6h";
     case "actual":
     case "custom":
-      return `${hours}h`;
+      return `${formatHoursToken(hours)}h`;
     case "abs_lh":
       return "Abs·LH";
     case "abs_lo":
@@ -1087,14 +1089,9 @@ function formatHoursToken(hours: number): string {
 }
 
 /**
- * The hours a grid cell should print for a day.
- *
- * A `work` cell used to print a flat `12` no matter what attendance recorded,
- * so a 9 h shift and a 50-minute shift both read as a full SOP day. The cell now
- * carries the logged hours whenever attendance measured any, a still-open
- * check-in carries the hours elapsed so far (`elapsedHours`, today only), and a
- * day with no attendance reading at all falls back to the SOP credit. This is
- * display only — the rule engine still decides the day from `loggedHours`.
+ * Hours that belong on a PAYROLL token. `work` uses the credited full day
+ * (12), never the attendance log or an open check-in's elapsed hours.
+ * Those stay on the Actual Hours column.
  */
 export function dayDisplayHours(
   status: DayStatus,
@@ -1102,13 +1099,9 @@ export function dayDisplayHours(
     | { loggedHours?: number; elapsedHours?: number; creditedHours?: number }
     | undefined,
 ): number {
-  if (!info) return 0;
+  if (!info) return status === "work" ? 12 : 0;
   const credited = info.creditedHours ?? 0;
-  if (status !== "work") return credited;
-  const logged = info.loggedHours ?? 0;
-  if (logged > 0) return logged;
-  const elapsed = info.elapsedHours ?? 0;
-  if (elapsed > 0) return elapsed;
+  if (status === "work") return credited > 0 ? credited : 12;
   return credited;
 }
 

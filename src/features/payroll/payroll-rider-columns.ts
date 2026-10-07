@@ -3,7 +3,7 @@
 import { vehicleLabel } from "@/features/performance/performance-ops-format";
 import { PAYROLL_DAY_HOURS, type DayStatus } from "./payroll-formulas";
 import { cellParticular } from "./payroll-particulars";
-import { ADJUSTMENT_STATUS_TO_DAY } from "./payroll-rules-engine";
+import { ADJUSTMENT_STATUS_TO_DAY, type AdjustmentStatus } from "./payroll-rules-engine";
 import type { PayrollRiderRow } from "./payroll-types";
 
 export type PayrollRiderColumn = {
@@ -182,6 +182,31 @@ export function dayColumnValue(status: DayStatus): string {
 
 export function dayColumnId(dayIndex: number): string {
   return `d${dayIndex + 1}`;
+}
+
+export function dayAdjustmentInput(
+  row: PayrollRiderRow,
+  dayIndex: number,
+  date: string,
+  text?: string,
+): {
+  driverId: string;
+  date: string;
+  text: string;
+  currentHours: number;
+  beforeStatus: AdjustmentStatus;
+  beforeHours: number | null;
+} {
+  const info = row.dayInfo[dayIndex];
+  const manual = Boolean(info?.adjusted && info.adjustmentStatus && info.adjustmentStatus !== "auto");
+  return {
+    driverId: row.driverId,
+    date,
+    text: text ?? dayClipboardToken(row, dayIndex),
+    currentHours: info?.creditedHours ?? 0,
+    beforeStatus: manual ? info!.adjustmentStatus! : "auto",
+    beforeHours: manual ? (info!.adjustmentHours ?? null) : null,
+  };
 }
 
 export function dayClipboardToken(row: PayrollRiderRow, dayIndex: number): string {

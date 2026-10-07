@@ -1207,9 +1207,12 @@ export function cellsFromSelection(
     date: string;
     text: string;
     currentHours: number;
+    beforeStatus?: AdjustmentStatus;
+    beforeHours?: number | null;
   }>,
-): { cells: PayrollAdjustmentCell[]; rejected: number } {
+): { cells: PayrollAdjustmentCell[]; before: PayrollAdjustmentCell[]; rejected: number } {
   const cells: PayrollAdjustmentCell[] = [];
+  const before: PayrollAdjustmentCell[] = [];
   let rejected = 0;
   for (const input of inputs) {
     const parsed = parseAdjustmentCellText(input.text, input.currentHours);
@@ -1223,8 +1226,14 @@ export function cellsFromSelection(
       status: parsed.status,
       hours: parsed.hours,
     });
+    before.push({
+      driverId: input.driverId,
+      date: input.date,
+      status: input.beforeStatus ?? "auto",
+      hours: input.beforeStatus && input.beforeStatus !== "auto" ? (input.beforeHours ?? null) : null,
+    });
   }
-  return { cells, rejected };
+  return { cells, before, rejected };
 }
 
 /**
@@ -1255,27 +1264,67 @@ export function tilePasteOntoSelection(
  * Cells the fill handle paints, using the same skip rule the Combined grid
  * already used (source rectangle is left untouched; the rest tiles).
  */
+function positiveMod(value: number, size: number): number {
+  return ((value % size) + size) % size;
+}
+
 export function fillTargetCells(
   source: { r0: number; c0: number; r1: number; c1: number },
   hoverR: number,
   hoverC: number,
 ): Array<{ r: number; c: number; srcR: number; srcC: number }> {
-  const width = source.c1 - source.c0 + 1;
-  const height = source.r1 - source.r0 + 1;
+  const r0 = Math.min(source.r0, source.r1);
+  const r1 = Math.max(source.r0, source.r1);
+  const c0 = Math.min(source.c0, source.c1);
+  const c1 = Math.max(source.c0, source.c1);
+  const height = r1 - r0 + 1;
+  const width = c1 - c0 + 1;
   if (width <= 0 || height <= 0) return [];
+  const top = Math.min(r0, hoverR);
+  const bottom = Math.max(r1, hoverR);
+  const left = Math.min(c0, hoverC);
+  const right = Math.max(c1, hoverC);
   const out: Array<{ r: number; c: number; srcR: number; srcC: number }> = [];
-  for (let r = Math.min(source.r0, hoverR); r <= Math.max(source.r1, hoverR); r += 1) {
-    for (let c = Math.min(source.c0, hoverC); c <= Math.max(source.c1, hoverC); c += 1) {
-      if (r <= source.r1 && c <= source.c1) continue;
+  for (let r = top; r <= bottom; r += 1) {
+    for (let c = left; c <= right; c += 1) {
+      if (r >= r0 && r <= r1 && c >= c0 && c <= c1) continue;
       out.push({
         r,
         c,
-        srcR: source.r0 + ((r - source.r0) % height),
-        srcC: source.c0 + ((c - source.c0) % width),
+        srcR: r0 + positiveMod(r - r0, height),
+        srcC: c0 + positiveMod(c - c0, width),
       });
     }
   }
   return out;
+}
+
+/** Drop fill targets whose row left the visible (filtered) set. */
+export function visibleFillTargets<T extends { r: number; srcR: number }>(
+  targets: readonly T[],
+  rowIds: readonly string[],
+  visibleIds: ReadonlySet<string>,
+): T[] {
+  return targets.filter((target) => {
+    const id = rowIds[target.r];
+    const sourceId = rowIds[target.srcR];
+    return Boolean(id && sourceId && visibleIds.has(id) && visibleIds.has(sourceId));
+  });
+}
+
+/**
+ * Hours stored with a confirmed adjustment. A fixed status must not keep a
+ * parsed custom hour (choosing 12 Hours after a `7.2h` token stays `hours: null`).
+ * `actual` keeps the hour already on the cell. `custom` uses the typed value.
+ */
+export function hoursForAdjustmentChoice(
+  choice: AdjustmentStatus,
+  cellHours: number | null | undefined,
+  customHours: number,
+): number | null {
+  if (choice === "custom") return Math.min(24, Math.max(0, customHours));
+  if (choice === "actual") return cellHours ?? null;
+  return null;
 }
 
 export { normaliseRuleKind };

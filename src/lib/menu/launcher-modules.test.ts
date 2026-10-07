@@ -27,12 +27,15 @@ describe("launcher modules", () => {
     const tiles = visibleLauncherTiles(perms, false);
     assert.ok(tiles.some((item) => item.id === "dashboard-ops"));
     assert.ok(!tiles.some((item) => item.id === "employeedesk"));
-    assert.ok(!tiles.some((item) => item.id === "roles"));
   });
 
-  it("shows a super-admin-only tile to a super admin", () => {
+  it("keeps the Settings door and drops tiles that already live in a hub", () => {
     const tiles = visibleLauncherTiles(new Set(), true);
-    assert.ok(tiles.some((item) => item.id === "roles"));
+    assert.ok(tiles.some((item) => item.id === "profile"));
+    assert.ok(tiles.some((item) => item.id === "operations-hub"));
+    for (const id of ["restaurants", "roles", "document-expiry", "driver-app"]) {
+      assert.ok(!tiles.some((item) => item.id === id), id);
+    }
   });
 
   it("filters by English and Arabic labels", () => {

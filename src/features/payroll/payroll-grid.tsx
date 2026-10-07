@@ -48,6 +48,7 @@ import {
 } from "./payroll-column-filter";
 import {
   COMBINED_IDENTITY_COLUMNS,
+  dayAdjustmentInput,
   dayClipboardToken,
   dayColumnId,
   isNumericRiderColumn,
@@ -55,7 +56,7 @@ import {
   riderColumnValue,
   type PayrollRiderColumn,
 } from "./payroll-rider-columns";
-import { cellsFromSelection, fillTargetCells, tilePasteOntoSelection } from "./payroll-snapshot";
+import { cellsFromSelection, fillTargetCells, tilePasteOntoSelection, visibleFillTargets } from "./payroll-snapshot";
 import type { PayrollAdjustmentCell, PayrollRiderRow } from "./payroll-types";
 import { PayrollCellMenu, type PayrollCellMenuState } from "./payroll-cell-menu";
 import {
@@ -144,6 +145,8 @@ export type PayrollAdjustRequest = {
     hours: number;
   } | null;
   note?: string;
+  /** Cell state before this batch, restored by one Undo. */
+  before?: PayrollAdjustmentCell[];
 };
 
 export type PayrollGridEditor = {
@@ -259,9 +262,14 @@ export function PayrollDayGrid({
   }, [rows, days]);
 
   const colCount = identityCount + days;
-  const drag = useRef<{ mode: "select" | "fill"; r0: number; c0: number; r1: number; c1: number } | null>(
-    null,
-  );
+  const drag = useRef<{
+    mode: "select" | "fill";
+    r0: number;
+    c0: number;
+    r1: number;
+    c1: number;
+    rowIds: readonly string[];
+  } | null>(null);
   const rectRef = useRef<CellRect | null>(null);
 
   const contextFor = useCallback(
@@ -294,17 +302,26 @@ export function PayrollDayGrid({
 
   const openAdjust = useCallback(
     (
-      inputs: ReadonlyArray<{ driverId: string; date: string; text: string; currentHours?: number }>,
+      inputs: ReadonlyArray<{
+        driverId: string;
+        date: string;
+        text: string;
+        currentHours?: number;
+        beforeStatus?: PayrollAdjustmentCell["status"];
+        beforeHours?: number | null;
+      }>,
       mode: PayrollAdjustRequest["mode"],
       emptyMessage: string,
       first?: { row: PayrollRiderRow; dayIndex: number },
     ) => {
-      const { cells, rejected } = cellsFromSelection(
+      const { cells, before, rejected } = cellsFromSelection(
         inputs.map((cell) => ({
           driverId: cell.driverId,
           date: cell.date,
           text: cell.text,
           currentHours: cell.currentHours ?? 0,
+          beforeStatus: cell.beforeStatus,
+          beforeHours: cell.beforeHours,
         })),
       );
       if (!cells.length) {
@@ -322,6 +339,7 @@ export function PayrollDayGrid({
         mode,
         anchor: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
         anchorEl: lastAnchorEl.current,
+        before,
         auto: first ? autoFor(first.row, first.dayIndex) : null,
         context: first ? contextFor(first.row, first.dayIndex) : null,
         note: mode === "fill" || mode === "paste" ? t("adjust.patternNote") : undefined,
@@ -339,25 +357,28 @@ export function PayrollDayGrid({
       return;
     }
     if (active.mode === "fill") {
-      const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
+      const inputs: ReturnType<typeof dayAdjustmentInput>[] = [];
       let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
-      for (const target of fillTargetCells(
-        { r0: active.r0, c0: active.c0, r1: active.r1, c1: active.c1 },
-        current.r1,
-        current.c1,
+      const visibleIds = new Set(visibleRows.map((row) => row.driverId));
+      const byId = new Map(visibleRows.map((row) => [row.driverId, row]));
+      for (const target of visibleFillTargets(
+        fillTargetCells(
+          { r0: active.r0, c0: active.c0, r1: active.r1, c1: active.c1 },
+          current.r1,
+          current.c1,
+        ),
+        active.rowIds,
+        visibleIds,
       )) {
-        const sourceRow = visibleRows[target.srcR];
+        const sourceRow = byId.get(active.rowIds[target.srcR] ?? "");
         const sourceDay = target.srcC - identityCount;
-        const targetRow = visibleRows[target.r];
+        const targetRow = byId.get(active.rowIds[target.r] ?? "");
         const targetDay = target.c - identityCount;
         if (!sourceRow || !targetRow) continue;
         if (sourceDay < 0 || sourceDay >= days || targetDay < 0 || targetDay >= days) continue;
-        inputs.push({
-          driverId: targetRow.driverId,
-          date: dates[targetDay] ?? "",
-          text: dayClipboardToken(sourceRow, sourceDay),
-          currentHours: targetRow.dayInfo[targetDay]?.creditedHours ?? 0,
-        });
+        inputs.push(
+          dayAdjustmentInput(targetRow, targetDay, dates[targetDay] ?? "", dayClipboardToken(sourceRow, sourceDay)),
+        );
         first ??= { row: targetRow, dayIndex: targetDay };
       }
       setFillPreview(null);
@@ -366,20 +387,16 @@ export function PayrollDayGrid({
     }
     const moved = current.r0 !== current.r1 || current.c0 !== current.c1;
     const bounds = normalizeRect(current);
-    const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
+    const inputs: ReturnType<typeof dayAdjustmentInput>[] = [];
     let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
+    const byId = new Map(visibleRows.map((row) => [row.driverId, row]));
     for (let r = bounds.top; r <= bounds.bottom; r += 1) {
-      const row = visibleRows[r];
+      const row = byId.get(active.rowIds[r] ?? "");
       if (!row) continue;
       for (let c = bounds.left; c <= bounds.right; c += 1) {
         const dayIndex = c - identityCount;
         if (dayIndex < 0 || dayIndex >= days) continue;
-        inputs.push({
-          driverId: row.driverId,
-          date: dates[dayIndex] ?? "",
-          text: dayClipboardToken(row, dayIndex),
-          currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
-        });
+        inputs.push(dayAdjustmentInput(row, dayIndex, dates[dayIndex] ?? ""));
         first ??= { row, dayIndex };
       }
     }
@@ -458,7 +475,7 @@ export function PayrollDayGrid({
       const selRows = bounds.bottom - bounds.top + 1;
       const selCols = bounds.right - bounds.left + 1;
       const tiled = tilePasteOntoSelection(matrix, selRows, selCols);
-      const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
+      const inputs: ReturnType<typeof dayAdjustmentInput>[] = [];
       let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
       for (let r = 0; r < tiled.length; r += 1) {
         const row = visibleRows[bounds.top + r];
@@ -466,12 +483,7 @@ export function PayrollDayGrid({
         for (let c = 0; c < tiled[r].length; c += 1) {
           const dayIndex = bounds.left - identityCount + c;
           if (dayIndex < 0 || dayIndex >= days) continue;
-          inputs.push({
-            driverId: row.driverId,
-            date: dates[dayIndex] ?? "",
-            text: tiled[r][c],
-            currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
-          });
+          inputs.push(dayAdjustmentInput(row, dayIndex, dates[dayIndex] ?? "", tiled[r][c]));
           first ??= { row, dayIndex };
         }
       }
@@ -486,7 +498,7 @@ export function PayrollDayGrid({
     const bounds = normalizeRect(rect);
     const source = visibleRows[bounds.top];
     if (!source) return;
-    const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
+    const inputs: ReturnType<typeof dayAdjustmentInput>[] = [];
     let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
     for (let r = bounds.top + 1; r <= bounds.bottom; r += 1) {
       const row = visibleRows[r];
@@ -494,12 +506,7 @@ export function PayrollDayGrid({
       for (let c = bounds.left; c <= bounds.right; c += 1) {
         const dayIndex = c - identityCount;
         if (dayIndex < 0 || dayIndex >= days) continue;
-        inputs.push({
-          driverId: row.driverId,
-          date: dates[dayIndex] ?? "",
-          text: dayClipboardToken(source, dayIndex),
-          currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
-        });
+        inputs.push(dayAdjustmentInput(row, dayIndex, dates[dayIndex] ?? "", dayClipboardToken(source, dayIndex)));
         first ??= { row, dayIndex };
       }
     }
@@ -781,7 +788,11 @@ export function PayrollDayGrid({
                                       r1: item.index,
                                       c1: columnIndex,
                                     };
-                                    drag.current = { mode: "select", ...next };
+                                    drag.current = {
+                                      mode: "select",
+                                      ...next,
+                                      rowIds: visibleRows.map((item) => item.driverId),
+                                    };
                                     setRect(next);
                                     setFillPreview(null);
                                   }
@@ -836,6 +847,7 @@ export function PayrollDayGrid({
                                     c0: bounds.left,
                                     r1: bounds.bottom,
                                     c1: bounds.right,
+                                    rowIds: visibleRows.map((item) => item.driverId),
                                   };
                                 }}
                               />

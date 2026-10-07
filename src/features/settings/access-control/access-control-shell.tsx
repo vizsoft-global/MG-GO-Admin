@@ -28,7 +28,7 @@ import {
   APP_NAV_KEY_BY_ID,
   MENU_REGISTRY,
 } from "@/lib/menu/menu-registry";
-import { LAUNCHER_LABEL_OVERRIDE, type LauncherTileId } from "@/lib/menu/launcher-modules";
+import { LAUNCHER_LABEL_OVERRIDE, type AppAccessModuleId } from "@/lib/menu/launcher-modules";
 import type { AdminRoleRow } from "@/lib/auth/get-role-permissions";
 import {
   copyRoleTemplateTicks,
@@ -232,7 +232,7 @@ function StaffAccessWorkspace({
   const displayAccess = fullAccess ? fullAccessMap() : access;
 
   const appLabel = useCallback(
-    (appId: LauncherTileId) => {
+    (appId: AppAccessModuleId) => {
       const override = LAUNCHER_LABEL_OVERRIDE[appId];
       const navKey = APP_NAV_KEY_BY_ID[appId];
       const fromNav = navKey ? tNav(`nav.${navKey}`) : null;

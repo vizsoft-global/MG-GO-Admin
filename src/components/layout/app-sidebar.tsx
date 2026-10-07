@@ -16,6 +16,7 @@ import {
   Monitor,
   Moon,
   PanelLeftClose,
+  PanelLeftOpen,
   Sun,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -457,15 +458,25 @@ function SidebarBrand() {
 
   if (collapsed) {
     return (
-      <button
-        type="button"
-        onClick={toggleSidebar}
-        title={t("expandSidebar")}
-        aria-label={t("expandSidebar")}
-        className="mx-auto flex size-9 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-sidebar-accent"
-      >
-        <Logo size="sm" framed priority />
-      </button>
+      <div className="flex flex-col items-center gap-1">
+        <Link
+          href="/dashboard"
+          title={t("home")}
+          aria-label={t("home")}
+          className="flex size-9 items-center justify-center rounded-md transition-colors hover:bg-sidebar-accent"
+        >
+          <Logo size="sm" framed priority />
+        </Link>
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          title={t("expandSidebar")}
+          aria-label={t("expandSidebar")}
+          className="flex size-7 cursor-pointer items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+        >
+          <PanelLeftOpen className="size-3.5" aria-hidden />
+        </button>
+      </div>
     );
   }
 

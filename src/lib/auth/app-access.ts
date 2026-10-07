@@ -1,4 +1,4 @@
-import { LAUNCHER_TILE_IDS, type LauncherTileId } from "@/lib/menu/launcher-modules";
+import { LAUNCHER_TILE_IDS, type AppAccessModuleId } from "@/lib/menu/launcher-modules";
 import { RESOURCE_CRUD_MODULE_SET, type ResourceCrudModule } from "@/lib/auth/staff-access";
 
 export const APP_ACCESS_LEVELS = ["none", "viewer", "user", "manager"] as const;
@@ -21,7 +21,7 @@ export type AppSubViewDef = {
 };
 
 export type AppAccessEntry = {
-  appId: LauncherTileId;
+  appId: AppAccessModuleId;
   crudModule?: ResourceCrudModule;
   extraViewer?: readonly string[];
   extraUser?: readonly string[];
@@ -31,7 +31,7 @@ export type AppAccessEntry = {
 };
 
 export type AppAccessItem = {
-  appId: LauncherTileId;
+  appId: AppAccessModuleId;
   level: AppAccessLevel;
   custom: boolean;
   subViews: string[];
@@ -39,14 +39,14 @@ export type AppAccessItem = {
   receiver?: boolean;
 };
 
-export type AppAccessMap = Record<LauncherTileId, AppAccessItem>;
+export type AppAccessMap = Record<AppAccessModuleId, AppAccessItem>;
 
 export type AccessDiff = {
-  addedApps: LauncherTileId[];
-  removedApps: LauncherTileId[];
-  levelChanges: { appId: LauncherTileId; from: AppAccessLevel; to: AppAccessLevel }[];
-  subViewAdds: { appId: LauncherTileId; id: string }[];
-  subViewRemoves: { appId: LauncherTileId; id: string }[];
+  addedApps: AppAccessModuleId[];
+  removedApps: AppAccessModuleId[];
+  levelChanges: { appId: AppAccessModuleId; from: AppAccessLevel; to: AppAccessLevel }[];
+  subViewAdds: { appId: AppAccessModuleId; id: string }[];
+  subViewRemoves: { appId: AppAccessModuleId; id: string }[];
   sideChanges: number;
   changeCount: number;
 };
@@ -192,7 +192,7 @@ export const APP_ACCESS_CATALOG: readonly AppAccessEntry[] = [
 const CATALOG_BY_ID = new Map(APP_ACCESS_CATALOG.map((entry) => [entry.appId, entry]));
 
 export function appAccessEntry(appId: string): AppAccessEntry | undefined {
-  return CATALOG_BY_ID.get(appId as LauncherTileId);
+  return CATALOG_BY_ID.get(appId as AppAccessModuleId);
 }
 
 function extrasAt(entry: AppAccessEntry, level: AppAccessLevel): string[] {
@@ -355,7 +355,7 @@ function inferLevel(entry: AppAccessEntry, ticks: ReadonlySet<string>): {
   return { level: "none", custom: false };
 }
 
-function emptyItem(appId: LauncherTileId, entry: AppAccessEntry): AppAccessItem {
+function emptyItem(appId: AppAccessModuleId, entry: AppAccessEntry): AppAccessItem {
   return {
     appId,
     level: "none",
@@ -429,7 +429,7 @@ export function modulesSelectedFromAccess(state: AppAccessMap): number {
 
 export function setAppLevel(
   state: AppAccessMap,
-  appId: LauncherTileId,
+  appId: AppAccessModuleId,
   level: AppAccessLevel,
 ): AppAccessMap {
   const entry = CATALOG_BY_ID.get(appId);
@@ -451,7 +451,7 @@ export function setAppLevel(
 
 export function toggleAppSubView(
   state: AppAccessMap,
-  appId: LauncherTileId,
+  appId: AppAccessModuleId,
   subViewId: string,
 ): AppAccessMap {
   const entry = CATALOG_BY_ID.get(appId);
@@ -489,8 +489,8 @@ export function setRcmSides(
 }
 
 export function diffAccess(before: AppAccessMap, after: AppAccessMap): AccessDiff {
-  const addedApps: LauncherTileId[] = [];
-  const removedApps: LauncherTileId[] = [];
+  const addedApps: AppAccessModuleId[] = [];
+  const removedApps: AppAccessModuleId[] = [];
   const levelChanges: AccessDiff["levelChanges"] = [];
   const subViewAdds: AccessDiff["subViewAdds"] = [];
   const subViewRemoves: AccessDiff["subViewRemoves"] = [];
