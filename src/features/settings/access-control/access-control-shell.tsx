@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { SearchField } from "@/components/app";
-import { LAYOUT } from "@/components/app/layout-spacing";
-import { SegmentOption } from "@/components/app/toggle-chip";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { RotateCcw } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { CATALOG_SLUGS } from "@/lib/auth/permission-catalog";
 import { managerDowngradeSeedTicks, type StaffAccessKind } from "@/lib/auth/staff-access";
 import {
@@ -28,7 +29,7 @@ import {
   APP_NAV_KEY_BY_ID,
   MENU_REGISTRY,
 } from "@/lib/menu/menu-registry";
-import { LAUNCHER_LABEL_OVERRIDE, type AppAccessModuleId } from "@/lib/menu/launcher-modules";
+import { LAUNCHER_TILE_IDS, LAUNCHER_LABEL_OVERRIDE, type AppAccessModuleId } from "@/lib/menu/launcher-modules";
 import type { AdminRoleRow } from "@/lib/auth/get-role-permissions";
 import {
   copyRoleTemplateTicks,
@@ -137,7 +138,7 @@ export function AccessControlShell({
       {loadError ? (
         <p className="mb-2 text-xs text-destructive">{t("errors.loadFailed")}</p>
       ) : null}
-      <div className={`grid min-h-0 flex-1 lg:grid-cols-[300px_minmax(0,1fr)_300px] ${LAYOUT.panelGap}`}>
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-[#E4E4E7] bg-white lg:grid-cols-[280px_minmax(0,1fr)_300px]">
         <StaffUserList
           rows={rows}
           selectedId={selectedId}
@@ -158,16 +159,18 @@ export function AccessControlShell({
           />
         ) : (
           <>
-            <div className="flex flex-1 items-center justify-center rounded-xl border border-border bg-card text-sm text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center bg-[#FAFAFA] text-sm text-muted-foreground">
               {t("emptyUsers")}
             </div>
             <AccessPreviewPane
               name={t("selectedUser")}
-              ticks={[]}
-              fullAccess={false}
+              apps={[]}
+              totalApps={LAUNCHER_TILE_IDS.length}
               unsavedCount={0}
+              disabled
               onDiscard={() => undefined}
               onSave={() => undefined}
+              onCopy={() => undefined}
             />
           </>
         )}
@@ -354,9 +357,45 @@ function StaffAccessWorkspace({
 
   const name = row.fullName ?? row.email ?? t("selectedUser");
 
+  const appCounts = useMemo(() => {
+    const withAccess = APP_ACCESS_CATALOG.filter((entry) =>
+      appHasAccess(displayAccess[entry.appId]),
+    ).length;
+    return {
+      all: APP_ACCESS_CATALOG.length,
+      with: withAccess,
+      none: APP_ACCESS_CATALOG.length - withAccess,
+    };
+  }, [displayAccess]);
+
+  const previewApps = useMemo(
+    () =>
+      APP_ACCESS_CATALOG.filter((entry) => appHasAccess(displayAccess[entry.appId])).map(
+        (entry) => {
+          const registry = MENU_REGISTRY.find((item) => item.id === entry.appId);
+          const item = displayAccess[entry.appId];
+          return {
+            id: entry.appId as string,
+            label: appLabel(entry.appId),
+            iconName: registry?.defaultIcon ?? "LayoutDashboard",
+            subViewLabels: entry.subViews
+              .filter((view) => item.subViews.includes(view.id))
+              .map((view) => t(view.labelKey)),
+          };
+        },
+      ),
+    [appLabel, displayAccess, t],
+  );
+
+  const appFilters: { id: AppFilter; label: string; count: number }[] = [
+    { id: "all", label: t("filterAll"), count: appCounts.all },
+    { id: "with", label: t("filterWith"), count: appCounts.with },
+    { id: "none", label: t("filterNone"), count: appCounts.none },
+  ];
+
   return (
     <>
-      <section className="flex min-h-0 flex-col">
+      <section className="flex min-h-0 flex-col bg-[#FAFAFA]">
         <UserAccessHeader
           name={name}
           email={row.email}
@@ -368,30 +407,53 @@ function StaffAccessWorkspace({
           accessKind={kind}
           onAccessKind={applyKind}
           disabled={isPending || isSuperAdmin}
-          onCopy={() => setCopyOpen(true)}
-          onReset={resetRole}
         />
-        <div className="mt-2 flex min-h-0 flex-1 flex-col rounded-xl border border-border bg-card shadow-sm">
-          <div className="flex flex-wrap items-center gap-2 p-3">
-            <SegmentOption selected={appFilter === "all"} onClick={() => setAppFilter("all")}>
-              {t("filterAll")}
-            </SegmentOption>
-            <SegmentOption selected={appFilter === "with"} onClick={() => setAppFilter("with")}>
-              {t("filterWith")}
-            </SegmentOption>
-            <SegmentOption selected={appFilter === "none"} onClick={() => setAppFilter("none")}>
-              {t("filterNone")}
-            </SegmentOption>
-            <SearchField
-              value={appQuery}
-              onChange={setAppQuery}
-              placeholder={t("searchApps")}
-              clearLabel={t("clearSearch")}
-              className="min-w-[160px]"
-            />
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+          <div className="flex h-9 items-center gap-px rounded-lg bg-[#EAEAEC] p-[3px]">
+            {appFilters.map((filter) => {
+              const active = appFilter === filter.id;
+              return (
+                <button
+                  key={filter.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setAppFilter(filter.id)}
+                  className={cn(
+                    "inline-flex h-[30px] cursor-pointer items-center gap-1.5 rounded-md px-3 text-[12.5px] transition-colors duration-150",
+                    active
+                      ? "bg-white font-medium text-[#18181B] shadow-sm"
+                      : "text-[#52525B] hover:text-[#18181B]",
+                  )}
+                >
+                  {filter.label}
+                  <span className={active ? "text-[#18181B]" : "text-[#9CA3AF]"}>
+                    {filter.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
-            <div className="grid gap-2 md:grid-cols-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 cursor-pointer rounded-lg border-[#E4E4E7] bg-white px-2.5 text-[12.5px] font-medium text-[#18181B]"
+            onClick={resetRole}
+            disabled={isPending || isSuperAdmin}
+          >
+            <RotateCcw className="me-1.5 size-3.5" />
+            {t("resetRole")}
+          </Button>
+          <SearchField
+            value={appQuery}
+            onChange={setAppQuery}
+            placeholder={t("searchApps")}
+            clearLabel={t("clearSearch")}
+            className="min-w-[180px]"
+            inputClassName="h-9 rounded-lg border-[#E4E4E7] bg-white text-[12.5px]"
+          />
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
+          <div className="grid gap-4 md:grid-cols-2">
               {visibleApps.map((entry) => {
                 const registry = MENU_REGISTRY.find((item) => item.id === entry.appId);
                 return (
@@ -440,19 +502,20 @@ function StaffAccessWorkspace({
                   />
                 );
               })}
-            </div>
           </div>
         </div>
       </section>
 
       <AccessPreviewPane
         name={name}
-        ticks={draftTicks}
-        fullAccess={fullAccess}
+        apps={previewApps}
+        totalApps={LAUNCHER_TILE_IDS.length}
         unsavedCount={unsaved}
         saving={isPending}
+        disabled={isSuperAdmin}
         onDiscard={discard}
         onSave={save}
+        onCopy={() => setCopyOpen(true)}
       />
 
       <CopyAccessDialog

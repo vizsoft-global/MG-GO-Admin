@@ -1,11 +1,9 @@
 "use client";
 
-import { UserPlus } from "lucide-react";
+import { ChevronRight, Circle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { SearchField } from "@/components/app";
-import { ToggleChip } from "@/components/app/toggle-chip";
-import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
+import { SearchField } from "@/components/app";
 import { type StaffDepartment } from "@/lib/auth/app-access";
 import type { StaffAccessListRow } from "@/features/settings/staff-access-actions";
 import { cn } from "@/lib/utils";
@@ -17,21 +15,6 @@ const DEPT_KEYS: { id: "all" | StaffDepartment; labelKey: string }[] = [
   { id: "admin", labelKey: "deptAdmin" },
   { id: "operations_fleet", labelKey: "deptOperations" },
 ];
-
-const AVATAR_TINTS = [
-  "bg-teal-100 text-teal-800",
-  "bg-sky-100 text-sky-800",
-  "bg-violet-100 text-violet-800",
-  "bg-amber-100 text-amber-800",
-  "bg-rose-100 text-rose-800",
-  "bg-emerald-100 text-emerald-800",
-];
-
-function avatarTint(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return AVATAR_TINTS[hash % AVATAR_TINTS.length];
-}
 
 function initials(name: string | null): string {
   const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
@@ -67,44 +50,52 @@ export function StaffUserList({
       .some((value) => String(value).toLowerCase().includes(q));
   });
 
+  const countFor = (id: "all" | StaffDepartment) =>
+    id === "all" ? rows.length : rows.filter((row) => row.staffDepartment === id).length;
+
   return (
-    <aside className="flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-sm">
-      <div className="flex items-center justify-between gap-2 p-3">
-        <p className="text-sm font-semibold">{t("usersTitle")}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-2 text-[11px]"
-          render={<Link href="/settings/access-requests" />}
-        >
-          <UserPlus className="me-1 size-3.5" />
-          {t("inviteUser")}
-        </Button>
-      </div>
-      <div className="space-y-2 px-3 pb-2">
+    <aside className="flex min-h-0 flex-col bg-white lg:border-e lg:border-[#E4E4E7]">
+      <div className="flex shrink-0 flex-col gap-3 px-4 pt-4 pb-3">
+        <p className="text-[10.5px] text-[#71717A]">{t("breadcrumb")}</p>
+        <p className="text-base font-bold text-[#111827]">{t("usersTitle")}</p>
         <SearchField
           value={search}
           onChange={onSearch}
           placeholder={t("searchUsers")}
           clearLabel={t("clearSearch")}
+          inputClassName="h-[38px] rounded-lg border-[#E4E4E7] bg-[#FAFAFA] text-[12.5px] ps-8"
         />
-        <div className="flex flex-wrap gap-1">
-          {DEPT_KEYS.map((chip) => (
-            <ToggleChip
-              key={chip.id}
-              selected={department === chip.id}
-              onClick={() => onDepartment(chip.id)}
-            >
-              {t(chip.labelKey)}
-            </ToggleChip>
-          ))}
+        <div className="flex flex-wrap gap-1.5">
+          {DEPT_KEYS.map((chip) => {
+            const active = department === chip.id;
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onDepartment(chip.id)}
+                className={cn(
+                  "inline-flex h-[26px] cursor-pointer items-center gap-1 rounded-full border px-2.5 text-[10.5px] font-medium transition-colors duration-150",
+                  active
+                    ? "border-[#18181B] bg-[#18181B] text-white"
+                    : "border-[#E4E4E7] bg-white text-[#4B5563] hover:bg-[#F4F4F5]",
+                )}
+              >
+                {t(chip.labelKey)}
+                <span className={active ? "text-white/55" : "text-[#9CA3AF]"}>
+                  {countFor(chip.id)}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
+
+      <div className="min-h-0 flex-1 overflow-auto">
         {visible.length === 0 ? (
-          <p className="px-2 py-8 text-center text-xs text-muted-foreground">{t("emptyUsers")}</p>
+          <p className="px-3 py-8 text-center text-xs text-muted-foreground">{t("emptyUsers")}</p>
         ) : (
-          <ul className="space-y-1">
+          <ul>
             {visible.map((row) => {
               const name = row.fullName ?? row.email ?? "—";
               const selected = row.id === selectedId;
@@ -114,26 +105,29 @@ export function StaffUserList({
                     type="button"
                     onClick={() => onSelect(row.id)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start transition-colors duration-150",
+                      "flex min-h-[66px] w-full cursor-pointer items-center gap-2.5 border-b border-s-[3px] border-black/10 px-3 py-2.5 text-start transition-colors duration-150",
                       selected
-                        ? "bg-primary/10 ring-1 ring-primary/30"
-                        : "hover:bg-muted/60",
+                        ? "border-s-[#B54708] bg-[#FFFAEB]"
+                        : "border-s-transparent hover:bg-[#FAFAFA]",
                     )}
                   >
-                    <span
-                      className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
-                        avatarTint(name),
-                      )}
-                    >
+                    <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#FDE68A] text-[11px] font-semibold text-[#574500]">
                       {initials(row.fullName)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-semibold">{name}</span>
-                      <span className="block truncate text-[10px] text-muted-foreground">
-                        {row.roleName ?? t("noRole")}
+                      <span className="flex items-center gap-1">
+                        <span className="truncate text-[13px] font-semibold text-[#18181B]">
+                          {name}
+                        </span>
+                        <ChevronRight className="size-3.5 shrink-0 text-[#9CA3AF]" aria-hidden />
                       </span>
-                      <span className="block text-[10px] text-muted-foreground">
+                      <span className="block truncate text-[11px] text-[#6B7280]">
+                        {[row.email, row.staffDepartment ? t(`dept.${row.staffDepartment}`) : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-1 text-[10.5px] font-medium text-[#B54708]">
+                        <Circle className="size-[9px] shrink-0 stroke-[2.5]" aria-hidden />
                         {t("modulesSelected", { count: row.modulesSelected })}
                       </span>
                     </span>
@@ -143,6 +137,15 @@ export function StaffUserList({
             })}
           </ul>
         )}
+      </div>
+
+      <div className="shrink-0 border-t border-[#ECECEE] p-4">
+        <Link
+          href="/settings/access-requests"
+          className="flex h-9 w-full items-center justify-center rounded-lg border border-dashed border-[#9CA3AF] text-xs font-medium text-[#18181B] transition-colors duration-150 hover:bg-[#FAFAFA]"
+        >
+          + {t("inviteUser")}
+        </Link>
       </div>
     </aside>
   );

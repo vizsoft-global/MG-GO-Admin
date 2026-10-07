@@ -47,17 +47,65 @@ const BY_ID: Record<string, ModuleTint> = {
 };
 
 /**
- * Home launcher: canvas is the MG teal, not navy-grey. Tiles and icons use
- * the same mark as `/logo` (teal square, mint glyph). Sidebar chips and
- * Roles cards still use `moduleTint(id)`.
+ * Home launcher: Figma `Launcher/00-App-Launcher` canvas is `#212134`, not the
+ * MG teal. Tiles take `launcherTileHex(id)`; `moduleTint(id)` still paints the
+ * sidebar chips and the Roles & Permissions app cards.
  */
 export const LAUNCHER_BRAND_TINT: ModuleTint = PALETTE[0];
 
 export const LAUNCHER_BRAND = {
-  canvas: "#042F2E",
-  tile: LAUNCHER_BRAND_TINT.tile,
-  icon: LAUNCHER_BRAND_TINT.ink,
+  canvas: "#212134",
+  topBar: "#28283E",
+  search: "#242438",
+  searchBorder: "rgba(255,255,255,0.1)",
+  searchHint: "#383854",
+  logoChip: "#D9D2CF",
+  badge: "#F03838",
+  muted: "#80808F",
+  text: "#F4F4F5",
+  subText: "#C4C4CE",
 } as const;
+
+/**
+ * Home Launcher tile fill per module, taken from Figma
+ * `Launcher/00-App-Launcher` (5944:4011). Every tile is one solid accent and
+ * carries the module glyph in white — the launcher is the one surface that
+ * does not use `moduleTint`, which stays the sidebar-chip palette.
+ */
+export const LAUNCHER_TILE_HEX: Record<string, string> = {
+  "dashboard-ops": "#544D99",
+  dashboard: "#544D99",
+  performance: "#544D99",
+  "live-tracking-v2": "#387A9E",
+  "live-tracking": "#387A9E",
+  "operations-hub": "#387A9E",
+  "visit-bookings": "#38859E",
+  "employeedesk-visits": "#38859E",
+  notifications: "#388F85",
+  attendance: "#6161A3",
+  "driver-groups": "#7A5CAD",
+  "dpd-verification": "#9E5CAD",
+  assistant: "#7A5CAD",
+  "app-releases": "#7A4DA8",
+  drivers: "#C27047",
+  deliveries: "#478F75",
+  employeedesk: "#B8474D",
+  requests: "#B8474D",
+  "document-expiry": "#A84D4D",
+  earnings: "#C29947",
+  payroll: "#C29947",
+  restaurants: "#B25C70",
+  roles: "#3D7070",
+  profile: "#61708F",
+  "driver-app": "#4761A3",
+  vehicles: "#8F754D",
+  assets: "#8F754D",
+};
+
+/** Launcher tile fill for a module id; falls back to the brand teal. */
+export function launcherTileHex(id: string): string {
+  return LAUNCHER_TILE_HEX[id] ?? LAUNCHER_BRAND_TINT.tile;
+}
 
 function hashId(id: string): number {
   let h = 0;
