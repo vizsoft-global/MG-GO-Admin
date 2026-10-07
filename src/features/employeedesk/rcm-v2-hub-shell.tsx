@@ -5,22 +5,23 @@ import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
   AlertCircle,
+  ArrowRight,
   Briefcase,
   CalendarDays,
-  Check,
   ChevronDown,
   CircleDollarSign,
   Cross,
+  Download,
   FileText,
   Folder,
   Fuel,
-  Inbox,
-  LayoutDashboard,
+  Lock,
   Package,
   Plus,
   Search,
-  Send,
   Shield,
+  UserCheck,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -63,14 +64,14 @@ const OUTGOING_PARENTS: Array<{
   icon: LucideIcon;
   color: string;
 }> = [
-  { key: "loan", label: "Loan", icon: CircleDollarSign, color: "bg-[#7C6CF6]" },
-  { key: "payslip", label: "Payslip", icon: FileText, color: "bg-[#A78BFA]" },
-  { key: "asset", label: "Asset", icon: Package, color: "bg-[#2DD4BF]" },
-  { key: "leave", label: "Leave", icon: CalendarDays, color: "bg-[#FB923C]" },
-  { key: "penalty", label: "Penalty", icon: Shield, color: "bg-[#8B5CF6]" },
-  { key: "investigation", label: "Investigation", icon: Search, color: "bg-[#FBBF24]" },
-  { key: "accident", label: "Accident", icon: Cross, color: "bg-[#F97316]" },
-  { key: "general_doc", label: "General Doc", icon: FileText, color: "bg-[#60A5FA]" },
+  { key: "loan", label: "Loan", icon: CircleDollarSign, color: "bg-[#7460F1]" },
+  { key: "payslip", label: "Payslip", icon: FileText, color: "bg-[#539EFF]" },
+  { key: "asset", label: "Asset", icon: Package, color: "bg-[#4CC57D]" },
+  { key: "leave", label: "Leave", icon: CalendarDays, color: "bg-[#EF6053]" },
+  { key: "penalty", label: "Penalty", icon: Shield, color: "bg-[#E6C45F]" },
+  { key: "investigation", label: "Investigation", icon: Search, color: "bg-[#898989]" },
+  { key: "accident", label: "Accident", icon: Cross, color: "bg-[#E09B44]" },
+  { key: "general_doc", label: "General Doc", icon: FileText, color: "bg-[#4498D1]" },
 ];
 
 const FALLBACK_PENALTIES = [
@@ -87,15 +88,15 @@ const INCOMING_TYPES: Array<{
   color: string;
   dot: string;
 }> = [
-  { type: "leave", icon: FileText, color: "bg-[#14B8A6]", dot: "bg-[#14B8A6]" },
+  { type: "leave", icon: FileText, color: "bg-[#0F9D8A]", dot: "bg-[#0F9D8A]" },
   { type: "asset", icon: Package, color: "bg-[#7C3AED]", dot: "bg-[#7C3AED]" },
-  { type: "fuel", icon: Fuel, color: "bg-[#F97316]", dot: "bg-[#F97316]" },
-  { type: "fuel_refund", icon: FileText, color: "bg-[#FB923C]", dot: "bg-[#FB923C]" },
-  { type: "loan", icon: CircleDollarSign, color: "bg-[#7C3AED]", dot: "bg-[#2563EB]" },
-  { type: "complaint", icon: AlertCircle, color: "bg-[#EC4899]", dot: "bg-[#EF4444]" },
-  { type: "document", icon: Folder, color: "bg-[#3B82F6]", dot: "bg-[#3B82F6]" },
-  { type: "salary_justification", icon: Briefcase, color: "bg-[#EA580C]", dot: "bg-[#EA580C]" },
-  { type: "sick_leave", icon: Cross, color: "bg-[#EF4444]", dot: "bg-[#22C55E]" },
+  { type: "fuel", icon: Fuel, color: "bg-[#EA580C]", dot: "bg-[#EA580C]" },
+  { type: "fuel_refund", icon: FileText, color: "bg-[#EDA23A]", dot: "bg-[#EDA23A]" },
+  { type: "loan", icon: CircleDollarSign, color: "bg-[#2563EB]", dot: "bg-[#2563EB]" },
+  { type: "complaint", icon: AlertCircle, color: "bg-[#DB2777]", dot: "bg-[#DB2777]" },
+  { type: "document", icon: Folder, color: "bg-[#4F46E5]", dot: "bg-[#4F46E5]" },
+  { type: "salary_justification", icon: Briefcase, color: "bg-[#D25335]", dot: "bg-[#D25335]" },
+  { type: "sick_leave", icon: Cross, color: "bg-[#D25335]", dot: "bg-[#D25335]" },
 ];
 
 function HubTile({
@@ -115,15 +116,15 @@ function HubTile({
 }) {
   const body = (
     <>
-      <span className={cn("relative grid size-16 place-items-center rounded-[22px]", color)}>
-        <Icon className="size-7 text-white" aria-hidden />
+      <span className={cn("relative grid size-20 place-items-center rounded-[17.45px]", color)}>
+        <Icon className="size-[29px] text-white" aria-hidden />
         {count != null && count > 0 ? (
-          <span className="absolute end-1.5 top-1 text-[11px] font-semibold tabular-nums text-white">
+          <span className="absolute -end-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[#F6E5C3] bg-[#FFFAEB] px-1 text-[10px] font-bold tabular-nums text-[#B54708]">
             {count > 999 ? "999+" : count}
           </span>
         ) : null}
       </span>
-      <span className="w-full text-center text-[12px] font-medium leading-tight text-foreground">
+      <span className="w-full text-center text-[12px] font-medium leading-tight text-[#0A0A0A]">
         {label}
       </span>
     </>
@@ -161,13 +162,12 @@ function FilterChip({
       aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        "inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12px]",
+        "inline-flex h-8 items-center gap-1 rounded-full px-3 text-[12px] font-medium",
         selected
-          ? "bg-muted font-semibold text-foreground"
-          : "text-muted-foreground hover:text-foreground",
+          ? "bg-[#0A0A0A] text-white"
+          : "border border-[#E5E5E5] bg-white text-[#525252] hover:bg-[#F5F5F5]",
       )}
     >
-      {selected ? <Check className="size-3.5" /> : null}
       {children}
     </button>
   );
@@ -291,32 +291,34 @@ export function RcmV2HubShell() {
       : RCM_ADMIN_CHIPS;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-10">
       <header className="grid grid-cols-1 items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
         <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[12px] font-semibold text-primary hover:bg-primary/10"
-          >
-            <LayoutDashboard className="size-3.5" aria-hidden />
-            {t("backToDashboard")}
-          </Link>
-          <p className="text-[13px] font-semibold text-foreground">{t("breadcrumb")}</p>
+          <p className="text-[13px] font-semibold text-[#0A0A0A]">{t("breadcrumb")}</p>
         </div>
-        <div className="flex items-stretch justify-center rounded-2xl bg-muted/70 p-1">
+        <div className="flex items-stretch justify-center rounded-md bg-[#F5F5F5] p-1">
           <button
             type="button"
             onClick={() => router.replace("/employeedesk?tab=outgoing")}
             className={cn(
-              "flex min-w-[200px] flex-col items-center rounded-xl px-4 py-1.5",
-              tab === "outgoing" ? "bg-slate-950 text-white shadow-sm" : "text-muted-foreground",
+              "flex h-[42px] min-w-[180px] flex-col items-center justify-center rounded-md px-4",
+              tab === "outgoing" ? "bg-white shadow-sm" : "",
             )}
           >
-            <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold">
-              <Send className="size-3.5" />
+            <span
+              className={cn(
+                "text-[14px] font-medium",
+                tab === "outgoing" ? "text-[#0A0A0A]" : "text-[#737373]",
+              )}
+            >
               {t("outgoing")}
             </span>
-            <span className={cn("text-[10px]", tab === "outgoing" ? "text-white/70" : "text-muted-foreground")}>
+            <span
+              className={cn(
+                "text-[10px]",
+                tab === "outgoing" ? "text-[#737373]" : "text-[#8A8A8A]",
+              )}
+            >
               {t("outgoingHint")}
             </span>
           </button>
@@ -324,65 +326,73 @@ export function RcmV2HubShell() {
             type="button"
             onClick={() => router.replace("/employeedesk?tab=incoming")}
             className={cn(
-              "flex min-w-[200px] flex-col items-center rounded-xl px-4 py-1.5",
-              tab === "incoming" ? "bg-slate-950 text-white shadow-sm" : "text-muted-foreground",
+              "flex h-[42px] min-w-[180px] flex-col items-center justify-center rounded-md px-4",
+              tab === "incoming" ? "bg-white shadow-sm" : "",
             )}
           >
-            <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold">
-              <Inbox className="size-3.5" />
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 text-[14px] font-medium",
+                tab === "incoming" ? "text-[#0A0A0A]" : "text-[#737373]",
+              )}
+            >
               {t("incoming")}
               {incomingCount > 0 ? (
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 text-[10px] font-semibold tabular-nums",
-                    tab === "incoming" ? "bg-white/20" : "bg-muted",
-                  )}
-                >
+                <span className="inline-flex h-4 items-center rounded-full bg-[#E5E5E5] px-1.5 text-[10px] font-medium tabular-nums text-[#737373]">
                   {incomingCount}
                 </span>
               ) : null}
             </span>
-            <span className={cn("text-[10px]", tab === "incoming" ? "text-white/70" : "text-muted-foreground")}>
+            <span
+              className={cn(
+                "text-[10px]",
+                tab === "incoming" ? "text-[#737373]" : "text-[#8A8A8A]",
+              )}
+            >
               {t("incomingHint")}
             </span>
           </button>
         </div>
         <div className="flex items-center justify-end gap-1.5">
-          <span className="text-[11px] text-muted-foreground">{t("yourAccess")}</span>
-          {access.sender ? (
-            <span className="rounded-full border border-border bg-card px-2 py-0.5 text-[10px] font-semibold">
-              {t("access.sender")}
-            </span>
-          ) : null}
-          {access.receiver ? (
-            <span className="rounded-full border border-border bg-card px-2 py-0.5 text-[10px] font-semibold">
-              {t("access.receiver")}
-            </span>
-          ) : null}
+          <span className="inline-flex items-center gap-2 rounded-md border border-[#E5E5E5] bg-card px-2 py-1">
+            <span className="text-[12px] text-[#525252]">{t("yourAccess")}</span>
+            {access.sender ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-[#E5E5E5] bg-white px-2 py-0.5 text-[12px] font-medium text-[#0A0A0A]">
+                <UserCheck className="size-3" aria-hidden />
+                {t("access.sender")}
+              </span>
+            ) : null}
+            {access.receiver ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-[#E5E5E5] bg-white px-2 py-0.5 text-[12px] font-medium text-[#0A0A0A]">
+                <Users className="size-3" aria-hidden />
+                {t("access.receiver")}
+              </span>
+            ) : null}
+          </span>
         </div>
       </header>
 
       {tab === "outgoing" ? (
-        <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr] lg:items-start">
-          <section className="rounded-2xl border border-border bg-card p-5">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,513px)_minmax(0,1fr)] lg:items-start xl:gap-16">
+          <section className="rounded-xl border border-[#E5E5E5] bg-card p-8">
             <div className="mb-1 flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-[15px] font-semibold">{t("createFromTemplate")}</h2>
-                  <span className="rounded-full bg-slate-950 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                  <h2 className="text-[16px] font-semibold">{t("createFromTemplate")}</h2>
+                  <span className="rounded-md bg-[#FFFAEB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B54708]">
                     {t("youSend")}
                   </span>
                 </div>
-                <p className="mt-1 text-[12px] text-muted-foreground">{t("templateHint")}</p>
+                <p className="mt-1 text-[12px] text-[#737373]">{t("templateHint")}</p>
               </div>
               <Link
                 href="/employeedesk/esign/templates"
-                className="shrink-0 text-[12px] font-semibold text-primary hover:bg-primary/10"
+                className="shrink-0 text-[12px] font-medium text-[#B54708] underline underline-offset-2 hover:opacity-80"
               >
                 {t("seeAllTemplates")}
               </Link>
             </div>
-            <div className="mt-5 grid grid-cols-4 gap-x-3 gap-y-6">
+            <div className="mt-5 grid grid-cols-4 justify-between gap-y-6">
               {parents.map((tile) =>
                 tile.key === "penalty" ? (
                   <div key={tile.key} className="relative">
@@ -393,16 +403,16 @@ export function RcmV2HubShell() {
                       aria-expanded={penaltyOpen}
                       aria-label={t("penaltyMore")}
                     >
-                      <span className={cn("relative grid size-16 place-items-center rounded-[22px]", tile.color)}>
-                        <tile.icon className="size-7 text-white" aria-hidden />
+                      <span className={cn("relative grid size-20 place-items-center rounded-[17.45px]", tile.color)}>
+                        <tile.icon className="size-[29px] text-white" aria-hidden />
                       </span>
-                      <span className="inline-flex items-center gap-0.5 text-[12px] font-medium leading-tight text-foreground">
+                      <span className="inline-flex items-center gap-0.5 text-[12px] font-medium leading-tight text-[#0A0A0A]">
                         {tile.label}
                         <ChevronDown className="size-3.5 text-muted-foreground" />
                       </span>
                     </button>
                     {penaltyOpen ? (
-                      <div className="absolute start-0 top-full z-10 mt-2 w-56 rounded-xl border border-border bg-card p-2 shadow-lg">
+                      <div className="absolute start-0 top-full z-10 mt-2 w-56 rounded-lg border border-[#E5E5E5] bg-white p-2 shadow-sm">
                         <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                           {t("penaltyCategory")}
                         </p>
@@ -431,13 +441,13 @@ export function RcmV2HubShell() {
             </div>
           </section>
 
-          <div className="flex flex-col gap-4">
-            <section className="rounded-2xl border border-border bg-card p-5">
-              <h2 className="text-[15px] font-semibold">{t("sendToMany")}</h2>
-              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">{t("sendToManyHint")}</p>
+          <div className="flex flex-col gap-8">
+            <section className="rounded-xl border border-[#E5E5E5] bg-card p-6">
+              <h2 className="text-[16px] font-semibold">{t("sendToMany")}</h2>
+              <p className="mt-1 text-[12px] leading-5 text-[#737373]">{t("sendToManyHint")}</p>
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <Button
-                  className="h-9 bg-slate-950 text-white hover:bg-slate-800"
+                  className="h-9 rounded-md bg-[#0A0A0A] px-4 text-[13px] font-medium text-white hover:bg-[#262626]"
                   render={<Link href="/employeedesk/esign/bulk" />}
                 >
                   <Plus className="size-3.5" />
@@ -445,17 +455,18 @@ export function RcmV2HubShell() {
                 </Button>
                 <button
                   type="button"
-                  className="text-[12px] font-semibold text-foreground underline-offset-2 hover:underline"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E5E5E5] bg-white px-4 text-[13px] font-medium text-[#0A0A0A] hover:bg-[#F5F5F5]"
                   onClick={() => downloadGenericExampleSheet()}
                 >
+                  <Download className="size-3.5" aria-hidden />
                   {t("downloadExample")}
                 </button>
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-5">
+            <section className="rounded-xl border border-[#E5E5E5] bg-card p-6">
               <div className="mb-3 flex items-center justify-between gap-2">
-                <h2 className="text-[15px] font-semibold">{t("sentForSignature")}</h2>
+                <h2 className="text-[16px] font-semibold">{t("sentForSignature")}</h2>
                 <Link
                   href="/requests/esign/batches"
                   className="text-[12px] font-semibold text-primary hover:bg-primary/10"
@@ -468,8 +479,8 @@ export function RcmV2HubShell() {
                   {t("emptyBatches")}
                 </p>
               ) : (
-                <div className="divide-y divide-border">
-                  {recentBatches.map((row) => {
+                <div>
+                  {recentBatches.map((row, index) => {
                     const done = row.stage === "completed";
                     const total = row.progress.total || row.batch.total_count;
                     const signed = row.progress.signed;
@@ -477,38 +488,51 @@ export function RcmV2HubShell() {
                     const sent = formatSentDate(row.batch.created_at, locale);
                     const bulk = Boolean(row.batch.source_filename);
                     return (
-                      <div key={row.batch.id} className="flex items-center gap-3 py-3">
+                      <div
+                        key={row.batch.id}
+                        className={cn(
+                          "flex items-center gap-3 py-3",
+                          index < recentBatches.length - 1 && "border-b border-[#F5F5F5]",
+                        )}
+                      >
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[13px] font-semibold">
                             {row.batch.title || row.batch.template_name || row.batch.batch_code}
                           </p>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          <p className="mt-0.5 text-[11px] text-[#737373]">
                             {bulk
                               ? t("batchEmployeesBulk", { count: total, date: sent })
                               : t("batchEmployees", { count: total, date: sent })}
                           </p>
-                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#F5F5F5]">
                             <div
                               className="h-full rounded-full bg-emerald-500"
                               style={{ width: `${Math.min(100, percent)}%` }}
                             />
                           </div>
                         </div>
-                        <div className="flex shrink-0 flex-col items-end gap-1">
-                          {done ? (
-                            <span className="text-[12px] font-semibold text-emerald-600">
-                              {t("completed")}
-                            </span>
-                          ) : (
+                        <div className="flex shrink-0 flex-col items-end gap-1.5">
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                              done
+                                ? "bg-[#ECFDF3] text-[#067647]"
+                                : "bg-[#FFFAEB] text-[#B54708]",
+                            )}
+                          >
+                            {done ? t("completed") : t("inProgress")}
+                          </span>
+                          {done ? null : (
                             <>
-                              <span className="text-[11px] tabular-nums text-muted-foreground">
+                              <span className="text-[11px] tabular-nums text-[#737373]">
                                 {t("signedOf", { signed, total, percent })}
                               </span>
                               <Link
                                 href={`/requests/esign/batches/${row.batch.id}`}
-                                className="text-[11px] font-bold uppercase tracking-wide text-primary hover:bg-primary/10"
+                                className="inline-flex h-7 items-center gap-1 rounded-md border border-[#E5E5E5] px-2 text-[11px] font-semibold text-[#0A0A0A] hover:bg-[#F5F5F5]"
                               >
                                 {t("track")}
+                                <ArrowRight className="size-3" aria-hidden />
                               </Link>
                             </>
                           )}
@@ -522,11 +546,11 @@ export function RcmV2HubShell() {
           </div>
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr] lg:items-start">
-          <section className="rounded-2xl border border-border bg-card p-5">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,431px)_minmax(0,1fr)] lg:items-start">
+          <section className="rounded-xl border border-[#E5E5E5] bg-card p-8">
             <div className="mb-5 flex items-center gap-2">
-              <h2 className="text-[15px] font-semibold">{t("queuesWaiting")}</h2>
-              <span className="rounded-full bg-amber-300 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-950">
+              <h2 className="text-[16px] font-semibold">{t("queuesWaiting")}</h2>
+              <span className="rounded-md bg-[#FFFAEB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B54708]">
                 {t("youReceive")}
               </span>
             </div>
@@ -544,18 +568,18 @@ export function RcmV2HubShell() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-border bg-card p-5">
+          <section className="rounded-xl border border-[#E5E5E5] bg-card p-6">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="text-[15px] font-semibold">{t("needsAction")}</h2>
+              <h2 className="text-[16px] font-semibold">{t("needsAction")}</h2>
               <Button
-                className="h-9 bg-slate-950 text-white hover:bg-slate-800"
+                className="h-9 rounded-md bg-[#0A0A0A] px-4 text-[13px] font-medium text-white hover:bg-[#262626]"
                 onClick={() => setUploadOpen(true)}
               >
                 {t("uploadDocument")}
               </Button>
             </div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-0.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <FilterChip selected={incomingFilter === "all"} onClick={() => setIncomingFilter("all")}>
                   {t("filterAll", { count: incomingCount })}
                 </FilterChip>
@@ -579,7 +603,7 @@ export function RcmV2HubShell() {
                   if (value === "oldest" || value === "newest") setSort(value);
                 }}
               >
-                <SelectTrigger className="h-8 w-[130px] border-0 bg-transparent shadow-none">
+                <SelectTrigger className="h-8 w-[140px] rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] shadow-none">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -597,26 +621,35 @@ export function RcmV2HubShell() {
                 {t("emptyAction")}
               </p>
             ) : (
-              <div className="divide-y divide-border">
-                {actionRows.map((row) => {
+              <div>
+                {actionRows.map((row, index) => {
                   const typeMeta = INCOMING_TYPES.find((item) => item.type === row.request_type);
                   return (
-                    <div key={row.id} className="flex items-center gap-3 py-3">
+                    <div
+                      key={row.id}
+                      className={cn(
+                        "flex items-center gap-3 py-3",
+                        index < actionRows.length - 1 && "border-b border-[#F5F5F5]",
+                      )}
+                    >
                       <span className={cn("size-2 shrink-0 rounded-full", typeMeta?.dot ?? "bg-slate-400")} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13px] font-semibold">
                           {t(`types.${row.request_type}` as "types.leave")}
                         </p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {incomingFromLine(row, t)}
+                        <p className="flex items-center gap-1 text-[11px] text-[#737373]">
+                          {row.is_confidential ? (
+                            <Lock className="size-3 shrink-0" aria-hidden />
+                          ) : null}
+                          <span className="truncate">{incomingFromLine(row, t)}</span>
                         </p>
                       </div>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                      <span className="shrink-0 text-[11px] text-[#737373]">
                         {formatAge(row.created_at, t)}
                       </span>
                       <Link
                         href={`/employeedesk/${row.id}`}
-                        className="shrink-0 text-[12px] font-semibold text-primary hover:bg-primary/10"
+                        className="inline-flex h-7 shrink-0 items-center rounded-md border border-[#E5E5E5] px-3 text-[11px] font-semibold text-[#0A0A0A] hover:bg-[#F5F5F5]"
                       >
                         {t("review")}
                       </Link>
@@ -625,20 +658,20 @@ export function RcmV2HubShell() {
                 })}
               </div>
             )}
-            <p className="mt-4 text-[11px] text-muted-foreground">{t("incomingFootnote")}</p>
+            <p className="mt-4 text-[11px] text-[#737373]">{t("incomingFootnote")}</p>
           </section>
         </div>
       )}
 
-      <footer className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+      <footer className="mt-2 flex flex-wrap items-center gap-3 border-t border-[#E5E5E5] pt-5">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-[#737373]">
           {t("adminOnly")}
         </span>
         {adminChips.map((chip) => (
           <Link
             key={chip.id}
             href={chip.href}
-            className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold hover:bg-muted"
+            className="inline-flex h-7 items-center rounded-full border border-[#E5E5E5] bg-white px-3 text-[11px] font-medium text-[#0A0A0A] hover:bg-[#F5F5F5]"
           >
             {t(`admin.${chip.id}` as "admin.templates")}
           </Link>

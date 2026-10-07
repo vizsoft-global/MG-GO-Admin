@@ -2,16 +2,17 @@
 
 import { createElement } from "react";
 import { useTranslations } from "next-intl";
-import { SegmentOption, ToggleChip } from "@/components/app/toggle-chip";
+import { Check, Plus } from "lucide-react";
 import {
   APP_ACCESS_LEVELS,
   type AppAccessEntry,
   type AppAccessItem,
   type AppAccessLevel,
 } from "@/lib/auth/app-access";
-import { moduleTint } from "@/lib/menu/module-colors";
+import { launcherTileHex } from "@/lib/menu/module-colors";
 import { resolveIcon } from "@/lib/menu/menu-registry";
 import type { RequestTypeGrant, RequestTypeOption } from "@/features/settings/staff-access-actions";
+import { cn } from "@/lib/utils";
 
 const LEVEL_KEYS: Record<AppAccessLevel, string> = {
   none: "levelNone",
@@ -19,6 +20,47 @@ const LEVEL_KEYS: Record<AppAccessLevel, string> = {
   user: "levelUser",
   manager: "levelManager",
 };
+
+/**
+ * Figma `6039:62395` styles every chip below as a flat outline: an active
+ * sub-view is a filled grey pill with a solid check, and an inactive one waits
+ * on a white pill with a plus. Level selection is the one control filled
+ * solid black. The reference is explicit, so the emerald `ToggleChip` rule
+ * does not apply inside this screen.
+ */
+function SubViewChip({
+  active,
+  label,
+  disabled,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border px-[7px] text-[10.5px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+        active
+          ? "border-black/30 bg-[#F4F4F5] text-[#374151]"
+          : "border-[#E4E4E7] bg-white text-[#71717A] hover:bg-[#FAFAFA]",
+      )}
+    >
+      {active ? (
+        <Check className="size-2.5 shrink-0 stroke-[3] text-[#18181B]" aria-hidden />
+      ) : (
+        <Plus className="size-2.5 shrink-0 stroke-[3] text-[#9CA3AF]" aria-hidden />
+      )}
+      {label}
+    </button>
+  );
+}
 
 export function AppAccessCard({
   entry,
@@ -46,97 +88,123 @@ export function AppAccessCard({
   onToggleType?: (key: string) => void;
 }) {
   const t = useTranslations("pages.settings.accessControl");
-  const tint = moduleTint(entry.appId);
   const selected = new Set(grants?.map((row) => row.requestType) ?? []);
+  const hidden = item.level === "none";
+  const shownSubViews = entry.subViews.filter((view) => item.subViews.includes(view.id)).length;
 
   return (
-    <article className="rounded-xl border border-border bg-card p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg"
-            style={{ backgroundColor: tint.chip, color: tint.ink }}
-          >
-            {createElement(resolveIcon(iconName), { className: "size-4" })}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold">{label}</p>
-            {item.custom ? (
-              <p className="text-[10px] font-medium text-amber-700">{t("custom")}</p>
-            ) : null}
-          </div>
+    <article
+      className={cn(
+        "flex flex-col gap-3 rounded-xl border border-black/15 bg-white p-3",
+        entry.rcm && "md:col-span-2",
+      )}
+    >
+      <div className="flex items-center gap-2.5">
+        <span
+          className="flex size-6 shrink-0 items-center justify-center rounded-md"
+          style={{ backgroundColor: launcherTileHex(entry.appId) }}
+        >
+          {createElement(resolveIcon(iconName), { className: "size-3.5 text-white" })}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[12.5px] font-semibold text-[#18181B]">{label}</p>
+          <p className="truncate text-[10.5px] text-[#71717A]">
+            {hidden
+              ? t("hiddenFromUser")
+              : t("subViewsSummary", {
+                  level: t(LEVEL_KEYS[item.level]),
+                  shown: shownSubViews,
+                  total: entry.subViews.length,
+                })}
+          </p>
         </div>
       </div>
-      <div className="mt-2 grid grid-cols-4 gap-1">
-        {APP_ACCESS_LEVELS.map((level) => (
-          <SegmentOption
-            key={level}
-            selected={item.level === level}
-            onClick={() => onLevel(level)}
-            disabled={disabled}
-            variant={level === "manager" || level === "user" ? "success" : "default"}
-          >
-            {t(LEVEL_KEYS[level])}
-          </SegmentOption>
-        ))}
+
+      <div className="flex h-[30px] items-center gap-px rounded-lg bg-[#F1F3F5] p-[3px]">
+        {APP_ACCESS_LEVELS.map((level) => {
+          const active = item.level === level;
+          return (
+            <button
+              key={level}
+              type="button"
+              aria-pressed={active}
+              disabled={disabled}
+              onClick={() => onLevel(level)}
+              className={cn(
+                "h-6 flex-1 cursor-pointer rounded-md text-[10px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+                active
+                  ? "bg-[#18181B] font-medium text-white"
+                  : "text-[#6B7280] hover:text-[#18181B]",
+              )}
+            >
+              {t(LEVEL_KEYS[level])}
+            </button>
+          );
+        })}
       </div>
-      {entry.subViews.length > 0 && item.level !== "none" ? (
-        <div className="mt-2">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+
+      {item.custom ? (
+        <p className="flex items-center gap-1.5 text-[9.5px] text-[#646464]">
+          <span className="size-1.5 shrink-0 rounded-full bg-[#646464]" aria-hidden />
+          {t("changedManually")}
+        </p>
+      ) : null}
+
+      {!hidden && entry.subViews.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[9.5px] font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
             {t("visibleSubViews")}
           </p>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {entry.subViews.map((view) => (
-              <ToggleChip
+              <SubViewChip
                 key={view.id}
-                selected={item.subViews.includes(view.id)}
-                onClick={() => onToggleSubView(view.id)}
+                active={item.subViews.includes(view.id)}
                 disabled={disabled}
-              >
-                {t(view.labelKey)}
-              </ToggleChip>
+                onClick={() => onToggleSubView(view.id)}
+                label={t(view.labelKey)}
+              />
             ))}
           </div>
         </div>
       ) : null}
-      {entry.rcm && item.level !== "none" && onSides ? (
-        <div className="mt-2">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+
+      {!hidden && entry.rcm && onSides ? (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[9.5px] font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
             {t("sides")}
           </p>
-          <div className="flex flex-wrap gap-1">
-            <ToggleChip
-              selected={item.sender === true}
+          <div className="flex flex-wrap gap-1.5">
+            <SubViewChip
+              active={item.sender === true}
+              disabled={disabled}
               onClick={() => onSides({ sender: !item.sender, receiver: item.receiver === true })}
+              label={t("outgoingSender")}
+            />
+            <SubViewChip
+              active={item.receiver === true}
               disabled={disabled}
-            >
-              {t("outgoingSender")}
-            </ToggleChip>
-            <ToggleChip
-              selected={item.receiver === true}
               onClick={() => onSides({ sender: item.sender === true, receiver: !item.receiver })}
-              disabled={disabled}
-            >
-              {t("incomingReceiver")}
-            </ToggleChip>
+              label={t("incomingReceiver")}
+            />
           </div>
         </div>
       ) : null}
-      {entry.rcm && item.level !== "none" && requestTypes && onToggleType ? (
-        <div className="mt-2">
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+
+      {!hidden && entry.rcm && requestTypes && onToggleType ? (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[9.5px] font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
             {t("requestTypes")}
           </p>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {requestTypes.map((type) => (
-              <ToggleChip
+              <SubViewChip
                 key={type.key}
-                selected={selected.has(type.key)}
-                onClick={() => onToggleType(type.key)}
+                active={selected.has(type.key)}
                 disabled={disabled}
-              >
-                {type.labelEn}
-              </ToggleChip>
+                onClick={() => onToggleType(type.key)}
+                label={type.labelEn}
+              />
             ))}
           </div>
         </div>
@@ -145,10 +213,7 @@ export function AppAccessCard({
   );
 }
 
-export function appCardMatchesQuery(
-  label: string,
-  query: string,
-): boolean {
+export function appCardMatchesQuery(label: string, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return label.toLowerCase().includes(q);
