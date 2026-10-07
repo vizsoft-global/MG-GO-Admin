@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Download, Info } from "lucide-react";
+import { Download, Info, Undo2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { SearchField } from "@/components/app";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ import {
 } from "./payroll-column-filter";
 import {
   AO_LEAD_COLUMNS,
+  dayAdjustmentInput,
   dayClipboardToken,
   dayColumnId,
   dayOrdersColumnId,
@@ -41,7 +43,7 @@ import {
 } from "./payroll-column-config";
 import { PayrollColumnsMenu, PayrollHeadingLabel, stickyIdentityOffset, stickyIdentityStyle } from "./payroll-heading";
 import { cellParticular } from "./payroll-particulars";
-import { fillTargetCells, tilePasteOntoSelection } from "./payroll-snapshot";
+import { fillTargetCells, tilePasteOntoSelection, visibleFillTargets } from "./payroll-snapshot";
 import type { PayrollRiderRow } from "./payroll-types";
 import { usePayrollAdjustSession } from "./use-payroll-adjust";
 import { usePayrollColumnConfig } from "./use-payroll";
@@ -75,7 +77,14 @@ export function PayrollAttendanceOrdersTab({
   const [rect, setRect] = useState<CellRect | null>(null);
   const [fillPreview, setFillPreview] = useState<CellRect | null>(null);
   const [menu, setMenu] = useState<PayrollCellMenuState | null>(null);
-  const drag = useRef<{ mode: "select" | "fill"; r0: number; c0: number; r1: number; c1: number } | null>(null);
+  const drag = useRef<{
+    mode: "select" | "fill";
+    r0: number;
+    c0: number;
+    r1: number;
+    c1: number;
+    rowIds: readonly string[];
+  } | null>(null);
   const rectRef = useRef<CellRect | null>(null);
   const session = usePayrollAdjustSession();
   const headings = usePayrollColumnConfig();
@@ -202,23 +211,26 @@ export function PayrollAttendanceOrdersTab({
       return;
     }
     if (active.mode === "fill") {
-      const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
+      const inputs: ReturnType<typeof dayAdjustmentInput>[] = [];
       let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
-      for (const target of fillTargetCells(
-        { r0: active.r0, c0: active.c0, r1: active.r1, c1: active.c1 },
-        current.r1,
-        current.c1,
+      const visibleIds = new Set(visibleRows.map((row) => row.driverId));
+      const byId = new Map(visibleRows.map((row) => [row.driverId, row]));
+      for (const target of visibleFillTargets(
+        fillTargetCells(
+          { r0: active.r0, c0: active.c0, r1: active.r1, c1: active.c1 },
+          current.r1,
+          current.c1,
+        ),
+        active.rowIds,
+        visibleIds,
       )) {
-        const sourceRow = visibleRows[target.srcR];
-        const targetRow = visibleRows[target.r];
+        const sourceRow = byId.get(active.rowIds[target.srcR] ?? "");
+        const targetRow = byId.get(active.rowIds[target.r] ?? "");
         if (!sourceRow || !targetRow) continue;
         if (target.srcC < 0 || target.srcC >= dates.length || target.c < 0 || target.c >= dates.length) continue;
-        inputs.push({
-          driverId: targetRow.driverId,
-          date: dates[target.c] ?? "",
-          text: dayClipboardToken(sourceRow, target.srcC),
-          currentHours: targetRow.dayInfo[target.c]?.creditedHours ?? 0,
-        });
+        inputs.push(
+          dayAdjustmentInput(targetRow, target.c, dates[target.c] ?? "", dayClipboardToken(sourceRow, target.srcC)),
+        );
         first ??= { row: targetRow, dayIndex: target.c };
       }
       setFillPreview(null);
@@ -227,19 +239,15 @@ export function PayrollAttendanceOrdersTab({
     }
     const moved = current.r0 !== current.r1 || current.c0 !== current.c1;
     const bounds = normalizeRect(current);
-    const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
+    const inputs: ReturnType<typeof dayAdjustmentInput>[] = [];
     let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
+    const byId = new Map(visibleRows.map((row) => [row.driverId, row]));
     for (let r = bounds.top; r <= bounds.bottom; r += 1) {
-      const row = visibleRows[r];
+      const row = byId.get(active.rowIds[r] ?? "");
       if (!row) continue;
       for (let c = bounds.left; c <= bounds.right; c += 1) {
         if (c < 0 || c >= dates.length) continue;
-        inputs.push({
-          driverId: row.driverId,
-          date: dates[c] ?? "",
-          text: dayClipboardToken(row, c),
-          currentHours: row.dayInfo[c]?.creditedHours ?? 0,
-        });
+        inputs.push(dayAdjustmentInput(row, c, dates[c] ?? ""));
         first ??= { row, dayIndex: c };
       }
     }
@@ -309,7 +317,7 @@ export function PayrollAttendanceOrdersTab({
         .map((line) => line.split("\t"));
       const box = normalizeRect(current);
       const tiled = tilePasteOntoSelection(matrix, box.bottom - box.top + 1, box.right - box.left + 1);
-      const inputs: Array<{ driverId: string; date: string; text: string; currentHours: number }> = [];
+      const inputs: ReturnType<typeof dayAdjustmentInput>[] = [];
       let first: { row: PayrollRiderRow; dayIndex: number } | undefined;
       for (let r = 0; r < tiled.length; r += 1) {
         const row = visibleRows[box.top + r];
@@ -317,12 +325,7 @@ export function PayrollAttendanceOrdersTab({
         for (let c = 0; c < tiled[r].length; c += 1) {
           const dayIndex = box.left + c;
           if (dayIndex < 0 || dayIndex >= dates.length) continue;
-          inputs.push({
-            driverId: row.driverId,
-            date: dates[dayIndex] ?? "",
-            text: tiled[r][c],
-            currentHours: row.dayInfo[dayIndex]?.creditedHours ?? 0,
-          });
+          inputs.push(dayAdjustmentInput(row, dayIndex, dates[dayIndex] ?? "", tiled[r][c]));
           first ??= { row, dayIndex };
         }
       }
@@ -356,12 +359,26 @@ export function PayrollAttendanceOrdersTab({
         <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
           <b>{t("ao.bannerTitle")}</b> {t("ao.bannerBody")}
         </div>
-        <PayrollColumnsMenu
-          view="ao"
-          config={headingConfig}
-          fallbackLabel={fallbackLabel}
-          canManage={canManage}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {editable ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9"
+              disabled={session.undoCount === 0 || session.pending}
+              onClick={() => session.undo()}
+            >
+              <Undo2 className="size-3.5" />
+              {t("adjust.undo")}
+            </Button>
+          ) : null}
+          <PayrollColumnsMenu
+            view="ao"
+            config={headingConfig}
+            fallbackLabel={fallbackLabel}
+            canManage={canManage}
+          />
+        </div>
       </div>
       <SearchField
         value={search}
@@ -541,7 +558,11 @@ export function PayrollAttendanceOrdersTab({
                                     event.preventDefault();
                                     session.rememberAnchor(event.currentTarget);
                                     const next = { r0: rowIndex, c0: i, r1: rowIndex, c1: i };
-                                    drag.current = { mode: "select", ...next };
+                                    drag.current = {
+                                      mode: "select",
+                                      ...next,
+                                      rowIds: visibleRows.map((item) => item.driverId),
+                                    };
                                     setRect(next);
                                     setFillPreview(null);
                                   }
@@ -594,6 +615,7 @@ export function PayrollAttendanceOrdersTab({
                                     c0: bounds.left,
                                     r1: bounds.bottom,
                                     c1: bounds.right,
+                                    rowIds: visibleRows.map((item) => item.driverId),
                                   };
                                 }}
                               />

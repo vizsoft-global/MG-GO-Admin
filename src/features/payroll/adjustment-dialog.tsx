@@ -11,6 +11,7 @@ import { dayGridLabel } from "./payroll-formulas";
 import { EDITOR_ADJUSTMENT_STATUSES, particularForAdjustment } from "./payroll-particulars";
 import type { PayrollAdjustRequest } from "./payroll-grid";
 import type { AdjustmentStatus } from "./payroll-rules-engine";
+import { hoursForAdjustmentChoice } from "./payroll-snapshot";
 import type { PayrollAdjustmentCell } from "./payroll-types";
 import { usePayrollAdjustmentAudit } from "./use-payroll";
 
@@ -122,11 +123,11 @@ export function AdjustmentDialog({
 
   const resolved = useMemo(() => {
     if (!state) return [];
-    const hours = choice === "custom" ? Math.min(24, Math.max(0, Number(customHours) || 0)) : null;
+    const typed = Math.min(24, Math.max(0, Number(customHours) || 0));
     return state.cells.map((cell) => ({
       ...cell,
       status: choice,
-      hours: choice === "custom" ? hours : cell.hours,
+      hours: hoursForAdjustmentChoice(choice, cell.hours, typed),
     }));
   }, [state, choice, customHours]);
 

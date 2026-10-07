@@ -35,6 +35,8 @@ import {
 } from "@/components/app";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { TableCell } from "@/components/ui/table";
 import { CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -62,6 +64,7 @@ import { formatReplacementSince } from "@/features/fleet/fleet-labels";
 import { VehicleBulkImportDialog } from "./import/vehicle-bulk-import-dialog";
 import { downloadVehicleListXlsx } from "./import/vehicle-import-sheet";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import { VehicleBulkBar } from "./vehicle-bulk-bar";
 import { VehicleFormDialog } from "./vehicle-form-dialog";
 import { VehiclesColumnHeader } from "./vehicles-column-header";
 import { useVehicleTypes, useVehicleUseTypes, useVehiclesList } from "./use-vehicles";
@@ -138,6 +141,8 @@ export function VehiclesPageShell({
   const t = useTranslations("pages.vehicles");
   const { can } = useAuth();
   const canCreate = can("vehicles.create");
+  const canManage = can("vehicles.manage");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: vehicles = [], isLoading, isFetching, refetch } = useVehiclesList();
@@ -313,9 +318,42 @@ export function VehiclesPageShell({
     { key: "replacement", label: t("kpiReplacement"), value: isLoading ? "—" : String(counts.replacement), icon: Repeat, tone: "warning" },
   ];
 
+  const visibleIds = useMemo(() => visible.map((row) => row.id), [visible]);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const selectedRows = useMemo(
+    () => vehicles.filter((row) => selectedIds.has(row.id)),
+    [selectedIds, vehicles],
+  );
+
   const tableColumns = useMemo(
     () =>
-      COLUMN_ORDER.filter((id) => isVisible(id)).map((id) => ({
+      [
+        ...(canManage
+          ? [
+              {
+                id: "select",
+                className: "w-10",
+                label: (
+                  <Checkbox
+                    checked={allVisibleSelected}
+                    onCheckedChange={(checked) => {
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        if (checked) {
+                          for (const id of visibleIds) next.add(id);
+                        } else {
+                          for (const id of visibleIds) next.delete(id);
+                        }
+                        return next;
+                      });
+                    }}
+                    aria-label={t("bulkSelected", { count: visibleIds.length })}
+                  />
+                ),
+              },
+            ]
+          : []),
+        ...COLUMN_ORDER.filter((id) => isVisible(id)).map((id) => ({
         id,
         label: (
           <VehiclesColumnHeader
@@ -332,7 +370,8 @@ export function VehiclesPageShell({
           />
         ),
       })),
-    [columnFilters, headerLabels, isVisible, optionLabel, scoped, sort, t],
+      ],
+    [allVisibleSelected, canManage, columnFilters, headerLabels, isVisible, optionLabel, scoped, sort, t, visibleIds],
   );
 
   const isRefreshing = isFetching && !isLoading;
@@ -542,8 +581,12 @@ export function VehiclesPageShell({
           </div>
         ) : (
           <CardContent className="p-0">
+            {canManage && selectedRows.length > 0 ? (
+              <VehicleBulkBar rows={selectedRows} onDone={() => setSelectedIds(new Set())} />
+            ) : null}
             <AppDataTable
               columns={tableColumns}
+              stickyHeader
               headerRowClassName="bg-primary/5 hover:bg-primary/5"
               empty={
                 visible.length === 0 ? (
@@ -558,6 +601,16 @@ export function VehiclesPageShell({
                   key={row.id}
                   row={row}
                   isVisible={isVisible}
+                  showSelect={canManage}
+                  selected={selectedIds.has(row.id)}
+                  onToggle={() =>
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(row.id)) next.delete(row.id);
+                      else next.add(row.id);
+                      return next;
+                    })
+                  }
                   onOpen={() => router.push(`/vehicles/${row.id}`)}
                 />
               ))}
@@ -591,15 +644,26 @@ export function VehiclesPageShell({
 function VehicleRow({
   row,
   isVisible,
+  showSelect,
+  selected,
+  onToggle,
   onOpen,
 }: {
   row: VehicleListRow;
   isVisible: (id: string) => boolean;
+  showSelect: boolean;
+  selected: boolean;
+  onToggle: () => void;
   onOpen: () => void;
 }) {
   const t = useTranslations("pages.vehicles");
   return (
     <AppDataTableRow className="cursor-pointer" onClick={onOpen}>
+      {showSelect ? (
+        <TableCell className="w-10" onClick={(event) => event.stopPropagation()}>
+          <Checkbox checked={selected} onCheckedChange={() => onToggle()} aria-label={row.reg_number || row.bike_id} />
+        </TableCell>
+      ) : null}
       <VisibleTableCell columnId="plate" isVisible={isVisible} className="whitespace-nowrap">
         <p className="font-medium">{row.reg_number || row.bike_id}</p>
         <div className="mt-0.5 flex flex-wrap items-center gap-1">

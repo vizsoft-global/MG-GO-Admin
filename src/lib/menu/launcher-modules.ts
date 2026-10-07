@@ -15,13 +15,9 @@ export const LAUNCHER_TILE_IDS = [
   "visit-bookings",
   "dpd-verification",
   "earnings",
-  "restaurants",
   "notifications",
   "attendance",
-  "roles",
   "profile",
-  "document-expiry",
-  "driver-app",
   "assets",
   "operations-hub",
   "vehicles",
@@ -32,7 +28,25 @@ export const LAUNCHER_TILE_IDS = [
 
 export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
 
-export const LAUNCHER_LABEL_OVERRIDE: Partial<Record<LauncherTileId, string>> = {
+/**
+ * Apps that no longer carry a Home tile (they live inside Operations or
+ * Settings) but are still real permission surfaces in Roles & Permissions.
+ * They keep an entry in `APP_ACCESS_CATALOG` so a per-user tick can still be
+ * given for them; they must never be added to `LAUNCHER_TILE_IDS` or they
+ * would reappear as launcher tiles.
+ */
+export const APP_ACCESS_EXTRA_MODULE_IDS = [
+  "restaurants",
+  "roles",
+  "document-expiry",
+  "driver-app",
+] as const;
+
+export type AppAccessModuleId =
+  | LauncherTileId
+  | (typeof APP_ACCESS_EXTRA_MODULE_IDS)[number];
+
+export const LAUNCHER_LABEL_OVERRIDE: Partial<Record<AppAccessModuleId, string>> = {
   "dashboard-ops": "Dashboard",
   "live-tracking-v2": "Live tracking",
   "visit-bookings": "Visit Bookings",

@@ -18,6 +18,7 @@ export function AppDataTable({
   footer,
   className,
   headerRowClassName,
+  stickyHeader = false,
 }: {
   columns: { id: string; label: ReactNode; className?: string }[];
   children: ReactNode;
@@ -25,22 +26,35 @@ export function AppDataTable({
   footer?: ReactNode;
   className?: string;
   headerRowClassName?: string;
+  /** Keep the header row visible inside this table's own scroller. */
+  stickyHeader?: boolean;
 }) {
   return (
-    <div className={cn("overflow-x-auto", className)}>
+    <div
+      className={cn(
+        stickyHeader
+          ? "max-h-[min(640px,62dvh)] overflow-auto [&_[data-slot=table-container]]:overflow-visible"
+          : "overflow-x-auto",
+        className,
+      )}
+    >
       {/* QA #18 — mirror the scroller above the header row so a wide list can be
           panned without scrolling to the bottom of the page first. */}
       <AppTableScrollRail />
       <Table>
-        <TableHeader>
+        <TableHeader className={stickyHeader ? "sticky top-0 z-20 bg-card shadow-sm" : undefined}>
           <TableRow
             className={cn(
               "bg-muted/30 hover:bg-muted/30",
+              stickyHeader && "bg-card hover:bg-card",
               headerRowClassName,
             )}
           >
             {columns.map((col) => (
-              <TableHead key={col.id} className={cn(TABLE_HEAD_CLASS, col.className)}>
+              <TableHead
+                key={col.id}
+                className={cn(TABLE_HEAD_CLASS, stickyHeader && "bg-card", col.className)}
+              >
                 {col.label}
               </TableHead>
             ))}

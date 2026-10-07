@@ -2,18 +2,19 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Hand } from "lucide-react";
-import { toast } from "sonner";
+import { Hand, Undo2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { SearchField } from "@/components/app";
 import { payrollRiderMatchesSearch, type PayrollPeriod } from "./payroll-formulas";
-import { AdjustmentDialog, type AdjustmentDialogState } from "./adjustment-dialog";
-import { PayrollDayGrid, PayrollLegend, type PayrollAdjustRequest } from "./payroll-grid";
+import { AdjustmentDialog } from "./adjustment-dialog";
+import { PayrollDayGrid, PayrollLegend } from "./payroll-grid";
 import { exportCombinedPayrollCsv } from "./payroll-csv";
 import { configByKey, exportLabelsFromConfig, hiddenSetFor } from "./payroll-column-config";
 import { PayrollColumnsMenu } from "./payroll-heading";
-import { useApplyPayrollAdjustments, usePayrollAdjustmentAudit, usePayrollColumnConfig } from "./use-payroll";
-import type { PayrollAdjustmentCell, PayrollRiderRow } from "./payroll-types";
+import { usePayrollAdjustmentAudit, usePayrollColumnConfig } from "./use-payroll";
+import { usePayrollAdjustSession } from "./use-payroll-adjust";
+import type { PayrollRiderRow } from "./payroll-types";
 
 export function CombinedPayrollTab({
   month,
@@ -28,8 +29,7 @@ export function CombinedPayrollTab({
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
-  const [adjust, setAdjust] = useState<AdjustmentDialogState | null>(null);
-  const apply = useApplyPayrollAdjustments();
+  const session = usePayrollAdjustSession();
   const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
@@ -44,28 +44,6 @@ export function CombinedPayrollTab({
     [searched],
   );
 
-  const onRequestAdjust = useCallback((request: PayrollAdjustRequest) => {
-    setAdjust(request);
-  }, []);
-
-  const onNotice = useCallback((message: string) => {
-    if (message) toast.warning(message);
-  }, []);
-
-  function confirm(input: { cells: PayrollAdjustmentCell[]; reason: string }) {
-    apply.mutate(input, {
-      onSuccess: (result) => {
-        if ("error" in result) {
-          toast.error(t(`adjust.errors.${errorKey(result.error)}`));
-          return;
-        }
-        toast.success(t("adjust.applied", { count: result.applied }));
-        setAdjust(null);
-      },
-      onError: () => toast.error(t("adjust.errors.unknown")),
-    });
-  }
-
   const fallbackLabel = useCallback((key: string) => t(`riderCols.${key}`), [t]);
 
   return (
@@ -75,6 +53,18 @@ export function CombinedPayrollTab({
           <b>{t("combinedBannerTitle")}</b> {t("combinedBannerBody")}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canManage ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9"
+              disabled={session.undoCount === 0 || session.pending}
+              onClick={() => session.undo()}
+            >
+              <Undo2 className="size-3.5" />
+              {t("adjust.undo")}
+            </Button>
+          ) : null}
           <PayrollColumnsMenu
             view="combined"
             config={headingConfig}
@@ -108,7 +98,11 @@ export function CombinedPayrollTab({
             });
           }
         }}
-        editor={canManage ? { canManage, onRequestAdjust, onNotice } : undefined}
+        editor={
+          canManage
+            ? { canManage, onRequestAdjust: session.openRequest, onNotice: session.onNotice }
+            : undefined
+        }
         footer={t("tableFootRange", {
           shown: searched.length,
           total: riders.length,
@@ -117,12 +111,10 @@ export function CombinedPayrollTab({
       />
       <PayrollLegend riders={searched} />
       <AdjustmentDialog
-        state={adjust}
-        pending={apply.isPending}
-        onCancel={() => {
-          if (!apply.isPending) setAdjust(null);
-        }}
-        onConfirm={confirm}
+        state={session.adjust}
+        pending={session.pending}
+        onCancel={session.cancel}
+        onConfirm={session.confirm}
       />
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="border-b border-border px-4 py-2">
@@ -173,9 +165,4 @@ export function CombinedPayrollTab({
       </div>
     </div>
   );
-}
-
-function errorKey(code: string): string {
-  const known = ["reason_required", "no_cells", "too_many_cells", "not_authorized"];
-  return known.includes(code) ? code : "unknown";
 }

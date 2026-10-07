@@ -59,6 +59,7 @@ export type VehicleDriverOption = {
   id: string;
   label: string;
   keywords: string[];
+  projectKey: string | null;
 };
 
 async function requireVehicles(permission: "vehicles.view" | "vehicles.manage") {
@@ -114,13 +115,14 @@ export async function listVehicleTabDrivers(): Promise<VehicleDriverOption[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("drivers")
-    .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name)")
+    .select("id, driver_code, employee_id, project_key, profiles!drivers_id_fkey(full_name)")
     .is("archived_at", null)
     .order("employee_id");
   return ((data ?? []) as Array<{
     id: string;
     driver_code: string | null;
     employee_id: string | null;
+    project_key: string | null;
     profiles: { full_name: string | null } | { full_name: string | null }[] | null;
   }>).map((row) => {
     const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
@@ -128,6 +130,7 @@ export async function listVehicleTabDrivers(): Promise<VehicleDriverOption[]> {
       id: row.id,
       label: [profile?.full_name, row.employee_id || row.driver_code].filter(Boolean).join(" · "),
       keywords: [profile?.full_name, row.employee_id, row.driver_code].filter(Boolean) as string[],
+      projectKey: row.project_key,
     };
   });
 }

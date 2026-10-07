@@ -493,6 +493,65 @@ export async function assignVehicleDriver(
   return {};
 }
 
+const BULK_VEHICLE_CAP = 50;
+
+export async function bulkAssignVehicleDrivers(
+  pairs: { vehicleId: string; driverId: string | null }[],
+): Promise<{ error?: string; updated?: number }> {
+  const auth = await requireVehicles("vehicles.manage");
+  if ("error" in auth) return auth;
+  const next = pairs
+    .map((pair) => ({
+      vehicleId: pair.vehicleId.trim(),
+      driverId: pair.driverId?.trim() || null,
+    }))
+    .filter((pair) => pair.vehicleId)
+    .slice(0, BULK_VEHICLE_CAP);
+  if (next.length === 0) return { error: "missing_fields" };
+  for (const pair of next) {
+    const result = await assignVehicleDriver(pair.vehicleId, pair.driverId);
+    if (result.error) return result;
+  }
+  return { updated: next.length };
+}
+
+export async function bulkUpdateVehicles(
+  ids: string[],
+  patch: { status?: VehicleStatus; ownerPartnerId?: string | null },
+): Promise<{ error?: string; updated?: number }> {
+  const auth = await requireVehicles("vehicles.manage");
+  if ("error" in auth) return auth;
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))].slice(0, BULK_VEHICLE_CAP);
+  if (unique.length === 0) return { error: "missing_fields" };
+
+  const payload: {
+    updated_at: string;
+    status?: VehicleStatus;
+    owner_partner_id?: string | null;
+  } = { updated_at: new Date().toISOString() };
+  if (patch.status === "active" || patch.status === "suspended" || patch.status === "maintenance") {
+    payload.status = patch.status;
+  }
+  if ("ownerPartnerId" in patch) {
+    payload.owner_partner_id = patch.ownerPartnerId?.trim() || null;
+  }
+  if (payload.status === undefined && !("owner_partner_id" in payload)) {
+    return { error: "missing_fields" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("vehicles").update(payload).in("id", unique);
+  if (error) return { error: formatError(error) };
+  void logAdminMutation({
+    action: "update",
+    entityType: "vehicle",
+    entityId: unique[0] ?? "bulk",
+    routeName: "/vehicles",
+    after: { ids: unique, ...payload },
+  });
+  return { updated: unique.length };
+}
+
 export async function updateVehicleTypeLabel(formData: FormData): Promise<{ error?: string }> {
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
