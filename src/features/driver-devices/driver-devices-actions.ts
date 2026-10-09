@@ -1,10 +1,10 @@
-"use server";
+﻿"use server";
 
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createClient } from "@/lib/supabase/server";
 import { sendDirectDriverNotification } from "@/features/notifications/notifications-actions";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import {
   getSentryDeviceOverview,
   sentryDriverIssuesUrl,
@@ -103,9 +103,8 @@ function toSentryView(
 }
 
 async function loadDevicesPageData(): Promise<DriverDevicesPageData | { error: string }> {
-  const supabase = await createClient();
   const [{ data, error }, overview] = await Promise.all([
-    supabase.rpc("admin_list_driver_devices"),
+    callAdminFunction("admin_list_driver_devices"),
     getSentryDeviceOverview(),
   ]);
   if (error) {
@@ -177,8 +176,7 @@ export async function setDriverDevicesForceUpdate(input: {
     return { error: "invalid_min_code" };
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_set_driver_force_update", {
+  const { data, error } = await callAdminFunction("admin_set_driver_force_update", {
     p_driver_ids: ids,
     p_min_code: minCode ?? 1,
     p_enabled: input.enabled,

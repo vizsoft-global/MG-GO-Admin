@@ -1,6 +1,9 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import type { Firestore } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import type { Json } from "@/types/database";
@@ -53,22 +56,40 @@ async function requirePayrollPermission(
   return session;
 }
 
-async function fetchAll<T>(
-  run: (
-    from: number,
-    to: number,
-  ) => PromiseLike<{ data: T[] | null; error: { message: string; code?: string } | null }>,
-): Promise<T[]> {
-  const page = 1000;
-  const out: T[] = [];
-  for (let from = 0; ; from += page) {
-    const { data, error } = await run(from, from + page - 1);
-    if (error) throw new Error(error.message);
-    const rows = data ?? [];
-    out.push(...rows);
-    if (rows.length < page) break;
+function isoOf(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  const ts = value as { toDate?: () => Date };
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  return null;
+}
+
+function textOf(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
+/** Callables accept `p_*` and camelCase. Send both so either reader matches. */
+function rpcArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...args };
+  for (const [key, value] of Object.entries(args)) {
+    if (!key.startsWith("p_")) continue;
+    const camel = key.slice(2).replace(/_([a-z0-9])/g, (_match, ch: string) => ch.toUpperCase());
+    if (out[camel] === undefined) out[camel] = value;
   }
   return out;
+}
+
+function callRpc<T>(name: string, args: Record<string, unknown> = {}) {
+  return callAdminFunction<T>(name, rpcArgs(args));
+}
+
+async function payrollDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
 }
 
 function kuwaitBoundIso(ymd: string): string {
@@ -105,22 +126,21 @@ function isMissingRpc(error: { code?: string; message?: string }): boolean {
  * rider who has been on the clock for nine hours as a plain full day. The rule
  * engine still sees `0`; only the cell label uses this.
  */
-async function loadOpenLogElapsedToday(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  today: string,
-): Promise<Record<string, number>> {
-  const { data } = await supabase
-    .from("attendance_logs")
-    .select("driver_id, check_in_at")
-    .eq("log_date", today)
-    .is("check_out_at", null);
+async function loadOpenLogElapsedToday(today: string): Promise<Record<string, number>> {
+  const db = await payrollDb();
+  const snap = await db.collection(COLLECTIONS.attendanceLogs).where("log_date", "==", today).get();
   const now = Date.now();
   const out: Record<string, number> = {};
-  for (const row of data ?? []) {
-    const started = row.check_in_at ? Date.parse(row.check_in_at) : Number.NaN;
+  for (const doc of snap.docs) {
+    const row = doc.data();
+    if (row.check_out_at != null) continue;
+    const startedRaw = isoOf(row.check_in_at);
+    const started = startedRaw ? Date.parse(startedRaw) : Number.NaN;
     if (!Number.isFinite(started)) continue;
     const hours = Math.max(0, (now - started) / 3_600_000);
-    out[row.driver_id] = Math.round(hours * 100) / 100;
+    const driverId = String(row.driver_id ?? "");
+    if (!driverId) continue;
+    out[driverId] = Math.round(hours * 100) / 100;
   }
   return out;
 }
@@ -133,7 +153,16 @@ export async function fetchPayrollMonthSnapshot(input: {
   const today = kuwaitToday();
   const month = assertPayrollMonth(input.monthKey, today);
   const slicers = input.slicers ?? EMPTY_OPS_SLICERS;
-  const supabase = await createClient();
+  const snapshotArgs = {
+    p_month: `${month.key}-01`,
+    p_zone_ids: emptyToUndef(slicers.zoneIds),
+    p_project_keys: emptyToUndef(slicers.projectKeys),
+    p_vehicle_keys: emptyToUndef(slicers.vehicleKeys),
+    p_nationalities: emptyToUndef(slicers.nationalities),
+    p_source_types: emptyToUndef(slicers.sourceTypes),
+    p_source_companies: emptyToUndef(slicers.sourceCompanies),
+    p_restaurant_ids: emptyToUndef(slicers.restaurantIds),
+  };
 
   // The rule snapshot is the source of truth: it already resolves hours,
   // requests, recon orders, per-month rules, zone category and adjustments in
@@ -145,18 +174,9 @@ export async function fetchPayrollMonthSnapshot(input: {
   // today's open logs are fetched alongside — in the same round trip, so this
   // costs no latency — and fed in as display-only elapsed hours.
   const [rule, openElapsed] = await Promise.all([
-    supabase.rpc("admin_payroll_rule_snapshot", {
-      p_month: `${month.key}-01`,
-      p_zone_ids: emptyToUndef(slicers.zoneIds),
-      p_project_keys: emptyToUndef(slicers.projectKeys),
-      p_vehicle_keys: emptyToUndef(slicers.vehicleKeys),
-      p_nationalities: emptyToUndef(slicers.nationalities),
-      p_source_types: emptyToUndef(slicers.sourceTypes),
-      p_source_companies: emptyToUndef(slicers.sourceCompanies),
-      p_restaurant_ids: emptyToUndef(slicers.restaurantIds),
-    }),
+    callRpc<RawPayrollRuleSnapshot>("admin_payroll_rule_snapshot", snapshotArgs),
     today.startsWith(month.key)
-      ? loadOpenLogElapsedToday(supabase, today)
+      ? loadOpenLogElapsedToday(today)
       : Promise.resolve(undefined),
   ]);
   if (!rule.error && rule.data) {
@@ -169,133 +189,146 @@ export async function fetchPayrollMonthSnapshot(input: {
     throw new Error(rule.error.message);
   }
 
-  const { data, error } = await supabase.rpc("admin_payroll_month_snapshot", {
-    p_month: `${month.key}-01`,
-    p_zone_ids: emptyToUndef(slicers.zoneIds),
-    p_project_keys: emptyToUndef(slicers.projectKeys),
-    p_vehicle_keys: emptyToUndef(slicers.vehicleKeys),
-    p_nationalities: emptyToUndef(slicers.nationalities),
-    p_source_types: emptyToUndef(slicers.sourceTypes),
-    p_source_companies: emptyToUndef(slicers.sourceCompanies),
-    p_restaurant_ids: emptyToUndef(slicers.restaurantIds),
-  });
+  const { data, error } = await callRpc<PayrollSnapshot>("admin_payroll_month_snapshot", snapshotArgs);
 
   if (!error && data) {
-    return decoratePayrollSnapshot(data as PayrollSnapshot);
+    return decoratePayrollSnapshot(data);
   }
   if (error && !isMissingRpc(error)) {
     throw new Error(error.message);
   }
 
-  return assembleFromTables(supabase, today, month.key, slicers);
+  return assembleFromTables(today, month.key, slicers);
+}
+
+function requestOverlapsMonth(
+  row: { start_date: string | null; end_date: string | null; created_at: string | null },
+  startIso: string,
+  endExclusiveIso: string,
+  startMs: number,
+  endMs: number,
+): boolean {
+  const start = row.start_date;
+  const end = row.end_date;
+  const createdMs = row.created_at ? Date.parse(row.created_at) : Number.NaN;
+  if (start != null && start < endExclusiveIso && end != null && end >= startIso) return true;
+  if (start != null && start < endExclusiveIso && end == null && start >= startIso) return true;
+  if (start == null && end != null && end >= startIso && Number.isFinite(createdMs) && createdMs < endMs) {
+    return true;
+  }
+  if (start == null && end == null && Number.isFinite(createdMs) && createdMs >= startMs && createdMs < endMs) {
+    return true;
+  }
+  return false;
 }
 
 async function assembleFromTables(
-  supabase: Awaited<ReturnType<typeof createClient>>,
   today: string,
   monthKey: string,
   slicers: PayrollSlicers,
 ): Promise<PayrollSnapshot> {
+  const db = await payrollDb();
   const { startIso, endExclusiveIso } = kuwaitMonthBounds(monthKey);
   const startUtc = kuwaitBoundIso(startIso);
   const endUtc = kuwaitBoundIso(endExclusiveIso);
+  const startMs = Date.parse(startUtc);
+  const endMs = Date.parse(endUtc);
 
-  const [driverRows, profileRows, zoneRows, vehicleRows, mapRows, restaurantRows, logRows, requestRows, offRows] =
+  const [driverSnap, profileSnap, zoneSnap, vehicleSnap, mapSnap, restaurantSnap, logSnap, requestSnap, offSnap] =
     await Promise.all([
-      fetchAll<{
-        id: string;
-        employee_id: string | null;
-        driver_code: string | null;
-        zone_id: string | null;
-        project_key: string | null;
-        nationality: string | null;
-        rider_category: string | null;
-        source_company: string | null;
-        status: string | null;
-        vehicle_id: string | null;
-      }>((from, to) =>
-        supabase
-          .from("drivers")
-          .select(
-            "id, employee_id, driver_code, zone_id, project_key, nationality, rider_category, source_company, status, vehicle_id",
-          )
-          .is("archived_at", null)
-          .range(from, to),
-      ),
-      fetchAll<{ id: string; full_name: string | null }>((from, to) =>
-        supabase.from("profiles").select("id, full_name").range(from, to),
-      ),
-      fetchAll<{ id: string; name: string }>((from, to) =>
-        supabase.from("zones").select("id, name").range(from, to),
-      ),
-      fetchAll<{ id: string; vehicle_type_key: string | null }>((from, to) =>
-        supabase.from("vehicles").select("id, vehicle_type_key").range(from, to),
-      ),
-      fetchAll<{ driver_id: string; restaurant_id: string }>((from, to) =>
-        supabase
-          .from("driver_restaurants")
-          .select("driver_id, restaurant_id")
-          .order("restaurant_id", { ascending: true })
-          .range(from, to),
-      ),
-      fetchAll<{ id: string; name: string }>((from, to) =>
-        supabase.from("restaurants").select("id, name").range(from, to),
-      ),
-      fetchAll<{
-        driver_id: string;
-        check_in_at: string | null;
-        check_out_at: string | null;
-      }>((from, to) =>
-        supabase
-          .from("attendance_logs")
-          .select("driver_id, check_in_at, check_out_at")
-          .gte("check_in_at", startUtc)
-          .lt("check_in_at", endUtc)
-          .range(from, to),
-      ),
-      fetchAll<{
-        id: string;
-        request_code: string;
-        driver_id: string;
-        request_type: string;
-        status: string;
-        start_date: string | null;
-        end_date: string | null;
-        created_at: string;
-        payload: unknown;
-        current_step_label: string | null;
-      }>((from, to) =>
-        supabase
-          .from("requests")
-          .select(
-            "id, request_code, driver_id, request_type, status, start_date, end_date, created_at, payload, current_step_label",
-          )
-          .or(
-            [
-              `and(start_date.not.is.null,start_date.lt.${endExclusiveIso},end_date.gte.${startIso})`,
-              `and(start_date.not.is.null,start_date.lt.${endExclusiveIso},end_date.is.null,start_date.gte.${startIso})`,
-              `and(start_date.is.null,end_date.gte.${startIso},created_at.lt.${endUtc})`,
-              `and(start_date.is.null,end_date.is.null,created_at.gte.${startUtc},created_at.lt.${endUtc})`,
-            ].join(","),
-          )
-          .range(from, to),
-      ),
-      fetchAll<{
-        driver_id: string;
-        off_days: number;
-        source: string;
-      }>((from, to) =>
-        supabase
-          .from("driver_off_structure")
-          .select("driver_id, off_days, source")
-          .eq("period_month", `${monthKey}-01`)
-          .range(from, to),
-      ).catch(() => [] as Array<{
-        driver_id: string;
-        off_days: number;
-        source: string;
-      }>),
+      db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
+      db.collection(COLLECTIONS.profiles).get(),
+      db.collection(COLLECTIONS.zones).get(),
+      db.collection(COLLECTIONS.vehicles).get(),
+      db.collection(COLLECTIONS.driverRestaurants).get(),
+      db.collection(COLLECTIONS.restaurants).get(),
+      db
+        .collection(COLLECTIONS.attendanceLogs)
+        .where("check_in_at", ">=", new Date(startUtc))
+        .where("check_in_at", "<", new Date(endUtc))
+        .get(),
+      db.collection(COLLECTIONS.requests).get(),
+      db
+        .collection(COLLECTIONS.driverOffStructure)
+        .where("period_month", "==", `${monthKey}-01`)
+        .get()
+        .catch(() => null),
     ]);
+
+  const driverRows = driverSnap.docs.map((doc) => {
+    const row = doc.data();
+    return {
+      id: doc.id,
+      employee_id: textOf(row.employee_id),
+      driver_code: textOf(row.driver_code),
+      zone_id: textOf(row.zone_id),
+      project_key: textOf(row.project_key),
+      nationality: textOf(row.nationality),
+      rider_category: textOf(row.rider_category),
+      source_company: textOf(row.source_company),
+      status: textOf(row.status),
+      vehicle_id: textOf(row.vehicle_id),
+    };
+  });
+  const profileRows = profileSnap.docs.map((doc) => ({
+    id: doc.id,
+    full_name: textOf(doc.data().full_name),
+  }));
+  const zoneRows = zoneSnap.docs.map((doc) => ({
+    id: doc.id,
+    name: String(doc.data().name ?? ""),
+  }));
+  const vehicleRows = vehicleSnap.docs.map((doc) => ({
+    id: doc.id,
+    vehicle_type_key: textOf(doc.data().vehicle_type_key),
+  }));
+  const mapRows = mapSnap.docs
+    .map((doc) => {
+      const row = doc.data();
+      return {
+        driver_id: String(row.driver_id ?? ""),
+        restaurant_id: String(row.restaurant_id ?? ""),
+      };
+    })
+    .filter((row) => row.driver_id && row.restaurant_id)
+    .sort((a, b) => a.restaurant_id.localeCompare(b.restaurant_id));
+  const restaurantRows = restaurantSnap.docs.map((doc) => ({
+    id: doc.id,
+    name: String(doc.data().name ?? ""),
+  }));
+  const logRows = logSnap.docs.map((doc) => {
+    const row = doc.data();
+    return {
+      driver_id: String(row.driver_id ?? ""),
+      check_in_at: isoOf(row.check_in_at),
+      check_out_at: isoOf(row.check_out_at),
+    };
+  });
+  const requestRows = requestSnap.docs
+    .map((doc) => {
+      const row = doc.data();
+      return {
+        id: doc.id,
+        request_code: String(row.request_code ?? ""),
+        driver_id: String(row.driver_id ?? ""),
+        request_type: String(row.request_type ?? ""),
+        status: String(row.status ?? ""),
+        start_date: textOf(row.start_date),
+        end_date: textOf(row.end_date),
+        created_at: isoOf(row.created_at) ?? "",
+        payload: row.payload,
+        current_step_label: textOf(row.current_step_label),
+      };
+    })
+    .filter((row) => requestOverlapsMonth(row, startIso, endExclusiveIso, startMs, endMs));
+  const offRows = (offSnap?.docs ?? []).map((doc) => {
+    const row = doc.data();
+    return {
+      driver_id: String(row.driver_id ?? ""),
+      off_days: Number(row.off_days ?? 0),
+      source: String(row.source ?? "manual"),
+    };
+  });
 
   const names = new Map(profileRows.map((p) => [p.id, p.full_name]));
   const zones = new Map(zoneRows.map((z) => [z.id, z.name]));
@@ -336,22 +369,22 @@ async function assembleFromTables(
     role_key: string;
     status: string;
   }> = [];
-  for (let i = 0; i < requestIds.length; i += 200) {
-    const chunk = requestIds.slice(i, i + 200);
-    const part = await fetchAll<{
-      request_id: string;
-      step_order: number;
-      step_name: string;
-      role_key: string;
-      status: string;
-    }>((from, to) =>
-      supabase
-        .from("request_approval_steps")
-        .select("request_id, step_order, step_name, role_key, status")
-        .in("request_id", chunk)
-        .range(from, to),
-    );
-    stepRows.push(...part);
+  for (let i = 0; i < requestIds.length; i += 30) {
+    const chunk = requestIds.slice(i, i + 30);
+    const part = await db
+      .collection(COLLECTIONS.requestApprovalSteps)
+      .where("request_id", "in", chunk)
+      .get();
+    for (const doc of part.docs) {
+      const row = doc.data();
+      stepRows.push({
+        request_id: String(row.request_id ?? ""),
+        step_order: Number(row.step_order ?? 0),
+        step_name: String(row.step_name ?? ""),
+        role_key: String(row.role_key ?? ""),
+        status: String(row.status ?? ""),
+      });
+    }
   }
 
   const stepByRequest = new Map<string, { stepName: string; roleKey: string }>();
@@ -427,8 +460,7 @@ export async function setDriverOffStructure(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "invalid_month" };
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_set_driver_off_structure", {
+  const { data, error } = await callRpc("admin_set_driver_off_structure", {
     p_driver_id: input.driverId,
     p_month: `${input.monthKey}-01`,
     p_off_days: input.offDays as number,
@@ -462,8 +494,7 @@ export async function applyOffStructureBulk(input: {
   }
   if (!input.rows.length) return { error: "no_rows" };
   if (input.rows.length > 2000) return { error: "too_many_rows" };
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_bulk_set_driver_off_structure", {
+  const { data, error } = await callRpc("admin_bulk_set_driver_off_structure", {
     p_month: `${input.monthKey}-01`,
     p_rows: input.rows.map((row) => ({
       driver_key: row.driverKey,
@@ -546,8 +577,7 @@ export async function fetchPayrollRuleConfig(input: {
   await requirePayrollView();
   const today = kuwaitToday();
   const month = assertPayrollMonth(input.monthKey, today);
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_payroll_rule_config", {
+  const { data, error } = await callAdminFunction("admin_payroll_rule_config", {
     p_month: `${month.key}-01`,
   });
   if (error) throw new Error(error.message);
@@ -561,8 +591,7 @@ export async function openPayrollRuleMonth(input: {
   await requirePayrollPermission("payroll.manage");
   const today = kuwaitToday();
   const month = assertPayrollMonth(input.monthKey, today);
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_open_payroll_rule_month", {
+  const { data, error } = await callAdminFunction("admin_open_payroll_rule_month", {
     p_month: `${month.key}-01`,
   });
   if (error) throw new Error(error.message);
@@ -586,8 +615,7 @@ export async function savePayrollClient(input: {
   sortOrder?: number | null;
 }): Promise<{ error: string } | { ok: true }> {
   await requirePayrollPermission("payroll.manage");
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("admin_save_payroll_client", {
+  const { error } = await callAdminFunction("admin_save_payroll_client", {
     p_key: input.key,
     p_name: input.name,
     p_uses_zone: input.usesZone,
@@ -645,8 +673,7 @@ export async function addPayrollClient(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "invalid_month" };
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_add_payroll_client", {
+  const { data, error } = await callAdminFunction("admin_add_payroll_client", {
     p_name: input.name,
     p_uses_zone: input.usesZone,
     p_uses_orders: input.usesOrders,
@@ -684,8 +711,7 @@ export async function savePayrollClientRules(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "invalid_month" };
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_save_payroll_client_rules", {
+  const { data, error } = await callAdminFunction("admin_save_payroll_client_rules", {
     p_client_key: input.clientKey,
     p_month: `${month}-01`,
     p_rules: input.rules.map((rule) => ({
@@ -719,8 +745,7 @@ export async function resetPayrollClientRules(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "invalid_month" };
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_reset_payroll_client_rules", {
+  const { data, error } = await callAdminFunction("admin_reset_payroll_client_rules", {
     p_client_key: input.clientKey,
     p_month: `${month}-01`,
   });
@@ -748,8 +773,7 @@ export async function recomputePayrollZoneMetrics(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "invalid_month" };
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_recompute_payroll_zone_metrics", {
+  const { data, error } = await callRpc("admin_recompute_payroll_zone_metrics", {
     p_month: `${month}-01`,
   });
   if (error) return { error: error.message };
@@ -785,8 +809,7 @@ export async function savePayrollZoneOverride(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "invalid_month" };
   }
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("admin_save_payroll_zone_override", {
+  const { error } = await callRpc("admin_save_payroll_zone_override", {
     p_zone_id: input.zoneId,
     p_month: `${month}-01`,
     p_dpd_used: input.dpdUsed ?? undefined,
@@ -816,8 +839,7 @@ export async function fetchPayrollZoneSettings(input: {
   monthKey: string;
 }): Promise<import("./payroll-types").PayrollZoneSettings> {
   await requirePayrollView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_payroll_zone_settings", {
+  const { data, error } = await callRpc("admin_payroll_zone_settings", {
     p_month: `${input.monthKey}-01`,
   });
   if (error) throw new Error(error.message);
@@ -845,8 +867,7 @@ export async function savePayrollZoneSettings(input: {
   } catch (e) {
     return { error: e instanceof Error ? e.message : "invalid_month" };
   }
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("admin_save_payroll_zone_settings", {
+  const { error } = await callRpc("admin_save_payroll_zone_settings", {
     p_month: `${month}-01`,
     p_target_dpd_override: input.targetDpdOverride ?? undefined,
     p_good_threshold: input.goodThreshold,
@@ -873,8 +894,7 @@ export async function deletePayrollClient(input: {
   key: string;
 }): Promise<{ error: string } | { ok: true }> {
   await requirePayrollPermission("payroll.manage");
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("admin_delete_payroll_client", {
+  const { error } = await callAdminFunction("admin_delete_payroll_client", {
     p_key: input.key,
   });
   if (error) return { error: error.message };
@@ -909,8 +929,7 @@ export async function applyPayrollAdjustments(input: {
   if (!reason) return { error: "reason_required" };
   if (!input.cells.length) return { error: "no_cells" };
   if (input.cells.length > 2000) return { error: "too_many_cells" };
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_apply_payroll_adjustments", {
+  const { data, error } = await callRpc("admin_apply_payroll_adjustments", {
     p_cells: normaliseAdjustmentCells(input.cells) as unknown as Json,
     p_reason: reason,
   });
@@ -942,8 +961,7 @@ export async function fetchPayrollAdjustmentAudit(input: {
   driverId?: string | null;
 }): Promise<PayrollAdjustmentAuditRow[]> {
   await requirePayrollView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_payroll_adjustment_audit", {
+  const { data, error } = await callRpc("admin_payroll_adjustment_audit", {
     p_from: (input.from ?? null) as unknown as string,
     p_to: (input.to ?? null) as unknown as string,
     p_driver_id: input.driverId ?? undefined,
@@ -968,17 +986,9 @@ export async function fetchPayrollAdjustmentAudit(input: {
   });
 }
 
-type LooseRpc = {
-  rpc: (
-    fn: string,
-    args?: Record<string, unknown>,
-  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
-};
-
 export async function fetchPayrollColumnConfig(): Promise<PayrollColumnConfigRow[]> {
   await requirePayrollView();
-  const supabase = (await createClient()) as unknown as LooseRpc;
-  const { data, error } = await supabase.rpc("admin_list_payroll_column_config");
+  const { data, error } = await callAdminFunction("admin_list_payroll_column_config");
   if (error) throw new Error(error.message);
   const list = Array.isArray(data) ? data : [];
   return list.map((item) => {
@@ -998,8 +1008,7 @@ export async function savePayrollColumnConfig(input: {
   hiddenViews: readonly PayrollHeadingView[];
 }): Promise<{ error: string } | { ok: true }> {
   await requirePayrollPermission("payroll.manage");
-  const supabase = (await createClient()) as unknown as LooseRpc;
-  const { error } = await supabase.rpc("admin_set_payroll_column_config", {
+  const { error } = await callAdminFunction("admin_set_payroll_column_config", {
     p_column_key: input.columnKey,
     p_label: input.label,
     p_hidden_views: [...input.hiddenViews],

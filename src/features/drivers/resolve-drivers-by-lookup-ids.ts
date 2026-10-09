@@ -1,3 +1,4 @@
+import { staffClient } from "./driver-uniqueness";
 import { normalizeDriverLookupIds } from "./parse-pasted-driver-ids";
 
 export type ResolvedDriverLookup = {
@@ -41,22 +42,25 @@ function rowFromDriver(d: {
 
 /**
  * Resolve pasted IDs against drivers.employee_id OR drivers.driver_code.
+ *
+ * The first argument stays so callers that still pass a query client
+ * (`resolveDriversByLookupIds(client, ids)`) compile. The client is ignored;
+ * pass a string array alone when there is no client.
  */
 export async function resolveDriversByLookupIds(
-  supabase: {
-    from: (table: string) => any;
-  },
-  lookupIds: string[],
+  clientOrIds: unknown,
+  lookupIds?: string[],
 ): Promise<ResolvedDriverLookup[]> {
-  const normalized = normalizeDriverLookupIds(lookupIds);
+  const ids = Array.isArray(clientOrIds) ? (clientOrIds as string[]) : (lookupIds ?? []);
+  const normalized = normalizeDriverLookupIds(ids);
   if (normalized.length === 0) return [];
 
   const select =
     "id, driver_code, employee_id, is_blocked, archived_at, profiles!drivers_id_fkey(full_name)";
-
+  const db = await staffClient();
   const [byEmployeeResult, byCodeResult] = await Promise.all([
-    supabase.from("drivers").select(select).in("employee_id", normalized),
-    supabase.from("drivers").select(select).in("driver_code", normalized),
+    db.from("drivers").select(select).in("employee_id", normalized),
+    db.from("drivers").select(select).in("driver_code", normalized),
   ]);
 
   if (byEmployeeResult.error) throw new Error(byEmployeeResult.error.message);

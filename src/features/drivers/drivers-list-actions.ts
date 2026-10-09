@@ -1,10 +1,10 @@
-"use server";
+﻿"use server";
 
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import {
   DEFAULT_DRIVERS_SORT,
   isDriversFilterColumn,
@@ -61,8 +61,7 @@ async function callPage(
   limit: number,
   offset: number,
 ): Promise<DriversPageResult> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_list_drivers_page", {
+  const { data, error } = await callAdminFunction("admin_list_drivers_page", {
     ...normalizeQuery(query),
     p_limit: limit,
     p_offset: offset,
@@ -110,9 +109,8 @@ export async function fetchDriverFilterValues(
 ): Promise<DriversFilterOption[]> {
   await requireDriversView();
   if (!isDriversFilterColumn(column)) throw new Error("invalid_filter");
-  const supabase = await createClient();
   const { p_tab, p_search, p_filters } = normalizeQuery({ ...query, sort: DEFAULT_DRIVERS_SORT });
-  const { data, error } = await supabase.rpc("admin_drivers_filter_values", {
+  const { data, error } = await callAdminFunction("admin_drivers_filter_values", {
     p_column: column,
     p_tab,
     p_search,

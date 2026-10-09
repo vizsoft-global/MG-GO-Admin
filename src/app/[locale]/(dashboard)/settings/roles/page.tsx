@@ -3,13 +3,35 @@ import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
 import { logAdminPageView } from "@/lib/audit/log-admin-activity";
 import { getAllAdminRoles } from "@/lib/auth/get-role-permissions";
 import { syncAdminPermissionsFromCatalog } from "@/lib/auth/sync-admin-permissions";
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getRoleUsageCounts } from "@/features/settings/roles-actions";
 import {
   listRequestTypeOptions,
   listStaffAccess,
 } from "@/features/settings/staff-access-actions";
 import { RolesAccessPage } from "@/features/settings/access-control/roles-access-page";
+
+type PermissionRow = { slug: string; label: string; category: string };
+
+async function listPermissionRows(): Promise<PermissionRow[]> {
+  const db = await staffDb();
+  if (!db) return [];
+
+  const snap = await db.collection(COLLECTIONS.adminPermissions).get();
+  return snap.docs
+    .map((doc) => {
+      const data = doc.data();
+      const slug = typeof data.slug === "string" ? data.slug : "";
+      const label = typeof data.label === "string" ? data.label : "";
+      const category = typeof data.category === "string" ? data.category : "";
+      return { slug, label, category };
+    })
+    .filter((row) => row.slug.length > 0 && row.label.length > 0)
+    .sort(
+      (a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label),
+    );
+}
 
 export default async function RolesPermissionsPage({
   params,
@@ -26,13 +48,12 @@ export default async function RolesPermissionsPage({
 
   await syncAdminPermissionsFromCatalog();
 
-  const supabase = await createClient();
-  const [allRoles, usageCounts, listed, requestTypes, permissionsResult] = await Promise.all([
+  const [allRoles, usageCounts, listed, requestTypes, permissions] = await Promise.all([
     getAllAdminRoles(),
     getRoleUsageCounts(),
     listStaffAccess(),
     listRequestTypeOptions(),
-    supabase.from("admin_permissions").select("slug, label, category").order("category").order("label"),
+    listPermissionRows(),
   ]);
 
   return (
@@ -44,7 +65,7 @@ export default async function RolesPermissionsPage({
         loadError={listed.error}
         roles={allRoles}
         requestTypes={requestTypes.rows ?? []}
-        permissions={permissionsResult.data ?? []}
+        permissions={permissions}
         usageCounts={usageCounts}
       />
     </div>

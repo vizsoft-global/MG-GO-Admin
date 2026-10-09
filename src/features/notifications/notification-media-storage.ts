@@ -1,10 +1,23 @@
 import { randomUUID } from "crypto";
-import { buildNotificationMediaKey } from "@/lib/storage/r2-keys";
-import { putObject } from "@/lib/storage/r2-client";
+import { buildNotificationMediaKey, isNotificationMediaObjectKey } from "@/lib/storage/r2-keys";
+import { getPresignedGetUrl, putObject } from "@/lib/storage/r2-client";
 import {
+  FCM_IMAGE_URL_TTL_SECONDS,
   resolveNotificationMediaMeta,
   type NotificationMediaUploadError,
 } from "./notification-media";
+
+export async function resolveNotificationMediaReadUrl(
+  objectKey: string,
+  expiresInSeconds = FCM_IMAGE_URL_TTL_SECONDS,
+): Promise<string | null> {
+  if (!isNotificationMediaObjectKey(objectKey)) return null;
+  try {
+    return await getPresignedGetUrl(objectKey, expiresInSeconds);
+  } catch {
+    return null;
+  }
+}
 
 export async function uploadNotificationMediaFile(
   file: File,

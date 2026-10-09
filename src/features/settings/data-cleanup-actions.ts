@@ -1,9 +1,13 @@
 "use server";
 
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { getFirebaseAuth } from "@/lib/firebase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   allAssetCatalogImageKeys,
   allDriverAvatarKeys,
@@ -14,9 +18,7 @@ import {
   isR2ObjectKey,
 } from "@/lib/storage/r2-keys";
 import type { DriverDocumentType } from "@/features/drivers/types";
-import type { Json } from "@/types/database";
 import { deleteObject, deleteObjects } from "@/lib/storage/r2-client";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
 import {
   isPurgeAllEntity,
   purgeAllModuleFor,
@@ -24,6 +26,8 @@ import {
 } from "./purge-entities";
 
 const PAGE_SIZE = 25;
+const SEARCH_SCAN_CAP = 4000;
+const STORAGE_UPLOADS = "storage_uploads";
 
 /**
  * Clear all loops the batched RPC until the module is empty, but it stops after
@@ -136,6 +140,33 @@ function expandStorageEntry(entry: string): string[] {
   return [];
 }
 
+async function deleteStorageUploadDocs(keys: string[]): Promise<void> {
+  if (keys.length === 0) return;
+  const db = await staffDb();
+  if (!db) return;
+  for (let i = 0; i < keys.length; i += 30) {
+    const part = keys.slice(i, i + 30);
+    const snap = await db.collection(STORAGE_UPLOADS).where("object_key", "in", part).get();
+    if (snap.empty) continue;
+    const batch = db.batch();
+    for (const doc of snap.docs) batch.delete(doc.ref);
+    await batch.commit();
+  }
+}
+
+async function deleteAuthUsers(userIds: Iterable<string>): Promise<void> {
+  const auth = await getFirebaseAuth();
+  if (!auth) return;
+  for (const authUserId of userIds) {
+    if (!authUserId) continue;
+    try {
+      await auth.deleteUser(authUserId);
+    } catch {
+      /* best-effort */
+    }
+  }
+}
+
 async function cleanupStorageEntries(entries: string[]): Promise<void> {
   const keys = [...new Set(entries.flatMap(expandStorageEntry))];
   if (keys.length === 0) return;
@@ -146,15 +177,14 @@ async function cleanupStorageEntries(entries: string[]): Promise<void> {
   }
 
   try {
-    const admin = createAdminClient();
-    await admin.from("storage_uploads").delete().in("object_key", keys);
+    await deleteStorageUploadDocs(keys);
   } catch {
     /* best-effort */
   }
 }
 
 async function cleanupStorageKeys(keys: string[]): Promise<void> {
-  const objectKeys = keys.filter((k) => isR2ObjectKey(k));
+  const objectKeys = keys.filter((key) => isR2ObjectKey(key));
   for (const key of objectKeys) {
     try {
       await deleteObject(key);
@@ -164,12 +194,55 @@ async function cleanupStorageKeys(keys: string[]): Promise<void> {
   }
   if (objectKeys.length > 0) {
     try {
-      const admin = createAdminClient();
-      await admin.from("storage_uploads").delete().in("object_key", objectKeys);
+      await deleteStorageUploadDocs(objectKeys);
     } catch {
       /* best-effort */
     }
   }
+}
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function iso(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  return null;
+}
+
+function fold(value: unknown): string {
+  return typeof value === "string" ? value.toLowerCase() : "";
+}
+
+function matches(needle: string, ...parts: unknown[]): boolean {
+  if (!needle) return true;
+  return parts.some((part) => fold(part).includes(needle));
+}
+
+function createdStamp(data: DocumentData): string {
+  return iso(data.created_at) ?? "";
+}
+
+function isArchived(value: unknown): boolean {
+  return value != null && value !== "";
+}
+
+function pageOf(items: CleanupCandidate[], total: number, page: number): CleanupCandidatesPage {
+  return { items, total, page, pageSize: PAGE_SIZE };
+}
+
+async function loadDocs(db: Firestore, collection: string): Promise<Array<{ id: string; data: DocumentData }>> {
+  const snap = await db.collection(collection).get();
+  return snap.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
 }
 
 export async function fetchCleanupCandidates(
@@ -181,182 +254,163 @@ export async function fetchCleanupCandidates(
   const auth = await requireSuperAdmin();
   if (auth.error) return { error: auth.error };
 
-  const supabase = await createClient();
-  const q = search.trim();
+  const db = await staffDb();
+  if (!db) return { error: "fetch_failed" };
+
+  const needle = search.trim().toLowerCase();
   const from = Math.max(0, (page - 1) * PAGE_SIZE);
-  const to = from + PAGE_SIZE - 1;
 
-  if (tab === "drivers") {
-    let query = supabase
-      .from("driver_intakes")
-      .select("id, full_name, phone, driver_code, linked_profile_id, archived_at, workflow_status", {
-        count: "exact",
-      })
-      .order("created_at", { ascending: false });
-
-    if (options?.archivedOnly) {
-      query = query.not("archived_at", "is", null);
+  try {
+    switch (tab) {
+      case "drivers": {
+        const rows = (await loadDocs(db, COLLECTIONS.driverIntakes))
+          .filter((row) => (options?.archivedOnly ? isArchived(row.data.archived_at) : true))
+          .filter((row) =>
+            matches(needle, row.data.full_name, row.data.phone, row.data.driver_code),
+          )
+          .sort((a, b) => createdStamp(b.data).localeCompare(createdStamp(a.data)));
+        const items = rows.slice(from, from + PAGE_SIZE).map((row) => {
+          const linkedId = text(row.data.linked_profile_id);
+          const linked = Boolean(linkedId);
+          return {
+            id: row.id,
+            purgeId: linked ? linkedId! : row.id,
+            purgeType: linked ? "driver" : "intake",
+            label: text(row.data.full_name) || text(row.data.driver_code) || text(row.data.phone) || row.id,
+            sublabel: [text(row.data.driver_code), text(row.data.phone)].filter(Boolean).join(" · "),
+            status: isArchived(row.data.archived_at)
+              ? "archived"
+              : linked
+                ? "linked"
+                : (text(row.data.workflow_status) ?? "awaiting"),
+          } satisfies CleanupCandidate;
+        });
+        return pageOf(items, rows.length, page);
+      }
+      case "zones": {
+        const rows = (await loadDocs(db, COLLECTIONS.zones))
+          .filter((row) => matches(needle, row.data.name, row.data.code))
+          .sort((a, b) => fold(a.data.name).localeCompare(fold(b.data.name)));
+        return pageOf(
+          rows.slice(from, from + PAGE_SIZE).map((row) => ({
+            id: row.id,
+            purgeId: row.id,
+            purgeType: "zone",
+            label: text(row.data.name) ?? row.id,
+            sublabel: text(row.data.code) ?? undefined,
+          })),
+          rows.length,
+          page,
+        );
+      }
+      case "restaurants": {
+        const rows = (await loadDocs(db, COLLECTIONS.restaurants))
+          .filter((row) => matches(needle, row.data.name, row.data.restaurant_code))
+          .sort((a, b) => fold(a.data.name).localeCompare(fold(b.data.name)));
+        return pageOf(
+          rows.slice(from, from + PAGE_SIZE).map((row) => ({
+            id: row.id,
+            purgeId: row.id,
+            purgeType: "restaurant",
+            label: text(row.data.name) ?? row.id,
+            sublabel: text(row.data.restaurant_code) ?? undefined,
+            status: text(row.data.status) ?? undefined,
+          })),
+          rows.length,
+          page,
+        );
+      }
+      case "delivery_rules": {
+        const rows = (await loadDocs(db, COLLECTIONS.deliveryRules))
+          .filter((row) => matches(needle, row.data.name))
+          .sort((a, b) => fold(a.data.name).localeCompare(fold(b.data.name)));
+        return pageOf(
+          rows.slice(from, from + PAGE_SIZE).map((row) => ({
+            id: row.id,
+            purgeId: row.id,
+            purgeType: "delivery_rule",
+            label: text(row.data.name) ?? row.id,
+            status: text(row.data.status) ?? undefined,
+          })),
+          rows.length,
+          page,
+        );
+      }
+      case "incentive_rules": {
+        const rows = (await loadDocs(db, COLLECTIONS.incentiveRules))
+          .filter((row) => matches(needle, row.data.name))
+          .sort((a, b) => fold(a.data.name).localeCompare(fold(b.data.name)));
+        return pageOf(
+          rows.slice(from, from + PAGE_SIZE).map((row) => ({
+            id: row.id,
+            purgeId: row.id,
+            purgeType: "incentive_rule",
+            label: text(row.data.name) ?? row.id,
+            status: text(row.data.status) ?? undefined,
+          })),
+          rows.length,
+          page,
+        );
+      }
+      case "assets": {
+        const rows = (await loadDocs(db, COLLECTIONS.assetCatalog))
+          .filter((row) => matches(needle, row.data.name, row.data.code))
+          .sort((a, b) => fold(a.data.name).localeCompare(fold(b.data.name)));
+        return pageOf(
+          rows.slice(from, from + PAGE_SIZE).map((row) => ({
+            id: row.id,
+            purgeId: row.id,
+            purgeType: "asset_catalog",
+            label: text(row.data.name) ?? row.id,
+            sublabel: text(row.data.code) ?? undefined,
+            status: row.data.is_active === false ? "inactive" : "active",
+          })),
+          rows.length,
+          page,
+        );
+      }
+      case "deliveries": {
+        const collection = db.collection(COLLECTIONS.deliveries);
+        if (!needle) {
+          const [countSnap, pageSnap] = await Promise.all([
+            collection.count().get(),
+            collection.orderBy("created_at", "desc").offset(from).limit(PAGE_SIZE).get(),
+          ]);
+          return pageOf(
+            pageSnap.docs.map((doc) => deliveryCandidate(doc.id, doc.data())),
+            countSnap.data().count,
+            page,
+          );
+        }
+        const scanned = await collection
+          .orderBy("created_at", "desc")
+          .limit(SEARCH_SCAN_CAP)
+          .get();
+        const matched = scanned.docs.filter((doc) => matches(needle, doc.data().external_order_id));
+        return pageOf(
+          matched.slice(from, from + PAGE_SIZE).map((doc) => deliveryCandidate(doc.id, doc.data())),
+          matched.length,
+          page,
+        );
+      }
+      default: {
+        const _exhaustive: never = tab;
+        return { error: `fetch_failed:${String(_exhaustive)}` };
+      }
     }
-
-    if (q) {
-      query = query.or(
-        `full_name.ilike.%${q}%,phone.ilike.%${q}%,driver_code.ilike.%${q}%`,
-      );
-    }
-
-    const { data, error, count } = await query.range(from, to);
-    if (error) return { error: "fetch_failed" };
-
-    const items: CleanupCandidate[] = (data ?? []).map((row) => {
-      const linked = Boolean(row.linked_profile_id);
-      return {
-        id: row.id,
-        purgeId: linked ? row.linked_profile_id! : row.id,
-        purgeType: linked ? "driver" : "intake",
-        label: row.full_name?.trim() || row.driver_code || row.phone || row.id,
-        sublabel: [row.driver_code, row.phone].filter(Boolean).join(" · "),
-        status: row.archived_at
-          ? "archived"
-          : linked
-            ? "linked"
-            : row.workflow_status ?? "awaiting",
-      };
-    });
-
-    return { items, total: count ?? items.length, page, pageSize: PAGE_SIZE };
+  } catch {
+    return { error: "fetch_failed" };
   }
+}
 
-  if (tab === "zones") {
-    let query = supabase
-      .from("zones")
-      .select("id, name, code", { count: "exact" })
-      .order("name", { ascending: true });
-    if (q) query = query.or(`name.ilike.%${q}%,code.ilike.%${q}%`);
-    const { data, error, count } = await query.range(from, to);
-    if (error) return { error: "fetch_failed" };
-    return {
-      items: (data ?? []).map((row) => ({
-        id: row.id,
-        purgeId: row.id,
-        purgeType: "zone",
-        label: row.name,
-        sublabel: row.code,
-      })),
-      total: count ?? 0,
-      page,
-      pageSize: PAGE_SIZE,
-    };
-  }
-
-  if (tab === "restaurants") {
-    let query = supabase
-      .from("restaurants")
-      .select("id, name, restaurant_code, status", { count: "exact" })
-      .order("name", { ascending: true });
-    if (q) query = query.or(`name.ilike.%${q}%,restaurant_code.ilike.%${q}%`);
-    const { data, error, count } = await query.range(from, to);
-    if (error) return { error: "fetch_failed" };
-    return {
-      items: (data ?? []).map((row) => ({
-        id: row.id,
-        purgeId: row.id,
-        purgeType: "restaurant",
-        label: row.name,
-        sublabel: row.restaurant_code ?? undefined,
-        status: row.status ?? undefined,
-      })),
-      total: count ?? 0,
-      page,
-      pageSize: PAGE_SIZE,
-    };
-  }
-
-  if (tab === "delivery_rules") {
-    let query = supabase
-      .from("delivery_rules")
-      .select("id, name, status", { count: "exact" })
-      .order("name", { ascending: true });
-    if (q) query = query.ilike("name", `%${q}%`);
-    const { data, error, count } = await query.range(from, to);
-    if (error) return { error: "fetch_failed" };
-    return {
-      items: (data ?? []).map((row) => ({
-        id: row.id,
-        purgeId: row.id,
-        purgeType: "delivery_rule",
-        label: row.name,
-        status: row.status ?? undefined,
-      })),
-      total: count ?? 0,
-      page,
-      pageSize: PAGE_SIZE,
-    };
-  }
-
-  if (tab === "incentive_rules") {
-    let query = supabase
-      .from("incentive_rules")
-      .select("id, name, status", { count: "exact" })
-      .order("name", { ascending: true });
-    if (q) query = query.ilike("name", `%${q}%`);
-    const { data, error, count } = await query.range(from, to);
-    if (error) return { error: "fetch_failed" };
-    return {
-      items: (data ?? []).map((row) => ({
-        id: row.id,
-        purgeId: row.id,
-        purgeType: "incentive_rule",
-        label: row.name,
-        status: row.status ?? undefined,
-      })),
-      total: count ?? 0,
-      page,
-      pageSize: PAGE_SIZE,
-    };
-  }
-
-  if (tab === "assets") {
-    let query = supabase
-      .from("asset_catalog")
-      .select("id, name, code, is_active", { count: "exact" })
-      .order("name", { ascending: true });
-    if (q) query = query.or(`name.ilike.%${q}%,code.ilike.%${q}%`);
-    const { data, error, count } = await query.range(from, to);
-    if (error) return { error: "fetch_failed" };
-    return {
-      items: (data ?? []).map((row) => ({
-        id: row.id,
-        purgeId: row.id,
-        purgeType: "asset_catalog",
-        label: row.name,
-        sublabel: row.code,
-        status: row.is_active ? "active" : "inactive",
-      })),
-      total: count ?? 0,
-      page,
-      pageSize: PAGE_SIZE,
-    };
-  }
-
-  let query = supabase
-    .from("deliveries")
-    .select("id, external_order_id, status, delivered_at", { count: "exact" })
-    .order("created_at", { ascending: false });
-  if (q) query = query.ilike("external_order_id", `%${q}%`);
-  const { data, error, count } = await query.range(from, to);
-  if (error) return { error: "fetch_failed" };
+function deliveryCandidate(id: string, data: DocumentData): CleanupCandidate {
   return {
-    items: (data ?? []).map((row) => ({
-      id: row.id,
-      purgeId: row.id,
-      purgeType: "delivery",
-      label: row.external_order_id ?? row.id.slice(0, 8),
-      sublabel: row.delivered_at ?? undefined,
-      status: row.status ?? undefined,
-    })),
-    total: count ?? 0,
-    page,
-    pageSize: PAGE_SIZE,
+    id,
+    purgeId: id,
+    purgeType: "delivery",
+    label: text(data.external_order_id) ?? id.slice(0, 8),
+    sublabel: iso(data.delivered_at) ?? undefined,
+    status: text(data.status) ?? undefined,
   };
 }
 
@@ -366,7 +420,6 @@ export async function previewCleanupPurge(
   const auth = await requireSuperAdmin();
   if (auth.error) return { error: auth.error };
 
-  const supabase = await createClient();
   const byType = new Map<PurgeEntityType, string[]>();
   for (const sel of selections) {
     const list = byType.get(sel.purgeType) ?? [];
@@ -378,14 +431,12 @@ export async function previewCleanupPurge(
 
   for (const [entityType, ids] of byType) {
     const uniqueIds = [...new Set(ids)];
-    const { data, error } = await supabase.rpc("admin_preview_purge", {
-      p_entity_type: entityType,
-      p_ids: uniqueIds,
-    });
-    if (error) {
-      return { error: "preview_failed" };
-    }
-    const payload = (data ?? { items: [] }) as { items?: CleanupPreviewItem[] };
+    const { data, error } = await callAdminFunction<{ items?: CleanupPreviewItem[] }>(
+      "admin_preview_purge",
+      { p_entity_type: entityType, p_ids: uniqueIds },
+    );
+    if (error) return { error: "preview_failed" };
+    const payload = data ?? { items: [] };
     for (const item of payload.items ?? []) {
       allItems.push({
         id: item.id,
@@ -399,67 +450,54 @@ export async function previewCleanupPurge(
   return { items: allItems };
 }
 
-async function callPurgeRpc(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  type: PurgeEntityType,
-  ids: string[],
-) {
+async function callPurgeRpc(type: PurgeEntityType, ids: string[]) {
   switch (type) {
     case "delivery":
-      return supabase.rpc("admin_purge_deliveries", { p_ids: ids });
+      return callAdminFunction("admin_purge_deliveries", { p_ids: ids });
     case "driver":
-      return supabase.rpc("admin_purge_drivers", { p_ids: ids });
+      return callAdminFunction("admin_purge_drivers", { p_ids: ids });
     case "intake":
-      return supabase.rpc("admin_purge_intakes", { p_ids: ids });
+      return callAdminFunction("admin_purge_intakes", { p_ids: ids });
     case "restaurant":
-      return supabase.rpc("admin_purge_restaurants", { p_ids: ids });
+      return callAdminFunction("admin_purge_restaurants", { p_ids: ids });
     case "zone":
-      return supabase.rpc("admin_purge_zones", { p_ids: ids });
+      return callAdminFunction("admin_purge_zones", { p_ids: ids });
     case "delivery_rule":
-      return supabase.rpc("admin_purge_delivery_rules", { p_ids: ids });
+      return callAdminFunction("admin_purge_delivery_rules", { p_ids: ids });
     case "incentive_rule":
-      return supabase.rpc("admin_purge_incentive_rules", { p_ids: ids });
+      return callAdminFunction("admin_purge_incentive_rules", { p_ids: ids });
     case "asset_catalog":
-      return supabase.rpc("admin_purge_asset_catalog", { p_ids: ids });
+      return callAdminFunction("admin_purge_asset_catalog", { p_ids: ids });
+    default: {
+      const _exhaustive: never = type;
+      return { data: null, error: { message: `unknown_entity:${String(_exhaustive)}` } };
+    }
   }
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 async function executePurgeBatch(
-  supabase: Awaited<ReturnType<typeof createClient>>,
   type: PurgeEntityType,
   ids: string[],
 ): Promise<{ ok: boolean; error?: string }> {
-  const { data, error } = await callPurgeRpc(supabase, type, ids);
-  if (error) {
-    return { ok: false, error: error.message };
-  }
+  const { data, error } = await callPurgeRpc(type, ids);
+  if (error) return { ok: false, error: error.message };
 
   const payload = (data ?? {}) as Record<string, unknown>;
 
   if (type === "driver") {
-    const storageKeys = (payload.storage_keys as string[] | undefined) ?? [];
-    await cleanupStorageEntries(storageKeys);
-
-    const manifest = (payload.manifest as Array<{ auth_user_id?: string }> | undefined) ?? [];
-    const admin = createAdminClient();
-    for (const entry of manifest) {
-      const authUserId = entry.auth_user_id;
-      if (!authUserId) continue;
-      try {
-        await admin.auth.admin.deleteUser(authUserId);
-      } catch {
-        /* best-effort */
-      }
-    }
-  } else if (type === "intake") {
-    const prefixes = (payload.storage_prefixes as string[] | undefined) ?? [];
-    await cleanupStorageEntries(prefixes);
-  } else if (type === "restaurant") {
-    const prefixes = (payload.storage_prefixes as string[] | undefined) ?? [];
-    await cleanupStorageEntries(prefixes);
+    await cleanupStorageEntries(stringList(payload.storage_keys));
+    const manifest = Array.isArray(payload.manifest)
+      ? (payload.manifest as Array<{ auth_user_id?: string }>)
+      : [];
+    await deleteAuthUsers(manifest.map((entry) => entry.auth_user_id ?? ""));
+  } else if (type === "intake" || type === "restaurant") {
+    await cleanupStorageEntries(stringList(payload.storage_prefixes));
   } else if (type === "delivery" || type === "asset_catalog") {
-    const keys = (payload.storage_keys as string[] | undefined) ?? [];
-    await cleanupStorageKeys(keys);
+    await cleanupStorageKeys(stringList(payload.storage_keys));
     if (type === "asset_catalog") {
       for (const id of ids) {
         try {
@@ -476,7 +514,7 @@ async function executePurgeBatch(
     entityType: `data_cleanup_${type}`,
     routeName: "executeCleanupPurge",
     context: { ids, purgeType: type },
-    after: payload as Record<string, unknown>,
+    after: payload,
   });
 
   return { ok: true };
@@ -492,7 +530,6 @@ export async function executeCleanupPurge(
     return { error: "nothing_selected" };
   }
 
-  const supabase = await createClient();
   const byType = new Map<PurgeEntityType, string[]>();
   for (const sel of selections) {
     const list = byType.get(sel.purgeType) ?? [];
@@ -505,7 +542,7 @@ export async function executeCleanupPurge(
 
   for (const [type, ids] of byType) {
     const uniqueIds = [...new Set(ids)];
-    const result = await executePurgeBatch(supabase, type, uniqueIds);
+    const result = await executePurgeBatch(type, uniqueIds);
     if (result.ok) {
       deleted += uniqueIds.length;
     } else {
@@ -519,10 +556,6 @@ export async function executeCleanupPurge(
 
   return { ok: true, deleted, errors };
 }
-
-/* ------------------------------------------------------------------ */
-/* Clear all — one module at a time                                    */
-/* ------------------------------------------------------------------ */
 
 export type PurgeAllPreviewItem = {
   entity: PurgeAllEntity;
@@ -555,9 +588,7 @@ async function requirePurgeAllAccess(entity: PurgeAllEntity) {
   const module = purgeAllModuleFor(entity);
   if (!module) return { error: "unknown_entity" as const };
 
-  if (
-    !hasPermissionInSet(session.permissions, module.slug, session.isSuperAdmin)
-  ) {
+  if (!hasPermissionInSet(session.permissions, module.slug, session.isSuperAdmin)) {
     return { error: "not_authorized" as const };
   }
 
@@ -585,20 +616,15 @@ export async function previewPurgeAllModules(
 
   if (allowed.length === 0) return { items: [] };
 
-  const supabase = await createClient();
   const items: PurgeAllPreviewItem[] = [];
 
   for (const entity of allowed) {
-    const { data, error } = await supabase.rpc("admin_purge_preview_all", {
-      p_entity: entity,
-    });
-    if (error) {
-      return { error: "preview_failed", errorDetail: error.message };
-    }
-    const payload = (data ?? {}) as {
+    const { data, error } = await callAdminFunction<{
       count?: number;
       blockers?: string[] | null;
-    };
+    }>("admin_purge_preview_all", { p_entity: entity });
+    if (error) return { error: "preview_failed", errorDetail: error.message };
+    const payload = data ?? {};
     items.push({
       entity,
       count: payload.count ?? 0,
@@ -630,7 +656,6 @@ export async function runPurgeAllModule(
   const auth = await requirePurgeAllAccess(entity);
   if (auth.error) return { error: auth.error };
 
-  const supabase = await createClient();
   const startedAt = Date.now();
   const storageEntries = new Set<string>();
   const authUserIds = new Set<string>();
@@ -645,24 +670,20 @@ export async function runPurgeAllModule(
   for (let round = 0; round < PURGE_ALL_MAX_ROUNDS; round += 1) {
     if (round > 0 && Date.now() - startedAt > PURGE_ALL_BUDGET_MS) break;
 
-    const { data, error } = await supabase.rpc("admin_purge_run_all", {
-      p_entity: entity,
-      p_limit: PURGE_ALL_BATCH,
-    });
+    const { data, error } = await callAdminFunction<{
+      deleted?: number;
+      remaining?: number;
+      blockers?: string[] | null;
+      storage_keys?: string[] | null;
+      manifest?: Array<{ auth_user_id?: string | null }> | null;
+    }>("admin_purge_run_all", { p_entity: entity, p_limit: PURGE_ALL_BATCH });
     if (error) {
       failure = error.message;
       break;
     }
 
     rounds += 1;
-    const payload = (data ?? {}) as {
-      deleted?: number;
-      remaining?: number;
-      blockers?: string[] | null;
-      storage_keys?: string[] | null;
-      manifest?: Array<{ auth_user_id?: string | null }> | null;
-    };
-
+    const payload = data ?? {};
     const roundDeleted = payload.deleted ?? 0;
     deleted += roundDeleted;
     remaining = payload.remaining ?? 0;
@@ -684,16 +705,8 @@ export async function runPurgeAllModule(
   if (storageEntries.size > 0) {
     await cleanupStorageEntries([...storageEntries]);
   }
-
   if (authUserIds.size > 0) {
-    const admin = createAdminClient();
-    for (const authUserId of authUserIds) {
-      try {
-        await admin.auth.admin.deleteUser(authUserId);
-      } catch {
-        /* best-effort — the profile row is already gone */
-      }
-    }
+    await deleteAuthUsers(authUserIds);
   }
 
   void logAdminMutation({
@@ -719,10 +732,6 @@ export async function runPurgeAllModule(
     warning: failure ?? undefined,
   };
 }
-
-/* ------------------------------------------------------------------ */
-/* Clear by filter — the same delete path, narrowed to a subset        */
-/* ------------------------------------------------------------------ */
 
 export type PurgeFilterColumnInfo = {
   key: string;
@@ -807,16 +816,11 @@ export async function fetchPurgeFilterColumns(
   const auth = await requireFilteredPurgeAccess();
   if (auth.error) return { error: auth.error };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_purge_filter_columns", {
+  const { data, error } = await callAdminFunction<unknown>("admin_purge_filter_columns", {
     p_entity: entity,
   });
   if (error) return { error: "fetch_failed", errorDetail: error.message };
-  if (!Array.isArray(data)) {
-    // `NULL` is the server saying this module has no filter spec yet — an
-    // empty list, not a failure, so the dialog can say so plainly.
-    return [];
-  }
+  if (!Array.isArray(data)) return [];
 
   return data.map((entry) => {
     const row = (entry ?? {}) as Record<string, unknown>;
@@ -837,11 +841,10 @@ export async function fetchPurgeFilterValues(
   const auth = await requireFilteredPurgeAccess();
   if (auth.error) return { error: auth.error };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_purge_filtered_values", {
+  const { data, error } = await callAdminFunction<unknown>("admin_purge_filtered_values", {
     p_entity: entity,
     p_column: column,
-    p_filters: filters as unknown as Json,
+    p_filters: filters,
   });
   if (error) return { error: "fetch_failed", errorDetail: error.message };
   if (!Array.isArray(data)) return [];
@@ -862,14 +865,13 @@ export async function previewFilteredPurge(
   const auth = await requireFilteredPurgeAccess();
   if (auth.error) return { error: auth.error };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_purge_filtered_preview", {
-    p_entity: entity,
-    p_filters: filters as unknown as Json,
-  });
+  const { data, error } = await callAdminFunction<Record<string, unknown>>(
+    "admin_purge_filtered_preview",
+    { p_entity: entity, p_filters: filters },
+  );
   if (error) return { error: "preview_failed", errorDetail: error.message };
 
-  const payload = (data ?? {}) as Record<string, unknown>;
+  const payload = data ?? {};
   const blockers = Array.isArray(payload.blockers) ? payload.blockers : [];
   return {
     count: Number(payload.count ?? 0),
@@ -888,16 +890,18 @@ export async function pageFilteredPurge(
   if (auth.error) return { error: auth.error };
 
   const offset = Math.max(0, (page - 1) * PURGE_FILTERED_PAGE_SIZE);
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_purge_filtered_page", {
-    p_entity: entity,
-    p_filters: filters as unknown as Json,
-    p_limit: PURGE_FILTERED_PAGE_SIZE,
-    p_offset: offset,
-  });
+  const { data, error } = await callAdminFunction<Record<string, unknown>>(
+    "admin_purge_filtered_page",
+    {
+      p_entity: entity,
+      p_filters: filters,
+      p_limit: PURGE_FILTERED_PAGE_SIZE,
+      p_offset: offset,
+    },
+  );
   if (error) return { error: "preview_failed", errorDetail: error.message };
 
-  const payload = (data ?? {}) as Record<string, unknown>;
+  const payload = data ?? {};
   return {
     rows: parseFilteredRows(payload.rows),
     total: Number(payload.total ?? 0),
@@ -922,7 +926,6 @@ export async function runFilteredPurge(
   const auth = await requireFilteredPurgeAccess();
   if (auth.error) return { error: auth.error };
 
-  const supabase = await createClient();
   const startedAt = Date.now();
   const storageEntries = new Set<string>();
   const authUserIds = new Set<string>();
@@ -937,9 +940,15 @@ export async function runFilteredPurge(
   for (let round = 0; round < PURGE_ALL_MAX_ROUNDS; round += 1) {
     if (round > 0 && Date.now() - startedAt > PURGE_ALL_BUDGET_MS) break;
 
-    const { data, error } = await supabase.rpc("admin_purge_filtered_run", {
+    const { data, error } = await callAdminFunction<{
+      deleted?: number;
+      remaining?: number;
+      blockers?: string[] | null;
+      storage_keys?: string[] | null;
+      manifest?: Array<{ auth_user_id?: string | null }> | null;
+    }>("admin_purge_filtered_run", {
       p_entity: entity,
-      p_filters: filters as unknown as Json,
+      p_filters: filters,
       p_limit: PURGE_ALL_BATCH,
     });
     if (error) {
@@ -948,14 +957,7 @@ export async function runFilteredPurge(
     }
 
     rounds += 1;
-    const payload = (data ?? {}) as {
-      deleted?: number;
-      remaining?: number;
-      blockers?: string[] | null;
-      storage_keys?: string[] | null;
-      manifest?: Array<{ auth_user_id?: string | null }> | null;
-    };
-
+    const payload = data ?? {};
     const roundDeleted = payload.deleted ?? 0;
     deleted += roundDeleted;
     remaining = payload.remaining ?? 0;
@@ -977,16 +979,8 @@ export async function runFilteredPurge(
   if (storageEntries.size > 0) {
     await cleanupStorageEntries([...storageEntries]);
   }
-
   if (authUserIds.size > 0) {
-    const admin = createAdminClient();
-    for (const authUserId of authUserIds) {
-      try {
-        await admin.auth.admin.deleteUser(authUserId);
-      } catch {
-        /* best-effort — the profile row is already gone */
-      }
-    }
+    await deleteAuthUsers(authUserIds);
   }
 
   void logAdminMutation({

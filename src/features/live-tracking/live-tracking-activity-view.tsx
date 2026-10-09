@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, ChevronDown, ListChecks, ShieldAlert } from "lucide-react";
@@ -130,6 +130,14 @@ export function LiveTrackingActivityView({
   // burst of new rows never yanks the row they are reading out from under them.
   const pausedRef = useRef(false);
   const [paused, setPaused] = useState(false);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const peekRef = useRef({
+    driverId: initialDriverId ?? "",
+    categories: [] as string[],
+    failuresOnly: false,
+    from: "",
+    to: null as string | null,
+  });
 
   const bounds = useMemo(() => rangeBounds(range), [range]);
 
@@ -178,6 +186,20 @@ export function LiveTrackingActivityView({
     [feedQuery.data],
   );
 
+  useEffect(() => {
+    seenIdsRef.current = new Set(events.map((event) => event.id));
+  }, [events]);
+
+  useEffect(() => {
+    peekRef.current = {
+      driverId,
+      categories,
+      failuresOnly,
+      from: bounds.from,
+      to: bounds.to,
+    };
+  }, [driverId, categories, failuresOnly, bounds]);
+
   useRealtimeInvalidator({
     channel: "admin-driver-operations",
     tables: [{ table: "driver_operation_events", event: "INSERT" }],
@@ -192,7 +214,20 @@ export function LiveTrackingActivityView({
         ],
     debounceMs: 500,
     onChange: () => {
-      if (pausedRef.current) setPendingCount((count) => count + 1);
+      if (!pausedRef.current) return;
+      const peek = peekRef.current;
+      void fetchDriverOperationFeed({
+        driverId: peek.driverId || null,
+        categories: peek.categories.length ? peek.categories : null,
+        failuresOnly: peek.failuresOnly,
+        from: peek.from,
+        to: peek.to,
+        cursor: null,
+        limit: PAGE_SIZE,
+      }).then((page) => {
+        const known = seenIdsRef.current;
+        setPendingCount(page.events.filter((event) => !known.has(event.id)).length);
+      });
     },
   });
 

@@ -1,7 +1,7 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { isAdminAccessRequestProfile } from "./access-request-eligibility";
 import {
@@ -10,6 +10,8 @@ import {
   parseStaffAccessKind,
   type StaffAccessKind,
 } from "@/lib/auth/staff-access";
+import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 
 export type PendingStaffAccessRequest = {
   id: string;
@@ -17,6 +19,20 @@ export type PendingStaffAccessRequest = {
   full_name: string | null;
   created_at: string;
 };
+
+function iso(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  return null;
+}
 
 async function requireSuperAdmin() {
   const session = await getSessionUser();
@@ -34,98 +50,73 @@ export async function approveUser(
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  const { data: role } = await supabase
-    .from("admin_roles")
-    .select("id, is_super_admin")
-    .eq("id", roleId)
-    .maybeSingle();
-
-  if (!role || role.is_super_admin) {
+  const roleSnap = await db.collection(COLLECTIONS.adminRoles).doc(roleId).get();
+  const role = roleSnap.data();
+  if (!roleSnap.exists || role?.is_super_admin === true) {
     return { error: "invalid_role" };
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("email, role, approval_status")
-    .eq("id", userId)
-    .maybeSingle();
-
-  const { data: driverRow } = await supabase
-    .from("drivers")
-    .select("id")
-    .eq("id", userId)
-    .maybeSingle();
+  const profileSnap = await db.collection(COLLECTIONS.profiles).doc(userId).get();
+  const profile = profileSnap.data();
+  const driverSnap = await db.collection(COLLECTIONS.drivers).doc(userId).get();
+  const email = typeof profile?.email === "string" ? profile.email : "";
 
   if (
-    !profile?.email ||
+    !email ||
     !isAdminAccessRequestProfile({
-      role: profile.role,
-      approval_status: profile.approval_status,
-      isDriver: Boolean(driverRow),
+      role: typeof profile?.role === "string" ? profile.role : "",
+      approval_status: typeof profile?.approval_status === "string" ? profile.approval_status : "",
+      isDriver: driverSnap.exists,
     })
   ) {
     return { error: "user_not_found" };
   }
 
   const kind = parseStaffAccessKind(accessKind) ?? "user";
-  const approvedAt = new Date().toISOString();
-  const baseUpdate = {
-    admin_role_id: roleId,
-    approval_status: "approved" as const,
-    role: "staff" as const,
-    approved_at: approvedAt,
-    approved_by: auth.session.id,
-    updated_at: approvedAt,
-  };
+  const approvedAt = new Date();
 
-  let { error } = await supabase
-    .from("profiles")
-    .update({ ...baseUpdate, access_kind: kind })
-    .eq("id", userId)
-    .eq("role", "staff");
-
-  if (error && /access_kind/.test(error.message)) {
-    ({ error } = await supabase
-      .from("profiles")
-      .update(baseUpdate)
-      .eq("id", userId)
-      .eq("role", "staff"));
-  }
-
-  if (error) {
+  try {
+    await profileSnap.ref.set(
+      {
+        admin_role_id: roleId,
+        approval_status: "approved",
+        role: "staff",
+        access_kind: kind,
+        approved_at: approvedAt,
+        approved_by: auth.session.id,
+        updated_at: approvedAt,
+      },
+      { merge: true },
+    );
+  } catch {
     return { error: "save_failed" };
   }
 
+  const permRef = db.collection(COLLECTIONS.adminUserPermissions).doc(userId);
   if (kind === "user") {
-    const { data: rolePerms } = await supabase
-      .from("admin_role_permissions")
-      .select("permission_slug")
-      .eq("role_id", roleId);
-    const ticks = [...expandRoleSlugsToUserTicks((rolePerms ?? []).map((row) => row.permission_slug))]
-      .filter(isStaffMatrixSlug);
-    const { error: clearTicksError } = await supabase
-      .from("admin_user_permissions")
-      .delete()
-      .eq("user_id", userId);
-    if (clearTicksError && !/admin_user_permissions|42703|PGRST/.test(clearTicksError.message)) {
-      return { error: "save_failed" };
-    }
-    if (ticks.length > 0) {
-      await supabase.from("admin_user_permissions").insert(
-        ticks.map((permission_slug) => ({ user_id: userId, permission_slug })),
-      );
-    }
+    const rolePerms = await db.collection(COLLECTIONS.adminRolePermissions).doc(roleId).get();
+    const raw = rolePerms.data()?.permission_slugs;
+    const source = Array.isArray(raw) ? raw.filter((slug): slug is string => typeof slug === "string") : [];
+    const ticks = [...expandRoleSlugsToUserTicks(source)].filter(isStaffMatrixSlug);
+    await permRef.set({ permission_slugs: ticks }, { merge: true });
   } else {
-    await supabase.from("admin_user_permissions").delete().eq("user_id", userId);
+    await permRef.set({ permission_slugs: [] }, { merge: true });
   }
 
-  await supabase.from("admin_allowlist").upsert({
-    email: profile.email.toLowerCase(),
-    role: "staff",
-  });
+  const allowEmail = email.toLowerCase();
+  await db.collection(COLLECTIONS.adminAllowlist).doc(encodeURIComponent(allowEmail)).set(
+    { email: allowEmail, role: "staff" },
+    { merge: true },
+  );
 
+  try {
+    await callAdminFunction("syncStaffClaims", { uid: userId });
+  } catch {
+    // Approval is already saved; claims refresh must not report it as failed.
+  }
   updateTag("admin-roles");
   return { success: true };
 }
@@ -134,41 +125,33 @@ export async function rejectUser(userId: string): Promise<{ error?: string; succ
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, approval_status")
-    .eq("id", userId)
-    .maybeSingle();
-
-  const { data: driverRow } = await supabase
-    .from("drivers")
-    .select("id")
-    .eq("id", userId)
-    .maybeSingle();
+  const profileSnap = await db.collection(COLLECTIONS.profiles).doc(userId).get();
+  const profile = profileSnap.data();
+  const driverSnap = await db.collection(COLLECTIONS.drivers).doc(userId).get();
 
   if (
     !profile ||
     !isAdminAccessRequestProfile({
-      role: profile.role,
-      approval_status: profile.approval_status,
-      isDriver: Boolean(driverRow),
+      role: typeof profile.role === "string" ? profile.role : "",
+      approval_status: typeof profile.approval_status === "string" ? profile.approval_status : "",
+      isDriver: driverSnap.exists,
     })
   ) {
     return { error: "user_not_found" };
   }
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      approval_status: "rejected",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", userId)
-    .eq("role", "staff");
-
-  if (error) {
+  try {
+    await profileSnap.ref.set(
+      {
+        approval_status: "rejected",
+        updated_at: new Date(),
+      },
+      { merge: true },
+    );
+  } catch {
     return { error: "save_failed" };
   }
 
@@ -178,37 +161,42 @@ export async function rejectUser(userId: string): Promise<{ error?: string; succ
 export async function listPendingStaffAccessRequests(limit?: number): Promise<
   PendingStaffAccessRequest[]
 > {
-  const supabase = await createClient();
-  let query = supabase
-    .from("profiles")
-    .select("id, email, full_name, created_at, role, approval_status")
-    .eq("role", "staff")
-    .eq("approval_status", "pending")
-    .order("created_at", { ascending: false });
+  const db = await staffDb();
+  if (!db) return [];
+
+  let query = db
+    .collection(COLLECTIONS.profiles)
+    .where("role", "==", "staff")
+    .where("approval_status", "==", "pending")
+    .orderBy("created_at", "desc");
   if (limit != null) query = query.limit(limit);
 
-  const { data: pendingUsers } = await query;
-  const rows = pendingUsers ?? [];
-  if (rows.length === 0) return [];
+  const pending = await query.get();
+  if (pending.empty) return [];
 
-  const ids = rows.map((row) => row.id);
-  const { data: driverRows } = await supabase.from("drivers").select("id").in("id", ids);
-  const driverIds = new Set((driverRows ?? []).map((row) => row.id));
+  const driverSnaps = await db.getAll(
+    ...pending.docs.map((doc) => db.collection(COLLECTIONS.drivers).doc(doc.id)),
+  );
+  const driverIds = new Set(driverSnaps.filter((snap) => snap.exists).map((snap) => snap.id));
 
-  return rows
-    .filter((row) =>
-      isAdminAccessRequestProfile({
-        role: row.role,
-        approval_status: row.approval_status,
-        isDriver: driverIds.has(row.id),
-      }),
-    )
-    .map((row) => ({
-      id: row.id,
-      email: row.email,
-      full_name: row.full_name,
-      created_at: row.created_at,
-    }));
+  return pending.docs
+    .filter((doc) => {
+      const data = doc.data();
+      return isAdminAccessRequestProfile({
+        role: typeof data.role === "string" ? data.role : "",
+        approval_status: typeof data.approval_status === "string" ? data.approval_status : "",
+        isDriver: driverIds.has(doc.id),
+      });
+    })
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        email: typeof data.email === "string" ? data.email : null,
+        full_name: typeof data.full_name === "string" ? data.full_name : null,
+        created_at: iso(data.created_at) ?? "",
+      };
+    });
 }
 
 export async function setMaintenanceMode(
@@ -217,17 +205,19 @@ export async function setMaintenanceMode(
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("app_settings")
-    .update({
-      maintenance_mode: enabled,
-      updated_at: new Date().toISOString(),
-      updated_by: auth.session.id,
-    })
-    .eq("id", 1);
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  if (error) {
+  try {
+    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
+      {
+        maintenance_mode: enabled,
+        updated_at: new Date(),
+        updated_by: auth.session.id,
+      },
+      { merge: true },
+    );
+  } catch {
     return { error: "save_failed" };
   }
 

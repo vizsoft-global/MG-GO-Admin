@@ -4,10 +4,12 @@ import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { putObject } from "@/lib/storage/r2-client";
 import { buildVehicleFileKey, extensionFromMime } from "@/lib/storage/r2-keys";
-import { createClient } from "@/lib/supabase/server";
 import { syncIntakeAssetAssignments } from "@/features/assets/assets-actions";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 
 export type VehicleHandoverRow = {
   id: string;
@@ -62,6 +64,55 @@ export type VehicleDriverOption = {
   projectKey: string | null;
 };
 
+const HANDOVERS = "vehicle_handovers";
+const ACCIDENTS = "vehicle_accidents";
+const DOCUMENTS = "vehicle_documents";
+const SERVICES = "vehicle_services";
+
+type Row = Record<string, unknown> & { id: string };
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+async function rowsByIds(db: Firestore, collection: string, ids: string[]): Promise<Map<string, Row>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const map = new Map<string, Row>();
+  for (let i = 0; i < unique.length; i += 100) {
+    const refs = unique.slice(i, i + 100).map((id) => db.collection(collection).doc(id));
+    if (refs.length === 0) continue;
+    const snaps = await db.getAll(...refs);
+    for (const snap of snaps) {
+      if (snap.exists) map.set(snap.id, asRow(snap.id, snap.data()));
+    }
+  }
+  return map;
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 async function requireVehicles(permission: "vehicles.view" | "vehicles.manage") {
   const session = await getSessionUser();
   if (!session || !hasPermissionInSet(session.permissions, permission, session.isSuperAdmin)) {
@@ -74,12 +125,10 @@ function empty(value: FormDataEntryValue | null): string {
   return String(value ?? "").trim();
 }
 
-/** A calendar date (YYYY-MM-DD) that is later than today in Asia/Kuwait. */
 function isFutureYmd(ymd: string): boolean {
   return ymd.localeCompare(kuwaitTodayYmd()) > 0;
 }
 
-/** A datetime-local value that is later than now, with a one-minute clock-skew tolerance. */
 function isFutureDateTime(value: string): boolean {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return false;
@@ -109,30 +158,33 @@ async function uploadOptional(
   return { key };
 }
 
+async function byVehicle(db: Firestore, collection: string, vehicleId: string, orderField: string) {
+  const snap = await db.collection(collection).where("vehicle_id", "==", vehicleId).get();
+  return snap.docs
+    .map((doc) => asRow(doc.id, doc.data()))
+    .sort((a, b) => str(b[orderField]).localeCompare(str(a[orderField])));
+}
+
 export async function listVehicleTabDrivers(): Promise<VehicleDriverOption[]> {
   const auth = await requireVehicles("vehicles.view");
   if ("error" in auth) return [];
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("drivers")
-    .select("id, driver_code, employee_id, project_key, profiles!drivers_id_fkey(full_name)")
-    .is("archived_at", null)
-    .order("employee_id");
-  return ((data ?? []) as Array<{
-    id: string;
-    driver_code: string | null;
-    employee_id: string | null;
-    project_key: string | null;
-    profiles: { full_name: string | null } | { full_name: string | null }[] | null;
-  }>).map((row) => {
-    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-    return {
-      id: row.id,
-      label: [profile?.full_name, row.employee_id || row.driver_code].filter(Boolean).join(" · "),
-      keywords: [profile?.full_name, row.employee_id, row.driver_code].filter(Boolean) as string[],
-      projectKey: row.project_key,
-    };
-  });
+  const db = await openDb();
+  const snap = await db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get();
+  const profiles = await rowsByIds(db, COLLECTIONS.profiles, snap.docs.map((doc) => doc.id));
+  return snap.docs
+    .map((doc) => asRow(doc.id, doc.data()))
+    .sort((a, b) => str(a.employee_id).localeCompare(str(b.employee_id)))
+    .map((row) => {
+      const name = str(profiles.get(row.id)?.full_name);
+      const employeeId = str(row.employee_id);
+      const driverCode = str(row.driver_code);
+      return {
+        id: row.id,
+        label: [name, employeeId || driverCode].filter(Boolean).join(" · "),
+        keywords: [name, employeeId, driverCode].filter(Boolean),
+        projectKey: str(row.project_key) || null,
+      };
+    });
 }
 
 export type VehicleAssetCatalogOption = {
@@ -153,18 +205,16 @@ export async function listVehicleAssetCatalog(): Promise<VehicleAssetCatalogOpti
   ) {
     return [];
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("asset_catalog")
-    .select("id, name, code")
-    .eq("is_active", true)
-    .order("name");
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    label: row.code ? `${row.name} · ${row.code}` : row.name,
-    keywords: [row.name, row.code].filter(Boolean) as string[],
-  }));
+  const db = await openDb();
+  const snap = await db.collection(COLLECTIONS.assetCatalog).where("is_active", "==", true).get();
+  return snap.docs
+    .map((doc) => asRow(doc.id, doc.data()))
+    .sort((a, b) => str(a.name).localeCompare(str(b.name)))
+    .map((row) => ({
+      id: row.id,
+      label: str(row.code) ? `${str(row.name)} · ${str(row.code)}` : str(row.name),
+      keywords: [str(row.name), str(row.code)].filter(Boolean),
+    }));
 }
 
 export async function assignVehicleAsset(input: {
@@ -184,41 +234,47 @@ export async function assignVehicleAsset(input: {
   const quantity = Number.isFinite(input.quantity) ? Math.max(1, Math.floor(input.quantity)) : 1;
   if (!driverId || !catalogItemId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data: intake, error: intakeError } = await supabase
-    .from("driver_intakes")
-    .select("id")
-    .eq("linked_profile_id", driverId)
-    .is("archived_at", null)
-    .maybeSingle();
-  if (intakeError) return { error: "save_failed" };
+  const db = await openDb();
+  const intakes = await db
+    .collection(COLLECTIONS.driverIntakes)
+    .where("linked_profile_id", "==", driverId)
+    .where("archived_at", "==", null)
+    .limit(2)
+    .get();
+  if (intakes.size !== 1) return { error: intakes.empty ? "missing_fields" : "save_failed" };
+  const intake = intakes.docs[0];
   if (!intake) return { error: "missing_fields" };
 
-  const { data: current, error: currentError } = await supabase
-    .from("asset_assignments")
-    .select("catalog_item_id")
-    .eq("intake_id", intake.id)
-    .eq("status", "assigned");
-  if (currentError) return { error: "save_failed" };
-
-  const nextIds = [...new Set([...(current ?? []).map((row) => row.catalog_item_id), catalogItemId])];
-  const synced = await syncIntakeAssetAssignments(
-    supabase,
-    intake.id,
-    nextIds,
-    session.id,
-    driverId,
-  );
+  const current = await db
+    .collection(COLLECTIONS.assetAssignments)
+    .where("intake_id", "==", intake.id)
+    .where("status", "==", "assigned")
+    .get();
+  const nextIds = [
+    ...new Set([
+      ...current.docs.map((doc) => str(doc.data().catalog_item_id)).filter(Boolean),
+      catalogItemId,
+    ]),
+  ];
+  const synced = await syncIntakeAssetAssignments(null, intake.id, nextIds, session.id, driverId);
   if (synced.error) return { error: synced.error };
 
   if (quantity !== 1) {
-    const { error: qtyError } = await supabase
-      .from("asset_assignments")
-      .update({ quantity, updated_at: new Date().toISOString() })
-      .eq("intake_id", intake.id)
-      .eq("catalog_item_id", catalogItemId)
-      .eq("status", "assigned");
-    if (qtyError) return { error: "save_failed" };
+    const assigned = await db
+      .collection(COLLECTIONS.assetAssignments)
+      .where("intake_id", "==", intake.id)
+      .where("catalog_item_id", "==", catalogItemId)
+      .where("status", "==", "assigned")
+      .get();
+    try {
+      await Promise.all(
+        assigned.docs.map((doc) =>
+          doc.ref.set({ quantity, updated_at: new Date() }, { merge: true }),
+        ),
+      );
+    } catch {
+      return { error: "save_failed" };
+    }
   }
 
   void logAdminMutation({
@@ -231,112 +287,105 @@ export async function assignVehicleAsset(input: {
   return {};
 }
 
-function nameMap(
-  rows: Array<{ id: string; profiles: { full_name: string | null } | { full_name: string | null }[] | null }>,
-): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const row of rows) {
-    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-    if (profile?.full_name) map.set(row.id, profile.full_name);
-  }
-  return map;
-}
-
 export async function listVehicleHandovers(vehicleId: string): Promise<VehicleHandoverRow[]> {
   const auth = await requireVehicles("vehicles.view");
   if ("error" in auth) return [];
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vehicle_handovers")
-    .select("id, handed_at, from_driver_id, to_driver_id, notes, storage_key")
-    .eq("vehicle_id", vehicleId)
-    .order("handed_at", { ascending: false });
-  if (error) throw new Error(error.message);
+  const db = await openDb();
+  const rows = await byVehicle(db, HANDOVERS, vehicleId, "handed_at");
   const ids = [
-    ...new Set(
-      (data ?? []).flatMap((row) => [row.from_driver_id, row.to_driver_id].filter(Boolean) as string[]),
-    ),
+    ...new Set(rows.flatMap((row) => [str(row.from_driver_id), str(row.to_driver_id)].filter(Boolean))),
   ];
-  const names = new Map<string, string>();
-  if (ids.length) {
-    const { data: drivers } = await supabase
-      .from("drivers")
-      .select("id, profiles!drivers_id_fkey(full_name)")
-      .in("id", ids);
-    for (const [id, name] of nameMap((drivers ?? []) as never)) names.set(id, name);
-  }
-  return (data ?? []).map((row) => ({
-    ...row,
-    from_name: row.from_driver_id ? names.get(row.from_driver_id) ?? null : null,
-    to_name: row.to_driver_id ? names.get(row.to_driver_id) ?? null : null,
+  const profiles = ids.length ? await rowsByIds(db, COLLECTIONS.profiles, ids) : new Map<string, Row>();
+  return rows.map((row) => ({
+    id: row.id,
+    handed_at: str(row.handed_at),
+    from_driver_id: str(row.from_driver_id) || null,
+    to_driver_id: str(row.to_driver_id) || null,
+    from_name: str(profiles.get(str(row.from_driver_id))?.full_name) || null,
+    to_name: str(profiles.get(str(row.to_driver_id))?.full_name) || null,
+    notes: str(row.notes) || null,
+    storage_key: str(row.storage_key) || null,
   }));
 }
 
 export async function listVehicleAccidents(vehicleId: string): Promise<VehicleAccidentRow[]> {
   const auth = await requireVehicles("vehicles.view");
   if ("error" in auth) return [];
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vehicle_accidents")
-    .select("id, occurred_at, location_text, severity, notes, storage_key")
-    .eq("vehicle_id", vehicleId)
-    .order("occurred_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const db = await openDb();
+  const rows = await byVehicle(db, ACCIDENTS, vehicleId, "occurred_at");
+  return rows.map((row) => ({
+    id: row.id,
+    occurred_at: str(row.occurred_at),
+    location_text: str(row.location_text) || null,
+    severity: str(row.severity),
+    notes: str(row.notes) || null,
+    storage_key: str(row.storage_key) || null,
+  }));
 }
 
 export async function listVehicleDocuments(vehicleId: string): Promise<VehicleDocumentRow[]> {
   const auth = await requireVehicles("vehicles.view");
   if ("error" in auth) return [];
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vehicle_documents")
-    .select("id, doc_type, storage_key, file_name, expires_at")
-    .eq("vehicle_id", vehicleId)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const db = await openDb();
+  const rows = await byVehicle(db, DOCUMENTS, vehicleId, "created_at");
+  return rows.map((row) => ({
+    id: row.id,
+    doc_type: str(row.doc_type),
+    storage_key: str(row.storage_key),
+    file_name: str(row.file_name) || null,
+    expires_at: str(row.expires_at) || null,
+  }));
 }
 
 export async function listVehicleServices(vehicleId: string): Promise<VehicleServiceRow[]> {
   const auth = await requireVehicles("vehicles.view");
   if ("error" in auth) return [];
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vehicle_services")
-    .select("id, serviced_at, kind, odometer, vendor, cost_kwd, notes")
-    .eq("vehicle_id", vehicleId)
-    .order("serviced_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const db = await openDb();
+  const rows = await byVehicle(db, SERVICES, vehicleId, "serviced_at");
+  return rows.map((row) => ({
+    id: row.id,
+    serviced_at: str(row.serviced_at),
+    kind: str(row.kind),
+    odometer: row.odometer == null ? null : Number(row.odometer),
+    vendor: str(row.vendor) || null,
+    cost_kwd: row.cost_kwd == null ? null : Number(row.cost_kwd),
+    notes: str(row.notes) || null,
+  }));
 }
 
 export async function listVehicleAssignedAssets(driverId: string | null): Promise<VehicleAssetRow[]> {
   const auth = await requireVehicles("vehicles.view");
   if ("error" in auth || !driverId) return [];
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("asset_assignments")
-    .select("id, quantity, assigned_at, catalog_item_id, asset_catalog(name, code)")
-    .eq("driver_id", driverId)
-    .eq("status", "assigned")
-    .order("assigned_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as Array<{
-    id: string;
-    quantity: number | null;
-    assigned_at: string | null;
-    asset_catalog: { name: string; code: string | null } | { name: string; code: string | null }[] | null;
-  }>).map((row) => {
-    const catalog = Array.isArray(row.asset_catalog) ? row.asset_catalog[0] : row.asset_catalog;
+  const db = await openDb();
+  const snap = await db
+    .collection(COLLECTIONS.assetAssignments)
+    .where("driver_id", "==", driverId)
+    .where("status", "==", "assigned")
+    .get();
+  const rows = snap.docs
+    .map((doc) => asRow(doc.id, doc.data()))
+    .sort((a, b) => str(b.assigned_at).localeCompare(str(a.assigned_at)));
+  const catalog = await rowsByIds(
+    db,
+    COLLECTIONS.assetCatalog,
+    rows.map((row) => str(row.catalog_item_id)).filter(Boolean),
+  );
+  return rows.map((row) => {
+    const item = catalog.get(str(row.catalog_item_id));
     return {
       id: row.id,
-      name: catalog?.name ?? "—",
-      code: catalog?.code ?? null,
-      quantity: row.quantity ?? 1,
-      assigned_at: row.assigned_at,
+      name: str(item?.name) || "—",
+      code: str(item?.code) || null,
+      quantity: row.quantity == null ? 1 : Number(row.quantity),
+      assigned_at: str(row.assigned_at) || null,
     };
   });
+}
+
+async function insertRow(collection: string, data: Record<string, unknown>) {
+  const db = await openDb();
+  const id = crypto.randomUUID();
+  await db.collection(collection).doc(id).set({ id, ...data, created_at: new Date() });
 }
 
 export async function createVehicleHandover(formData: FormData): Promise<{ error?: string }> {
@@ -357,17 +406,19 @@ export async function createVehicleHandover(formData: FormData): Promise<{ error
     auth.session.id,
   );
   if ("error" in uploaded) return { error: uploaded.error };
-  const supabase = await createClient();
-  const { error } = await supabase.from("vehicle_handovers").insert({
-    vehicle_id: vehicleId,
-    handed_at: new Date(handedAt).toISOString(),
-    from_driver_id: fromDriverId,
-    to_driver_id: toDriverId,
-    notes: empty(formData.get("notes")) || null,
-    storage_key: uploaded.key,
-    created_by: auth.session.id,
-  });
-  if (error) return { error: "save_failed" };
+  try {
+    await insertRow(HANDOVERS, {
+      vehicle_id: vehicleId,
+      handed_at: new Date(handedAt),
+      from_driver_id: fromDriverId,
+      to_driver_id: toDriverId,
+      notes: empty(formData.get("notes")) || null,
+      storage_key: uploaded.key,
+      created_by: auth.session.id,
+    });
+  } catch {
+    return { error: "save_failed" };
+  }
   void logAdminMutation({
     action: "create",
     entityType: "vehicle_handover",
@@ -396,17 +447,19 @@ export async function createVehicleAccident(formData: FormData): Promise<{ error
     auth.session.id,
   );
   if ("error" in uploaded) return { error: uploaded.error };
-  const supabase = await createClient();
-  const { error } = await supabase.from("vehicle_accidents").insert({
-    vehicle_id: vehicleId,
-    occurred_at: new Date(occurredAt).toISOString(),
-    location_text: locationText,
-    severity,
-    notes: empty(formData.get("notes")) || null,
-    storage_key: uploaded.key,
-    created_by: auth.session.id,
-  });
-  if (error) return { error: "save_failed" };
+  try {
+    await insertRow(ACCIDENTS, {
+      vehicle_id: vehicleId,
+      occurred_at: new Date(occurredAt),
+      location_text: locationText,
+      severity,
+      notes: empty(formData.get("notes")) || null,
+      storage_key: uploaded.key,
+      created_by: auth.session.id,
+    });
+  } catch {
+    return { error: "save_failed" };
+  }
   void logAdminMutation({
     action: "create",
     entityType: "vehicle_accident",
@@ -433,16 +486,18 @@ export async function createVehicleDocument(formData: FormData): Promise<{ error
   if (!uploaded.key) return { error: "missing_fields" };
   const expiresAt = empty(formData.get("expiresAt"));
   if (expiresAt && expiresAt < kuwaitTodayYmd()) return { error: "expiry_in_past" };
-  const supabase = await createClient();
-  const { error } = await supabase.from("vehicle_documents").insert({
-    vehicle_id: vehicleId,
-    doc_type: docType,
-    storage_key: uploaded.key,
-    file_name: file.name.slice(0, 180),
-    expires_at: expiresAt || null,
-    created_by: auth.session.id,
-  });
-  if (error) return { error: "save_failed" };
+  try {
+    await insertRow(DOCUMENTS, {
+      vehicle_id: vehicleId,
+      doc_type: docType,
+      storage_key: uploaded.key,
+      file_name: file.name.slice(0, 180),
+      expires_at: expiresAt || null,
+      created_by: auth.session.id,
+    });
+  } catch {
+    return { error: "save_failed" };
+  }
   void logAdminMutation({
     action: "create",
     entityType: "vehicle_document",
@@ -462,18 +517,20 @@ export async function createVehicleService(formData: FormData): Promise<{ error?
   if (isFutureYmd(servicedAt)) return { error: "future_date" };
   const odometerRaw = empty(formData.get("odometer"));
   const costRaw = empty(formData.get("costKwd"));
-  const supabase = await createClient();
-  const { error } = await supabase.from("vehicle_services").insert({
-    vehicle_id: vehicleId,
-    serviced_at: new Date(servicedAt).toISOString(),
-    kind,
-    odometer: odometerRaw ? Number(odometerRaw) : null,
-    vendor: empty(formData.get("vendor")) || null,
-    cost_kwd: costRaw ? Number(costRaw) : null,
-    notes: empty(formData.get("notes")) || null,
-    created_by: auth.session.id,
-  });
-  if (error) return { error: "save_failed" };
+  try {
+    await insertRow(SERVICES, {
+      vehicle_id: vehicleId,
+      serviced_at: new Date(servicedAt),
+      kind,
+      odometer: odometerRaw ? Number(odometerRaw) : null,
+      vendor: empty(formData.get("vendor")) || null,
+      cost_kwd: costRaw ? Number(costRaw) : null,
+      notes: empty(formData.get("notes")) || null,
+      created_by: auth.session.id,
+    });
+  } catch {
+    return { error: "save_failed" };
+  }
   void logAdminMutation({
     action: "create",
     entityType: "vehicle_service",

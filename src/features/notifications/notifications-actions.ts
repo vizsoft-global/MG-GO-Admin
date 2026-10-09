@@ -1,18 +1,22 @@
 "use server";
 
+import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
+
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { callAdminFunction, callCronFunction } from "@/lib/firebase/callable";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { buildActionPayload, buildFcmDataPayload } from "./payload-contract";
 import { DEFAULT_TIMEZONE, NOTIFICATIONS_CAMPAIGNS_PAGE_SIZE, PAYLOAD_VERSION, requiresApproval } from "./constants";
 import {
   parseNotificationMedia,
   pickPushNotificationImageKey,
-  resolveNotificationMediaReadUrl,
 } from "./notification-media";
-import { uploadNotificationMediaFile } from "./notification-media-storage";
+import {
+  resolveNotificationMediaReadUrl,
+  uploadNotificationMediaFile,
+} from "./notification-media-storage";
 import { sendPushBatch } from "@/lib/firebase/fcm-provider";
 import { interpolateTemplate } from "./interpolate-template";
 import { pickLatestPushTokenByDriver } from "./push-token-select";
@@ -43,12 +47,706 @@ import type {
 
 const KUWAIT_TZ = DEFAULT_TIMEZONE;
 
+type Loose = Record<string, unknown>;
+type FilterOp = "eq" | "neq" | "in" | "isnull" | "notnull" | "ilike" | "gte" | "lte" | "gt" | "lt";
+type Filter = { field: string; op: FilterOp; value: unknown };
+type OrderSpec = { field: string; ascending: boolean };
+type QueryResult = { data: any; error: { message: string } | null; count: number | null };
+
+const READ_CAP = 5000;
+
+function fromValue(value: unknown): unknown {
+  if (value == null) return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(fromValue);
+  if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    const out: Loose = {};
+    for (const [key, inner] of Object.entries(value as Loose)) out[key] = fromValue(inner);
+    return out;
+  }
+  return value;
+}
+
+function fromDoc(id: string, data: DocumentData | undefined): Loose {
+  const out: Loose = { id };
+  for (const [key, value] of Object.entries(data ?? {})) out[key] = fromValue(value);
+  if (data?.id != null) out.id = fromValue(data.id) as string;
+  return out;
+}
+
+function toWrite(value: unknown): unknown {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== "object") {
+    if (typeof value === "string") {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      if (value.includes("T") && Number.isFinite(Date.parse(value))) return new Date(value);
+    }
+    return value;
+  }
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => toWrite(item)).filter((item) => item !== undefined);
+  }
+  if (Object.getPrototypeOf(value) !== Object.prototype) return value;
+  const out: Loose = {};
+  for (const [key, inner] of Object.entries(value as Loose)) {
+    const next = toWrite(inner);
+    if (next !== undefined) out[key] = next;
+  }
+  return out;
+}
+
+function bound(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (value.includes("T") && Number.isFinite(Date.parse(value))) return new Date(value);
+  return value;
+}
+
+function millisOf(value: unknown): number | null {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string" && value.includes("T")) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function cmp(left: unknown, right: unknown): number {
+  const leftMs = millisOf(left);
+  const rightMs = millisOf(right);
+  if (leftMs != null && rightMs != null) return leftMs - rightMs;
+  if (typeof left === "number" && typeof right === "number") return left - right;
+  return String(left ?? "").localeCompare(String(right ?? ""));
+}
+
+function ilike(pattern: string, value: string): boolean {
+  let source = "";
+  for (const ch of pattern) {
+    if (ch === "%") source += ".*";
+    else if (ch === "_") source += ".";
+    else source += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${source}$`, "i").test(value);
+}
+
+function matchesFilter(row: Loose, filter: Filter): boolean {
+  const value = row[filter.field];
+  switch (filter.op) {
+    case "eq":
+      if (filter.field === "id") return String(value ?? "") === String(filter.value ?? "");
+      return value === filter.value;
+    case "neq":
+      return value !== filter.value;
+    case "in": {
+      const list = Array.isArray(filter.value) ? filter.value : [];
+      if (filter.field === "id") return list.map((item) => String(item)).includes(String(value ?? ""));
+      return list.includes(value);
+    }
+    case "isnull":
+      return value == null;
+    case "notnull":
+      return value != null;
+    case "ilike":
+      return ilike(String(filter.value ?? ""), String(value ?? ""));
+    case "gte":
+      return cmp(value, filter.value) >= 0;
+    case "lte":
+      return cmp(value, filter.value) <= 0;
+    case "gt":
+      return cmp(value, filter.value) > 0;
+    case "lt":
+      return cmp(value, filter.value) < 0;
+    default: {
+      const unreachable: never = filter.op;
+      return unreachable;
+    }
+  }
+}
+
+function splitTop(input: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (ch === "(") depth += 1;
+    else if (ch === ")") depth -= 1;
+    else if (ch === "," && depth === 0) {
+      parts.push(input.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  const tail = input.slice(start).trim();
+  if (tail) parts.push(tail);
+  return parts.filter(Boolean);
+}
+
+function parseClause(clause: string): Filter | null {
+  const match = /^(.*?)\.(ilike|is|lte|gte|lt|gt|eq|in|neq)\.(.*)$/.exec(clause.trim());
+  if (!match) return null;
+  const field = match[1] ?? "";
+  const op = match[2] ?? "";
+  const rest = match[3] ?? "";
+  if (op === "ilike") return { field, op: "ilike", value: rest };
+  if (op === "is") return { field, op: rest === "null" ? "isnull" : "eq", value: rest === "null" ? null : rest };
+  if (op === "in") {
+    const inner = rest.startsWith("(") && rest.endsWith(")") ? rest.slice(1, -1) : rest;
+    const values = inner.length === 0 ? [] : inner.split(",").map((item) => item.trim()).filter(Boolean);
+    return { field, op: "in", value: values };
+  }
+  if (op === "lte") return { field, op: "lte", value: rest };
+  if (op === "gte") return { field, op: "gte", value: rest };
+  if (op === "lt") return { field, op: "lt", value: rest };
+  if (op === "gt") return { field, op: "gt", value: rest };
+  if (op === "eq") return { field, op: "eq", value: rest };
+  if (op === "neq") return { field, op: "neq", value: rest };
+  return null;
+}
+
+function parseOr(input: string): Filter[] {
+  return splitTop(input)
+    .map(parseClause)
+    .filter((filter): filter is Filter => filter != null);
+}
+
+function splitFilters(filters: Filter[]): { native: Filter[]; memory: Filter[] } {
+  const native: Filter[] = [];
+  const memory: Filter[] = [];
+  const ins = filters.filter((filter) => filter.op === "in" && filter.field !== "id");
+  const ranges = filters.filter(
+    (filter) => filter.op === "gte" || filter.op === "gt" || filter.op === "lte" || filter.op === "lt",
+  );
+  const rangeField = ranges[0]?.field ?? null;
+  const onlyIn = ins.length === 1 ? ins[0] : null;
+  for (const filter of filters) {
+    if (filter.field === "id") {
+      memory.push(filter);
+      continue;
+    }
+    if (filter.op === "eq") {
+      native.push(filter);
+      continue;
+    }
+    if (filter.op === "gte" || filter.op === "gt" || filter.op === "lte" || filter.op === "lt") {
+      if (filter.field === rangeField) native.push(filter);
+      else memory.push(filter);
+      continue;
+    }
+    if (
+      filter.op === "in" &&
+      onlyIn === filter &&
+      rangeField == null &&
+      Array.isArray(filter.value) &&
+      filter.value.length > 0
+    ) {
+      native.push(filter);
+      continue;
+    }
+    memory.push(filter);
+  }
+  return { native, memory };
+}
+
+async function loadByIds(db: Firestore, collection: string, ids: string[]): Promise<Map<string, Loose>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const map = new Map<string, Loose>();
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    if (chunk.length === 0) continue;
+    const snaps = await db.getAll(...chunk.map((id) => db.collection(collection).doc(id)));
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      map.set(snap.id, fromDoc(snap.id, snap.data()));
+    }
+  }
+  return map;
+}
+
+function projectRow(row: Loose, columns: string): Loose {
+  if (columns.includes("*")) return row;
+  const out: Loose = {};
+  for (const part of splitTop(columns)) {
+    if (part.includes("(")) {
+      const alias = part.startsWith("profiles!") ? "profiles" : part.slice(0, part.indexOf("("));
+      if (alias in row) out[alias] = row[alias];
+      continue;
+    }
+    out[part] = row[part];
+  }
+  return out;
+}
+
+async function attachEmbeds(db: Firestore, rows: Loose[], columns: string): Promise<Loose[]> {
+  const parts = splitTop(columns);
+  const profileOnSelf = parts.some(
+    (part) => part.includes("profiles!drivers_id_fkey") && !part.startsWith("drivers("),
+  );
+  const driverPart = parts.some((part) => part.startsWith("drivers("));
+  const campaignPart = parts.some((part) => part.startsWith("notification_campaigns("));
+  const next = rows.map((row) => ({ ...row }));
+  if (profileOnSelf) {
+    const profiles = await loadByIds(
+      db,
+      "profiles",
+      next.map((row) => String(row.id)),
+    );
+    for (const row of next) {
+      row.profiles = { full_name: profiles.get(String(row.id))?.full_name ?? null };
+    }
+  }
+  if (driverPart) {
+    const drivers = await loadByIds(
+      db,
+      "drivers",
+      next.map((row) => String(row.driver_id ?? "")),
+    );
+    const profiles = await loadByIds(db, "profiles", [...drivers.keys()]);
+    for (const row of next) {
+      const driver = drivers.get(String(row.driver_id ?? ""));
+      row.drivers = driver
+        ? {
+            driver_code: driver.driver_code ?? null,
+            employee_id: driver.employee_id ?? null,
+            profiles: { full_name: profiles.get(String(driver.id))?.full_name ?? null },
+          }
+        : null;
+    }
+  }
+  if (campaignPart) {
+    const campaigns = await loadByIds(
+      db,
+      "notification_campaigns",
+      next.map((row) => String(row.campaign_id ?? "")),
+    );
+    for (const row of next) {
+      const campaign = campaigns.get(String(row.campaign_id ?? ""));
+      row.notification_campaigns = campaign
+        ? { title: campaign.title ?? null, category: campaign.category ?? null }
+        : null;
+    }
+  }
+  return next;
+}
+
+function applyQueryFilters(query: Query, filters: Filter[], chunk: unknown[] | null, inField: string | null): Query {
+  let next = query;
+  for (const filter of filters) {
+    if (filter.op === "eq") next = next.where(filter.field, "==", bound(filter.value));
+    else if (filter.op === "gte") next = next.where(filter.field, ">=", bound(filter.value));
+    else if (filter.op === "lte") next = next.where(filter.field, "<=", bound(filter.value));
+    else if (filter.op === "gt") next = next.where(filter.field, ">", bound(filter.value));
+    else if (filter.op === "lt") next = next.where(filter.field, "<", bound(filter.value));
+  }
+  if (chunk && inField) next = next.where(inField, "in", chunk.map(bound));
+  return next;
+}
+
+class NotificationQuery {
+  private mode: "select" | "insert" | "update" | "upsert" = "select";
+  private columns = "*";
+  private selected = false;
+  private countExact = false;
+  private head = false;
+  private filters: Filter[] = [];
+  private orGroups: Filter[][] = [];
+  private orders: OrderSpec[] = [];
+  private limitN: number | null = null;
+  private rangeFrom: number | null = null;
+  private rangeTo: number | null = null;
+  private payload: unknown = null;
+  private onConflict: string | null = null;
+  private shape: "many" | "one" | "maybe" = "many";
+  private pending: Promise<QueryResult> | null = null;
+
+  constructor(private readonly table: string) {}
+
+  select(columns = "*", options?: { count?: "exact"; head?: boolean }) {
+    this.columns = columns;
+    this.selected = true;
+    this.countExact = options?.count === "exact";
+    this.head = options?.head === true;
+    return this;
+  }
+
+  eq(field: string, value: unknown) {
+    this.filters.push({ field, op: "eq", value });
+    return this;
+  }
+
+  neq(field: string, value: unknown) {
+    this.filters.push({ field, op: "neq", value });
+    return this;
+  }
+
+  in(field: string, value: unknown[]) {
+    this.filters.push({ field, op: "in", value: value ?? [] });
+    return this;
+  }
+
+  is(field: string, value: unknown) {
+    this.filters.push({ field, op: value == null ? "isnull" : "eq", value });
+    return this;
+  }
+
+  not(field: string, operator: string, value: unknown) {
+    if (operator === "is" && value == null) this.filters.push({ field, op: "notnull", value: null });
+    return this;
+  }
+
+  ilike(field: string, value: string) {
+    this.filters.push({ field, op: "ilike", value });
+    return this;
+  }
+
+  gte(field: string, value: unknown) {
+    this.filters.push({ field, op: "gte", value });
+    return this;
+  }
+
+  lte(field: string, value: unknown) {
+    this.filters.push({ field, op: "lte", value });
+    return this;
+  }
+
+  gt(field: string, value: unknown) {
+    this.filters.push({ field, op: "gt", value });
+    return this;
+  }
+
+  lt(field: string, value: unknown) {
+    this.filters.push({ field, op: "lt", value });
+    return this;
+  }
+
+  or(input: string) {
+    const group = parseOr(input);
+    if (group.length > 0) this.orGroups.push(group);
+    return this;
+  }
+
+  order(field: string, options?: { ascending?: boolean }) {
+    this.orders.push({ field, ascending: options?.ascending !== false });
+    return this;
+  }
+
+  limit(count: number) {
+    this.limitN = count;
+    return this;
+  }
+
+  range(from: number, to: number) {
+    this.rangeFrom = from;
+    this.rangeTo = to;
+    return this;
+  }
+
+  update(payload: unknown) {
+    this.mode = "update";
+    this.payload = payload;
+    return this;
+  }
+
+  insert(payload: unknown) {
+    this.mode = "insert";
+    this.payload = payload;
+    return this;
+  }
+
+  upsert(payload: unknown, options?: { onConflict?: string }) {
+    this.mode = "upsert";
+    this.payload = payload;
+    this.onConflict = options?.onConflict ?? null;
+    return this;
+  }
+
+  maybeSingle() {
+    this.shape = "maybe";
+    return this;
+  }
+
+  single() {
+    this.shape = "one";
+    return this;
+  }
+
+  then(
+    resolve?: ((value: QueryResult) => unknown) | null,
+    reject?: ((reason: unknown) => unknown) | null,
+  ): Promise<QueryResult> {
+    this.pending ??= this.execute();
+    return this.pending.then(resolve ?? undefined, reject ?? undefined) as Promise<QueryResult>;
+  }
+
+  private matchesAll(row: Loose): boolean {
+    if (!this.filters.every((filter) => matchesFilter(row, filter))) return false;
+    return this.orGroups.every((group) => group.some((filter) => matchesFilter(row, filter)));
+  }
+
+  private async execute(): Promise<QueryResult> {
+    if (this.filters.some((filter) => filter.op === "in" && Array.isArray(filter.value) && filter.value.length === 0)) {
+      return { data: this.shape === "many" ? [] : null, error: null, count: 0 };
+    }
+    const db = await staffDb();
+    if (!db) return { data: null, error: { message: "not_configured" }, count: null };
+    try {
+      if (this.mode === "insert") return await this.writeInsert(db);
+      if (this.mode === "update") return await this.writeUpdate(db);
+      if (this.mode === "upsert") return await this.writeUpsert(db);
+      return await this.read(db);
+    } catch (error) {
+      return {
+        data: null,
+        error: { message: error instanceof Error ? error.message : "query_failed" },
+        count: null,
+      };
+    }
+  }
+
+  private async read(db: Firestore): Promise<QueryResult> {
+    const { native, memory } = splitFilters(this.filters);
+    const hasMemory = memory.length > 0 || this.orGroups.length > 0 || this.filters.some((filter) => filter.field === "id");
+    if (this.head && !hasMemory) {
+      return { data: null, error: null, count: await this.countNative(db, native) };
+    }
+    const matched = (await this.collect(db)).filter((row) => this.matchesAll(row));
+    this.sortRows(matched);
+    const count = this.countExact || this.head ? matched.length : null;
+    if (this.head) return { data: null, error: null, count: matched.length };
+    const page = this.slice(matched);
+    const embedded = await attachEmbeds(db, page, this.columns);
+    return this.finish(embedded.map((row) => projectRow(row, this.columns)), count);
+  }
+
+  private sortRows(rows: Loose[]) {
+    if (this.orders.length === 0) return;
+    rows.sort((left, right) => {
+      for (const order of this.orders) {
+        const delta = cmp(left[order.field], right[order.field]);
+        if (delta !== 0) return order.ascending ? delta : -delta;
+      }
+      return 0;
+    });
+  }
+
+  private slice(rows: Loose[]): Loose[] {
+    if (this.rangeFrom != null && this.rangeTo != null) return rows.slice(this.rangeFrom, this.rangeTo + 1);
+    if (this.limitN != null) return rows.slice(0, this.limitN);
+    return rows;
+  }
+
+  private finish(rows: Loose[], count: number | null): QueryResult {
+    if (this.shape === "one") {
+      if (rows.length !== 1) {
+        return { data: null, error: { message: rows.length === 0 ? "not_found" : "multiple_rows" }, count };
+      }
+      return { data: rows[0], error: null, count };
+    }
+    if (this.shape === "maybe") {
+      if (rows.length === 0) return { data: null, error: null, count };
+      if (rows.length > 1) return { data: null, error: { message: "multiple_rows" }, count };
+      return { data: rows[0], error: null, count };
+    }
+    return { data: rows, error: null, count };
+  }
+
+  private async collect(db: Firestore): Promise<Loose[]> {
+    const idEq = this.filters.find((filter) => filter.field === "id" && filter.op === "eq");
+    if (idEq) return this.docsById(db, [idEq.value]);
+    const idIn = this.filters.find((filter) => filter.field === "id" && filter.op === "in");
+    if (idIn && Array.isArray(idIn.value)) return this.docsById(db, idIn.value);
+    const { native } = splitFilters(this.filters);
+    if (native.length === 0) {
+      const snap = await db.collection(this.table).limit(READ_CAP).get();
+      return snap.docs.map((doc) => fromDoc(doc.id, doc.data()));
+    }
+    return this.queryNative(db, native);
+  }
+
+  private async docsById(db: Firestore, ids: unknown[]): Promise<Loose[]> {
+    if (this.table === "notification_remote_config" && ids.length === 1 && (ids[0] === 1 || ids[0] === "1")) {
+      const snap = await db.collection(this.table).doc("1").get();
+      if (snap.exists) return [fromDoc(snap.id, snap.data())];
+      const found = await db.collection(this.table).where("id", "==", 1).limit(1).get();
+      return found.docs.map((doc) => fromDoc(doc.id, doc.data()));
+    }
+    const map = await loadByIds(
+      db,
+      this.table,
+      ids.map((id) => String(id)),
+    );
+    return [...map.values()];
+  }
+
+  private async queryNative(db: Firestore, native: Filter[]): Promise<Loose[]> {
+    const inFilter = native.find((filter) => filter.op === "in");
+    const rest = native.filter((filter) => filter.op !== "in");
+    const values = inFilter && Array.isArray(inFilter.value) ? inFilter.value : [];
+    const chunks: Array<unknown[] | null> = values.length > 0 ? [] : [null];
+    for (let i = 0; i < values.length; i += 30) chunks.push(values.slice(i, i + 30));
+    const rows: Loose[] = [];
+    const seen = new Set<string>();
+    for (const chunk of chunks) {
+      const snap = await this.safeGet(db, rest, chunk, inFilter?.field ?? null);
+      for (const doc of snap) {
+        const id = String(doc.id ?? "");
+        if (seen.has(id)) continue;
+        seen.add(id);
+        rows.push(doc);
+      }
+    }
+    return rows;
+  }
+
+  private async safeGet(
+    db: Firestore,
+    filters: Filter[],
+    chunk: unknown[] | null,
+    inField: string | null,
+  ): Promise<Loose[]> {
+    const run = async (ordered: boolean, capped: boolean) => {
+      let query = applyQueryFilters(db.collection(this.table), filters, chunk, inField);
+      const order = this.orders[0];
+      const rangeField = filters.find(
+        (filter) => filter.op === "gte" || filter.op === "gt" || filter.op === "lte" || filter.op === "lt",
+      )?.field;
+      if (ordered && order && (!rangeField || order.field === rangeField)) {
+        query = query.orderBy(order.field, order.ascending ? "asc" : "desc");
+      }
+      if (capped) query = query.limit(READ_CAP);
+      const snap = await query.get();
+      return snap.docs.map((doc) => fromDoc(doc.id, doc.data()));
+    };
+    try {
+      return await run(true, false);
+    } catch {
+      try {
+        return await run(false, false);
+      } catch {
+        try {
+          return await run(false, true);
+        } catch {
+          const snap = await db.collection(this.table).limit(READ_CAP).get();
+          return snap.docs.map((doc) => fromDoc(doc.id, doc.data()));
+        }
+      }
+    }
+  }
+
+  private async countNative(db: Firestore, native: Filter[]): Promise<number> {
+    const inFilter = native.find((filter) => filter.op === "in");
+    const rest = native.filter((filter) => filter.op !== "in");
+    const values = inFilter && Array.isArray(inFilter.value) ? inFilter.value : [];
+    const chunks: Array<unknown[] | null> = values.length > 0 ? [] : [null];
+    for (let i = 0; i < values.length; i += 30) chunks.push(values.slice(i, i + 30));
+    let total = 0;
+    for (const chunk of chunks) {
+      try {
+        const snap = await applyQueryFilters(db.collection(this.table), rest, chunk, inFilter?.field ?? null)
+          .count()
+          .get();
+        total += snap.data().count;
+      } catch {
+        const rows = await this.safeGet(db, rest, chunk, inFilter?.field ?? null);
+        total += rows.length;
+      }
+    }
+    return total;
+  }
+
+  private async writeInsert(db: Firestore): Promise<QueryResult> {
+    const source = Array.isArray(this.payload) ? this.payload : [this.payload];
+    const written: Loose[] = [];
+    let batch = db.batch();
+    let pending = 0;
+    for (const raw of source) {
+      const data = (toWrite(raw) ?? {}) as Loose;
+      const id = data.id != null ? String(data.id) : crypto.randomUUID();
+      data.id = id;
+      batch.set(db.collection(this.table).doc(id), data);
+      written.push(fromDoc(id, data as DocumentData));
+      pending += 1;
+      if (pending === 400) {
+        await batch.commit();
+        batch = db.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) await batch.commit();
+    if (!this.selected) return { data: null, error: null, count: written.length };
+    const embedded = await attachEmbeds(db, written, this.columns);
+    return this.finish(embedded.map((row) => projectRow(row, this.columns)), written.length);
+  }
+
+  private async writeUpdate(db: Firestore): Promise<QueryResult> {
+    const matches = (await this.collect(db)).filter((row) => this.matchesAll(row));
+    const patch = (toWrite(this.payload) ?? {}) as Loose;
+    let batch = db.batch();
+    let pending = 0;
+    const updated: Loose[] = [];
+    for (const row of matches) {
+      const id = String(row.id);
+      if (Object.keys(patch).length > 0) {
+        batch.update(db.collection(this.table).doc(id), patch);
+        pending += 1;
+      }
+      updated.push(fromDoc(id, { ...row, ...(fromValue(patch) as Loose) } as DocumentData));
+      if (pending === 400) {
+        await batch.commit();
+        batch = db.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) await batch.commit();
+    if (!this.selected) return { data: null, error: null, count: updated.length };
+    return this.finish(updated.map((row) => projectRow(row, this.columns)), updated.length);
+  }
+
+  private async writeUpsert(db: Firestore): Promise<QueryResult> {
+    const data = (toWrite(this.payload) ?? {}) as Loose;
+    const conflictValue = this.onConflict ? data[this.onConflict] : undefined;
+    const id =
+      this.onConflict && conflictValue != null
+        ? this.onConflict === "id"
+          ? String(conflictValue)
+          : encodeURIComponent(String(conflictValue))
+        : data.id != null
+          ? String(data.id)
+          : crypto.randomUUID();
+    if (data.id == null) data.id = id;
+    await db.collection(this.table).doc(id).set(data, { merge: true });
+    if (!this.selected) return { data: null, error: null, count: 1 };
+    return this.finish([projectRow(fromDoc(id, data as DocumentData), this.columns)], 1);
+  }
+}
+
+class NotificationClient {
+  constructor(private readonly cron: boolean) {}
+
+  from(table: string) {
+    return new NotificationQuery(table);
+  }
+
+  async rpc(name: string, args?: Record<string, unknown>) {
+    const call = this.cron ? callCronFunction : callAdminFunction;
+    const { data, error } = await call(name, args ?? {});
+    return { data, error: error ? { message: error.message } : null };
+  }
+}
+
 async function notificationsDb() {
-  return (await createClient()) as any;
+  return new NotificationClient(false);
 }
 
 function notificationsAdminDb() {
-  return createAdminClient() as any;
+  return new NotificationClient(true);
 }
 
 async function requireNotificationsView() {
@@ -99,8 +797,8 @@ async function ensureCampaignApprovedForDispatch(
   campaignId: string,
   session: NonNullable<Awaited<ReturnType<typeof requireNotificationsSend>>>,
 ): Promise<{ ok: true } | { error: NotificationActionError }> {
-  const supabase = await notificationsDb();
-  const { data: campaign } = await supabase
+  const panel = await notificationsDb();
+  const { data: campaign } = await panel
     .from("notification_campaigns")
     .select("requires_approval, approved_at, status")
     .eq("id", campaignId)
@@ -117,7 +815,7 @@ async function ensureCampaignApprovedForDispatch(
     return { error: "approval_required" };
   }
 
-  const { error } = await supabase
+  const { error } = await panel
     .from("notification_campaigns")
     .update({
       approved_by: session.id,
@@ -142,12 +840,12 @@ async function ensureCampaignApprovedForDispatch(
 }
 
 async function estimateAudienceCount(
-  supabase: Awaited<ReturnType<typeof notificationsDb>>,
+  panel: Awaited<ReturnType<typeof notificationsDb>>,
   targetSpec: TargetSpec,
   exclusionSpec: Record<string, unknown> = {},
   importSpec?: NotificationImportSpec,
 ): Promise<number> {
-  const { data, error } = await supabase.rpc("estimate_notification_audience", {
+  const { data, error } = await panel.rpc("estimate_notification_audience", {
     p_target_spec: targetSpec,
     p_exclusion_spec: exclusionSpec,
     p_import_spec: importSpec ?? {},
@@ -200,38 +898,38 @@ function mapCampaign(row: Record<string, unknown>): NotificationCampaignRow {
 
 export async function getNotificationDashboardKpis(): Promise<NotificationDashboardKpis> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
+  const panel = await notificationsDb();
   const today = kuwaitToday();
   const start = `${today}T00:00:00+03:00`;
 
   const [sentRes, scheduledRes, draftsRes, failedRes, automationsRes, activityRes, campaignsRes] =
     await Promise.all([
-      supabase
+      panel
         .from("notification_campaigns")
         .select("id", { count: "exact", head: true })
         .gte("sent_at", start)
         .in("status", ["sent", "delivered", "opened", "clicked"]),
-      supabase
+      panel
         .from("notification_campaigns")
         .select("id", { count: "exact", head: true })
         .eq("status", "scheduled"),
-      supabase
+      panel
         .from("notification_campaigns")
         .select("id", { count: "exact", head: true })
         .eq("status", "draft"),
-      supabase
+      panel
         .from("notification_campaigns")
         .select("failed_count")
         .gte("created_at", start),
-      supabase
+      panel
         .from("notification_automations")
         .select("id", { count: "exact", head: true })
         .eq("status", "active"),
-      supabase
+      panel
         .from("notification_events")
         .select("id", { count: "exact", head: true })
         .gte("occurred_at", start),
-      supabase
+      panel
         .from("notification_campaigns")
         .select("recipient_count, delivered_count, opened_count, failed_count")
         .gte("sent_at", start),
@@ -304,14 +1002,14 @@ export async function listNotificationCampaignsPage(params: {
   hasMore: boolean;
 }> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
+  const panel = await notificationsDb();
   const filters = params.filters ?? {};
   const limit = params.limit ?? NOTIFICATIONS_CAMPAIGNS_PAGE_SIZE;
   const page = params.page ?? 0;
   const from = page * limit;
   const to = from + limit - 1;
 
-  let query = supabase
+  let query = panel
     .from("notification_campaigns")
     .select("*", { count: "exact" })
     .order("created_at", { ascending: false })
@@ -361,8 +1059,8 @@ export async function getNotificationDispatchItems(
   campaignId: string,
 ): Promise<NotificationDispatchItemRow[]> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_dispatch_items")
     .select(
       "id, driver_id, status, error_code, error_message, sent_at, opened_at, clicked_at, delivered_at, drivers(driver_code, employee_id, profiles!drivers_id_fkey(full_name))",
@@ -404,8 +1102,8 @@ export async function getNotificationCampaign(
   id: string,
 ): Promise<NotificationCampaignRow | null> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_campaigns")
     .select("*")
     .eq("id", id)
@@ -420,8 +1118,8 @@ export async function estimateNotificationAudience(
   importSpec?: NotificationImportSpec,
 ): Promise<number> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase.rpc("estimate_notification_audience", {
+  const panel = await notificationsDb();
+  const { data, error } = await panel.rpc("estimate_notification_audience", {
     p_target_spec: targetSpec,
     p_exclusion_spec: exclusionSpec,
     p_import_spec: importSpec ?? {},
@@ -458,11 +1156,11 @@ export async function uploadNotificationMedia(
 }
 
 async function loadTemplateScreenshotFlag(
-  supabase: Awaited<ReturnType<typeof notificationsDb>>,
+  panel: Awaited<ReturnType<typeof notificationsDb>>,
   templateId: string | null | undefined,
 ): Promise<boolean> {
   if (!templateId) return false;
-  const { data } = await supabase
+  const { data } = await panel
     .from("notification_templates")
     .select("screenshot_restricted")
     .eq("id", templateId)
@@ -486,9 +1184,9 @@ export async function saveNotificationCampaign(
     targetMode: input.targetSpec.mode,
   });
 
-  const supabase = await notificationsDb();
+  const panel = await notificationsDb();
   const audience = await estimateAudienceCount(
-    supabase,
+    panel,
     input.targetSpec,
     input.exclusionSpec ?? {},
     input.importSpec,
@@ -498,7 +1196,7 @@ export async function saveNotificationCampaign(
     input.screenshotRestrictedOverride === undefined
       ? null
       : input.screenshotRestrictedOverride;
-  const templateFlag = await loadTemplateScreenshotFlag(supabase, input.templateId);
+  const templateFlag = await loadTemplateScreenshotFlag(panel, input.templateId);
   const screenshotRestricted = resolveScreenshotRestricted(override, templateFlag);
 
   const row = {
@@ -528,7 +1226,7 @@ export async function saveNotificationCampaign(
   };
 
   if (campaignId) {
-    const { data, error } = await supabase
+    const { data, error } = await panel
       .from("notification_campaigns")
       .update(row)
       .eq("id", campaignId)
@@ -546,7 +1244,7 @@ export async function saveNotificationCampaign(
     return { id: data.id };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await panel
     .from("notification_campaigns")
     .insert({ ...row, created_by: session.id, status: "draft" })
     .select("id")
@@ -571,8 +1269,8 @@ export async function submitNotificationForApproval(
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await notificationsDb();
-  const { error } = await supabase
+  const panel = await notificationsDb();
+  const { error } = await panel
     .from("notification_campaigns")
     .update({
       status: "pending_approval",
@@ -598,8 +1296,8 @@ export async function approveNotificationCampaign(
   const session = await requireNotificationsApprove();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await notificationsDb();
-  const { data: campaign } = await supabase
+  const panel = await notificationsDb();
+  const { data: campaign } = await panel
     .from("notification_campaigns")
     .select("schedule_spec, scheduled_for")
     .eq("id", campaignId)
@@ -610,7 +1308,7 @@ export async function approveNotificationCampaign(
   const nextStatus =
     scheduleSpec?.mode === "later" || campaign.scheduled_for ? "scheduled" : "queued";
 
-  const { error } = await supabase
+  const { error } = await panel
     .from("notification_campaigns")
     .update({
       status: nextStatus,
@@ -1059,15 +1757,15 @@ export async function cloneNotificationCampaign(
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await notificationsDb();
-  const { data: source, error } = await supabase
+  const panel = await notificationsDb();
+  const { data: source, error } = await panel
     .from("notification_campaigns")
     .select("*")
     .eq("id", campaignId)
     .maybeSingle();
   if (error || !source) return { error: "not_found" };
 
-  const { data, error: insertError } = await supabase
+  const { data, error: insertError } = await panel
     .from("notification_campaigns")
     .insert({
       title: `${source.title} (copy)`,
@@ -1107,8 +1805,8 @@ export async function cloneNotificationCampaign(
 
 export async function listNotificationTemplates(): Promise<NotificationTemplateRow[]> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_templates")
     .select("*")
     .eq("is_archived", false)
@@ -1119,8 +1817,8 @@ export async function listNotificationTemplates(): Promise<NotificationTemplateR
 
 export async function listNotificationAutomations(): Promise<NotificationAutomationRow[]> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_automations")
     .select("*")
     .order("created_at", { ascending: false });
@@ -1135,11 +1833,11 @@ export async function getNotificationTargetingOptions(): Promise<{
   drivers: Array<{ id: string; label: string }>;
 }> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
+  const panel = await notificationsDb();
   const [zonesRes, partnersRes, groupsRes] = await Promise.all([
-    supabase.from("zones").select("id, name").order("name"),
-    supabase.from("partners").select("id, name").order("name"),
-    (supabase as any).from("driver_groups").select("id, name, member_count").order("name"),
+    panel.from("zones").select("id, name").order("name"),
+    panel.from("partners").select("id, name").order("name"),
+    (panel as any).from("driver_groups").select("id, name, member_count").order("name"),
   ]);
 
   return {
@@ -1170,8 +1868,7 @@ export async function searchDriversForNotification(
   }>
 > {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const hits = await searchActiveDrivers(supabase, query, limit);
+  const hits = await searchActiveDrivers(query, limit);
   return hits.map((d) => ({
     id: d.id,
     label: `${d.driver_code} · ${d.full_name}`,
@@ -1183,8 +1880,8 @@ export async function searchDriversForNotification(
 
 export async function resolveNotificationDriversByEmployeeIds(employeeIds: string[]) {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const resolved = await resolveDriversByLookupIds(supabase, employeeIds);
+  const panel = await notificationsDb();
+  const resolved = await resolveDriversByLookupIds(panel, employeeIds);
   return resolved.map((row) => ({
     lookup_id: row.lookup_id,
     employee_id: row.employee_id,
@@ -1281,8 +1978,8 @@ export async function scheduleNotificationCampaign(
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await notificationsDb();
-  const { data: campaign } = await supabase
+  const panel = await notificationsDb();
+  const { data: campaign } = await panel
     .from("notification_campaigns")
     .select("requires_approval, scheduled_for, schedule_spec")
     .eq("id", campaignId)
@@ -1290,7 +1987,7 @@ export async function scheduleNotificationCampaign(
   if (!campaign?.scheduled_for) return { error: "invalid_input" };
 
   const nextStatus = campaign.requires_approval ? "pending_approval" : "scheduled";
-  const { error } = await supabase
+  const { error } = await panel
     .from("notification_campaigns")
     .update({
       status: nextStatus,
@@ -1320,8 +2017,8 @@ export async function rejectNotificationCampaign(
   const session = await requireNotificationsApprove();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await notificationsDb();
-  const { error } = await supabase
+  const panel = await notificationsDb();
+  const { error } = await panel
     .from("notification_campaigns")
     .update({
       status: "cancelled",
@@ -1348,8 +2045,8 @@ export async function cancelNotificationCampaign(
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await notificationsDb();
-  const { error } = await supabase
+  const panel = await notificationsDb();
+  const { error } = await panel
     .from("notification_campaigns")
     .update({
       status: "cancelled",
@@ -1416,8 +2113,8 @@ export async function getNotificationTemplate(
   id: string,
 ): Promise<NotificationTemplateRow | null> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_templates")
     .select("*")
     .eq("id", id)
@@ -1430,8 +2127,8 @@ export async function getNotificationAutomation(
   id: string,
 ): Promise<NotificationAutomationRow | null> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_automations")
     .select("*")
     .eq("id", id)
@@ -1450,8 +2147,8 @@ export async function listNotificationAnalyticsDaily(filters: {
   toDate?: string;
 } = {}): Promise<NotificationAnalyticsDailyRow[]> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  let query = supabase
+  const panel = await notificationsDb();
+  let query = panel
     .from("notification_analytics_daily")
     .select("*, notification_campaigns(title, category)")
     .order("metric_date", { ascending: false })
@@ -1486,8 +2183,8 @@ export async function listNotificationAutomationRuns(
   automationId: string,
 ): Promise<Array<Record<string, unknown>>> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_automation_runs")
     .select("*")
     .eq("automation_id", automationId)
@@ -1506,8 +2203,8 @@ export async function saveNotificationTemplate(
     return { error: "invalid_input" };
   }
 
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_templates")
     .insert({
       name: input.name.trim(),
@@ -1547,8 +2244,8 @@ export async function updateNotificationTemplate(
   }
 
   const screenshotRestricted = Boolean(input.screenshotRestricted);
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_templates")
     .update({
       name: input.name.trim(),
@@ -1570,7 +2267,7 @@ export async function updateNotificationTemplate(
   if (error || !data) return { error: "not_found" };
 
   // Refresh stamp on editable campaigns that inherit this template.
-  await supabase
+  await panel
     .from("notification_campaigns")
     .update({
       screenshot_restricted: screenshotRestricted,
@@ -1594,8 +2291,8 @@ export async function listCampaignScreenshotEvents(
   campaignId: string,
 ): Promise<NotificationScreenshotEventRow[]> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_events")
     .select("id, campaign_id, dispatch_item_id, driver_id, occurred_at, metadata")
     .eq("campaign_id", campaignId)
@@ -1615,7 +2312,7 @@ export async function listCampaignScreenshotEvents(
   if (rows.length === 0) return [];
 
   const driverIds = [...new Set(rows.map((r) => r.driver_id))];
-  const { data: drivers } = await supabase
+  const { data: drivers } = await panel
     .from("drivers")
     .select("id, driver_code, profiles!drivers_id_fkey(full_name)")
     .in("id", driverIds);
@@ -1653,8 +2350,8 @@ export async function archiveNotificationTemplate(
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await notificationsDb();
-  const { error } = await supabase
+  const panel = await notificationsDb();
+  const { error } = await panel
     .from("notification_templates")
     .update({ is_archived: true, updated_at: new Date().toISOString() })
     .eq("id", id);
@@ -1677,8 +2374,8 @@ export async function saveNotificationAutomation(
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim()) return { error: "invalid_input" };
 
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_automations")
     .insert({
       name: input.name.trim(),
@@ -1723,8 +2420,8 @@ export async function updateNotificationAutomation(
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim()) return { error: "invalid_input" };
 
-  const supabase = await notificationsDb();
-  const { data, error } = await supabase
+  const panel = await notificationsDb();
+  const { data, error } = await panel
     .from("notification_automations")
     .update({
       name: input.name.trim(),
@@ -1769,7 +2466,7 @@ export async function setNotificationAutomationStatus(
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await notificationsDb();
+  const panel = await notificationsDb();
   const patch: Record<string, unknown> = {
     status,
     updated_at: new Date().toISOString(),
@@ -1781,7 +2478,7 @@ export async function setNotificationAutomationStatus(
     patch.next_run_at = null;
   }
 
-  const { error } = await supabase.from("notification_automations").update(patch).eq("id", id);
+  const { error } = await panel.from("notification_automations").update(patch).eq("id", id);
   if (error) return { error: "save_failed" };
 
   await logAdminMutation({
@@ -1798,8 +2495,8 @@ export async function listNotificationDispatchHistory(
   campaignId?: string,
 ): Promise<Array<Record<string, unknown>>> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  let query = supabase
+  const panel = await notificationsDb();
+  let query = panel
     .from("notification_dispatch_runs")
     .select("*")
     .order("created_at", { ascending: false })
@@ -1812,8 +2509,8 @@ export async function listNotificationDispatchHistory(
 
 export async function getNotificationRemoteConfig(): Promise<Record<string, unknown>> {
   await requireNotificationsView();
-  const supabase = await notificationsDb();
-  const { data } = await supabase
+  const panel = await notificationsDb();
+  const { data } = await panel
     .from("notification_remote_config")
     .select("*")
     .eq("id", 1)

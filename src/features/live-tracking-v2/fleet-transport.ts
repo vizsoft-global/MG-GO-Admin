@@ -1,28 +1,22 @@
 /**
- * Three rails, in descending order of quality, chosen automatically.
+ * Two rails, in descending order of quality, chosen automatically.
  *
  * 1. **Edge WebSocket** (`edge`) — the Cloudflare room. 4Hz deltas, sub-second.
- * 2. **Supabase Broadcast mirror** (`mirror`) — ~1Hz, same data, different path.
- *    Only useful when the Worker is running but *this browser* cannot reach it:
- *    a proxy that blocks WebSockets to a third-party origin is the real case.
- *    It is produced by the Worker, so it is worthless when the Worker is down.
- * 3. **Snapshot polling** (`poll`) — `admin_live_fleet_snapshot` every 10s through
- *    Supabase. Slow, but it depends on nothing beyond the database, so it is the
- *    rail that is available when everything else is not.
+ * 2. **Snapshot polling** (`poll`) — `admin_live_fleet_snapshot` every 10s through
+ *    a staff server action. Slow, but it depends on nothing beyond the database,
+ *    so it is the rail that is available when the socket is not.
  *
  * A snapshot is always fetched first, whichever rail wins: it is the only source of
- * roster facts the mirror lacks, and it means the map is populated before the socket
- * finishes its handshake.
+ * roster facts the delta stream lacks, and it means the map is populated before the
+ * socket finishes its handshake.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import { shouldRunBackgroundWork } from "@/lib/browser/visibility";
 
-import type { FleetStore, FleetMirrorDriver, FleetSnapshotRow } from "./fleet-store";
+import type { FleetStore, FleetSnapshotRow } from "./fleet-store";
 import type { FleetZone } from "./fleet-types";
 import type { ClientFrame, ServerFrame } from "./fleet-wire";
 import type { FleetSocketTicket } from "./fleet-token";
-import { shouldRunBackgroundWork } from "@/lib/browser/visibility";
 
 const SNAPSHOT_POLL_MS = 10_000;
 /** Warm-refresh cadence while a live rail is running: roster facts only. */
@@ -56,31 +50,53 @@ const FLOW_WATCHDOG_MS = 5_000;
  */
 const STATUS_CLOCK_MS = 1_000;
 
-/**
- * Channel name deliberately unlike v1's `admin-driver-locations`. Two pages on the
- * same Supabase project must not share a channel: a v1 tab and a v2 tab open side by
- * side would otherwise deliver each other's payloads.
- */
-export function fleetMirrorTopic(room: string): string {
-  return `fleet:${room}`;
-}
+type SnapshotPayload = {
+  generated_at: string;
+  settings: Record<string, number> | null;
+  drivers: FleetSnapshotRow[];
+};
+
+type SnapshotResult = {
+  data: SnapshotPayload | null;
+  error: { message: string } | null;
+};
+
+type EventSeedResult = {
+  data: { events?: Array<Record<string, unknown>> } | null;
+  error: { message: string } | null;
+};
 
 export type FleetTransportOptions = {
   store: FleetStore;
-  supabase: SupabaseClient;
   /** Injected so tests and the simulator can drive this without a browser. */
   fetchTicket?: () => Promise<FleetSocketTicket | { error: string }>;
   zonesLoader?: () => Promise<FleetZone[]>;
+  snapshotLoader?: () => Promise<SnapshotResult>;
+  eventSeedLoader?: () => Promise<EventSeedResult>;
+  opsSeedLoader?: () => Promise<Array<Record<string, unknown>>>;
 };
+
+async function emptySnapshot(): Promise<SnapshotResult> {
+  return { data: null, error: null };
+}
+
+async function emptyEventSeed(): Promise<EventSeedResult> {
+  return { data: { events: [] }, error: null };
+}
+
+async function emptyOpsSeed(): Promise<Array<Record<string, unknown>>> {
+  return [];
+}
 
 export class FleetTransport {
   private readonly store: FleetStore;
-  private readonly supabase: SupabaseClient;
   private readonly fetchTicket: () => Promise<FleetSocketTicket | { error: string }>;
   private readonly zonesLoader: (() => Promise<FleetZone[]>) | null;
+  private readonly snapshotLoader: () => Promise<SnapshotResult>;
+  private readonly eventSeedLoader: () => Promise<EventSeedResult>;
+  private readonly opsSeedLoader: () => Promise<Array<Record<string, unknown>>>;
 
   private socket: WebSocket | null = null;
-  private channel: RealtimeChannel | null = null;
   private pollHandle: ReturnType<typeof setInterval> | null = null;
   private rosterHandle: ReturnType<typeof setInterval> | null = null;
   private pingHandle: ReturnType<typeof setInterval> | null = null;
@@ -102,9 +118,11 @@ export class FleetTransport {
 
   constructor(options: FleetTransportOptions) {
     this.store = options.store;
-    this.supabase = options.supabase;
     this.fetchTicket = options.fetchTicket ?? defaultFetchTicket;
     this.zonesLoader = options.zonesLoader ?? null;
+    this.snapshotLoader = options.snapshotLoader ?? emptySnapshot;
+    this.eventSeedLoader = options.eventSeedLoader ?? emptyEventSeed;
+    this.opsSeedLoader = options.opsSeedLoader ?? emptyOpsSeed;
 
     this.store.onFiltersChanged = () => this.sendView();
   }
@@ -126,7 +144,6 @@ export class FleetTransport {
     this.stopped = true;
     this.unbindVisibility();
     this.teardownEdge();
-    this.teardownMirror();
     this.stopPolling();
     this.stopFlowWatchdog();
     this.stopStatusClock();
@@ -245,7 +262,6 @@ export class FleetTransport {
       // cadence for roster facts the delta stream never carries (delivery counts,
       // distance today, shift changes).
       this.stopPolling();
-      this.teardownMirror();
       this.startRosterRefresh();
     };
 
@@ -391,16 +407,15 @@ export class FleetTransport {
     this.lastLivePositionAt = Date.now();
     if (!this.starved) return;
     this.starved = false;
-    // Only the edge socket owns its own cadence. The mirror polls underneath by design,
-    // because it carries no roster and no eviction.
+    // Only the edge socket owns its own cadence. Polling underneath a live socket
+    // exists to cover silence, and a fresh position ends that cover.
     if (this.socket?.readyState === WebSocket.OPEN) this.stopPolling();
     this.store.setConnection({ status: "live", error: null });
   }
 
   private checkLiveFlow(): void {
     if (this.stopped || this.starved) return;
-    const live =
-      (this.socket && this.socket.readyState === WebSocket.OPEN) || this.channel != null;
+    const live = this.socket != null && this.socket.readyState === WebSocket.OPEN;
     if (!live) return;
     // Nobody on duty means nobody should be publishing. Silence is the correct state of
     // an empty fleet, and calling it degraded would train operators to ignore the pill.
@@ -443,57 +458,14 @@ export class FleetTransport {
       return;
     }
 
-    this.startMirror();
-  }
-
-  // -------------------------------------------------------------------------
-  // Rail 2: Supabase Broadcast mirror
-  // -------------------------------------------------------------------------
-
-  private startMirror(): void {
-    if (this.stopped || this.channel) return;
-    this.store.setRail("mirror", "connecting");
-    // Polling runs underneath the mirror: the mirror has no roster and no eviction,
-    // so on its own it would keep drawing a driver who clocked out.
+    // The socket is gone. Polling is the remaining rail, and the pill has to say so:
+    // startPolling only switches the rail when it is still "offline".
+    this.store.setRail("poll", "degraded");
     this.startPolling();
-
-    const channel = this.supabase
-      .channel(fleetMirrorTopic(this.room), { config: { broadcast: { self: false } } })
-      .on("broadcast", { event: "positions" }, (message) => {
-        const payload = message.payload as
-          | { ts: number; drivers: FleetMirrorDriver[] }
-          | undefined;
-        if (!payload?.drivers) return;
-        this.lastFrameAt = Date.now();
-        if (payload.drivers.length > 0) this.noteLivePositions();
-        this.store.applyMirror(payload);
-        this.store.setRail("mirror", "live");
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          // Subscribed proves the channel, not the fleet — the mirror is produced by the
-          // same room, so it is silent whenever the room is.
-          this.lastLivePositionAt = Date.now();
-          this.starved = false;
-          this.startFlowWatchdog();
-          this.store.setRail("mirror", "live");
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          this.teardownMirror();
-          this.store.setRail("poll", "degraded");
-        }
-      });
-
-    this.channel = channel;
-  }
-
-  private teardownMirror(): void {
-    if (!this.channel) return;
-    void this.supabase.removeChannel(this.channel);
-    this.channel = null;
   }
 
   // -------------------------------------------------------------------------
-  // Rail 3: snapshot polling
+  // Rail 2: snapshot polling
   // -------------------------------------------------------------------------
 
   private startPolling(): void {
@@ -523,16 +495,12 @@ export class FleetTransport {
   private async loadSnapshot(): Promise<void> {
     try {
       const [snapshot, zones] = await Promise.all([
-        this.supabase.rpc("admin_live_fleet_snapshot", { p_seen_within_minutes: 30 }),
+        this.snapshotLoader(),
         this.zonesLoader?.() ?? Promise.resolve(null),
       ]);
 
       if (snapshot.error) throw new Error(snapshot.error.message);
-      const data = snapshot.data as {
-        generated_at: string;
-        settings: Record<string, number> | null;
-        drivers: FleetSnapshotRow[];
-      } | null;
+      const data = snapshot.data;
       if (!data) return;
 
       this.store.applySnapshot({
@@ -553,15 +521,9 @@ export class FleetTransport {
 
   private async seedFeed(): Promise<void> {
     try {
-      const [fleet, ops] = await Promise.all([
-        this.supabase.rpc("admin_list_fleet_events", { p_limit: 50 }),
-        this.supabase
-          .from("driver_operation_events")
-          .select(
-            "id, driver_id, category, operation_key, success, error_code, context, occurred_at",
-          )
-          .order("id", { ascending: false })
-          .limit(50),
+      const [fleet, opsRowsRaw] = await Promise.all([
+        this.eventSeedLoader(),
+        this.opsSeedLoader(),
       ]);
 
       const fleetRows = (
@@ -581,7 +543,7 @@ export class FleetTransport {
       }));
       if (fleetRows.length > 0) this.store.applyFleetEvents(fleetRows);
 
-      const opsRows = (ops.data ?? []).map((event) => ({
+      const opsRows = opsRowsRaw.map((event) => ({
         id: String(event.id),
         driverId: String(event.driver_id),
         category: String(event.category ?? ""),

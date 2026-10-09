@@ -21,7 +21,9 @@ import type { RequestDatePreset } from "@/features/requests/types";
 import { fetchRestaurantAssignedDrivers, fetchRestaurantDetail } from "@/features/restaurants/restaurants-actions";
 import { listZonesForAssistant } from "@/features/zones/zones-read-actions";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
+import { ASSISTANT_SCAN_CAP, docById, loadDocs, rowsWhere, scanCollection } from "./assistant-lookups";
 import type { SessionUser } from "@/lib/auth/get-session";
 import type { Permission } from "@/lib/auth/permissions";
 import { kuwaitDayCreatedAtBounds, monthKeyFromYmd, resolveAssistantDateRange } from "./assistant-dates";
@@ -65,86 +67,83 @@ function toRequestPreset(preset?: string): RequestDatePreset {
 }
 
 async function vehicleById(id: string): Promise<Record<string, unknown> | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("vehicles")
-    .select(
-      "id, bike_id, reg_number, status, vehicle_type_key, condition, car_type, type_of_use, make, model, location_text",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const data = await docById(COLLECTIONS.vehicles, id);
   if (!data) return null;
-  const { data: driver } = await supabase
-    .from("drivers")
-    .select("id, driver_code, profiles!drivers_id_fkey(full_name)")
-    .eq("vehicle_id", id)
-    .is("archived_at", null)
-    .maybeSingle();
-  const profile = Array.isArray(driver?.profiles) ? driver?.profiles[0] : driver?.profiles;
+  const assigned = (await rowsWhere(COLLECTIONS.drivers, "vehicle_id", id, 5)).filter(
+    (row) => row.archived_at == null,
+  );
+  const driver = assigned.length === 1 ? assigned[0] : null;
+  const db = await staffDb();
+  const profile = driver && db
+    ? (await loadDocs(db, COLLECTIONS.profiles, [String(driver.id)])).get(String(driver.id))
+    : undefined;
+  const name = typeof profile?.full_name === "string" ? profile.full_name : null;
   return {
-    ...data,
+    id: data.id,
+    bike_id: data.bike_id ?? null,
+    reg_number: data.reg_number ?? null,
+    status: data.status ?? null,
+    vehicle_type_key: data.vehicle_type_key ?? null,
+    condition: data.condition ?? null,
+    car_type: data.car_type ?? null,
+    type_of_use: data.type_of_use ?? null,
+    make: data.make ?? null,
+    model: data.model ?? null,
+    location_text: data.location_text ?? null,
     assigned_driver_id: driver?.id ?? null,
     assigned_driver_code: driver?.driver_code ?? null,
-    assigned_driver_name: (profile as { full_name?: string } | null)?.full_name ?? null,
+    assigned_driver_name: name,
   };
 }
 
 async function deliveryById(id: string): Promise<Record<string, unknown> | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("deliveries")
-    .select("id, status, external_order_id, driver_id, created_at, delivered_at, partner_id")
-    .eq("id", id)
-    .maybeSingle();
-  return data;
+  const data = await docById(COLLECTIONS.deliveries, id);
+  if (!data) return null;
+  return {
+    id: data.id,
+    status: data.status ?? null,
+    external_order_id: data.external_order_id ?? null,
+    driver_id: data.driver_id ?? null,
+    created_at: data.created_at ?? null,
+    delivered_at: data.delivered_at ?? null,
+    partner_id: data.partner_id ?? null,
+  };
 }
 
 async function countDriversInZone(zoneId: string): Promise<{ count: number; head: Record<string, unknown>[] }> {
-  const supabase = await createClient();
-  const countRes = await supabase
-    .from("drivers")
-    .select("id", { count: "exact", head: true })
-    .eq("zone_id", zoneId)
-    .is("archived_at", null);
-  const { data } = await supabase
-    .from("drivers")
-    .select("id, driver_code, profiles!drivers_id_fkey(full_name)")
-    .eq("zone_id", zoneId)
-    .is("archived_at", null)
-    .limit(ASSISTANT_LIST_CAP);
+  const rows = (await rowsWhere(COLLECTIONS.drivers, "zone_id", zoneId, ASSISTANT_SCAN_CAP)).filter(
+    (row) => row.archived_at == null,
+  );
+  const head = rows.slice(0, ASSISTANT_LIST_CAP);
+  const db = await staffDb();
+  const profiles = db ? await loadDocs(db, COLLECTIONS.profiles, head.map((row) => String(row.id))) : new Map();
   return {
-    count: countRes.count ?? 0,
-    head: (data ?? []).map((row) => {
-      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-      return {
-        id: row.id,
-        driver_code: row.driver_code,
-        name: (profile as { full_name?: string } | null)?.full_name ?? null,
-      };
-    }),
+    count: rows.length,
+    head: head.map((row) => ({
+      id: row.id,
+      driver_code: row.driver_code,
+      name: profiles.get(String(row.id))?.full_name ?? null,
+    })),
   };
 }
 
 async function restaurantsInZone(zoneId: string): Promise<{ count: number; head: Record<string, unknown>[] }> {
-  const supabase = await createClient();
-  const countRes = await supabase
-    .from("restaurants")
-    .select("id", { count: "exact", head: true })
-    .eq("zone_id", zoneId);
-  const { data } = await supabase
-    .from("restaurants")
-    .select("id, name, status")
-    .eq("zone_id", zoneId)
-    .order("name")
-    .limit(ASSISTANT_LIST_CAP);
-  return { count: countRes.count ?? 0, head: data ?? [] };
+  const rows = (await rowsWhere(COLLECTIONS.restaurants, "zone_id", zoneId, ASSISTANT_SCAN_CAP))
+    .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+  return {
+    count: rows.length,
+    head: rows.slice(0, ASSISTANT_LIST_CAP).map((row) => ({
+      id: row.id,
+      name: row.name ?? null,
+      status: row.status ?? null,
+    })),
+  };
 }
 
 async function vehicleConditionCounts(): Promise<Record<string, number>> {
-  const supabase = await createClient();
-  const { data } = await supabase.from("vehicles").select("condition");
-  const counts: Record<string, number> = { total: data?.length ?? 0 };
-  for (const row of data ?? []) {
+  const data = await scanCollection(COLLECTIONS.vehicles);
+  const counts: Record<string, number> = { total: data.length };
+  for (const row of data) {
     const key = String(row.condition ?? "unknown");
     counts[key] = (counts[key] ?? 0) + 1;
   }

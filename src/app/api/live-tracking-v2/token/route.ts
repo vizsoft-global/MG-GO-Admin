@@ -27,10 +27,9 @@ export async function POST() {
   const base = process.env.FLEET_WS_URL?.trim();
   const room = process.env.FLEET_ROOM?.trim() || "fleet-kw";
 
-  // A missing edge is a normal deployment state, not a fault: the page falls back to
-  // the Supabase mirror and then to snapshot polling. Returning 503 with a code lets
-  // the client pick a rail instead of showing an error to an operator who cannot act
-  // on it.
+  // A missing edge is a normal deployment state, not a fault: the page falls back
+  // to snapshot polling. Returning 503 with a code lets the client pick a rail
+  // instead of showing an error to an operator who cannot act on it.
   if (!secret || !base) {
     return NextResponse.json(
       { error: "fleet_edge_not_configured" },

@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { withCors } from "@/lib/http/cors";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
+import { isDriverOwnedAvatarKey } from "@/lib/storage/driver-avatar-key";
 import { requireDriverFromRequest } from "@/lib/storage/driver-upload-auth";
-import { resolveOrderProofUrl } from "@/lib/storage/order-proof-url";
+import { resolveOrderProofUrl } from "@/lib/storage/order-proof-resolve";
+import { STORAGE_UPLOADS } from "@/lib/storage/storage-upload-audit";
+
+const PROOF_FIELDS = ["order_proof_url", "pickup_proof_url", "cancel_proof_url"] as const;
+const PROOF_LISTS = ["order_proof_urls", "pickup_proof_urls", "cancel_proof_urls"] as const;
 
 async function handler(request: Request): Promise<Response> {
   if (request.method !== "GET") {
@@ -20,58 +26,47 @@ async function handler(request: Request): Promise<Response> {
     return NextResponse.json({ error: "missing_object_key" }, { status: 400 });
   }
 
-  const admin = createAdminClient();
+  const db = await getFirebaseFirestore();
+  if (!db) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
 
-  const { data: delivery } = await admin
-    .from("deliveries")
-    .select("id")
-    .eq("driver_id", auth.driverId)
-    .or(
-      [
-        `order_proof_url.eq.${objectKey}`,
-        `pickup_proof_url.eq.${objectKey}`,
-        `cancel_proof_url.eq.${objectKey}`,
-      ].join(","),
-    )
-    .maybeSingle();
-
-  let ownsDeliveryProof = Boolean(delivery);
-  if (!ownsDeliveryProof) {
-    const arrayChecks = await Promise.all(
-      (["order_proof_urls", "pickup_proof_urls", "cancel_proof_urls"] as const).map(
-        (column) =>
-          admin
-            .from("deliveries")
-            .select("id")
-            .eq("driver_id", auth.driverId)
-            .contains(column, [objectKey])
-            .limit(1)
-            .maybeSingle(),
-      ),
-    );
-    ownsDeliveryProof = arrayChecks.some((result) => Boolean(result.data));
+  let ownsDeliveryProof = false;
+  for (const field of PROOF_FIELDS) {
+    const snap = await db.collection(COLLECTIONS.deliveries).where(field, "==", objectKey).limit(5).get();
+    if (snap.docs.some((doc) => doc.get("driver_id") === auth.driverId)) {
+      ownsDeliveryProof = true;
+      break;
+    }
   }
 
   if (!ownsDeliveryProof) {
-    const { data: upload } = await admin
-      .from("storage_uploads")
-      .select("id")
-      .eq("uploaded_by", auth.authUid)
-      .eq("object_key", objectKey)
-      .maybeSingle();
+    for (const field of PROOF_LISTS) {
+      const snap = await db
+        .collection(COLLECTIONS.deliveries)
+        .where(field, "array-contains", objectKey)
+        .limit(5)
+        .get();
+      if (snap.docs.some((doc) => doc.get("driver_id") === auth.driverId)) {
+        ownsDeliveryProof = true;
+        break;
+      }
+    }
+  }
 
-    const { data: driverRow } = await admin
-      .from("drivers")
-      .select("avatar_object_key")
-      .eq("id", auth.driverId)
-      .maybeSingle();
-
-    const { isDriverOwnedAvatarKey } = await import("@/lib/storage/driver-avatar-key");
+  if (!ownsDeliveryProof) {
+    const uploads = await db
+      .collection(STORAGE_UPLOADS)
+      .where("object_key", "==", objectKey)
+      .limit(5)
+      .get();
+    const ownsUpload = uploads.docs.some((doc) => doc.get("uploaded_by") === auth.authUid);
+    const driver = await db.collection(COLLECTIONS.drivers).doc(auth.driverId).get();
     const ownsAvatar =
-      driverRow?.avatar_object_key === objectKey ||
+      driver.get("avatar_object_key") === objectKey ||
       isDriverOwnedAvatarKey(auth.driverId, objectKey);
 
-    if (!upload && !ownsAvatar) {
+    if (!ownsUpload && !ownsAvatar) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
   }

@@ -1,7 +1,6 @@
 "use server";
 
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import {
   canManageRestaurants,
@@ -32,7 +31,10 @@ import {
   type ZoneGeoFeature,
   type ZoneGeometryType,
 } from "@/lib/geo/zone-geometry";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import type { Json } from "@/types/database";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import type {
   RestaurantActivityEvent,
   RestaurantAssignedDriver,
@@ -60,9 +62,76 @@ type PgLikeError = {
   hint?: string | null;
 };
 
-function formatPgErrorDetail(
-  error: PgLikeError | null | undefined,
-): string | undefined {
+type Row = Record<string, unknown> & { id: string };
+
+const INTAKE_RESTAURANTS = "driver_intake_restaurants";
+const VERIFICATION_BALANCES = "verification_balances";
+const STORE_ALIASES = "order_recon_store_aliases";
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function strOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numOrNull(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+async function rowsByIds(db: Firestore, collection: string, ids: string[]): Promise<Map<string, Row>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const map = new Map<string, Row>();
+  for (let i = 0; i < unique.length; i += 100) {
+    const refs = unique.slice(i, i + 100).map((id) => db.collection(collection).doc(id));
+    if (refs.length === 0) continue;
+    const snaps = await db.getAll(...refs);
+    for (const snap of snaps) {
+      if (snap.exists) map.set(snap.id, asRow(snap.id, snap.data()));
+    }
+  }
+  return map;
+}
+
+async function whereIn(db: Firestore, collection: string, field: string, ids: string[]): Promise<Row[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const rows: Row[] = [];
+  for (let i = 0; i < unique.length; i += 30) {
+    const chunk = unique.slice(i, i + 30);
+    const snap = await db.collection(collection).where(field, "in", chunk).get();
+    for (const doc of snap.docs) rows.push(asRow(doc.id, doc.data()));
+  }
+  return rows;
+}
+
+function formatPgErrorDetail(error: PgLikeError | null | undefined): string | undefined {
   if (!error) return undefined;
   const parts: string[] = [];
   if (error.code) parts.push(`code ${error.code}`);
@@ -76,17 +145,10 @@ function logPgError(scope: string, error: PgLikeError | unknown): void {
   const e = error as PgLikeError;
   console.error(`[restaurants:${scope}]`, {
     code: e?.code ?? null,
-    message: e?.message ?? null,
+    message: e?.message ?? (error instanceof Error ? error.message : null),
     details: e?.details ?? null,
     hint: e?.hint ?? null,
   });
-}
-
-function isMissingRelationError(error: { code?: string; message?: string } | null) {
-  if (!error) return false;
-  if (error.code === "PGRST205" || error.code === "42P01") return true;
-  const msg = error.message ?? "";
-  return msg.includes("driver_intake_restaurants") || msg.includes("driver_restaurants");
 }
 
 async function requireDeliveriesView() {
@@ -100,147 +162,113 @@ async function requireDeliveriesView() {
   return session;
 }
 
-const DELIVERY_LIST_SELECT =
-  "id, driver_id, partner_id, restaurant_id, zone_id, external_order_id, order_proof_url, order_proof_urls, status, rejection_reason, delivered_at, delivered_lat, delivered_lng, pickup_at, pickup_lat, pickup_lng, pickup_proof_url, pickup_proof_urls, cancelled_at, cancel_lat, cancel_lng, cancel_reason, cancel_proof_url, cancel_proof_urls, created_at, drivers(driver_code, profiles!drivers_id_fkey(full_name, phone)), partners(name, logo_url), restaurants(id, name), zones(name)";
-
 async function fetchAssignedDriverIdsForRestaurant(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Firestore,
   restaurantId: string,
 ): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from("driver_restaurants")
-    .select("driver_id")
-    .eq("restaurant_id", restaurantId);
-  if (error && !isMissingRelationError(error)) {
+  try {
+    const snap = await db
+      .collection(COLLECTIONS.driverRestaurants)
+      .where("restaurant_id", "==", restaurantId)
+      .get();
+    return new Set(snap.docs.map((doc) => str(doc.data().driver_id)).filter(Boolean));
+  } catch (error) {
     logPgError("assigned_drivers", error);
+    return new Set();
   }
-  return new Set((data ?? []).map((row) => row.driver_id));
 }
 
-/** Linked driver assignments only — matches DriverAssignSheet / assign actions. */
 async function fetchLinkedDriverCountsByRestaurant(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Firestore,
   restaurantIds: string[],
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
   for (const id of restaurantIds) counts.set(id, 0);
   if (restaurantIds.length === 0) return counts;
-
-  const { data, error } = await supabase
-    .from("driver_restaurants")
-    .select("restaurant_id, driver_id")
-    .in("restaurant_id", restaurantIds);
-  if (error && !isMissingRelationError(error)) {
+  try {
+    const rows = await whereIn(db, COLLECTIONS.driverRestaurants, "restaurant_id", restaurantIds);
+    const uniqueByRestaurant = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const restaurantId = str(row.restaurant_id);
+      const driverId = str(row.driver_id);
+      if (!restaurantId || !driverId) continue;
+      const set = uniqueByRestaurant.get(restaurantId) ?? new Set();
+      set.add(driverId);
+      uniqueByRestaurant.set(restaurantId, set);
+    }
+    for (const [restaurantId, set] of uniqueByRestaurant) counts.set(restaurantId, set.size);
+  } catch (error) {
     logPgError("linked_driver_counts", error);
-    return counts;
-  }
-
-  const uniqueByRestaurant = new Map<string, Set<string>>();
-  for (const row of data ?? []) {
-    const set = uniqueByRestaurant.get(row.restaurant_id) ?? new Set();
-    set.add(row.driver_id);
-    uniqueByRestaurant.set(row.restaurant_id, set);
-  }
-  for (const [restaurantId, set] of uniqueByRestaurant) {
-    counts.set(restaurantId, set.size);
   }
   return counts;
 }
 
 async function fetchScopedDeliveryRows(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Firestore,
   restaurantId: string,
   restaurantPartnerId: string | null,
   assignedDriverIds: ReadonlySet<string>,
 ): Promise<ScopedDeliveryRow[]> {
-  const [{ data: direct, error: directErr }, { data: indirect, error: indirectErr }] =
-    await Promise.all([
-      supabase
-        .from("deliveries")
-        .select(
-          "id, driver_id, partner_id, restaurant_id, status, external_order_id, pickup_at, delivered_at, cancelled_at, cancel_reason, created_at, drivers(driver_code, profiles!drivers_id_fkey(full_name, phone))",
-        )
-        .eq("restaurant_id", restaurantId),
-      assignedDriverIds.size > 0 && restaurantPartnerId
-        ? supabase
-            .from("deliveries")
-            .select(
-              "id, driver_id, partner_id, restaurant_id, status, external_order_id, pickup_at, delivered_at, cancelled_at, cancel_reason, created_at, drivers(driver_code, profiles!drivers_id_fkey(full_name, phone))",
-            )
-            .is("restaurant_id", null)
-            .in("driver_id", [...assignedDriverIds])
-            .eq("partner_id", restaurantPartnerId)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-
-  if (directErr) logPgError("scoped_deliveries_direct", directErr);
-  if (indirectErr) logPgError("scoped_deliveries_indirect", indirectErr);
-
-  type ScopedDeliveryDbRow = {
-    id: string;
-    driver_id: string;
-    partner_id: string | null;
-    restaurant_id: string | null;
-    status: string;
-    external_order_id: string | null;
-    pickup_at: string | null;
-    delivered_at: string | null;
-    cancelled_at: string | null;
-    cancel_reason: string | null;
-    created_at: string;
-    drivers:
-      | {
-          driver_code: string;
-          profiles:
-            | { full_name: string | null; phone: string | null }
-            | { full_name: string | null; phone: string | null }[]
-            | null;
-        }
-      | {
-          driver_code: string;
-          profiles:
-            | { full_name: string | null; phone: string | null }
-            | { full_name: string | null; phone: string | null }[]
-            | null;
-        }[]
-      | null;
-  };
-
-  const merged = [
-    ...((direct ?? []) as unknown as ScopedDeliveryDbRow[]),
-    ...((indirect ?? []) as unknown as ScopedDeliveryDbRow[]),
-  ];
-
+  let direct: Row[] = [];
+  let indirect: Row[] = [];
+  try {
+    const snap = await db
+      .collection(COLLECTIONS.deliveries)
+      .where("restaurant_id", "==", restaurantId)
+      .get();
+    direct = snap.docs.map((doc) => asRow(doc.id, doc.data()));
+  } catch (error) {
+    logPgError("scoped_deliveries_direct", error);
+  }
+  if (assignedDriverIds.size > 0 && restaurantPartnerId) {
+    try {
+      const rows = await whereIn(db, COLLECTIONS.deliveries, "driver_id", [...assignedDriverIds]);
+      indirect = rows.filter(
+        (row) => row.restaurant_id == null && str(row.partner_id) === restaurantPartnerId,
+      );
+    } catch (error) {
+      logPgError("scoped_deliveries_indirect", error);
+    }
+  }
+  const merged = [...direct, ...indirect];
+  const profiles = await rowsByIds(
+    db,
+    COLLECTIONS.profiles,
+    merged.map((row) => str(row.driver_id)).filter(Boolean),
+  );
+  const drivers = await rowsByIds(
+    db,
+    COLLECTIONS.drivers,
+    merged.map((row) => str(row.driver_id)).filter(Boolean),
+  );
   const byId = new Map<string, ScopedDeliveryRow>();
   for (const row of merged) {
     if (byId.has(row.id)) continue;
-    const driverRel = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
-    const profileRel = driverRel?.profiles;
-    const profile = Array.isArray(profileRel) ? profileRel[0] : profileRel;
+    const driver = drivers.get(str(row.driver_id));
+    const profile = profiles.get(str(row.driver_id));
     byId.set(row.id, {
       id: row.id,
-      driver_id: row.driver_id,
-      partner_id: row.partner_id,
-      restaurant_id: row.restaurant_id,
+      driver_id: str(row.driver_id),
+      partner_id: strOrNull(row.partner_id),
+      restaurant_id: strOrNull(row.restaurant_id),
       status: row.status as DeliveryStatus,
-      external_order_id: row.external_order_id,
-      pickup_at: row.pickup_at,
-      delivered_at: row.delivered_at,
-      cancelled_at: row.cancelled_at,
-      cancel_reason: row.cancel_reason,
-      created_at: row.created_at,
-      driver_name: profile?.full_name ?? undefined,
-      driver_code: driverRel?.driver_code ?? undefined,
+      external_order_id: strOrNull(row.external_order_id),
+      pickup_at: strOrNull(row.pickup_at),
+      delivered_at: strOrNull(row.delivered_at),
+      cancelled_at: strOrNull(row.cancelled_at),
+      cancel_reason: strOrNull(row.cancel_reason),
+      created_at: str(row.created_at),
+      driver_name: strOrNull(profile?.full_name) ?? undefined,
+      driver_code: strOrNull(driver?.driver_code) ?? undefined,
     });
   }
-
   return [...byId.values()].filter((d) =>
     isDeliveryForRestaurant(d, restaurantId, restaurantPartnerId, assignedDriverIds),
   );
 }
 
 async function fetchRestaurantListAggregates(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Firestore,
   restaurantIds: string[],
   restaurants: Array<{
     id: string;
@@ -274,73 +302,63 @@ async function fetchRestaurantListAggregates(
       | "geofence_count"
     >
   >();
-
   for (const r of restaurants) {
     result.set(r.id, {
       active_deliveries: 0,
       deliveries_total: 0,
       deliveries_verified: 0,
       deliveries_cancelled: 0,
-      has_coordinates: hasValidCoordinates(
-        r.latitude != null ? Number(r.latitude) : null,
-        r.longitude != null ? Number(r.longitude) : null,
-      ),
+      has_coordinates: hasValidCoordinates(r.latitude, r.longitude),
       geofence_count: 0,
     });
   }
-
   if (restaurantIds.length === 0) return result;
-
-  const partnerByRestaurant = new Map(
-    restaurants.map((r) => [r.id, r.partner_id]),
-  );
-
-  const [{ data: geofences, error: geofenceErr }, { data: driverLinks, error: driverErr }, { data: deliveries, error: deliveryErr }] =
-    await Promise.all([
-      supabase
-        .from("restaurant_geofences")
-        .select("restaurant_id")
-        .in("restaurant_id", restaurantIds),
-      supabase
-        .from("driver_restaurants")
-        .select("restaurant_id, driver_id")
-        .in("restaurant_id", restaurantIds),
-      supabase
-        .from("deliveries")
-        .select("id, restaurant_id, driver_id, partner_id, status"),
-    ]);
-
-  if (geofenceErr) logPgError("list_geofence_counts", geofenceErr);
-  if (driverErr && !isMissingRelationError(driverErr)) {
-    logPgError("list_driver_links", driverErr);
+  const partnerByRestaurant = new Map(restaurants.map((r) => [r.id, r.partner_id]));
+  const idSet = new Set(restaurantIds);
+  let geofences: Row[] = [];
+  let driverLinks: Row[] = [];
+  let deliveries: Row[] = [];
+  try {
+    geofences = await whereIn(db, COLLECTIONS.restaurantGeofences, "restaurant_id", restaurantIds);
+  } catch (error) {
+    logPgError("list_geofence_counts", error);
   }
-  if (deliveryErr) logPgError("list_delivery_stats", deliveryErr);
-
+  try {
+    driverLinks = await whereIn(db, COLLECTIONS.driverRestaurants, "restaurant_id", restaurantIds);
+  } catch (error) {
+    logPgError("list_driver_links", error);
+  }
+  try {
+    const snap = await db
+      .collection(COLLECTIONS.deliveries)
+      .select("restaurant_id", "driver_id", "partner_id", "status")
+      .get();
+    deliveries = snap.docs.map((doc) => asRow(doc.id, doc.data()));
+  } catch (error) {
+    logPgError("list_delivery_stats", error);
+  }
   const geofenceCounts = new Map<string, number>();
-  for (const row of geofences ?? []) {
-    geofenceCounts.set(row.restaurant_id, (geofenceCounts.get(row.restaurant_id) ?? 0) + 1);
+  for (const row of geofences) {
+    const restaurantId = str(row.restaurant_id);
+    geofenceCounts.set(restaurantId, (geofenceCounts.get(restaurantId) ?? 0) + 1);
   }
-
   const driversByRestaurant = new Map<string, Set<string>>();
-  for (const row of driverLinks ?? []) {
-    const set = driversByRestaurant.get(row.restaurant_id) ?? new Set();
-    set.add(row.driver_id);
-    driversByRestaurant.set(row.restaurant_id, set);
+  for (const row of driverLinks) {
+    const restaurantId = str(row.restaurant_id);
+    const driverId = str(row.driver_id);
+    const set = driversByRestaurant.get(restaurantId) ?? new Set();
+    if (driverId) set.add(driverId);
+    driversByRestaurant.set(restaurantId, set);
   }
-
   const statsByRestaurant = new Map<string, ScopedDeliveryRow[]>();
-  for (const restaurantId of restaurantIds) {
-    statsByRestaurant.set(restaurantId, []);
-  }
-
-  for (const d of deliveries ?? []) {
-    const status = d.status as DeliveryStatus;
+  for (const restaurantId of restaurantIds) statsByRestaurant.set(restaurantId, []);
+  for (const d of deliveries) {
     const scoped: ScopedDeliveryRow = {
       id: d.id,
-      driver_id: d.driver_id,
-      partner_id: d.partner_id,
-      restaurant_id: d.restaurant_id,
-      status,
+      driver_id: str(d.driver_id),
+      partner_id: strOrNull(d.partner_id),
+      restaurant_id: strOrNull(d.restaurant_id),
+      status: d.status as DeliveryStatus,
       external_order_id: null,
       pickup_at: null,
       delivered_at: null,
@@ -348,23 +366,20 @@ async function fetchRestaurantListAggregates(
       cancel_reason: null,
       created_at: "",
     };
-
-    if (d.restaurant_id && statsByRestaurant.has(d.restaurant_id)) {
-      statsByRestaurant.get(d.restaurant_id)!.push(scoped);
+    const restaurantId = strOrNull(d.restaurant_id);
+    if (restaurantId && statsByRestaurant.has(restaurantId)) {
+      statsByRestaurant.get(restaurantId)!.push(scoped);
       continue;
     }
-
-    if (d.restaurant_id != null) continue;
-
-    for (const restaurantId of restaurantIds) {
-      const partnerId = partnerByRestaurant.get(restaurantId) ?? null;
-      const assigned = driversByRestaurant.get(restaurantId) ?? new Set();
-      if (isDeliveryForRestaurant(scoped, restaurantId, partnerId, assigned)) {
-        statsByRestaurant.get(restaurantId)!.push(scoped);
+    if (restaurantId != null) continue;
+    for (const candidate of idSet) {
+      const partnerId = partnerByRestaurant.get(candidate) ?? null;
+      const assigned = driversByRestaurant.get(candidate) ?? new Set();
+      if (isDeliveryForRestaurant(scoped, candidate, partnerId, assigned)) {
+        statsByRestaurant.get(candidate)!.push(scoped);
       }
     }
   }
-
   for (const restaurantId of restaurantIds) {
     const base = result.get(restaurantId)!;
     const stats = computeDeliveryStats(statsByRestaurant.get(restaurantId) ?? []);
@@ -377,25 +392,28 @@ async function fetchRestaurantListAggregates(
       geofence_count: geofenceCounts.get(restaurantId) ?? 0,
     });
   }
-
   return result;
 }
 
+function restaurantBaseFromRow(row: Row) {
+  return {
+    id: row.id,
+    partner_id: strOrNull(row.partner_id),
+    zone_id: strOrNull(row.zone_id),
+    name: str(row.name),
+    logo_url: strOrNull(row.logo_url),
+    external_merchant_id: strOrNull(row.external_merchant_id),
+    map_link: strOrNull(row.map_link),
+    latitude: numOrNull(row.latitude),
+    longitude: numOrNull(row.longitude),
+    status: str(row.status),
+    is_active: row.is_active !== false,
+    created_at: str(row.created_at),
+  };
+}
+
 async function mapRestaurantBaseRow(
-  row: {
-    id: string;
-    partner_id: string | null;
-    zone_id: string | null;
-    name: string;
-    logo_url: string | null;
-    external_merchant_id: string | null;
-    map_link: string | null;
-    latitude: number | null;
-    longitude: number | null;
-    status: string;
-    is_active: boolean;
-    created_at: string;
-  },
+  row: ReturnType<typeof restaurantBaseFromRow>,
   partnerMap: Map<string, string>,
   zoneMap: Map<string, string>,
   driverCount: number,
@@ -420,8 +438,8 @@ async function mapRestaurantBaseRow(
     logo_display_url: null,
     external_merchant_id: row.external_merchant_id,
     map_link: row.map_link,
-    latitude: row.latitude != null ? Number(row.latitude) : null,
-    longitude: row.longitude != null ? Number(row.longitude) : null,
+    latitude: row.latitude,
+    longitude: row.longitude,
     status: fromDbRestaurantStatus(row.status, row.is_active),
     is_active: row.is_active,
     driver_count: driverCount,
@@ -448,96 +466,54 @@ async function requireRestaurantsManage() {
 
 export async function fetchRestaurantPartnerOptions(): Promise<RestaurantPartnerOption[]> {
   await requireRestaurantsView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.from("partners").select("id, name").order("name");
-  if (error) throw error;
-  return data ?? [];
+  const db = await openDb();
+  const snap = await db.collection(COLLECTIONS.partners).get();
+  return snap.docs
+    .map((doc) => ({ id: doc.id, name: str(doc.data().name) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function fetchRestaurantZoneOptions(): Promise<RestaurantZoneOption[]> {
   await requireRestaurantsView();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("zones")
-    .select("id, name, code")
-    .order("name");
-  if (error) throw error;
-  return data ?? [];
+  const db = await openDb();
+  const snap = await db.collection(COLLECTIONS.zones).get();
+  return snap.docs
+    .map((doc) => ({ id: doc.id, name: str(doc.data().name), code: str(doc.data().code) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function fetchRestaurantsForAdmin(): Promise<RestaurantRow[]> {
   await requireRestaurantsView();
   void logAdminRead("restaurants", "fetchRestaurantsForAdmin");
-  const supabase = await createClient();
-
-  const [
-    { data: restaurants, error: restaurantsError },
-    { data: partners, error: partnersError },
-    { data: zones, error: zonesError },
-  ] = await Promise.all([
-    supabase
-      .from("restaurants")
-      .select(
-        "id, partner_id, zone_id, name, logo_url, external_merchant_id, map_link, latitude, longitude, status, is_active, created_at",
-      )
-      .order("name"),
-    supabase.from("partners").select("id, name"),
-    supabase.from("zones").select("id, name, code"),
+  const db = await openDb();
+  const [restaurantSnap, partnerSnap, zoneSnap] = await Promise.all([
+    db.collection(COLLECTIONS.restaurants).get(),
+    db.collection(COLLECTIONS.partners).get(),
+    db.collection(COLLECTIONS.zones).get(),
   ]);
-
-  if (restaurantsError) {
-    logPgError("list", restaurantsError);
-    throw restaurantsError;
-  }
-  if (partnersError) logPgError("list_partners", partnersError);
-  if (zonesError) logPgError("list_zones", zonesError);
-
-  const partnerMap = new Map((partners ?? []).map((p) => [p.id, p.name]));
+  const restaurants = restaurantSnap.docs
+    .map((doc) => restaurantBaseFromRow(asRow(doc.id, doc.data())))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const partnerMap = new Map(partnerSnap.docs.map((doc) => [doc.id, str(doc.data().name)]));
   const zoneMap = new Map(
-    (zones ?? []).map((z) => [z.id, `${z.name} (${z.code})`]),
+    zoneSnap.docs.map((doc) => [doc.id, `${str(doc.data().name)} (${str(doc.data().code)})`]),
   );
-  const ids = (restaurants ?? []).map((r) => r.id);
-
-  const driverCounts =
-    ids.length > 0
-      ? await fetchLinkedDriverCountsByRestaurant(supabase, ids)
-      : new Map<string, number>();
-
-  const listAggregates = await fetchRestaurantListAggregates(
-    supabase,
-    ids,
-    (restaurants ?? []).map((r) => ({
-      id: r.id,
-      partner_id: r.partner_id,
-      latitude: r.latitude != null ? Number(r.latitude) : null,
-      longitude: r.longitude != null ? Number(r.longitude) : null,
-    })),
-  );
-
+  const ids = restaurants.map((r) => r.id);
+  const driverCounts = await fetchLinkedDriverCountsByRestaurant(db, ids);
+  const listAggregates = await fetchRestaurantListAggregates(db, ids, restaurants);
   const rows = await Promise.all(
-    (restaurants ?? []).map(async (row) => {
-      const aggregates =
-        listAggregates.get(row.id) ?? {
-          active_deliveries: 0,
-          deliveries_total: 0,
-          deliveries_verified: 0,
-          deliveries_cancelled: 0,
-          has_coordinates: hasValidCoordinates(
-            row.latitude != null ? Number(row.latitude) : null,
-            row.longitude != null ? Number(row.longitude) : null,
-          ),
-          geofence_count: 0,
-        };
-      return mapRestaurantBaseRow(
-        row,
-        partnerMap,
-        zoneMap,
-        driverCounts.get(row.id) ?? 0,
-        aggregates,
-      );
+    restaurants.map(async (row) => {
+      const aggregates = listAggregates.get(row.id) ?? {
+        active_deliveries: 0,
+        deliveries_total: 0,
+        deliveries_verified: 0,
+        deliveries_cancelled: 0,
+        has_coordinates: hasValidCoordinates(row.latitude, row.longitude),
+        geofence_count: 0,
+      };
+      return mapRestaurantBaseRow(row, partnerMap, zoneMap, driverCounts.get(row.id) ?? 0, aggregates);
     }),
   );
-
   try {
     return await resolveRestaurantLogoUrls(rows);
   } catch (error) {
@@ -556,41 +532,26 @@ export async function fetchRestaurantPickerOptions(): Promise<
   }>
 > {
   await requireRestaurantsView();
-  const supabase = await createClient();
-  const [{ data: restaurants, error }, { data: partners, error: partnersError }] =
-    await Promise.all([
-      supabase
-        .from("restaurants")
-        .select("id, name, partner_id, status")
-        .order("name"),
-      supabase.from("partners").select("id, name"),
-    ]);
-
-  if (error) {
-    logPgError("picker", error);
-    throw error;
-  }
-  if (partnersError) logPgError("picker_partners", partnersError);
-
-  const partnerNameById = new Map((partners ?? []).map((p) => [p.id, p.name]));
-
-  return (restaurants ?? []).map((row) => ({
-    id: row.id,
-    name: row.name,
-    partner_id: row.partner_id,
-    partner_name: row.partner_id
-      ? (partnerNameById.get(row.partner_id) ?? null)
-      : null,
-    status: fromDbRestaurantStatus(row.status),
-  }));
+  const db = await openDb();
+  const [restaurantSnap, partnerSnap] = await Promise.all([
+    db.collection(COLLECTIONS.restaurants).get(),
+    db.collection(COLLECTIONS.partners).get(),
+  ]);
+  const partnerNameById = new Map(partnerSnap.docs.map((doc) => [doc.id, str(doc.data().name)]));
+  return restaurantSnap.docs
+    .map((doc) => asRow(doc.id, doc.data()))
+    .sort((a, b) => str(a.name).localeCompare(str(b.name)))
+    .map((row) => ({
+      id: row.id,
+      name: str(row.name),
+      partner_id: strOrNull(row.partner_id),
+      partner_name: strOrNull(row.partner_id) ? (partnerNameById.get(str(row.partner_id)) ?? null) : null,
+      status: fromDbRestaurantStatus(str(row.status)),
+    }));
 }
 
-function validateGeofenceInput(
-  input: RestaurantGeofenceInput,
-): string | null {
-  if (input.kind !== "inclusion" && input.kind !== "exclusion") {
-    return "invalid_kind";
-  }
+function validateGeofenceInput(input: RestaurantGeofenceInput): string | null {
+  if (input.kind !== "inclusion" && input.kind !== "exclusion") return "invalid_kind";
   return validateZoneGeometry(input.zone_type, input.geometry);
 }
 
@@ -616,98 +577,70 @@ function mapGeofenceRow(row: {
   };
 }
 
-export async function fetchRestaurantGeofences(
-  restaurantId: string,
-): Promise<RestaurantGeofence[]> {
+export async function fetchRestaurantGeofences(restaurantId: string): Promise<RestaurantGeofence[]> {
   await requireRestaurantsView();
   if (!restaurantId) return [];
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("restaurant_geofences")
-    .select(
-      "id, restaurant_id, kind, zone_type, geometry, name, color, created_at",
-    )
-    .eq("restaurant_id", restaurantId)
-    .order("created_at");
-
-  if (error) throw error;
-  return (data ?? []).map(mapGeofenceRow);
+  const db = await openDb();
+  const snap = await db
+    .collection(COLLECTIONS.restaurantGeofences)
+    .where("restaurant_id", "==", restaurantId)
+    .get();
+  return snap.docs
+    .map((doc) => asRow(doc.id, doc.data()))
+    .sort((a, b) => str(a.created_at).localeCompare(str(b.created_at)))
+    .map((row) =>
+      mapGeofenceRow({
+        id: row.id,
+        restaurant_id: str(row.restaurant_id),
+        kind: str(row.kind),
+        zone_type: str(row.zone_type),
+        geometry: row.geometry as Json,
+        name: strOrNull(row.name),
+        color: str(row.color),
+        created_at: str(row.created_at),
+      }),
+    );
 }
 
-export async function fetchRestaurantDetail(
-  restaurantId: string,
-): Promise<RestaurantDetailModel | null> {
+export async function fetchRestaurantDetail(restaurantId: string): Promise<RestaurantDetailModel | null> {
   await requireRestaurantsView();
   if (!restaurantId) return null;
   void logAdminRead("restaurants", "fetchRestaurantDetail", { restaurantId });
-
-  const supabase = await createClient();
-  const { data: row, error } = await supabase
-    .from("restaurants")
-    .select(
-      "id, partner_id, zone_id, name, logo_url, external_merchant_id, map_link, latitude, longitude, status, is_active, created_at",
-    )
-    .eq("id", restaurantId)
-    .maybeSingle();
-
-  if (error) {
-    logPgError("detail", error);
-    throw error;
-  }
-  if (!row) return null;
-
-  const [{ data: partners }, { data: zones }] = await Promise.all([
-    row.partner_id
-      ? supabase.from("partners").select("id, name").eq("id", row.partner_id)
-      : Promise.resolve({ data: [] }),
-    row.zone_id
-      ? supabase.from("zones").select("id, name, code").eq("id", row.zone_id)
-      : Promise.resolve({ data: [] }),
+  const db = await openDb();
+  const snap = await db.collection(COLLECTIONS.restaurants).doc(restaurantId).get();
+  if (!snap.exists) return null;
+  const row = restaurantBaseFromRow(asRow(snap.id, snap.data()));
+  const [partnerSnap, zoneSnap] = await Promise.all([
+    row.partner_id ? db.collection(COLLECTIONS.partners).doc(row.partner_id).get() : Promise.resolve(null),
+    row.zone_id ? db.collection(COLLECTIONS.zones).doc(row.zone_id).get() : Promise.resolve(null),
   ]);
-
-  const partnerMap = new Map((partners ?? []).map((p) => [p.id, p.name]));
-  const zoneMap = new Map(
-    (zones ?? []).map((z) => [z.id, `${z.name} (${z.code})`]),
-  );
-
-  const driverCount = (
-    await fetchLinkedDriverCountsByRestaurant(supabase, [restaurantId])
-  ).get(restaurantId) ?? 0;
-
+  const partnerMap = new Map<string, string>();
+  if (partnerSnap?.exists) partnerMap.set(partnerSnap.id, str(partnerSnap.data()?.name));
+  const zoneMap = new Map<string, string>();
+  if (zoneSnap?.exists) {
+    zoneMap.set(zoneSnap.id, `${str(zoneSnap.data()?.name)} (${str(zoneSnap.data()?.code)})`);
+  }
+  const driverCount = (await fetchLinkedDriverCountsByRestaurant(db, [restaurantId])).get(restaurantId) ?? 0;
   const aggregates = (
-    await fetchRestaurantListAggregates(supabase, [restaurantId], [
+    await fetchRestaurantListAggregates(db, [restaurantId], [
       {
         id: restaurantId,
         partner_id: row.partner_id,
-        latitude: row.latitude != null ? Number(row.latitude) : null,
-        longitude: row.longitude != null ? Number(row.longitude) : null,
+        latitude: row.latitude,
+        longitude: row.longitude,
       },
     ])
   ).get(restaurantId)!;
-
-  const assignedDriverIds = await fetchAssignedDriverIdsForRestaurant(
-    supabase,
-    restaurantId,
-  );
+  const assignedDriverIds = await fetchAssignedDriverIdsForRestaurant(db, restaurantId);
   const scopedDeliveries = await fetchScopedDeliveryRows(
-    supabase,
+    db,
     restaurantId,
     row.partner_id,
     assignedDriverIds,
   );
   const deliveryStats = computeDeliveryStats(scopedDeliveries);
-
-  const base = await mapRestaurantBaseRow(
-    row,
-    partnerMap,
-    zoneMap,
-    driverCount,
-    aggregates,
-  );
-
+  const base = await mapRestaurantBaseRow(row, partnerMap, zoneMap, driverCount, aggregates);
   const [withLogo] = await resolveRestaurantLogoUrls([base]);
-
   return {
     ...withLogo,
     geofence_count: aggregates.geofence_count,
@@ -716,96 +649,142 @@ export async function fetchRestaurantDetail(
   };
 }
 
-export async function fetchRestaurantAssignedDrivers(
-  restaurantId: string,
-): Promise<RestaurantAssignedDriver[]> {
+export async function fetchRestaurantAssignedDrivers(restaurantId: string): Promise<RestaurantAssignedDriver[]> {
   await requireRestaurantsView();
   if (!restaurantId) return [];
-
-  const supabase = await createClient();
-  const [{ data: linkedRows, error: linkedErr }, { data: intakeRows, error: intakeErr }] =
-    await Promise.all([
-      supabase
-        .from("driver_restaurants")
-        .select(
-          "driver_id, drivers(id, driver_code, is_on_duty, is_blocked, profiles!drivers_id_fkey(full_name, phone))",
-        )
-        .eq("restaurant_id", restaurantId),
-      supabase
-        .from("driver_intake_restaurants")
-        .select(
-          "intake_id, driver_intakes(id, full_name, phone, driver_code, linked, linked_profile_id)",
-        )
-        .eq("restaurant_id", restaurantId),
-    ]);
-
-  if (linkedErr && !isMissingRelationError(linkedErr)) {
-    logPgError("assigned_linked", linkedErr);
+  const db = await openDb();
+  let linkedRows: Row[] = [];
+  let intakeLinks: Row[] = [];
+  try {
+    const snap = await db
+      .collection(COLLECTIONS.driverRestaurants)
+      .where("restaurant_id", "==", restaurantId)
+      .get();
+    linkedRows = snap.docs.map((doc) => asRow(doc.id, doc.data()));
+  } catch (error) {
+    logPgError("assigned_linked", error);
   }
-  if (intakeErr && !isMissingRelationError(intakeErr)) {
-    logPgError("assigned_intake", intakeErr);
+  try {
+    const snap = await db.collection(INTAKE_RESTAURANTS).where("restaurant_id", "==", restaurantId).get();
+    intakeLinks = snap.docs.map((doc) => asRow(doc.id, doc.data()));
+  } catch (error) {
+    logPgError("assigned_intake", error);
   }
-
+  const linkedDriverIds = linkedRows.map((row) => str(row.driver_id)).filter(Boolean);
+  const [drivers, profiles, intakeByProfile] = await Promise.all([
+    rowsByIds(db, COLLECTIONS.drivers, linkedDriverIds),
+    rowsByIds(db, COLLECTIONS.profiles, linkedDriverIds),
+    whereIn(db, COLLECTIONS.driverIntakes, "linked_profile_id", linkedDriverIds).catch((error: unknown) => {
+      logPgError("assigned_intake_profile", error);
+      return [] as Row[];
+    }),
+  ]);
+  const intakeIdByDriverId = new Map<string, string>();
+  for (const row of intakeByProfile) {
+    if (row.archived_at != null) continue;
+    const profileId = str(row.linked_profile_id);
+    if (profileId) intakeIdByDriverId.set(profileId, row.id);
+  }
   const results: RestaurantAssignedDriver[] = [];
-  const linkedDriverIds = (linkedRows ?? []).map((row) => row.driver_id);
-
-  const { data: intakeByProfile } =
-    linkedDriverIds.length > 0
-      ? await supabase
-          .from("driver_intakes")
-          .select("id, linked_profile_id")
-          .in("linked_profile_id", linkedDriverIds)
-          .is("archived_at", null)
-      : { data: [] as { id: string; linked_profile_id: string | null }[] };
-
-  const intakeIdByDriverId = new Map(
-    (intakeByProfile ?? [])
-      .filter((row) => row.linked_profile_id)
-      .map((row) => [row.linked_profile_id as string, row.id]),
-  );
-
-  for (const row of linkedRows ?? []) {
-    const driverRel = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
-    if (!driverRel) continue;
-    const profileRel = driverRel.profiles;
-    const profile = Array.isArray(profileRel) ? profileRel[0] : profileRel;
+  for (const row of linkedRows) {
+    const driverId = str(row.driver_id);
+    const driver = drivers.get(driverId);
+    if (!driver) continue;
+    const profile = profiles.get(driverId);
     results.push({
-      id: `linked:${row.driver_id}`,
-      driver_id: row.driver_id,
-      intake_id: intakeIdByDriverId.get(row.driver_id) ?? null,
-      name: profile?.full_name ?? "—",
-      driver_code: driverRel.driver_code ?? "—",
-      phone: profile?.phone ?? null,
+      id: `linked:${driverId}`,
+      driver_id: driverId,
+      intake_id: intakeIdByDriverId.get(driverId) ?? null,
+      name: str(profile?.full_name) || "—",
+      driver_code: str(driver.driver_code) || "—",
+      phone: strOrNull(profile?.phone),
       link_status: "linked",
-      is_on_duty: driverRel.is_on_duty ?? false,
-      is_blocked: driverRel.is_blocked ?? false,
+      is_on_duty: driver.is_on_duty === true,
+      is_blocked: driver.is_blocked === true,
     });
   }
-
-  for (const row of intakeRows ?? []) {
-    const intake = Array.isArray(row.driver_intakes)
-      ? row.driver_intakes[0]
-      : row.driver_intakes;
-    if (!intake || intake.linked) continue;
+  const intakes = await rowsByIds(
+    db,
+    COLLECTIONS.driverIntakes,
+    intakeLinks.map((row) => str(row.intake_id)).filter(Boolean),
+  );
+  for (const row of intakeLinks) {
+    const intake = intakes.get(str(row.intake_id));
+    if (!intake || intake.linked === true) continue;
     results.push({
-      id: `intake:${row.intake_id}`,
+      id: `intake:${str(row.intake_id)}`,
       driver_id: null,
-      intake_id: row.intake_id,
-      name: intake.full_name ?? "—",
-      driver_code: intake.driver_code ?? "—",
-      phone: intake.phone ?? null,
+      intake_id: str(row.intake_id),
+      name: str(intake.full_name) || "—",
+      driver_code: str(intake.driver_code) || "—",
+      phone: strOrNull(intake.phone),
       link_status: "intake",
       is_on_duty: false,
       is_blocked: false,
     });
   }
-
   return results.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export type RestaurantDeliveriesFilter = {
   status?: DeliveryStatus | "all" | "active";
 };
+
+async function hydrateDeliveryListRows(db: Firestore, rows: Row[]): Promise<DeliveryDbRowForList[]> {
+  const driverIds = rows.map((row) => str(row.driver_id)).filter(Boolean);
+  const [drivers, profiles, partners, restaurants, zones] = await Promise.all([
+    rowsByIds(db, COLLECTIONS.drivers, driverIds),
+    rowsByIds(db, COLLECTIONS.profiles, driverIds),
+    rowsByIds(db, COLLECTIONS.partners, rows.map((row) => str(row.partner_id)).filter(Boolean)),
+    rowsByIds(db, COLLECTIONS.restaurants, rows.map((row) => str(row.restaurant_id)).filter(Boolean)),
+    rowsByIds(db, COLLECTIONS.zones, rows.map((row) => str(row.zone_id)).filter(Boolean)),
+  ]);
+  return rows.map((row) => {
+    const driver = drivers.get(str(row.driver_id));
+    const profile = profiles.get(str(row.driver_id));
+    const partner = partners.get(str(row.partner_id));
+    const restaurant = restaurants.get(str(row.restaurant_id));
+    const zone = zones.get(str(row.zone_id));
+    return {
+      id: row.id,
+      driver_id: str(row.driver_id),
+      partner_id: strOrNull(row.partner_id),
+      restaurant_id: strOrNull(row.restaurant_id),
+      zone_id: strOrNull(row.zone_id),
+      external_order_id: strOrNull(row.external_order_id),
+      order_proof_url: strOrNull(row.order_proof_url),
+      order_proof_urls: Array.isArray(row.order_proof_urls) ? (row.order_proof_urls as string[]) : null,
+      status: row.status as DeliveryStatus,
+      rejection_reason: strOrNull(row.rejection_reason),
+      delivered_at: strOrNull(row.delivered_at),
+      delivered_lat: numOrNull(row.delivered_lat),
+      delivered_lng: numOrNull(row.delivered_lng),
+      pickup_at: strOrNull(row.pickup_at),
+      pickup_lat: numOrNull(row.pickup_lat),
+      pickup_lng: numOrNull(row.pickup_lng),
+      pickup_proof_url: strOrNull(row.pickup_proof_url),
+      pickup_proof_urls: Array.isArray(row.pickup_proof_urls) ? (row.pickup_proof_urls as string[]) : null,
+      cancelled_at: strOrNull(row.cancelled_at),
+      cancel_lat: numOrNull(row.cancel_lat),
+      cancel_lng: numOrNull(row.cancel_lng),
+      cancel_reason: strOrNull(row.cancel_reason),
+      cancel_proof_url: strOrNull(row.cancel_proof_url),
+      cancel_proof_urls: Array.isArray(row.cancel_proof_urls) ? (row.cancel_proof_urls as string[]) : null,
+      created_at: str(row.created_at),
+      drivers: driver
+        ? {
+            driver_code: str(driver.driver_code),
+            profiles: profile
+              ? { full_name: strOrNull(profile.full_name), phone: strOrNull(profile.phone) }
+              : null,
+          }
+        : null,
+      partners: partner ? { name: str(partner.name), logo_url: strOrNull(partner.logo_url) } : null,
+      restaurants: restaurant ? { id: restaurant.id, name: str(restaurant.name) } : null,
+      zones: zone ? { name: str(zone.name) } : null,
+    };
+  });
+}
 
 export async function fetchRestaurantDeliveries(
   restaurantId: string,
@@ -814,73 +793,39 @@ export async function fetchRestaurantDeliveries(
   await requireDeliveriesView();
   if (!restaurantId) return [];
   void logAdminRead("restaurants", "fetchRestaurantDeliveries", { restaurantId });
-
-  const supabase = await createClient();
-  const { data: restaurant, error: restaurantErr } = await supabase
-    .from("restaurants")
-    .select("partner_id")
-    .eq("id", restaurantId)
-    .maybeSingle();
-  if (restaurantErr) throw restaurantErr;
-  if (!restaurant) return [];
-
-  const assignedDriverIds = await fetchAssignedDriverIdsForRestaurant(
-    supabase,
-    restaurantId,
-  );
-
-  const [{ data: direct, error: directErr }, { data: indirect, error: indirectErr }] =
-    await Promise.all([
-      supabase.from("deliveries").select(DELIVERY_LIST_SELECT).eq("restaurant_id", restaurantId),
-      assignedDriverIds.size > 0 && restaurant.partner_id
-        ? supabase
-            .from("deliveries")
-            .select(DELIVERY_LIST_SELECT)
-            .is("restaurant_id", null)
-            .in("driver_id", [...assignedDriverIds])
-            .eq("partner_id", restaurant.partner_id)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-
-  if (directErr) throw directErr;
-  if (indirectErr) throw indirectErr;
-
-  const byId = new Map<string, DeliveryDbRowForList>();
-  for (const row of [
-    ...((direct ?? []) as unknown as DeliveryDbRowForList[]),
-    ...((indirect ?? []) as unknown as DeliveryDbRowForList[]),
-  ]) {
-    if (!byId.has(row.id)) {
-      byId.set(row.id, row);
-    }
+  const db = await openDb();
+  const restaurantSnap = await db.collection(COLLECTIONS.restaurants).doc(restaurantId).get();
+  if (!restaurantSnap.exists) return [];
+  const partnerId = strOrNull(restaurantSnap.data()?.partner_id);
+  const assignedDriverIds = await fetchAssignedDriverIdsForRestaurant(db, restaurantId);
+  const directSnap = await db.collection(COLLECTIONS.deliveries).where("restaurant_id", "==", restaurantId).get();
+  const direct = directSnap.docs.map((doc) => asRow(doc.id, doc.data()));
+  let indirect: Row[] = [];
+  if (assignedDriverIds.size > 0 && partnerId) {
+    const rows = await whereIn(db, COLLECTIONS.deliveries, "driver_id", [...assignedDriverIds]);
+    indirect = rows.filter((row) => row.restaurant_id == null && str(row.partner_id) === partnerId);
   }
-
+  const byId = new Map<string, Row>();
+  for (const row of [...direct, ...indirect]) {
+    if (!byId.has(row.id)) byId.set(row.id, row);
+  }
   let rows = [...byId.values()].filter((d) =>
     isDeliveryForRestaurant(
       {
-        driver_id: d.driver_id,
-        partner_id: d.partner_id,
-        restaurant_id: d.restaurant_id ?? null,
+        driver_id: str(d.driver_id),
+        partner_id: strOrNull(d.partner_id),
+        restaurant_id: strOrNull(d.restaurant_id),
       },
       restaurantId,
-      restaurant.partner_id,
+      partnerId,
       assignedDriverIds,
     ),
   );
-
   if (opts.status && opts.status !== "all") {
-    if (opts.status === "active") {
-      rows = rows.filter((r) => r.status === "in_transit");
-    } else {
-      rows = rows.filter((r) => r.status === opts.status);
-    }
+    rows = opts.status === "active" ? rows.filter((r) => r.status === "in_transit") : rows.filter((r) => r.status === opts.status);
   }
-
-  rows.sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
-
-  return mapDeliveryDbRowsToListRows(rows);
+  rows.sort((a, b) => new Date(str(b.created_at)).getTime() - new Date(str(a.created_at)).getTime());
+  return mapDeliveryDbRowsToListRows(await hydrateDeliveryListRows(db, rows));
 }
 
 export async function fetchRestaurantActivityLog(
@@ -889,27 +834,16 @@ export async function fetchRestaurantActivityLog(
 ): Promise<RestaurantActivityEvent[]> {
   await requireDeliveriesView();
   if (!restaurantId) return [];
-
-  const supabase = await createClient();
-  const { data: restaurant, error: restaurantErr } = await supabase
-    .from("restaurants")
-    .select("partner_id")
-    .eq("id", restaurantId)
-    .maybeSingle();
-  if (restaurantErr) throw restaurantErr;
-  if (!restaurant) return [];
-
-  const assignedDriverIds = await fetchAssignedDriverIdsForRestaurant(
-    supabase,
-    restaurantId,
-  );
+  const db = await openDb();
+  const restaurantSnap = await db.collection(COLLECTIONS.restaurants).doc(restaurantId).get();
+  if (!restaurantSnap.exists) return [];
+  const assignedDriverIds = await fetchAssignedDriverIdsForRestaurant(db, restaurantId);
   const scoped = await fetchScopedDeliveryRows(
-    supabase,
+    db,
     restaurantId,
-    restaurant.partner_id,
+    strOrNull(restaurantSnap.data()?.partner_id),
     assignedDriverIds,
   );
-
   return buildActivityLogFromDeliveries(scoped, limit);
 }
 
@@ -920,62 +854,53 @@ export async function saveRestaurantGeofences(
   const auth = await requireRestaurantsManage();
   if (auth.error) return { error: auth.error };
   if (!restaurantId) return { error: "missing_fields" };
-
   for (const geofence of geofences) {
     const validationError = validateGeofenceInput(geofence);
     if (validationError) return { error: validationError };
   }
-
-  const supabase = await createClient();
-  const { data: existing, error: fetchError } = await supabase
-    .from("restaurant_geofences")
-    .select("id")
-    .eq("restaurant_id", restaurantId);
-
-  if (fetchError) return { error: "save_failed" };
-
-  const incomingIds = new Set(
-    geofences.map((g) => g.id).filter((id): id is string => Boolean(id)),
-  );
-  const toDelete = (existing ?? [])
-    .map((row) => row.id)
-    .filter((id) => !incomingIds.has(id));
-
-  if (toDelete.length > 0) {
-    const { error: deleteError } = await supabase
-      .from("restaurant_geofences")
-      .delete()
-      .in("id", toDelete);
-    if (deleteError) return { error: "save_failed" };
-  }
-
-  for (const geofence of geofences) {
-    const payload = {
-      restaurant_id: restaurantId,
-      kind: geofence.kind,
-      zone_type: geofence.zone_type,
-      geometry: geofence.geometry as unknown as Json,
-      name: geofence.name?.trim() || null,
-      color: geofence.color ?? (geofence.kind === "inclusion" ? "#22c55e" : "#ef4444"),
-      updated_at: new Date().toISOString(),
-    };
-
-    if (geofence.id) {
-      const { error } = await supabase
-        .from("restaurant_geofences")
-        .update(payload)
-        .eq("id", geofence.id)
-        .eq("restaurant_id", restaurantId);
-      if (error) return { error: "save_failed" };
-    } else {
-      const { error } = await supabase.from("restaurant_geofences").insert({
-        ...payload,
-        created_by: auth.session.id,
-      });
-      if (error) return { error: "save_failed" };
+  const db = await openDb();
+  const existingSnap = await db
+    .collection(COLLECTIONS.restaurantGeofences)
+    .where("restaurant_id", "==", restaurantId)
+    .get();
+  const incomingIds = new Set(geofences.map((g) => g.id).filter((id): id is string => Boolean(id)));
+  const toDelete = existingSnap.docs.filter((doc) => !incomingIds.has(doc.id));
+  try {
+    for (let i = 0; i < toDelete.length; i += 400) {
+      const batch = db.batch();
+      for (const doc of toDelete.slice(i, i + 400)) batch.delete(doc.ref);
+      await batch.commit();
     }
+    for (const geofence of geofences) {
+      const payload = {
+        restaurant_id: restaurantId,
+        kind: geofence.kind,
+        zone_type: geofence.zone_type,
+        geometry: geofence.geometry,
+        name: geofence.name?.trim() || null,
+        color: geofence.color ?? (geofence.kind === "inclusion" ? "#22c55e" : "#ef4444"),
+        updated_at: new Date(),
+      };
+      if (geofence.id) {
+        const ref = db.collection(COLLECTIONS.restaurantGeofences).doc(geofence.id);
+        const current = await ref.get();
+        if (current.exists && str(current.data()?.restaurant_id) === restaurantId) {
+          await ref.set(payload, { merge: true });
+        }
+      } else {
+        const id = crypto.randomUUID();
+        await db.collection(COLLECTIONS.restaurantGeofences).doc(id).set({
+          ...payload,
+          id,
+          created_by: auth.session.id,
+          created_at: new Date(),
+        });
+      }
+    }
+  } catch (error) {
+    logPgError("save_geofences", error);
+    return { error: "save_failed" };
   }
-
   void logAdminMutation({
     action: "update",
     entityType: "restaurant",
@@ -983,14 +908,10 @@ export async function saveRestaurantGeofences(
     routeName: "saveRestaurantGeofences",
     after: { geofence_count: geofences.length },
   });
-
   return { success: true };
 }
 
-function hasValidCoordinates(
-  latitude: number | null,
-  longitude: number | null,
-): boolean {
+function hasValidCoordinates(latitude: number | null, longitude: number | null): boolean {
   return (
     latitude != null &&
     longitude != null &&
@@ -999,26 +920,57 @@ function hasValidCoordinates(
   );
 }
 
-async function countInclusionGeofences(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  restaurantId: string,
-): Promise<number> {
-  const { count, error } = await supabase
-    .from("restaurant_geofences")
-    .select("id", { count: "exact", head: true })
-    .eq("restaurant_id", restaurantId)
-    .eq("kind", "inclusion");
-  if (error) {
+async function countInclusionGeofences(db: Firestore, restaurantId: string): Promise<number> {
+  try {
+    const snap = await db
+      .collection(COLLECTIONS.restaurantGeofences)
+      .where("restaurant_id", "==", restaurantId)
+      .where("kind", "==", "inclusion")
+      .count()
+      .get();
+    return snap.data().count;
+  } catch (error) {
     logPgError("count_inclusion_geofences", error);
     return 0;
   }
-  return count ?? 0;
+}
+
+async function restaurantNameTaken(
+  db: Firestore,
+  partnerId: string | null,
+  zoneId: string | null,
+  name: string,
+  excludeId?: string,
+): Promise<boolean> {
+  if (!partnerId || !zoneId) return false;
+  const snap = await db.collection(COLLECTIONS.restaurants).where("name", "==", name).get();
+  return snap.docs.some((doc) => {
+    if (doc.id === excludeId) return false;
+    const data = doc.data();
+    return strOrNull(data.partner_id) === partnerId && strOrNull(data.zone_id) === zoneId;
+  });
+}
+
+async function nextRestaurantCode(db: Firestore): Promise<string> {
+  const ref = db.collection("counters").doc("restaurant_code_seq");
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    const n = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const current = Number(snap.data()?.value ?? 0);
+      const next = (Number.isFinite(current) ? current : 0) + 1;
+      tx.set(ref, { value: next }, { merge: true });
+      return next;
+    });
+    const code = `RST-${String(n).padStart(4, "0")}`;
+    const taken = await db.collection(COLLECTIONS.restaurants).where("restaurant_code", "==", code).limit(1).get();
+    if (taken.empty) return code;
+  }
+  throw new Error("restaurant_code");
 }
 
 export async function saveRestaurant(formData: FormData): Promise<RestaurantMutationResult> {
   const auth = await requireRestaurantsManage();
   if (auth.error) return { error: auth.error };
-
   const parsed = parseRestaurantFormData(formData);
   const {
     id,
@@ -1032,34 +984,25 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
     longitude,
     inclusionGeofenceCount,
   } = parsed;
-
   if (!name) return { error: "missing_fields" };
-
   const coordError = validateRestaurantCoordinates(latitude, longitude);
   if (coordError) return { error: coordError };
-
   const merchantError = validateRestaurantExternalMerchantId(externalMerchantId);
   if (merchantError) return { error: merchantError };
-
-  const supabase = await createClient();
-
+  const db = await openDb();
   let status = requestedStatus;
   let statusWarning: RestaurantMutationResult["statusWarning"];
-
   if (status === "published") {
     let hasInclusionGeofence = inclusionGeofenceCount > 0;
     if (!hasInclusionGeofence && id) {
-      hasInclusionGeofence = (await countInclusionGeofences(supabase, id)) > 0;
+      hasInclusionGeofence = (await countInclusionGeofences(db, id)) > 0;
     }
-    const hasCoords = hasValidCoordinates(latitude, longitude);
-    if (!hasCoords && !hasInclusionGeofence) {
+    if (!hasValidCoordinates(latitude, longitude) && !hasInclusionGeofence) {
       status = "draft";
       statusWarning = "auto_downgraded_to_draft";
     }
   }
-
   const isActive = status === "published";
-
   const payload = {
     partner_id: partnerId || null,
     zone_id: zoneId || null,
@@ -1070,20 +1013,25 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
     longitude,
     status: toDbRestaurantStatus(status),
     is_active: isActive && status !== "archived",
-    updated_at: new Date().toISOString(),
+    updated_at: new Date(),
   };
-
+  if (await restaurantNameTaken(db, payload.partner_id, payload.zone_id, name, id || undefined)) {
+    return { error: "restaurant_exists" };
+  }
   if (id) {
     const logoResult = await applyRestaurantLogoFromForm(id, formData, auth.session.id);
     const patch = {
       ...payload,
       ...(logoResult.logoUrl !== undefined ? { logo_url: logoResult.logoUrl } : {}),
     };
-    const { error } = await supabase.from("restaurants").update(patch).eq("id", id);
-    if (error) {
-      if (error.code === "23505") return { error: "restaurant_exists" };
+    try {
+      await db.collection(COLLECTIONS.restaurants).doc(id).set(patch, { merge: true });
+    } catch (error) {
       logPgError("update", error);
-      return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
+      return {
+        error: "save_failed",
+        errorDetail: formatPgErrorDetail({ message: error instanceof Error ? error.message : "save_failed" }),
+      };
     }
     void logAdminMutation({
       action: "update",
@@ -1101,50 +1049,41 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
       finalStatus: status,
     };
   }
-
-  const insertPayload = {
-    ...payload,
-    created_by: auth.session.id,
-  };
-
-  const { data, error } = await supabase
-    .from("restaurants")
-    .insert(insertPayload)
-    .select("id")
-    .single();
-
-  if (error) {
-    if (error.code === "23505") return { error: "restaurant_exists" };
+  const newId = crypto.randomUUID();
+  let restaurantCode = "";
+  try {
+    restaurantCode = await nextRestaurantCode(db);
+    await db.collection(COLLECTIONS.restaurants).doc(newId).set({
+      ...payload,
+      id: newId,
+      restaurant_code: restaurantCode,
+      created_by: auth.session.id,
+      created_at: new Date(),
+    });
+  } catch (error) {
     logPgError("insert", error);
-    return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
+    return {
+      error: "save_failed",
+      errorDetail: formatPgErrorDetail({ message: error instanceof Error ? error.message : "save_failed" }),
+    };
   }
-
-  const logoResult = await applyRestaurantLogoFromForm(
-    data.id,
-    formData,
-    auth.session.id,
-  );
+  const logoResult = await applyRestaurantLogoFromForm(newId, formData, auth.session.id);
   if (logoResult.logoUrl !== undefined) {
-    await supabase
-      .from("restaurants")
-      .update({
-        logo_url: logoResult.logoUrl,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", data.id);
+    await db.collection(COLLECTIONS.restaurants).doc(newId).set(
+      { logo_url: logoResult.logoUrl, updated_at: new Date() },
+      { merge: true },
+    );
   }
-
   void logAdminMutation({
     action: "create",
     entityType: "restaurant",
-    entityId: data.id,
+    entityId: newId,
     routeName: "saveRestaurant",
     after: { name, partner_id: partnerId, zone_id: zoneId, status },
   });
-
   return {
     success: true,
-    id: data.id,
+    id: newId,
     logoUrl: logoResult.logoUrl,
     logoWarning: logoResult.logoWarning,
     statusWarning,
@@ -1152,15 +1091,51 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
   };
 }
 
+async function deleteWhere(db: Firestore, collection: string, field: string, value: string) {
+  const snap = await db.collection(collection).where(field, "==", value).get();
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const batch = db.batch();
+    for (const doc of snap.docs.slice(i, i + 400)) batch.delete(doc.ref);
+    await batch.commit();
+  }
+}
+
+async function nullWhere(db: Firestore, collection: string, field: string, value: string) {
+  const snap = await db.collection(collection).where(field, "==", value).get();
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const batch = db.batch();
+    for (const doc of snap.docs.slice(i, i + 400)) batch.set(doc.ref, { [field]: null }, { merge: true });
+    await batch.commit();
+  }
+}
+
 export async function deleteRestaurant(id: string): Promise<RestaurantMutationResult> {
   const auth = await requireRestaurantsManage();
   if (auth.error) return { error: auth.error };
   if (!id) return { error: "missing_fields" };
-
-  const supabase = await createClient();
+  const db = await openDb();
   await deleteRestaurantLogoFiles(id);
-  const { error } = await supabase.from("restaurants").delete().eq("id", id);
-  if (error) return { error: "delete_failed" };
+  try {
+    await Promise.all([
+      deleteWhere(db, COLLECTIONS.restaurantGeofences, "restaurant_id", id),
+      deleteWhere(db, COLLECTIONS.driverRestaurants, "restaurant_id", id),
+      deleteWhere(db, INTAKE_RESTAURANTS, "restaurant_id", id),
+      deleteWhere(db, COLLECTIONS.deliveryVerifications, "restaurant_id", id),
+      deleteWhere(db, VERIFICATION_BALANCES, "restaurant_id", id),
+      deleteWhere(db, COLLECTIONS.deliveryRules, "restaurant_id", id),
+      deleteWhere(db, COLLECTIONS.incentiveRules, "restaurant_id", id),
+      deleteWhere(db, COLLECTIONS.deliveryRuleScopes, "restaurant_id", id),
+      deleteWhere(db, COLLECTIONS.incentiveRuleScopes, "restaurant_id", id),
+      deleteWhere(db, STORE_ALIASES, "restaurant_id", id),
+      nullWhere(db, COLLECTIONS.deliveries, "restaurant_id", id),
+      nullWhere(db, COLLECTIONS.drivers, "restaurant_id", id),
+      nullWhere(db, COLLECTIONS.driverIntakes, "restaurant_id", id),
+    ]);
+    await db.collection(COLLECTIONS.restaurants).doc(id).delete();
+  } catch (error) {
+    logPgError("delete", error);
+    return { error: "delete_failed" };
+  }
   void logAdminMutation({
     action: "delete",
     entityType: "restaurant",

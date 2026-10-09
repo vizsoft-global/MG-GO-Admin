@@ -1,7 +1,6 @@
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { withDeadline } from "@/lib/supabase/deadline";
+import type { DocumentData } from "firebase-admin/firestore";
+import { withDeadline } from "@/lib/async/deadline";
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_DRIVER_APP_SETTINGS,
@@ -9,6 +8,8 @@ import {
   type LogoType,
   isFontFamilyId,
 } from "@/lib/branding/constants";
+import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { DEFAULT_THEME_ID } from "@/lib/theme/presets";
 import {
   resolveTheme,
@@ -49,33 +50,74 @@ export type AppSettings = {
   customThemes: AppThemeRecord[];
 };
 
+type SettingsRow = {
+  app_name: string;
+  app_subtitle: string;
+  driver_app_login_hint?: string | null;
+  driver_app_title?: string | null;
+  driver_app_logo_url?: string | null;
+  driver_app_splash_url?: string | null;
+  driver_app_icon_url?: string | null;
+  driver_app_maintenance_mode?: boolean | null;
+  driver_app_maintenance_message?: string | null;
+  driver_app_login_verification_exempt_all?: boolean | null;
+  driver_app_delivery_proximity_meters?: number | null;
+  driver_app_force_update?: boolean | null;
+  driver_app_min_version_code?: number | null;
+  driver_app_min_version_name?: string | null;
+  driver_app_update_message?: string | null;
+  font_family: string;
+  logo_url: string | null;
+  logo_type: string;
+  theme_id?: string | null;
+};
+
+const THEMES = "app_themes";
+const BRANDING_BUDGET_MS = 5_000;
+
 function parseTokens(json: unknown): Partial<ThemeTokens> {
   if (!json || typeof json !== "object") return {};
   return json as Partial<ThemeTokens>;
 }
 
+function text(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function flag(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function num(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function rowFromDoc(data: DocumentData): SettingsRow {
+  return {
+    app_name: text(data.app_name) ?? "",
+    app_subtitle: text(data.app_subtitle) ?? "",
+    driver_app_login_hint: text(data.driver_app_login_hint),
+    driver_app_title: text(data.driver_app_title),
+    driver_app_logo_url: text(data.driver_app_logo_url),
+    driver_app_splash_url: text(data.driver_app_splash_url),
+    driver_app_icon_url: text(data.driver_app_icon_url),
+    driver_app_maintenance_mode: flag(data.driver_app_maintenance_mode),
+    driver_app_maintenance_message: text(data.driver_app_maintenance_message),
+    driver_app_login_verification_exempt_all: flag(data.driver_app_login_verification_exempt_all),
+    driver_app_delivery_proximity_meters: num(data.driver_app_delivery_proximity_meters),
+    driver_app_force_update: flag(data.driver_app_force_update),
+    driver_app_min_version_code: num(data.driver_app_min_version_code),
+    driver_app_min_version_name: text(data.driver_app_min_version_name),
+    driver_app_update_message: text(data.driver_app_update_message),
+    font_family: text(data.font_family) ?? "inter",
+    logo_url: text(data.logo_url),
+    logo_type: text(data.logo_type) ?? "image",
+    theme_id: text(data.theme_id),
+  };
+}
+
 function normalizeRow(
-  row: {
-    app_name: string;
-    app_subtitle: string;
-    driver_app_login_hint?: string | null;
-    driver_app_title?: string | null;
-    driver_app_logo_url?: string | null;
-    driver_app_splash_url?: string | null;
-    driver_app_icon_url?: string | null;
-    driver_app_maintenance_mode?: boolean | null;
-    driver_app_maintenance_message?: string | null;
-    driver_app_login_verification_exempt_all?: boolean | null;
-    driver_app_delivery_proximity_meters?: number | null;
-    driver_app_force_update?: boolean | null;
-    driver_app_min_version_code?: number | null;
-    driver_app_min_version_name?: string | null;
-    driver_app_update_message?: string | null;
-    font_family: string;
-    logo_url: string | null;
-    logo_type: string;
-    theme_id?: string | null;
-  },
+  row: SettingsRow,
   customThemes: AppThemeRecord[],
 ): Omit<AppSettings, "theme"> & { themeId: string } {
   return {
@@ -110,27 +152,23 @@ function normalizeRow(
   };
 }
 
-const BRANDING_BUDGET_MS = 5_000;
-
 async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
   try {
-    const supabase = await createClient({ timeoutMs: BRANDING_BUDGET_MS });
-    const { data, error } = await supabase
-      .from("app_themes")
-      .select("id, name, base_preset, light_tokens, dark_tokens")
-      .order("name");
-
-    if (error) {
-      return [];
-    }
-
-    return (data ?? []).map((row) => ({
-      id: row.id,
-      name: row.name,
-      basePreset: row.base_preset,
-      lightTokens: parseTokens(row.light_tokens),
-      darkTokens: parseTokens(row.dark_tokens),
-    }));
+    const db = await staffDb();
+    if (!db) return [];
+    const snap = await db.collection(THEMES).get();
+    return snap.docs
+      .map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          name: text(data.name) ?? "",
+          basePreset: text(data.base_preset) ?? DEFAULT_THEME_ID,
+          lightTokens: parseTokens(data.light_tokens),
+          darkTokens: parseTokens(data.dark_tokens),
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
   } catch {
     return [];
   }
@@ -138,64 +176,16 @@ async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
 
 const getCustomThemes = cache(fetchCustomThemes);
 
-const APP_SETTINGS_SELECT =
-  "app_name, app_subtitle, driver_app_login_hint, driver_app_title, driver_app_logo_url, driver_app_splash_url, driver_app_icon_url, driver_app_maintenance_mode, driver_app_maintenance_message, driver_app_login_verification_exempt_all, driver_app_delivery_proximity_meters, driver_app_force_update, driver_app_min_version_code, driver_app_min_version_name, driver_app_update_message, font_family, logo_url, logo_type, theme_id";
-
-async function loadAppSettingsRow(): Promise<{
-  app_name: string;
-  app_subtitle: string;
-  driver_app_login_hint?: string | null;
-  driver_app_title?: string | null;
-  driver_app_logo_url?: string | null;
-  driver_app_splash_url?: string | null;
-  driver_app_icon_url?: string | null;
-  driver_app_maintenance_mode?: boolean | null;
-  driver_app_maintenance_message?: string | null;
-  driver_app_login_verification_exempt_all?: boolean | null;
-  driver_app_delivery_proximity_meters?: number | null;
-  driver_app_force_update?: boolean | null;
-  driver_app_min_version_code?: number | null;
-  driver_app_min_version_name?: string | null;
-  driver_app_update_message?: string | null;
-  font_family: string;
-  logo_url: string | null;
-  logo_type: string;
-  theme_id?: string | null;
-} | null> {
+async function loadAppSettingsRow(): Promise<SettingsRow | null> {
   try {
-    const supabase = await createClient({ timeoutMs: BRANDING_BUDGET_MS });
-    let { data, error } = await supabase
-      .from("app_settings")
-      .select(APP_SETTINGS_SELECT)
-      .eq("id", 1)
-      .maybeSingle();
-
-    if (error?.code === "42703") {
-      ({ data, error } = await supabase
-        .from("app_settings")
-        .select("app_name, app_subtitle, font_family, logo_url, logo_type")
-        .eq("id", 1)
-        .maybeSingle());
-    }
-    if (!error && data) return data;
+    const db = await staffDb();
+    if (!db) return null;
+    const snap = await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).get();
+    if (!snap.exists) return null;
+    return rowFromDoc(snap.data() ?? {});
   } catch {
-    /* fall through to service role */
+    return null;
   }
-
-  try {
-    const admin = createAdminClient({ timeoutMs: BRANDING_BUDGET_MS });
-    const { data, error } = await admin
-      .from("app_settings")
-      .select(APP_SETTINGS_SELECT)
-      .eq("id", 1)
-      .maybeSingle();
-
-    if (!error && data) return data;
-  } catch {
-    /* use defaults */
-  }
-
-  return null;
 }
 
 /**
@@ -206,8 +196,6 @@ async function loadAppSettingsRow(): Promise<{
  * its own, and it is what made every page load take a minute.
  */
 async function fetchAppSettings(): Promise<AppSettings> {
-  // Independent reads, so they cost one round trip rather than two. The row
-  // read carries its own service-role retry, which shares this budget.
   const [customThemes, data] = await Promise.all([
     withDeadline(getCustomThemes(), BRANDING_BUDGET_MS, () => []),
     withDeadline(loadAppSettingsRow(), BRANDING_BUDGET_MS, () => null),

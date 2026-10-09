@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { callCronFunction } from "@/lib/firebase/callable";
 
 /** Auto-close of decided requests and SLA breach flagging share one hourly pass. */
 export async function GET(request: Request): Promise<Response> {
@@ -18,11 +18,10 @@ export async function GET(request: Request): Promise<Response> {
     "requests-sweep",
     async () => {
       try {
-        const supabase = createAdminClient();
         const [closed, breached, expired] = await Promise.all([
-          supabase.rpc("admin_auto_close_requests"),
-          supabase.rpc("admin_run_request_sla_sweep"),
-          supabase.rpc("admin_expire_esign_requests"),
+          callCronFunction("admin_auto_close_requests"),
+          callCronFunction("admin_run_request_sla_sweep"),
+          callCronFunction("admin_expire_esign_requests"),
         ]);
         if (closed.error) throw closed.error;
         if (breached.error) throw breached.error;

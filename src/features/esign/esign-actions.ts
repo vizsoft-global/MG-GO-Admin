@@ -1,6 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { getFirebaseStorage } from "@/lib/firebase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
@@ -56,6 +60,176 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+type DocRow = Record<string, unknown> & { id: string };
+const APP_SETTINGS_DOC_ID = "1";
+
+function cell(value: unknown): unknown {
+  if (value == null) return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  if (Array.isArray(value)) return value.map(cell);
+  return value;
+}
+
+function docRow(id: string, data: DocumentData | undefined): DocRow | null {
+  if (!data) return null;
+  const row: DocRow = { id };
+  for (const [key, value] of Object.entries(data)) row[key] = cell(value);
+  return row;
+}
+
+async function openDb(): Promise<Firestore | null> {
+  return staffDb();
+}
+
+async function getDoc(name: string, id: string): Promise<{ row: DocRow | null; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { row: null, error: "not_configured" };
+  try {
+    const snap = await db.collection(name).doc(id).get();
+    return { row: snap.exists ? docRow(snap.id, snap.data()) : null, error: null };
+  } catch (e) {
+    return { row: null, error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function listDocs(name: string): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    const snap = await db.collection(name).get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function queryDocs(
+  name: string,
+  filters: Array<[string, unknown]>,
+): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    let q: Query = db.collection(name);
+    for (const [field, value] of filters) q = q.where(field, "==", value);
+    const snap = await q.get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch {
+    const all = await listDocs(name);
+    if (all.error) return all;
+    return {
+      rows: all.rows.filter((row) => filters.every(([field, value]) => row[field] === value)),
+      error: null,
+    };
+  }
+}
+
+async function docsByIds(name: string, ids: string[]): Promise<DocRow[]> {
+  const db = await openDb();
+  if (!db) return [];
+  const unique = [...new Set(ids.filter((id) => id.length > 0))];
+  const out: DocRow[] = [];
+  for (let i = 0; i < unique.length; i += 30) {
+    const chunk = unique.slice(i, i + 30);
+    const snaps = await db.getAll(...chunk.map((docId) => db.collection(name).doc(docId)));
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      const row = docRow(snap.id, snap.data());
+      if (row) out.push(row);
+    }
+  }
+  return out;
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  const as = String(a);
+  const bs = String(b);
+  return as < bs ? -1 : as > bs ? 1 : 0;
+}
+
+function sortRows(rows: DocRow[], keys: Array<[string, "asc" | "desc"]>): DocRow[] {
+  return [...rows].sort((left, right) => {
+    for (const [key, dir] of keys) {
+      const c = compareValues(left[key], right[key]);
+      if (c !== 0) return dir === "asc" ? c : -c;
+    }
+    return 0;
+  });
+}
+
+async function countDocs(
+  name: string,
+  filters: Array<[string, unknown]>,
+): Promise<{ count: number; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { count: 0, error: "not_configured" };
+  try {
+    let q: Query = db.collection(name);
+    for (const [field, value] of filters) q = q.where(field, "==", value);
+    const snap = await q.count().get();
+    return { count: snap.data().count, error: null };
+  } catch {
+    const listed = await queryDocs(name, filters);
+    return { count: listed.rows.length, error: listed.error };
+  }
+}
+
+async function patchDoc(
+  name: string,
+  id: string,
+  data: Record<string, unknown>,
+): Promise<string | null> {
+  const db = await openDb();
+  if (!db) return "not_configured";
+  try {
+    const ref = db.collection(name).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    await ref.set(data, { merge: true });
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "write_failed";
+  }
+}
+
+async function insertDoc(
+  name: string,
+  data: Record<string, unknown>,
+): Promise<{ id?: string; error?: string }> {
+  const db = await openDb();
+  if (!db) return { error: "not_configured" };
+  const id = crypto.randomUUID();
+  try {
+    await db.collection(name).doc(id).set({ ...data, id });
+    return { id };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "write_failed" };
+  }
+}
+
+async function deleteDoc(name: string, id: string): Promise<string | null> {
+  const db = await openDb();
+  if (!db) return "not_configured";
+  try {
+    await db.collection(name).doc(id).delete();
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "delete_failed";
+  }
+}
+
 function mapListRow(r: Record<string, unknown>): EsignListRow {
   const storedStatus = String(r.display_status ?? r.status ?? "pending");
   const dueAt = r.due_at != null ? String(r.due_at) : null;
@@ -99,8 +273,7 @@ export async function fetchEsignRequestsList(
   filters: EsignListFilters = {},
 ): Promise<{ rows: EsignListRow[]; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_list_esign_requests", {
+  const { data, error } = await callAdminFunction("admin_list_esign_requests", {
     p_status: filters.status ?? undefined,
     p_limit: filters.limit ?? 100,
     p_offset: filters.offset ?? 0,
@@ -117,30 +290,36 @@ export async function fetchEsignRequestsList(
 
   const ids = rows.map((r) => r.id);
   if (ids.length > 0) {
-    const extra = await (supabase as any)
-      .from("esign_requests")
-      .select("id, template_id, batch_id, description, esign_templates(name_en), esign_batches(batch_code)")
-      .in("id", ids);
-    if (!extra.error && Array.isArray(extra.data)) {
-      const byId = new Map<string, Record<string, unknown>>();
-      for (const row of extra.data as Record<string, unknown>[]) {
-        byId.set(String(row.id), row);
-      }
-      rows = rows.map((row) => {
-        const x = byId.get(row.id);
-        if (!x) return row;
-        const tpl = asRecord(x.esign_templates);
-        const batch = asRecord(x.esign_batches);
-        return {
-          ...row,
-          template_id: x.template_id != null ? String(x.template_id) : null,
-          template_name: tpl.name_en != null ? String(tpl.name_en) : null,
-          batch_id: x.batch_id != null ? String(x.batch_id) : null,
-          batch_code: batch.batch_code != null ? String(batch.batch_code) : null,
-          description: x.description != null ? String(x.description) : null,
-        };
-      });
-    }
+    const extras = await docsByIds(COLLECTIONS.esignRequests, ids);
+    const templates = await docsByIds(
+      COLLECTIONS.esignTemplates,
+      extras.map((row) => (row.template_id != null ? String(row.template_id) : "")),
+    );
+    const batches = await docsByIds(
+      COLLECTIONS.esignBatches,
+      extras.map((row) => (row.batch_id != null ? String(row.batch_id) : "")),
+    );
+    const byId = new Map(extras.map((row) => [row.id, row]));
+    const templateName = new Map(
+      templates.map((row) => [row.id, row.name_en != null ? String(row.name_en) : null]),
+    );
+    const batchCode = new Map(
+      batches.map((row) => [row.id, row.batch_code != null ? String(row.batch_code) : null]),
+    );
+    rows = rows.map((row) => {
+      const extra = byId.get(row.id);
+      if (!extra) return row;
+      const templateId = extra.template_id != null ? String(extra.template_id) : null;
+      const batchId = extra.batch_id != null ? String(extra.batch_id) : null;
+      return {
+        ...row,
+        template_id: templateId,
+        template_name: templateId ? (templateName.get(templateId) ?? null) : null,
+        batch_id: batchId,
+        batch_code: batchId ? (batchCode.get(batchId) ?? null) : null,
+        description: extra.description != null ? String(extra.description) : null,
+      };
+    });
   }
 
   if (filters.template_id) {
@@ -161,27 +340,21 @@ export async function fetchEsignRequestsList(
 /** KPI + tab counts for the Sent requests / E-signatures lists (Figma ESign 01 & 02). */
 export async function fetchEsignStatusCounts(): Promise<EsignStatusCounts> {
   await requireRequestsManage();
-  const supabase = await createClient();
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
 
   const [requests, categories] = await Promise.all([
-    (supabase as any)
-      .from("esign_requests")
-      .select("status, due_at, created_at, signed_at, viewed_at"),
-    supabase
-      .from("esign_categories")
-      .select("id", { count: "exact", head: true })
-      .eq("is_active", true),
+    listDocs(COLLECTIONS.esignRequests),
+    countDocs(COLLECTIONS.esignCategories, [["is_active", true]]),
   ]);
 
   const today = kuwaitTodayYmd();
-  const rows = (requests.data ?? []) as {
-    status: string;
-    due_at: string | null;
-    created_at: string | null;
-    signed_at: string | null;
-    viewed_at: string | null;
-  }[];
+  const rows = requests.rows.map((row) => ({
+    status: String(row.status ?? ""),
+    due_at: row.due_at != null ? String(row.due_at) : null,
+    created_at: row.created_at != null ? String(row.created_at) : null,
+    signed_at: row.signed_at != null ? String(row.signed_at) : null,
+    viewed_at: row.viewed_at != null ? String(row.viewed_at) : null,
+  }));
   const count = (status: string) =>
     rows.filter((row) => effectiveEsignStatus(row.status, row.due_at, today) === status).length;
   /**
@@ -214,7 +387,7 @@ export async function fetchEsignStatusCounts(): Promise<EsignStatusCounts> {
     notOpened: recipientStageCount("not_opened"),
     signedLast30d: rows.filter((row) => row.signed_at != null && row.signed_at >= since).length,
     sentLast30d: rows.filter((row) => row.created_at != null && row.created_at >= since).length,
-    categories: categories.count ?? 0,
+    categories: categories.count,
   };
 }
 
@@ -222,26 +395,22 @@ export async function fetchEsignRequestDetail(
   id: string,
 ): Promise<{ request: EsignDetail | null; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any)
-    .from("esign_requests")
-    .select(
-      `
-      *,
-      drivers ( driver_code, profiles!drivers_id_fkey ( full_name ) ),
-      esign_categories ( label_en )
-    `,
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const loaded = await getDoc(COLLECTIONS.esignRequests, id);
+  if (loaded.error) return { request: null, error: loaded.error };
+  if (!loaded.row) return { request: null };
 
-  if (error) return { request: null, error: error.message };
-  if (!data) return { request: null };
-
-  const row = data as Record<string, unknown>;
-  const drivers = asRecord(row.drivers);
-  const profiles = asRecord(drivers.profiles);
-  const category = asRecord(row.esign_categories);
+  const row = loaded.row;
+  const driverId = row.driver_id != null ? String(row.driver_id) : "";
+  const [driver, profile, categories] = await Promise.all([
+    driverId ? getDoc(COLLECTIONS.drivers, driverId) : Promise.resolve({ row: null, error: null }),
+    driverId ? getDoc(COLLECTIONS.profiles, driverId) : Promise.resolve({ row: null, error: null }),
+    row.category_key != null
+      ? queryDocs(COLLECTIONS.esignCategories, [["key", String(row.category_key)]])
+      : Promise.resolve({ rows: [] as DocRow[], error: null }),
+  ]);
+  const drivers: DocRow = driver.row ?? { id: "" };
+  const profiles: DocRow = profile.row ?? { id: "" };
+  const category: DocRow = categories.rows[0] ?? { id: "" };
 
   await logAdminRead("esign_requests", "esign.detail", { id });
 
@@ -283,25 +452,17 @@ export async function fetchEsignDocumentLinks(id: string): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any)
-    .from("esign_requests")
-    .select(
-      "document_storage_key, signature_storage_key, signed_document_storage_key, signed_document_error",
-    )
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error) {
+  const loaded = await getDoc(COLLECTIONS.esignRequests, id);
+  if (loaded.error) {
     return {
       documentUrl: null,
       signatureUrl: null,
       signedDocumentUrl: null,
       signedDocumentError: null,
-      error: error.message,
+      error: loaded.error,
     };
   }
-  const row = asRecord(data);
+  const row: DocRow = loaded.row ?? { id: "" };
 
   return {
     documentUrl: hasStorageKey(row.document_storage_key)
@@ -340,12 +501,20 @@ export async function uploadEsignDocument(
   if (!ext) return { ok: false, error: "unsupported_source_type" };
   if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: "file_too_large" };
 
-  const supabase = await createClient();
+  const storage = await getFirebaseStorage();
+  if (!storage) return { ok: false, error: "not_configured" };
   const key = `admin/${crypto.randomUUID()}.${ext}`;
-  const { error } = await supabase.storage
-    .from(ESIGN_BUCKET)
-    .upload(key, file, { contentType: file.type, upsert: false });
-  if (error) return { ok: false, error: error.message };
+  try {
+    const object = storage.bucket().file(`${ESIGN_BUCKET}/${key}`);
+    const [exists] = await object.exists();
+    if (exists) return { ok: false, error: "already_exists" };
+    await object.save(Buffer.from(await file.arrayBuffer()), {
+      contentType: file.type,
+      resumable: false,
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "upload_failed" };
+  }
   return { ok: true, key };
 }
 
@@ -364,8 +533,7 @@ export async function createEsignRequest(input: {
   if (!isEsignDueDateAllowed(input.due_at ?? "", kuwaitTodayYmd())) {
     return { ok: false, error: "due_in_past" };
   }
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_create_esign_request", {
+  const { data, error } = await callAdminFunction("admin_create_esign_request", {
     p_driver_id: input.driver_id,
     p_title: input.title.trim(),
     p_category_key: input.category_key.trim(),
@@ -400,41 +568,34 @@ export async function fetchEsignCategories(): Promise<{
   error?: string;
 }> {
   await requireRequestsView();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any)
-    .from("esign_categories")
-    .select(
-      "id, key, label_en, description, icon_key, screenshot_restricted, is_active, sort_order, parent_key",
-    )
-    .order("sort_order")
-    .order("label_en");
+  const listed = await listDocs(COLLECTIONS.esignCategories);
+  if (listed.error) return { rows: [], error: listed.error };
 
-  if (error) return { rows: [], error: error.message };
-
-  const { data: signedRows } = await (supabase as any)
-    .from("esign_requests")
-    .select("category_key")
-    .eq("status", "signed");
+  const signedRows = await queryDocs(COLLECTIONS.esignRequests, [["status", "signed"]]);
   const signedByKey = new Map<string, number>();
-  for (const row of (signedRows ?? []) as { category_key: string | null }[]) {
-    if (!row.category_key) continue;
-    signedByKey.set(row.category_key, (signedByKey.get(row.category_key) ?? 0) + 1);
+  for (const row of signedRows.rows) {
+    if (row.category_key == null) continue;
+    const key = String(row.category_key);
+    signedByKey.set(key, (signedByKey.get(key) ?? 0) + 1);
   }
 
   await logAdminRead("esign_categories", "esign.categories.list", {});
 
   return {
-    rows: ((data ?? []) as EsignCategoryRow[]).map((row) => ({
+    rows: sortRows(listed.rows, [
+      ["sort_order", "asc"],
+      ["label_en", "asc"],
+    ]).map((row) => ({
       id: row.id,
-      key: row.key,
-      label_en: row.label_en,
-      description: row.description,
-      icon_key: row.icon_key,
-      screenshot_restricted: row.screenshot_restricted,
-      is_active: row.is_active,
-      sort_order: row.sort_order,
+      key: String(row.key ?? ""),
+      label_en: String(row.label_en ?? ""),
+      description: row.description != null ? String(row.description) : null,
+      icon_key: row.icon_key != null ? String(row.icon_key) : null,
+      screenshot_restricted: Boolean(row.screenshot_restricted),
+      is_active: Boolean(row.is_active),
+      sort_order: Number(row.sort_order ?? 0),
       parent_key: row.parent_key != null ? String(row.parent_key) : null,
-      signed_count: signedByKey.get(row.key) ?? 0,
+      signed_count: signedByKey.get(String(row.key ?? "")) ?? 0,
     })),
   };
 }
@@ -450,10 +611,14 @@ export async function upsertEsignCategory(input: {
   sort_order?: number;
 }): Promise<{ ok: boolean; error?: string; id?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
   const key = input.key.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
   const label_en = input.label_en.trim();
   if (!key || !label_en) return { ok: false, error: "missing_fields" };
+
+  const existing = await queryDocs(COLLECTIONS.esignCategories, [["key", key]]);
+  if (existing.rows.some((row) => row.id !== input.id)) {
+    return { ok: false, error: "key_exists" };
+  }
 
   const row = {
     key,
@@ -463,15 +628,12 @@ export async function upsertEsignCategory(input: {
     screenshot_restricted: input.screenshot_restricted ?? false,
     is_active: input.is_active ?? true,
     sort_order: input.sort_order ?? 0,
-    updated_at: new Date().toISOString(),
+    updated_at: new Date(),
   };
 
   if (input.id) {
-    const { error } = await (supabase as any)
-      .from("esign_categories")
-      .update(row)
-      .eq("id", input.id);
-    if (error) return { ok: false, error: error.message };
+    const error = await patchDoc(COLLECTIONS.esignCategories, input.id, row);
+    if (error) return { ok: false, error };
     await logAdminMutation({
       action: "update",
       entityType: "esign_categories",
@@ -481,29 +643,24 @@ export async function upsertEsignCategory(input: {
     return { ok: true, id: input.id };
   }
 
-  const { data, error } = await (supabase as any)
-    .from("esign_categories")
-    .insert(row)
-    .select("id")
-    .single();
-  if (error) return { ok: false, error: error.message };
+  const created = await insertDoc(COLLECTIONS.esignCategories, row);
+  if (created.error || !created.id) return { ok: false, error: created.error ?? "write_failed" };
 
   await logAdminMutation({
     action: "create",
     entityType: "esign_categories",
-    entityId: data.id,
+    entityId: created.id,
     routeName: "esign.categories.create",
   });
-  return { ok: true, id: data.id };
+  return { ok: true, id: created.id };
 }
 
 export async function deleteEsignCategory(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { error } = await (supabase as any).from("esign_categories").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  const error = await deleteDoc(COLLECTIONS.esignCategories, id);
+  if (error) return { ok: false, error };
 
   await logAdminMutation({
     action: "delete",
@@ -519,32 +676,20 @@ export async function fetchEsignScreenshotDefault(): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("app_settings")
-    .select("esign_screenshot_default")
-    .eq("id", 1)
-    .maybeSingle();
-
-  if (error) return { value: true, error: error.message };
-  const settings = data as { esign_screenshot_default?: boolean } | null;
-  return { value: settings?.esign_screenshot_default ?? true };
+  const loaded = await getDoc(COLLECTIONS.appSettings, APP_SETTINGS_DOC_ID);
+  if (loaded.error) return { value: true, error: loaded.error };
+  return { value: loaded.row?.esign_screenshot_default !== false };
 }
 
 export async function updateEsignScreenshotDefault(
   value: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("app_settings")
-    .update({
-      esign_screenshot_default: value,
-      updated_at: new Date().toISOString(),
-    } as never)
-    .eq("id", 1);
-
-  if (error) return { ok: false, error: error.message };
+  const error = await patchDoc(COLLECTIONS.appSettings, APP_SETTINGS_DOC_ID, {
+    esign_screenshot_default: value,
+    updated_at: new Date(),
+  });
+  if (error) return { ok: false, error };
 
   await logAdminMutation({
     action: "update",
@@ -561,24 +706,26 @@ export async function fetchEsignDriverOptions(): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("drivers")
-    .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name)")
-    .eq("status", "active")
-    .is("archived_at", null)
-    .order("driver_code");
-
-  if (error) return { rows: [], error: error.message };
+  const listed = await queryDocs(COLLECTIONS.drivers, [["status", "active"]]);
+  if (listed.error) return { rows: [], error: listed.error };
+  const live = sortRows(
+    listed.rows.filter((row) => row.archived_at == null),
+    [["driver_code", "asc"]],
+  );
+  const profiles = await docsByIds(
+    COLLECTIONS.profiles,
+    live.map((row) => row.id),
+  );
+  const profileById = new Map(profiles.map((row) => [row.id, row]));
 
   return {
-    rows: (data ?? []).map((row) => {
-      const profile = asRecord(row.profiles);
+    rows: live.map((row) => {
+      const profile = profileById.get(row.id);
       return {
         id: row.id,
-        full_name: String(profile.full_name ?? row.driver_code ?? "—"),
-        driver_code: row.driver_code ?? "",
-        employee_id: row.employee_id,
+        full_name: String(profile?.full_name ?? row.driver_code ?? "—"),
+        driver_code: row.driver_code != null ? String(row.driver_code) : "",
+        employee_id: row.employee_id != null ? String(row.employee_id) : null,
       };
     }),
   };

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { logDriverChange } from "@/features/drivers/driver-change-log";
 import { requireDriversManagerApi } from "@/lib/auth/require-drivers-manager";
 import {
   DOCUMENT_TYPES,
   type DocumentExpiryConfig,
   type DriverDocumentType,
 } from "@/features/drivers/types";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   parseNotifyLeadDays,
   upsertDocumentTracking,
@@ -56,6 +58,25 @@ function parseExpiryBody(body: ExpiryPayload): {
   };
 }
 
+function linkedProfileId(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function expiresText(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
+  }
+  return null;
+}
+
 export async function PATCH(request: Request): Promise<Response> {
   const auth = await requireDriversManagerApi();
   if ("error" in auth) {
@@ -74,29 +95,29 @@ export async function PATCH(request: Request): Promise<Response> {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const { data: intake } = await supabase
-    .from("driver_intakes")
-    .select("id, linked_profile_id")
-    .eq("id", parsed.intakeId)
-    .maybeSingle();
+  const db = await staffDb();
+  if (!db) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
 
-  if (!intake) {
+  const intake = await db.collection(COLLECTIONS.driverIntakes).doc(parsed.intakeId).get();
+  if (!intake.exists) {
     return NextResponse.json({ error: "save_failed" }, { status: 404 });
   }
 
-  const linkedId = intake.linked_profile_id;
+  const linkedId = linkedProfileId(intake.get("linked_profile_id"));
   if (parsed.driverProfileId && linkedId && parsed.driverProfileId !== linkedId) {
     return NextResponse.json({ error: "not_authorized" }, { status: 403 });
   }
 
   const targetDriverId = parsed.driverProfileId ?? linkedId;
-  const { data: prior } = await supabase
-    .from("document_tracking")
-    .select("expires_at, track_expiry")
-    .eq("intake_id", parsed.intakeId)
-    .eq("doc_type", parsed.docType)
-    .maybeSingle();
+  const priorSnap = await db
+    .collection(COLLECTIONS.documentTracking)
+    .where("intake_id", "==", parsed.intakeId)
+    .limit(50)
+    .get();
+  const priorRows = priorSnap.docs.filter((doc) => doc.get("doc_type") === parsed.docType);
+  const prior = priorRows.length === 1 ? priorRows[0] : null;
 
   const result = await upsertDocumentTracking({
     intakeId: parsed.intakeId,
@@ -109,14 +130,14 @@ export async function PATCH(request: Request): Promise<Response> {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  const { logDriverChange } = await import("@/features/drivers/driver-change-log");
   const field = `document.${parsed.docType}.expiry`;
+  const priorExpiry = expiresText(prior?.get("expires_at"));
   void logDriverChange({
     intakeId: parsed.intakeId,
     driverId: targetDriverId,
     source: "document",
     before: {
-      [field]: prior?.track_expiry ? (prior.expires_at ?? "tracked") : "off",
+      [field]: prior?.get("track_expiry") ? (priorExpiry ?? "tracked") : "off",
     },
     after: {
       [field]: parsed.expiry.trackExpiry

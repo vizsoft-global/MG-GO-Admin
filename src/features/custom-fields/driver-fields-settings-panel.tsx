@@ -55,7 +55,7 @@ import {
 } from "@/lib/ui-preferences/types";
 import { customFieldColumnId } from "@/lib/custom-fields/types";
 import { useQuery } from "@tanstack/react-query";
-import { createClient } from "@/lib/supabase/client";
+import { listAdminRoleOptions } from "./custom-fields-actions";
 
 const STANDARD_COLUMN_IDS = [
   "driverId",
@@ -110,14 +110,7 @@ export function DriverFieldsSettingsPanel() {
 
   const rolesQuery = useQuery({
     queryKey: ["admin-roles-options"],
-    queryFn: async () => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("admin_roles")
-        .select("id, name, slug")
-        .order("name");
-      return data ?? [];
-    },
+    queryFn: () => listAdminRoleOptions(),
   });
 
   const [roleId, setRoleId] = useState("");

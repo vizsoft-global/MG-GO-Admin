@@ -1,4 +1,3 @@
-import { getPresignedGetUrl } from "@/lib/storage/r2-client";
 import { isNotificationMediaObjectKey } from "@/lib/storage/r2-keys";
 
 export type NotificationMediaRole = "banner" | "image";
@@ -108,16 +107,4 @@ export function pickPushNotificationImageKey(media: unknown): string | null {
     parsed.find((item) => item.role === "banner")?.object_key ??
     null
   );
-}
-
-export async function resolveNotificationMediaReadUrl(
-  objectKey: string,
-  expiresInSeconds = FCM_IMAGE_URL_TTL_SECONDS,
-): Promise<string | null> {
-  if (!isNotificationMediaObjectKey(objectKey)) return null;
-  try {
-    return await getPresignedGetUrl(objectKey, expiresInSeconds);
-  } catch {
-    return null;
-  }
 }

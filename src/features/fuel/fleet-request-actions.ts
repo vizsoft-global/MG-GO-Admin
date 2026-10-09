@@ -8,8 +8,10 @@ import {
   type VehicleFuelCompany,
 } from "@/features/fleet/fleet-labels";
 import { fetchAdminRequestsList } from "@/features/requests/requests-actions";
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { FUEL_TRANSFER_TYPES, type FuelTransferType } from "@/features/requests/types";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import type { FleetRequestListRow } from "./fleet-request-types";
 import { isAssetFirstTime } from "@/features/requests/request-create-utils";
 import {
@@ -68,18 +70,72 @@ function isFuelTransferType(value: unknown): value is FuelTransferType {
   return (FUEL_TRANSFER_TYPES as readonly string[]).includes(String(value));
 }
 
+type Row = Record<string, unknown> & { id: string };
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+async function rowsByIds(db: Firestore, collection: string, ids: string[]): Promise<Row[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const rows: Row[] = [];
+  for (let i = 0; i < unique.length; i += 100) {
+    const refs = unique.slice(i, i + 100).map((id) => db.collection(collection).doc(id));
+    if (refs.length === 0) continue;
+    const snaps = await db.getAll(...refs);
+    for (const snap of snaps) {
+      if (snap.exists) rows.push(asRow(snap.id, snap.data()));
+    }
+  }
+  return rows;
+}
+
+async function whereIn(db: Firestore, collection: string, field: string, ids: string[]): Promise<Row[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const rows: Row[] = [];
+  for (let i = 0; i < unique.length; i += 30) {
+    const chunk = unique.slice(i, i + 30);
+    if (chunk.length === 0) continue;
+    const snap = await db.collection(collection).where(field, "in", chunk).get();
+    rows.push(...snap.docs.map((doc) => asRow(doc.id, doc.data())));
+  }
+  return rows;
+}
+
 export async function listFleetRequests(input: {
   type: FleetQueueRequestType;
   driverId?: string;
 }): Promise<{ rows: FleetRequestListRow[]; error?: string }> {
-  const supabase = await createClient();
+  let db: Firestore;
+  try {
+    db = await openDb();
+  } catch (error) {
+    return { rows: [], error: error instanceof Error ? error.message : "not_configured" };
+  }
   let search: string | undefined;
   if (input.driverId) {
-    const { data: driver } = await supabase
-      .from("drivers")
-      .select("employee_id, driver_code")
-      .eq("id", input.driverId)
-      .maybeSingle();
+    const driverSnap = await db.collection(COLLECTIONS.drivers).doc(input.driverId).get();
+    const driver = driverSnap.exists ? asRow(driverSnap.id, driverSnap.data()) : null;
     const driverCode = typeof driver?.driver_code === "string" ? driver.driver_code.trim() : "";
     const employeeId = typeof driver?.employee_id === "string" ? driver.employee_id.trim() : "";
     // admin_list_requests p_search matches request_code / name / driver_code, not employee_id.
@@ -118,43 +174,44 @@ export async function listFleetRequests(input: {
   const driverIds = [...new Set(scopedRows.map((row) => row.driver_id).filter(Boolean))];
 
   const requestIds = scopedRows.map((row) => row.id);
-  const [driversResult, siblingsResult, fillsResult, stampedResult] = await Promise.all([
-    driverIds.length === 0
-      ? Promise.resolve({ data: [] as Record<string, unknown>[], error: null })
-      : supabase
-          .from("drivers")
-          .select(
-            "id, employee_id, project_key, partner_id, vehicle_id, zone_id, zones(name), profiles!drivers_id_fkey(phone)",
-          )
-          .in("id", driverIds),
-    supabase.from("requests").select("driver_id, created_at, amount_kwd").eq("request_type", input.type),
-    driverIds.length === 0
-      ? Promise.resolve({ data: [] as Record<string, unknown>[], error: null })
-      : supabase
-          .from("fuel_fills")
-          .select("driver_id, vehicle_id, filled_at")
-          .in("driver_id", driverIds)
-          .order("filled_at", { ascending: false }),
-    requestIds.length === 0
-      ? Promise.resolve({ data: [] as Record<string, unknown>[], error: null })
-      : supabase.from("requests").select("id, vehicle_id, payload, fuel_transfer_type").in("id", requestIds),
-  ]);
+  let drivers: Row[];
+  let siblings: Row[];
+  let fills: Row[];
+  let stampedRows: Row[];
+  try {
+    [drivers, siblings, fills, stampedRows] = await Promise.all([
+      rowsByIds(db, COLLECTIONS.drivers, driverIds),
+      db
+        .collection(COLLECTIONS.requests)
+        .where("request_type", "==", input.type)
+        .get()
+        .then((snap) => snap.docs.map((doc) => asRow(doc.id, doc.data()))),
+      whereIn(db, COLLECTIONS.fuelFills, "driver_id", driverIds),
+      rowsByIds(db, COLLECTIONS.requests, requestIds),
+    ]);
+  } catch (error) {
+    return { rows: [], error: error instanceof Error ? error.message : "save_failed" };
+  }
 
-  if (driversResult.error) return { rows: [], error: driversResult.error.message };
-  if (siblingsResult.error) return { rows: [], error: siblingsResult.error.message };
-  if (fillsResult.error) return { rows: [], error: fillsResult.error.message };
-  if (stampedResult.error) return { rows: [], error: stampedResult.error.message };
+  const profiles = await rowsByIds(db, COLLECTIONS.profiles, driverIds);
+  const zoneIds = drivers.map((row) => asId(row.zone_id)).filter((id): id is string => Boolean(id));
+  const zones = await rowsByIds(db, COLLECTIONS.zones, zoneIds);
+  const profileById = new Map(profiles.map((row) => [row.id, row]));
+  const zoneById = new Map(zones.map((row) => [row.id, row]));
 
   const driverById = new Map<string, Record<string, unknown>>();
-  for (const raw of driversResult.data ?? []) {
-    const row = asRecord(raw);
-    const id = asId(row.id);
-    if (id) driverById.set(id, row);
+  for (const row of drivers) {
+    const zone = zoneById.get(asId(row.zone_id) ?? "");
+    driverById.set(row.id, {
+      ...row,
+      profiles: { phone: profileById.get(row.id)?.phone ?? null },
+      zones: zone ? { name: zone.name } : null,
+    });
   }
 
   const fillVehicleByDriver = new Map<string, string>();
-  for (const raw of fillsResult.data ?? []) {
-    const row = asRecord(raw);
+  const fillsSorted = [...fills].sort((a, b) => String(b.filled_at ?? "").localeCompare(String(a.filled_at ?? "")));
+  for (const row of fillsSorted) {
     const driverId = asId(row.driver_id);
     const vehicleId = asId(row.vehicle_id);
     if (driverId && vehicleId && !fillVehicleByDriver.has(driverId)) {
@@ -166,11 +223,8 @@ export async function listFleetRequests(input: {
     string,
     { vehicleId: string | null; payload: Record<string, unknown>; fuelTransferType: FuelTransferType | null }
   >();
-  for (const raw of stampedResult.data ?? []) {
-    const row = asRecord(raw);
-    const id = asId(row.id);
-    if (!id) continue;
-    stampedByRequest.set(id, {
+  for (const row of stampedRows) {
+    stampedByRequest.set(row.id, {
       vehicleId: asId(row.vehicle_id),
       payload: asRecord(row.payload),
       fuelTransferType: isFuelTransferType(row.fuel_transfer_type) ? row.fuel_transfer_type : null,
@@ -190,36 +244,33 @@ export async function listFleetRequests(input: {
     if (stamped.vehicleId) vehicleIds.add(stamped.vehicleId);
   }
 
-  const vehiclesResult =
-    vehicleIds.size === 0
-      ? { data: [] as Record<string, unknown>[], error: null }
-      : await supabase
-          .from("vehicles")
-          .select("id, reg_number, model, make, car_type, fuel_company, owner_partner_id")
-          .in("id", [...vehicleIds]);
-  if (vehiclesResult.error) return { rows: [], error: vehiclesResult.error.message };
+  let vehicleRows: Row[];
+  try {
+    vehicleRows = await rowsByIds(db, COLLECTIONS.vehicles, [...vehicleIds]);
+  } catch (error) {
+    return { rows: [], error: error instanceof Error ? error.message : "save_failed" };
+  }
 
   const vehicleById = new Map<string, Record<string, unknown>>();
-  for (const raw of vehiclesResult.data ?? []) {
-    const row = asRecord(raw);
-    const id = asId(row.id);
-    if (id) vehicleById.set(id, row);
+  for (const row of vehicleRows) {
+    vehicleById.set(row.id, row);
     const ownerId = asId(row.owner_partner_id);
     if (ownerId) partnerIds.add(ownerId);
   }
 
-  const partnersResult =
-    partnerIds.size === 0
-      ? { data: [] as Array<{ id: string; name: string }>, error: null }
-      : await supabase.from("partners").select("id, name").in("id", [...partnerIds]);
-  if (partnersResult.error) return { rows: [], error: partnersResult.error.message };
+  let partnerRows: Row[];
+  try {
+    partnerRows = await rowsByIds(db, COLLECTIONS.partners, [...partnerIds]);
+  } catch (error) {
+    return { rows: [], error: error instanceof Error ? error.message : "save_failed" };
+  }
 
   const partnerNameById = new Map(
-    ((partnersResult.data ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]),
+    partnerRows.map((row) => [row.id, typeof row.name === "string" ? row.name : ""]),
   );
 
   const siblingsByDriver = new Map<string, Array<{ created_at: string; amount_kwd: number | null }>>();
-  for (const raw of siblingsResult.data ?? []) {
+  for (const raw of siblings) {
     const row = asRecord(raw);
     const driverId = asId(row.driver_id);
     const createdAt = typeof row.created_at === "string" ? row.created_at : "";

@@ -18,7 +18,8 @@ import {
 } from "@/features/requests/request-status-utils";
 import { listZonesForAssistant } from "@/features/zones/zones-read-actions";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { scanCollection } from "./assistant-lookups";
 import type { Permission } from "@/lib/auth/permissions";
 import { kuwaitDayCreatedAtBounds, monthKeyFromYmd, resolveAssistantDateRange } from "./assistant-dates";
 import { assistantModuleAllowed, requireAssistantModule } from "./assistant-gates";
@@ -101,17 +102,16 @@ function slicersFrom(input: { zone_id?: string; restaurant_id?: string; partner_
 }
 
 async function vehicleCounts() {
-  const supabase = await createClient();
-  const { data } = await supabase.from("vehicles").select("status, condition");
+  const data = await scanCollection(COLLECTIONS.vehicles);
   const byStatus: Record<string, number> = {};
   const byCondition: Record<string, number> = {};
-  for (const row of data ?? []) {
+  for (const row of data) {
     const status = String(row.status ?? "unknown");
     const condition = String(row.condition ?? "unknown");
     byStatus[status] = (byStatus[status] ?? 0) + 1;
     byCondition[condition] = (byCondition[condition] ?? 0) + 1;
   }
-  return { total: data?.length ?? 0, by_status: byStatus, by_condition: byCondition };
+  return { total: data.length, by_status: byStatus, by_condition: byCondition };
 }
 
 export async function compareWindows(input: DateInput & {

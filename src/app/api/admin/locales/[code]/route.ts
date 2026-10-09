@@ -1,25 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/auth/get-session";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 
 async function requireSuperAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("admin_roles(is_super_admin)")
-    .eq("id", user.id)
-    .single();
-
-  const isSuperAdmin =
-    (profile as { admin_roles: { is_super_admin: boolean } | null } | null)
-      ?.admin_roles?.is_super_admin === true;
-
-  if (!isSuperAdmin) throw new Error("Forbidden");
-  return supabase;
+  const session = await getSessionUser();
+  if (!session) throw new Error("Unauthorized");
+  if (!session.isSuperAdmin) throw new Error("Forbidden");
 }
 
 export async function PATCH(
@@ -32,22 +19,34 @@ export async function PATCH(
       enabled?: boolean;
       is_default?: boolean;
     };
-    const supabase = await requireSuperAdmin();
+    await requireSuperAdmin();
 
+    const db = await staffDb();
+    if (!db) return NextResponse.json({ error: "not_configured" }, { status: 500 });
+
+    const snap = await db.collection(COLLECTIONS.locales).get();
+    const target = snap.docs.find((doc) => doc.id === code || doc.data().code === code);
+    if (!target) return NextResponse.json({ error: "locale_not_found" }, { status: 500 });
+
+    const batch = db.batch();
     if (body.is_default) {
-      await supabase.from("locales").update({ is_default: false }).neq("code", code);
+      for (const doc of snap.docs) {
+        if (doc.id === target.id) continue;
+        if (doc.data().is_default === true) {
+          batch.set(doc.ref, { is_default: false, updated_at: new Date() }, { merge: true });
+        }
+      }
     }
 
     const patch: {
-      updated_at: string;
+      updated_at: Date;
       enabled?: boolean;
       is_default?: boolean;
-    } = { updated_at: new Date().toISOString() };
+    } = { updated_at: new Date() };
     if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
     if (body.is_default) patch.is_default = true;
-
-    const { error } = await supabase.from("locales").update(patch).eq("code", code);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    batch.set(target.ref, patch, { merge: true });
+    await batch.commit();
 
     return NextResponse.json({ ok: true });
   } catch (e) {

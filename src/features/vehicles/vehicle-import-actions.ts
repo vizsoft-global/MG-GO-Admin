@@ -3,8 +3,10 @@
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import type { Json } from "@/types/database";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import {
   previewVehicleImport,
   type VehicleImportExisting,
@@ -20,9 +22,8 @@ import {
   type VehicleImportBatchTip,
 } from "./import/vehicle-import-stack";
 
-const VEHICLE_COLUMNS =
-  "id, bike_id, reg_number, chassis_no, make, model, model_year, vehicle_type_key, project_type, status, location_text, condition, car_type, type_of_use, fuel_type, fuel_company, chip_no, fuel_monthly_limit_kwd";
-
+const BATCHES = "vehicle_import_batches";
+const IMPORT_ROWS = "vehicle_import_rows";
 const MAX_ROWS = 1000;
 
 export type VehicleImportBatchRow = {
@@ -43,6 +44,36 @@ export type VehicleImportLogRow = {
   outcome: "create" | "update" | "failed";
   message: string | null;
 };
+
+type Row = Record<string, unknown> & { id: string };
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
 
 async function requireCreate() {
   const session = await getSessionUser();
@@ -95,6 +126,29 @@ function asSnapshot(row: {
   };
 }
 
+function fromVehicle(row: Row): VehicleImportExisting {
+  return asSnapshot({
+    id: row.id,
+    bike_id: str(row.bike_id),
+    reg_number: str(row.reg_number) || null,
+    chassis_no: str(row.chassis_no) || null,
+    make: str(row.make) || null,
+    model: str(row.model) || null,
+    model_year: row.model_year == null ? null : Number(row.model_year),
+    vehicle_type_key: str(row.vehicle_type_key),
+    project_type: str(row.project_type),
+    status: str(row.status),
+    location_text: str(row.location_text) || null,
+    condition: str(row.condition) || null,
+    car_type: str(row.car_type) || null,
+    type_of_use: str(row.type_of_use) || null,
+    fuel_type: str(row.fuel_type) || null,
+    fuel_company: str(row.fuel_company) || null,
+    chip_no: str(row.chip_no) || null,
+    fuel_monthly_limit_kwd: row.fuel_monthly_limit_kwd == null ? null : Number(row.fuel_monthly_limit_kwd),
+  });
+}
+
 function writePayload(snapshot: VehicleSheetSnapshot) {
   return {
     ...snapshot,
@@ -104,11 +158,6 @@ function writePayload(snapshot: VehicleSheetSnapshot) {
   };
 }
 
-/**
- * Import history, with the failure kept distinct from "no history yet".
- * Returning `[]` on error made Undo/Redo look permanently disabled with nothing on
- * screen to explain why, which is the whole of QA #12.
- */
 export type VehicleImportBatchesResult =
   | { ok: true; batches: VehicleImportBatchRow[] }
   | { ok: false; error: string };
@@ -116,47 +165,49 @@ export type VehicleImportBatchesResult =
 export async function listVehicleImportBatches(): Promise<VehicleImportBatchesResult> {
   const auth = await requireCreate();
   if ("error" in auth) return { ok: false, error: auth.error ?? "not_authorized" };
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vehicle_import_batches")
-    .select(
-      "id, file_name, status, total_rows, applied_rows, failed_rows, created_at, undo_seq, redoable",
-    )
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (error) return { ok: false, error: error.message };
-  return {
-    ok: true,
-    batches: (data ?? []).map((row) => ({
-      id: row.id,
-      fileName: row.file_name,
-      status: row.status === "undone" ? "undone" : "applied",
-      totalRows: row.total_rows,
-      appliedRows: row.applied_rows,
-      failedRows: row.failed_rows,
-      createdAt: row.created_at,
-      undoSeq: row.undo_seq,
-      redoable: row.redoable,
-    })),
-  };
+  try {
+    const db = await openDb();
+    const snap = await db.collection(BATCHES).orderBy("created_at", "desc").limit(50).get();
+    return {
+      ok: true,
+      batches: snap.docs.map((doc) => {
+        const row = asRow(doc.id, doc.data());
+        return {
+          id: row.id,
+          fileName: str(row.file_name),
+          status: row.status === "undone" ? "undone" : "applied",
+          totalRows: Number(row.total_rows ?? 0),
+          appliedRows: Number(row.applied_rows ?? 0),
+          failedRows: Number(row.failed_rows ?? 0),
+          createdAt: str(row.created_at),
+          undoSeq: row.undo_seq == null ? null : Number(row.undo_seq),
+          redoable: row.redoable === true,
+        };
+      }),
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "save_failed" };
+  }
 }
 
 export async function listVehicleImportRows(batchId: string): Promise<VehicleImportLogRow[]> {
   const auth = await requireCreate();
   if ("error" in auth) return [];
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vehicle_import_rows")
-    .select("row_index, bike_id, outcome, message")
-    .eq("batch_id", batchId)
-    .order("row_index");
-  if (error) return [];
-  return (data ?? []).map((row) => ({
-    rowIndex: row.row_index,
-    bikeId: row.bike_id,
-    outcome: row.outcome === "create" || row.outcome === "update" ? row.outcome : "failed",
-    message: row.message,
-  }));
+  try {
+    const db = await openDb();
+    const snap = await db.collection(IMPORT_ROWS).where("batch_id", "==", batchId).get();
+    return snap.docs
+      .map((doc) => asRow(doc.id, doc.data()))
+      .sort((a, b) => Number(a.row_index ?? 0) - Number(b.row_index ?? 0))
+      .map((row) => ({
+        rowIndex: Number(row.row_index ?? 0),
+        bikeId: str(row.bike_id),
+        outcome: row.outcome === "create" || row.outcome === "update" ? row.outcome : "failed",
+        message: str(row.message) || null,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 export async function applyVehicleImport(input: {
@@ -168,19 +219,31 @@ export async function applyVehicleImport(input: {
   if ("error" in auth) return { error: auth.error };
   if (input.rows.length > MAX_ROWS) return { error: "too_many_rows" };
 
-  const supabase = await createClient();
-  const [{ data, error }, usesRes] = await Promise.all([
-    supabase.from("vehicles").select(VEHICLE_COLUMNS),
-    supabase.from("vehicle_use_types").select("key").eq("is_active", true),
-  ]);
-  if (error) return { error: error.message };
-  const existing = (data ?? []).map((row) => asSnapshot(row));
+  let db: Firestore;
+  try {
+    db = await openDb();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "not_configured" };
+  }
+
+  let existing: VehicleImportExisting[];
+  let allowedUseTypes: string[];
+  try {
+    const [vehicles, uses] = await Promise.all([
+      db.collection(COLLECTIONS.vehicles).get(),
+      db.collection(COLLECTIONS.vehicleUseTypes).where("is_active", "==", true).get(),
+    ]);
+    existing = vehicles.docs.map((doc) => fromVehicle(asRow(doc.id, doc.data())));
+    allowedUseTypes = uses.docs.map((doc) => str(doc.data().key) || doc.id).filter(Boolean);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "save_failed" };
+  }
 
   const preview = previewVehicleImport({
     headers: input.headers,
     rows: input.rows,
     existing,
-    allowedUseTypes: (usesRes.data ?? []).map((row) => row.key),
+    allowedUseTypes,
   });
   if (preview.error) return { error: preview.error };
   if (!preview.rows.length) return { error: "empty_sheet" };
@@ -194,80 +257,99 @@ export async function applyVehicleImport(input: {
 
   for (const row of preview.rows) {
     if (row.status === "error" || !row.after) {
-      logged.push({
-        row,
-        outcome: "failed",
-        message: row.error,
-        vehicleId: row.vehicleId,
-      });
+      logged.push({ row, outcome: "failed", message: row.error, vehicleId: row.vehicleId });
       continue;
     }
     if (row.status === "create") {
-      const { data, error } = await supabase
-        .from("vehicles")
-        .insert({ ...writePayload(row.after), created_by: auth.session.id })
-        .select("id")
-        .single();
-      logged.push({
-        row,
-        outcome: error ? "failed" : "create",
-        message: error?.message ?? null,
-        vehicleId: data?.id ?? null,
-      });
+      const id = crypto.randomUUID();
+      try {
+        await db.collection(COLLECTIONS.vehicles).doc(id).set({
+          id,
+          ...writePayload(row.after),
+          created_by: auth.session.id,
+          created_at: new Date(),
+        });
+        logged.push({ row, outcome: "create", message: null, vehicleId: id });
+      } catch (error) {
+        logged.push({
+          row,
+          outcome: "failed",
+          message: error instanceof Error ? error.message : "save_failed",
+          vehicleId: null,
+        });
+      }
       continue;
     }
-    const { error } = await supabase
-      .from("vehicles")
-      .update(writePayload(row.after))
-      .eq("id", row.vehicleId ?? "");
-    logged.push({
-      row,
-      outcome: error ? "failed" : "update",
-      message: error?.message ?? null,
-      vehicleId: row.vehicleId,
-    });
+    try {
+      await db
+        .collection(COLLECTIONS.vehicles)
+        .doc(row.vehicleId ?? "")
+        .set(writePayload(row.after), { merge: true });
+      logged.push({ row, outcome: "update", message: null, vehicleId: row.vehicleId });
+    } catch (error) {
+      logged.push({
+        row,
+        outcome: "failed",
+        message: error instanceof Error ? error.message : "save_failed",
+        vehicleId: row.vehicleId,
+      });
+    }
   }
 
   const applied = logged.filter((item) => item.outcome !== "failed").length;
   const failed = logged.length - applied;
-  const { data: batch, error: batchError } = await supabase
-    .from("vehicle_import_batches")
-    .insert({
+  const batchId = crypto.randomUUID();
+  try {
+    await db.collection(BATCHES).doc(batchId).set({
+      id: batchId,
       file_name: input.fileName.slice(0, 180) || "vehicles.xlsx",
       status: "applied",
       total_rows: logged.length,
       applied_rows: applied,
       failed_rows: failed,
       uploaded_by: auth.session.id,
-    })
-    .select("id")
-    .single();
-  if (batchError || !batch) return { error: batchError?.message ?? "save_failed", applied, failed };
+      created_at: new Date(),
+      redoable: false,
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "save_failed", applied, failed };
+  }
 
-  const { error: rowsError } = await supabase.from("vehicle_import_rows").insert(
-    logged.map((item) => ({
-      batch_id: batch.id,
-      row_index: item.row.rowIndex,
-      bike_id: item.row.bikeId,
-      outcome: item.outcome,
-      message: item.message,
-      vehicle_id: item.vehicleId,
-      before: (item.row.before ?? null) as Json,
-      after: (item.outcome === "failed" ? null : item.row.after) as Json,
-    })),
+  try {
+    for (let i = 0; i < logged.length; i += 400) {
+      const slice = db.batch();
+      for (const item of logged.slice(i, i + 400)) {
+        const id = crypto.randomUUID();
+        slice.set(db.collection(IMPORT_ROWS).doc(id), {
+          id,
+          batch_id: batchId,
+          row_index: item.row.rowIndex,
+          bike_id: item.row.bikeId,
+          outcome: item.outcome,
+          message: item.message,
+          vehicle_id: item.vehicleId,
+          before: (item.row.before ?? null) as Json,
+          after: (item.outcome === "failed" ? null : item.row.after) as Json,
+          created_at: new Date(),
+        });
+      }
+      await slice.commit();
+    }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "save_failed", applied, failed };
+  }
+
+  const undone = await db.collection(BATCHES).where("status", "==", "undone").get();
+  await Promise.all(
+    undone.docs
+      .filter((doc) => doc.id !== batchId)
+      .map((doc) => doc.ref.set({ redoable: false }, { merge: true })),
   );
-  if (rowsError) return { error: rowsError.message, applied, failed };
-
-  await supabase
-    .from("vehicle_import_batches")
-    .update({ redoable: false })
-    .eq("status", "undone")
-    .neq("id", batch.id);
 
   void logAdminMutation({
     action: "create",
     entityType: "vehicle_import",
-    entityId: batch.id,
+    entityId: batchId,
     routeName: "/vehicles",
     after: { applied, failed, fileName: input.fileName },
   });
@@ -285,95 +367,108 @@ export async function redoVehicleImport(): Promise<{ error?: string; changed?: n
 async function replay(direction: "undo" | "redo"): Promise<{ error?: string; changed?: number }> {
   const auth = await requireCreate();
   if ("error" in auth) return { error: auth.error };
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vehicle_import_batches")
-    .select("id, status, created_at, undo_seq, redoable")
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (error) return { error: error.message };
-  const tips: VehicleImportBatchTip[] = (data ?? []).map((row) => ({
-    id: row.id,
-    status: row.status === "undone" ? "undone" : "applied",
-    createdAt: row.created_at,
-    undoSeq: row.undo_seq,
-    redoable: row.redoable,
-  }));
+  let db: Firestore;
+  try {
+    db = await openDb();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "not_configured" };
+  }
+
+  let tips: VehicleImportBatchTip[];
+  try {
+    const snap = await db.collection(BATCHES).orderBy("created_at", "desc").limit(50).get();
+    tips = snap.docs.map((doc) => {
+      const row = asRow(doc.id, doc.data());
+      return {
+        id: row.id,
+        status: row.status === "undone" ? "undone" : "applied",
+        createdAt: str(row.created_at),
+        undoSeq: row.undo_seq == null ? null : Number(row.undo_seq),
+        redoable: row.redoable === true,
+      };
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "save_failed" };
+  }
+
   const target = direction === "undo" ? undoTargetId(tips) : redoTargetId(tips);
   if (!target) return { error: direction === "undo" ? "nothing_to_undo" : "nothing_to_redo" };
 
-  const { data: rows, error: rowsError } = await supabase
-    .from("vehicle_import_rows")
-    .select("outcome, vehicle_id, before, after")
-    .eq("batch_id", target);
-  if (rowsError) return { error: rowsError.message };
+  let rows: Row[];
+  try {
+    const snap = await db.collection(IMPORT_ROWS).where("batch_id", "==", target).get();
+    rows = snap.docs.map((doc) => asRow(doc.id, doc.data()));
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "save_failed" };
+  }
 
-  // Rows actually touched, so the dialog can say what the gesture did rather than just closing.
   let changed = 0;
-  for (const row of rows ?? []) {
+  for (const row of rows) {
     const outcome = row.outcome === "create" || row.outcome === "update" ? row.outcome : "failed";
+    const vehicleId = str(row.vehicle_id) || null;
     if (direction === "undo") {
-      const plan = undoRowPlan({ outcome, vehicleId: row.vehicle_id, before: row.before });
+      const plan = undoRowPlan({ outcome, vehicleId, before: row.before });
       if (!plan) continue;
-      if (plan.op === "delete") {
-        const { error: deleteError } = await supabase.from("vehicles").delete().eq("id", plan.vehicleId);
-        if (deleteError) return { error: deleteError.message };
-      } else {
-        const snapshot = plan.snapshot as VehicleSheetSnapshot;
-        const { error: updateError } = await supabase
-          .from("vehicles")
-          .update(writePayload(snapshot))
-          .eq("id", plan.vehicleId);
-        if (updateError) return { error: updateError.message };
+      try {
+        if (plan.op === "delete") {
+          await db.collection(COLLECTIONS.vehicles).doc(plan.vehicleId).delete();
+        } else {
+          const snapshot = plan.snapshot as VehicleSheetSnapshot;
+          await db
+            .collection(COLLECTIONS.vehicles)
+            .doc(plan.vehicleId)
+            .set(writePayload(snapshot), { merge: true });
+        }
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : "save_failed" };
       }
       changed += 1;
     } else {
-      const plan = redoRowPlan({ outcome, vehicleId: row.vehicle_id, after: row.after });
+      const plan = redoRowPlan({ outcome, vehicleId, after: row.after });
       if (!plan) continue;
       const snapshot = plan.snapshot as VehicleSheetSnapshot;
-      if (plan.vehicleId) {
-        const { data: found } = await supabase
-          .from("vehicles")
-          .select("id")
-          .eq("id", plan.vehicleId)
-          .maybeSingle();
-        if (found) {
-          const { error: updateError } = await supabase
-            .from("vehicles")
-            .update(writePayload(snapshot))
-            .eq("id", plan.vehicleId);
-          if (updateError) return { error: updateError.message };
-          changed += 1;
-          continue;
+      try {
+        if (plan.vehicleId) {
+          const found = await db.collection(COLLECTIONS.vehicles).doc(plan.vehicleId).get();
+          if (found.exists) {
+            await found.ref.set(writePayload(snapshot), { merge: true });
+            changed += 1;
+            continue;
+          }
         }
+        const id = plan.vehicleId || crypto.randomUUID();
+        await db.collection(COLLECTIONS.vehicles).doc(id).set({
+          id,
+          ...writePayload(snapshot),
+          created_by: auth.session.id,
+          created_at: new Date(),
+        });
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : "save_failed" };
       }
-      const { error: insertError } = await supabase.from("vehicles").insert({
-        ...writePayload(snapshot),
-        ...(plan.vehicleId ? { id: plan.vehicleId } : {}),
-        created_by: auth.session.id,
-      });
-      if (insertError) return { error: insertError.message };
       changed += 1;
     }
   }
 
-  if (direction === "undo") {
-    const { error: statusError } = await supabase
-      .from("vehicle_import_batches")
-      .update({
-        status: "undone",
-        undone_at: new Date().toISOString(),
-        undo_seq: nextUndoSeq(tips),
-        redoable: true,
-      })
-      .eq("id", target);
-    if (statusError) return { error: statusError.message };
-  } else {
-    const { error: statusError } = await supabase
-      .from("vehicle_import_batches")
-      .update({ status: "applied", undone_at: null, redoable: true })
-      .eq("id", target);
-    if (statusError) return { error: statusError.message };
+  try {
+    if (direction === "undo") {
+      await db.collection(BATCHES).doc(target).set(
+        {
+          status: "undone",
+          undone_at: new Date().toISOString(),
+          undo_seq: nextUndoSeq(tips),
+          redoable: true,
+        },
+        { merge: true },
+      );
+    } else {
+      await db.collection(BATCHES).doc(target).set(
+        { status: "applied", undone_at: null, redoable: true },
+        { merge: true },
+      );
+    }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "save_failed" };
   }
 
   void logAdminMutation({

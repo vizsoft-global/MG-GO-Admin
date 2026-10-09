@@ -1,5 +1,7 @@
 "use server";
 
+import { staffClient } from "@/features/drivers/driver-uniqueness";
+
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
@@ -16,7 +18,6 @@ import {
   parseOptions,
   validateDefinitionInput,
 } from "@/lib/custom-fields/validate";
-import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 
 function mapRow(row: {
@@ -97,8 +98,8 @@ export async function listCustomFieldDefinitions(
   const session = await requireDriversView();
   if (!session) return [];
 
-  const supabase = await createClient();
-  let query = supabase
+  const db = await staffClient();
+  let query = db
     .from("custom_field_definitions")
     .select("*")
     .eq("entity_type", entityType)
@@ -137,11 +138,11 @@ export async function upsertCustomFieldDefinition(
       : [];
   const lettersOnly =
     input.field_type === "text" ? Boolean(input.letters_only) : false;
-  const supabase = await createClient();
+  const db = await staffClient();
   const now = new Date().toISOString();
 
   if (input.id) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("custom_field_definitions")
       .update({
         label: input.label.trim(),
@@ -174,13 +175,13 @@ export async function upsertCustomFieldDefinition(
     return { success: true, id: data.id };
   }
 
-  const { count } = await supabase
+  const { count } = await db
     .from("custom_field_definitions")
     .select("id", { count: "exact", head: true })
     .eq("entity_type", entityType)
     .is("archived_at", null);
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("custom_field_definitions")
     .insert({
       entity_type: entityType,
@@ -219,8 +220,8 @@ export async function setCustomFieldActive(
   const session = await requireDriversManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await createClient();
-  const { error } = await supabase
+  const db = await staffClient();
+  const { error } = await db
     .from("custom_field_definitions")
     .update({ is_active: active, updated_at: new Date().toISOString() })
     .eq("id", id)
@@ -243,8 +244,8 @@ export async function archiveCustomFieldDefinition(
   const session = await requireDriversManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await createClient();
-  const { error } = await supabase
+  const db = await staffClient();
+  const { error } = await db
     .from("custom_field_definitions")
     .update({
       is_active: false,
@@ -271,11 +272,11 @@ export async function reorderCustomFieldDefinitions(
   if (!session) return { error: "not_authorized" };
   if (ids.length === 0) return { success: true };
 
-  const supabase = await createClient();
+  const db = await staffClient();
   const now = new Date().toISOString();
   const results = await Promise.all(
     ids.map((id, index) =>
-      supabase
+      db
         .from("custom_field_definitions")
         .update({ sort_order: index, updated_at: now })
         .eq("id", id)
@@ -284,4 +285,13 @@ export async function reorderCustomFieldDefinitions(
   );
   if (results.some((r) => r.error)) return { error: "save_failed" };
   return { success: true };
+}
+
+export async function listAdminRoleOptions(): Promise<Array<{ id: string; name: string; slug: string }>> {
+  const session = await getSessionUser();
+  if (!session) return [];
+  const db = await staffClient();
+  const { data, error } = await db.from("admin_roles").select("id, name, slug").order("name");
+  if (error || !data) return [];
+  return data as Array<{ id: string; name: string; slug: string }>;
 }

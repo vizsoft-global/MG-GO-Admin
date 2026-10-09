@@ -1,3 +1,4 @@
+import { staffClient } from "@/features/drivers/driver-uniqueness";
 import * as XLSX from "xlsx";
 import {
   TEMPLATE_COLUMNS_PARAM,
@@ -13,7 +14,6 @@ import {
   zonesLookupAoa,
 } from "@/features/drivers/import/lookups";
 import { fetchDriverImportLookups } from "@/features/drivers/drivers-import-actions";
-import { createClient } from "@/lib/supabase/server";
 import {
   DRIVER_ENTITY_TYPE,
   type CustomFieldOption,
@@ -21,9 +21,9 @@ import {
 } from "@/lib/custom-fields/types";
 
 export async function GET(request: Request) {
-  const supabase = await createClient();
+  const db = await staffClient();
   const [{ data: defs }, lookups, { data: companies }] = await Promise.all([
-    supabase
+    db
       .from("custom_field_definitions")
       .select("key, label, field_type, options")
       .eq("entity_type", DRIVER_ENTITY_TYPE)
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
       .is("archived_at", null)
       .order("sort_order", { ascending: true }),
     fetchDriverImportLookups(),
-    supabase
+    db
       .from("source_companies")
       .select("name, client_code, is_active, is_system")
       .order("sort_order", { ascending: true }),

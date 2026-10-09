@@ -1,9 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
+import { getFirebaseStorage } from "@/lib/firebase/admin";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import { isEsignStaffSignerRole } from "./esign-signers";
 import type {
   EsignCounterSignatureState,
@@ -15,6 +16,24 @@ import type {
 } from "./types";
 
 const ESIGN_BUCKET = "esign-documents";
+
+async function uploadEsignObject(
+  key: string,
+  bytes: Buffer,
+  contentType: string,
+): Promise<{ error: string | null }> {
+  const storage = await getFirebaseStorage();
+  if (!storage) return { error: "not_configured" };
+  try {
+    const file = storage.bucket().file(`${ESIGN_BUCKET}/${key}`);
+    const [exists] = await file.exists();
+    if (exists) return { error: "already_exists" };
+    await file.save(bytes, { contentType, resumable: false });
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "upload_failed" };
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -77,8 +96,7 @@ export async function fetchEsignSigners(requestId: string): Promise<{
   error?: string;
 }> {
   await requireEsignManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_list_esign_signers", {
+  const { data, error } = await callAdminFunction("admin_list_esign_signers", {
     p_request_id: requestId,
   });
   if (error) {
@@ -118,8 +136,7 @@ export async function fetchEsignSignerOptions(): Promise<{
   error?: string;
 }> {
   await requireEsignManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_esign_signer_options");
+  const { data, error } = await callAdminFunction("admin_esign_signer_options");
   if (error) return { rows: [], error: error.message };
   const payload = asRecord(data);
   if (payload.ok === false) return { rows: [], error: String(payload.error ?? "failed") };
@@ -146,8 +163,7 @@ export async function addEsignSigner(input: {
   await requireEsignManage();
   const role = input.role ?? "countersigner";
   if (!isEsignStaffSignerRole(role)) return { ok: false, error: "invalid_role" };
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_add_esign_signer", {
+  const { data, error } = await callAdminFunction("admin_add_esign_signer", {
     p_request_id: input.request_id,
     p_staff_user_id: input.staff_user_id,
     p_role: role,
@@ -170,8 +186,7 @@ export async function removeEsignSigner(
   signerId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireEsignManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_remove_esign_signer", {
+  const { data, error } = await callAdminFunction("admin_remove_esign_signer", {
     p_signer_id: signerId,
   });
   if (error) return { ok: false, error: error.message };
@@ -191,8 +206,7 @@ export async function fetchMyEsignSignatures(readyOnly = true): Promise<{
   error?: string;
 }> {
   await requireEsignSign();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_list_my_esign_signatures", {
+  const { data, error } = await callAdminFunction("admin_list_my_esign_signatures", {
     p_ready_only: readyOnly,
   });
   if (error) return { rows: [], error: error.message };
@@ -233,12 +247,9 @@ export async function uploadStaffEsignSignature(
   await requireEsignSign();
   const raw = pngBase64.includes(",") ? pngBase64.split(",")[1] ?? "" : pngBase64;
   if (!raw) return { ok: false, error: "empty_signature" };
-  const supabase = await createClient();
   const key = `admin/sign/${crypto.randomUUID()}.png`;
-  const { error } = await supabase.storage
-    .from(ESIGN_BUCKET)
-    .upload(key, Buffer.from(raw, "base64"), { contentType: "image/png", upsert: false });
-  if (error) return { ok: false, error: error.message };
+  const uploaded = await uploadEsignObject(key, Buffer.from(raw, "base64"), "image/png");
+  if (uploaded.error) return { ok: false, error: uploaded.error };
   return { ok: true, key };
 }
 
@@ -247,8 +258,7 @@ export async function submitMyEsignSignature(input: {
   signature_storage_key: string;
 }): Promise<{ ok: boolean; counter_signature_state?: EsignCounterSignatureState; error?: string }> {
   await requireEsignSign();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_submit_esign_signature", {
+  const { data, error } = await callAdminFunction("admin_submit_esign_signature", {
     p_request_id: input.request_id,
     p_signature_storage_key: input.signature_storage_key,
     p_signer_meta: {},
@@ -269,8 +279,7 @@ export async function declineMyEsignSignature(input: {
   reason?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireEsignSign();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_decline_esign_signature", {
+  const { data, error } = await callAdminFunction("admin_decline_esign_signature", {
     p_request_id: input.request_id,
     p_reason: input.reason ?? null,
   });

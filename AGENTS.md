@@ -4,6 +4,14 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+## Language (mandatory)
+
+Always respond to the user in **Kannada (ಕನ್ನಡ)**.
+
+Keep code, file paths, commands, identifiers, and error messages in their original form (usually English). Explanations, summaries, and UI-facing guidance go in Kannada.
+
+Applies to every agent and subagent working in this repo — this file is the global ruleset; `.cursor/rules/KA.mdc` mirrors it for Cursor.
+
 ## Stack — production only
 
 Do not use the retired testing stack. Local `.env.local`, migrations, and Vercel deploys all target production.
@@ -12,7 +20,8 @@ Do not use the retired testing stack. Local `.env.local`, migrations, and Vercel
 |-------|------------|
 | Admin URL | https://dpdadmin-prod.vercel.app |
 | Vercel project | `dpdadmin-prod` |
-| Supabase | `eoksxkdssptgyqyywdju` (`dpd-production`) |
+| Backend | Firestore + Cloud Functions on `musallam-delivery-prod` (`me-central2`) |
+| Supabase | paused `eoksxkdssptgyqyywdju` — admin no longer calls it |
 | R2 | `dpd-private-prod` |
 | Firebase | `musallam-delivery-prod` |
 

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { logDriverChange } from "@/features/drivers/driver-change-log";
 import { requireDriversManagerApi } from "@/lib/auth/require-drivers-manager";
 import { validateDocumentFile } from "@/features/drivers/driver-form-validation";
 import {
   DOCUMENT_TYPES,
   type DriverDocumentType,
 } from "@/features/drivers/types";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { isR2Configured } from "@/lib/storage/r2-config";
 import {
   allDocumentKeysForType,
@@ -21,6 +23,10 @@ import {
   extensionFromMime,
 } from "@/lib/storage/r2-keys";
 import { deleteObjects, putObject } from "@/lib/storage/r2-client";
+
+function linkedProfileId(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
 
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireDriversManagerApi();
@@ -58,19 +64,17 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: fileError }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const { data: intake } = await supabase
-    .from("driver_intakes")
-    .select("id, linked_profile_id")
-    .eq("id", intakeId)
-    .is("archived_at", null)
-    .maybeSingle();
+  const db = await staffDb();
+  if (!db) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
 
-  if (!intake) {
+  const intake = await db.collection(COLLECTIONS.driverIntakes).doc(intakeId).get();
+  if (!intake.exists || intake.get("archived_at") != null) {
     return NextResponse.json({ error: "save_failed" }, { status: 404 });
   }
 
-  const linkedId = intake.linked_profile_id;
+  const linkedId = linkedProfileId(intake.get("linked_profile_id"));
   if (driverProfileId && linkedId && driverProfileId !== linkedId) {
     return NextResponse.json({ error: "not_authorized" }, { status: 403 });
   }
@@ -111,22 +115,25 @@ export async function POST(request: Request): Promise<Response> {
 
   if (source === "driver" && targetDriverId) {
     const expiry = parseExpiryConfigFromForm(formData, docType);
-
-    await supabase
-      .from("driver_documents")
-      .delete()
-      .eq("driver_id", targetDriverId)
-      .eq("doc_type", docType);
-
-    const { error: insertErr } = await supabase.from("driver_documents").insert({
-      driver_id: targetDriverId,
-      doc_type: docType,
-      file_url: objectKey,
-      expires_at: expiry.trackExpiry ? expiry.expiresAt : null,
-      updated_at: new Date().toISOString(),
-    });
-
-    if (insertErr) {
+    const existing = await db
+      .collection(COLLECTIONS.driverDocuments)
+      .where("driver_id", "==", targetDriverId)
+      .get();
+    const matches = existing.docs.filter((doc) => doc.get("doc_type") === docType);
+    try {
+      const batch = db.batch();
+      for (const doc of matches) batch.delete(doc.ref);
+      const ref = db.collection(COLLECTIONS.driverDocuments).doc();
+      batch.set(ref, {
+        id: ref.id,
+        driver_id: targetDriverId,
+        doc_type: docType,
+        file_url: objectKey,
+        expires_at: expiry.trackExpiry ? expiry.expiresAt : null,
+        updated_at: new Date(),
+      });
+      await batch.commit();
+    } catch {
       return NextResponse.json({ error: "save_failed" }, { status: 500 });
     }
 
@@ -163,7 +170,6 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "upload_failed" }, { status: 500 });
   }
 
-  const { logDriverChange } = await import("@/features/drivers/driver-change-log");
   void logDriverChange({
     intakeId,
     driverId: targetDriverId,

@@ -1,6 +1,7 @@
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
-import { withDeadline } from "@/lib/supabase/deadline";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
+import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
+import { withDeadline } from "@/lib/async/deadline";
 
 export type AppOpsSettings = {
   maintenanceMode: boolean;
@@ -10,34 +11,28 @@ export type AppOpsSettings = {
 
 const OPS_SETTINGS_BUDGET_MS = 5_000;
 
+const FALLBACK: AppOpsSettings = {
+  maintenanceMode: false,
+  superAdminClaimed: false,
+  superAdminUserId: null,
+};
+
 async function fetchAppOpsSettings(): Promise<AppOpsSettings> {
   try {
-    const supabase = await createClient({ timeoutMs: OPS_SETTINGS_BUDGET_MS });
-    const { data, error } = await supabase
-      .from("app_settings")
-      .select("maintenance_mode, super_admin_claimed, super_admin_user_id")
-      .eq("id", 1)
-      .maybeSingle();
+    const db = await getFirebaseFirestore();
+    if (!db) return FALLBACK;
 
-    if (error || !data) {
-      return {
-        maintenanceMode: false,
-        superAdminClaimed: false,
-        superAdminUserId: null,
-      };
-    }
+    const snap = await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).get();
+    if (!snap.exists) return FALLBACK;
 
+    const data = snap.data() ?? {};
     return {
       maintenanceMode: data.maintenance_mode ?? false,
       superAdminClaimed: data.super_admin_claimed ?? false,
-      superAdminUserId: data.super_admin_user_id,
+      superAdminUserId: (data.super_admin_user_id as string | null) ?? null,
     };
   } catch {
-    return {
-      maintenanceMode: false,
-      superAdminClaimed: false,
-      superAdminUserId: null,
-    };
+    return FALLBACK;
   }
 }
 
@@ -48,9 +43,5 @@ async function fetchAppOpsSettings(): Promise<AppOpsSettings> {
  * the proxy.
  */
 export const getAppOpsSettings = cache(() =>
-  withDeadline(fetchAppOpsSettings(), OPS_SETTINGS_BUDGET_MS, () => ({
-    maintenanceMode: false,
-    superAdminClaimed: false,
-    superAdminUserId: null,
-  })),
+  withDeadline(fetchAppOpsSettings(), OPS_SETTINGS_BUDGET_MS, () => FALLBACK),
 );

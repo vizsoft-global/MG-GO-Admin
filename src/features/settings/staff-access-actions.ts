@@ -1,7 +1,8 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { CATALOG_SLUG_SET } from "@/lib/auth/permission-catalog";
 import {
@@ -19,6 +20,8 @@ import {
   type StaffDepartment,
 } from "@/lib/auth/app-access";
 import { logAdminActivity } from "@/lib/audit/log-admin-activity";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 
 export type StaffLastChanged = {
   by: string | null;
@@ -67,6 +70,25 @@ export type StaffAccessDetail = {
   lastChanged: StaffLastChanged;
 };
 
+function iso(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  return null;
+}
+
+function slugsOf(data: DocumentData | undefined): string[] {
+  const raw = data?.permission_slugs;
+  return Array.isArray(raw) ? raw.filter((slug): slug is string => typeof slug === "string") : [];
+}
+
 async function requireSuperAdmin() {
   const session = await getSessionUser();
   if (!session?.isSuperAdmin) {
@@ -80,45 +102,80 @@ function matrixSlugs(slugs: string[]): string[] {
 }
 
 async function lastChangedByEntities(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Firestore,
   entityIds: string[],
 ): Promise<Map<string, StaffLastChanged>> {
   const map = new Map<string, StaffLastChanged>();
   if (entityIds.length === 0) return map;
 
-  const { data: logs } = await supabase
-    .from("admin_activity_logs")
-    .select("entity_id, admin_user_id, created_at")
-    .eq("entity_type", "staff_access")
-    .eq("success", true)
-    .in("entity_id", entityIds)
-    .order("created_at", { ascending: false })
-    .limit(400);
+  const wanted = new Set(entityIds);
+  const logs: Array<{ entity_id: string; admin_user_id: string | null; created_at: string }> = [];
+  const pushLog = (data: DocumentData) => {
+    const entityId = typeof data.entity_id === "string" ? data.entity_id : "";
+    if (!entityId || !wanted.has(entityId)) return;
+    logs.push({
+      entity_id: entityId,
+      admin_user_id: typeof data.admin_user_id === "string" ? data.admin_user_id : null,
+      created_at: iso(data.created_at) ?? "",
+    });
+  };
+
+  try {
+    for (let i = 0; i < entityIds.length; i += 30) {
+      const part = entityIds.slice(i, i + 30);
+      const snap = await db
+        .collection(COLLECTIONS.adminActivityLogs)
+        .where("entity_type", "==", "staff_access")
+        .where("success", "==", true)
+        .where("entity_id", "in", part)
+        .orderBy("created_at", "desc")
+        .limit(400)
+        .get();
+      for (const doc of snap.docs) pushLog(doc.data());
+    }
+  } catch {
+    logs.length = 0;
+    const snap = await db
+      .collection(COLLECTIONS.adminActivityLogs)
+      .where("entity_type", "==", "staff_access")
+      .orderBy("created_at", "desc")
+      .limit(400)
+      .get();
+    for (const doc of snap.docs) {
+      if (doc.data().success !== true) continue;
+      pushLog(doc.data());
+    }
+  }
+
+  logs.sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   const actorIds = new Set<string>();
-  for (const row of logs ?? []) {
-    if (!row.entity_id || map.has(row.entity_id)) continue;
-    map.set(row.entity_id, { by: null, at: row.created_at });
+  for (const row of logs) {
+    if (map.has(row.entity_id)) continue;
+    map.set(row.entity_id, { by: null, at: row.created_at || null });
     if (row.admin_user_id) actorIds.add(row.admin_user_id);
   }
 
   if (actorIds.size === 0) return map;
 
-  const { data: actors } = await supabase
-    .from("profiles")
-    .select("id, full_name, email")
-    .in("id", [...actorIds]);
-
+  const actorRefs = [...actorIds].map((id) => db.collection(COLLECTIONS.profiles).doc(id));
+  const actors = actorRefs.length > 0 ? await db.getAll(...actorRefs) : [];
   const names = new Map(
-    (actors ?? []).map((row) => [row.id, row.full_name ?? row.email ?? null] as const),
+    actors.map((snap) => {
+      const data = snap.data();
+      const name =
+        (typeof data?.full_name === "string" && data.full_name) ||
+        (typeof data?.email === "string" && data.email) ||
+        null;
+      return [snap.id, name] as const;
+    }),
   );
 
-  for (const row of logs ?? []) {
-    if (!row.entity_id) continue;
+  for (const row of logs) {
     const current = map.get(row.entity_id);
-    if (!current || current.by || current.at !== row.created_at) continue;
+    if (!current || current.by || current.at !== (row.created_at || null)) continue;
     map.set(row.entity_id, {
-      at: row.created_at,
+      at: row.created_at || null,
       by: row.admin_user_id ? (names.get(row.admin_user_id) ?? null) : null,
     });
   }
@@ -133,50 +190,74 @@ export async function listStaffAccess(): Promise<{
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      "id, full_name, email, access_kind, staff_department, admin_role_id, updated_at, admin_roles(name, slug, is_super_admin)",
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" };
+
+  const snap = await db.collection(COLLECTIONS.profiles).where("role", "==", "staff").get();
+  const people = snap.docs.map(
+    (doc) => ({ id: doc.id, ...doc.data() }) as { id: string } & Record<string, unknown>,
+  )
+    .filter(
+      (row) => row.approval_status === "approved" && (row.archived_at == null || row.archived_at === ""),
     )
-    .eq("role", "staff")
-    .eq("approval_status", "approved")
-    .is("archived_at", null)
-    .order("full_name", { ascending: true, nullsFirst: false });
+    .sort((a, b) => {
+      const aName = typeof a.full_name === "string" && a.full_name ? a.full_name : "\uffff";
+      const bName = typeof b.full_name === "string" && b.full_name ? b.full_name : "\uffff";
+      return aName.localeCompare(bName);
+    });
 
-  if (error) return { error: error.message };
+  const ids = people.map((row) => row.id);
+  const roleIds = [
+    ...new Set(
+      people
+        .map((row) => (typeof row.admin_role_id === "string" ? row.admin_role_id : ""))
+        .filter(Boolean),
+    ),
+  ];
 
-  const ids = (data ?? []).map((row) => row.id);
+  const [tickSnaps, roleSnaps] = await Promise.all([
+    ids.length
+      ? db.getAll(...ids.map((id) => db.collection(COLLECTIONS.adminUserPermissions).doc(id)))
+      : Promise.resolve([]),
+    roleIds.length
+      ? db.getAll(...roleIds.map((id) => db.collection(COLLECTIONS.adminRoles).doc(id)))
+      : Promise.resolve([]),
+  ]);
+
   const slugsByUser = new Map<string, string[]>();
-  if (ids.length > 0) {
-    const { data: ticks } = await supabase
-      .from("admin_user_permissions")
-      .select("user_id, permission_slug")
-      .in("user_id", ids);
-    for (const row of ticks ?? []) {
-      const list = slugsByUser.get(row.user_id) ?? [];
-      if (isStaffMatrixSlug(row.permission_slug)) list.push(row.permission_slug);
-      slugsByUser.set(row.user_id, list);
-    }
+  for (const tick of tickSnaps) {
+    const slugs = slugsOf(tick.data()).filter(isStaffMatrixSlug);
+    slugsByUser.set(tick.id, slugs);
   }
 
-  const lastChanged = await lastChangedByEntities(supabase, ids);
+  const roles = new Map(
+    roleSnaps.map((role) => {
+      const data = role.data() ?? {};
+      return [
+        role.id,
+        {
+          name: typeof data.name === "string" ? data.name : "",
+          slug: typeof data.slug === "string" ? data.slug : "",
+          is_super_admin: data.is_super_admin === true,
+        },
+      ] as const;
+    }),
+  );
+
+  const lastChanged = await lastChangedByEntities(db, ids);
 
   return {
-    rows: (data ?? []).map((row) => {
-      const role = row.admin_roles as {
-        name: string;
-        slug: string;
-        is_super_admin: boolean;
-      } | null;
+    rows: people.map((row) => {
+      const roleId = typeof row.admin_role_id === "string" ? row.admin_role_id : null;
+      const role = roleId ? roles.get(roleId) : undefined;
       const slugs = slugsByUser.get(row.id) ?? [];
       const fullAccess = role?.is_super_admin === true || parseStaffAccessKind(row.access_kind) === "manager";
       return {
         id: row.id,
-        fullName: row.full_name,
-        email: row.email,
+        fullName: typeof row.full_name === "string" ? row.full_name : null,
+        email: typeof row.email === "string" ? row.email : null,
         accessKind: parseStaffAccessKind(row.access_kind),
-        roleId: row.admin_role_id,
+        roleId,
         roleName: role?.name ?? null,
         roleSlug: role?.slug ?? null,
         isSuperAdmin: role?.is_super_admin === true,
@@ -185,7 +266,7 @@ export async function listStaffAccess(): Promise<{
         staffDepartment: parseStaffDepartment(row.staff_department),
         slugs,
         lastChanged: lastChanged.get(row.id) ?? { by: null, at: null },
-        updatedAt: row.updated_at,
+        updatedAt: iso(row.updated_at) ?? "",
       };
     }),
   };
@@ -198,46 +279,40 @@ export async function getStaffAccess(userId: string): Promise<{
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      "id, full_name, email, access_kind, staff_department, admin_role_id, admin_roles(name, is_super_admin)",
-    )
-    .eq("id", userId)
-    .eq("role", "staff")
-    .maybeSingle();
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" };
 
-  if (error || !data) return { error: "user_not_found" };
+  const snap = await db.collection(COLLECTIONS.profiles).doc(userId).get();
+  const data = snap.data();
+  if (!snap.exists || !data || data.role !== "staff") return { error: "user_not_found" };
 
-  const role = data.admin_roles as { name: string; is_super_admin: boolean } | null;
-  const { data: ticks } = await supabase
-    .from("admin_user_permissions")
-    .select("permission_slug")
-    .eq("user_id", userId);
+  const roleId = typeof data.admin_role_id === "string" ? data.admin_role_id : null;
+  const [roleSnap, tickSnap, grantSnap, lastChanged] = await Promise.all([
+    roleId ? db.collection(COLLECTIONS.adminRoles).doc(roleId).get() : Promise.resolve(null),
+    db.collection(COLLECTIONS.adminUserPermissions).doc(userId).get(),
+    db.collection(COLLECTIONS.requestStaffAccess).where("profile_id", "==", userId).get(),
+    lastChangedByEntities(db, [userId]),
+  ]);
 
-  const { data: grants } = await supabase
-    .from("request_staff_access")
-    .select("request_type, access_level")
-    .eq("profile_id", userId);
-
-  const lastChanged = await lastChangedByEntities(supabase, [userId]);
-
+  const role = roleSnap?.data();
   return {
     detail: {
-      id: data.id,
-      fullName: data.full_name,
-      email: data.email,
+      id: snap.id,
+      fullName: typeof data.full_name === "string" ? data.full_name : null,
+      email: typeof data.email === "string" ? data.email : null,
       accessKind: parseStaffAccessKind(data.access_kind) ?? "user",
-      roleId: data.admin_role_id,
-      roleName: role?.name ?? null,
+      roleId,
+      roleName: typeof role?.name === "string" ? role.name : null,
       isSuperAdmin: role?.is_super_admin === true,
-      slugs: (ticks ?? []).map((row) => row.permission_slug).filter(isStaffMatrixSlug),
+      slugs: slugsOf(tickSnap.data()).filter(isStaffMatrixSlug),
       staffDepartment: parseStaffDepartment(data.staff_department),
-      requestTypes: (grants ?? []).map((row) => ({
-        requestType: row.request_type,
-        accessLevel: row.access_level === "approver" ? "approver" : "view_only",
-      })),
+      requestTypes: grantSnap.docs.map((doc) => {
+        const grant = doc.data();
+        return {
+          requestType: String(grant.request_type ?? ""),
+          accessLevel: grant.access_level === "approver" ? "approver" : "view_only",
+        };
+      }),
       lastChanged: lastChanged.get(userId) ?? { by: null, at: null },
     },
   };
@@ -250,22 +325,28 @@ export async function listRequestTypeOptions(): Promise<{
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("request_type_definitions")
-    .select("key, label_en, label_ar, is_active, sort_order")
-    .eq("is_active", true)
-    .order("sort_order");
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" };
 
-  if (error) return { error: error.message };
+  const snap = await db
+    .collection(COLLECTIONS.requestTypeDefinitions)
+    .where("is_active", "==", true)
+    .get();
 
-  return {
-    rows: (data ?? []).map((row) => ({
-      key: row.key,
-      labelEn: row.label_en,
-      labelAr: row.label_ar,
-    })),
-  };
+  const rows = snap.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        key: typeof data.key === "string" ? data.key : doc.id,
+        labelEn: typeof data.label_en === "string" ? data.label_en : "",
+        labelAr: typeof data.label_ar === "string" ? data.label_ar : null,
+        sort: typeof data.sort_order === "number" ? data.sort_order : 0,
+      };
+    })
+    .sort((a, b) => a.sort - b.sort)
+    .map(({ key, labelEn, labelAr }) => ({ key, labelEn, labelAr }));
+
+  return { rows };
 }
 
 export async function saveStaffAccess(input: {
@@ -284,84 +365,73 @@ export async function saveStaffAccess(input: {
     return { error: "invalid_department" };
   }
 
-  const supabase = await createClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, access_kind, staff_department, role")
-    .eq("id", input.userId)
-    .eq("role", "staff")
-    .maybeSingle();
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" };
 
-  if (!profile) return { error: "user_not_found" };
+  const profileSnap = await db.collection(COLLECTIONS.profiles).doc(input.userId).get();
+  const profile = profileSnap.data();
+  if (!profileSnap.exists || !profile || profile.role !== "staff") return { error: "user_not_found" };
 
-  const { data: previousTicks } = await supabase
-    .from("admin_user_permissions")
-    .select("permission_slug")
-    .eq("user_id", input.userId);
-
-  const slugs = kind === "user" ? matrixSlugs(input.slugs) : [];
-  const beforeAccess = ticksToAppAccess(
-    (previousTicks ?? []).map((row) => row.permission_slug).filter(isStaffMatrixSlug),
+  const previousTicks = slugsOf(
+    (await db.collection(COLLECTIONS.adminUserPermissions).doc(input.userId).get()).data(),
   );
+  const slugs = kind === "user" ? matrixSlugs(input.slugs) : [];
+  const beforeAccess = ticksToAppAccess(previousTicks.filter(isStaffMatrixSlug));
   const afterAccess = ticksToAppAccess(slugs);
   const accessDiff = diffAccess(beforeAccess, afterAccess);
 
   const profilePatch: {
     access_kind: StaffAccessKind;
-    updated_at: string;
+    updated_at: Date;
     staff_department?: string | null;
   } = {
     access_kind: kind,
-    updated_at: new Date().toISOString(),
+    updated_at: new Date(),
   };
   if (input.department !== undefined) {
     profilePatch.staff_department = input.department;
   }
 
-  const { error: kindError } = await supabase
-    .from("profiles")
-    .update(profilePatch)
-    .eq("id", input.userId);
-
-  if (kindError) return { error: kindError.message };
-
-  const { error: deleteError } = await supabase
-    .from("admin_user_permissions")
-    .delete()
-    .eq("user_id", input.userId);
-
-  if (deleteError) return { error: deleteError.message };
-
-  if (slugs.length > 0) {
-    const { error: insertError } = await supabase.from("admin_user_permissions").insert(
-      slugs.map((permission_slug) => ({
-        user_id: input.userId,
-        permission_slug,
-      })),
+  try {
+    await profileSnap.ref.set(profilePatch, { merge: true });
+    await db.collection(COLLECTIONS.adminUserPermissions).doc(input.userId).set(
+      { permission_slugs: slugs },
+      { merge: true },
     );
-    if (insertError) return { error: insertError.message };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "save_failed" };
   }
 
   if (input.requestTypes) {
-    const { error: clearTypes } = await supabase
-      .from("request_staff_access")
-      .delete()
-      .eq("profile_id", input.userId);
-    if (clearTypes) return { error: clearTypes.message };
-
-    const rows = input.requestTypes.filter(
-      (row) => row.accessLevel === "view_only" || row.accessLevel === "approver",
-    );
-    if (rows.length > 0) {
-      const { error: insertTypes } = await supabase.from("request_staff_access").insert(
-        rows.map((row) => ({
+    try {
+      const existing = await db
+        .collection(COLLECTIONS.requestStaffAccess)
+        .where("profile_id", "==", input.userId)
+        .get();
+      const batch = db.batch();
+      for (const doc of existing.docs) batch.delete(doc.ref);
+      const rows = input.requestTypes.filter(
+        (row) => row.accessLevel === "view_only" || row.accessLevel === "approver",
+      );
+      for (const row of rows) {
+        const id = `${input.userId}_${row.requestType}`;
+        batch.set(db.collection(COLLECTIONS.requestStaffAccess).doc(id), {
+          id,
           profile_id: input.userId,
           request_type: row.requestType,
           access_level: row.accessLevel,
-        })),
-      );
-      if (insertTypes) return { error: insertTypes.message };
+        });
+      }
+      await batch.commit();
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "save_failed" };
     }
+  }
+
+  try {
+    await callAdminFunction("syncStaffClaims", { uid: input.userId });
+  } catch {
+    // Permission rows are already saved; claims refresh must not roll that back.
   }
 
   void logAdminActivity({
@@ -394,18 +464,12 @@ export async function copyRoleTemplateTicks(roleId: string): Promise<{
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("admin_role_permissions")
-    .select("permission_slug")
-    .eq("role_id", roleId);
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" };
 
-  if (error) return { error: error.message };
-
+  const snap = await db.collection(COLLECTIONS.adminRolePermissions).doc(roleId).get();
   return {
-    slugs: [...expandRoleSlugsToUserTicks((data ?? []).map((row) => row.permission_slug))].filter(
-      isStaffMatrixSlug,
-    ),
+    slugs: [...expandRoleSlugsToUserTicks(slugsOf(snap.data()))].filter(isStaffMatrixSlug),
   };
 }
 

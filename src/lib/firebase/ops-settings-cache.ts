@@ -1,10 +1,10 @@
 /**
  * Per-isolate cache for the two `app_settings` flags the proxy reads.
  *
- * The proxy read them on every navigation, which is a Supabase round trip per
- * request for a row that changes perhaps twice in the lifetime of the project.
- * Under the load that produced MIDDLEWARE_INVOCATION_TIMEOUT that read is pure
- * cost on the critical path.
+ * The proxy read them on every navigation, which is a database round trip per
+ * request for a document that changes perhaps twice in the lifetime of the
+ * project. Under the load that produced MIDDLEWARE_INVOCATION_TIMEOUT that read
+ * is pure cost on the critical path.
  */
 export type ProxyOpsSettings = {
   super_admin_claimed: boolean | null;

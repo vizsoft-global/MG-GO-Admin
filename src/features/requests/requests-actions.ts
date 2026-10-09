@@ -1,6 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { getFirebaseStorage } from "@/lib/firebase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
@@ -74,13 +78,170 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+type DocRow = Record<string, unknown> & { id: string };
+
+function cell(value: unknown): unknown {
+  if (value == null) return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  if (Array.isArray(value)) return value.map(cell);
+  return value;
+}
+
+function docRow(id: string, data: DocumentData | undefined): DocRow | null {
+  if (!data) return null;
+  const row: DocRow = { id };
+  for (const [key, value] of Object.entries(data)) row[key] = cell(value);
+  return row;
+}
+
+async function openDb(): Promise<Firestore | null> {
+  return staffDb();
+}
+
+async function getDoc(name: string, id: string): Promise<{ row: DocRow | null; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { row: null, error: "not_configured" };
+  try {
+    const snap = await db.collection(name).doc(id).get();
+    return { row: snap.exists ? docRow(snap.id, snap.data()) : null, error: null };
+  } catch (e) {
+    return { row: null, error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function listDocs(name: string): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    const snap = await db.collection(name).get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function queryDocs(
+  name: string,
+  filters: Array<[string, unknown]>,
+): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    let q: Query = db.collection(name);
+    for (const [field, value] of filters) q = q.where(field, "==", value);
+    const snap = await q.get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function docsByIds(name: string, ids: string[]): Promise<DocRow[]> {
+  const db = await openDb();
+  if (!db) return [];
+  const unique = [...new Set(ids.filter((id) => id.length > 0))];
+  const out: DocRow[] = [];
+  for (let i = 0; i < unique.length; i += 30) {
+    const chunk = unique.slice(i, i + 30);
+    const snaps = await db.getAll(...chunk.map((id) => db.collection(name).doc(id)));
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      const row = docRow(snap.id, snap.data());
+      if (row) out.push(row);
+    }
+  }
+  return out;
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  const as = String(a);
+  const bs = String(b);
+  return as < bs ? -1 : as > bs ? 1 : 0;
+}
+
+function sortRows(rows: DocRow[], keys: Array<[string, "asc" | "desc"]>): DocRow[] {
+  return [...rows].sort((left, right) => {
+    for (const [key, dir] of keys) {
+      const c = compareValues(left[key], right[key]);
+      if (c !== 0) return dir === "asc" ? c : -c;
+    }
+    return 0;
+  });
+}
+
+async function countDocs(
+  name: string,
+  filters: Array<[string, unknown]>,
+): Promise<{ count: number; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { count: 0, error: "not_configured" };
+  try {
+    let q: Query = db.collection(name);
+    for (const [field, value] of filters) q = q.where(field, "==", value);
+    const snap = await q.count().get();
+    return { count: snap.data().count, error: null };
+  } catch (e) {
+    return { count: 0, error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+const REQUEST_ATTACHMENTS_BUCKET = "request-attachments";
+
+function attachmentObjectPath(key: string): string {
+  const trimmed = key.replace(/^\/+/, "");
+  return trimmed.startsWith(`${REQUEST_ATTACHMENTS_BUCKET}/`)
+    ? trimmed
+    : `${REQUEST_ATTACHMENTS_BUCKET}/${trimmed}`;
+}
+
+async function uploadRequestAttachment(
+  key: string,
+  bytes: Buffer,
+  contentType: string,
+): Promise<{ error: string | null }> {
+  const storage = await getFirebaseStorage();
+  if (!storage) return { error: "not_configured" };
+  try {
+    const file = storage.bucket().file(attachmentObjectPath(key));
+    const [exists] = await file.exists();
+    if (exists) return { error: "already_exists" };
+    await file.save(bytes, { contentType, resumable: false });
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "upload_failed" };
+  }
+}
+
+async function signedAttachmentReadUrl(key: string): Promise<{ url: string | null; error?: string }> {
+  const storage = await getFirebaseStorage();
+  if (!storage) return { url: null, error: "not_configured" };
+  try {
+    const file = storage.bucket().file(attachmentObjectPath(key));
+    const [url] = await file.getSignedUrl({ action: "read", expires: Date.now() + 300_000 });
+    return { url };
+  } catch (e) {
+    return { url: null, error: e instanceof Error ? e.message : "sign_failed" };
+  }
+}
+
 export async function fetchRequestTypeCounts(): Promise<{
   counts: Record<string, { total: number; pending: number }>;
   error?: string;
 }> {
   await requireRequestsView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_count_requests_by_type");
+  const { data, error } = await callAdminFunction("admin_count_requests_by_type");
 
   if (error) return { counts: {}, error: error.message };
   const payload = asRecord(data);
@@ -109,10 +270,9 @@ export async function fetchAdminRequestsList(
   error?: string;
 }> {
   await requireRequestsView(extraView);
-  const supabase = await createClient();
   const { from, to } = datePresetToBounds(filters.datePreset);
 
-  const { data, error } = await supabase.rpc("admin_list_requests", {
+  const { data, error } = await callAdminFunction("admin_list_requests", {
     p_date_from: from ?? undefined,
     p_date_to: to ?? undefined,
     p_status: filters.status || undefined,
@@ -268,10 +428,9 @@ export async function fetchAdminRequestsTrend(
   > & { weeks?: number },
 ): Promise<RequestsTrend> {
   await requireRequestsView();
-  const supabase = await createClient();
   const { from, to } = datePresetToBounds(filters.datePreset);
 
-  const { data, error } = await supabase.rpc("admin_requests_trend", {
+  const { data, error } = await callAdminFunction("admin_requests_trend", {
     p_date_from: from ?? undefined,
     p_date_to: to ?? undefined,
     p_type: filters.type || undefined,
@@ -345,8 +504,7 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
   error?: string;
 }> {
   await requireRequestsView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_get_request", {
+  const { data, error } = await callAdminFunction("admin_get_request", {
     p_request_id: requestId,
   });
 
@@ -513,14 +671,7 @@ export async function fetchRequestAttachmentUrl(
     ? normalized.slice(REQUEST_ATTACHMENTS_PREFIX.length)
     : normalized;
 
-  const signRequestAttachment = async () => {
-    const supabase = await createClient();
-    const { data, error } = await supabase.storage
-      .from("request-attachments")
-      .createSignedUrl(requestObjectKey, 300);
-    if (data?.signedUrl) return { url: data.signedUrl };
-    return { url: null as string | null, error: error?.message };
-  };
+  const signRequestAttachment = () => signedAttachmentReadUrl(requestObjectKey);
 
   const signR2 = async () => {
     try {
@@ -589,15 +740,10 @@ export async function uploadStaffRequestAttachments(input: {
   await requireRequestsDecide();
   if (input.files.length === 0) return { ok: false, error: "attachment_required" };
 
-  const supabase = await createClient();
-  const { data: request, error: requestError } = await supabase
-    .from("requests")
-    .select("driver_id")
-    .eq("id", input.requestId)
-    .maybeSingle();
-  const driverId = request?.driver_id != null ? String(request.driver_id) : "";
-  if (requestError || !driverId) {
-    return { ok: false, error: requestError?.message ?? "not_found" };
+  const loaded = await getDoc(COLLECTIONS.requests, input.requestId);
+  const driverId = loaded.row?.driver_id != null ? String(loaded.row.driver_id) : "";
+  if (loaded.error || !driverId) {
+    return { ok: false, error: loaded.error ?? "not_found" };
   }
 
   const attachments: RequestDecisionAttachment[] = [];
@@ -610,11 +756,8 @@ export async function uploadStaffRequestAttachments(input: {
       return { ok: false, error: "invalid_attachment_size" };
     }
     const key = `${driverId}/${input.requestId}/${Date.now()}_${safeAttachmentName(file.name)}`;
-    const { error } = await supabase.storage.from("request-attachments").upload(key, bytes, {
-      contentType: type,
-      upsert: false,
-    });
-    if (error) return { ok: false, error: error.message };
+    const uploaded = await uploadRequestAttachment(key, bytes, type);
+    if (uploaded.error) return { ok: false, error: uploaded.error };
     attachments.push({
       storage_key: key,
       file_name: safeAttachmentName(file.name),
@@ -644,7 +787,6 @@ async function uploadOnBehalfCreateKindFiles(
   error?: string;
 }> {
   if (files.length === 0) return { ok: true, attachments: [] };
-  const supabase = await createClient();
   const attachments: Array<{
     storage_key: string;
     file_name: string;
@@ -665,11 +807,8 @@ async function uploadOnBehalfCreateKindFiles(
       return { ok: false, error: "invalid_attachment_size" };
     }
     const key = `${staffId}/create/${Date.now()}_${attachments.length}_${safeAttachmentName(file.name)}`;
-    const { error } = await supabase.storage.from("request-attachments").upload(key, bytes, {
-      contentType: type,
-      upsert: false,
-    });
-    if (error) return { ok: false, error: error.message };
+    const uploaded = await uploadRequestAttachment(key, bytes, type);
+    if (uploaded.error) return { ok: false, error: uploaded.error };
     attachments.push({
       storage_key: key,
       file_name: safeAttachmentName(file.name),
@@ -697,7 +836,6 @@ export async function decideAdminRequest(input: {
   if (input.action === "reschedule" && !(input.reason ?? "").trim()) {
     return { ok: false, error: "reschedule_note_required" };
   }
-  const supabase = await createClient();
   const meta = {
     ...buildDecisionMeta(input.terms, staffDisplayName(session)),
     ...(input.reschedule?.new_start_date
@@ -708,7 +846,7 @@ export async function decideAdminRequest(input: {
       : {}),
     ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   };
-  const { data, error } = await supabase.rpc("admin_decide_request", {
+  const { data, error } = await callAdminFunction("admin_decide_request", {
     p_request_id: input.requestId,
     p_action: input.action,
     p_reason: input.reason ?? undefined,
@@ -731,7 +869,6 @@ export async function decideAdminRequest(input: {
   }
 
   const followUp = await maybeAutoCompleteSickLeaveDocumentsStep(
-    supabase,
     input.requestId,
     input.action,
     staffDisplayName(session),
@@ -754,34 +891,23 @@ export async function decideAdminRequest(input: {
 }
 
 async function maybeAutoCompleteSickLeaveDocumentsStep(
-  supabase: Awaited<ReturnType<typeof createClient>>,
   requestId: string,
   action: string,
   staffName: string | null,
 ): Promise<{ ok: boolean; error?: string; status?: string } | null> {
   if (action !== "approve") return null;
 
-  const { data: request } = await supabase
-    .from("requests")
-    .select("request_type")
-    .eq("id", requestId)
-    .maybeSingle();
-  if (request?.request_type !== "sick_leave") return null;
+  const request = await getDoc(COLLECTIONS.requests, requestId);
+  if (request.row?.request_type !== "sick_leave") return null;
 
-  const { count } = await supabase
-    .from("request_attachments")
-    .select("id", { count: "exact", head: true })
-    .eq("request_id", requestId);
-  if (!count) return null;
+  const counted = await countDocs(COLLECTIONS.requestAttachments, [["request_id", requestId]]);
+  if (!counted.count) return null;
 
-  const { data: steps } = await supabase
-    .from("request_approval_steps")
-    .select("step_order, status")
-    .eq("request_id", requestId);
-  const active = (steps ?? []).find((row) => row.status === "in_progress");
+  const steps = await queryDocs(COLLECTIONS.requestApprovalSteps, [["request_id", requestId]]);
+  const active = steps.rows.find((row) => row.status === "in_progress");
   if (Number(active?.step_order) !== 4) return null;
 
-  const { data, error } = await supabase.rpc("admin_decide_request", {
+  const { data, error } = await callAdminFunction("admin_decide_request", {
     p_request_id: requestId,
     p_action: "approve",
     p_reason: undefined,
@@ -816,12 +942,11 @@ export async function decideAdminRequestsBulk(input: {
     return { ok: false, succeeded: [], failed: [], error: "reason_required" };
   }
 
-  const supabase = await createClient();
   const succeeded: string[] = [];
   const failed: Array<{ requestId: string; error: string }> = [];
 
   for (const requestId of input.requestIds) {
-    const { data, error } = await supabase.rpc("admin_decide_request", {
+    const { data, error } = await callAdminFunction("admin_decide_request", {
       p_request_id: requestId,
       p_action: input.action,
       p_reason: input.reason?.trim() || undefined,
@@ -835,7 +960,6 @@ export async function decideAdminRequestsBulk(input: {
     } else {
       succeeded.push(requestId);
       await maybeAutoCompleteSickLeaveDocumentsStep(
-        supabase,
         requestId,
         input.action,
         staffDisplayName(session),
@@ -867,53 +991,37 @@ export async function fetchRequestCreateOptions(): Promise<
   RequestCreateOptions & { error?: string }
 > {
   await requireRequestsManage();
-  const supabase = await createClient();
 
-  const [driversResult, tenuresResult, categoriesResult, typesResult, fieldsResult] =
+  const [driversListed, tenuresListed, categoriesListed, typesListed, fieldsListed] =
     await Promise.all([
-      supabase
-        .from("drivers")
-        .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name, phone)")
-        .is("archived_at", null)
-        .order("driver_code"),
-      supabase
-        .from("loan_tenure_options")
-        .select("months, label, is_active")
-        .eq("is_active", true)
-        .order("sort_order")
-        .order("months"),
-      supabase
-        .from("complaint_categories")
-        .select("key, label_en, is_active")
-        .eq("is_active", true)
-        .order("sort_order")
-        .order("label_en"),
-      supabase
-        .from("request_type_definitions")
-        .select(
-          "key, label_en, label_ar, is_system, is_active, sort_order, date_range_required, min_attachments",
-        )
-        .eq("is_active", true)
-        .order("sort_order"),
-      supabase
-        .from("request_field_definitions")
-        .select(
-          "type_key, field_key, label_en, label_ar, kind, target, is_required, sort_order, options_source, options",
-        )
-        .order("sort_order"),
+      listDocs(COLLECTIONS.drivers),
+      queryDocs("loan_tenure_options", [["is_active", true]]),
+      queryDocs("complaint_categories", [["is_active", true]]),
+      queryDocs(COLLECTIONS.requestTypeDefinitions, [["is_active", true]]),
+      listDocs(COLLECTIONS.requestFieldDefinitions),
     ]);
 
   const error =
-    driversResult.error?.message ??
-    tenuresResult.error?.message ??
-    categoriesResult.error?.message ??
-    typesResult.error?.message ??
-    fieldsResult.error?.message;
+    driversListed.error ??
+    tenuresListed.error ??
+    categoriesListed.error ??
+    typesListed.error ??
+    fieldsListed.error;
 
-  const types = (typesResult.data ?? []).map((row) => ({
-    key: row.key,
-    label_en: row.label_en,
-    label_ar: row.label_ar,
+  const liveDrivers = sortRows(
+    driversListed.rows.filter((row) => row.archived_at == null),
+    [["driver_code", "asc"]],
+  );
+  const profiles = await docsByIds(
+    COLLECTIONS.profiles,
+    liveDrivers.map((row) => row.id),
+  );
+  const profileById = new Map(profiles.map((row) => [row.id, row]));
+
+  const types = sortRows(typesListed.rows, [["sort_order", "asc"]]).map((row) => ({
+    key: String(row.key ?? row.id),
+    label_en: row.label_en != null ? String(row.label_en) : "",
+    label_ar: row.label_ar != null ? String(row.label_ar) : null,
     is_system: Boolean(row.is_system),
     date_range_required: Boolean(row.date_range_required),
     min_attachments: Number(row.min_attachments ?? 0),
@@ -921,26 +1029,32 @@ export async function fetchRequestCreateOptions(): Promise<
   const typeKeys = new Set(types.map((row) => row.key));
 
   return {
-    drivers: (driversResult.data ?? []).map((row) => {
-      const profile = asRecord(row.profiles);
+    drivers: liveDrivers.map((row) => {
+      const profile = profileById.get(row.id);
       return {
         id: row.id,
-        full_name: String(profile.full_name ?? row.driver_code ?? "—"),
-        driver_code: row.driver_code ?? "",
-        employee_id: row.employee_id,
-        phone: profile.phone != null ? String(profile.phone) : null,
+        full_name: String(profile?.full_name ?? row.driver_code ?? "—"),
+        driver_code: row.driver_code != null ? String(row.driver_code) : "",
+        employee_id: row.employee_id != null ? String(row.employee_id) : null,
+        phone: profile?.phone != null ? String(profile.phone) : null,
       };
     }),
-    loanTenures: (tenuresResult.data ?? []).map((row) => ({
+    loanTenures: sortRows(tenuresListed.rows, [
+      ["sort_order", "asc"],
+      ["months", "asc"],
+    ]).map((row) => ({
       months: Number(row.months),
-      label: row.label ?? `${row.months}`,
+      label: row.label != null ? String(row.label) : `${row.months}`,
     })),
-    complaintCategories: (categoriesResult.data ?? []).map((row) => ({
-      key: row.key,
-      label: row.label_en ?? row.key,
+    complaintCategories: sortRows(categoriesListed.rows, [
+      ["sort_order", "asc"],
+      ["label_en", "asc"],
+    ]).map((row) => ({
+      key: String(row.key ?? row.id),
+      label: row.label_en != null ? String(row.label_en) : String(row.key ?? row.id),
     })),
     types,
-    fields: (fieldsResult.data ?? [])
+    fields: sortRows(fieldsListed.rows, [["sort_order", "asc"]])
       .filter((row) => typeKeys.has(String(row.type_key)))
       .map((row) => ({
         type_key: String(row.type_key),
@@ -1010,9 +1124,7 @@ export async function createRequestOnBehalf(input: RequestCreateInput): Promise<
     pAttachments = uploaded.attachments;
   }
 
-  const supabase = await createClient();
-
-  const { data, error } = await supabase.rpc("admin_create_request", {
+  const { data, error } = await callAdminFunction("admin_create_request", {
     p_driver_id: input.driverId,
     p_type: input.type as "leave",
     p_payload: input.payload,
@@ -1055,8 +1167,7 @@ export async function setFuelTransferType(input: {
   transferType: FuelTransferType | null;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsDecide();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_set_fuel_transfer_type", {
+  const { data, error } = await callAdminFunction("admin_set_fuel_transfer_type", {
     p_request_id: input.requestId,
     // The RPC folds an empty string back to NULL, which is how a choice is cleared.
     p_transfer_type: input.transferType ?? "",
@@ -1088,8 +1199,7 @@ export async function saveRequestDecisionTerms(input: {
   const meta = buildDecisionMeta(input.terms, staffDisplayName(session));
   if (Object.keys(meta).length === 0) return { ok: false, error: "no_terms" };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_set_request_decision_meta", {
+  const { data, error } = await callAdminFunction("admin_set_request_decision_meta", {
     p_request_id: input.requestId,
     p_meta: meta,
   });
@@ -1115,17 +1225,14 @@ export async function fetchStaffForForward(): Promise<
   Array<{ id: string; full_name: string; email: string | null }>
 > {
   await requireRequestsDecide();
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("profiles")
-    .select("id, full_name, email")
-    .eq("role", "staff")
-    .eq("approval_status", "approved")
-    .order("full_name");
-  return (data ?? []).map((row) => ({
+  const listed = await queryDocs(COLLECTIONS.profiles, [
+    ["role", "staff"],
+    ["approval_status", "approved"],
+  ]);
+  return sortRows(listed.rows, [["full_name", "asc"]]).map((row) => ({
     id: row.id,
-    full_name: row.full_name ?? "—",
-    email: row.email,
+    full_name: row.full_name != null ? String(row.full_name) : "—",
+    email: row.email != null ? String(row.email) : null,
   }));
 }
 
@@ -1135,8 +1242,7 @@ export async function forwardAdminRequest(input: {
   note: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsDecide();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_forward_request", {
+  const { data, error } = await callAdminFunction("admin_forward_request", {
     p_request_id: input.requestId,
     p_to_user: input.toUserId,
     p_note: input.note,
@@ -1159,8 +1265,7 @@ export async function escalateAdminRequest(input: {
   note?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsDecide();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_escalate_request", {
+  const { data, error } = await callAdminFunction("admin_escalate_request", {
     p_request_id: input.requestId,
     p_note: input.note ?? "",
   });
@@ -1175,8 +1280,7 @@ export async function addAdminRequestComment(input: {
   body: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_add_request_comment", {
+  const { data, error } = await callAdminFunction("admin_add_request_comment", {
     p_request_id: input.requestId,
     p_body: input.body,
   });
@@ -1209,8 +1313,7 @@ export async function uploadIncomingDocument(input: {
   if (!uploaded.ok || !uploaded.attachments) {
     return { ok: false, error: uploaded.error ?? "upload_failed" };
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_upload_incoming_document", {
+  const { data, error } = await callAdminFunction("admin_upload_incoming_document", {
     p_driver_id: input.driverId,
     p_category: input.category,
     p_subject: input.subject,

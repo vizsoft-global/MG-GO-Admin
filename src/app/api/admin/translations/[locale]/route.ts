@@ -1,30 +1,16 @@
 import { NextResponse } from "next/server";
 import { readFile, writeFile } from "fs/promises";
 import path from "path";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/auth/get-session";
 import {
   flattenMessages,
   unflattenMessages,
 } from "@/lib/i18n/message-keys";
 
 async function requireSuperAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("admin_roles(is_super_admin)")
-    .eq("id", user.id)
-    .single();
-
-  const isSuperAdmin =
-    (profile as { admin_roles: { is_super_admin: boolean } | null } | null)
-      ?.admin_roles?.is_super_admin === true;
-
-  if (!isSuperAdmin) throw new Error("Forbidden");
+  const session = await getSessionUser();
+  if (!session) throw new Error("Unauthorized");
+  if (!session.isSuperAdmin) throw new Error("Forbidden");
 }
 
 export async function GET(

@@ -1,10 +1,11 @@
 "use server";
 
+import { staffClient, type StaffClient } from "./driver-uniqueness";
+
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { logAdminActivity } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
 import {
   CLIENT_CODE_RE,
   COMPANY_KEY_RE,
@@ -47,9 +48,9 @@ async function requirePermission(slug: Permission) {
 }
 
 async function loadCompanies(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
 ): Promise<SourceCompany[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("source_companies")
     .select(
       "key, name, client_code, is_active, is_system, sort_order, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
@@ -62,16 +63,16 @@ async function loadCompanies(
 
 export async function listSourceCompanies(): Promise<SourceCompany[]> {
   await requirePermission("drivers.view");
-  return loadCompanies(await createClient());
+  return loadCompanies(await staffClient());
 }
 
 /** Settings list: every company plus how many live riders reference it. */
 export async function listSourceCompaniesWithUsage(): Promise<SourceCompanyWithUsage[]> {
   await requirePermission("companies.view");
-  const supabase = await createClient();
+  const db = await staffClient();
   const [companies, { data: intakes, error }] = await Promise.all([
-    loadCompanies(supabase),
-    supabase
+    loadCompanies(db),
+    db
       .from("driver_intakes")
       .select("source_company, rider_category")
       .is("archived_at", null),
@@ -111,8 +112,8 @@ export async function upsertSourceCompany(input: {
   if (!name || name.length > 120) return { error: "invalid_company_name" };
   if (clientCode && !CLIENT_CODE_RE.test(clientCode)) return { error: "invalid_client_code" };
 
-  const supabase = await createClient();
-  const { data: before } = await supabase
+  const db = await staffClient();
+  const { data: before } = await db
     .from("source_companies")
     .select(
       "key, name, client_code, is_active, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
@@ -121,7 +122,7 @@ export async function upsertSourceCompany(input: {
     .maybeSingle();
   if (input.isNew && before) return { error: "invalid_company_key" };
 
-  const { error } = await supabase.rpc("admin_upsert_source_company", {
+  const { error } = await db.rpc("admin_upsert_source_company", {
     p_key: key,
     p_name: name,
     p_client_code: clientCode ?? "",

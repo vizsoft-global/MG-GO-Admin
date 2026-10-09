@@ -1,4 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
+import type { Firestore } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import type {
   DeliveryValidationResult,
   EarningsDailyListResult,
@@ -39,24 +42,45 @@ function deliveryMatchesRuleScopes(
   );
 }
 
+function isoOf(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  const ts = value as { toDate?: () => Date };
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  return null;
+}
+
+async function calculatorDb(): Promise<Firestore | null> {
+  return staffDb();
+}
+
 export async function validateDeliveryForRules(
   deliveryId: string,
 ): Promise<DeliveryValidationResult> {
-  const supabase = await createClient();
+  const db = await calculatorDb();
+  if (!db) {
+    return { eligible: false, matchedRuleIds: [], reasons: ["validation_failed"] };
+  }
 
-  const { data: delivery, error } = await supabase
-    .from("deliveries")
-    .select("id, status, zone_id, partner_id, restaurant_id, delivered_at")
-    .eq("id", deliveryId)
-    .maybeSingle();
-
-  if (error || !delivery) {
+  const deliverySnap = await db.collection(COLLECTIONS.deliveries).doc(deliveryId).get();
+  const deliveryData = deliverySnap.data();
+  if (!deliverySnap.exists || !deliveryData) {
     return {
       eligible: false,
       matchedRuleIds: [],
       reasons: ["delivery_not_found"],
     };
   }
+
+  const delivery = {
+    id: deliverySnap.id,
+    status: deliveryData.status == null ? null : String(deliveryData.status),
+    zone_id: deliveryData.zone_id == null ? null : String(deliveryData.zone_id),
+    partner_id: deliveryData.partner_id == null ? null : String(deliveryData.partner_id),
+    restaurant_id: deliveryData.restaurant_id == null ? null : String(deliveryData.restaurant_id),
+    delivered_at: isoOf(deliveryData.delivered_at),
+  };
 
   if (delivery.status !== "verified") {
     return {
@@ -75,7 +99,7 @@ export async function validateDeliveryForRules(
       }).format(new Date(delivery.delivered_at))
     : null;
 
-  const { data: matches, error: matchError } = await supabase.rpc(
+  const { data: matches, error: matchError } = await callAdminFunction(
     "delivery_matches_rules",
     {
       p_delivery_id: deliveryId,
@@ -91,17 +115,48 @@ export async function validateDeliveryForRules(
     };
   }
 
-  const { data: rules } = await supabase
-    .from("delivery_rules")
-    .select(
-      "id, name, scope_type, start_date, end_date, delivery_rule_scopes (zone_id, partner_id, restaurant_id)",
-    )
-    .eq("status", "active");
+  const rulesSnap = await db
+    .collection(COLLECTIONS.deliveryRules)
+    .where("status", "==", "active")
+    .get();
+  const ruleIds = rulesSnap.docs.map((doc) => doc.id);
+  const scopesByRule = new Map<string, RuleScopeRow[]>();
+  for (let i = 0; i < ruleIds.length; i += 30) {
+    const chunk = ruleIds.slice(i, i + 30);
+    const scopeSnap = await db
+      .collection(COLLECTIONS.deliveryRuleScopes)
+      .where("delivery_rule_id", "in", chunk)
+      .get();
+    for (const doc of scopeSnap.docs) {
+      const data = doc.data();
+      const ruleId = data.delivery_rule_id == null ? "" : String(data.delivery_rule_id);
+      if (!ruleId) continue;
+      const list = scopesByRule.get(ruleId) ?? [];
+      list.push({
+        zone_id: data.zone_id == null ? null : String(data.zone_id),
+        partner_id: data.partner_id == null ? null : String(data.partner_id),
+        restaurant_id: data.restaurant_id == null ? null : String(data.restaurant_id),
+      });
+      scopesByRule.set(ruleId, list);
+    }
+  }
+
+  const rules: DeliveryRuleWithScopes[] = rulesSnap.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      name: String(data.name ?? ""),
+      scope_type: String(data.scope_type ?? "zone") as DeliveryRuleWithScopes["scope_type"],
+      start_date: String(data.start_date ?? ""),
+      end_date: String(data.end_date ?? ""),
+      delivery_rule_scopes: scopesByRule.get(doc.id) ?? [],
+    };
+  });
 
   const matchedRuleIds: string[] = [];
   const reasons: string[] = [];
 
-  for (const rule of (rules ?? []) as DeliveryRuleWithScopes[]) {
+  for (const rule of rules) {
     if (
       deliverDate &&
       (deliverDate < rule.start_date || deliverDate > rule.end_date)
@@ -113,7 +168,7 @@ export async function validateDeliveryForRules(
     }
   }
 
-  if (!matches && (rules?.length ?? 0) > 0) {
+  if (!matches && rules.length > 0) {
     reasons.push("no_matching_scope");
   }
 
@@ -127,8 +182,7 @@ export async function validateDeliveryForRules(
 export async function previewDriverEarnings(
   earnDate: string,
 ): Promise<EarningsPreviewResult | { error: string }> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("preview_driver_earnings", {
+  const { data, error } = await callAdminFunction("preview_driver_earnings", {
     p_earn_date: earnDate,
   });
 
@@ -139,21 +193,19 @@ export async function previewDriverEarnings(
 export async function recalculateEarningsForDate(
   earnDate: string,
 ): Promise<{ count: number } | { error: string }> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("recalculate_earnings_for_date", {
+  const { data, error } = await callAdminFunction("recalculate_earnings_for_date", {
     p_earn_date: earnDate,
   });
 
   if (error) return { error: "recalc_failed" };
-  return { count: data ?? 0 };
+  return { count: (data as number | null) ?? 0 };
 }
 
 export async function recalculateDriverEarnings(
   driverId: string,
   earnDate: string,
 ): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("recalculate_driver_earnings", {
+  const { error } = await callAdminFunction("recalculate_driver_earnings", {
     p_driver_id: driverId,
     p_earn_date: earnDate,
   });
@@ -167,23 +219,21 @@ export async function recalculateEarningsForRange(
   endDate: string,
   driverId?: string | null,
 ): Promise<{ count: number } | { error: string }> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("recalculate_earnings_for_range", {
+  const { data, error } = await callAdminFunction("recalculate_earnings_for_range", {
     p_start_date: startDate,
     p_end_date: endDate,
     p_driver_id: driverId ?? undefined,
   });
 
   if (error) return { error: "recalc_failed" };
-  return { count: data ?? 0 };
+  return { count: (data as number | null) ?? 0 };
 }
 
 export async function getDriverEarningsDetail(
   driverId: string,
   earnDate: string,
 ): Promise<EarningsDetailResult | { error: string }> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_driver_earnings_detail", {
+  const { data, error } = await callAdminFunction("get_driver_earnings_detail", {
     p_driver_id: driverId,
     p_earn_date: earnDate,
   });
@@ -197,8 +247,7 @@ export async function listDriverEarningsDaily(
   endDate: string,
   driverId?: string | null,
 ): Promise<EarningsDailyListResult | { error: string }> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("list_driver_earnings_daily", {
+  const { data, error } = await callAdminFunction("list_driver_earnings_daily", {
     p_start_date: startDate,
     p_end_date: endDate,
     p_driver_id: driverId ?? undefined,

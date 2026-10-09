@@ -1,8 +1,8 @@
 "use server";
 
+import { staffClient } from "./driver-uniqueness";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createClient } from "@/lib/supabase/server";
 import {
   DRIVER_CHANGE_SOURCES,
   type DriverChangeEntry,
@@ -62,8 +62,8 @@ export async function listDriverChangeEvents(input: {
   if ("error" in auth) return { error: "not_authorized" };
   if (!input.intakeId) return { rows: [], nextCursor: null };
 
-  const supabase = await createClient();
-  let query = supabase
+  const db = await staffClient();
+  let query = db
     .from("driver_change_events")
     .select(
       "id, created_at, intake_id, driver_id, actor_id, actor_name, source, changes, context",

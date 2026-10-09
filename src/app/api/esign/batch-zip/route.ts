@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import type { DocumentData } from "firebase-admin/firestore";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getFirebaseStorage } from "@/lib/firebase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { contentDispositionAttachment } from "@/lib/storage/order-proof-url";
 import { ESIGN_BUCKET, normalizeEsignStorageKey } from "@/features/esign/esign-storage-key";
 import {
@@ -41,6 +43,52 @@ const MAX_ENTRIES = 500;
 /** A hard ceiling on buffered bytes, so one request cannot exhaust the function. */
 const MAX_TOTAL_BYTES = 256 * 1024 * 1024;
 
+type DocRow = Record<string, unknown> & { id: string };
+
+function cell(value: unknown): unknown {
+  if (value == null) return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  if (Array.isArray(value)) return value.map(cell);
+  return value;
+}
+
+function docRow(id: string, data: DocumentData | undefined): DocRow | null {
+  if (!data) return null;
+  const row: DocRow = { id };
+  for (const [key, value] of Object.entries(data)) row[key] = cell(value);
+  return row;
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  const as = String(a);
+  const bs = String(b);
+  return as < bs ? -1 : as > bs ? 1 : 0;
+}
+
+async function downloadEsignObject(key: string): Promise<Uint8Array | null> {
+  const storage = await getFirebaseStorage();
+  if (!storage) return null;
+  try {
+    const file = storage.bucket().file(`${ESIGN_BUCKET}/${key}`);
+    const [buf] = await file.download();
+    return new Uint8Array(buf);
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: Request) {
   const session = await getSessionUser();
   if (
@@ -53,47 +101,70 @@ export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get("id")?.trim() ?? "";
   if (!id) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
 
-  const supabase = await createClient();
-  const [{ data: batch, error: batchError }, { data: rows, error: rowsError }] = await Promise.all([
-    (supabase as any).from("esign_batches").select("batch_code, title").eq("id", id).maybeSingle(),
-    (supabase as any)
-      .from("esign_batch_rows")
-      .select(
-        `
-        row_index,
-        employee_id,
-        status,
-        esign_requests (
-          request_code,
-          status,
-          signed_document_storage_key,
-          drivers ( profiles!drivers_id_fkey ( full_name ) )
-        )
-      `,
-      )
-      .eq("batch_id", id)
-      .order("row_index", { ascending: true }),
-  ]);
+  const db = await staffDb();
+  if (!db) return NextResponse.json({ error: "read_failed" }, { status: 500 });
 
-  if (batchError || rowsError) {
+  let batch: DocRow | null = null;
+  let rows: DocRow[] = [];
+  try {
+    const [batchSnap, rowSnap] = await Promise.all([
+      db.collection(COLLECTIONS.esignBatches).doc(id).get(),
+      db.collection(COLLECTIONS.esignBatchRows).where("batch_id", "==", id).get(),
+    ]);
+    batch = batchSnap.exists ? docRow(batchSnap.id, batchSnap.data()) : null;
+    rows = rowSnap.docs
+      .map((doc) => docRow(doc.id, doc.data())!)
+      .sort((left, right) => compareValues(left.row_index, right.row_index));
+  } catch {
     return NextResponse.json({ error: "read_failed" }, { status: 500 });
   }
   if (!batch) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
+  const requestIds = rows
+    .map((row) => (row.esign_request_id != null ? String(row.esign_request_id) : ""))
+    .filter((requestId) => requestId.length > 0);
+  const requestById = new Map<string, DocRow>();
+  const profileById = new Map<string, DocRow>();
+  try {
+    for (let i = 0; i < requestIds.length; i += 30) {
+      const chunk = [...new Set(requestIds.slice(i, i + 30))];
+      const snaps = await db.getAll(
+        ...chunk.map((requestId) => db.collection(COLLECTIONS.esignRequests).doc(requestId)),
+      );
+      for (const snap of snaps) {
+        if (!snap.exists) continue;
+        const row = docRow(snap.id, snap.data());
+        if (row) requestById.set(row.id, row);
+      }
+    }
+    const driverIds = [...requestById.values()]
+      .map((row) => (row.driver_id != null ? String(row.driver_id) : ""))
+      .filter((driverId) => driverId.length > 0);
+    for (let i = 0; i < driverIds.length; i += 30) {
+      const chunk = [...new Set(driverIds.slice(i, i + 30))];
+      const snaps = await db.getAll(
+        ...chunk.map((driverId) => db.collection(COLLECTIONS.profiles).doc(driverId)),
+      );
+      for (const snap of snaps) {
+        if (!snap.exists) continue;
+        const row = docRow(snap.id, snap.data());
+        if (row) profileById.set(row.id, row);
+      }
+    }
+  } catch {
+    return NextResponse.json({ error: "read_failed" }, { status: 500 });
+  }
+
   const inputs: EsignZipRowInput[] = [];
-  for (const raw of (rows ?? []) as Record<string, unknown>[]) {
-    // A `left` join, because a row that never produced a document has no
-    // `esign_requests` to read — and it is exactly those rows the archive
-    // drops, so reading it defensively here is what keeps them droppable
-    // rather than crashing the whole download.
-    const linked = asRecord(raw.esign_requests);
-    const drivers = asRecord(linked.drivers);
-    const profiles = asRecord(drivers.profiles);
+  for (const raw of rows) {
+    const linked = requestById.get(String(raw.esign_request_id ?? "")) ?? { id: "" };
+    const driverId = linked.driver_id != null ? String(linked.driver_id) : "";
+    const profile = profileById.get(driverId);
     inputs.push({
       row_index: Number(raw.row_index ?? 0),
       employee_id: raw.employee_id != null ? String(raw.employee_id) : null,
       request_code: linked.request_code != null ? String(linked.request_code) : null,
-      driver_name: profiles.full_name != null ? String(profiles.full_name) : null,
+      driver_name: profile?.full_name != null ? String(profile.full_name) : null,
       signed_key:
         linked.signed_document_storage_key != null
           ? String(linked.signed_document_storage_key)
@@ -109,19 +180,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "too_many_documents" }, { status: 413 });
   }
 
-  const admin = createAdminClient();
   const entries: ZipEntry[] = [];
   let total = 0;
   for (const item of plan) {
     const key = normalizeEsignStorageKey(item.storage_key);
-    const downloaded = await admin.storage.from(ESIGN_BUCKET).download(key);
-    // One unreadable document fails the archive rather than being skipped: an
-    // operator filing a batch needs to know a document is missing, and a
-    // quietly smaller archive is the failure mode this route exists to avoid.
-    if (downloaded.error || !downloaded.data) {
+    const bytes = await downloadEsignObject(key);
+    if (!bytes) {
       return NextResponse.json({ error: "read_failed", storage_key: item.storage_key }, { status: 500 });
     }
-    const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
     total += bytes.length;
     if (total > MAX_TOTAL_BYTES) {
       return NextResponse.json({ error: "archive_too_large" }, { status: 413 });
@@ -141,10 +207,4 @@ export async function GET(request: Request) {
       "Cache-Control": "private, no-store",
     },
   });
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }

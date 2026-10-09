@@ -1,44 +1,62 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import type { DocumentData } from "firebase-admin/firestore";
+import { getSessionUser } from "@/lib/auth/get-session";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getTranslationStatsForLocale } from "@/lib/i18n/locales-server";
 
+function iso(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  return null;
+}
+
+function plainRow(id: string, data: DocumentData): Record<string, unknown> {
+  const row: Record<string, unknown> = { id };
+  for (const [key, value] of Object.entries(data)) {
+    const asIso = iso(value);
+    row[key] = asIso ?? value;
+  }
+  if (typeof row.code !== "string") row.code = id;
+  return row;
+}
+
 async function requireSuperAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("admin_roles(is_super_admin)")
-    .eq("id", user.id)
-    .single();
-
-  const isSuperAdmin =
-    (profile as { admin_roles: { is_super_admin: boolean } | null } | null)
-      ?.admin_roles?.is_super_admin === true;
-
-  if (!isSuperAdmin) throw new Error("Forbidden");
-  return supabase;
+  const session = await getSessionUser();
+  if (!session) throw new Error("Unauthorized");
+  if (!session.isSuperAdmin) throw new Error("Forbidden");
 }
 
 export async function GET() {
   try {
-    const supabase = await requireSuperAdmin();
-    const { data, error } = await supabase
-      .from("locales")
-      .select("*")
-      .order("is_default", { ascending: false })
-      .order("code");
+    await requireSuperAdmin();
+    const db = await staffDb();
+    if (!db) return NextResponse.json({ error: "not_configured" }, { status: 500 });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const snap = await db.collection(COLLECTIONS.locales).get();
+    const rows = snap.docs
+      .map((doc) => plainRow(doc.id, doc.data()))
+      .sort((a, b) => {
+        const aDefault = a.is_default === true ? 1 : 0;
+        const bDefault = b.is_default === true ? 1 : 0;
+        if (aDefault !== bDefault) return bDefault - aDefault;
+        return String(a.code ?? "").localeCompare(String(b.code ?? ""));
+      });
 
     const enriched = await Promise.all(
-      (data ?? []).map(async (l) => {
-        const stats = await getTranslationStatsForLocale(l.code);
+      rows.map(async (locale) => {
+        const code = String(locale.code ?? "");
+        const stats = await getTranslationStatsForLocale(code);
         return {
-          ...l,
+          ...locale,
           translation_count: stats.total,
           needs_review_count: stats.needsReview,
         };

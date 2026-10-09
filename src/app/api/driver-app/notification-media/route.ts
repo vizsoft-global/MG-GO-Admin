@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { withCors } from "@/lib/http/cors";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
 import { requireDriverFromRequest } from "@/lib/storage/driver-upload-auth";
 import {
   contentTypeFromNotificationObjectKey,
   parseNotificationMedia,
   pickNotificationMediaByRole,
-  resolveNotificationMediaReadUrl,
   type NotificationMediaRole,
 } from "@/features/notifications/notification-media";
+import { resolveNotificationMediaReadUrl } from "@/features/notifications/notification-media-storage";
+
+const DISPATCH_SCAN = 1000;
 
 async function handler(request: Request): Promise<Response> {
   if (request.method !== "GET") {
@@ -28,29 +31,27 @@ async function handler(request: Request): Promise<Response> {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
 
-  const admin = createAdminClient();
-  const { data: dispatchItem } = await admin
-    .from("notification_dispatch_items")
-    .select("id")
-    .eq("campaign_id", campaignId)
-    .eq("driver_id", auth.driverId)
-    .maybeSingle();
+  const db = await getFirebaseFirestore();
+  if (!db) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
 
-  if (!dispatchItem) {
+  const dispatch = await db
+    .collection(COLLECTIONS.notificationDispatchItems)
+    .where("driver_id", "==", auth.driverId)
+    .limit(DISPATCH_SCAN)
+    .get();
+  const ownsCampaign = dispatch.docs.some((doc) => doc.get("campaign_id") === campaignId);
+  if (!ownsCampaign) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const { data: campaign } = await admin
-    .from("notification_campaigns")
-    .select("media")
-    .eq("id", campaignId)
-    .maybeSingle();
-
-  if (!campaign) {
+  const campaign = await db.collection(COLLECTIONS.notificationCampaigns).doc(campaignId).get();
+  if (!campaign.exists) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const mediaItem = pickNotificationMediaByRole(parseNotificationMedia(campaign.media), role);
+  const mediaItem = pickNotificationMediaByRole(parseNotificationMedia(campaign.get("media")), role);
   if (!mediaItem) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }

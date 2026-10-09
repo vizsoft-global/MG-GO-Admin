@@ -5,8 +5,6 @@ import {
   logAdminMutation,
   logAdminRead,
 } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { normalizeCountryCode } from "@/lib/geo/countries";
@@ -36,7 +34,7 @@ import {
 import { accountStatusToSyncFromOperations } from "./driver-operations-status";
 import { countDeliveriesInWindow } from "./driver-delivery-counts";
 import { defaultStartDate, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
-import { civilIdExists, employeeIdExists } from "./driver-uniqueness";
+import { civilIdExists, employeeIdExists, fetchAllIn, staffClient, type StaffClient } from "./driver-uniqueness";
 import {
   allDriverAvatarKeys,
   allIntakeAvatarKeys,
@@ -55,7 +53,6 @@ import {
 } from "@/lib/storage/document-tracking";
 import { resolveDriverAvatarUrl } from "@/lib/storage/driver-avatar-url";
 import { resolvePartnerLogoUrl } from "@/lib/storage/partner-logo-url";
-import { fetchAllIn } from "@/lib/supabase/in-chunks";
 import {
   uploadDriverAvatarFile,
   uploadIntakeAvatarFile,
@@ -79,6 +76,7 @@ import {
   type DriverRemoteDocument,
   type DriverRiderCategory,
   type DriverWorkflowStatus,
+  type VehicleOption,
 } from "./types";
 import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
 import { parseCustomFieldsFromFormData } from "@/lib/custom-fields/serialize";
@@ -116,13 +114,13 @@ async function requireDriversView() {
 }
 
 async function resolveSourceCompanyForSave(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   riderCategory: DriverRiderCategory | null,
   raw: string,
 ): Promise<string | null> {
   const value = raw.trim();
   if (!value) return null;
-  const { data } = await supabase
+  const { data } = await db
     .from("source_companies")
     .select("key, name, client_code, is_active, is_system, sort_order");
   const companies = (data ?? []) as SourceCompany[];
@@ -164,11 +162,11 @@ function parseRestaurantIds(formData: FormData): string[] {
 }
 
 async function validateRestaurantsPublished(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   restaurantIds: string[],
 ): Promise<{ error?: string }> {
   if (restaurantIds.length === 0) return {};
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("restaurants")
     .select("id")
     .eq("status", "published")
@@ -182,11 +180,11 @@ async function validateRestaurantsPublished(
 }
 
 async function hasPublishedActiveRestaurants(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   restaurantIds: string[],
 ): Promise<boolean> {
   if (restaurantIds.length === 0) return false;
-  const { count, error } = await supabase
+  const { count, error } = await db
     .from("restaurants")
     .select("id", { count: "exact", head: true })
     .eq("status", "published")
@@ -197,23 +195,23 @@ async function hasPublishedActiveRestaurants(
 }
 
 async function syncIntakeRestaurants(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   intakeId: string,
   restaurantIds: string[],
 ) {
-  await supabase.from("driver_intake_restaurants").delete().eq("intake_id", intakeId);
+  await db.from("driver_intake_restaurants").delete().eq("intake_id", intakeId);
   if (restaurantIds.length === 0) return;
-  await supabase.from("driver_intake_restaurants").insert(
+  await db.from("driver_intake_restaurants").insert(
     restaurantIds.map((restaurant_id) => ({ intake_id: intakeId, restaurant_id })),
   );
 }
 
 async function syncDriverRestaurants(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverId: string,
   restaurantIds: string[],
 ) {
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from("driver_restaurants")
     .select("restaurant_id")
     .eq("driver_id", driverId);
@@ -224,12 +222,12 @@ async function syncDriverRestaurants(
   // Insert first: a delete-all sync fires driver_restaurants_sync_status and
   // drops an active driver to pending even when the mapping is unchanged.
   if (toAdd.length > 0) {
-    await supabase.from("driver_restaurants").insert(
+    await db.from("driver_restaurants").insert(
       toAdd.map((restaurant_id) => ({ driver_id: driverId, restaurant_id })),
     );
   }
   if (toRemove.length > 0) {
-    await supabase
+    await db
       .from("driver_restaurants")
       .delete()
       .eq("driver_id", driverId)
@@ -238,10 +236,10 @@ async function syncDriverRestaurants(
 }
 
 async function fetchIntakeRestaurantIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   intakeId: string,
 ): Promise<string[]> {
-  const { data } = await supabase
+  const { data } = await db
     .from("driver_intake_restaurants")
     .select("restaurant_id")
     .eq("intake_id", intakeId);
@@ -249,10 +247,10 @@ async function fetchIntakeRestaurantIds(
 }
 
 async function fetchDriverRestaurantIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverId: string,
 ): Promise<string[]> {
-  const { data } = await supabase
+  const { data } = await db
     .from("driver_restaurants")
     .select("restaurant_id")
     .eq("driver_id", driverId);
@@ -260,11 +258,11 @@ async function fetchDriverRestaurantIds(
 }
 
 async function loadRestaurantNames(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   ids: string[],
 ): Promise<string[]> {
   if (ids.length === 0) return [];
-  const { data } = await supabase.from("restaurants").select("id, name").in("id", ids);
+  const { data } = await db.from("restaurants").select("id, name").in("id", ids);
   const order = new Map(ids.map((id, i) => [id, i]));
   return (data ?? [])
     .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
@@ -272,9 +270,9 @@ async function loadRestaurantNames(
 }
 
 async function phoneExists(phone: string, excludeIntakeId?: string): Promise<boolean> {
-  const supabase = await createClient();
+  const db = await staffClient();
 
-  let intakeQuery = supabase
+  let intakeQuery = db
     .from("driver_intakes")
     .select("id")
     .eq("phone", phone)
@@ -284,7 +282,7 @@ async function phoneExists(phone: string, excludeIntakeId?: string): Promise<boo
   const { data: intake } = await intakeQuery.maybeSingle();
   if (intake) return true;
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from("profiles")
     .select("id")
     .eq("phone", phone)
@@ -292,7 +290,7 @@ async function phoneExists(phone: string, excludeIntakeId?: string): Promise<boo
 
   if (!profile) return false;
   if (excludeIntakeId) {
-    const { data: linkedIntake } = await supabase
+    const { data: linkedIntake } = await db
       .from("driver_intakes")
       .select("id")
       .eq("linked_profile_id", profile.id)
@@ -383,8 +381,8 @@ export async function createDriverIntake(
   if (!hasOpsAssignment(zoneId, restaurantIds)) {
     return { error: "missing_assignment" };
   }
-  const supabase = await createClient();
-  const sourceCompany = await resolveSourceCompanyForSave(supabase, riderCategory, sourceCompanyRaw);
+  const db = await staffClient();
+  const sourceCompany = await resolveSourceCompanyForSave(db, riderCategory, sourceCompanyRaw);
   const intakeId = crypto.randomUUID();
 
   const docsToUpload: { docType: DriverDocumentType; file: File }[] = [];
@@ -402,7 +400,7 @@ export async function createDriverIntake(
   const [phoneTaken, civilTaken, restaurantCheck, r2Configured] = await Promise.all([
     phone ? phoneExists(phone) : Promise.resolve(false),
     civilIdNormalized ? civilIdExists(civilIdNormalized) : Promise.resolve(false),
-    validateRestaurantsPublished(supabase, restaurantIds),
+    validateRestaurantsPublished(db, restaurantIds),
     needsR2 ? isR2Configured() : Promise.resolve(true),
   ]);
 
@@ -420,7 +418,7 @@ export async function createDriverIntake(
     hasAvatarUpload && avatarFile instanceof File
       ? uploadIntakeAvatarFile(intakeId, avatarFile, auth.session.id)
       : Promise.resolve<{ error?: string; path?: string }>({}),
-    supabase.rpc("allocate_driver_code"),
+    db.rpc("allocate_driver_code"),
   ]);
 
   const docError = docUploads.find((r) => r.error)?.error;
@@ -451,7 +449,7 @@ export async function createDriverIntake(
 
   const intakeAvatarKey = avatarUpload.path ?? null;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("driver_intakes")
     .insert({
       id: intakeId,
@@ -489,10 +487,10 @@ export async function createDriverIntake(
     return { error: mapDriverDbError(error, "employee_id") };
   }
 
-  await syncIntakeRestaurants(supabase, data.id, restaurantIds);
+  await syncIntakeRestaurants(db, data.id, restaurantIds);
 
   const assetSync = await syncIntakeAssetAssignments(
-    supabase,
+    db,
     data.id,
     catalogItemIds,
     auth.session.id,
@@ -523,7 +521,7 @@ export async function createDriverIntake(
     after: { driver_code: data.driver_code, partner_id: partnerId, zone_id: zoneId },
   });
 
-  const labels = await loadChangeLabels(supabase, {
+  const labels = await loadChangeLabels(db, {
     zoneId: zoneId || null,
     partnerId: partnerId || null,
     vehicleId: vehicleId || null,
@@ -608,13 +606,13 @@ function kuwaitRollingWeekBounds(): { start: string; end: string } {
 }
 
 async function fetchDriverDeliveryCounts(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverId: string | null,
 ): Promise<{ today: number; week: number }> {
   if (!driverId) return { today: 0, week: 0 };
   const week = kuwaitRollingWeekBounds();
   const today = kuwaitDayBounds();
-  const { data } = await supabase
+  const { data } = await db
     .from("deliveries")
     .select("status, created_at, pickup_at, delivered_at")
     .eq("driver_id", driverId)
@@ -673,10 +671,10 @@ export async function fetchDriversForAdmin(options?: {
   void logAdminRead("driver_intakes", "fetchDriversForAdmin", {
     archived: options?.archived ?? false,
   });
-  const supabase = await createClient();
+  const db = await staffClient();
   const archivedOnly = options?.archived === true;
 
-  let query = supabase
+  let query = db
     .from("driver_intakes")
     .select(
       `
@@ -743,13 +741,13 @@ export async function fetchDriversForAdmin(options?: {
   if (intakeIds.length > 0) {
     const [intakeRestRows, driverRestRows] = await Promise.all([
       fetchAllIn(intakeIds, (chunk) =>
-        supabase
+        db
           .from("driver_intake_restaurants")
           .select("intake_id, restaurants (id, name)")
           .in("intake_id", chunk),
       ),
       fetchAllIn(linkedIds, (chunk) =>
-        supabase
+        db
           .from("driver_restaurants")
           .select("driver_id, restaurants (id, name)")
           .in("driver_id", chunk),
@@ -789,13 +787,13 @@ export async function fetchDriversForAdmin(options?: {
     const { start, end } = kuwaitDayBounds();
     const [driverRows, deliveryRows] = await Promise.all([
       fetchAllIn(linkedIds, (chunk) =>
-        supabase
+        db
           .from("drivers")
           .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id")
           .in("id", chunk),
       ),
       fetchAllIn(linkedIds, (chunk) =>
-        supabase
+        db
           .from("deliveries")
           .select("driver_id")
           .in("driver_id", chunk)
@@ -923,8 +921,8 @@ export async function archiveDriverIntake(
   if (auth.error) return { error: auth.error };
   if (!intakeId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("archive_driver_intake", {
+  const db = await staffClient();
+  const { data, error } = await db.rpc("archive_driver_intake", {
     p_intake_id: intakeId,
   });
 
@@ -936,7 +934,7 @@ export async function archiveDriverIntake(
     return { error: payload.error ?? "save_failed" };
   }
 
-  const { data: archived } = await supabase
+  const { data: archived } = await db
     .from("driver_intakes")
     .select("linked_profile_id")
     .eq("id", intakeId)
@@ -958,8 +956,8 @@ export async function restoreDriverIntake(
   if (auth.error) return { error: auth.error };
   if (!intakeId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data: intake, error: loadError } = await supabase
+  const db = await staffClient();
+  const { data: intake, error: loadError } = await db
     .from("driver_intakes")
     .select("id, phone, civil_id, employee_id, archived_at, linked_profile_id")
     .eq("id", intakeId)
@@ -982,7 +980,7 @@ export async function restoreDriverIntake(
   if (civilTaken) return { error: "civil_id_exists" };
   if (employeeTaken) return { error: "employee_id_exists" };
 
-  const { data, error } = await supabase.rpc("restore_driver_intake", {
+  const { data, error } = await db.rpc("restore_driver_intake", {
     p_intake_id: intakeId,
   });
 
@@ -1020,9 +1018,9 @@ export async function updateDriverWorkflowStatus(
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 
-  const supabase = await createClient();
-  const before = await loadIntakeProfileSnapshot(supabase, intakeId);
-  const { error } = await supabase
+  const db = await staffClient();
+  const before = await loadIntakeProfileSnapshot(db, intakeId);
+  const { error } = await db
     .from("driver_intakes")
     .update({
       workflow_status: workflowStatus,
@@ -1115,8 +1113,8 @@ async function updateDriverIntakeInner(
   const civilIdNormalized = civilId ? normalizeCivilId(civilId) : null;
   if (civilId && !civilIdNormalized) return { error: "invalid_civil_id" };
 
-  const supabase = await createClient();
-  const sourceCompany = await resolveSourceCompanyForSave(supabase, riderCategory, sourceCompanyRaw);
+  const db = await staffClient();
+  const sourceCompany = await resolveSourceCompanyForSave(db, riderCategory, sourceCompanyRaw);
   const restaurantIds = parseRestaurantIds(formData);
   if (!hasOpsAssignment(zoneId, restaurantIds)) {
     return { error: "missing_assignment" };
@@ -1125,13 +1123,13 @@ async function updateDriverIntakeInner(
   const [phoneTaken, civilTaken, existingResp, restaurantCheck, r2Configured] = await Promise.all([
     phone ? phoneExists(phone, intakeId) : Promise.resolve(false),
     civilIdNormalized ? civilIdExists(civilIdNormalized, intakeId) : Promise.resolve(false),
-    supabase
+    db
       .from("driver_intakes")
       .select("id, linked_profile_id, driver_code, avatar_url")
       .eq("id", intakeId)
       .is("archived_at", null)
       .maybeSingle(),
-    validateRestaurantsPublished(supabase, restaurantIds),
+    validateRestaurantsPublished(db, restaurantIds),
     hasAvatarUpload ? isR2Configured() : Promise.resolve(true),
   ]);
 
@@ -1143,11 +1141,11 @@ async function updateDriverIntakeInner(
   const existing = existingResp.data;
   if (!existing) return { error: "save_failed" };
 
-  const beforeChange = await loadIntakeProfileSnapshot(supabase, intakeId);
+  const beforeChange = await loadIntakeProfileSnapshot(db, intakeId);
 
   let currentAccountStatus: DriverAccountStatus | null = null;
   if (existing.linked_profile_id) {
-    const { data: linkedDriver } = await supabase
+    const { data: linkedDriver } = await db
       .from("drivers")
       .select("status")
       .eq("id", existing.linked_profile_id)
@@ -1160,7 +1158,7 @@ async function updateDriverIntakeInner(
         return { error: "missing_assignment" };
       }
       if (restaurantIds.length > 0) {
-        const { data: publishedRows } = await supabase
+        const { data: publishedRows } = await db
           .from("restaurants")
           .select("id")
           .eq("status", "published")
@@ -1196,7 +1194,7 @@ async function updateDriverIntakeInner(
   const linked = Boolean(existing.linked_profile_id);
   const resolvedWorkflowStatus = normalizeIntakeWorkflowStatus(linked, workflowStatus);
 
-  const { error } = await supabase
+  const { error } = await db
     .from("driver_intakes")
     .update({
       full_name: fullName,
@@ -1224,7 +1222,7 @@ async function updateDriverIntakeInner(
   if (error) return { error: mapDriverDbError(error, "employee_id") };
 
   const assetSync = await syncIntakeAssetAssignments(
-    supabase,
+    db,
     intakeId,
     catalogItemIds,
     actorId,
@@ -1252,11 +1250,11 @@ async function updateDriverIntakeInner(
     // Restaurant mapping first, then the driver row. Running them in parallel
     // let driver_restaurants_sync_status see an empty set and write Pending
     // after we had already restored Active.
-    await syncDriverRestaurants(supabase, linkedProfileId, restaurantIds);
-    await syncIntakeRestaurants(supabase, intakeId, restaurantIds);
+    await syncDriverRestaurants(db, linkedProfileId, restaurantIds);
+    await syncIntakeRestaurants(db, intakeId, restaurantIds);
 
     const results = await Promise.all([
-      supabase
+      db
         .from("profiles")
         .update({
           full_name: fullName,
@@ -1265,7 +1263,7 @@ async function updateDriverIntakeInner(
           updated_at: new Date().toISOString(),
         })
         .eq("id", linkedProfileId),
-      supabase
+      db
         .from("drivers")
         .update({
           partner_id: partnerId || null,
@@ -1297,7 +1295,7 @@ async function updateDriverIntakeInner(
       currentAccountStatus,
       operationsWorkflow: resolvedWorkflowStatus,
     });
-    const { data: afterSync } = await supabase
+    const { data: afterSync } = await db
       .from("drivers")
       .select("status")
       .eq("id", linkedProfileId)
@@ -1309,7 +1307,7 @@ async function updateDriverIntakeInner(
     });
     const writeAccount = nextAccount ?? restoreAccount;
     if (writeAccount) {
-      const { data: statusData, error: statusError } = await supabase.rpc(
+      const { data: statusData, error: statusError } = await db.rpc(
         "set_driver_account_status",
         {
           p_driver_id: linkedProfileId,
@@ -1333,7 +1331,7 @@ async function updateDriverIntakeInner(
       await syncDriverAvatarKey(linkedProfileId, profileAvatarPath);
     }
   } else {
-    await syncIntakeRestaurants(supabase, intakeId, restaurantIds);
+    await syncIntakeRestaurants(db, intakeId, restaurantIds);
   }
 
   void logAdminMutation({
@@ -1344,7 +1342,7 @@ async function updateDriverIntakeInner(
     after: { workflow_status: workflowStatus, partner_id: partnerId },
   });
 
-  const afterLabels = await loadChangeLabels(supabase, {
+  const afterLabels = await loadChangeLabels(db, {
     zoneId: zoneId || null,
     partnerId: partnerId || null,
     vehicleId: vehicleId || null,
@@ -1398,10 +1396,10 @@ const EMPTY_FREEZE = {
 
 /** Freeze columns are not on production until `20261027300000` is pushed. */
 async function fetchDriverFreezeRow(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverId: string,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("drivers")
     .select("frozen_from, frozen_until, freeze_reason, frozen_at")
     .eq("id", driverId)
@@ -1430,9 +1428,9 @@ export async function fetchDriverDetail(
 async function fetchDriverDetailInner(
   id: string,
 ): Promise<DriverDetailModel | null> {
-  const supabase = await createClient();
+  const db = await staffClient();
 
-  const { data: intake } = await supabase
+  const { data: intake } = await db
     .from("driver_intakes")
     .select(
       `
@@ -1501,17 +1499,17 @@ async function fetchDriverDetailInner(
     } | null = null;
     if (linkedId) {
       const [{ data: prof }, { data: drv }, freeze] = await Promise.all([
-        supabase
+        db
           .from("profiles")
           .select("email, avatar_url, full_name, phone")
           .eq("id", linkedId)
           .maybeSingle(),
-        supabase
+        db
           .from("drivers")
           .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, accommodation, is_blocked, blocked_reason, blocked_at, login_verification_exempt, screenshots_allowed, avatar_object_key")
           .eq("id", linkedId)
           .maybeSingle(),
-        fetchDriverFreezeRow(supabase, linkedId),
+        fetchDriverFreezeRow(db, linkedId),
       ]);
       profile = prof;
       linkedDriver = drv
@@ -1551,12 +1549,12 @@ async function fetchDriverDetailInner(
 
     const restaurant_ids =
       linkedId != null
-        ? await fetchDriverRestaurantIds(supabase, linkedId)
-        : await fetchIntakeRestaurantIds(supabase, intake.id);
+        ? await fetchDriverRestaurantIds(db, linkedId)
+        : await fetchIntakeRestaurantIds(db, intake.id);
     const [restaurant_names, has_published_restaurant, avatar_url, assigned_assets, deliveryCounts] =
       await Promise.all([
-      loadRestaurantNames(supabase, restaurant_ids),
-      hasPublishedActiveRestaurants(supabase, restaurant_ids),
+      loadRestaurantNames(db, restaurant_ids),
+      hasPublishedActiveRestaurants(db, restaurant_ids),
       resolveDriverAvatarUrl(
         pickDriverAvatarKey({
           avatarObjectKey: linkedDriver?.avatar_object_key,
@@ -1565,7 +1563,7 @@ async function fetchDriverDetailInner(
         }),
       ),
       fetchDriverAssetAssignments(intake.id, linkedId),
-      fetchDriverDeliveryCounts(supabase, linkedId),
+      fetchDriverDeliveryCounts(db, linkedId),
     ]);
 
     return {
@@ -1641,7 +1639,7 @@ async function fetchDriverDetailInner(
     };
   }
 
-  const { data: driverRow } = await supabase
+  const { data: driverRow } = await db
     .from("drivers")
     .select(
       `
@@ -1683,17 +1681,17 @@ async function fetchDriverDetailInner(
   if (!driverRow) return null;
 
   const [{ data: prof }, freeze] = await Promise.all([
-    supabase
+    db
       .from("profiles")
       .select("email, avatar_url, full_name, phone")
       .eq("id", id)
       .maybeSingle(),
-    fetchDriverFreezeRow(supabase, id),
+    fetchDriverFreezeRow(db, id),
   ]);
 
   let vehicleRow: { bike_id: string; reg_number: string | null } | null = null;
   if (driverRow.vehicle_id) {
-    const { data: v } = await supabase
+    const { data: v } = await db
       .from("vehicles")
       .select("bike_id, reg_number")
       .eq("id", driverRow.vehicle_id)
@@ -1701,7 +1699,7 @@ async function fetchDriverDetailInner(
     vehicleRow = v;
   }
 
-  const { data: intakeForDriver } = await supabase
+  const { data: intakeForDriver } = await db
     .from("driver_intakes")
     .select(
       "id, assets_issued, workflow_status, linked, partner_id, zone_id, vehicle_id, archived_at, avatar_url, accommodation",
@@ -1709,11 +1707,11 @@ async function fetchDriverDetailInner(
     .eq("linked_profile_id", id)
     .maybeSingle();
 
-  const restaurant_ids = await fetchDriverRestaurantIds(supabase, id);
+  const restaurant_ids = await fetchDriverRestaurantIds(db, id);
   const [restaurant_names, has_published_restaurant, avatar_url, assigned_assets, deliveryCounts] =
     await Promise.all([
-    loadRestaurantNames(supabase, restaurant_ids),
-    hasPublishedActiveRestaurants(supabase, restaurant_ids),
+    loadRestaurantNames(db, restaurant_ids),
+    hasPublishedActiveRestaurants(db, restaurant_ids),
     resolveDriverAvatarUrl(
       pickDriverAvatarKey({
         avatarObjectKey: driverRow.avatar_object_key,
@@ -1722,7 +1720,7 @@ async function fetchDriverDetailInner(
       }),
     ),
     fetchDriverAssetAssignments(intakeForDriver?.id ?? null, id),
-    fetchDriverDeliveryCounts(supabase, id),
+    fetchDriverDeliveryCounts(db, id),
   ]);
 
   return {
@@ -1802,7 +1800,7 @@ export async function setDriverScreenshotsAllowed(
   if (!driverId) return { error: "missing_fields" };
 
   try {
-    const admin = createAdminClient();
+    const admin = await staffClient();
     const { error } = await admin
       .from("drivers")
       .update({ screenshots_allowed: allowed })
@@ -1834,7 +1832,7 @@ export async function setDriverLoginVerificationExempt(
   if (!driverId) return { error: "missing_fields" };
 
   try {
-    const admin = createAdminClient();
+    const admin = await staffClient();
     const { error } = await admin
       .from("drivers")
       .update({ login_verification_exempt: exempt })
@@ -1871,13 +1869,13 @@ export async function updateDriverAccountStatus(
     return { error: "missing_fields" };
   }
 
-  const supabase = await createClient();
-  const { data: beforeDriver } = await supabase
+  const db = await staffClient();
+  const { data: beforeDriver } = await db
     .from("drivers")
     .select("status")
     .eq("id", driverId)
     .maybeSingle();
-  const { data, error } = await supabase.rpc("set_driver_account_status", {
+  const { data, error } = await db.rpc("set_driver_account_status", {
     p_driver_id: driverId,
     p_status: status,
   });
@@ -1905,7 +1903,7 @@ export async function updateDriverAccountStatus(
     after: { status },
   });
 
-  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
   if (intakeId) {
     void logDriverChange({
       intakeId,
@@ -1929,8 +1927,8 @@ export async function setDriverBlocked(
 
   if (!driverId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("set_driver_blocked", {
+  const db = await staffClient();
+  const { data, error } = await db.rpc("set_driver_blocked", {
     p_driver_id: driverId,
     p_blocked: blocked,
     p_reason: blocked ? reason?.trim() || undefined : undefined,
@@ -1954,7 +1952,7 @@ export async function setDriverBlocked(
     after: blocked ? { is_blocked: true, blocked_reason: reason?.trim() } : { is_blocked: false },
   });
 
-  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
   if (intakeId) {
     void logDriverChange({
       intakeId,
@@ -1975,8 +1973,8 @@ export async function listRestrictionReasons(
   kind: RestrictionReasonKind,
 ): Promise<RestrictionReason[]> {
   await requireDriversView();
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const db = await staffClient();
+  const { data, error } = await db
     .from("driver_restriction_reasons")
     .select("id, kind, label_en, label_ar, sort_order")
     .eq("is_active", true)
@@ -1996,8 +1994,8 @@ export async function setDriverFrozen(
   if (auth.error) return { error: auth.error };
   if (!driverId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("set_driver_frozen", {
+  const db = await staffClient();
+  const { data, error } = await db.rpc("set_driver_frozen", {
     p_driver_id: driverId,
     p_from: from,
     p_until: until,
@@ -2028,7 +2026,7 @@ export async function setDriverFrozen(
     after: { frozen_from: from, frozen_until: until, freeze_reason: reason.trim() },
   });
 
-  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
   if (intakeId) {
     void logDriverChange({
       intakeId,
@@ -2049,8 +2047,8 @@ export async function setDriverUnfrozen(
   if (auth.error) return { error: auth.error };
   if (!driverId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("set_driver_unfrozen", {
+  const db = await staffClient();
+  const { data, error } = await db.rpc("set_driver_unfrozen", {
     p_driver_id: driverId,
   });
   if (error) return { error: "save_failed" };
@@ -2071,7 +2069,7 @@ export async function setDriverUnfrozen(
     after: { frozen_from: null, frozen_until: null },
   });
 
-  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
   if (intakeId) {
     void logDriverChange({
       intakeId,
@@ -2093,8 +2091,8 @@ export async function regenerateDriverPasscode(
 
   if (!driverId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data: existing } = await supabase
+  const db = await staffClient();
+  const { data: existing } = await db
     .from("drivers")
     .select("id, status")
     .eq("id", driverId)
@@ -2103,7 +2101,7 @@ export async function regenerateDriverPasscode(
   if (!existing) return { error: "driver_not_found" };
   if (existing.status !== "active") return { error: "driver_not_active" };
 
-  const { data, error } = await supabase.rpc("regenerate_driver_app_passcode", {
+  const { data, error } = await db.rpc("regenerate_driver_app_passcode", {
     p_driver_id: driverId,
   });
 
@@ -2122,7 +2120,7 @@ export async function regenerateDriverPasscode(
     context: { passcode_rotated: true },
   });
 
-  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
   if (intakeId) {
     void logDriverChange({
       intakeId,
@@ -2142,8 +2140,8 @@ export async function fetchDriverDeviceOverview(
   await requireDriversView();
   if (!driverId) return null;
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_driver_device_overview", {
+  const db = await staffClient();
+  const { data, error } = await db.rpc("admin_driver_device_overview", {
     p_driver_id: driverId,
     p_history_limit: historyLimit,
   });
@@ -2195,8 +2193,8 @@ export async function forceSignOutDriver(
 
   if (!driverId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("admin_force_sign_out_driver", {
+  const db = await staffClient();
+  const { error } = await db.rpc("admin_force_sign_out_driver", {
     p_driver_id: driverId,
   });
 
@@ -2218,17 +2216,34 @@ export async function fetchDriversMultiDeviceRecent(
 ): Promise<DriverMultiDeviceRecentRow[]> {
   await requireDriversView();
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_drivers_multi_device_recent", {
+  const db = await staffClient();
+  const { data, error } = await db.rpc("admin_drivers_multi_device_recent", {
     p_days: days,
   });
 
   if (error || !data) return [];
 
-  return data.map((row) => ({
+  return data.map((row: { driver_id: string; device_count: number | string; latest_activity_at: string }) => ({
     driver_id: row.driver_id,
     device_count: Number(row.device_count),
     latest_activity_at: row.latest_activity_at,
+  }));
+}
+
+export async function listAvailableVehicles(): Promise<VehicleOption[]> {
+  await requireDriversView();
+  const db = await staffClient();
+  const { data, error } = await db
+    .from("vehicles")
+    .select("id, bike_id, reg_number, vehicle_type_key")
+    .eq("status", "active")
+    .order("bike_id");
+  if (error) throw error;
+  return (data ?? []).map((v: { id: string; bike_id: string; reg_number: string | null; vehicle_type_key?: string | null }) => ({
+    id: v.id,
+    bike_id: v.bike_id,
+    reg_number: v.reg_number,
+    vehicle_type_key: v.vehicle_type_key ?? "bike",
   }));
 }
 

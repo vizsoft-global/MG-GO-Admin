@@ -91,9 +91,8 @@ export function activeFlagsFromBits(bits: number): FleetFlag[] {
 }
 
 /**
- * The Supabase Broadcast mirror sends flag *names* rather than bits, because that
- * payload is read by a fallback client that may be running an older bundle and must
- * not depend on the bit order staying put.
+ * Named flags stay decodable without depending on bit order, so an older
+ * bundle that still receives names rather than bits can paint the same set.
  */
 export function flagsFromNames(names: readonly string[]): FleetFlagSet {
   const out: Record<string, boolean> = {};

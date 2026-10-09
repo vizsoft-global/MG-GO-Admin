@@ -3,15 +3,49 @@
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createClient } from "@/lib/supabase/server";
+import { getFirebaseStorage } from "@/lib/firebase/admin";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   isDriverProjectKey,
   isVehicleFuelType,
   type DriverProjectKey,
   type VehicleFuelType,
 } from "@/features/fleet/fleet-labels";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import { parseFuelFillRow } from "./fuel-week";
 import type { FuelFillListItem } from "./types";
+
+type Row = Record<string, unknown> & { id: string };
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
 
 async function requireFuelView() {
   const session = await getSessionUser();
@@ -41,10 +75,17 @@ export async function fetchFuelFillAttachmentUrl(
     ? normalized.slice("fuel-fills/".length)
     : normalized;
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.storage.from("fuel-fills").createSignedUrl(objectKey, 300);
-  if (error) return { url: null, error: error.message };
-  return { url: data?.signedUrl ?? null };
+  const storage = await getFirebaseStorage();
+  if (!storage) return { url: null, error: "not_configured" };
+  try {
+    const [url] = await storage.bucket().file(`fuel-fills/${objectKey}`).getSignedUrl({
+      action: "read",
+      expires: Date.now() + 300_000,
+    });
+    return { url: url ?? null };
+  } catch (error) {
+    return { url: null, error: error instanceof Error ? error.message : "save_failed" };
+  }
 }
 
 export async function listFuelFills(input: {
@@ -57,12 +98,11 @@ export async function listFuelFills(input: {
   const auth = await requireFuelView();
   if ("error" in auth) throw new Error(auth.error);
 
-  const supabase = await createClient();
-  // `p_driver_id` scopes the query *before* the LIMIT. Filtering the fleet-wide
-  // page in JavaScript meant a rider's own fills fell outside the 2000-row
-  // window whenever the fleet was busier than that, so a custom range came back
-  // empty for a rider who plainly had records.
-  const { data, error } = await supabase.rpc("admin_list_fuel_fills", {
+  const { data, error } = await callAdminFunction<{
+    ok?: boolean;
+    error?: string;
+    rows?: unknown;
+  }>("admin_list_fuel_fills", {
     p_from: input.from,
     p_to: input.to,
     p_search: input.search?.trim() || undefined,
@@ -73,13 +113,7 @@ export async function listFuelFills(input: {
   });
   if (error) throw new Error(error.message);
 
-  const payload = data as {
-    ok?: boolean;
-    error?: string;
-    rows?: unknown;
-  } | null;
-  // The RPC answers `ok: false` for a refusal, which is not a PostgREST error —
-  // returning [] here is what made a denial look like "no records".
+  const payload = data;
   if (!payload?.ok) {
     throw new Error(payload?.error || "fuel_list_failed");
   }
@@ -95,6 +129,7 @@ export async function listFuelFills(input: {
 
 const MONTH_KEY = /^\d{4}-\d{2}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const OVERRIDES = "fuel_withdrawn_overrides";
 
 export type FuelDriverHeader = {
   driverId: string;
@@ -112,54 +147,32 @@ export async function getFuelDriverHeader(driverId: string): Promise<FuelDriverH
   if ("error" in auth) throw new Error(auth.error);
   if (!UUID.test(driverId)) return null;
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("drivers")
-    .select("id, employee_id, project_key, vehicle_id, zones(name), profiles!drivers_id_fkey(full_name)")
-    .eq("id", driverId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!data) return null;
-
-  const vehicleId = typeof data.vehicle_id === "string" ? data.vehicle_id : null;
-  const vehicle = vehicleId
-    ? await supabase
-        .from("vehicles")
-        .select("reg_number, fuel_type, fuel_monthly_limit_kwd")
-        .eq("id", vehicleId)
-        .maybeSingle()
-    : { data: null, error: null };
-  if (vehicle.error) throw new Error(vehicle.error.message);
-
-  const zoneRaw = data.zones;
-  const zoneRow = Array.isArray(zoneRaw) ? zoneRaw[0] : zoneRaw;
-  const profileRaw = data.profiles;
-  const profileRow = Array.isArray(profileRaw) ? profileRaw[0] : profileRaw;
-  const name =
-    profileRow && typeof profileRow === "object" && "full_name" in profileRow
-      ? typeof (profileRow as { full_name?: unknown }).full_name === "string"
-        ? (profileRow as { full_name: string }).full_name
-        : null
-      : null;
-  const zoneName =
-    zoneRow && typeof zoneRow === "object" && "name" in zoneRow
-      ? typeof (zoneRow as { name?: unknown }).name === "string"
-        ? (zoneRow as { name: string }).name
-        : null
-      : null;
-  const limitRaw = vehicle.data?.fuel_monthly_limit_kwd;
-  const limit = typeof limitRaw === "number" ? limitRaw : Number(limitRaw);
-  const fuelTypeRaw = vehicle.data?.fuel_type;
+  const db = await openDb();
+  const driverSnap = await db.collection(COLLECTIONS.drivers).doc(driverId).get();
+  if (!driverSnap.exists) return null;
+  const driver = asRow(driverSnap.id, driverSnap.data());
+  const profileSnap = await db.collection(COLLECTIONS.profiles).doc(driverId).get();
+  const profile = profileSnap.exists ? asRow(profileSnap.id, profileSnap.data()) : null;
+  const zoneId = str(driver.zone_id);
+  const zoneSnap = zoneId ? await db.collection(COLLECTIONS.zones).doc(zoneId).get() : null;
+  const vehicleId = str(driver.vehicle_id);
+  const vehicleSnap = vehicleId
+    ? await db.collection(COLLECTIONS.vehicles).doc(vehicleId).get()
+    : null;
+  const vehicle = vehicleSnap?.exists ? asRow(vehicleSnap.id, vehicleSnap.data()) : null;
+  const limit = Number(vehicle?.fuel_monthly_limit_kwd);
+  const projectKey = typeof driver.project_key === "string" ? driver.project_key : null;
+  const fuelType = typeof vehicle?.fuel_type === "string" ? vehicle.fuel_type : null;
 
   return {
     driverId,
-    driverName: name,
-    employeeId: typeof data.employee_id === "string" ? data.employee_id : null,
-    plate: typeof vehicle.data?.reg_number === "string" ? vehicle.data.reg_number : null,
-    projectKey: isDriverProjectKey(data.project_key) ? data.project_key : null,
-    zone: zoneName,
+    driverName: str(profile?.full_name) || null,
+    employeeId: str(driver.employee_id) || null,
+    plate: str(vehicle?.reg_number) || null,
+    projectKey: isDriverProjectKey(projectKey) ? projectKey : null,
+    zone: zoneSnap?.exists ? str(zoneSnap.data()?.name) || null : null,
     monthlyLimit: Number.isFinite(limit) ? limit : 0,
-    fuelType: isVehicleFuelType(fuelTypeRaw) ? fuelTypeRaw : null,
+    fuelType: isVehicleFuelType(fuelType) ? fuelType : null,
   };
 }
 
@@ -174,16 +187,15 @@ export async function listFuelWithdrawnOverrides(monthKey: string): Promise<Fuel
   if ("error" in auth) throw new Error(auth.error);
   if (!MONTH_KEY.test(monthKey)) return [];
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("fuel_withdrawn_overrides")
-    .select("driver_id, vehicle_id, amount_kwd")
-    .eq("month_key", monthKey);
-  if (error) throw new Error(error.message);
-  return (data ?? []).flatMap((row) => {
+  const db = await openDb();
+  const snap = await db.collection(OVERRIDES).where("month_key", "==", monthKey).get();
+  return snap.docs.flatMap((doc) => {
+    const row = asRow(doc.id, doc.data());
     const amount = Number(row.amount_kwd);
-    if (!row.driver_id || !row.vehicle_id || !Number.isFinite(amount)) return [];
-    return [{ driverId: row.driver_id, vehicleId: row.vehicle_id, amountKwd: amount }];
+    const driverId = str(row.driver_id);
+    const vehicleId = str(row.vehicle_id);
+    if (!driverId || !vehicleId || !Number.isFinite(amount)) return [];
+    return [{ driverId, vehicleId, amountKwd: amount }];
   });
 }
 
@@ -202,20 +214,24 @@ export async function saveFuelWithdrawnOverride(input: {
     return { ok: false, error: "invalid_amount" };
   }
   const amountKwd = Math.round(input.amountKwd * 1000) / 1000;
+  const docId = `${input.driverId}_${input.vehicleId}_${input.monthKey}`;
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("fuel_withdrawn_overrides").upsert(
-    {
-      driver_id: input.driverId,
-      vehicle_id: input.vehicleId,
-      month_key: input.monthKey,
-      amount_kwd: amountKwd,
-      updated_at: new Date().toISOString(),
-      updated_by: auth.session.id,
-    },
-    { onConflict: "driver_id,vehicle_id,month_key" },
-  );
-  if (error) return { ok: false, error: error.message };
+  const db = await openDb();
+  try {
+    await db.collection(OVERRIDES).doc(docId).set(
+      {
+        driver_id: input.driverId,
+        vehicle_id: input.vehicleId,
+        month_key: input.monthKey,
+        amount_kwd: amountKwd,
+        updated_at: new Date(),
+        updated_by: auth.session.id,
+      },
+      { merge: true },
+    );
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "save_failed" };
+  }
 
   await logAdminMutation({
     action: "update",

@@ -1,6 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
+import { callAdminFunction, callCronFunction } from "@/lib/firebase/callable";
+import { getFirebaseStorage } from "@/lib/firebase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
@@ -61,6 +65,147 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+type DocRow = Record<string, unknown> & { id: string };
+
+function cell(value: unknown): unknown {
+  if (value == null) return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  if (Array.isArray(value)) return value.map(cell);
+  return value;
+}
+
+function docRow(id: string, data: DocumentData | undefined): DocRow | null {
+  if (!data) return null;
+  const row: DocRow = { id };
+  for (const [key, value] of Object.entries(data)) row[key] = cell(value);
+  return row;
+}
+
+async function openDb(): Promise<Firestore | null> {
+  return staffDb();
+}
+
+function callRpc(asWorker: boolean) {
+  return asWorker ? callCronFunction : callAdminFunction;
+}
+
+async function getDoc(name: string, id: string): Promise<{ row: DocRow | null; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { row: null, error: "not_configured" };
+  try {
+    const snap = await db.collection(name).doc(id).get();
+    return { row: snap.exists ? docRow(snap.id, snap.data()) : null, error: null };
+  } catch (e) {
+    return { row: null, error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function listDocs(name: string): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    const snap = await db.collection(name).get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function queryDocs(
+  name: string,
+  filters: Array<[string, unknown]>,
+): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    let q: Query = db.collection(name);
+    for (const [field, value] of filters) q = q.where(field, "==", value);
+    const snap = await q.get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch {
+    const all = await listDocs(name);
+    if (all.error) return all;
+    return {
+      rows: all.rows.filter((row) => filters.every(([field, value]) => row[field] === value)),
+      error: null,
+    };
+  }
+}
+
+async function docsByIds(name: string, ids: string[]): Promise<DocRow[]> {
+  const db = await openDb();
+  if (!db) return [];
+  const unique = [...new Set(ids.filter((id) => id.length > 0))];
+  const out: DocRow[] = [];
+  for (let i = 0; i < unique.length; i += 30) {
+    const chunk = unique.slice(i, i + 30);
+    const snaps = await db.getAll(...chunk.map((docId) => db.collection(name).doc(docId)));
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      const row = docRow(snap.id, snap.data());
+      if (row) out.push(row);
+    }
+  }
+  return out;
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  const as = String(a);
+  const bs = String(b);
+  return as < bs ? -1 : as > bs ? 1 : 0;
+}
+
+function sortRows(rows: DocRow[], keys: Array<[string, "asc" | "desc"]>): DocRow[] {
+  return [...rows].sort((left, right) => {
+    for (const [key, dir] of keys) {
+      const c = compareValues(left[key], right[key]);
+      if (c !== 0) return dir === "asc" ? c : -c;
+    }
+    return 0;
+  });
+}
+
+async function patchDoc(
+  name: string,
+  id: string,
+  data: Record<string, unknown>,
+): Promise<string | null> {
+  const db = await openDb();
+  if (!db) return "not_configured";
+  try {
+    const ref = db.collection(name).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    await ref.set(data, { merge: true });
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "write_failed";
+  }
+}
+
+async function deleteDoc(name: string, id: string): Promise<string | null> {
+  const db = await openDb();
+  if (!db) return "not_configured";
+  try {
+    await db.collection(name).doc(id).delete();
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "delete_failed";
+  }
 }
 
 function asStringArray(value: unknown): string[] {
@@ -180,56 +325,69 @@ export async function fetchEsignTemplates(): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any)
-    .from("esign_templates")
-    // The library card's provenance chip needs `source_kind`, so the two
-    // columns ride along on a query that was already joining the field rows to
-    // count them. Selecting only `id` here would leave the card guessing.
-    //
-    // `esign_categories` rides the existing FK for the card's category chip, for
-    // the same reason: one embed instead of a second client read of a catalogue
-    // that is only ever used here to resolve a label.
-    .select(
-      "*, esign_template_fields(id, field_key, source_kind), esign_categories(label_en)",
-    )
-    .order("name_en");
-  if (error) return { rows: [], error: error.message };
+  const [listed, fields, categories] = await Promise.all([
+    listDocs(COLLECTIONS.esignTemplates),
+    listDocs(COLLECTIONS.esignTemplateFields),
+    listDocs(COLLECTIONS.esignCategories),
+  ]);
+  if (listed.error) return { rows: [], error: listed.error };
+  const fieldsByTemplate = new Map<string, DocRow[]>();
+  for (const field of fields.rows) {
+    const templateId = String(field.template_id ?? "");
+    const group = fieldsByTemplate.get(templateId) ?? [];
+    group.push(field);
+    fieldsByTemplate.set(templateId, group);
+  }
+  const categoryByKey = new Map(
+    categories.rows.map((row) => [String(row.key ?? row.id), row]),
+  );
   await logAdminRead("esign_templates", "esign.templates.list", {});
   return {
-    rows: ((data ?? []) as Record<string, unknown>[]).map((row) => {
-      const fields = Array.isArray(row.esign_template_fields)
-        ? row.esign_template_fields
-        : [];
-      return mapTemplate(row, fields.length);
+    rows: sortRows(listed.rows, [["name_en", "asc"]]).map((row) => {
+      const attachedFields = (fieldsByTemplate.get(row.id) ?? []).map((field) => ({
+        id: field.id,
+        field_key: field.field_key,
+        source_kind: field.source_kind,
+      }));
+      const category = categoryByKey.get(String(row.category_key ?? ""));
+      return mapTemplate(
+        {
+          ...row,
+          esign_template_fields: attachedFields,
+          esign_categories: category ? { label_en: category.label_en } : null,
+        },
+        attachedFields.length,
+      );
     }),
   };
 }
 
 async function loadEsignTemplate(
-  supabase: Awaited<ReturnType<typeof createClient>>,
   id: string,
 ): Promise<{ template: EsignTemplateDetail | null; error?: string }> {
-  const { data, error } = await (supabase as any)
-    .from("esign_templates")
-    .select("*, esign_template_fields(*)")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) return { template: null, error: error.message };
-  if (!data) return { template: null };
-  const row = data as Record<string, unknown>;
-  const fields = (Array.isArray(row.esign_template_fields) ? row.esign_template_fields : [])
-    .map((f) => mapField(asRecord(f)))
+  const loaded = await getDoc(COLLECTIONS.esignTemplates, id);
+  if (loaded.error) return { template: null, error: loaded.error };
+  if (!loaded.row) return { template: null };
+  const fields = await queryDocs(COLLECTIONS.esignTemplateFields, [["template_id", id]]);
+  const category = loaded.row.category_key
+    ? await queryDocs(COLLECTIONS.esignCategories, [["key", String(loaded.row.category_key)]])
+    : { rows: [] as DocRow[], error: null };
+  const row = {
+    ...loaded.row,
+    esign_template_fields: fields.rows,
+    esign_categories: category.rows[0] ? { label_en: category.rows[0].label_en } : null,
+  };
+  const mapped = fields.rows
+    .map((field) => mapField(field))
     .sort((a, b) => a.sort_order - b.sort_order);
-  return { template: { ...mapTemplate(row, fields.length), fields } };
+  return { template: { ...mapTemplate(row, mapped.length), fields: mapped } };
 }
 
 export async function fetchEsignTemplate(
   id: string,
 ): Promise<{ template: EsignTemplateDetail | null; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const loaded = await loadEsignTemplate(supabase, id);
+  const loaded = await loadEsignTemplate(id);
   if (loaded.template) {
     await logAdminRead("esign_templates", "esign.templates.detail", { id });
   }
@@ -253,8 +411,7 @@ export async function upsertEsignTemplate(input: {
   is_draft?: boolean;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_upsert_esign_template", {
+  const { data, error } = await callAdminFunction("admin_upsert_esign_template", {
     p_template: {
       id: input.id ?? null,
       category_key: input.category_key,
@@ -309,8 +466,7 @@ export async function upsertEsignTemplateField(input: {
   const key = input.field_key.trim().toLowerCase();
   if (!validFieldKey(key)) return { ok: false, error: "invalid_field_key" };
   if (!input.label_en.trim()) return { ok: false, error: "invalid_input" };
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_upsert_esign_template_field", {
+  const { data, error } = await callAdminFunction("admin_upsert_esign_template_field", {
     p_field: {
       template_id: input.template_id,
       field_key: key,
@@ -342,9 +498,8 @@ export async function deleteEsignTemplateField(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { error } = await (supabase as any).from("esign_template_fields").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  const error = await deleteDoc(COLLECTIONS.esignTemplateFields, id);
+  if (error) return { ok: false, error };
   await logAdminMutation({
     action: "delete",
     entityType: "esign_template_fields",
@@ -355,11 +510,10 @@ export async function deleteEsignTemplateField(
 }
 
 async function resolveEmployeesOnClient(
-  supabase: Awaited<ReturnType<typeof createClient>>,
   employeeIds: string[],
   asWorker: boolean,
 ): Promise<{ rows: EsignResolveRow[]; error?: string }> {
-  const { data, error } = await (supabase as any).rpc(
+  const { data, error } = await callRpc(asWorker)(
     asWorker ? "esign_worker_resolve_employees" : "admin_esign_resolve_employees",
     { p_rows: employeeIds.map((employee_id) => ({ employee_id })) },
   );
@@ -386,16 +540,14 @@ export async function resolveEsignEmployees(
   employeeIds: string[],
 ): Promise<{ rows: EsignResolveRow[]; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  return resolveEmployeesOnClient(supabase, employeeIds, false);
+  return resolveEmployeesOnClient(employeeIds, false);
 }
 
 export async function fetchEsignSnapshot(
   driverId: string,
 ): Promise<{ snapshot: EsignEmployeeSnapshot | null; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("esign_employee_snapshot", {
+  const { data, error } = await callAdminFunction("esign_employee_snapshot", {
     p_driver_id: driverId,
   });
   if (error) return { snapshot: null, error: error.message };
@@ -429,14 +581,19 @@ function documentForLocale(
 }
 
 async function uploadPdfBytes(
-  supabase: Awaited<ReturnType<typeof createClient>>,
   bytes: Uint8Array,
 ): Promise<{ ok: true; key: string } | { ok: false; error: string }> {
+  const storage = await getFirebaseStorage();
+  if (!storage) return { ok: false, error: "not_configured" };
   const key = `admin/${crypto.randomUUID()}.pdf`;
-  const { error } = await supabase.storage
-    .from(ESIGN_BUCKET)
-    .upload(key, Buffer.from(bytes), { contentType: "application/pdf", upsert: false });
-  if (error) return { ok: false, error: error.message };
+  try {
+    const file = storage.bucket().file(`${ESIGN_BUCKET}/${key}`);
+    const [exists] = await file.exists();
+    if (exists) return { ok: false, error: "already_exists" };
+    await file.save(Buffer.from(bytes), { contentType: "application/pdf", resumable: false });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "upload_failed" };
+  }
   return { ok: true, key };
 }
 
@@ -470,7 +627,6 @@ export async function createEsignFromTemplate(input: {
   }
 
   const browser = await launchEsignBrowser();
-  const supabase = await createClient();
   try {
     const pdf = await renderEsignPdf(
       documentForLocale(
@@ -482,10 +638,10 @@ export async function createEsignFromTemplate(input: {
       ),
       browser,
     );
-    const upload = await uploadPdfBytes(supabase, pdf);
+    const upload = await uploadPdfBytes(pdf);
     if (!upload.ok) return { ok: false, error: upload.error };
 
-    const { data, error } = await (supabase as any).rpc("admin_create_esign_request", {
+    const { data, error } = await callAdminFunction("admin_create_esign_request", {
       p_driver_id: input.driver_id,
       p_title: input.title.trim(),
       p_category_key: loaded.template.category_key,
@@ -510,7 +666,7 @@ export async function createEsignFromTemplate(input: {
     });
     const id = result.id != null ? String(result.id) : undefined;
     if (id && input.resent_from_id) {
-      const linked = await (supabase as any).rpc("admin_link_esign_resend", {
+      const linked = await callAdminFunction("admin_link_esign_resend", {
         p_id: id,
         p_from_id: input.resent_from_id,
       });
@@ -547,8 +703,7 @@ export async function createEsignBatch(input: {
   if (!isEsignDueDateAllowed(input.due_at ?? "", kuwaitTodayYmd())) {
     return { ok: false, error: "due_in_past" };
   }
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_create_esign_batch", {
+  const { data, error } = await callAdminFunction("admin_create_esign_batch", {
     p_batch: {
       template_id: input.template_id,
       title: input.title,
@@ -631,8 +786,7 @@ export async function remindEsignRequests(
       error: "no_ids",
     };
   }
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_remind_esign_requests", {
+  const { data, error } = await callAdminFunction("admin_remind_esign_requests", {
     p_ids: ids,
     p_message: message?.trim() || undefined,
   });
@@ -691,8 +845,7 @@ export async function fetchEsignReminderState(
   await requireRequestsManage();
   const empty: EsignReminderState = { cooldownHours: 0, rows: [] };
   if (ids.length === 0) return { state: empty };
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_esign_reminder_state", {
+  const { data, error } = await callAdminFunction("admin_esign_reminder_state", {
     p_ids: ids,
   });
   if (error) return { state: empty, error: error.message };
@@ -736,17 +889,16 @@ export async function fetchEsignTrackerRecipients(
   limit = 4000,
 ): Promise<{ recipients: EsignTrackerRecipient[]; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any)
-    .from("esign_requests")
-    .select("id, batch_id, request_code, status, viewed_at, due_at")
-    .not("batch_id", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(Math.max(1, Math.min(limit, 20000)));
-  if (error) return { recipients: [], error: error.message };
+  const listed = await listDocs(COLLECTIONS.esignRequests);
+  if (listed.error) return { recipients: [], error: listed.error };
+  const cap = Math.max(1, Math.min(limit, 20000));
+  const data = sortRows(
+    listed.rows.filter((row) => row.batch_id != null && String(row.batch_id) !== ""),
+    [["created_at", "desc"]],
+  ).slice(0, cap);
   const todayYmd = kuwaitTodayYmd();
   return {
-    recipients: ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    recipients: data.map((row) => ({
       id: String(row.id),
       batch_id: String(row.batch_id),
       request_code: String(row.request_code ?? ""),
@@ -781,8 +933,7 @@ export async function updateEsignBatchRow(input: {
   field_values?: Record<string, string> | null;
 }): Promise<{ ok: boolean; status?: string; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_update_esign_batch_row", {
+  const { data, error } = await callAdminFunction("admin_update_esign_batch_row", {
     p_row_id: input.row_id,
     p_employee_id: input.employee_id,
     p_field_values: input.field_values ?? null,
@@ -804,8 +955,7 @@ export async function removeEsignBatchRow(
   rowId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_remove_esign_batch_row", {
+  const { data, error } = await callAdminFunction("admin_remove_esign_batch_row", {
     p_row_id: rowId,
   });
   if (error) return { ok: false, error: error.message };
@@ -827,15 +977,25 @@ export async function fetchEsignBatches(): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any)
-    .from("esign_batches")
-    .select("*, esign_templates(name_en)")
-    .order("created_at", { ascending: false })
-    .limit(200);
-  if (error) return { rows: [], error: error.message };
+  const listed = await listDocs(COLLECTIONS.esignBatches);
+  if (listed.error) return { rows: [], error: listed.error };
+  const templates = await docsByIds(
+    COLLECTIONS.esignTemplates,
+    listed.rows.map((row) => String(row.template_id ?? "")),
+  );
+  const templateById = new Map(templates.map((row) => [row.id, row]));
   await logAdminRead("esign_batches", "esign.batches.list", {});
-  return { rows: ((data ?? []) as Record<string, unknown>[]).map(mapBatch) };
+  return {
+    rows: sortRows(listed.rows, [["created_at", "desc"]])
+      .slice(0, 200)
+      .map((row) => {
+        const template = templateById.get(String(row.template_id ?? ""));
+        return mapBatch({
+          ...row,
+          esign_templates: template ? { name_en: template.name_en } : null,
+        });
+      }),
+  };
 }
 
 export async function fetchEsignBatchKpis(): Promise<{
@@ -843,8 +1003,7 @@ export async function fetchEsignBatchKpis(): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_esign_batch_kpis");
+  const { data, error } = await callAdminFunction("admin_esign_batch_kpis");
   if (error) return { kpis: null, error: error.message };
   const kpis = parseEsignBatchKpis(asRecord(data));
   return { kpis };
@@ -856,28 +1015,36 @@ export async function fetchEsignBatch(id: string): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const [{ data, error }, lines] = await Promise.all([
-    (supabase as any)
-      .from("esign_batches")
-      .select("*, esign_templates(name_en)")
-      .eq("id", id)
-      .maybeSingle(),
-    (supabase as any)
-      .from("esign_batch_rows")
-      .select(
-        "id, row_index, employee_id, driver_id, status, error, field_values, description, esign_request_id, esign_requests(id, request_code, status, viewed_at, due_at, declined_at, signer_display_name, signer_meta, last_reminded_at, reminder_count)",
-      )
-      .eq("batch_id", id)
-      .order("row_index"),
+  const [batchLoaded, lineRows] = await Promise.all([
+    getDoc(COLLECTIONS.esignBatches, id),
+    queryDocs(COLLECTIONS.esignBatchRows, [["batch_id", id]]),
   ]);
-  if (error) return { batch: null, lines: [], error: error.message };
-  if (!data) return { batch: null, lines: [] };
+  if (batchLoaded.error) return { batch: null, lines: [], error: batchLoaded.error };
+  if (!batchLoaded.row) return { batch: null, lines: [] };
+  const template = batchLoaded.row.template_id
+    ? await getDoc(COLLECTIONS.esignTemplates, String(batchLoaded.row.template_id))
+    : { row: null as DocRow | null, error: null };
+  const requests = await docsByIds(
+    COLLECTIONS.esignRequests,
+    lineRows.rows.map((row) => String(row.esign_request_id ?? "")),
+  );
+  const requestById = new Map(requests.map((row) => [row.id, row]));
+  const data = {
+    ...batchLoaded.row,
+    esign_templates: template.row ? { name_en: template.row.name_en } : null,
+  };
+  const lines = sortRows(lineRows.rows, [["row_index", "asc"]]).map((row) => ({
+    ...row,
+    esign_requests: row.esign_request_id
+      ? (requestById.get(String(row.esign_request_id)) ?? null)
+      : null,
+  }));
   await logAdminRead("esign_batches", "esign.batches.detail", { id });
   const todayYmd = kuwaitTodayYmd();
   return {
-    batch: mapBatch(data as Record<string, unknown>),
-    lines: ((lines.data ?? []) as Record<string, unknown>[]).map((row) => {
+    batch: mapBatch(data),
+    lines: lines.map((line) => {
+      const row: DocRow = line;
       const req = asRecord(row.esign_requests);
       const recipientStatus = req.status != null ? String(req.status) : null;
       const recipientDue = req.due_at != null ? String(req.due_at) : null;
@@ -930,29 +1097,20 @@ export async function fetchEsignBatch(id: string): Promise<{
   };
 }
 
-async function recountBatch(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  batchId: string,
-) {
-  const { data } = await (supabase as any)
-    .from("esign_batch_rows")
-    .select("status")
-    .eq("batch_id", batchId);
-  const rows = (data ?? []) as { status: string }[];
+async function recountBatch(batchId: string) {
+  const listed = await queryDocs(COLLECTIONS.esignBatchRows, [["batch_id", batchId]]);
+  const rows = listed.rows;
   const created = rows.filter((r) => r.status === "created").length;
   const failed = rows.filter((r) => r.status === "failed").length;
   const pending = rows.filter((r) => r.status === "pending").length;
   const status: EsignBatchStatus =
     pending > 0 ? "processing" : failed > 0 ? "partial" : "completed";
-  await (supabase as any)
-    .from("esign_batches")
-    .update({
-      created_count: created,
-      failed_count: failed,
-      status,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", batchId);
+  await patchDoc(COLLECTIONS.esignBatches, batchId, {
+    created_count: created,
+    failed_count: failed,
+    status,
+    updated_at: new Date(),
+  });
   return { created, failed, pending, status };
 }
 
@@ -965,8 +1123,6 @@ async function recountBatch(
  * would hand the worker rows another concurrent claim had already taken.
  */
 export async function runEsignBatchChunk(input: {
-  // Session client or service-role admin client — same PostgREST surface.
-  supabase: any;
   batchId: string;
   mode?: EsignBatchChunkMode;
   asWorker?: boolean;
@@ -981,8 +1137,7 @@ export async function runEsignBatchChunk(input: {
   error?: string;
 }> {
   const mode = input.mode ?? "pending";
-  const supabase = input.supabase;
-  const { data, error } = await (supabase as any).rpc(
+  const { data, error } = await callRpc(Boolean(input.asWorker))(
     input.asWorker ? "esign_worker_claim_batch_rows" : "admin_claim_esign_batch_rows",
     {
       p_batch_id: input.batchId,
@@ -998,7 +1153,7 @@ export async function runEsignBatchChunk(input: {
   }
   const claimed = Array.isArray(payload.rows) ? payload.rows.map(asRecord) : [];
   if (claimed.length === 0) {
-    const totals = await recountBatch(supabase, input.batchId);
+    const totals = await recountBatch(input.batchId);
     return {
       ok: true,
       processed: 0,
@@ -1009,13 +1164,9 @@ export async function runEsignBatchChunk(input: {
     };
   }
 
-  const batchRow = await (supabase as any)
-    .from("esign_batches")
-    .select("template_id, language, title, due_at")
-    .eq("id", input.batchId)
-    .maybeSingle();
-  const batch = asRecord(batchRow.data);
-  const loaded = await loadEsignTemplate(supabase, String(batch.template_id ?? ""));
+  const batchRow = await getDoc(COLLECTIONS.esignBatches, input.batchId);
+  const batch: DocRow = batchRow.row ?? { id: input.batchId };
+  const loaded = await loadEsignTemplate(String(batch.template_id ?? ""));
   if (!loaded.template) {
     return { ok: false, processed: 0, created: 0, failed: 0, remaining: 0, error: loaded.error ?? "invalid_template" };
   }
@@ -1034,33 +1185,27 @@ export async function runEsignBatchChunk(input: {
       let driverId = row.driver_id != null ? String(row.driver_id) : "";
       let snapshot = null as EsignEmployeeSnapshot | null | undefined;
       if (driverId && !input.asWorker) {
-        const { data: snapData, error: snapError } = await (supabase as any).rpc(
+        const { data: snapData, error: snapError } = await callAdminFunction(
           "esign_employee_snapshot",
           { p_driver_id: driverId },
         );
         if (!snapError) snapshot = mapSnapshot(snapData) ?? null;
       }
       if (!snapshot || !driverId) {
-        const resolved = await resolveEmployeesOnClient(supabase, [employeeId], Boolean(input.asWorker));
+        const resolved = await resolveEmployeesOnClient([employeeId], Boolean(input.asWorker));
         const hit = resolved.rows[0];
         if (!hit?.ok || !hit.driver_id || !hit.snapshot) {
-          await (supabase as any)
-            .from("esign_batch_rows")
-            .update({
-              status: "failed",
-              error: hit?.status ?? resolved.error ?? "unknown_id",
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", rowId);
+          await patchDoc(COLLECTIONS.esignBatchRows, rowId, {
+            status: "failed",
+            error: hit?.status ?? resolved.error ?? "unknown_id",
+            updated_at: new Date(),
+          });
           failed += 1;
           continue;
         }
         driverId = hit.driver_id;
         snapshot = hit.snapshot;
-        await (supabase as any)
-          .from("esign_batch_rows")
-          .update({ driver_id: driverId })
-          .eq("id", rowId);
+        await patchDoc(COLLECTIONS.esignBatchRows, rowId, { driver_id: driverId });
       }
 
       const fieldValues = asRecord(row.field_values) as Record<string, string>;
@@ -1077,9 +1222,9 @@ export async function runEsignBatchChunk(input: {
           ),
           browser,
         );
-        const upload = await uploadPdfBytes(supabase, pdf);
+        const upload = await uploadPdfBytes(pdf);
         if (!upload.ok) throw new Error(upload.error);
-        const { data: createdRow, error: createError } = await (supabase as any).rpc(
+        const { data: createdRow, error: createError } = await callRpc(Boolean(input.asWorker))(
           input.asWorker ? "esign_worker_create_request" : "admin_create_esign_request",
           {
             p_driver_id: driverId,
@@ -1101,14 +1246,11 @@ export async function runEsignBatchChunk(input: {
         if (result.ok === false) throw new Error(String(result.error ?? "failed"));
         created += 1;
       } catch (err) {
-        await (supabase as any)
-          .from("esign_batch_rows")
-          .update({
-            status: "failed",
-            error: err instanceof Error ? err.message : "render_failed",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", rowId);
+        await patchDoc(COLLECTIONS.esignBatchRows, rowId, {
+          status: "failed",
+          error: err instanceof Error ? err.message : "render_failed",
+          updated_at: new Date(),
+        });
         failed += 1;
       }
     }
@@ -1116,7 +1258,7 @@ export async function runEsignBatchChunk(input: {
     await browser.close();
   }
 
-  const totals = await recountBatch(supabase, input.batchId);
+  const totals = await recountBatch(input.batchId);
   return {
     ok: true,
     processed: claimed.length,
@@ -1140,8 +1282,7 @@ export async function processEsignBatchChunk(
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  return runEsignBatchChunk({ supabase, batchId, mode });
+  return runEsignBatchChunk({ batchId, mode });
 }
 
 /**
@@ -1164,13 +1305,11 @@ export async function retryFailedEsignBatchRows(batchId: string): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data: before } = await (supabase as any)
-    .from("esign_batch_rows")
-    .select("id")
-    .eq("batch_id", batchId)
-    .eq("status", "failed");
-  let previous = ((before ?? []) as { id: string }[]).length;
+  const before = await queryDocs(COLLECTIONS.esignBatchRows, [
+    ["batch_id", batchId],
+    ["status", "failed"],
+  ]);
+  let previous = before.rows.length;
 
   let attempted = 0;
   let created = 0;
@@ -1197,12 +1336,11 @@ export async function retryFailedEsignBatchRows(batchId: string): Promise<{
     failed = chunk.failed;
     remaining = chunk.remaining;
     batchStatus = chunk.batch_status;
-    const { data: after } = await (supabase as any)
-      .from("esign_batch_rows")
-      .select("id")
-      .eq("batch_id", batchId)
-      .eq("status", "failed");
-    const now = ((after ?? []) as { id: string }[]).length;
+    const after = await queryDocs(COLLECTIONS.esignBatchRows, [
+      ["batch_id", batchId],
+      ["status", "failed"],
+    ]);
+    const now = after.rows.length;
     if (now >= previous) break;
     previous = now;
     maxChunks -= 1;
@@ -1263,8 +1401,7 @@ export async function saveEsignDraft(input: {
   source_filename?: string | null;
 }): Promise<{ ok: boolean; id?: string; rows?: number; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_save_esign_draft", {
+  const { data, error } = await callAdminFunction("admin_save_esign_draft", {
     p_draft: {
       id: input.id ?? null,
       kind: input.kind,
@@ -1293,8 +1430,7 @@ export async function fetchEsignDrafts(
   limit = 50,
 ): Promise<{ rows: EsignDraftRow[]; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_list_esign_drafts", {
+  const { data, error } = await callAdminFunction("admin_list_esign_drafts", {
     p_limit: limit,
   });
   if (error) return { rows: [], error: error.message };
@@ -1308,8 +1444,7 @@ export async function fetchEsignDraft(
   id: string,
 ): Promise<{ draft: EsignDraftDetail | null; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_get_esign_draft", { p_id: id });
+  const { data, error } = await callAdminFunction("admin_get_esign_draft", { p_id: id });
   if (error) return { draft: null, error: error.message };
   const payload = asRecord(data);
   if (payload.ok === false) return { draft: null, error: String(payload.error ?? "failed") };
@@ -1341,8 +1476,7 @@ export async function fetchEsignDraft(
 
 export async function deleteEsignDraft(id: string): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("admin_delete_esign_draft", { p_id: id });
+  const { data, error } = await callAdminFunction("admin_delete_esign_draft", { p_id: id });
   if (error) return { ok: false, error: error.message };
   const payload = asRecord(data);
   if (payload.ok === false) return { ok: false, error: String(payload.error ?? "failed") };

@@ -2,8 +2,6 @@
 
 import { refresh, revalidatePath, updateTag } from "next/cache";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import {
@@ -22,6 +20,10 @@ import {
   resolveLogoUploadMeta,
 } from "@/lib/branding/constants";
 import { sendDirectDriverNotification } from "@/features/notifications/notifications-actions";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { getFirebaseStorage } from "@/lib/firebase/admin";
+import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   getSentryDeviceOverview,
   sentryBuildIssuesUrl,
@@ -32,24 +34,24 @@ import {
 const DRIVER_APP_PLAY_URL =
   "https://play.google.com/store/apps/details?id=com.musallam_delivery.app";
 
-type PgLikeError = {
+type WriteError = {
   code?: string | null;
   message?: string | null;
   details?: string | null;
   hint?: string | null;
 };
 
-function logPgError(scope: string, error: PgLikeError | unknown): void {
-  const e = error as PgLikeError;
-  console.error(`[driver-app-settings:${scope}] supabase mutation failed`, {
+function logWriteError(scope: string, error: WriteError | unknown): void {
+  const e = error as WriteError;
+  console.error(`[driver-app-settings:${scope}] settings write failed`, {
     code: e?.code ?? null,
-    message: e?.message ?? null,
+    message: e?.message ?? (error instanceof Error ? error.message : null),
     details: e?.details ?? null,
     hint: e?.hint ?? null,
   });
 }
 
-function formatPgErrorDetail(error: PgLikeError | null | undefined): string | undefined {
+function formatWriteErrorDetail(error: WriteError | null | undefined): string | undefined {
   if (!error) return undefined;
   const parts: string[] = [];
   if (error.code) parts.push(`code ${error.code}`);
@@ -59,63 +61,79 @@ function formatPgErrorDetail(error: PgLikeError | null | undefined): string | un
   return parts.length > 0 ? parts.join(" — ") : undefined;
 }
 
+function brandingObjectPath(relativePath: string): string {
+  const trimmed = relativePath.replace(/^\/+/, "");
+  return trimmed.startsWith("branding/") ? trimmed : `branding/${trimmed}`;
+}
+
+async function brandingBucket() {
+  const storage = await getFirebaseStorage();
+  return storage?.bucket() ?? null;
+}
+
+async function saveBrandingObject(
+  relativePath: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<string | null> {
+  const bucket = await brandingBucket();
+  if (!bucket) return null;
+  const objectPath = brandingObjectPath(relativePath);
+  const token = crypto.randomUUID();
+  await bucket.file(objectPath).save(buffer, {
+    contentType,
+    metadata: { metadata: { firebaseStorageDownloadTokens: token } },
+  });
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+}
+
+async function removeStoragePaths(paths: string[]) {
+  if (paths.length === 0) return;
+  const bucket = await brandingBucket();
+  if (!bucket) return;
+  await Promise.all(
+    paths.map((relativePath) =>
+      bucket.file(brandingObjectPath(relativePath)).delete({ ignoreNotFound: true }),
+    ),
+  );
+}
+
 /**
- * Update one or more app_settings columns. Tries the staff client first
- * (so RLS audit shows the real user) and falls back to the admin client
- * if the staff client returns no rows or any error. Surfaces the actual
- * Postgres diagnostic in `errorDetail` when both attempts fail.
+ * Merge fields onto the single app_settings document. A missing document keeps
+ * the same diagnostic the panel already shows operators.
  */
 async function patchAppSettings(
   scope: string,
   patch: Record<string, unknown>,
   updatedBy: string,
 ): Promise<{ error?: string; errorDetail?: string }> {
-  const supabase = await createClient();
-  const payload = {
-    ...patch,
-    updated_at: new Date().toISOString(),
-    updated_by: updatedBy,
-  };
+  const db = await staffDb();
+  if (!db) return { error: "save_failed", errorDetail: "not_configured" };
 
-  const { data, error } = await supabase
-    .from("app_settings")
-    .update(payload)
-    .eq("id", 1)
-    .select("id");
-
-  if (!error && data && data.length > 0) return {};
-  if (error) logPgError(scope, error);
-
-  // Either RLS hid the row, the row was missing, or there was an explicit
-  // error. Retry with the admin client so the save still succeeds and we
-  // can capture a precise error message if it still fails.
+  const ref = db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID);
   try {
-    const admin = createAdminClient();
-    const { data: adminData, error: adminError } = await admin
-      .from("app_settings")
-      .update(payload)
-      .eq("id", 1)
-      .select("id");
-    if (adminError) {
-      logPgError(`${scope}:admin`, adminError);
-      return {
-        error: "save_failed",
-        errorDetail: formatPgErrorDetail(adminError),
-      };
-    }
-    if (!adminData || adminData.length === 0) {
+    const existing = await ref.get();
+    if (!existing.exists) {
       return {
         error: "save_failed",
         errorDetail:
           "app_settings row id=1 is missing — re-seed it with INSERT INTO app_settings (id) VALUES (1).",
       };
     }
+    await ref.set(
+      {
+        ...patch,
+        updated_at: new Date(),
+        updated_by: updatedBy,
+      },
+      { merge: true },
+    );
     return {};
-  } catch (e) {
-    logPgError(`${scope}:admin-throw`, e);
+  } catch (error) {
+    logWriteError(scope, error);
     return {
       error: "save_failed",
-      errorDetail: e instanceof Error ? e.message : String(e),
+      errorDetail: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -179,12 +197,6 @@ function resolveSplashUploadMeta(
       : mimeByExt[ext as (typeof ALLOWED_SPLASH_EXTENSIONS)[number]];
   if (!contentType) return null;
   return { ext, contentType };
-}
-
-async function removeStoragePaths(paths: string[]) {
-  if (paths.length === 0) return;
-  const supabase = await createClient();
-  await supabase.storage.from("branding").remove(paths);
 }
 
 export async function updateDriverAppSettings(
@@ -294,44 +306,33 @@ export async function uploadDriverAppLogo(
     return { error: "invalid_type" };
   }
 
-  const supabase = await createClient();
   const path = `${DRIVER_APP_LOGO_PREFIX}.${meta.ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await supabase.storage
-    .from("branding")
-    .remove(ALLOWED_LOGO_EXTENSIONS.map((e) => `${DRIVER_APP_LOGO_PREFIX}.${e}`));
+  try {
+    await removeStoragePaths(ALLOWED_LOGO_EXTENSIONS.map((e) => `${DRIVER_APP_LOGO_PREFIX}.${e}`));
+    const publicUrl = await saveBrandingObject(path, buffer, meta.contentType);
+    if (!publicUrl) return { error: "upload_failed" };
 
-  const { error: uploadError } = await supabase.storage
-    .from("branding")
-    .upload(path, buffer, {
-      contentType: meta.contentType,
-      upsert: true,
-    });
+    const logoUrl = `${publicUrl}&v=${Date.now()}`;
+    const result = await patchAppSettings(
+      "uploadDriverAppLogo",
+      { driver_app_logo_url: logoUrl },
+      auth.session.id,
+    );
+    if (result.error) return result;
 
-  if (uploadError) {
-    logPgError("uploadDriverAppLogo:storage", uploadError);
+    revalidateDriverAppSettings(locale);
+    return { success: true, logoUrl };
+  } catch (error) {
+    logWriteError("uploadDriverAppLogo:storage", error);
     return {
       error: "upload_failed",
-      errorDetail: formatPgErrorDetail(uploadError as PgLikeError),
+      errorDetail: formatWriteErrorDetail(
+        error instanceof Error ? { message: error.message } : undefined,
+      ),
     };
   }
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from("branding").getPublicUrl(path);
-
-  const logoUrl = `${publicUrl}?v=${Date.now()}`;
-
-  const result = await patchAppSettings(
-    "uploadDriverAppLogo",
-    { driver_app_logo_url: logoUrl },
-    auth.session.id,
-  );
-  if (result.error) return result;
-
-  revalidateDriverAppSettings(locale);
-  return { success: true, logoUrl };
 }
 
 export async function uploadDriverAppSplash(
@@ -354,44 +355,35 @@ export async function uploadDriverAppSplash(
     return { error: "invalid_type" };
   }
 
-  const supabase = await createClient();
   const path = `${DRIVER_APP_SPLASH_PREFIX}.${meta.ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await supabase.storage
-    .from("branding")
-    .remove(ALLOWED_SPLASH_EXTENSIONS.map((e) => `${DRIVER_APP_SPLASH_PREFIX}.${e}`));
+  try {
+    await removeStoragePaths(
+      ALLOWED_SPLASH_EXTENSIONS.map((e) => `${DRIVER_APP_SPLASH_PREFIX}.${e}`),
+    );
+    const publicUrl = await saveBrandingObject(path, buffer, meta.contentType);
+    if (!publicUrl) return { error: "upload_failed" };
 
-  const { error: uploadError } = await supabase.storage
-    .from("branding")
-    .upload(path, buffer, {
-      contentType: meta.contentType,
-      upsert: true,
-    });
+    const splashUrl = `${publicUrl}&v=${Date.now()}`;
+    const result = await patchAppSettings(
+      "uploadDriverAppSplash",
+      { driver_app_splash_url: splashUrl },
+      auth.session.id,
+    );
+    if (result.error) return result;
 
-  if (uploadError) {
-    logPgError("uploadDriverAppSplash:storage", uploadError);
+    revalidateDriverAppSettings(locale);
+    return { success: true, splashUrl };
+  } catch (error) {
+    logWriteError("uploadDriverAppSplash:storage", error);
     return {
       error: "upload_failed",
-      errorDetail: formatPgErrorDetail(uploadError as PgLikeError),
+      errorDetail: formatWriteErrorDetail(
+        error instanceof Error ? { message: error.message } : undefined,
+      ),
     };
   }
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from("branding").getPublicUrl(path);
-
-  const splashUrl = `${publicUrl}?v=${Date.now()}`;
-
-  const result = await patchAppSettings(
-    "uploadDriverAppSplash",
-    { driver_app_splash_url: splashUrl },
-    auth.session.id,
-  );
-  if (result.error) return result;
-
-  revalidateDriverAppSettings(locale);
-  return { success: true, splashUrl };
 }
 
 export async function uploadDriverAppIcon(
@@ -414,44 +406,33 @@ export async function uploadDriverAppIcon(
     return { error: "invalid_type" };
   }
 
-  const supabase = await createClient();
   const path = `${DRIVER_APP_ICON_PREFIX}.${meta.ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await supabase.storage
-    .from("branding")
-    .remove(ALLOWED_ICON_EXTENSIONS.map((e) => `${DRIVER_APP_ICON_PREFIX}.${e}`));
+  try {
+    await removeStoragePaths(ALLOWED_ICON_EXTENSIONS.map((e) => `${DRIVER_APP_ICON_PREFIX}.${e}`));
+    const publicUrl = await saveBrandingObject(path, buffer, meta.contentType);
+    if (!publicUrl) return { error: "upload_failed" };
 
-  const { error: uploadError } = await supabase.storage
-    .from("branding")
-    .upload(path, buffer, {
-      contentType: meta.contentType,
-      upsert: true,
-    });
+    const iconUrl = `${publicUrl}&v=${Date.now()}`;
+    const result = await patchAppSettings(
+      "uploadDriverAppIcon",
+      { driver_app_icon_url: iconUrl },
+      auth.session.id,
+    );
+    if (result.error) return result;
 
-  if (uploadError) {
-    logPgError("uploadDriverAppIcon:storage", uploadError);
+    revalidateDriverAppSettings(locale);
+    return { success: true, iconUrl };
+  } catch (error) {
+    logWriteError("uploadDriverAppIcon:storage", error);
     return {
       error: "upload_failed",
-      errorDetail: formatPgErrorDetail(uploadError as PgLikeError),
+      errorDetail: formatWriteErrorDetail(
+        error instanceof Error ? { message: error.message } : undefined,
+      ),
     };
   }
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from("branding").getPublicUrl(path);
-
-  const iconUrl = `${publicUrl}?v=${Date.now()}`;
-
-  const result = await patchAppSettings(
-    "uploadDriverAppIcon",
-    { driver_app_icon_url: iconUrl },
-    auth.session.id,
-  );
-  if (result.error) return result;
-
-  revalidateDriverAppSettings(locale);
-  return { success: true, iconUrl };
 }
 
 export async function setDriverAppMaintenanceMode(
@@ -518,14 +499,28 @@ export async function updateDriverAppForceUpdate(
     driver_app_update_message: message,
   };
 
-  const supabase = await createClient();
-  const { data: before } = await supabase
-    .from("app_settings")
-    .select(
-      "driver_app_force_update, driver_app_min_version_code, driver_app_min_version_name, driver_app_update_message",
-    )
-    .eq("id", 1)
-    .maybeSingle();
+  const db = await staffDb();
+  const beforeSnap = db
+    ? await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).get()
+    : null;
+  const beforeData = beforeSnap?.data();
+  const before = beforeData
+    ? {
+        driver_app_force_update: beforeData.driver_app_force_update === true,
+        driver_app_min_version_code:
+          typeof beforeData.driver_app_min_version_code === "number"
+            ? beforeData.driver_app_min_version_code
+            : null,
+        driver_app_min_version_name:
+          typeof beforeData.driver_app_min_version_name === "string"
+            ? beforeData.driver_app_min_version_name
+            : null,
+        driver_app_update_message:
+          typeof beforeData.driver_app_update_message === "string"
+            ? beforeData.driver_app_update_message
+            : null,
+      }
+    : undefined;
 
   const result = await patchAppSettings("updateDriverAppForceUpdate", patch, auth.session.id);
   if (result.error) return result;
@@ -536,7 +531,7 @@ export async function updateDriverAppForceUpdate(
     entityType: "app_settings",
     entityId: "1",
     routeName: "updateDriverAppForceUpdate",
-    before: before ?? undefined,
+    before,
     after: patch,
   });
   return { success: true };
@@ -575,15 +570,58 @@ type InstallVersionRow = {
 
 const RECENT_INSTALL_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
+function seenAt(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (value && typeof value === "object" && "_seconds" in value) {
+    const seconds = (value as { _seconds?: unknown })._seconds;
+    if (typeof seconds === "number") return new Date(seconds * 1000).toISOString();
+  }
+  return null;
+}
+
+function installRow(raw: unknown): InstallVersionRow | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  const code = row.app_version_code;
+  const versionCode =
+    typeof code === "number"
+      ? code
+      : typeof code === "string" && code.trim() !== "" && Number.isFinite(Number(code))
+        ? Number(code)
+        : null;
+  return {
+    driver_id: typeof row.driver_id === "string" ? row.driver_id : "",
+    app_version_code: versionCode,
+    app_version_name: typeof row.app_version_name === "string" ? row.app_version_name : null,
+    last_seen_at: seenAt(row.last_seen_at),
+  };
+}
+
+function installRows(data: unknown): InstallVersionRow[] {
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((row) => {
+    const parsed = installRow(row);
+    return parsed ? [parsed] : [];
+  });
+}
+
 /**
  * Which build every active driver is running, read from the device session their
  * current phone logged in with. Lets the operator see how many installs a
  * minimum versionCode will lock out before the toggle is flipped.
  */
 export async function getDriverAppInstallStats(): Promise<DriverAppInstallStats> {
-  const supabase = await createClient();
-  const [{ data, error }, overview] = await Promise.all([
-    supabase.rpc("admin_driver_app_install_versions"),
+  const [versions, overview] = await Promise.all([
+    callAdminFunction<unknown>("admin_driver_app_install_versions"),
     getSentryDeviceOverview(),
   ]);
   const sentry = {
@@ -591,8 +629,8 @@ export async function getDriverAppInstallStats(): Promise<DriverAppInstallStats>
     reason: overview.connected ? null : overview.reason,
     projectUrl: sentryProjectUrl(),
   };
-  if (error) {
-    logPgError("getDriverAppInstallStats", error);
+  if (versions.error) {
+    logWriteError("getDriverAppInstallStats", versions.error);
     return { total: 0, versions: [], loadFailed: true, sentry };
   }
   const sentryEventsByCode = new Map<number, number>();
@@ -605,7 +643,7 @@ export async function getDriverAppInstallStats(): Promise<DriverAppInstallStats>
       );
     }
   }
-  const rows = (data ?? []) as InstallVersionRow[];
+  const rows = installRows(versions.data);
   const cutoff = Date.now() - RECENT_INSTALL_WINDOW_MS;
   const byCode = new Map<number | null, DriverAppInstallVersion>();
   for (const row of rows) {
@@ -631,13 +669,12 @@ export async function getDriverAppInstallStats(): Promise<DriverAppInstallStats>
     if (!entry.versionName && row.app_version_name) entry.versionName = row.app_version_name;
     byCode.set(code, entry);
   }
-  const versions = [...byCode.values()].sort((a, b) => {
-    // Unknown builds first: they are treated as below any minimum, same as the gate.
+  const versionList = [...byCode.values()].sort((a, b) => {
     if (a.versionCode == null) return -1;
     if (b.versionCode == null) return 1;
     return a.versionCode - b.versionCode;
   });
-  return { total: rows.length, versions, loadFailed: false, sentry };
+  return { total: rows.length, versions: versionList, loadFailed: false, sentry };
 }
 
 export type NotifyOutdatedInstallsResult =
@@ -653,7 +690,7 @@ export async function notifyOutdatedInstalls(
   input: { belowVersionCode: number; title: string; body: string },
 ): Promise<NotifyOutdatedInstallsResult> {
   const auth = await requireSettingsManager();
-  if (auth.error) return { error: auth.error };
+  if ("error" in auth) return { error: "not_authorized" };
 
   const below = Math.trunc(input.belowVersionCode);
   if (!Number.isFinite(below) || below <= 0) return { error: "invalid_version_code" };
@@ -661,15 +698,15 @@ export async function notifyOutdatedInstalls(
   const body = input.body.trim();
   if (!title || !body) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_driver_app_install_versions");
-  if (error) {
-    logPgError("notifyOutdatedInstalls", error);
-    return { error: "load_failed", errorDetail: formatPgErrorDetail(error) };
+  const versions = await callAdminFunction<unknown>("admin_driver_app_install_versions");
+  if (versions.error) {
+    logWriteError("notifyOutdatedInstalls", versions.error);
+    return { error: "load_failed", errorDetail: formatWriteErrorDetail(versions.error) };
   }
-  const driverIds = ((data ?? []) as InstallVersionRow[])
+  const driverIds = installRows(versions.data)
     .filter((row) => row.app_version_code == null || row.app_version_code < below)
-    .map((row) => row.driver_id);
+    .map((row) => row.driver_id)
+    .filter(Boolean);
   if (driverIds.length === 0) return { error: "no_outdated_installs" };
 
   const result = await sendDirectDriverNotification({
@@ -743,7 +780,6 @@ export async function resetDriverAppSettings(
       driver_app_login_verification_exempt_all: false,
       driver_app_delivery_proximity_meters:
         DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
-      // Always off — sideload OTA removed for Play Store.
       driver_app_sideload_updates_enabled: false,
       driver_app_force_update: false,
       driver_app_min_version_code: null,

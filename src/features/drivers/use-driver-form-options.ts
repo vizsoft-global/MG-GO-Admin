@@ -1,28 +1,15 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { createClient } from "@/lib/supabase/client";
 import { queryKeys } from "@/lib/query/query-keys";
 import { fetchPartners } from "@/features/partners/use-partners";
 import { fetchRestaurantPickerOptions } from "@/features/restaurants/restaurants-actions";
 import { fetchZones } from "@/features/zones/use-zones";
+import { listAvailableVehicles } from "./drivers-actions";
 import type { PartnerOption, RestaurantOption, VehicleOption, ZoneOption } from "./types";
 
 export async function fetchAvailableVehicles(): Promise<VehicleOption[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("vehicles")
-    .select("id, bike_id, reg_number, vehicle_type_key")
-    .eq("status", "active")
-    .order("bike_id");
-
-  if (error) throw error;
-  return (data ?? []).map((v) => ({
-    id: v.id,
-    bike_id: v.bike_id,
-    reg_number: v.reg_number,
-    vehicle_type_key: (v as { vehicle_type_key?: string | null }).vehicle_type_key ?? "bike",
-  }));
+  return listAvailableVehicles();
 }
 
 export type DriverFormOptions = {

@@ -167,6 +167,7 @@
     "weakPassword": "Password must be at least 8 characters",
     "resetFailed": "Could not send reset email. Try again.",
     "updatePasswordFailed": "Could not update password. Try again.",
+    "resetLinkInvalid": "This reset link is invalid or has expired. Request a new one.",
     "missingFields": "Please fill in all required fields",
     "invalidEmail": "Enter a valid email address",
     "emailAlreadyRegistered": "This email is already registered. Try signing in.",

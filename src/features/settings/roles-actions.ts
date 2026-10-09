@@ -1,10 +1,21 @@
 "use server";
 
 import { updateTag } from "next/cache";
+import type { Firestore } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { CATALOG_SLUG_SET, isValidRoleSlug } from "@/lib/auth/permission-catalog";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
+
+type RoleRow = {
+  id: string;
+  slug: string;
+  name: string;
+  is_system: boolean;
+  is_super_admin: boolean;
+};
 
 async function requireRolesManager() {
   const session = await getSessionUser();
@@ -18,30 +29,69 @@ function filterValidPermissions(permissionSlugs: string[]): string[] {
   return permissionSlugs.filter((s) => CATALOG_SLUG_SET.has(s));
 }
 
-async function getRoleByIdInternal(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  roleId: string,
-) {
-  return supabase
-    .from("admin_roles")
-    .select("id, slug, name, is_system, is_super_admin")
-    .eq("id", roleId)
-    .maybeSingle();
+async function getRoleByIdInternal(db: Firestore, roleId: string): Promise<RoleRow | null> {
+  const snap = await db.collection(COLLECTIONS.adminRoles).doc(roleId).get();
+  if (!snap.exists) return null;
+  const data = snap.data() ?? {};
+  return {
+    id: snap.id,
+    slug: typeof data.slug === "string" ? data.slug : "",
+    name: typeof data.name === "string" ? data.name : "",
+    is_system: data.is_system === true,
+    is_super_admin: data.is_super_admin === true,
+  };
+}
+
+async function readRoleSlugs(db: Firestore, roleId: string): Promise<string[]> {
+  const snap = await db.collection(COLLECTIONS.adminRolePermissions).doc(roleId).get();
+  const slugs = snap.data()?.permission_slugs;
+  return Array.isArray(slugs) ? slugs.filter((slug): slug is string => typeof slug === "string") : [];
+}
+
+async function writeRoleSlugs(db: Firestore, roleId: string, slugs: string[]): Promise<boolean> {
+  try {
+    await db.collection(COLLECTIONS.adminRolePermissions).doc(roleId).set(
+      { permission_slugs: slugs },
+      { merge: true },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function syncClaimsForRole(db: Firestore, roleId: string): Promise<void> {
+  const snap = await db
+    .collection(COLLECTIONS.profiles)
+    .where("admin_role_id", "==", roleId)
+    .get();
+  await Promise.all(
+    snap.docs.map(async (doc) => {
+      try {
+        await callAdminFunction("syncStaffClaims", { uid: doc.id });
+      } catch {
+        // Claims refresh is best-effort; the permission rows are already saved.
+      }
+    }),
+  );
 }
 
 export async function getRoleUsageCounts(): Promise<
   { roleId: string; userCount: number }[]
 > {
-  const supabase = await createClient();
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("admin_role_id")
-    .not("admin_role_id", "is", null);
+  const db = await staffDb();
+  if (!db) return [];
 
+  const snap = await db
+    .collection(COLLECTIONS.profiles)
+    .where("admin_role_id", "!=", null)
+    .orderBy("admin_role_id")
+    .get();
   const counts = new Map<string, number>();
-  for (const row of profiles ?? []) {
-    if (!row.admin_role_id) continue;
-    counts.set(row.admin_role_id, (counts.get(row.admin_role_id) ?? 0) + 1);
+  for (const doc of snap.docs) {
+    const roleId = doc.data().admin_role_id;
+    if (typeof roleId !== "string" || !roleId) continue;
+    counts.set(roleId, (counts.get(roleId) ?? 0) + 1);
   }
 
   return Array.from(counts.entries()).map(([roleId, userCount]) => ({
@@ -58,39 +108,18 @@ export async function updateRolePermissions(
   if ("error" in auth) return auth;
 
   const filtered = filterValidPermissions(permissionSlugs);
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  const { data: role } = await getRoleByIdInternal(supabase, roleId);
+  const role = await getRoleByIdInternal(db, roleId);
+  if (!role) return { error: "role_not_found" };
+  if (role.is_super_admin) return { error: "cannot_edit_super_admin" };
 
-  if (!role) {
-    return { error: "role_not_found" };
-  }
+  const beforeSlugs = await readRoleSlugs(db, roleId);
+  const saved = await writeRoleSlugs(db, roleId, filtered);
+  if (!saved) return { error: "save_failed" };
 
-  if (role.is_super_admin) {
-    return { error: "cannot_edit_super_admin" };
-  }
-
-  const { data: beforePerms } = await supabase
-    .from("admin_role_permissions")
-    .select("permission_slug")
-    .eq("role_id", roleId);
-  const beforeSlugs = (beforePerms ?? []).map((p) => p.permission_slug);
-
-  await supabase.from("admin_role_permissions").delete().eq("role_id", roleId);
-
-  if (filtered.length > 0) {
-    const { error } = await supabase.from("admin_role_permissions").insert(
-      filtered.map((permission_slug) => ({
-        role_id: roleId,
-        permission_slug,
-      })),
-    );
-
-    if (error) {
-      return { error: "save_failed" };
-    }
-  }
-
+  await syncClaimsForRole(db, roleId);
   updateTag("admin-roles");
   void logAdminMutation({
     action: "update",
@@ -104,28 +133,18 @@ export async function updateRolePermissions(
 }
 
 async function saveRolePermissionsWithoutCache(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Firestore,
   roleId: string,
   permissionSlugs: string[],
 ): Promise<{ error?: string }> {
   const filtered = filterValidPermissions(permissionSlugs);
-
-  const { data: role } = await getRoleByIdInternal(supabase, roleId);
+  const role = await getRoleByIdInternal(db, roleId);
   if (!role) return { error: "role_not_found" };
   if (role.is_super_admin) return { error: "cannot_edit_super_admin" };
 
-  await supabase.from("admin_role_permissions").delete().eq("role_id", roleId);
-
-  if (filtered.length > 0) {
-    const { error } = await supabase.from("admin_role_permissions").insert(
-      filtered.map((permission_slug) => ({
-        role_id: roleId,
-        permission_slug,
-      })),
-    );
-    if (error) return { error: "save_failed" };
-  }
-
+  const saved = await writeRoleSlugs(db, roleId, filtered);
+  if (!saved) return { error: "save_failed" };
+  await syncClaimsForRole(db, roleId);
   return {};
 }
 
@@ -139,14 +158,11 @@ export async function updateMultipleRolePermissions(
     return { success: true };
   }
 
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
   for (const { roleId, permissionSlugs } of updates) {
-    const result = await saveRolePermissionsWithoutCache(
-      supabase,
-      roleId,
-      permissionSlugs,
-    );
+    const result = await saveRolePermissionsWithoutCache(db, roleId, permissionSlugs);
     if (result.error) return result;
   }
 
@@ -177,43 +193,41 @@ export async function createCustomRole(
   const reserved = new Set(["super_admin", "administrator", "operator"]);
   if (reserved.has(normalizedSlug)) return { error: "slug_reserved" };
 
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  const { data: existing } = await supabase
-    .from("admin_roles")
-    .select("id")
-    .eq("slug", normalizedSlug)
-    .maybeSingle();
+  const existing = await db
+    .collection(COLLECTIONS.adminRoles)
+    .where("slug", "==", normalizedSlug)
+    .limit(1)
+    .get();
+  if (!existing.empty) return { error: "slug_exists" };
 
-  if (existing) return { error: "slug_exists" };
-
-  const { data: role, error } = await supabase
-    .from("admin_roles")
-    .insert({
+  const roleId = crypto.randomUUID();
+  try {
+    await db.collection(COLLECTIONS.adminRoles).doc(roleId).set({
+      id: roleId,
       name: trimmedName,
       slug: normalizedSlug,
       is_system: false,
       is_super_admin: false,
-    })
-    .select("id")
-    .single();
-
-  if (error || !role) {
+    });
+  } catch {
     return { error: "save_failed" };
   }
 
-  const result = await updateRolePermissions(role.id, permissionSlugs);
+  const result = await updateRolePermissions(roleId, permissionSlugs);
   if (result.error) return result;
 
   void logAdminMutation({
     action: "create",
     entityType: "admin_role",
-    entityId: role.id,
+    entityId: roleId,
     routeName: "createCustomRole",
     after: { name: trimmedName, slug: normalizedSlug },
   });
 
-  return { success: true, roleId: role.id };
+  return { success: true, roleId };
 }
 
 export async function duplicateRole(
@@ -224,13 +238,10 @@ export async function duplicateRole(
   const auth = await requireRolesManager();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
-  const { data: sourcePerms } = await supabase
-    .from("admin_role_permissions")
-    .select("permission_slug")
-    .eq("role_id", sourceRoleId);
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  const slugs = (sourcePerms ?? []).map((r) => r.permission_slug);
+  const slugs = await readRoleSlugs(db, sourceRoleId);
   return createCustomRole(name, slug, slugs);
 }
 
@@ -245,22 +256,14 @@ export async function copyRolePermissionsToEditor(
     return { error: "same_role" };
   }
 
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  const { data: target } = await getRoleByIdInternal(supabase, targetRoleId);
+  const target = await getRoleByIdInternal(db, targetRoleId);
   if (!target) return { error: "role_not_found" };
   if (target.is_super_admin) return { error: "cannot_edit_super_admin" };
 
-  const { data: sourcePerms } = await supabase
-    .from("admin_role_permissions")
-    .select("permission_slug")
-    .eq("role_id", sourceRoleId);
-
-  return {
-    permissions: filterValidPermissions(
-      (sourcePerms ?? []).map((r) => r.permission_slug),
-    ),
-  };
+  return { permissions: filterValidPermissions(await readRoleSlugs(db, sourceRoleId)) };
 }
 
 export async function applyCopyRolePermissions(
@@ -282,20 +285,23 @@ export async function updateRoleMeta(
   const trimmedName = name.trim();
   if (!trimmedName) return { error: "invalid_name" };
 
-  const supabase = await createClient();
-  const { data: role } = await getRoleByIdInternal(supabase, roleId);
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
+  const role = await getRoleByIdInternal(db, roleId);
   if (!role) return { error: "role_not_found" };
   if (role.is_super_admin || role.is_system) {
     return { error: "cannot_edit_system_role" };
   }
 
-  const { error } = await supabase
-    .from("admin_roles")
-    .update({ name: trimmedName })
-    .eq("id", roleId);
-
-  if (error) return { error: "save_failed" };
+  try {
+    await db.collection(COLLECTIONS.adminRoles).doc(roleId).set(
+      { name: trimmedName },
+      { merge: true },
+    );
+  } catch {
+    return { error: "save_failed" };
+  }
 
   updateTag("admin-roles");
   return { success: true };
@@ -307,26 +313,28 @@ export async function deleteCustomRole(
   const auth = await requireRolesManager();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
-  const { data: role } = await getRoleByIdInternal(supabase, roleId);
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
+  const role = await getRoleByIdInternal(db, roleId);
   if (!role) return { error: "role_not_found" };
   if (role.is_super_admin || role.is_system) {
     return { error: "cannot_delete_system_role" };
   }
 
-  const { count } = await supabase
-    .from("profiles")
-    .select("id", { count: "exact", head: true })
-    .eq("admin_role_id", roleId);
+  const countSnap = await db
+    .collection(COLLECTIONS.profiles)
+    .where("admin_role_id", "==", roleId)
+    .count()
+    .get();
+  if (countSnap.data().count > 0) return { error: "role_in_use" };
 
-  if ((count ?? 0) > 0) {
-    return { error: "role_in_use" };
+  try {
+    await db.collection(COLLECTIONS.adminRoles).doc(roleId).delete();
+    await db.collection(COLLECTIONS.adminRolePermissions).doc(roleId).delete();
+  } catch {
+    return { error: "delete_failed" };
   }
-
-  const { error } = await supabase.from("admin_roles").delete().eq("id", roleId);
-
-  if (error) return { error: "delete_failed" };
 
   updateTag("admin-roles");
   void logAdminMutation({

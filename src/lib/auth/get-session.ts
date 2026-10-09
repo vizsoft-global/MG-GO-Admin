@@ -1,14 +1,21 @@
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
-import { probeUser } from "@/lib/supabase/auth-probe";
-import type { Profile } from "@/types/database";
+import { cookies } from "next/headers";
+import type { Firestore } from "firebase-admin/firestore";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
+import {
+  MIDDLEWARE_SESSION_BUDGET_MS,
+  STAFF_SESSION_COOKIE,
+  verifyStaffSessionCookie,
+} from "@/lib/firebase/session";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { withDeadline } from "@/lib/async/deadline";
+import type { AdminRoleDoc, ProfileDoc } from "@/lib/firebase/types";
 import { canAccessAdminPanel, type AdminApprovalStatus } from "@/lib/auth/permissions";
 import {
   enrichSessionPermissions,
   toAuthProfile,
   type EnrichedProfile,
 } from "@/lib/auth/profile-auth";
-import { userFromLocalJwt } from "@/lib/auth/local-session";
 import { parseStaffAccessKind, type StaffAccessKind } from "@/lib/auth/staff-access";
 
 export type SessionUser = {
@@ -39,57 +46,35 @@ async function loadSessionOutcome(): Promise<SessionOutcome> {
 }
 
 async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
-  const supabase = await createClient({ timeoutMs: SESSION_BUDGET_MS });
-  let { user, unavailable } = await probeUser(supabase, {
-    timeoutMs: SESSION_BUDGET_MS,
+  const cookieStore = await cookies();
+  const cookie = cookieStore.get(STAFF_SESSION_COOKIE)?.value;
+
+  const probe = await verifyStaffSessionCookie(cookie, {
+    timeoutMs: MIDDLEWARE_SESSION_BUDGET_MS,
   });
 
-  // The probe's wall-clock budget includes event-loop stalls (Turbopack
-  // compiling a first-hit route, a server-action RSC refresh). That is not
-  // evidence GoTrue is down. Recover from the cookie JWT before painting
-  // error.tsx — a signed-in admin navigating or applying an import must not
-  // look like an outage.
-  if (!user && unavailable) {
-    const local = await supabase.auth.getSession();
-    const recovered = userFromLocalJwt(local.data.session);
-    if (recovered && local.data.session?.user) {
-      user = local.data.session.user;
-      unavailable = false;
-    }
+  // The verifier did not answer, so the session is unproven rather than absent.
+  // Throwing would be a logout caused by a backend blip.
+  if (!probe.uid) {
+    return { session: null, unavailable: probe.unavailable };
   }
 
-  if (!user) {
-    return { session: null, unavailable };
-  }
-
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select(
-      "*, admin_role_id, approval_status, approved_at, approved_by, admin_roles(is_super_admin, slug)",
-    )
-    .eq("id", user.id)
-    .maybeSingle();
-
-  // A failed read is not a missing row. Treating it as absent would redirect
-  // a valid admin to /login — the same logout-on-blip the proxy already avoids.
-  if (profileError) {
+  const db = await getFirebaseFirestore();
+  if (!db) {
     return { session: null, unavailable: true };
   }
 
-  if (!profile) {
+  const profileSnap = await db.collection(COLLECTIONS.profiles).doc(probe.uid).get();
+
+  if (!profileSnap.exists) {
     return { session: null, unavailable: false };
   }
 
-  const profileRow = profile as EnrichedProfile &
-    Profile & {
-      admin_roles: { is_super_admin: boolean; slug: string } | null;
-    };
+  const profileRow = { id: probe.uid, ...(profileSnap.data() ?? {}) } as ProfileDoc;
+  const enriched: EnrichedProfile = profileRow;
 
-  const enriched = profileRow;
-  const isSuperAdmin = profileRow.admin_roles?.is_super_admin === true;
-  const accessKind = parseStaffAccessKind(
-    "access_kind" in profileRow ? profileRow.access_kind : null,
-  );
+  const isSuperAdmin = probe.claims?.superAdmin === true;
+  const accessKind = parseStaffAccessKind(profileRow.access_kind);
   const isManager = isSuperAdmin || accessKind === "manager";
   const authProfile = toAuthProfile(enriched, isSuperAdmin);
 
@@ -99,35 +84,46 @@ async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
     }
   }
 
-  const permissions = await enrichSessionPermissions(
-    supabase,
-    enriched.admin_role_id,
-    isSuperAdmin,
-    accessKind,
-    user.id,
-  );
+  const [permissions, roleSlug] = await Promise.all([
+    enrichSessionPermissions(
+      db,
+      enriched.admin_role_id,
+      isSuperAdmin,
+      accessKind,
+      probe.uid,
+    ),
+    loadRoleSlug(db, enriched.admin_role_id),
+  ]);
 
   return {
     session: {
-      id: user.id,
-      email: user.email ?? enriched.email,
+      id: probe.uid,
+      email: enriched.email,
       profile: enriched,
       permissions,
       isSuperAdmin,
       isManager,
       accessKind,
-      adminRoleSlug: profileRow.admin_roles?.slug ?? "operator",
+      adminRoleSlug: roleSlug ?? "operator",
     },
     unavailable: false,
   };
 }
 
+async function loadRoleSlug(
+  db: Firestore,
+  roleId: string | null,
+): Promise<string | null> {
+  if (!roleId) return null;
+  const snap = await db.collection(COLLECTIONS.adminRoles).doc(roleId).get();
+  return (snap.data() as AdminRoleDoc | undefined)?.slug ?? null;
+}
+
 /**
  * Per-request cache only. Do not wrap the whole load in a second wall-clock
- * race: getUser + profile + permissions routinely exceed the probe budget
- * when the first hop is slow-but-successful, and that discarded a real
+ * race: verification, profile and permissions routinely exceed the verify
+ * budget when the first hop is slow-but-successful, and that discarded a real
  * session (error.tsx on every first compile / post-action RSC refresh).
- * The fetch AbortSignal on createClient still bounds the network.
  */
 export const getSessionOutcome = cache(loadSessionOutcome);
 
@@ -136,14 +132,16 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 export async function getProfileForUser(userId: string): Promise<EnrichedProfile | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("profiles")
-    .select("*, admin_role_id, approval_status, approved_at, approved_by")
-    .eq("id", userId)
-    .maybeSingle();
+  const db = await getFirebaseFirestore();
+  if (!db) return null;
+  const snap = await db.collection(COLLECTIONS.profiles).doc(userId).get();
+  if (!snap.exists) return null;
+  return { id: userId, ...(snap.data() ?? {}) } as EnrichedProfile;
+}
 
-  return (data as EnrichedProfile | null) ?? null;
+/** Bounds a session load so a stalled Firestore read cannot hold the page. */
+export function withSessionDeadline<T>(op: Promise<T>, fallback: () => T): Promise<T> {
+  return withDeadline(op, SESSION_BUDGET_MS, fallback);
 }
 
 export type { AdminApprovalStatus };

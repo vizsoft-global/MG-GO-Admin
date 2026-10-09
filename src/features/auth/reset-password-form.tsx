@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { updatePassword } from "@/features/auth/actions";
 import { BrandMark } from "@/components/brand/brand-mark";
 import { useBranding } from "@/contexts/branding-context";
@@ -16,15 +16,21 @@ export function ResetPasswordForm() {
   const { appSubtitle } = useBranding();
   const locale = useLocale();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Firebase's action page forwards the reset code; a session-based password
+  // change carries none.
+  const oobCode = searchParams.get("oobCode") ?? "";
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const errorMessage =
     error === "weak_password"
       ? t("weakPassword")
-      : error === "update_failed"
-        ? t("updatePasswordFailed")
-        : null;
+      : error === "invalid_code" || error === "expired_code"
+        ? t("resetLinkInvalid")
+        : error === "update_failed"
+          ? t("updatePasswordFailed")
+          : null;
 
   return (
     <div className="flex w-full max-w-md flex-col items-center gap-6">
@@ -40,7 +46,7 @@ export function ResetPasswordForm() {
             action={(formData) => {
               startTransition(async () => {
                 setError(null);
-                const result = await updatePassword(formData);
+                const result = await updatePassword(locale, formData);
                 if (result?.error) {
                   setError(result.error);
                   return;
@@ -49,6 +55,7 @@ export function ResetPasswordForm() {
               });
             }}
           >
+            {oobCode ? <input type="hidden" name="oobCode" value={oobCode} /> : null}
             <div className="space-y-2">
               <Label htmlFor="password">{t("newPassword")}</Label>
               <Input

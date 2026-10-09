@@ -1,8 +1,6 @@
 "use server";
 
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
@@ -14,7 +12,9 @@ import {
   type ImportIdentityRoster,
   type ImportIdentitySeen,
 } from "./import/import-identity";
-import { civilIdExists } from "./driver-uniqueness";
+import { getFirebaseAuth } from "@/lib/firebase/admin";
+import type { Json } from "@/types/database";
+import { civilIdExists, staffClient, type StaffClient } from "./driver-uniqueness";
 import { intakeMissingApprovalFields } from "./driver-approve-validation";
 import type {
   DriverImportCredential,
@@ -62,7 +62,6 @@ import {
 } from "./import/resolve-lookups";
 import type { DriverImportLookups } from "./import/lookups";
 
-type ImportApplyClient = Awaited<ReturnType<typeof createClient>>;
 
 export async function requireDriversManager(verb: "create" | "edit" | "delete" = "edit") {
   const session = await getSessionUser();
@@ -80,15 +79,15 @@ export async function fetchDriverImportLookups(): Promise<
 > {
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
-  const supabase = await createClient();
+  const db = await staffClient();
 
   const [{ data: restaurants }, { data: partners }, { data: zones }] = await Promise.all([
-    supabase
+    db
       .from("restaurants")
       .select("id, name, restaurant_code, partner_id, zone_id, status, is_active")
       .order("name"),
-    supabase.from("partners").select("id, name").order("name"),
-    supabase.from("zones").select("id, name, code").order("name"),
+    db.from("partners").select("id, name").order("name"),
+    db.from("zones").select("id, name, code").order("name"),
   ]);
 
   const partnerNameById = new Map((partners ?? []).map((p) => [p.id, p.name]));
@@ -133,8 +132,8 @@ export async function approveDriverIntake(
   if (auth.error) return { error: auth.error };
   if (!intakeId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data: intake, error: loadError } = await supabase
+  const db = await staffClient();
+  const { data: intake, error: loadError } = await db
     .from("driver_intakes")
     .select(
       "id, phone, full_name, driver_code, linked, archived_at, partner_id, zone_id, employee_id, civil_id",
@@ -149,7 +148,7 @@ export async function approveDriverIntake(
     return { error: "missing_fields" };
   }
 
-  const { data: hasAssignment, error: assignmentCheckError } = await supabase.rpc(
+  const { data: hasAssignment, error: assignmentCheckError } = await db.rpc(
     "intake_has_ops_assignment",
     { p_intake_id: intakeId },
   );
@@ -163,39 +162,32 @@ export async function approveDriverIntake(
   }
 
   const email = syntheticDriverEmail(intake.driver_code);
-  let admin;
+  const authAdmin = await getFirebaseAuth();
+  if (!authAdmin) return { error: "save_failed" };
+
+  const intakePhone = intake.phone?.trim() ? intake.phone.trim() : undefined;
+  let userId: string;
   try {
-    admin = createAdminClient();
-  } catch {
-    return { error: "save_failed" };
-  }
-
-  // The synthetic email is the auth identifier the passcode login exchanges a
-  // magic link on; phone is stored only as a contact detail. Omit the key
-  // entirely when there is no number rather than sending null, since
-  // `phone_confirm` on an absent phone is a claim about nothing.
-  const intakePhone = intake.phone?.trim() ? intake.phone.trim() : null;
-  const { data: authUser, error: createError } = await admin.auth.admin.createUser({
-    ...(intakePhone ? { phone: intakePhone, phone_confirm: true } : {}),
-    email,
-    email_confirm: true,
-    user_metadata: {
-      full_name: intake.full_name,
-      driver_code: intake.driver_code,
-    },
-  });
-
-  if (createError || !authUser.user?.id) {
-    const msg = createError?.message?.toLowerCase() ?? "";
-    if (msg.includes("phone") || msg.includes("already")) {
+    const user = await authAdmin.createUser({
+      email,
+      emailVerified: true,
+      displayName: intake.full_name,
+      ...(intakePhone ? { phoneNumber: intakePhone } : {}),
+    });
+    userId = user.uid;
+  } catch (error) {
+    const code =
+      typeof error === "object" && error && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "";
+    const msg = error instanceof Error ? error.message.toLowerCase() : "";
+    if (code.includes("phone") || msg.includes("phone") || msg.includes("already")) {
       return { error: "phone_exists" };
     }
     return { error: "save_failed" };
   }
 
-  const userId = authUser.user.id;
-
-  const { data: rpcRaw, error: rpcError } = await supabase.rpc("admin_approve_driver", {
+  const { data: rpcRaw, error: rpcError } = await db.rpc("admin_approve_driver", {
     p_intake_id: intakeId,
     p_user_id: userId,
     p_email: email,
@@ -203,7 +195,7 @@ export async function approveDriverIntake(
 
   if (rpcError) {
     try {
-      await admin.auth.admin.deleteUser(userId);
+      await authAdmin.deleteUser(userId);
     } catch {
       /* rollback */
     }
@@ -219,7 +211,7 @@ export async function approveDriverIntake(
 
   if (!payload.ok) {
     try {
-      await admin.auth.admin.deleteUser(userId);
+      await authAdmin.deleteUser(userId);
     } catch {
       /* rollback */
     }
@@ -266,7 +258,7 @@ export async function resolveDriverImportPreview(
 ): Promise<DriverImportPreviewRow[] | { error: "not_authorized" }> {
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
-  const supabase = await createClient();
+  const db = await staffClient();
 
   const [
     { data: partners },
@@ -278,21 +270,21 @@ export async function resolveDriverImportPreview(
     { data: profiles },
     { data: companyRows },
   ] = await Promise.all([
-    supabase.from("partners").select("id, name"),
-    supabase.from("zones").select("id, name, code"),
-    supabase.from("vehicles").select("id, bike_id, reg_number"),
-    supabase
+    db.from("partners").select("id, name"),
+    db.from("zones").select("id, name, code"),
+    db.from("vehicles").select("id, bike_id, reg_number"),
+    db
       .from("restaurants")
       .select("id, name, restaurant_code, partner_id, status, is_active")
       .eq("status", "published")
       .eq("is_active", true),
-    supabase
+    db
       .from("driver_intakes")
       .select("id, phone, civil_id, employee_id")
       .is("archived_at", null),
-    supabase.from("drivers").select("id, employee_id, civil_id").is("archived_at", null),
-    supabase.from("profiles").select("id, phone").eq("role", "rider"),
-    supabase
+    db.from("drivers").select("id, employee_id, civil_id").is("archived_at", null),
+    db.from("profiles").select("id, phone").eq("role", "rider"),
+    db
       .from("source_companies")
       .select(
         "key, name, client_code, is_active, is_system, sort_order, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
@@ -518,7 +510,7 @@ function logWho(row: DriverImportPreviewRow) {
 export async function applyOneImportRow(
   row: DriverImportPreviewRow,
   ctx: {
-    supabase: ImportApplyClient;
+    db: StaffClient;
     duplicateStrategy: "skip" | "update";
     approveImmediately: boolean;
     customFieldDefs: Awaited<ReturnType<typeof listCustomFieldDefinitions>>;
@@ -559,7 +551,7 @@ export async function applyOneImportRow(
   let beforeSnap = {};
 
   const matchExisting = () =>
-    ctx.supabase
+    ctx.db
       .from("driver_intakes")
       .select("id, linked, driver_code, linked_profile_id")
       .is("archived_at", null)
@@ -588,9 +580,9 @@ export async function applyOneImportRow(
 
     if (existing) {
       alreadyLinked = Boolean(existing.linked || existing.linked_profile_id);
-      const prior = await loadIntakeProfileSnapshot(ctx.supabase, existing.id);
+      const prior = await loadIntakeProfileSnapshot(ctx.db, existing.id);
       beforeSnap = prior?.snapshot ?? {};
-      const { error: updErr } = await ctx.supabase
+      const { error: updErr } = await ctx.db
         .from("driver_intakes")
         .update({
           phone,
@@ -613,7 +605,7 @@ export async function applyOneImportRow(
       intakeId = existing.id;
       driverCode = existing.driver_code;
       updated = true;
-      await ctx.supabase
+      await ctx.db
         .from("driver_intake_restaurants")
         .delete()
         .eq("intake_id", intakeId);
@@ -621,7 +613,7 @@ export async function applyOneImportRow(
       if (existing.linked_profile_id) {
         const linkedId = existing.linked_profile_id;
         linkedDriverId = linkedId;
-        const { error: driverErr } = await ctx.supabase
+        const { error: driverErr } = await ctx.db
           .from("drivers")
           .update({
             partner_id: row.partner_id,
@@ -638,7 +630,7 @@ export async function applyOneImportRow(
           })
           .eq("id", linkedId);
         if (driverErr) return fail(driverErr.message);
-        await ctx.supabase
+        await ctx.db
           .from("profiles")
           .update({
             full_name: row.full_name!.trim(),
@@ -646,7 +638,7 @@ export async function applyOneImportRow(
             updated_at: new Date().toISOString(),
           })
           .eq("id", linkedId);
-        const { data: existingLinks } = await ctx.supabase
+        const { data: existingLinks } = await ctx.db
           .from("driver_restaurants")
           .select("restaurant_id")
           .eq("driver_id", linkedId);
@@ -655,13 +647,13 @@ export async function applyOneImportRow(
         const toAdd = row.restaurant_ids.filter((id) => !have.has(id));
         const toRemove = [...have].filter((id) => !want.has(id));
         if (toAdd.length > 0) {
-          const { error: addErr } = await ctx.supabase.from("driver_restaurants").insert(
+          const { error: addErr } = await ctx.db.from("driver_restaurants").insert(
             toAdd.map((restaurant_id) => ({ driver_id: linkedId, restaurant_id })),
           );
           if (addErr) return fail(addErr.message);
         }
         if (toRemove.length > 0) {
-          await ctx.supabase
+          await ctx.db
             .from("driver_restaurants")
             .delete()
             .eq("driver_id", linkedId)
@@ -688,7 +680,7 @@ export async function applyOneImportRow(
   }
 
   if (!intakeId) {
-    const { data: code, error: codeErr } = await ctx.supabase.rpc("allocate_driver_code");
+    const { data: code, error: codeErr } = await ctx.db.rpc("allocate_driver_code");
     if (codeErr || !code) return fail("Could not allocate driver code");
 
     const newId = crypto.randomUUID();
@@ -704,7 +696,7 @@ export async function applyOneImportRow(
     if (customErrors.length > 0) {
       return fail(`custom_fields: ${customErrors.map((e) => e.key).join(",")}`);
     }
-    const { error: insErr } = await ctx.supabase.from("driver_intakes").insert({
+    const { error: insErr } = await ctx.db.from("driver_intakes").insert({
       id: newId,
       phone,
       full_name: row.full_name!.trim(),
@@ -723,7 +715,7 @@ export async function applyOneImportRow(
       workflow_status: "pending",
       linked: false,
       assets_issued: {},
-      custom_fields: customValues as unknown as import("@/types/database").Json,
+      custom_fields: customValues as unknown as Json,
     });
 
     if (insErr) return fail(insErr.message);
@@ -732,7 +724,7 @@ export async function applyOneImportRow(
   }
 
   if (row.restaurant_ids.length > 0) {
-    const { error: linkErr } = await ctx.supabase.from("driver_intake_restaurants").insert(
+    const { error: linkErr } = await ctx.db.from("driver_intake_restaurants").insert(
       row.restaurant_ids.map((restaurant_id) => ({
         intake_id: intakeId!,
         restaurant_id,
@@ -837,7 +829,7 @@ export async function applyOneImportRow(
   const driverIdForOff = approvedDriverId ?? linkedDriverId;
   if (row.off_days != null) {
     if (!driverIdForOff) return fail("off_requires_approved_driver");
-    const { error: offErr } = await ctx.supabase.rpc("admin_set_driver_off_structure", {
+    const { error: offErr } = await ctx.db.rpc("admin_set_driver_off_structure", {
       p_driver_id: driverIdForOff,
       p_month: `${kuwaitToday().slice(0, 7)}-01`,
       p_off_days: offDaysForRpc(row.off_days) as unknown as number,
@@ -880,11 +872,11 @@ export async function applyDriverImportChunk(payload: {
   const ready = payload.rows.filter((r) =>
     isImportRowReady(r, payload.duplicateStrategy),
   );
-  const supabase = await createClient();
+  const db = await staffClient();
   let batchId = payload.batchId ?? null;
 
   if (!batchId) {
-    const { data: batch, error: batchError } = await supabase
+    const { data: batch, error: batchError } = await db
       .from("driver_import_batches")
       .insert({
         file_name: payload.fileName,
@@ -898,8 +890,8 @@ export async function applyDriverImportChunk(payload: {
       })
       .select("id")
       .single();
-    if (batchError || !batch) return { error: "save_failed" };
-    batchId = batch.id;
+    if (batchError || !batch?.id) return { error: "save_failed" };
+    batchId = String(batch.id);
   }
 
   const customFieldDefs = await listCustomFieldDefinitions("driver");
@@ -912,7 +904,7 @@ export async function applyDriverImportChunk(payload: {
 
   for (const row of ready) {
     const result = await applyOneImportRow(row, {
-      supabase,
+      db,
       duplicateStrategy: payload.duplicateStrategy,
       approveImmediately: payload.approveImmediately,
       customFieldDefs,
@@ -931,7 +923,7 @@ export async function applyDriverImportChunk(payload: {
   const appliedTotal = payload.appliedSoFar + applied;
   const skippedTotal = payload.skippedSoFar + skipped;
   const approvedTotal = payload.approvedSoFar + approved;
-  await supabase
+  await db
     .from("driver_import_batches")
     .update({
       applied_count: appliedTotal,

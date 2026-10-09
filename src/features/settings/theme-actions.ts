@@ -1,11 +1,14 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { DEFAULT_THEME_ID, isPresetThemeId } from "@/lib/theme/presets";
 import type { ThemeTokens } from "@/lib/theme/presets";
+
+const THEMES = "app_themes";
 
 async function requireManage() {
   const session = await getSessionUser();
@@ -30,23 +33,27 @@ export async function setActiveTheme(
   const id = themeId.trim();
   if (!id) return { error: "invalid_theme" };
 
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
   if (!isPresetThemeId(id)) {
-    const { data } = await supabase.from("app_themes").select("id").eq("id", id).maybeSingle();
-    if (!data) return { error: "theme_not_found" };
+    const theme = await db.collection(THEMES).doc(id).get();
+    if (!theme.exists) return { error: "theme_not_found" };
   }
 
-  const { error } = await supabase
-    .from("app_settings")
-    .update({
-      theme_id: id,
-      updated_at: new Date().toISOString(),
-      updated_by: auth.session.id,
-    })
-    .eq("id", 1);
+  try {
+    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
+      {
+        theme_id: id,
+        updated_at: new Date(),
+        updated_by: auth.session.id,
+      },
+      { merge: true },
+    );
+  } catch {
+    return { error: "save_failed" };
+  }
 
-  if (error) return { error: "save_failed" };
   invalidateThemeCaches();
   return { success: true };
 }
@@ -63,20 +70,25 @@ export async function createCustomTheme(input: {
   const name = input.name.trim();
   if (!name) return { error: "missing_name" };
 
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
+
   const base = isPresetThemeId(input.basePreset) ? input.basePreset : DEFAULT_THEME_ID;
   const id = `custom-${crypto.randomUUID().slice(0, 8)}`;
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("app_themes").insert({
-    id,
-    name,
-    base_preset: base,
-    light_tokens: input.lightTokens ?? {},
-    dark_tokens: input.darkTokens ?? {},
-    updated_at: new Date().toISOString(),
-  });
+  try {
+    await db.collection(THEMES).doc(id).set({
+      id,
+      name,
+      base_preset: base,
+      light_tokens: input.lightTokens ?? {},
+      dark_tokens: input.darkTokens ?? {},
+      updated_at: new Date(),
+    });
+  } catch {
+    return { error: "save_failed" };
+  }
 
-  if (error) return { error: "save_failed" };
   invalidateThemeCaches();
   return { success: true, id };
 }
@@ -95,25 +107,23 @@ export async function updateCustomTheme(
 
   if (isPresetThemeId(id)) return { error: "cannot_edit_preset" };
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("app_themes")
-    .update({
-      ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-      ...(input.basePreset !== undefined
-        ? {
-            base_preset: isPresetThemeId(input.basePreset)
-              ? input.basePreset
-              : DEFAULT_THEME_ID,
-          }
-        : {}),
-      ...(input.lightTokens !== undefined ? { light_tokens: input.lightTokens } : {}),
-      ...(input.darkTokens !== undefined ? { dark_tokens: input.darkTokens } : {}),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  if (error) return { error: "save_failed" };
+  const patch: Record<string, unknown> = { updated_at: new Date() };
+  if (input.name !== undefined) patch.name = input.name.trim();
+  if (input.basePreset !== undefined) {
+    patch.base_preset = isPresetThemeId(input.basePreset) ? input.basePreset : DEFAULT_THEME_ID;
+  }
+  if (input.lightTokens !== undefined) patch.light_tokens = input.lightTokens;
+  if (input.darkTokens !== undefined) patch.dark_tokens = input.darkTokens;
+
+  try {
+    await db.collection(THEMES).doc(id).set(patch, { merge: true });
+  } catch {
+    return { error: "save_failed" };
+  }
+
   invalidateThemeCaches();
   return { success: true };
 }
@@ -126,24 +136,24 @@ export async function deleteCustomTheme(
 
   if (isPresetThemeId(id)) return { error: "cannot_delete_preset" };
 
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  const { data: settings } = await supabase
-    .from("app_settings")
-    .select("theme_id")
-    .eq("id", 1)
-    .maybeSingle();
-
-  if (settings?.theme_id === id) {
-    await supabase
-      .from("app_settings")
-      .update({ theme_id: DEFAULT_THEME_ID, updated_at: new Date().toISOString() })
-      .eq("id", 1);
+  const settingsRef = db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID);
+  const settings = await settingsRef.get();
+  if (settings.data()?.theme_id === id) {
+    await settingsRef.set(
+      { theme_id: DEFAULT_THEME_ID, updated_at: new Date() },
+      { merge: true },
+    );
   }
 
-  const { error } = await supabase.from("app_themes").delete().eq("id", id);
+  try {
+    await db.collection(THEMES).doc(id).delete();
+  } catch {
+    return { error: "save_failed" };
+  }
 
-  if (error) return { error: "save_failed" };
   invalidateThemeCaches();
   return { success: true };
 }

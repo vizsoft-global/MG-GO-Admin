@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   buildDriverDocumentKey,
   buildIntakeDocumentKey,
@@ -73,6 +74,24 @@ async function remoteFromKey(
   };
 }
 
+function updatedMillis(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date.getTime() : 0;
+  }
+  return 0;
+}
+
 /**
  * Resolve uploaded documents for an intake (and optional linked driver profile).
  * Prefers `driver_documents` rows when linked; fills gaps from intake R2 prefix.
@@ -82,21 +101,23 @@ export async function listExistingDriverDocuments(
   driverProfileId: string | null,
 ): Promise<Partial<Record<DriverDocumentType, DriverRemoteDocument>>> {
   const out: Partial<Record<DriverDocumentType, DriverRemoteDocument>> = {};
-  const supabase = await createClient();
-
   const fromDb = new Map<DriverDocumentType, string>();
-  if (driverProfileId) {
-    const { data: rows } = await supabase
-      .from("driver_documents")
-      .select("doc_type, file_url, updated_at")
-      .eq("driver_id", driverProfileId)
-      .order("updated_at", { ascending: false });
 
-    for (const row of rows ?? []) {
-      const docType = row.doc_type as DriverDocumentType;
-      if (!DOCUMENT_TYPES.includes(docType)) continue;
-      if (!fromDb.has(docType) && row.file_url?.trim()) {
-        fromDb.set(docType, row.file_url.trim());
+  if (driverProfileId) {
+    const db = await staffDb();
+    if (db) {
+      const snap = await db
+        .collection(COLLECTIONS.driverDocuments)
+        .where("driver_id", "==", driverProfileId)
+        .get();
+      const rows = [...snap.docs].sort(
+        (a, b) => updatedMillis(b.get("updated_at")) - updatedMillis(a.get("updated_at")),
+      );
+      for (const row of rows) {
+        const docType = row.get("doc_type") as DriverDocumentType;
+        if (!DOCUMENT_TYPES.includes(docType)) continue;
+        const fileUrl = typeof row.get("file_url") === "string" ? row.get("file_url").trim() : "";
+        if (!fromDb.has(docType) && fileUrl) fromDb.set(docType, fileUrl);
       }
     }
   }

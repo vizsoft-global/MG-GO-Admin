@@ -2,7 +2,10 @@
 
 import { getSessionUser, type SessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createClient } from "@/lib/supabase/server";
+import type { DocumentSnapshot } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   collapseReconIssues,
   excelPayloadForRpc,
@@ -36,8 +39,30 @@ async function requireOrderRecon(
   return { session };
 }
 
-const RUN_SELECT =
-  "id, file_name, from_date, to_date, kpi, created_at, status, undo_seq, redoable";
+function isoOf(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  const ts = value as { toDate?: () => Date };
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  return null;
+}
+
+function rpcArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...args };
+  for (const [key, value] of Object.entries(args)) {
+    if (!key.startsWith("p_")) continue;
+    const camel = key.slice(2).replace(/_([a-z0-9])/g, (_match, ch: string) => ch.toUpperCase());
+    if (out[camel] === undefined) out[camel] = value;
+  }
+  return out;
+}
+
+async function reconDb() {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
 
 function asImportStatus(value: string | null | undefined): OrderReconImportStatus {
   return value === "undone" ? "undone" : "applied";
@@ -99,18 +124,34 @@ export async function previewOrderRecon(
   const parsed = await parseReconXlsx(buffer);
   if (!parsed.ok) return { error: parsed.error };
 
-  const supabase = await createClient();
-  const [{ data: drivers }, { data: restaurants }, { data: aliases }] = await Promise.all([
-    supabase.from("drivers").select("id, employee_id").is("archived_at", null),
-    supabase.from("restaurants").select("id, name"),
-    supabase.from("order_recon_store_aliases").select("alias, restaurant_id"),
+  const db = await reconDb();
+  const [driverSnap, restaurantSnap, aliasSnap] = await Promise.all([
+    db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
+    db.collection(COLLECTIONS.restaurants).get(),
+    db.collection("order_recon_store_aliases").get(),
   ]);
-  const driverIds = (drivers ?? []).map((d) => d.id);
-  const { data: profiles } =
-    driverIds.length > 0
-      ? await supabase.from("profiles").select("id, full_name").in("id", driverIds)
-      : { data: [] as { id: string; full_name: string | null }[] };
-  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+  const drivers = driverSnap.docs.map((doc) => ({
+    id: doc.id,
+    employee_id: (doc.data().employee_id as string | null) ?? null,
+  }));
+  const restaurants = restaurantSnap.docs.map((doc) => ({
+    id: doc.id,
+    name: String(doc.data().name ?? ""),
+  }));
+  const aliases = aliasSnap.docs.map((doc) => ({
+    alias: String(doc.data().alias ?? ""),
+    restaurant_id: String(doc.data().restaurant_id ?? ""),
+  }));
+  const driverIds = drivers.map((d) => d.id);
+  const nameById = new Map<string, string | null>();
+  for (let i = 0; i < driverIds.length; i += 100) {
+    const refs = driverIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.profiles).doc(id));
+    const found = refs.length ? await db.getAll(...refs) : [];
+    for (const doc of found) {
+      if (!doc.exists) continue;
+      nameById.set(doc.id, (doc.data()?.full_name as string | null) ?? null);
+    }
+  }
   const driverRows = (drivers ?? []).map((d) => ({
     id: d.id,
     employee_id: d.employee_id,
@@ -156,17 +197,18 @@ export async function commitOrderRecon(
   const auth = await requireOrderRecon("manage");
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
+  const db = await reconDb();
   const payload = excelPayloadForRpc(preview.resolved);
-  const { data, error } = await supabase.rpc("admin_order_recon_compare", {
+  const { data, error } = await callAdminFunction("admin_order_recon_compare", rpcArgs({
     p_from: preview.from,
     p_to: preview.to,
     p_excel: payload,
-  });
+  }));
   if (error) return { error: "compare_failed" };
 
   const compared = (Array.isArray(data) ? data : []) as CompareRow[];
-  const restaurantNames = new Map((await supabase.from("restaurants").select("id, name")).data?.map((r) => [r.id, r.name]) ?? []);
+  const restaurantSnap = await db.collection(COLLECTIONS.restaurants).get();
+  const restaurantNames = new Map(restaurantSnap.docs.map((doc) => [doc.id, String(doc.data().name ?? "")]));
   const driverMeta = new Map(
     preview.resolved
       .filter((r) => r.driver_id)
@@ -180,17 +222,26 @@ export async function commitOrderRecon(
     ),
   ];
   if (missingDriverIds.length > 0) {
-    const { data: extraDrivers } = await supabase
-      .from("drivers")
-      .select("id, employee_id")
-      .in("id", missingDriverIds);
-    const extraIds = (extraDrivers ?? []).map((d) => d.id);
-    const { data: extraProfiles } =
-      extraIds.length > 0
-        ? await supabase.from("profiles").select("id, full_name").in("id", extraIds)
-        : { data: [] as { id: string; full_name: string | null }[] };
-    const extraNames = new Map((extraProfiles ?? []).map((p) => [p.id, p.full_name ?? ""]));
-    for (const driver of extraDrivers ?? []) {
+    const extraDrivers: { id: string; employee_id: string | null }[] = [];
+    for (let i = 0; i < missingDriverIds.length; i += 100) {
+      const refs = missingDriverIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.drivers).doc(id));
+      const found = refs.length ? await db.getAll(...refs) : [];
+      for (const doc of found) {
+        if (!doc.exists) continue;
+        extraDrivers.push({ id: doc.id, employee_id: (doc.data()?.employee_id as string | null) ?? null });
+      }
+    }
+    const extraIds = extraDrivers.map((d) => d.id);
+    const extraNames = new Map<string, string>();
+    for (let i = 0; i < extraIds.length; i += 100) {
+      const refs = extraIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.profiles).doc(id));
+      const found = refs.length ? await db.getAll(...refs) : [];
+      for (const doc of found) {
+        if (!doc.exists) continue;
+        extraNames.set(doc.id, String(doc.data()?.full_name ?? ""));
+      }
+    }
+    for (const driver of extraDrivers) {
       driverMeta.set(driver.id, {
         employee_id: driver.employee_id ?? "",
         employee_name: extraNames.get(driver.id) ?? "",
@@ -248,9 +299,10 @@ export async function commitOrderRecon(
     app_only: appOnlyCount,
   };
 
-  const { data: run, error: runError } = await supabase
-    .from("order_recon_runs")
-    .insert({
+  const runRef = db.collection(COLLECTIONS.orderReconRuns).doc();
+  const createdAt = new Date().toISOString();
+  try {
+    await runRef.set({
       uploaded_by: auth.session.id,
       file_name: preview.fileName,
       from_date: preview.from,
@@ -258,16 +310,18 @@ export async function commitOrderRecon(
       kpi,
       status: "applied",
       redoable: true,
-    })
-    .select("id, created_at")
-    .single();
-  if (runError || !run) return { error: "save_failed" };
+      created_at: createdAt,
+    });
+  } catch {
+    return { error: "save_failed" };
+  }
+  const run = { id: runRef.id, created_at: createdAt };
 
-  await supabase
-    .from("order_recon_runs")
-    .update({ redoable: false })
-    .eq("status", "undone")
-    .neq("id", run.id);
+  const undoneSnap = await db.collection(COLLECTIONS.orderReconRuns).where("status", "==", "undone").get();
+  for (const doc of undoneSnap.docs) {
+    if (doc.id === run.id) continue;
+    await doc.ref.set({ redoable: false }, { merge: true });
+  }
 
   void logAdminMutation({
     action: "create",
@@ -291,17 +345,28 @@ export async function commitOrderRecon(
     status: row.status,
   }));
   if (insertRows.length > 0) {
-    const { error: rowError } = await supabase.from("order_recon_rows").insert(insertRows);
-    if (rowError) return { error: "save_failed" };
+    try {
+      for (let i = 0; i < insertRows.length; i += 400) {
+        const batch = db.batch();
+        for (const row of insertRows.slice(i, i + 400)) {
+          batch.set(db.collection(COLLECTIONS.orderReconRows).doc(), row);
+        }
+        await batch.commit();
+      }
+    } catch {
+      return { error: "save_failed" };
+    }
   }
 
-  const { data: old } = await supabase
-    .from("order_recon_runs")
-    .select("id")
-    .order("created_at", { ascending: false })
-    .range(20, 200);
-  if (old && old.length > 0) {
-    await supabase.from("order_recon_runs").delete().in("id", old.map((r) => r.id));
+  const allRuns = await db.collection(COLLECTIONS.orderReconRuns).get();
+  const stale = allRuns.docs
+    .map((doc) => ({ id: doc.id, created_at: isoOf(doc.data().created_at) ?? "" }))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(20);
+  if (stale.length > 0) {
+    const batch = db.batch();
+    for (const row of stale) batch.delete(db.collection(COLLECTIONS.orderReconRuns).doc(row.id));
+    await batch.commit();
   }
 
   return {
@@ -320,11 +385,23 @@ export async function commitOrderRecon(
   };
 }
 
-async function fetchAllReconRows(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  runId: string,
-) {
-  const pageSize = 1000;
+function mapStoredRun(doc: DocumentSnapshot): OrderReconRunSummary | null {
+  if (!doc.exists) return null;
+  const row = doc.data() ?? {};
+  return mapRunSummary({
+    id: doc.id,
+    file_name: String(row.file_name ?? ""),
+    from_date: String(row.from_date ?? ""),
+    to_date: String(row.to_date ?? ""),
+    kpi: (row.kpi ?? null) as OrderReconKpi | null,
+    created_at: isoOf(row.created_at) ?? "",
+    status: (row.status as string | null) ?? null,
+    undo_seq: (row.undo_seq as number | null) ?? null,
+    redoable: (row.redoable as boolean | null) ?? null,
+  });
+}
+
+async function fetchAllReconRows(runId: string) {
   const all: {
     id: string;
     employee_id: string | null;
@@ -338,20 +415,26 @@ async function fetchAllReconRows(
     difference: number;
     status: string;
   }[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
-      .from("order_recon_rows")
-      .select(
-        "id, employee_id, employee_name, restaurant_name, restaurant_id, driver_id, work_date, excel_orders, app_orders, difference, status",
-      )
-      .eq("run_id", runId)
-      .order("work_date", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) break;
-    const batch = data ?? [];
-    all.push(...batch);
-    if (batch.length < pageSize) break;
-  }
+  const db = await reconDb();
+  const snap = await db.collection(COLLECTIONS.orderReconRows).where("run_id", "==", runId).get();
+  const mapped = snap.docs.map((doc) => {
+    const row = doc.data();
+    return {
+      id: doc.id,
+      employee_id: (row.employee_id as string | null) ?? null,
+      employee_name: (row.employee_name as string | null) ?? null,
+      restaurant_name: (row.restaurant_name as string | null) ?? null,
+      restaurant_id: (row.restaurant_id as string | null) ?? null,
+      driver_id: (row.driver_id as string | null) ?? null,
+      work_date: String(row.work_date ?? ""),
+      excel_orders: Number(row.excel_orders ?? 0),
+      app_orders: Number(row.app_orders ?? 0),
+      difference: Number(row.difference ?? 0),
+      status: String(row.status ?? ""),
+    };
+  });
+  mapped.sort((a, b) => a.work_date.localeCompare(b.work_date));
+  all.push(...mapped);
   return all;
 }
 
@@ -377,54 +460,40 @@ export async function listOrderReconRuns(): Promise<OrderReconRunSummary[]> {
   const auth = await requireOrderRecon("view");
   if ("error" in auth) return [];
 
-  const supabase = await createClient();
-  const { data: runs } = await supabase
-    .from("order_recon_runs")
-    .select(RUN_SELECT)
-    .order("created_at", { ascending: false })
-    .limit(20);
-
-  return (runs ?? []).map((run) => mapRunSummary({ ...run, kpi: run.kpi as OrderReconKpi }));
+  const db = await reconDb();
+  const snap = await db.collection(COLLECTIONS.orderReconRuns).get();
+  return snap.docs
+    .map((doc) => mapStoredRun(doc))
+    .filter((run): run is OrderReconRunSummary => run != null)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 20);
 }
 
 export async function getOrderRecon(runId: string): Promise<OrderReconRun | null> {
   const auth = await requireOrderRecon("view");
   if ("error" in auth) return null;
 
-  const supabase = await createClient();
-  const { data: run } = await supabase
-    .from("order_recon_runs")
-    .select(RUN_SELECT)
-    .eq("id", runId)
-    .maybeSingle();
+  const db = await reconDb();
+  const doc = await db.collection(COLLECTIONS.orderReconRuns).doc(runId).get();
+  const run = mapStoredRun(doc);
   if (!run) return null;
-
-  const rows = await fetchAllReconRows(supabase, run.id);
-  return {
-    ...mapRunSummary({ ...run, kpi: run.kpi as OrderReconKpi }),
-    rows: mapRunRows(rows),
-  };
+  const rows = await fetchAllReconRows(run.id);
+  return { ...run, rows: mapRunRows(rows) };
 }
 
 export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
   const auth = await requireOrderRecon("view");
   if ("error" in auth) return null;
 
-  const supabase = await createClient();
-  const { data: run } = await supabase
-    .from("order_recon_runs")
-    .select(RUN_SELECT)
-    .eq("status", "applied")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const db = await reconDb();
+  const snap = await db.collection(COLLECTIONS.orderReconRuns).where("status", "==", "applied").get();
+  const run = snap.docs
+    .map((doc) => mapStoredRun(doc))
+    .filter((row): row is OrderReconRunSummary => row != null)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   if (!run) return null;
-
-  const rows = await fetchAllReconRows(supabase, run.id);
-  return {
-    ...mapRunSummary({ ...run, kpi: run.kpi as OrderReconKpi }),
-    rows: mapRunRows(rows),
-  };
+  const rows = await fetchAllReconRows(run.id);
+  return { ...run, rows: mapRunRows(rows) };
 }
 
 export async function undoOrderReconImport(): Promise<{ error?: string }> {
@@ -443,28 +512,26 @@ async function replayReconImport(direction: "undo" | "redo"): Promise<{ error?: 
   const target = direction === "undo" ? undoTargetId(asTips(runs)) : redoTargetId(asTips(runs));
   if (!target) return { error: direction === "undo" ? "nothing_to_undo" : "nothing_to_redo" };
 
-  const supabase = await createClient();
+  const db = await reconDb();
   const seq = nextUndoSeq(asTips(runs));
-  const { error } =
+  const patch =
     direction === "undo"
-      ? await supabase
-          .from("order_recon_runs")
-          .update({
-            status: "undone",
-            undone_at: new Date().toISOString(),
-            undo_seq: seq,
-            redoable: true,
-          })
-          .eq("id", target)
-      : await supabase
-          .from("order_recon_runs")
-          .update({
-            status: "applied",
-            undone_at: null,
-            redoable: true,
-          })
-          .eq("id", target);
-  if (error) return { error: "save_failed" };
+      ? {
+          status: "undone",
+          undone_at: new Date().toISOString(),
+          undo_seq: seq,
+          redoable: true,
+        }
+      : {
+          status: "applied",
+          undone_at: null,
+          redoable: true,
+        };
+  try {
+    await db.collection(COLLECTIONS.orderReconRuns).doc(target).set(patch, { merge: true });
+  } catch {
+    return { error: "save_failed" };
+  }
 
   void logAdminMutation({
     action: "update",

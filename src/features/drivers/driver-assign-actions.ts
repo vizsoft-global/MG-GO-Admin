@@ -1,7 +1,7 @@
 "use server";
 
+import { staffClient, type StaffClient } from "./driver-uniqueness";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { pickDriverAvatarKey } from "@/lib/storage/driver-avatar-key";
@@ -25,22 +25,22 @@ async function requireDriversManage() {
 }
 
 async function syncIntakeRestaurants(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   intakeId: string,
   restaurantIds: string[],
 ) {
-  await supabase.from("driver_intake_restaurants").delete().eq("intake_id", intakeId);
+  await db.from("driver_intake_restaurants").delete().eq("intake_id", intakeId);
   if (restaurantIds.length === 0) return;
-  await supabase.from("driver_intake_restaurants").insert(
+  await db.from("driver_intake_restaurants").insert(
     restaurantIds.map((restaurant_id) => ({ intake_id: intakeId, restaurant_id })),
   );
 }
 
 async function resolveIntakeIdForDriver(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverId: string,
 ): Promise<string | null> {
-  const { data } = await supabase
+  const { data } = await db
     .from("driver_intakes")
     .select("id")
     .eq("linked_profile_id", driverId)
@@ -50,22 +50,22 @@ async function resolveIntakeIdForDriver(
 }
 
 async function syncLinkedDriverRestaurants(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverId: string,
   restaurantIds: string[],
 ) {
-  await syncDriverRestaurants(supabase, driverId, restaurantIds);
-  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  await syncDriverRestaurants(db, driverId, restaurantIds);
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
   if (intakeId) {
-    await syncIntakeRestaurants(supabase, intakeId, restaurantIds);
+    await syncIntakeRestaurants(db, intakeId, restaurantIds);
   }
 }
 
 async function fetchDriverRestaurantIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverId: string,
 ): Promise<string[]> {
-  const { data } = await supabase
+  const { data } = await db
     .from("driver_restaurants")
     .select("restaurant_id")
     .eq("driver_id", driverId);
@@ -73,11 +73,11 @@ async function fetchDriverRestaurantIds(
 }
 
 async function syncDriverRestaurants(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverId: string,
   restaurantIds: string[],
 ) {
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from("driver_restaurants")
     .select("restaurant_id")
     .eq("driver_id", driverId);
@@ -86,12 +86,12 @@ async function syncDriverRestaurants(
     restaurantIds,
   );
   if (toAdd.length > 0) {
-    await supabase.from("driver_restaurants").insert(
+    await db.from("driver_restaurants").insert(
       toAdd.map((restaurant_id) => ({ driver_id: driverId, restaurant_id })),
     );
   }
   if (toRemove.length > 0) {
-    await supabase
+    await db
       .from("driver_restaurants")
       .delete()
       .eq("driver_id", driverId)
@@ -100,11 +100,11 @@ async function syncDriverRestaurants(
 }
 
 async function validatePublishedRestaurants(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   restaurantIds: string[],
 ): Promise<{ error?: string }> {
   if (restaurantIds.length === 0) return {};
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("restaurants")
     .select("id")
     .eq("status", "published")
@@ -118,10 +118,10 @@ async function validatePublishedRestaurants(
 }
 
 async function driverHasInTransitDelivery(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverId: string,
 ): Promise<boolean> {
-  const { count, error } = await supabase
+  const { count, error } = await db
     .from("deliveries")
     .select("id", { count: "exact", head: true })
     .eq("driver_id", driverId)
@@ -131,7 +131,7 @@ async function driverHasInTransitDelivery(
 }
 
 async function logAssignmentEvent(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   input: {
     driverId: string;
     changedBy: string;
@@ -145,7 +145,7 @@ async function logAssignmentEvent(
   },
 ) {
   await (
-    supabase as unknown as {
+    db as unknown as {
       from: (table: string) => {
         insert: (row: Record<string, unknown>) => Promise<unknown>;
       };
@@ -186,30 +186,30 @@ function relOne<T>(rel: T | T[] | null | undefined): T | null {
 }
 
 async function enrichAssignDriverRows(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
   driverIds: string[],
 ): Promise<AssignDriverRow[]> {
   if (driverIds.length === 0) return [];
 
   const [{ data: drivers, error }, { data: links }, { data: locations }, { data: inTransit }, { data: intakes }] =
     await Promise.all([
-      supabase
+      db
         .from("drivers")
         .select(
           "id, driver_code, partner_id, zone_id, is_on_duty, avatar_object_key, profiles!drivers_id_fkey(full_name, phone, avatar_url), partners(name), zones(name)",
         )
         .in("id", driverIds),
-      supabase.from("driver_restaurants").select("driver_id, restaurant_id").in("driver_id", driverIds),
-      supabase
+      db.from("driver_restaurants").select("driver_id, restaurant_id").in("driver_id", driverIds),
+      db
         .from("driver_locations")
         .select("driver_id, latitude, longitude, last_seen_at")
         .in("driver_id", driverIds),
-      supabase
+      db
         .from("deliveries")
         .select("driver_id")
         .in("driver_id", driverIds)
         .filter("status", "eq", "in_transit"),
-      supabase
+      db
         .from("driver_intakes")
         .select("id, linked_profile_id, avatar_url")
         .in("linked_profile_id", driverIds)
@@ -227,7 +227,7 @@ async function enrichAssignDriverRows(
   const restaurantIds = [...new Set((links ?? []).map((l) => l.restaurant_id))];
   const { data: restaurants } =
     restaurantIds.length > 0
-      ? await supabase.from("restaurants").select("id, name").in("id", restaurantIds)
+      ? await db.from("restaurants").select("id, name").in("id", restaurantIds)
       : { data: [] as { id: string; name: string }[] };
 
   const restaurantNameById = new Map((restaurants ?? []).map((r) => [r.id, r.name]));
@@ -305,8 +305,8 @@ export async function fetchRestaurantAssignedDriversForAssign(
   if (auth.error) throw new Error(auth.error);
   if (!restaurantId) return [];
 
-  const supabase = await createClient();
-  const { data: linkedRows, error: linkedErr } = await supabase
+  const db = await staffClient();
+  const { data: linkedRows, error: linkedErr } = await db
     .from("driver_restaurants")
     .select("driver_id")
     .eq("restaurant_id", restaurantId);
@@ -314,7 +314,7 @@ export async function fetchRestaurantAssignedDriversForAssign(
 
   const driverIds = [...new Set((linkedRows ?? []).map((row) => row.driver_id))];
 
-  const rows = await enrichAssignDriverRows(supabase, driverIds);
+  const rows = await enrichAssignDriverRows(db, driverIds);
   return rows.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -325,15 +325,15 @@ export async function fetchZoneAssignedDriversForAssign(
   if (auth.error) throw new Error(auth.error);
   if (!zoneId) return [];
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const db = await staffClient();
+  const { data, error } = await db
     .from("drivers")
     .select("id")
     .eq("zone_id", zoneId);
   if (error) throw error;
 
   const driverIds = (data ?? []).map((r) => r.id);
-  const rows = await enrichAssignDriverRows(supabase, driverIds);
+  const rows = await enrichAssignDriverRows(db, driverIds);
   return rows.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -344,11 +344,11 @@ export async function searchDriversForAssign(
   const auth = await requireDriversManage();
   if (auth.error) throw new Error(auth.error);
 
-  const supabase = await createClient();
+  const db = await staffClient();
   const term = query.trim();
   if (!term) return [];
 
-  const { data: intakes, error } = await supabase
+  const { data: intakes, error } = await db
     .from("driver_intakes")
     .select("linked_profile_id")
     .is("archived_at", null)
@@ -369,7 +369,7 @@ export async function searchDriversForAssign(
     ),
   ];
 
-  const rows = await enrichAssignDriverRows(supabase, driverIds);
+  const rows = await enrichAssignDriverRows(db, driverIds);
   return rows.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -380,8 +380,8 @@ export async function fetchDriverAssignmentPreview(
   if (auth.error) throw new Error(auth.error);
   if (!driverId) return null;
 
-  const supabase = await createClient();
-  const rows = await enrichAssignDriverRows(supabase, [driverId]);
+  const db = await staffClient();
+  const rows = await enrichAssignDriverRows(db, [driverId]);
   return rows[0] ?? null;
 }
 
@@ -397,9 +397,9 @@ export async function assignDriverToRestaurant(input: {
   const { driverId, restaurantId, zoneId, replaceAll } = input;
   if (!driverId || !restaurantId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
+  const db = await staffClient();
 
-  const { data: restaurant, error: restaurantErr } = await supabase
+  const { data: restaurant, error: restaurantErr } = await db
     .from("restaurants")
     .select("id, status, is_active, zone_id")
     .eq("id", restaurantId)
@@ -409,7 +409,7 @@ export async function assignDriverToRestaurant(input: {
     return { error: "invalid_restaurants" };
   }
 
-  const { data: driver, error: driverErr } = await supabase
+  const { data: driver, error: driverErr } = await db
     .from("drivers")
     .select("id, zone_id")
     .eq("id", driverId)
@@ -417,7 +417,7 @@ export async function assignDriverToRestaurant(input: {
   if (driverErr || !driver) return { error: "save_failed" };
 
   const beforeZoneId = driver.zone_id;
-  const beforeRestaurantIds = await fetchDriverRestaurantIds(supabase, driverId);
+  const beforeRestaurantIds = await fetchDriverRestaurantIds(db, driverId);
 
   let nextRestaurantIds: string[];
   if (replaceAll) {
@@ -428,27 +428,27 @@ export async function assignDriverToRestaurant(input: {
     nextRestaurantIds = [...beforeRestaurantIds, restaurantId];
   }
 
-  const restaurantCheck = await validatePublishedRestaurants(supabase, nextRestaurantIds);
+  const restaurantCheck = await validatePublishedRestaurants(db, nextRestaurantIds);
   if (restaurantCheck.error) return { error: restaurantCheck.error };
 
-  const hasActive = await driverHasInTransitDelivery(supabase, driverId);
+  const hasActive = await driverHasInTransitDelivery(db, driverId);
 
   const nextZoneId =
     zoneId !== undefined ? zoneId || null : restaurant.zone_id ?? beforeZoneId;
 
   if (replaceAll || !beforeRestaurantIds.includes(restaurantId)) {
-    await syncLinkedDriverRestaurants(supabase, driverId, nextRestaurantIds);
+    await syncLinkedDriverRestaurants(db, driverId, nextRestaurantIds);
   }
 
   if (nextZoneId !== beforeZoneId) {
-    const { error: zoneErr } = await supabase
+    const { error: zoneErr } = await db
       .from("drivers")
       .update({ zone_id: nextZoneId, updated_at: new Date().toISOString() })
       .eq("id", driverId);
     if (zoneErr) return { error: "save_failed" };
   }
 
-  await logAssignmentEvent(supabase, {
+  await logAssignmentEvent(db, {
     driverId,
     changedBy: auth.session.id,
     changeType: replaceAll ? "restaurant_replace" : "restaurant_add",
@@ -472,14 +472,14 @@ export async function assignDriverToRestaurant(input: {
     },
   });
 
-  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
   if (intakeId) {
     const [beforeLabels, afterLabels] = await Promise.all([
-      loadChangeLabels(supabase, {
+      loadChangeLabels(db, {
         zoneId: beforeZoneId,
         restaurantIds: beforeRestaurantIds,
       }),
-      loadChangeLabels(supabase, {
+      loadChangeLabels(db, {
         zoneId: nextZoneId,
         restaurantIds: nextRestaurantIds,
       }),
@@ -509,16 +509,16 @@ export async function assignDriverToZone(input: {
   const { driverId, zoneId } = input;
   if (!driverId || !zoneId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
+  const db = await staffClient();
 
-  const { data: zone, error: zoneErr } = await supabase
+  const { data: zone, error: zoneErr } = await db
     .from("zones")
     .select("id")
     .eq("id", zoneId)
     .maybeSingle();
   if (zoneErr || !zone) return { error: "save_failed" };
 
-  const { data: driver, error: driverErr } = await supabase
+  const { data: driver, error: driverErr } = await db
     .from("drivers")
     .select("id, zone_id")
     .eq("id", driverId)
@@ -526,16 +526,16 @@ export async function assignDriverToZone(input: {
   if (driverErr || !driver) return { error: "save_failed" };
 
   const beforeZoneId = driver.zone_id;
-  const beforeRestaurantIds = await fetchDriverRestaurantIds(supabase, driverId);
-  const hasActive = await driverHasInTransitDelivery(supabase, driverId);
+  const beforeRestaurantIds = await fetchDriverRestaurantIds(db, driverId);
+  const hasActive = await driverHasInTransitDelivery(db, driverId);
 
-  const { error: updateErr } = await supabase
+  const { error: updateErr } = await db
     .from("drivers")
     .update({ zone_id: zoneId, updated_at: new Date().toISOString() })
     .eq("id", driverId);
   if (updateErr) return { error: "save_failed" };
 
-  await logAssignmentEvent(supabase, {
+  await logAssignmentEvent(db, {
     driverId,
     changedBy: auth.session.id,
     changeType: "zone_assign",
@@ -555,11 +555,11 @@ export async function assignDriverToZone(input: {
     after: { zone_id: zoneId },
   });
 
-  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
   if (intakeId) {
     const [beforeLabels, afterLabels] = await Promise.all([
-      loadChangeLabels(supabase, { zoneId: beforeZoneId }),
-      loadChangeLabels(supabase, { zoneId }),
+      loadChangeLabels(db, { zoneId: beforeZoneId }),
+      loadChangeLabels(db, { zoneId }),
     ]);
     void logDriverChange({
       intakeId,
@@ -586,20 +586,20 @@ export async function unassignDriverFromRestaurant(input: {
   const { driverId, restaurantId } = input;
   if (!driverId || !restaurantId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
+  const db = await staffClient();
 
-  const beforeRestaurantIds = await fetchDriverRestaurantIds(supabase, driverId);
+  const beforeRestaurantIds = await fetchDriverRestaurantIds(db, driverId);
   if (!beforeRestaurantIds.includes(restaurantId)) {
     return { success: true };
   }
 
   const nextRestaurantIds = beforeRestaurantIds.filter((id) => id !== restaurantId);
-  const restaurantCheck = await validatePublishedRestaurants(supabase, nextRestaurantIds);
+  const restaurantCheck = await validatePublishedRestaurants(db, nextRestaurantIds);
   if (restaurantCheck.error && nextRestaurantIds.length > 0) {
     return { error: restaurantCheck.error };
   }
 
-  const { data: driver } = await supabase
+  const { data: driver } = await db
     .from("drivers")
     .select("id, zone_id, status")
     .eq("id", driverId)
@@ -610,11 +610,11 @@ export async function unassignDriverFromRestaurant(input: {
     return { error: "last_restaurant" };
   }
 
-  const hasActive = await driverHasInTransitDelivery(supabase, driverId);
+  const hasActive = await driverHasInTransitDelivery(db, driverId);
 
-  await syncLinkedDriverRestaurants(supabase, driverId, nextRestaurantIds);
+  await syncLinkedDriverRestaurants(db, driverId, nextRestaurantIds);
 
-  await logAssignmentEvent(supabase, {
+  await logAssignmentEvent(db, {
     driverId,
     changedBy: auth.session.id,
     changeType: "restaurant_remove",
@@ -634,11 +634,11 @@ export async function unassignDriverFromRestaurant(input: {
     after: { restaurant_id: restaurantId },
   });
 
-  const intakeId = await resolveIntakeIdForDriver(supabase, driverId);
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
   if (intakeId) {
     const [beforeLabels, afterLabels] = await Promise.all([
-      loadChangeLabels(supabase, { restaurantIds: beforeRestaurantIds }),
-      loadChangeLabels(supabase, { restaurantIds: nextRestaurantIds }),
+      loadChangeLabels(db, { restaurantIds: beforeRestaurantIds }),
+      loadChangeLabels(db, { restaurantIds: nextRestaurantIds }),
     ]);
     void logDriverChange({
       intakeId,

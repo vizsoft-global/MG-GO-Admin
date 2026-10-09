@@ -1,7 +1,9 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import type { Firestore } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import {
@@ -111,6 +113,112 @@ async function requireEarningsManage() {
   return { session };
 }
 
+async function restaurantNameClash(
+  db: Firestore,
+  name: string,
+  partnerId: string | null,
+  exceptId: string | null,
+): Promise<boolean> {
+  const snap = await db.collection(COLLECTIONS.restaurants).where("name", "==", name).get();
+  return snap.docs.some((doc) => {
+    if (exceptId && doc.id === exceptId) return false;
+    return textOrNull(doc.data().partner_id) === partnerId;
+  });
+}
+
+async function writeDoc(
+  collection: string,
+  id: string,
+  payload: Record<string, unknown>,
+  creating: boolean,
+): Promise<string> {
+  const db = await dpdDb();
+  const ref = creating ? db.collection(collection).doc() : db.collection(collection).doc(id);
+  await ref.set(payload, { merge: !creating });
+  return ref.id;
+}
+
+async function dpdDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+function pgFail(err: unknown): PgLikeError {
+  const message = err instanceof Error ? err.message : String(err ?? "save_failed");
+  const code = /already exists|ALREADY_EXISTS|23505/i.test(message) ? "23505" : "firestore";
+  return { code, message, details: null, hint: null };
+}
+
+async function deleteWhere(
+  db: Firestore,
+  collection: string,
+  field: string,
+  value: string,
+): Promise<void> {
+  const snap = await db.collection(collection).where(field, "==", value).get();
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const batch = db.batch();
+    for (const doc of snap.docs.slice(i, i + 400)) batch.delete(doc.ref);
+    if (snap.docs.slice(i, i + 400).length) await batch.commit();
+  }
+}
+
+async function insertRows(
+  db: Firestore,
+  collection: string,
+  rows: Array<Record<string, unknown>>,
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += 400) {
+    const batch = db.batch();
+    for (const row of rows.slice(i, i + 400)) {
+      batch.set(db.collection(collection).doc(), row);
+    }
+    await batch.commit();
+  }
+}
+
+async function scopesForRules(
+  db: Firestore,
+  collection: string,
+  foreignKey: string,
+  ruleIds: string[],
+): Promise<Map<string, RuleScopeRow[]>> {
+  const map = new Map<string, RuleScopeRow[]>();
+  for (let i = 0; i < ruleIds.length; i += 30) {
+    const chunk = ruleIds.slice(i, i + 30);
+    if (chunk.length === 0) continue;
+    const snap = await db.collection(collection).where(foreignKey, "in", chunk).get();
+    for (const doc of snap.docs) {
+      const row = doc.data();
+      const ruleId = String(row[foreignKey] ?? "");
+      const list = map.get(ruleId) ?? [];
+      list.push({
+        zone_id: row.zone_id == null ? null : String(row.zone_id),
+        partner_id: row.partner_id == null ? null : String(row.partner_id),
+        restaurant_id: row.restaurant_id == null ? null : String(row.restaurant_id),
+      });
+      map.set(ruleId, list);
+    }
+  }
+  return map;
+}
+
+function textOrNull(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
+function isoOf(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  const ts = value as { toDate?: () => Date };
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  return null;
+}
+
 function logPgError(scope: string, error: PgLikeError | unknown): void {
   const e = error as PgLikeError;
   console.error(`[dpd-actions:${scope}] insert/update failed`, {
@@ -201,91 +309,60 @@ function parseScopeFromForm(formData: FormData): {
   return { scopeType, ids };
 }
 
+async function replaceRuleScopes(
+  collection: string,
+  foreignKey: string,
+  ruleId: string,
+  scopeType: RuleScopeType,
+  ids: string[],
+): Promise<PgLikeError | null> {
+  try {
+    const db = await dpdDb();
+    await deleteWhere(db, collection, foreignKey, ruleId);
+    await insertRows(
+      db,
+      collection,
+      ids.map((id) => ({
+        [foreignKey]: ruleId,
+        zone_id: scopeType === "zone" ? id : null,
+        partner_id: scopeType === "partner" ? id : null,
+        restaurant_id: scopeType === "restaurant" ? id : null,
+      })),
+    );
+    return null;
+  } catch (err) {
+    const error = pgFail(err);
+    logPgError(`${collection}:write`, error);
+    return error;
+  }
+}
+
 async function replaceIncentiveRuleScopes(
-  supabase: Awaited<ReturnType<typeof createClient>>,
   ruleId: string,
   scopeType: RuleScopeType,
   ids: string[],
 ) {
-  const { error: delErr } = await supabase
-    .from("incentive_rule_scopes")
-    .delete()
-    .eq("incentive_rule_id", ruleId);
-  if (delErr) {
-    logPgError("incentive_rule_scopes:delete", delErr);
-    return delErr;
-  }
-
-  const rows = ids.map((id) => ({
-    incentive_rule_id: ruleId,
-    zone_id: scopeType === "zone" ? id : null,
-    partner_id: scopeType === "partner" ? id : null,
-    restaurant_id: scopeType === "restaurant" ? id : null,
-  }));
-
-  const { error: insErr } = await supabase
-    .from("incentive_rule_scopes")
-    .insert(rows);
-  if (insErr) {
-    logPgError("incentive_rule_scopes:insert", insErr);
-    const admin = createAdminClient();
-    await admin
-      .from("incentive_rule_scopes")
-      .delete()
-      .eq("incentive_rule_id", ruleId);
-    const retry = await admin.from("incentive_rule_scopes").insert(rows);
-    if (retry.error) {
-      logPgError("incentive_rule_scopes:admin-insert", retry.error);
-      return retry.error;
-    }
-    return null;
-  }
-  return null;
+  return replaceRuleScopes(
+    COLLECTIONS.incentiveRuleScopes,
+    "incentive_rule_id",
+    ruleId,
+    scopeType,
+    ids,
+  );
 }
 
 async function replaceDeliveryRuleScopes(
-  supabase: Awaited<ReturnType<typeof createClient>>,
   ruleId: string,
   scopeType: RuleScopeType,
   ids: string[],
 ) {
-  const { error: delErr } = await supabase
-    .from("delivery_rule_scopes")
-    .delete()
-    .eq("delivery_rule_id", ruleId);
-  if (delErr) {
-    logPgError("delivery_rule_scopes:delete", delErr);
-    return delErr;
-  }
-
-  const rows = ids.map((id) => ({
-    delivery_rule_id: ruleId,
-    zone_id: scopeType === "zone" ? id : null,
-    partner_id: scopeType === "partner" ? id : null,
-    restaurant_id: scopeType === "restaurant" ? id : null,
-  }));
-
-  const { error: insErr } = await supabase
-    .from("delivery_rule_scopes")
-    .insert(rows);
-  if (insErr) {
-    logPgError("delivery_rule_scopes:insert", insErr);
-    // Retry via the service-role client to bypass any RLS edge-case on the
-    // junction table (the parent row already saved successfully via the
-    // staff session, so this is a safe fallback).
-    const admin = createAdminClient();
-    await admin
-      .from("delivery_rule_scopes")
-      .delete()
-      .eq("delivery_rule_id", ruleId);
-    const retry = await admin.from("delivery_rule_scopes").insert(rows);
-    if (retry.error) {
-      logPgError("delivery_rule_scopes:admin-insert", retry.error);
-      return retry.error;
-    }
-    return null;
-  }
-  return null;
+  return replaceRuleScopes(
+    COLLECTIONS.deliveryRuleScopes,
+    "delivery_rule_id",
+    ruleId,
+    scopeType,
+    ids,
+  );
 }
 
 function parseDates(formData: FormData): { startDate: string; endDate: string } | { error: DpdErrorKey } {
@@ -315,44 +392,70 @@ function defaultPriority(scopeType: RuleScopeType): number {
 
 export async function fetchDpdScopeOptions(): Promise<DpdScopeOptions> {
   await requireEarningsView();
-  const supabase = await createClient();
+  const db = await dpdDb();
 
-  const [{ data: zones }, { data: partners }, { data: restaurants }] =
-    await Promise.all([
-      supabase.from("zones").select("id, name, code").order("name"),
-      supabase.from("partners").select("id, name").order("name"),
-      supabase
-        .from("restaurants")
-        .select("id, name, partner_id")
-        .eq("status", "published")
-        .order("name"),
-    ]);
+  const [zoneSnap, partnerSnap, restaurantSnap] = await Promise.all([
+    db.collection(COLLECTIONS.zones).get(),
+    db.collection(COLLECTIONS.partners).get(),
+    db.collection(COLLECTIONS.restaurants).where("status", "==", "published").get(),
+  ]);
 
-  const partnerMap = new Map((partners ?? []).map((p) => [p.id, p.name]));
+  const zones = zoneSnap.docs
+    .map((doc) => ({
+      id: doc.id,
+      name: String(doc.data().name ?? ""),
+      code: String(doc.data().code ?? ""),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const partners = partnerSnap.docs
+    .map((doc) => ({ id: doc.id, name: String(doc.data().name ?? "") }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const partnerMap = new Map(partners.map((p) => [p.id, p.name]));
 
   return {
-    zones: zones ?? [],
-    partners: partners ?? [],
-    restaurants: (restaurants ?? []).map((r) => ({
-      id: r.id,
-      name: r.name,
-      partner_id: r.partner_id,
-      partner_name: r.partner_id ? (partnerMap.get(r.partner_id) ?? "—") : "—",
-    })),
+    zones,
+    partners,
+    restaurants: restaurantSnap.docs
+      .map((doc) => {
+        const row = doc.data();
+        const partnerId = textOrNull(row.partner_id);
+        return {
+          id: doc.id,
+          name: String(row.name ?? ""),
+          partner_id: partnerId,
+          partner_name: partnerId ? (partnerMap.get(partnerId) ?? "—") : "—",
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
-async function loadScopeLabelMaps(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const [{ data: zones }, { data: partners }, { data: restaurants }] =
-    await Promise.all([
-      supabase.from("zones").select("id, name, code"),
-      supabase.from("partners").select("id, name"),
-      supabase.from("restaurants").select("id, name, external_merchant_id"),
-    ]);
+async function loadScopeLabelMaps() {
+  const db = await dpdDb();
+  const [zoneSnap, partnerSnap, restaurantSnap] = await Promise.all([
+    db.collection(COLLECTIONS.zones).get(),
+    db.collection(COLLECTIONS.partners).get(),
+    db.collection(COLLECTIONS.restaurants).get(),
+  ]);
   return {
-    zones: new Map((zones ?? []).map((z) => [z.id, z])),
-    partners: new Map((partners ?? []).map((p) => [p.id, p])),
-    restaurants: new Map((restaurants ?? []).map((r) => [r.id, r])),
+    zones: new Map(
+      zoneSnap.docs.map((doc) => [
+        doc.id,
+        { name: String(doc.data().name ?? ""), code: String(doc.data().code ?? "") },
+      ]),
+    ),
+    partners: new Map(
+      partnerSnap.docs.map((doc) => [doc.id, { name: String(doc.data().name ?? "") }]),
+    ),
+    restaurants: new Map(
+      restaurantSnap.docs.map((doc) => [
+        doc.id,
+        {
+          name: String(doc.data().name ?? ""),
+          external_merchant_id: textOrNull(doc.data().external_merchant_id),
+        },
+      ]),
+    ),
   };
 }
 
@@ -384,22 +487,38 @@ function scopeSearch(
 export async function fetchDeliveryRulesForAdmin(): Promise<DeliveryRuleRow[]> {
   await requireEarningsView();
   void logAdminRead("delivery_rules", "fetchDeliveryRulesForAdmin");
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("delivery_rules")
-    .select(
-      `id, name, status, scope_type, zone_id, partner_id, restaurant_id, start_date, end_date, priority,
-       dpd_target, dpd_period,
-       delivery_rule_scopes (zone_id, partner_id, restaurant_id)`,
-    )
-    .order("created_at", { ascending: false })
-    .order("priority", { ascending: false });
+  const db = await dpdDb();
+  const snap = await db.collection(COLLECTIONS.deliveryRules).get();
+  const scopeMap = await scopesForRules(
+    db,
+    COLLECTIONS.deliveryRuleScopes,
+    "delivery_rule_id",
+    snap.docs.map((doc) => doc.id),
+  );
+  const maps = await loadScopeLabelMaps();
+  const data = snap.docs
+    .map((doc) => {
+      const row = doc.data();
+      return {
+        id: doc.id,
+        name: String(row.name ?? ""),
+        status: row.status as DeliveryRuleRow["status"],
+        scope_type: row.scope_type as RuleScopeType,
+        zone_id: textOrNull(row.zone_id),
+        partner_id: textOrNull(row.partner_id),
+        restaurant_id: textOrNull(row.restaurant_id),
+        start_date: String(row.start_date ?? ""),
+        end_date: String(row.end_date ?? ""),
+        priority: Number(row.priority ?? 0),
+        dpd_target: row.dpd_target,
+        dpd_period: row.dpd_period,
+        created_at: isoOf(row.created_at) ?? "",
+        delivery_rule_scopes: scopeMap.get(doc.id) ?? [],
+      };
+    })
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.priority - a.priority);
 
-  if (error) throw error;
-
-  const maps = await loadScopeLabelMaps(supabase);
-
-  return (data ?? []).map((row) => {
+  return data.map((row) => {
     const scopes = extractScopeIds(
       row.delivery_rule_scopes as RuleScopeRow[] | null,
     );
@@ -474,6 +593,7 @@ type IncentiveRuleDbRow = {
     reward_per_delivery_kwd: number | string | null;
     sort_order: number;
   }[];
+  incentive_rule_scopes?: RuleScopeRow[];
 };
 
 function mapIncentiveTierRow(
@@ -491,13 +611,6 @@ function mapIncentiveTierRow(
     sort_order: tier.sort_order,
   };
 }
-
-const INCENTIVE_RULE_SELECT = `id, name, status, scope_type, zone_id, partner_id, restaurant_id, period,
-       target_mode, base_minimum_deliveries, target_deliveries, reward_mode,
-       reward_kwd, reward_per_delivery_kwd, payout_mode, overrides_others,
-       start_date, end_date, priority,
-       incentive_rule_scopes (zone_id, partner_id, restaurant_id),
-       incentive_rule_tiers (id, threshold_deliveries, reward_mode, reward_kwd, reward_per_delivery_kwd, sort_order)`;
 
 type ScopeLabelMaps = Awaited<ReturnType<typeof loadScopeLabelMaps>>;
 
@@ -557,27 +670,81 @@ function mapIncentiveRuleRow(
   };
 }
 
+async function loadIncentiveRuleRows(onlyId?: string): Promise<IncentiveRuleDbRow[]> {
+  const db = await dpdDb();
+  const snap = onlyId
+    ? await db.collection(COLLECTIONS.incentiveRules).doc(onlyId).get().then((doc) => (doc.exists ? [doc] : []))
+    : (await db.collection(COLLECTIONS.incentiveRules).get()).docs;
+  const ids = snap.map((doc) => doc.id);
+  const [scopeMap, tierSnapParts] = await Promise.all([
+    scopesForRules(db, COLLECTIONS.incentiveRuleScopes, "incentive_rule_id", ids),
+    (async () => {
+      const tiers = new Map<string, NonNullable<IncentiveRuleDbRow["incentive_rule_tiers"]>>();
+      for (let i = 0; i < ids.length; i += 30) {
+        const chunk = ids.slice(i, i + 30);
+        if (chunk.length === 0) continue;
+        const tierSnap = await db
+          .collection(COLLECTIONS.incentiveRuleTiers)
+          .where("incentive_rule_id", "in", chunk)
+          .get();
+        for (const doc of tierSnap.docs) {
+          const row = doc.data();
+          const ruleId = String(row.incentive_rule_id ?? "");
+          const list = tiers.get(ruleId) ?? [];
+          list.push({
+            id: doc.id,
+            threshold_deliveries: Number(row.threshold_deliveries ?? 0),
+            reward_mode: row.reward_mode as IncentiveRewardMode,
+            reward_kwd: row.reward_kwd as number | string | null,
+            reward_per_delivery_kwd: row.reward_per_delivery_kwd as number | string | null,
+            sort_order: Number(row.sort_order ?? 0),
+          });
+          tiers.set(ruleId, list);
+        }
+      }
+      return tiers;
+    })(),
+  ]);
+
+  return snap
+    .flatMap((doc) => {
+      const row = doc.data();
+      if (!row) return [];
+      const mapped: IncentiveRuleDbRow = {
+        id: doc.id,
+        name: String(row.name ?? ""),
+        status: row.status as RuleStatus,
+        scope_type: row.scope_type as RuleScopeType,
+        zone_id: textOrNull(row.zone_id),
+        partner_id: textOrNull(row.partner_id),
+        restaurant_id: textOrNull(row.restaurant_id),
+        period: row.period as IncentivePeriod,
+        target_mode: (row.target_mode ?? "single") as IncentiveTargetMode,
+        base_minimum_deliveries: Number(row.base_minimum_deliveries ?? 0),
+        target_deliveries: row.target_deliveries == null ? null : Number(row.target_deliveries),
+        reward_mode: (row.reward_mode ?? "fixed") as IncentiveRewardMode,
+        reward_kwd: row.reward_kwd as number | string,
+        reward_per_delivery_kwd: row.reward_per_delivery_kwd as number | string | null,
+        payout_mode: (row.payout_mode ?? "milestone") as IncentivePayoutMode,
+        overrides_others: Boolean(row.overrides_others),
+        start_date: String(row.start_date ?? ""),
+        end_date: String(row.end_date ?? ""),
+        priority: Number(row.priority ?? 0),
+        incentive_rule_scopes: scopeMap.get(doc.id) ?? [],
+        incentive_rule_tiers: tierSnapParts.get(doc.id) ?? [],
+      };
+      return [{ mapped, created: isoOf(row.created_at) ?? "" }];
+    })
+    .sort((a, b) => b.created.localeCompare(a.created) || b.mapped.priority - a.mapped.priority)
+    .map((entry) => entry.mapped);
+}
+
 export async function fetchIncentiveRulesForAdmin(): Promise<IncentiveRuleRow[]> {
   await requireEarningsView();
   void logAdminRead("incentive_rules", "fetchIncentiveRulesForAdmin");
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("incentive_rules")
-    .select(INCENTIVE_RULE_SELECT)
-    // Newest first, priority as the tie-break. A new rule defaults to
-    // priority 10, so ordering by priority first sank it below every 20/30/50
-    // rule and QA read that as "the rule was not saved". Payout precedence is
-    // resolved in SQL (`incentive_rule_matches_driver`), never by this order.
-    .order("created_at", { ascending: false })
-    .order("priority", { ascending: false });
-
-  if (error) throw error;
-
-  const maps = await loadScopeLabelMaps(supabase);
-
-  return ((data ?? []) as IncentiveRuleDbRow[]).map((row) =>
-    mapIncentiveRuleRow(row, maps),
-  );
+  const rows = await loadIncentiveRuleRows();
+  const maps = await loadScopeLabelMaps();
+  return rows.map((row) => mapIncentiveRuleRow(row, maps));
 }
 
 /**
@@ -592,16 +759,11 @@ export async function getIncentiveRuleById(
   await requireEarningsView();
   if (!id) return null;
   void logAdminRead("incentive_rules", "getIncentiveRuleById");
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("incentive_rules")
-    .select(INCENTIVE_RULE_SELECT)
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw error;
+  const rows = await loadIncentiveRuleRows(id);
+  const data = rows[0];
   if (!data) return null;
-  const maps = await loadScopeLabelMaps(supabase);
-  return mapIncentiveRuleRow(data as unknown as IncentiveRuleDbRow, maps);
+  const maps = await loadScopeLabelMaps();
+  return mapIncentiveRuleRow(data, maps);
 }
 
 export async function saveRestaurant(formData: FormData): Promise<DpdMutationResult> {
@@ -628,7 +790,7 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
   const coordError = validateRestaurantCoordinates(latitude, longitude);
   if (coordError) return { error: coordError };
 
-  const supabase = await createClient();
+  const db = await dpdDb();
   const payload = {
     partner_id: partnerId || null,
     zone_id: zoneId || null,
@@ -648,14 +810,15 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
       ...payload,
       ...(logoResult.logoUrl !== undefined ? { logo_url: logoResult.logoUrl } : {}),
     };
-    const { error } = await supabase.from("restaurants").update(patch).eq("id", id);
-    if (error) {
+    const clash = await restaurantNameClash(db, name, partnerId || null, id);
+    if (clash) return { error: "restaurant_exists" };
+    try {
+      await db.collection(COLLECTIONS.restaurants).doc(id).set(patch, { merge: true });
+    } catch (err) {
+      const error = pgFail(err);
       if (error.code === "23505") return { error: "restaurant_exists" };
       logPgError("restaurants:update", error);
-      return {
-        error: "save_failed",
-        errorDetail: formatPgErrorDetail(error),
-      };
+      return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
     }
     void logAdminMutation({
       action: "update",
@@ -667,30 +830,25 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
     return { success: true, id, logoWarning: logoResult.logoWarning };
   }
 
-  const { data, error } = await supabase
-    .from("restaurants")
-    .insert({ ...payload, created_by: session.id })
-    .select("id")
-    .single();
-
-  if (error) {
+  const clash = await restaurantNameClash(db, name, partnerId || null, null);
+  if (clash) return { error: "restaurant_exists" };
+  const createdRef = db.collection(COLLECTIONS.restaurants).doc();
+  try {
+    await createdRef.set({ ...payload, created_by: session.id });
+  } catch (err) {
+    const error = pgFail(err);
     if (error.code === "23505") return { error: "restaurant_exists" };
     logPgError("restaurants:insert", error);
-    return {
-      error: "save_failed",
-      errorDetail: formatPgErrorDetail(error),
-    };
+    return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
   }
+  const data = { id: createdRef.id };
 
   const logoResult = await applyRestaurantLogoFromForm(data.id, formData, session.id);
   if (logoResult.logoUrl !== undefined) {
-    await supabase
-      .from("restaurants")
-      .update({
-        logo_url: logoResult.logoUrl,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", data.id);
+    await db.collection(COLLECTIONS.restaurants).doc(data.id).set(
+      { logo_url: logoResult.logoUrl, updated_at: new Date().toISOString() },
+      { merge: true },
+    );
   }
 
   void logAdminMutation({
@@ -708,10 +866,16 @@ export async function deleteRestaurant(id: string): Promise<DpdMutationResult> {
   if (auth.error) return { error: auth.error };
   if (!id) return { error: "missing_fields" };
 
-  const supabase = await createClient();
+  const db = await dpdDb();
   await deleteRestaurantLogoFiles(id);
-  const { error } = await supabase.from("restaurants").delete().eq("id", id);
-  if (error) return { error: "delete_failed" };
+  try {
+    await deleteWhere(db, COLLECTIONS.deliveryRuleScopes, "restaurant_id", id);
+    await deleteWhere(db, COLLECTIONS.incentiveRuleScopes, "restaurant_id", id);
+    await deleteWhere(db, COLLECTIONS.driverRestaurants, "restaurant_id", id);
+    await db.collection(COLLECTIONS.restaurants).doc(id).delete();
+  } catch {
+    return { error: "delete_failed" };
+  }
   void logAdminMutation({
     action: "delete",
     entityType: "restaurant",
@@ -752,7 +916,6 @@ export async function saveDeliveryRule(formData: FormData): Promise<DpdMutationR
 
   const priority = priorityRaw ? Number(priorityRaw) : defaultPriority(scope.scopeType);
 
-  const supabase = await createClient();
   // Populate the legacy single-FK column with the first selected scope id.
   // The new `delivery_rule_scopes` junction table is the source of truth, but
   // older databases still have the `delivery_rules_scope_check` CHECK
@@ -788,53 +951,15 @@ export async function saveDeliveryRule(formData: FormData): Promise<DpdMutationR
   };
 
   let ruleId = id;
-
-  if (id) {
-    const { error } = await supabase.from("delivery_rules").update(payload).eq("id", id);
-    if (error) {
-      logPgError("delivery_rules:update", error);
-      const admin = createAdminClient();
-      const retry = await admin
-        .from("delivery_rules")
-        .update(payload)
-        .eq("id", id);
-      if (retry.error) {
-        logPgError("delivery_rules:admin-update", retry.error);
-        return {
-          error: "save_failed",
-          errorDetail: formatPgErrorDetail(retry.error),
-        };
-      }
-    }
-  } else {
-    const { data, error } = await supabase
-      .from("delivery_rules")
-      .insert(payload)
-      .select("id")
-      .single();
-    if (error) {
-      logPgError("delivery_rules:insert", error);
-      const admin = createAdminClient();
-      const retry = await admin
-        .from("delivery_rules")
-        .insert(payload)
-        .select("id")
-        .single();
-      if (retry.error || !retry.data) {
-        logPgError("delivery_rules:admin-insert", retry.error);
-        return {
-          error: "save_failed",
-          errorDetail: formatPgErrorDetail(retry.error ?? error),
-        };
-      }
-      ruleId = retry.data.id;
-    } else {
-      ruleId = data.id;
-    }
+  try {
+    ruleId = await writeDoc(COLLECTIONS.deliveryRules, id, payload, !id);
+  } catch (err) {
+    const error = pgFail(err);
+    logPgError("delivery_rules:write", error);
+    return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
   }
 
   const scopeErr = await replaceDeliveryRuleScopes(
-    supabase,
     ruleId,
     scope.scopeType,
     scope.ids,
@@ -862,9 +987,13 @@ export async function deleteDeliveryRule(id: string): Promise<DpdMutationResult>
   if (auth.error) return { error: auth.error };
   if (!id) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("delivery_rules").delete().eq("id", id);
-  if (error) return { error: "delete_failed" };
+  try {
+    const db = await dpdDb();
+    await deleteWhere(db, COLLECTIONS.deliveryRuleScopes, "delivery_rule_id", id);
+    await db.collection(COLLECTIONS.deliveryRules).doc(id).delete();
+  } catch {
+    return { error: "delete_failed" };
+  }
   void logAdminMutation({
     action: "delete",
     entityType: "delivery_rule",
@@ -1018,7 +1147,6 @@ export async function saveIncentiveRule(formData: FormData): Promise<DpdMutation
     if (tiers[0].threshold_deliveries <= baseMinimum) return { error: "invalid_tiers" };
   }
 
-  const supabase = await createClient();
   // Same backwards-compat shim as saveDeliveryRule — keep the legacy single-FK
   // column populated with the first selected scope id so inserts pass even on
   // older databases that still enforce `incentive_rules_scope_check`.
@@ -1049,87 +1177,32 @@ export async function saveIncentiveRule(formData: FormData): Promise<DpdMutation
   };
 
   let ruleId = id;
-
-  if (id) {
-    const { error } = await supabase.from("incentive_rules").update(payload).eq("id", id);
-    if (error) {
-      logPgError("incentive_rules:update", error);
-      const admin = createAdminClient();
-      const retry = await admin
-        .from("incentive_rules")
-        .update(payload)
-        .eq("id", id);
-      if (retry.error) {
-        logPgError("incentive_rules:admin-update", retry.error);
-        return {
-          error: "save_failed",
-          errorDetail: formatPgErrorDetail(retry.error),
-        };
-      }
+  const db = await dpdDb();
+  try {
+    ruleId = await writeDoc(COLLECTIONS.incentiveRules, id, payload, !id);
+    await deleteWhere(db, COLLECTIONS.incentiveRuleTiers, "incentive_rule_id", ruleId);
+    if (targetMode === "tiered" && tiers.length > 0) {
+      await insertRows(
+        db,
+        COLLECTIONS.incentiveRuleTiers,
+        tiers.map((tier, index) => ({
+          incentive_rule_id: ruleId,
+          sort_order: index,
+          threshold_deliveries: tier.threshold_deliveries,
+          reward_mode: tier.reward_mode,
+          reward_kwd: tier.reward_mode === "fixed" ? tier.reward_kwd : null,
+          reward_per_delivery_kwd:
+            tier.reward_mode === "per_delivery" ? tier.reward_per_delivery_kwd : null,
+        })),
+      );
     }
-  } else {
-    const { data, error } = await supabase
-      .from("incentive_rules")
-      .insert(payload)
-      .select("id")
-      .single();
-    if (error) {
-      logPgError("incentive_rules:insert", error);
-      const admin = createAdminClient();
-      const retry = await admin
-        .from("incentive_rules")
-        .insert(payload)
-        .select("id")
-        .single();
-      if (retry.error || !retry.data) {
-        logPgError("incentive_rules:admin-insert", retry.error);
-        return {
-          error: "save_failed",
-          errorDetail: formatPgErrorDetail(retry.error ?? error),
-        };
-      }
-      ruleId = retry.data.id;
-    } else {
-      ruleId = data.id;
-    }
-  }
-
-  const { error: deleteTiersError } = await supabase
-    .from("incentive_rule_tiers")
-    .delete()
-    .eq("incentive_rule_id", ruleId);
-  if (deleteTiersError) {
-    logPgError("incentive_rule_tiers:delete", deleteTiersError);
-    return {
-      error: "save_failed",
-      errorDetail: formatPgErrorDetail(deleteTiersError),
-    };
-  }
-
-  if (targetMode === "tiered" && tiers.length > 0) {
-    const tierRows = tiers.map((tier, index) => ({
-      incentive_rule_id: ruleId,
-      sort_order: index,
-      threshold_deliveries: tier.threshold_deliveries,
-      reward_mode: tier.reward_mode,
-      reward_kwd: tier.reward_mode === "fixed" ? tier.reward_kwd : null,
-      reward_per_delivery_kwd:
-        tier.reward_mode === "per_delivery" ? tier.reward_per_delivery_kwd : null,
-    }));
-    const { error: insertTiersError } = await supabase
-      .from("incentive_rule_tiers")
-      .insert(tierRows);
-    if (insertTiersError) {
-      logPgError("incentive_rule_tiers:insert", insertTiersError);
-      return {
-        error: "save_failed",
-        errorDetail: formatPgErrorDetail(insertTiersError),
-      };
-    }
+  } catch (err) {
+    const error = pgFail(err);
+    logPgError("incentive_rules:write", error);
+    return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
   }
 
   const scopeErr = await replaceIncentiveRuleScopes(
-    supabase,
     ruleId,
     scope.scopeType,
     scope.ids,
@@ -1157,9 +1230,14 @@ export async function deleteIncentiveRule(id: string): Promise<DpdMutationResult
   if (auth.error) return { error: auth.error };
   if (!id) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("incentive_rules").delete().eq("id", id);
-  if (error) return { error: "delete_failed" };
+  try {
+    const db = await dpdDb();
+    await deleteWhere(db, COLLECTIONS.incentiveRuleTiers, "incentive_rule_id", id);
+    await deleteWhere(db, COLLECTIONS.incentiveRuleScopes, "incentive_rule_id", id);
+    await db.collection(COLLECTIONS.incentiveRules).doc(id).delete();
+  } catch {
+    return { error: "delete_failed" };
+  }
   void logAdminMutation({
     action: "delete",
     entityType: "incentive_rule",
@@ -1287,48 +1365,54 @@ export async function applyDpdTargetImport(
   if (auth.error) return { error: auth.error };
 
   const preview = await previewDpdTargetImport(rows);
-  const supabase = await createClient();
+  const db = await dpdDb();
   let updated = 0;
   let created = 0;
   for (const row of applyableDpdTargetRows(preview)) {
     const period = row.dpd_period.trim().toLowerCase();
-    // Only overwrite a window the sheet actually stated. A sheet written
-    // against the old template carries no dates, and blanking a live rule's
-    // end date would silently end it.
     const window = row.start_date && row.end_date
       ? { start_date: row.start_date, end_date: row.end_date }
       : null;
     if (row.status === "ok" && row.rule_id) {
-      const { error } = await supabase
-        .from("delivery_rules")
-        .update({
-          dpd_target: Number(row.dpd_target),
-          dpd_period: period,
-          ...(window ?? {}),
-          updated_at: new Date().toISOString(),
-        } as never)
-        .eq("id", row.rule_id);
-      if (error) return { error: "save_failed" };
+      try {
+        await db.collection(COLLECTIONS.deliveryRules).doc(row.rule_id).set(
+          {
+            dpd_target: Number(row.dpd_target),
+            dpd_period: period,
+            ...(window ?? {}),
+            updated_at: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+      } catch {
+        return { error: "save_failed" };
+      }
       updated += 1;
       continue;
     }
-    if (
-      row.status !== "create" ||
-      !row.scope_id ||
-      !row.resolved_scope
-    ) {
-      continue;
-    }
-    const { error } = await supabase.rpc("admin_insert_delivery_rule_with_scope", {
+    if (row.status !== "create" || !row.scope_id || !row.resolved_scope) continue;
+    const { error } = await callAdminFunction("admin_insert_delivery_rule_with_scope", {
       p_name: row.name,
       p_scope_type: row.resolved_scope,
       p_scope_id: row.scope_id,
       p_dpd_target: Number(row.dpd_target),
       p_dpd_period: period,
-      ...(window ? { p_start_date: window.start_date, p_end_date: window.end_date } : {}),
-    } as never);
+      name: row.name,
+      scopeType: row.resolved_scope,
+      scopeId: row.scope_id,
+      dpdTarget: Number(row.dpd_target),
+      dpdPeriod: period,
+      ...(window
+        ? {
+            p_start_date: window.start_date,
+            p_end_date: window.end_date,
+            startDate: window.start_date,
+            endDate: window.end_date,
+          }
+        : {}),
+    });
     if (error) {
-      logPgError("admin_insert_delivery_rule_with_scope", error);
+      logPgError("admin_insert_delivery_rule_with_scope", pgFail(error));
       return { error: "save_failed" };
     }
     created += 1;
@@ -1391,7 +1475,7 @@ export async function applyIncentiveRuleImport(
   const ready = applyableIncentiveImportRows(preview);
   if (ready.length === 0) return { applied: 0, replaced: 0, rejected: preview.length };
 
-  const supabase = await createClient();
+  const db = await dpdDb();
   const ended = new Set<string>();
   let applied = 0;
   let replaced = 0;
@@ -1405,19 +1489,14 @@ export async function applyIncentiveRuleImport(
 
     for (const replaceId of row.replace_rule_ids) {
       if (ended.has(replaceId)) continue;
-      const { error: endErr } = await supabase
-        .from("incentive_rules")
-        .update({ status: "ended", updated_at: new Date().toISOString() })
-        .eq("id", replaceId);
-      if (endErr) {
-        const retry = await createAdminClient()
-          .from("incentive_rules")
-          .update({ status: "ended", updated_at: new Date().toISOString() })
-          .eq("id", replaceId);
-        if (retry.error) {
-          logPgError("incentive_rules:admin-end", retry.error);
-          return { error: "save_failed" };
-        }
+      try {
+        await db.collection(COLLECTIONS.incentiveRules).doc(replaceId).set(
+          { status: "ended", updated_at: new Date().toISOString() },
+          { merge: true },
+        );
+      } catch (err) {
+        logPgError("incentive_rules:admin-end", pgFail(err));
+        return { error: "save_failed" };
       }
       ended.add(replaceId);
       replaced += 1;
@@ -1457,43 +1536,30 @@ export async function applyIncentiveRuleImport(
       updated_at: new Date().toISOString(),
     };
 
-    let insert = await supabase.from("incentive_rules").insert(payload).select("id").single();
-    if (insert.error || !insert.data) {
-      insert = await createAdminClient()
-        .from("incentive_rules")
-        .insert(payload)
-        .select("id")
-        .single();
-    }
-    if (insert.error || !insert.data) {
-      logPgError("incentive_rules:admin-insert", insert.error);
+    let ruleId: string;
+    try {
+      ruleId = await writeDoc(COLLECTIONS.incentiveRules, "", payload, true);
+      if (row.target_mode === "tiered") {
+        await insertRows(
+          db,
+          COLLECTIONS.incentiveRuleTiers,
+          row.parsed_tiers.map((tier, index) => ({
+            incentive_rule_id: ruleId,
+            sort_order: index,
+            threshold_deliveries: tier.threshold_deliveries,
+            reward_mode: tier.reward_mode,
+            reward_kwd: tier.reward_mode === "fixed" ? tier.amount : null,
+            reward_per_delivery_kwd:
+              tier.reward_mode === "per_delivery" ? tier.amount : null,
+          })),
+        );
+      }
+    } catch (err) {
+      logPgError("incentive_rules:admin-insert", pgFail(err));
       return { error: "save_failed" };
     }
 
-    const ruleId = insert.data.id;
-    if (row.target_mode === "tiered") {
-      const tierRows = row.parsed_tiers.map((tier, index) => ({
-        incentive_rule_id: ruleId,
-        sort_order: index,
-        threshold_deliveries: tier.threshold_deliveries,
-        reward_mode: tier.reward_mode,
-        reward_kwd: tier.reward_mode === "fixed" ? tier.amount : null,
-        reward_per_delivery_kwd:
-          tier.reward_mode === "per_delivery" ? tier.amount : null,
-      }));
-      const { error: tierErr } = await supabase
-        .from("incentive_rule_tiers")
-        .insert(tierRows);
-      if (tierErr) {
-        const retry = await createAdminClient()
-          .from("incentive_rule_tiers")
-          .insert(tierRows);
-        if (retry.error) return { error: "save_failed" };
-      }
-    }
-
     const scopeErr = await replaceIncentiveRuleScopes(
-      supabase,
       ruleId,
       "restaurant",
       [row.restaurant_id],
