@@ -11,7 +11,7 @@ import {
   Timestamp,
   type DocumentSnapshot,
   type Query,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 

@@ -23,7 +23,7 @@ import {
   type DocumentReference,
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";

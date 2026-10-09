@@ -1,5 +1,5 @@
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
-import { getFirestore, type CollectionReference, type Query } from "firebase-admin/firestore";
+import { getFirestore, type CollectionReference, type Query } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";

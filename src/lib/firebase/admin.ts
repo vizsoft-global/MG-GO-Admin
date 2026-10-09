@@ -1,4 +1,5 @@
 import { getFirebaseAdminConfig } from "./config";
+import { FIRESTORE_DATABASE_ID } from "./db";
 
 type FirebaseApp = import("firebase-admin/app").App;
 type Messaging = import("firebase-admin/messaging").Messaging;
@@ -72,7 +73,7 @@ export async function getFirebaseFirestore(): Promise<Firestore | null> {
   const app = await getFirebaseAdminApp();
   if (!app) return null;
   const { getFirestore } = await import("firebase-admin/firestore");
-  cachedFirestore = getFirestore(app);
+  cachedFirestore = getFirestore(app, FIRESTORE_DATABASE_ID);
   return cachedFirestore;
 }
 

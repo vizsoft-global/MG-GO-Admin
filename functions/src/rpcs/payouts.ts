@@ -18,7 +18,7 @@ import {
   Timestamp,
   type DocumentReference,
   type WriteBatch,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";

@@ -13,7 +13,7 @@
  * never opened still resolves.
  */
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
-import { getFirestore, FieldValue, Timestamp, type Firestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp, type Firestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString, monthKey, parseMonthKey } from "../core/kuwait";
 import { requireStaff, type StaffContext } from "../core/staff";

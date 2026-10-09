@@ -1,5 +1,5 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getFirestore, Timestamp, type DocumentSnapshot } from "firebase-admin/firestore";
+import { getFirestore, Timestamp, type DocumentSnapshot } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { daysInMonth, kuwaitDayString, monthKey, monthLabel, parseMonthKey } from "../core/kuwait";
 import { parseIdList } from "../core/query";

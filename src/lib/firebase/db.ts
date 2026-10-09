@@ -121,6 +121,9 @@ export const COLLECTIONS = {
 } as const;
 
 /** The single doc that carries app-wide switches (branding, maintenance, force update). */
+/** Named Firestore database on musallam-delivery-prod (Enterprise, me-central2). */
+export const FIRESTORE_DATABASE_ID = "default";
+
 export const APP_SETTINGS_DOC_ID = "1";
 
 /** The doc holding the permission catalog slug list. */

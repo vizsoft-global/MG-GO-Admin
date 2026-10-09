@@ -4,7 +4,7 @@
  * Mirrors `attendance-shared.ts`: a piece of SQL that more than one function
  * needs, kept in one place so two ports cannot disagree about it.
  */
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 
 const SCAN_CAP = 40_000;

@@ -1,5 +1,5 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
 import { isoTimestamp, loadDocMap, pickCount, pickId, pickIdList, pickObject, pickText, pickTriBool, type Dict } from "./_shared";

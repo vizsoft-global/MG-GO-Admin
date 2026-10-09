@@ -1,5 +1,5 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getFirestore, type Query } from "firebase-admin/firestore";
+import { getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS, DELIVERY_STATUSES, FIELDS, IN_PROGRESS_STATUSES } from "../core/collections";
 import { parseId, parseInstant } from "../core/query";
 import { requireStaff } from "../core/staff";

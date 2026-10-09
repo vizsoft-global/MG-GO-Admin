@@ -14,7 +14,7 @@
  * row that matched in Postgres matches here.
  */
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
 import {

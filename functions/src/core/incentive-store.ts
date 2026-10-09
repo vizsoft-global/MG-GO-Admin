@@ -10,7 +10,7 @@
  * rule set.
  */
 
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore } from "./fs";
 import { COLLECTIONS } from "./collections";
 import { loadAppSettings } from "./settings";
 import { kuwaitDayEnd, kuwaitDayStart } from "./kuwait";

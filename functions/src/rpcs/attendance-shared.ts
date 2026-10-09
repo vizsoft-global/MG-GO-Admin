@@ -1,4 +1,4 @@
-import { getFirestore, type DocumentSnapshot, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, type DocumentSnapshot, Timestamp } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import type { AppSettings } from "../core/settings";

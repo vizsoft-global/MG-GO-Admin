@@ -1,4 +1,4 @@
-import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp } from "../core/fs";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { parseId } from "../core/query";

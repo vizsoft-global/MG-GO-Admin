@@ -18,7 +18,7 @@ import {
   Timestamp,
   type DocumentReference,
   type Firestore,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import {
   KUWAIT_OFFSET_MS,

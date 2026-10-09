@@ -1,5 +1,5 @@
 import { onCall } from "firebase-functions/v2/https";
-import { Timestamp, getFirestore, type Query } from "firebase-admin/firestore";
+import { Timestamp, getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { parseId, parseIdList, parseInstant } from "../core/query";

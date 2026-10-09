@@ -22,7 +22,7 @@ import {
   type QuerySnapshot,
   type Transaction,
   type WriteBatch,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 import { getAuth } from "firebase-admin/auth";
 import { COLLECTIONS, UNIQUE_LOCKS } from "../core/collections";
 import { daysInMonth, parseMonthKey, payrollMonths } from "../core/kuwait";

@@ -2,7 +2,7 @@ import { setGlobalOptions } from "firebase-functions/v2";
 import { onCall, HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore } from "./core/fs";
 
 export { adminDeliveriesStatusCounts, adminDeliveriesCountsByFilters } from "./rpcs/deliveries-counts";
 export { adminBulkUpdateDeliveries } from "./rpcs/deliveries-status";

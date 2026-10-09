@@ -1,9 +1,9 @@
 import { onCall } from "firebase-functions/v2/https";
-import { getFirestore, type Query } from "firebase-admin/firestore";
+import { getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { parseId } from "../core/query";
 import { requireStaff } from "../core/staff";
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "../core/fs";
 import {
   asDate,
   loadAllDocs,

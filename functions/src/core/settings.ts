@@ -1,4 +1,4 @@
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore } from "./fs";
 import { COLLECTIONS } from "./collections";
 
 const APP_SETTINGS_DOC_ID = "1";

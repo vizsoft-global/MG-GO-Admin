@@ -8,7 +8,7 @@
  * recon rows and driver shifts use their stored `YYYY-MM-DD` string fields.
  */
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";

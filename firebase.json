@@ -5,6 +5,7 @@
     "predeploy": ["npm --prefix functions run build"]
   },
   "firestore": {
+    "database": "default",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   }

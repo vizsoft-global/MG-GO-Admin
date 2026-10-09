@@ -15,7 +15,7 @@ import {
   Timestamp,
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { requireStaff } from "../core/staff";
 import {

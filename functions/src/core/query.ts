@@ -1,4 +1,4 @@
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp } from "./fs";
 import { HttpsError } from "firebase-functions/v2/https";
 
 /**

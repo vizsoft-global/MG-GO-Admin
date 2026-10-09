@@ -7,7 +7,7 @@
  */
 import { createHash } from "crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getFirestore, Timestamp, type Query } from "firebase-admin/firestore";
+import { getFirestore, Timestamp, type Query } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { loadAppSettings, type AppSettings } from "../core/settings";

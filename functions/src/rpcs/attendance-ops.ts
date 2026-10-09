@@ -11,7 +11,7 @@
  */
 import { createHash } from "crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getFirestore, Timestamp, type DocumentSnapshot } from "firebase-admin/firestore";
+import { getFirestore, Timestamp, type DocumentSnapshot } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { loadAppSettings } from "../core/settings";

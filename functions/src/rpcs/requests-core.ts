@@ -19,7 +19,7 @@ import {
   FieldValue,
   Timestamp,
   type Query,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";

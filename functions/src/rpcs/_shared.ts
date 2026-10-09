@@ -12,7 +12,7 @@ import {
   FieldValue,
   Timestamp,
   type DocumentSnapshot,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 
 /** Firestore caps a batched write at 500 operations. */

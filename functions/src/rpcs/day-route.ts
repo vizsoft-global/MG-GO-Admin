@@ -1,5 +1,5 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { haversineMeters, simplifyPath } from "../core/geo";
 import { kuwaitDayString, kuwaitDayEnd, kuwaitDayStart } from "../core/kuwait";

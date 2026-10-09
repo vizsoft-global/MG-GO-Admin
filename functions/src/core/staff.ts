@@ -1,5 +1,5 @@
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore } from "./fs";
 import { COLLECTIONS, FIELDS } from "./collections";
 
 /** Same list as `src/lib/auth/staff-access.ts` — a `.manage` module alias. */

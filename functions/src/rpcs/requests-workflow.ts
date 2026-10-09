@@ -5,7 +5,7 @@ import {
   Timestamp,
   type DocumentReference,
   type Transaction,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff, type StaffContext } from "../core/staff";
 import {

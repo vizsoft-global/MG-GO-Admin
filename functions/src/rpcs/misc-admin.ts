@@ -5,7 +5,7 @@ import {
   FieldValue,
   Timestamp,
   type QueryDocumentSnapshot,
-} from "firebase-admin/firestore";
+} from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
 import { notifyDriverTransactional as writeTransactionalNotification } from "./visits-shared";
