@@ -57,7 +57,7 @@ export function functionName(rpcName: string): string {
 }
 
 function functionsRegion(): string {
-  return process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION?.trim() || "me-central2";
+  return process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION?.trim() || "me-central1";
 }
 
 function functionsBaseUrl(projectId: string): string {

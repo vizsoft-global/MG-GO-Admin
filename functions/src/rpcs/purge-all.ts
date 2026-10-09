@@ -434,7 +434,7 @@ async function clearDriversBatch(
  * caller sweeps *after* the rows are gone.
  */
 export const adminPurgeRunAll = onCall(
-  { region: "me-central2", maxInstances: 20, cors: true },
+  { region: "me-central1", maxInstances: 20, cors: true },
   async (request) => {
     const data = (request.data ?? {}) as Record<string, unknown>;
     const entity = entityOf(data);
@@ -873,7 +873,7 @@ async function filteredBlockersFor(
  * to the rows the filter engine matched.
  */
 export const adminPurgeFilteredRun = onCall(
-  { region: "me-central2", maxInstances: 20, cors: true },
+  { region: "me-central1", maxInstances: 20, cors: true },
   async (request) => {
     const data = (request.data ?? {}) as Record<string, unknown>;
     const entity = entityOf(data);
@@ -1172,7 +1172,7 @@ async function previewItem(rawType: string, id: string): Promise<PreviewItem> {
  * shown rather than against a fleet-wide total.
  */
 export const adminPreviewPurge = onCall(
-  { region: "me-central2", maxInstances: 20, cors: true },
+  { region: "me-central1", maxInstances: 20, cors: true },
   async (request) => {
     const data = (request.data ?? {}) as Record<string, unknown>;
     const rawType = parseId(data.p_entity_type) ?? parseId(data.entityType) ?? "";
