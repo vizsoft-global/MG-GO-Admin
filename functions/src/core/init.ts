@@ -14,7 +14,13 @@ import { getApps, initializeApp } from "firebase-admin/app";
  */
 export const FUNCTIONS_REGION = "me-central1";
 
-setGlobalOptions({ region: FUNCTIONS_REGION, maxInstances: 20 });
+setGlobalOptions({
+  region: FUNCTIONS_REGION,
+  maxInstances: 2,
+  memory: "256MiB",
+  cpu: 0.08,
+  concurrency: 1,
+});
 
 if (getApps().length === 0) {
   initializeApp();
