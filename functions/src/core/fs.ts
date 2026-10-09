@@ -1,3 +1,4 @@
+import "./init";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore as getFirestoreAdmin } from "firebase-admin/firestore";
 

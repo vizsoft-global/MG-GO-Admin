@@ -1,6 +1,5 @@
-import { setGlobalOptions } from "firebase-functions/v2";
+import "./core/init";
 import { onCall, HttpsError, type CallableRequest } from "firebase-functions/v2/https";
-import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "./core/fs";
 
@@ -259,13 +258,6 @@ export {
   adminDeletePerformanceRatingCriterion,
 } from "./rpcs/performance-ratings";
 export { adminListDriverPerformance, adminPerformanceTrend } from "./rpcs/performance-list";
-
-// One project, one region: Firestore, Functions and Storage all live in
-// me-central2 so a function-to-database call never leaves the metro. The region
-// is a property of the deployment, not of any single function.
-setGlobalOptions({ region: "me-central2", maxInstances: 20 });
-
-initializeApp();
 
 export type StaffClaims = {
   staff: boolean;
