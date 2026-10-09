@@ -237,6 +237,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-09` — **206 gen2 callables are ACTIVE in `me-central1`.** Cloud Run's regional CPU cap is ~40 at 1 vCPU, so each function is `cpu: 0.08`, `concurrency: 1`, `maxInstances: 2`. `us-central1` leftovers are gone. Rules and indexes stay on the named `default` database in `me-central2`. Vercel production is still withheld.
+
 - `[admin only] 2026-10-09` — **Cloud Functions gen2 cannot upload to `me-central2` on this project** (`generateUploadUrl` → 403). Callables deploy to `me-central1` (Doha). Firestore named `default` stays Enterprise in `me-central2`. The panel default in `callAdminFunction` is `me-central1`.
 
 - `[admin only] 2026-10-09` — **Admin panel leaves paused Supabase and talks to Firestore + Cloud Functions on `musallam-delivery-prod`.** `src/lib/supabase/*` is gone. Staff login and `proxy.ts` use a Firebase session cookie; server actions and the 12 Vercel crons call gen2 callables in `me-central2` via `callAdminFunction` / `callCronFunction`; list/detail reads use `staffDb()`. Realtime channels are 15–30s TanStack polls. Vercel `regions` is `dxb1`. Client bundles stay free of `firebase-admin` (`order-proof-resolve`, `notification-media-storage`). `firestore.rules` keep staff writes on the Admin SDK; `firestore.indexes.json` holds the composites. **Not in this change:** Vercel production deploy, data load, Flutter, Worker, Algolia, `esign-compose-signed-document` as a function (compose stays in Next `renderEsignPdf`).
