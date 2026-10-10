@@ -3,6 +3,15 @@ import { getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS, DELIVERY_STATUSES, FIELDS, IN_PROGRESS_STATUSES } from "../core/collections";
 import { parseId, parseInstant } from "../core/query";
 import { requireStaff } from "../core/staff";
+import { kuwaitDayString } from "../core/kuwait";
+import {
+  driverDayId,
+  monthOfDay,
+  readRollupCounts,
+  singleCalendarMonth,
+  zoneMonthId,
+  type RollupCountShape,
+} from "../core/rollups";
 
 const DEL = FIELDS.deliveries;
 
@@ -89,6 +98,49 @@ function readFilters(data: Record<string, unknown>) {
 }
 
 /**
+ * A covering rollup replaces the scan only for one driver-day or one full
+ * zone-month on the delivered basis. Anything else (created-at, a partial
+ * month, a fleet-wide window) keeps `count()` so an empty rollup collection
+ * cannot blank the KPI strip.
+ */
+async function coveringRollup(
+  filters: DeliveryCountFilters,
+  basis: "created" | "delivered",
+  allowDriverDay: boolean,
+): Promise<RollupCountShape | null> {
+  if (basis !== "delivered" || !filters.from || !filters.to) return null;
+  const fromDay = kuwaitDayString(filters.from);
+  const toDay = kuwaitDayString(filters.to);
+  const db = getFirestore();
+  if (
+    allowDriverDay &&
+    filters.driverId &&
+    !filters.zoneId &&
+    !filters.partnerId &&
+    !filters.restaurantId &&
+    fromDay === toDay
+  ) {
+    return readRollupCounts(db, {
+      collection: COLLECTIONS.rollupsDriverDay,
+      id: driverDayId(filters.driverId, fromDay),
+    });
+  }
+  if (
+    filters.zoneId &&
+    !filters.partnerId &&
+    !filters.restaurantId &&
+    !filters.driverId &&
+    singleCalendarMonth(fromDay, toDay)
+  ) {
+    return readRollupCounts(db, {
+      collection: COLLECTIONS.rollupsZoneMonth,
+      id: zoneMonthId(filters.zoneId, monthOfDay(fromDay)),
+    });
+  }
+  return null;
+}
+
+/**
  * `admin_deliveries_status_counts`.
  *
  * Key names are the SQL's bytes, not the column names: the panel reads
@@ -100,7 +152,21 @@ export const adminDeliveriesStatusCounts = onCall(async (request) => {
 
   const data = (request.data ?? {}) as Record<string, unknown>;
   const { filters, basis } = readFilters(data);
-  const query = baseQuery({ ...filters, driverId: null, restaurantId: null }, basis);
+  const stripped = { ...filters, driverId: null, restaurantId: null };
+  const covered = await coveringRollup(stripped, basis, false);
+  if (covered) {
+    return {
+      total: covered.total,
+      active: covered.active,
+      verified: covered.verified,
+      pending: covered.pending,
+      rejected: covered.rejected,
+      cancelled: covered.cancelled,
+      under_review: covered.under_review,
+      in_progress: covered.in_progress,
+    };
+  }
+  const query = baseQuery(stripped, basis);
 
   const { total, byStatus, inProgress } = await statusCounts(query, DELIVERY_STATUSES);
 
@@ -122,6 +188,18 @@ export const adminDeliveriesCountsByFilters = onCall(async (request) => {
 
   const data = (request.data ?? {}) as Record<string, unknown>;
   const { filters, basis } = readFilters(data);
+  const covered = await coveringRollup(filters, basis, true);
+  if (covered) {
+    return {
+      total: covered.total,
+      verified: covered.verified,
+      pending: covered.pending,
+      rejected: covered.rejected,
+      cancelled: covered.cancelled,
+      in_transit: covered.in_transit,
+      under_review: covered.under_review,
+    };
+  }
   const query = baseQuery(filters, basis);
 
   const { total, byStatus } = await statusCounts(query, DELIVERY_STATUSES);

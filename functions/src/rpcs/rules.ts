@@ -4,6 +4,8 @@ import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { parseId } from "../core/query";
 import { requireStaff } from "../core/staff";
+import { catalogNameStamp, catalogPrefixQueries } from "../core/search-text";
+import { lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
 
 const DELIVERY_RULES = COLLECTIONS.deliveryRules;
 const DELIVERY_RULE_SCOPES = COLLECTIONS.deliveryRuleScopes;
@@ -31,6 +33,25 @@ type IncentiveRewardMode = "fixed" | "per_delivery";
 type IncentivePayoutMode = "milestone" | "cumulative";
 
 const dbs = () => getFirestore();
+
+/** Full catalog when there is no search, or when no `name_lower` exists yet. */
+async function catalogDocs(collection: string, search: unknown): Promise<FirebaseFirestore.DocumentSnapshot[]> {
+  const db = dbs();
+  const term = typeof search === "string" ? search.trim() : "";
+  if (!term) return (await db.collection(collection).get()).docs;
+  const indexed = await lowercaseFieldIndexed(db, collection, "name_lower");
+  if (!indexed) return (await db.collection(collection).get()).docs;
+  const ids = await prefixMatchIds(db, collection, catalogPrefixQueries(term));
+  const docs: FirebaseFirestore.DocumentSnapshot[] = [];
+  for (let index = 0; index < ids.length; index += 300) {
+    const chunk = ids.slice(index, index + 300);
+    const snaps = await db.getAll(...chunk.map((id) => db.collection(collection).doc(id)));
+    for (const snap of snaps) {
+      if (snap.exists) docs.push(snap);
+    }
+  }
+  return docs;
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -271,6 +292,7 @@ export const adminInsertDeliveryRuleWithScope = onCall(async (request) => {
     dpd_period: period,
     created_at: FieldValue.serverTimestamp(),
     updated_at: FieldValue.serverTimestamp(),
+    ...catalogNameStamp(name),
   });
   const scopeRef = db.collection(DELIVERY_RULE_SCOPES).doc();
   batch.set(scopeRef, {
@@ -438,6 +460,7 @@ export const adminUpsertDeliveryRule = onCall(async (request) => {
     dpd_target: dpdTarget !== null && dpdTarget > 0 ? dpdTarget : null,
     dpd_period: period,
     updated_at: FieldValue.serverTimestamp(),
+    ...catalogNameStamp(name),
   };
 
   const db = dbs();
@@ -474,14 +497,15 @@ export const adminListDeliveryRules = onCall(async (request) => {
   await requireStaff(request, "earnings.view");
 
   const db = dbs();
-  const [rulesSnap, maps] = await Promise.all([db.collection(DELIVERY_RULES).get(), labelMaps()]);
+  const search = asRecord(request.data).search;
+  const [ruleDocs, maps] = await Promise.all([catalogDocs(DELIVERY_RULES, search), labelMaps()]);
   const scopeSnaps = await Promise.all(
-    rulesSnap.docs.map((doc) =>
+    ruleDocs.map((doc) =>
       db.collection(DELIVERY_RULE_SCOPES).where("delivery_rule_id", "==", doc.id).get(),
     ),
   );
 
-  const rows = rulesSnap.docs.map((doc, index) => {
+  const rows = ruleDocs.map((doc, index) => {
     const data = docRecord(doc);
     const scopeType = (docString(data, "scope_type") ?? "zone") as ScopeType;
     const zoneIds: string[] = [];
@@ -620,6 +644,7 @@ export const adminBulkUpdateDeliveryRules = onCall(async (request) => {
       dpd_period: period,
       created_at: FieldValue.serverTimestamp(),
       updated_at: FieldValue.serverTimestamp(),
+      ...catalogNameStamp(name),
     });
     batch.set(db.collection(DELIVERY_RULE_SCOPES).doc(), {
       delivery_rule_id: ruleRef.id,
@@ -767,6 +792,7 @@ export const adminUpsertIncentiveRule = onCall(async (request) => {
     reward_kwd: targetMode === "single" && rewardMode === "fixed" ? rewardKwd : 0,
     reward_per_delivery_kwd:
       targetMode === "single" && rewardMode === "per_delivery" ? rewardPerDeliveryKwd : null,
+    ...catalogNameStamp(name),
     payout_mode: payoutMode,
     overrides_others: overridesOthers,
     start_date: startDate,
@@ -826,23 +852,23 @@ export const adminDeleteIncentiveRule = onCall(async (request) => {
   return { success: true };
 });
 
-async function listIncentiveRuleRows(): Promise<Array<Record<string, unknown>>> {
+async function listIncentiveRuleRows(search?: unknown): Promise<Array<Record<string, unknown>>> {
   const db = dbs();
-  const [rulesSnap, maps] = await Promise.all([db.collection(INCENTIVE_RULES).get(), labelMaps()]);
+  const [rulesSnapDocs, maps] = await Promise.all([catalogDocs(INCENTIVE_RULES, search), labelMaps()]);
   const [scopeSnaps, tierSnaps] = await Promise.all([
     Promise.all(
-      rulesSnap.docs.map((doc) =>
+      rulesSnapDocs.map((doc) =>
         db.collection(INCENTIVE_RULE_SCOPES).where("incentive_rule_id", "==", doc.id).get(),
       ),
     ),
     Promise.all(
-      rulesSnap.docs.map((doc) =>
+      rulesSnapDocs.map((doc) =>
         db.collection(INCENTIVE_RULE_TIERS).where("incentive_rule_id", "==", doc.id).get(),
       ),
     ),
   ]);
 
-  return rulesSnap.docs.map((doc, index) => {
+  return rulesSnapDocs.map((doc, index) => {
     const data = docRecord(doc);
     const scopeType = (docString(data, "scope_type") ?? "restaurant") as ScopeType;
     const zoneIds: string[] = [];
@@ -905,7 +931,7 @@ async function listIncentiveRuleRows(): Promise<Array<Record<string, unknown>>> 
 /** `admin_list_incentive_rules` / `fetchIncentiveRulesForAdmin`. */
 export const adminListIncentiveRules = onCall(async (request) => {
   await requireStaff(request, "earnings.view");
-  return listIncentiveRuleRows();
+  return listIncentiveRuleRows(asRecord(request.data).search);
 });
 
 /** `admin_export_incentive_rules` — the same rows the list returns, export-shaped. */

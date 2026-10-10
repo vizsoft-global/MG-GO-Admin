@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { tokenPrefixMatch } from "@/lib/search/prefix";
 import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
@@ -206,9 +207,9 @@ function RestaurantsPageContent() {
       if (
         q &&
         !(
-          r.name.toLowerCase().includes(q) ||
-          r.partner_name.toLowerCase().includes(q) ||
-          (r.external_merchant_id?.toLowerCase().includes(q) ?? false)
+          tokenPrefixMatch(r.name, q) ||
+          tokenPrefixMatch(r.partner_name, q) ||
+          tokenPrefixMatch(r.external_merchant_id ?? "", q)
         )
       ) {
         return false;

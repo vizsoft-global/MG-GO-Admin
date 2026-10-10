@@ -44,6 +44,7 @@ import { encodePosition } from "../src/features/live-tracking-v2/fleet-wire.ts";
 import { evaluateRules, initialRuleState } from "../infra/workers/dpd-live/src/fleet-rules.ts";
 import { verifyAdminToken } from "../infra/workers/dpd-live/src/auth.ts";
 import { debouncedMembership } from "../infra/workers/dpd-live/src/geo.ts";
+import { setResolveUserFromTokenForTests } from "../infra/workers/dpd-live/src/supabase.ts";
 
 // ---------------------------------------------------------------------------
 // Arguments
@@ -855,7 +856,11 @@ async function runRoomTarget(args, fleet, zones, stats) {
     name: zone.name,
     color: zone.color ?? "#2563eb",
     zone_type: "circle",
-    geometry: { type: "circle", center: zone.center, radius: ZONE_RADIUS_M },
+    geometry: {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: zone.center },
+      properties: { radiusMeters: ZONE_RADIUS_M },
+    },
   }));
 
   const io = { flushCalls: 0, flushRows: 0, eventRows: 0, broadcasts: 0, unhandled: [] };
@@ -874,25 +879,19 @@ async function runRoomTarget(args, fleet, zones, stats) {
       const id = String(header).replace(/^Bearer\s+sim\./, "");
       return jsonResponse(id ? { id } : {}, id ? 200 : 401);
     }
-    if (path.startsWith("/rest/v1/rpc/admin_live_fleet_snapshot")) {
-      return jsonResponse({ settings: null, drivers: snapshotDrivers });
+    const payload = init?.body ? JSON.parse(String(init.body)) : {};
+    if (path.startsWith("/workerFleetRead")) {
+      if (payload.op === "ops") return jsonResponse({ events: [], cursor: null });
+      return jsonResponse({ settings: null, drivers: snapshotDrivers, zones: zoneRows });
     }
-    if (path.startsWith("/rest/v1/rpc/admin_ingest_driver_positions")) {
+    if (path.startsWith("/adminIngestDriverPositions")) {
       io.flushCalls += 1;
-      const body = JSON.parse(init?.body ?? "{}");
-      io.flushRows += Array.isArray(body.p_events) ? body.p_events.length : 0;
-      return jsonResponse({});
+      io.flushRows += Array.isArray(payload.p_events) ? payload.p_events.length : 0;
+      return jsonResponse({ ok: true, skipped: [] });
     }
-    if (path.startsWith("/rest/v1/zones")) return jsonResponse(zoneRows);
-    if (path.startsWith("/rest/v1/rpc/admin_record_fleet_events")) {
-      const body = JSON.parse(init?.body ?? "{}");
-      io.eventRows += Array.isArray(body.p_events) ? body.p_events.length : 1;
-      return jsonResponse({});
-    }
-    if (path.startsWith("/rest/v1/driver_operation_events")) return jsonResponse([]);
-    if (path.startsWith("/realtime/v1/api/broadcast")) {
-      io.broadcasts += 1;
-      return jsonResponse({});
+    if (path.startsWith("/adminRecordFleetEvents")) {
+      io.eventRows += Array.isArray(payload.p_events) ? payload.p_events.length : 1;
+      return jsonResponse({ ok: true });
     }
     // Anything unstubbed is reported rather than silently returning [], which
     // would make a missing dependency look like an empty table.
@@ -915,10 +914,18 @@ async function runRoomTarget(args, fleet, zones, stats) {
     waitUntil: () => {},
   };
 
+  setResolveUserFromTokenForTests(async (_config, token) => {
+    const id = token.startsWith("sim.") ? token.slice(4) : "";
+    return id ? { kind: "ok", user: { id } } : { kind: "rejected" };
+  });
+
   const room = new FleetRoom(state, {
     SUPABASE_URL: supabaseUrl,
     SUPABASE_SERVICE_ROLE_KEY: "sim-service-role",
     SUPABASE_ANON_KEY: "sim-anon",
+    FIREBASE_FUNCTIONS_BASE_URL: supabaseUrl,
+    WORKER_SHARED_SECRET: "sim-worker-secret",
+    FIREBASE_PROJECT_ID: "musallam-delivery-prod",
     ADMIN_WS_TOKEN_SECRET: "sim-secret",
     POSITION_FRAME_HZ: String(args.hz),
     TICK_MS: "2000",

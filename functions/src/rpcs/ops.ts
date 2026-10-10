@@ -4,6 +4,7 @@ import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayRange, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { parseId, parseIdList } from "../core/query";
 import { requireStaff } from "../core/staff";
+import { overlayZoneMonthDocs } from "../core/rollups";
 import { EMPTY_ROW, asDate, loadAllDocs, loadDocMap, num, toRow, type Row } from "./fleet";
 
 const PERFORMANCE_TARGET_DPD = "performance_target_dpd";
@@ -1008,6 +1009,7 @@ export const adminDpdEfficiencySnapshot = onCall(async (request) => {
   }
 
   const roll = await buildRoll(readOpsArgs({ ...data, from, to }));
+  await overlayZoneMonthDocs(getFirestore(), from, to, roll.zones);
   return {
     from,
     to,
@@ -1140,6 +1142,13 @@ export const adminPerformanceOpsSnapshot = onCall(async (request) => {
       .sort((a, b) => String(a.key ?? "").localeCompare(String(b.key ?? "")));
   };
 
+  const byZone = byKey((driver) => {
+    const id = parseId(driver.zone_id);
+    const name = id ? roll.zoneById.get(id)?.name : undefined;
+    return { id, label: (name as string | null) ?? ((driver.zone_name as string | null) ?? null) };
+  });
+  await overlayZoneMonthDocs(getFirestore(), args.from, args.to, byZone);
+
   return {
     from: args.from,
     to: args.to,
@@ -1166,11 +1175,7 @@ export const adminPerformanceOpsSnapshot = onCall(async (request) => {
     },
     trend,
     by_vehicle: byVehicle(),
-    by_zone: byKey((driver) => {
-      const id = parseId(driver.zone_id);
-      const name = id ? roll.zoneById.get(id)?.name : undefined;
-      return { id, label: (name as string | null) ?? ((driver.zone_name as string | null) ?? null) };
-    }),
+    by_zone: byZone,
     by_partner: byKey((driver) => {
       const id = parseId(driver.partner_id);
       const name = id ? roll.partnerById.get(id)?.name : undefined;

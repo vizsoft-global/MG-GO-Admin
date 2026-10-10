@@ -5,6 +5,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { UNIQ_COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { digitsOnly, lowerText, prefixBounds, stampSearchFields, tokenPrefixMatch } from "@/lib/search/prefix";
 
 /** PostgREST-shaped error so `error.code` / `error.message` keep mapping. */
 export class DbError extends Error {
@@ -154,9 +155,112 @@ function escapeReg(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function wrappedTerm(pattern: string): string | null {
+  if (!pattern.startsWith("%") || !pattern.endsWith("%") || pattern.length < 2) return null;
+  const inner = pattern.slice(1, -1);
+  if (inner.includes("%")) return null;
+  return inner;
+}
+
 function likeMatch(hay: unknown, pattern: string, flags: string): boolean {
+  const inner = wrappedTerm(pattern);
+  if (inner !== null && flags.includes("i")) {
+    return tokenPrefixMatch(String(hay ?? ""), inner);
+  }
   const source = pattern.split("%").map(escapeReg).join(".*");
   return new RegExp(`^${source}$`, flags).test(String(hay ?? ""));
+}
+
+const SEARCH_TABLES = new Set([
+  "driver_intakes",
+  "drivers",
+  "restaurants",
+  "delivery_rules",
+  "incentive_rules",
+  "requests",
+]);
+
+const LOWER_FIELD: Record<string, string> = {
+  full_name: "name_lower",
+  name: "name_lower",
+  driver_code: "driver_code_lower",
+  employee_id: "employee_id_lower",
+  phone: "phone_digits",
+  client_name: "client_name_lower",
+  client_id: "client_id_lower",
+  request_code: "request_code_lower",
+  driver_name: "driver_name_lower",
+  external_merchant_id: "merchant_id_lower",
+  zone_name: "zone_name_lower",
+  partner_name: "partner_name_lower",
+  company_name: "company_name_lower",
+};
+
+function prefixJob(field: string, pattern: string): { field: string; term: string } | null {
+  const inner = wrappedTerm(pattern);
+  if (inner === null) return null;
+  const mapped = LOWER_FIELD[field];
+  if (!mapped) return null;
+  const term = mapped === "phone_digits" ? digitsOnly(inner) : lowerText(inner);
+  if (!term) return null;
+  return { field: mapped, term };
+}
+
+function walkOrPrefix(node: OrNode, jobs: { field: string; term: string }[]): boolean {
+  switch (node.kind) {
+    case "and":
+      return node.parts.every((part) => walkOrPrefix(part, jobs));
+    case "cmp": {
+      if (node.op === "like") return false;
+      if (node.op === "ilike") {
+        const job = prefixJob(node.field, String(node.value));
+        if (!job) return false;
+        jobs.push(job);
+      }
+      return true;
+    }
+    default: {
+      const unexpected: never = node;
+      void unexpected;
+      return false;
+    }
+  }
+}
+
+/** Null when any ilike is not a simple `%term%` on a stored lowercase field. */
+function collectPrefixJobs(filters: FieldFilter[]): { field: string; term: string }[] | null {
+  const jobs: { field: string; term: string }[] = [];
+  for (const filter of filters) {
+    switch (filter.kind) {
+      case "ilike": {
+        const job = prefixJob(filter.field, filter.value);
+        if (!job) return null;
+        jobs.push(job);
+        break;
+      }
+      case "like":
+        return null;
+      case "or":
+        if (!filter.parts.every((part) => walkOrPrefix(part, jobs))) return null;
+        break;
+      case "eq":
+      case "neq":
+      case "in":
+      case "gt":
+      case "gte":
+      case "lt":
+      case "lte":
+      case "isnull":
+      case "notnull":
+        break;
+      default: {
+        const unexpected: never = filter;
+        void unexpected;
+        return null;
+      }
+    }
+  }
+  return jobs;
 }
 
 function cmpOp(fieldVal: unknown, op: "gt" | "gte" | "lt" | "lte" | CmpOp, target: unknown): boolean {
@@ -938,7 +1042,44 @@ export class StaffQuery<M extends QueryMode = "list"> {
     const db = this.requireDb();
     const emptyIn = this.filters.some((filter) => filter.kind === "in" && filter.value.length === 0);
     if (emptyIn) return [];
+    if (SEARCH_TABLES.has(this.table)) {
+      const jobs = collectPrefixJobs(this.filters);
+      if (jobs && jobs.length > 0) {
+        const prefixed = await this.rowsByPrefix(db, jobs);
+        if (prefixed) return prefixed;
+      }
+    }
     const snaps = await queryCollection(db, this.table, this.filters);
+    return snaps.map(rowFromSnap).filter((row) => this.filters.every((filter) => matches(row, filter)));
+  }
+
+  /** Null when the lowercase field is not stored yet, so the caller keeps the scan. */
+  private async rowsByPrefix(
+    db: Firestore,
+    jobs: readonly { field: string; term: string }[],
+  ): Promise<Record<string, unknown>[] | null> {
+    const probeField = this.table === "requests" ? "request_code_lower" : "name_lower";
+    const probe = await db.collection(this.table).orderBy(probeField).limit(1).get();
+    if (probe.empty) return null;
+    const ids = new Set<string>();
+    await Promise.all(
+      jobs.map(async (job) => {
+        const bounds = prefixBounds(job.term);
+        if (!bounds) return;
+        const snap = await db
+          .collection(this.table)
+          .where(job.field, ">=", bounds.start)
+          .where(job.field, "<=", bounds.end)
+          .limit(200)
+          .get();
+        for (const doc of snap.docs) ids.add(doc.id);
+      }),
+    );
+    if (ids.size === 0) return [];
+    const snaps = await readDocs(
+      db,
+      [...ids].map((id) => db.collection(this.table).doc(id)),
+    );
     return snaps.map(rowFromSnap).filter((row) => this.filters.every((filter) => matches(row, filter)));
   }
 
@@ -983,6 +1124,7 @@ export class StaffQuery<M extends QueryMode = "list"> {
     }
     const id = docIdFor(this.table, { ...row, ...data });
     data.id = id;
+    stampSearchFields(this.table, data);
     return { id, data };
   }
 
@@ -1009,6 +1151,7 @@ export class StaffQuery<M extends QueryMode = "list"> {
     const targets = snaps.map(rowFromSnap).filter((row) => this.filters.every((filter) => matches(row, filter)));
     const patch = asWriteRecord(this.patch);
     if (UPDATE_TOUCH.has(this.table) && patch.updated_at == null) patch.updated_at = new Date();
+    stampSearchFields(this.table, patch);
     for (const row of targets) {
       const id = String(row.id);
       await writeLocked(db, this.table, id, patch, "merge");

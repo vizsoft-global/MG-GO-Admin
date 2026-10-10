@@ -52,6 +52,11 @@ export {
   adminListFleetEvents,
 } from "./rpcs/fleet";
 export {
+  adminIngestDriverPositions,
+  adminRecordFleetEvents,
+  workerFleetRead,
+} from "./rpcs/fleet-worker-http";
+export {
   adminListPerformanceComponents,
   adminUpdatePerformanceComponents,
   adminListPerformanceRatingTeams,
@@ -194,6 +199,7 @@ export {
   adminUpsertEsignTemplate,
   adminUpsertEsignTemplateField,
 } from "./rpcs/esign-requests";
+export { esignComposeSignedDocument } from "./rpcs/esign-compose";
 export {
   adminListEsignSigners,
   adminEsignSignerOptions,
@@ -326,3 +332,85 @@ export const syncStaffClaims = onCall(async (request: CallableRequest<{ uid?: st
   await getAuth().setCustomUserClaims(targetUid, claims);
   return { uid: targetUid, claims };
 });
+
+export {
+  driverPasscodeLogin,
+  driverReleaseDeviceSession,
+  driverHeartbeat,
+} from "./rpcs/driver-auth";
+export {
+  driverGetHomeDashboard,
+  driverSetDutyState,
+} from "./rpcs/driver-home";
+export {
+  driverGetTodayShift,
+  driverSubmitDailyShift,
+} from "./rpcs/driver-shift";
+export {
+  driverGetActivePickup,
+  driverCreatePickup,
+  driverCompleteDelivery,
+  driverCancelDelivery,
+  driverGetDeliveryProximityContext,
+} from "./rpcs/driver-deliveries";
+export {
+  driverReportLocation,
+  driverClearLiveLocation,
+} from "./rpcs/driver-location";
+export {
+  driverListMyRequests,
+  driverGetRequest,
+  driverCreateRequest,
+  driverSubmitClarification,
+  driverClarifyRequest,
+  driverAcknowledgeRequest,
+  driverRespondReschedule,
+} from "./rpcs/driver-requests";
+export {
+  driverListVisitSlots,
+  driverBookVisit,
+  driverCancelVisit,
+} from "./rpcs/driver-visits";
+export {
+  driverListEsignRequests,
+  driverGetEsignRequest,
+  driverSubmitEsignature,
+  driverMarkEsignViewed,
+  driverDeclineEsignature,
+  driverListAppointments,
+  driverRespondAppointment,
+} from "./rpcs/driver-esign";
+export {
+  driverGetEarningsSummary,
+  driverGetWorkSummary,
+  driverGetExtraEarnings,
+  driverGetEarningsDetail,
+} from "./rpcs/driver-earnings";
+export {
+  driverGetAssignedVehicle,
+  driverReportFuelFill,
+} from "./rpcs/driver-vehicle";
+export { driverIngestTelemetry } from "./rpcs/driver-telemetry";
+export {
+  driverUpdateAvatar,
+  driverReportDeviceMeta,
+  driverRecordLoginVerification,
+} from "./rpcs/driver-profile";
+export { driverGetAttendance } from "./rpcs/driver-attendance-get";
+export { driverLogSecurityEvent } from "./rpcs/driver-security";
+export {
+  driverListMyDeliveries,
+  driverListEarningsDaily,
+  driverListPayouts,
+  driverListRequestTypes,
+  driverListRequestFields,
+  driverListTenureOptions,
+  driverListComplaintCategories,
+  driverGetDefaultVisitBranch,
+  driverListVisitDepartments,
+  driverListMyVisits,
+} from "./rpcs/driver-lists";
+export {
+  driverGetUploadUrl,
+  driverGetDownloadUrl,
+} from "./rpcs/driver-storage";

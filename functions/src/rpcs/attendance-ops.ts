@@ -31,6 +31,7 @@ import {
   type Dict,
 } from "./_shared";
 import { loadAttendanceRows, type AttendanceRow } from "./attendance-shared";
+import { applyAttendanceRollup } from "../core/rollups";
 
 const ATT = FIELDS.attendanceLogs;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -179,6 +180,29 @@ export const adminAttendanceAnalyticsDaily = onCall(async (request) => {
 // admin_correct_attendance
 // ---------------------------------------------------------------------------
 
+function attendancePresent(status: unknown): boolean {
+  return status === "present" || status === "late" || status === "online_unvalidated";
+}
+
+async function rollupCorrectedAttendance(input: {
+  driverId: unknown;
+  day: unknown;
+  logId: string;
+  zoneId: unknown;
+  status: unknown;
+}): Promise<void> {
+  if (typeof input.driverId !== "string" || input.driverId.length === 0) return;
+  if (typeof input.day !== "string" || !DAY_RE.test(input.day)) return;
+  const zoneId = typeof input.zoneId === "string" && input.zoneId.length > 0 ? input.zoneId : null;
+  await applyAttendanceRollup(getFirestore(), {
+    driverId: input.driverId,
+    zoneId,
+    day: input.day,
+    logId: input.logId,
+    present: attendancePresent(input.status),
+  });
+}
+
 function serializeLog(id: string, raw: Dict): Dict {
   const out: Dict = { id };
   for (const [key, value] of Object.entries(raw)) {
@@ -231,6 +255,13 @@ export const adminCorrectAttendance = onCall(async (request) => {
       updated_at: now,
     };
     await ref.update(patch);
+    await rollupCorrectedAttendance({
+      driverId: old[ATT.driverId],
+      day: oldDate,
+      logId: ref.id,
+      zoneId: old[ATT.zoneId],
+      status: patch[ATT.status],
+    });
     return serializeLog(ref.id, { ...old, ...patch });
   }
 
@@ -268,6 +299,13 @@ export const adminCorrectAttendance = onCall(async (request) => {
       updated_at: now,
     };
     await doc.ref.update(patch);
+    await rollupCorrectedAttendance({
+      driverId,
+      day: logDate,
+      logId: doc.id,
+      zoneId: old[ATT.zoneId],
+      status: patch[ATT.status],
+    });
     return serializeLog(doc.id, { ...old, ...patch });
   }
 
@@ -294,6 +332,13 @@ export const adminCorrectAttendance = onCall(async (request) => {
     updated_at: now,
   };
   await ref.set(row);
+  await rollupCorrectedAttendance({
+    driverId,
+    day: logDate,
+    logId: ref.id,
+    zoneId: row[ATT.zoneId],
+    status: row[ATT.status],
+  });
   return serializeLog(ref.id, row);
 });
 

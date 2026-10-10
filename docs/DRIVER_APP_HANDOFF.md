@@ -2,8 +2,8 @@
 
 > **Paste this entire file** into a new AI session when building the driver mobile app.  
 > It stays in sync with the admin panel (`MGgo-Admin` / `dpdadmin`).  
-> **Driver-facing stack:** Supabase `eoksxkdssptgyqyywdju` · Admin https://dpdadmin-prod.vercel.app · Firebase `musallam-delivery-prod`  
-> See **§1a**. Production is the only stack.
+> **Driver-facing stack (Plan 1, 2026-10-10):** Firebase Auth custom token + Firestore named `default` (`me-central2`) + 55 gen2 rider callables (`me-central1`) on `musallam-delivery-prod`. Live GPS ingest: Cloudflare Worker `https://dpd-live.vizsoft.workers.dev` (Firebase ID token). Admin https://dpdadmin-prod.vercel.app.  
+> See **§1a** (ids) and **§1b** (Flutter paste). Production is the only stack. **Play withheld.** Dump ongoing. Vercel prod alias not moved.
 
 ---
 
@@ -28,6 +28,63 @@
 | Web | `1:579224507592:web:566afbce6fb96ae84981fd` |
 
 **Production is the only stack.** Retired testing (`ytfmsgckjatiserpgdbz` / `dpdadmin` / `dpd-private` / `musallam-delivery-kw`) is not a target.
+
+**Plan 1 (2026-10-10):** Flutter MG-GO no longer talks to paused Supabase at runtime. The table above still names the dump source, FCM project, R2 bucket, and Play package. Paste **§1b** for the live client contract.
+
+---
+
+## 1b. Plan 1 rider backend (2026-10-10) — paste for Flutter
+
+MG-GO is off live Supabase onto Firebase Auth + Firestore + gen2 callables. Do not invent RPCs. Do not change Flutter from this admin repo. **Play has not shipped** (`android/key.properties` missing in MG-GO).
+
+| Piece | Contract |
+|-------|----------|
+| Auth | Firebase **custom token**. `uid` = `drivers.id`. Custom claim `deviceId`. Employee ID + 6-digit passcode still the login fields. |
+| Public settings | Firestore `app_settings/1` on named database `default` in `me-central2`. Anon read. Same branding / maintenance / force-update fields as the old `id = 1` row. |
+| Callables | **55** rider gen2 HTTPS callables **ACTIVE** in `me-central1` on `musallam-delivery-prod` (`cpu: 0.08`, `concurrency: 1`, `maxInstances: 2`). Client envelope is Firebase callable `{ data }`. |
+| Error codes | Unchanged strings (`inactive`, `driver_off_duty`, `duplicate_order_id`, `shift_locked`, `declaration_required`, `driver_blocked`, `driver_archived`, …). |
+| Force-update | Checked **before** `createCustomToken`. Gated builds (`versionCode` ≥ 83) get callable details `update_required`. Pre-gate / missing `versionCode` still `driver_blocked` (details may include `update_required: true`) so older mappers keep working. |
+| Earnings name | Rider callable is **`driverGetEarningsDetail` only**. Admin export `getDriverEarningsDetail` stays in `functions/src/rpcs/earnings.ts`. Do not alias the rider name to the admin name. |
+| Proof storage | `driverGetUploadUrl` / `driverGetDownloadUrl` — signed **GCS** for `fuel-fills` \| `request-attachments` \| `esign-documents` only. R2 `dpd-private-prod` still holds intake / docs / logos; do not move those into GCS. |
+| FGS isolate | Foreground-service isolate uses the **Firebase ID token**, not a GoTrue JWT. |
+| Worker ingest | Same Firebase ID token as Bearer on `POST https://dpd-live.vizsoft.workers.dev/ingest`. Worker version `ecb39c9a-12eb-426c-b95e-031556e226b8` verifies via Google JWKS RS256, `iss` = `https://securetoken.google.com/musallam-delivery-prod`. |
+| Worker data | `worker-port` is live on that version. Snapshot + zones, durable flush, and Class B events are gen2 HTTPS in `me-central1`: `workerFleetRead`, `adminIngestDriverPositions`, `adminRecordFleetEvents`, header `X-Worker-Secret`. Zones come from Firestore `zones`. The Supabase broadcast mirror is dropped; the admin 10s snapshot poll is the fallback. |
+| Rules / indexes | `firestore.rules` + indexes deployed on named `default` in `me-central2`. |
+| Withheld | Plan 3 dump + load verified (`plan3-verify` mismatches=0; history NEVER set skipped). Vercel production alias not moved (preview only). **Play blocked.** |
+
+Paused-stack notes in **§2**, **§9**, **§15** describe old APKs / the dump source. A Plan 1 build does not `Supabase.initialize` and does not send a Supabase JWT to `/ingest`.
+
+### Cutover SMS / WhatsApp — copy only, **unsent**
+
+Do **not** send. No SMS/WhatsApp credentials were used. Dump is complete; load is verifying. Play cannot ship without `android/key.properties`. Paste on cutover day only after a Play listing is live and load is verified.
+
+**English**
+
+```
+Musallam Delivery — required update
+
+The rider app is moving to a new system. The version on your phone will stop working.
+
+Update or reinstall Musallam Delivery from Google Play, then sign in with your Employee ID and 6-digit passcode as usual.
+
+If Play Store does not show an update, uninstall the old app and install the latest listing. Contact your supervisor if login fails after the update.
+
+Do not install APK files from outside Google Play.
+```
+
+**Arabic**
+
+```
+تحديث إلزامي لتطبيق مسلم ديليفري
+
+ينتقل تطبيق السائق إلى نظام جديد. النسخة المثبتة على هاتفك ستتوقف عن العمل.
+
+حدّث أو أعد تثبيت تطبيق مسلم ديليفري من Google Play، ثم سجّل الدخول برقم الموظف ورمز المرور المكوّن من 6 أرقام كالمعتاد.
+
+إذا لم يظهر التحديث في المتجر، احذف التطبيق القديم وثبّت أحدث نسخة من القائمة. تواصل مع مشرفك إذا فشل تسجيل الدخول بعد التحديث.
+
+لا تثبّت ملفات APK من خارج Google Play.
+```
 
 ---
 
@@ -176,7 +233,7 @@ Admin panel creates `driver_intakes` via **Add Driver**, **bulk import**, or edi
 
 **Live Tracking map:** pins come from `driver_locations`. Active (non-archived) drivers keep a last-known pin, including **Offline / off-duty**. Cron `cleanup_stale_driver_locations` (every 2 min) deletes stale rows only when the driver is missing or `archived_at` is set. The duty tracker must keep sending heartbeats while In: coarse GPS (**>50 m**) re-sends the last good **pin** when stationary; when live speed is ≥1.5 m/s it reports the live fix so the admin pin travels. That threshold was 100 m, which is exactly what Android's network provider reports from a cell tower up to 600 m away — those fixes moved the pin and inflated `distance_today_meters` (65 km for a rider who never left one block). The last-good pin only outranks a coarse fix for **2 minutes**; past that the approximate fix is sent. Motion (`idle`/`moving`) is classified from the **live GPS sample** (speed or ≥15 m displacement), not the frozen last-good pin. While `duty_active_delivery_id` is set, reports stay `delivery_submit` (On Delivery); leftover `delivery_submit` without an open pickup is Idle/Moving from speed — never a green On Delivery pin. Admin **In Progress** counts only `liveListStatus === delivery_submit` (on duty + GPS live + open pickup). Off-duty / logged-out riders must display **Offline**, never the last `tracking_status`. **OS Location off** (or location permission denied) must call `driver_clear_live_location()` once so the rider is **removed** from the Live list — do not leave the last Idle stamp. Clock-out must **not** call that RPC (Offline keeps last-known GPS). After handover, the Thank You screen device back must `go('/home')`, not pop the activity.
 
-**Live Tracking V2 edge rail (additive — V1 above is unchanged):** unless `LIVE_INGEST_URL` is passed as an empty string, the duty FGS also streams fixes to a Cloudflare Worker at `POST {LIVE_INGEST_URL}/ingest` (driver Supabase JWT as bearer), at **1Hz** while moving and **30s** while idle. Moving batches **2 fixes or ≤2s**; idle waits for the 30s deadline — `batchSize` must not apply while idle or a parked phone POSTs every ~2s. Sampling is a time-based stream (`distanceFilter: 0` with `AndroidSettings.intervalDuration` = 1s) — a distance filter and a fixed rate cannot both hold, and the rate is what the admin renderer needs. The jitter that used to spread reports over 10–15s is gone for the same reason: the renderer interpolates between fixes and cannot do that against an unknown next-arrival time. **Idle stays 30s** on purpose — a parked phone at 1Hz is the same coordinate thirty times over. `driver_report_location` remains the durable record and the safety net: the Durable Object flushes to `driver_locations` every 10s (thinning each batch to ~17 rows/min/rider, so 1Hz does not multiply the table), so the app skips its own durable write for **25s** after a successful publish. If a publish fails, fall back at the **15s/30s watchdog cadence without `force`** so coalesce can drop duplicates. Do not `_tick(..., force: true)` on every failed batch. State changes, the first sample and `delivery_submit` always write directly, never waiting on a flush. The Worker account must stay on **Workers Paid** — free-plan 1027 is what takes ingest down and dumps the fleet onto Postgres.
+**Live Tracking V2 edge rail (additive — V1 above is unchanged):** unless `LIVE_INGEST_URL` is passed as an empty string, the duty FGS also streams fixes to a Cloudflare Worker at `POST {LIVE_INGEST_URL}/ingest` (**Plan 1: Firebase ID token as bearer — §1b**; old APKs sent a Supabase JWT), at **1Hz** while moving and **30s** while idle. Moving batches **2 fixes or ≤2s**; idle waits for the 30s deadline — `batchSize` must not apply while idle or a parked phone POSTs every ~2s. Sampling is a time-based stream (`distanceFilter: 0` with `AndroidSettings.intervalDuration` = 1s) — a distance filter and a fixed rate cannot both hold, and the rate is what the admin renderer needs. The jitter that used to spread reports over 10–15s is gone for the same reason: the renderer interpolates between fixes and cannot do that against an unknown next-arrival time. **Idle stays 30s** on purpose — a parked phone at 1Hz is the same coordinate thirty times over. `driver_report_location` remains the durable record and the safety net: the Durable Object flushes to `driver_locations` every 10s (thinning each batch to ~17 rows/min/rider, so 1Hz does not multiply the table), so the app skips its own durable write for **25s** after a successful publish. If a publish fails, fall back at the **15s/30s watchdog cadence without `force`** so coalesce can drop duplicates. Do not `_tick(..., force: true)` on every failed batch. State changes, the first sample and `delivery_submit` always write directly, never waiting on a flush. The Worker account must stay on **Workers Paid** — free-plan 1027 is what takes ingest down and dumps the fleet onto Postgres.
 
 Two fields the app must send, both of which exist to stop the fast rail from lying:
 
@@ -1266,7 +1323,9 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-10-05 — [admin+app] **Staff countersignature is a second fact.** `20261117000200` adds `awaiting_counter_signature` + `counter_signature_state` on `driver_list_esign_requests` / `driver_get_esign_request`. Do **not** remap `esign_requests.status` — that column is still the employee's signature (`signed` after the rider signs). Inbox: a signed row with the flag true is "Awaiting counter-signature", not finished. Confirmed: do not compose the signed copy while awaiting. Viewer: render `signer_meta.declined_reason`. Older builds ignore the new keys. Applied on `eoksxkdssptgyqyywdju`. **Play required.** Also: batch drain is admin-only (`/api/cron/esign-batch-drain`); no app surface.
+*Last synced: 2026-10-10 — [admin+app] Plan 1 rider backend paste is **§1b**. Flutter is off live Supabase onto Firebase Auth custom token + Firestore named `default` (`me-central2`) + 55 gen2 rider callables (`me-central1`). Worker `ecb39c9a-12eb-426c-b95e-031556e226b8` verifies Firebase ID tokens and `worker-port` is live: snapshot, flush, and Class B events go to `me-central1` HTTPS (`workerFleetRead`, `adminIngestDriverPositions`, `adminRecordFleetEvents`); the Supabase broadcast mirror is dropped. Cutover SMS/WhatsApp copy is in §1b and **unsent** (dump ongoing; Play blocked — no `android/key.properties`). Vercel prod withheld. **Do not claim Play shipped.**
+
+*Prior: 2026-10-05 — [admin+app] **Staff countersignature is a second fact.** `20261117000200` adds `awaiting_counter_signature` + `counter_signature_state` on `driver_list_esign_requests` / `driver_get_esign_request`. Do **not** remap `esign_requests.status` — that column is still the employee's signature (`signed` after the rider signs). Inbox: a signed row with the flag true is "Awaiting counter-signature", not finished. Confirmed: do not compose the signed copy while awaiting. Viewer: render `signer_meta.declined_reason`. Older builds ignore the new keys. Applied on `eoksxkdssptgyqyywdju`. **Play required.** Also: batch drain is admin-only (`/api/cron/esign-batch-drain`); no app surface.
 
 *Prior: 2026-10-01 — [admin+app] **Wrong Actions rider read.** The documented rider path ("Wrong action details + history" → `wrong_actions` R, plus the app page registry's "Driver reads own wrong_actions where driver_id=auth.uid()") was unreadable in practice: the only SELECT policy on `public.wrong_actions` is `wrong_actions_staff_read` (`is_admin_panel_user()`), so a rider session returned **0 rows** and an empty screen. Additive `wrong_actions_rider_read` (`20261101100000`, `FOR SELECT TO authenticated USING (driver_id = auth.uid())`) mirrors `driver_read_own_payouts` / `driver_read_own_earnings_daily`; **applied on `eoksxkdssptgyqyywdju` (`dpd-production`)** — verified after apply at 5 policies on `wrong_actions`, one of them this SELECT-only addition. **No new RPC** — the only functions referencing the table on production are `_admin_purge_slug_for_entity`, `admin_purge_preview_all`, `admin_purge_run_all` and `performance_daily_source`, all staff-side, and a SECURITY DEFINER reader would be a new access path invented for a contract RLS satisfies. Select `id, action_type, severity, details, occurred_at` **only**: `created_by` is a staff identifier, `source` is staff-side, and `penalty_kwd` **is not a column** (registry jsonb only) so requesting it is a `42703` that blanks the page. Rider gets SELECT only — no INSERT / UPDATE / DELETE policy exists and none is added; filing an incident stays `wrong_actions.manage`. Verified live on `eoksxkdssptgyqyywdju`: exactly four policies, one SELECT, staff-gated; `drivers.id` **is** `profiles.id` for all 886 drivers (`drivers.profile_id` does not exist), so the id the admin writes and the id the rider session carries are the same value; and the table holds **0 rows** today, so the screen stays empty until the first incident is filed rather than because the read failed. App side in the same pass (MG-GO): the six Profile placeholder rows now open real pages (`/profile/details`, `/profile/wrong-actions`, `/profile/payments`, `/profile/assets`, `/profile/terms`, `/profile/tutorial`), and the manual video streams from the public R2 URL with a fixed 9:16 letterbox stage (build-time `RIDER_MANUAL_VIDEO_URL` only — **no new `app_settings` column**, no bundled asset, no playback permission). No `db:types`, no schema change. No Play.*
 

@@ -32,6 +32,7 @@ import {
   type ZoneGeometryType,
 } from "@/lib/geo/zone-geometry";
 import { COLLECTIONS } from "@/lib/firebase/db";
+import { catalogNameStamp } from "@/lib/search/prefix";
 import { staffDb } from "@/lib/firebase/staff-db";
 import type { Json } from "@/types/database";
 import type { DocumentData, Firestore } from "firebase-admin/firestore";
@@ -1014,6 +1015,7 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
     status: toDbRestaurantStatus(status),
     is_active: isActive && status !== "archived",
     updated_at: new Date(),
+    ...catalogNameStamp(name, externalMerchantId),
   };
   if (await restaurantNameTaken(db, payload.partner_id, payload.zone_id, name, id || undefined)) {
     return { error: "restaurant_exists" };

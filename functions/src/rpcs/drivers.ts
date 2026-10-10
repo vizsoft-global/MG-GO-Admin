@@ -14,9 +14,11 @@
  * row that matched in Postgres matches here.
  */
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getFirestore, Timestamp } from "../core/fs";
+import { getFirestore, Timestamp, type Firestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
+import { lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
+import { driverPrefixQueries, tokenPrefixMatch } from "../core/search-text";
 import {
   logDriverOperation,
   pickBoolean,
@@ -267,11 +269,11 @@ function rowMatches(row: Dict, filters: Filters, skip?: string): boolean {
   return true;
 }
 
-/** `admin_drivers_search_matches`. */
+/** Prefix of a stored field or of one of its tokens. Column `contains` filters stay substring. */
 function searchMatches(row: Dict, search: string | null): boolean {
   const needle = (search ?? "").trim();
   if (needle === "") return true;
-  const haystack = [
+  const fields = [
     row["full_name"],
     row["driver_code"],
     row["mg_id"],
@@ -281,14 +283,11 @@ function searchMatches(row: Dict, search: string | null): boolean {
     row["client_name"],
     row["company_name"],
     row["company_client_code"],
-  ]
-    .map((part) => (typeof part === "string" ? part : ""))
-    .join(" ")
-    .toLowerCase();
-  if (haystack.includes(needle.toLowerCase())) return true;
+  ];
+  if (fields.some((part) => tokenPrefixMatch(typeof part === "string" ? part : "", needle))) return true;
   const digits = needle.replace(/\D/g, "");
   if (digits === "") return false;
-  return String(row["phone_digits"] ?? "").includes(digits);
+  return String(row["phone_digits"] ?? "").startsWith(digits);
 }
 
 /** `admin_drivers_tab_matches`. */
@@ -351,16 +350,29 @@ function compareNullable(
  * `admin_drivers_list_base` — the denormalised row, assembled from one read of
  * each base collection.
  */
-async function loadDriverRows(archived: boolean): Promise<Dict[]> {
+async function docsByIds(db: Firestore, collection: string, ids: readonly string[]) {
+  const unique = [...new Set(ids.filter((id) => id.length > 0))];
+  const docs = [];
+  for (let index = 0; index < unique.length; index += 300) {
+    const chunk = unique.slice(index, index + 300);
+    const snaps = await db.getAll(...chunk.map((id) => db.collection(collection).doc(id)));
+    for (const snap of snaps) {
+      if (snap.exists) docs.push(snap);
+    }
+  }
+  return docs;
+}
+
+async function loadDriverRows(archived: boolean, onlyIds?: ReadonlySet<string> | null): Promise<Dict[]> {
+  if (onlyIds && onlyIds.size === 0) return [];
   const db = getFirestore();
   const now = new Date();
   const dayStart = kuwaitDayStart(now);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
   const multiCutoff = new Date(now.getTime() - MULTI_DEVICE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  const [intakeSnap, partnerSnap, zoneSnap, companySnap, intakeRestSnap, driverRestSnap, restaurantSnap, deliverySnap, deviceSnap] =
+  const [partnerSnap, zoneSnap, companySnap, intakeRestSnap, driverRestSnap, restaurantSnap, deliverySnap, deviceSnap] =
     await Promise.all([
-      db.collection(COLLECTIONS.driverIntakes).get(),
       db.collection(COLLECTIONS.partners).get(),
       db.collection(COLLECTIONS.zones).get(),
       db.collection(COLLECTIONS.sourceCompanies).get(),
@@ -378,7 +390,11 @@ async function loadDriverRows(archived: boolean): Promise<Dict[]> {
         .get(),
     ]);
 
-  const intakes = intakeSnap.docs.filter((doc) =>
+  const intakeDocs = onlyIds
+    ? await docsByIds(db, COLLECTIONS.driverIntakes, [...onlyIds])
+    : (await db.collection(COLLECTIONS.driverIntakes).get()).docs;
+
+  const intakes = intakeDocs.filter((doc) =>
     archived ? doc.get("archived_at") != null : doc.get("archived_at") == null,
   );
 
@@ -517,6 +533,101 @@ async function loadDriverRows(archived: boolean): Promise<Dict[]> {
   });
 }
 
+type DriverKpis = {
+  total: number;
+  activeToday: number;
+  onlineNow: number;
+  inactive: number;
+  pendingVerification: number;
+  suspended: number;
+};
+
+function kpisFromRows(base: Dict[]): DriverKpis {
+  return {
+    total: base.length,
+    activeToday: base.filter((row) => row["account_status"] === "active").length,
+    onlineNow: base.filter((row) => row["is_on_duty"] === true).length,
+    inactive: base.filter(
+      (row) => row["account_status"] === "active" && row["is_on_duty"] !== true,
+    ).length,
+    pendingVerification: base.filter(
+      (row) =>
+        row["linked_profile_id"] === null ||
+        row["workflow_status"] === "pending" ||
+        row["account_status"] === "pending",
+    ).length,
+    suspended: base.filter((row) => row["account_status"] === "suspended").length,
+  };
+}
+
+function tabTotalOf(tab: string, kpis: DriverKpis): number {
+  switch (tab) {
+    case "all":
+    case "archived":
+      return kpis.total;
+    case "on_duty":
+      return kpis.onlineNow;
+    case "pending":
+      return kpis.pendingVerification;
+    default:
+      return kpis.total;
+  }
+}
+
+/** Single-field counts. Used only when a search term can be answered by prefix. */
+async function fleetKpiCounts(archived: boolean): Promise<DriverKpis> {
+  const db = getFirestore();
+  const intakes = db.collection(COLLECTIONS.driverIntakes);
+  if (archived) {
+    const total = (await intakes.where("archived_at", ">", new Date(0)).count().get()).data().count;
+    return { total, activeToday: 0, onlineNow: 0, inactive: 0, pendingVerification: 0, suspended: 0 };
+  }
+  const drivers = db.collection(COLLECTIONS.drivers);
+  const [all, archivedCount, active, online, suspended, pendingWorkflow, unlinked] = await Promise.all([
+    intakes.count().get(),
+    intakes.where("archived_at", ">", new Date(0)).count().get(),
+    drivers.where("status", "==", "active").count().get(),
+    drivers.where("is_on_duty", "==", true).count().get(),
+    drivers.where("status", "==", "suspended").count().get(),
+    intakes.where("workflow_status", "==", "pending").count().get(),
+    intakes.where("linked_profile_id", "==", null).count().get(),
+  ]);
+  const total = Math.max(0, all.data().count - archivedCount.data().count);
+  const activeToday = active.data().count;
+  const onlineNow = online.data().count;
+  return {
+    total,
+    activeToday,
+    onlineNow,
+    inactive: Math.max(0, activeToday - onlineNow),
+    pendingVerification: pendingWorkflow.data().count + unlinked.data().count,
+    suspended: suspended.data().count,
+  };
+}
+
+/**
+ * Search term + a stored `name_lower` → prefix query, then load those intakes.
+ * No term, or no lowercase field yet (dump still running) → the existing fleet scan.
+ * KPIs stay fleet-wide on the prefix path so the tiles do not shrink to the matches.
+ */
+async function loadDriversForList(
+  archived: boolean,
+  search: string | null,
+): Promise<{ rows: Dict[]; kpis: DriverKpis | null }> {
+  const term = (search ?? "").trim();
+  if (!term) return { rows: await loadDriverRows(archived), kpis: null };
+  const db = getFirestore();
+  const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.driverIntakes, "name_lower");
+  if (!indexed) return { rows: await loadDriverRows(archived), kpis: null };
+  const ids = await prefixMatchIds(db, COLLECTIONS.driverIntakes, driverPrefixQueries(term));
+  const rows = await loadDriverRows(archived, new Set(ids));
+  try {
+    return { rows, kpis: await fleetKpiCounts(archived) };
+  } catch {
+    return { rows: await loadDriverRows(archived), kpis: null };
+  }
+}
+
 /**
  * `admin_list_drivers_page`.
  *
@@ -542,7 +653,8 @@ export const adminListDriversPage = onCall(async (request) => {
   const limit = Math.min(Math.max(pickCount(data, 100, "limit", "p_limit"), 1), MAX_LIMIT);
   const offset = Math.max(pickCount(data, 0, "offset", "p_offset"), 0);
 
-  const base = await loadDriverRows(tab === "archived");
+  const loaded = await loadDriversForList(tab === "archived", search);
+  const base = loaded.rows;
   const tabbed = base.filter((row) => tabMatches(row, tab));
   const filtered = tabbed.filter(
     (row) => searchMatches(row, search) && rowMatches(row, filters),
@@ -566,22 +678,12 @@ export const adminListDriversPage = onCall(async (request) => {
   return {
     rows: sorted.slice(offset, offset + limit),
     filtered_total: filtered.length,
-    tab_total: tabbed.length,
-    kpis: {
-      total: base.length,
-      activeToday: base.filter((row) => row["account_status"] === "active").length,
-      onlineNow: base.filter((row) => row["is_on_duty"] === true).length,
-      inactive: base.filter(
-        (row) => row["account_status"] === "active" && row["is_on_duty"] !== true,
-      ).length,
-      pendingVerification: base.filter(
-        (row) =>
-          row["linked_profile_id"] === null ||
-          row["workflow_status"] === "pending" ||
-          row["account_status"] === "pending",
-      ).length,
-      suspended: base.filter((row) => row["account_status"] === "suspended").length,
-    },
+    tab_total: loaded.kpis
+      ? tab === "multi_device"
+        ? tabbed.length
+        : tabTotalOf(tab, loaded.kpis)
+      : tabbed.length,
+    kpis: loaded.kpis ?? kpisFromRows(base),
   };
 });
 
@@ -610,7 +712,8 @@ export const adminDriversFilterValues = onCall(async (request) => {
   const search = pickText(data, "search", "p_search");
   const filters = validateFilters(data["filters"] ?? data["p_filters"] ?? {});
 
-  const base = await loadDriverRows(tab === "archived");
+  const loaded = await loadDriversForList(tab === "archived", search);
+  const base = loaded.rows;
   const scoped = base.filter(
     (row) =>
       tabMatches(row, tab) &&

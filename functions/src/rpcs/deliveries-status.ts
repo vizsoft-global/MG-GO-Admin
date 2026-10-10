@@ -16,6 +16,7 @@ import { kuwaitDayString } from "../core/kuwait";
 import { type SourceCompanyConfig } from "../core/incentive";
 import { loadIncentiveContext, type IncentiveContext } from "../core/incentive-store";
 import { recalculateDriverEarningsCore } from "./earnings";
+import { applyDeliveryRollup } from "../core/rollups";
 import {
   driverRestaurantIds,
   loadRestaurantsByPartner,
@@ -132,6 +133,13 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
   const changed = await db.runTransaction(async (transaction) => {
     const snaps = await Promise.all(refs.map((ref) => transaction.get(ref)));
     const dayKeys = new Set<string>();
+    const touches: Array<{
+      id: string;
+      driverId: string;
+      zoneId: string | null;
+      day: string | null;
+      status: string;
+    }> = [];
     let updated = 0;
 
     for (const snap of snaps) {
@@ -160,6 +168,18 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
         }
         transaction.update(snap.ref, patch);
         updated += 1;
+        const driverId = asString(raw[FIELDS.deliveries.driverId]);
+        const shift = asString(raw[FIELDS.deliveries.shiftDate]);
+        const day = shift && /^\d{4}-\d{2}-\d{2}$/.test(shift) ? shift : earnDateOf(raw);
+        if (driverId) {
+          touches.push({
+            id: snap.id,
+            driverId,
+            zoneId: asString(raw[FIELDS.deliveries.zoneId]),
+            day,
+            status,
+          });
+        }
       }
 
       if (status === "verified") {
@@ -169,7 +189,7 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
       }
     }
 
-    return { updated, dayKeys };
+    return { updated, dayKeys, touches };
   });
 
   if (status === "verified" && changed.dayKeys.size > 0) {
@@ -189,6 +209,17 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
         companyCache,
       });
     }
+  }
+
+  for (const touch of changed.touches) {
+    if (!touch.day) continue;
+    await applyDeliveryRollup(db, {
+      deliveryId: touch.id,
+      driverId: touch.driverId,
+      zoneId: touch.zoneId,
+      day: touch.day,
+      status: touch.status,
+    });
   }
 
   return {

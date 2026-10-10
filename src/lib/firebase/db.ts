@@ -17,6 +17,8 @@ export const COLLECTIONS = {
   drivers: "drivers",
   driverIntakes: "driver_intakes",
   deliveries: "deliveries",
+  rollupsDriverDay: "rollups_driver_day",
+  rollupsZoneMonth: "rollups_zone_month",
   vehicles: "vehicles",
   requests: "requests",
   restaurants: "restaurants",

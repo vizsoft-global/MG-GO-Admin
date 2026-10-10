@@ -6,7 +6,7 @@
     "deploy:testing": "wrangler deploy --env testing",
     "dev": "wrangler dev",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test src/fleet-rules.test.ts src/geo.test.ts src/auth.test.ts"
+    "test": "node --import tsx --test src/fleet-rules.test.ts src/geo.test.ts src/auth.test.ts src/token-resolution.test.ts src/fleet-live-state.test.ts src/fleet-room.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260811.1",

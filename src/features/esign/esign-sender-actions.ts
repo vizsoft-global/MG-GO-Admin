@@ -12,6 +12,7 @@ import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { isEsignDueDateAllowed } from "./esign-due-date";
 import { CHUNK_SIZE } from "./render/esign-batch-cap";
 import { launchEsignBrowser, renderEsignPdf } from "./render/esign-pdf-renderer";
+// Fallback: unsigned template PDFs still compile here via renderEsignPdf (needs Chrome). Signed copies are esignComposeSignedDocument.
 import type { EsignEmployeeSnapshot } from "./render/esign-placeholders";
 import type {
   EsignBatchLine,

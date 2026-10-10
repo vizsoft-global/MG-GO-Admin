@@ -10,7 +10,7 @@ alwaysApply: true
 **Product:** Enterprise rider workforce Control Tower (Musallam / DPD).  
 **Admin:** Next.js 16 · https://dpdadmin-prod.vercel.app (`dpdadmin-prod`)  
 **Driver app:** Separate repo (`MG-GO`) — paste [`docs/DRIVER_APP_HANDOFF.md`](../docs/DRIVER_APP_HANDOFF.md)  
-**Backend:** Supabase `eoksxkdssptgyqyywdju` (`dpd-production`) + R2 `dpd-private-prod` + Firebase `musallam-delivery-prod`. Retired testing (`dpdadmin` / `ytfmsgckjatiserpgdbz` / `dpd-private` / `musallam-delivery-kw`) is not a target.
+**Backend:** Firestore + Cloud Functions on `musallam-delivery-prod` + R2 `dpd-private-prod`. Supabase `eoksxkdssptgyqyywdju` is paused — admin and the Worker no longer call it. Retired testing (`dpdadmin` / `ytfmsgckjatiserpgdbz` / `dpd-private` / `musallam-delivery-kw`) is not a target.
 
 ---
 
@@ -18,11 +18,14 @@ alwaysApply: true
 
 ```mermaid
 flowchart LR
-  DriverApp["Driver App mobile"] -->|"OTP auth, deliveries, requests, chat"| Supabase["Supabase"]
-  AdminPanel["Admin Panel web"] -->|"verify, approve, monitor"| Supabase
+  DriverApp["Driver App mobile"] -->|"OTP auth, deliveries, requests, chat"| Firebase["Firestore + Functions"]
+  AdminPanel["Admin Panel web"] -->|"verify, approve, monitor"| Firebase
   Partners["Talabat / DoorDash / UberEats"] -->|"external orders"| DriverApp
-  Supabase -->|"realtime"| AdminPanel
-  Supabase -->|"push"| DriverApp
+  DriverApp -->|"1Hz GPS"| Worker["FleetRoom Worker"]
+  AdminPanel -->|"WebSocket"| Worker
+  Worker -->|"HTTPS X-Worker-Secret"| Firebase
+  Firebase -->|"TanStack poll"| AdminPanel
+  Firebase -->|"FCM"| DriverApp
 ```
 
 Order allocation is **external** (partner apps). We own: monitoring, compliance, payroll, support.
@@ -188,7 +191,7 @@ Migrations: `20260518000000_dpd_core_schema.sql`, `20260518120000_app_settings.s
 | `driver_sessions` | On/off duty status |
 | `support:thread:{id}` | Chat |
 | `notifications:driver:{id}` | In-app notification feed |
-| `fleet:{room}` | **Live Tracking V2 only** — Supabase Broadcast mirror of the Durable Object, used when the edge WebSocket is unreachable. Deliberately not shared with any V1 channel |
+| `fleet` WebSocket | **Live Tracking V2 only** — Cloudflare Durable Object. Broadcast mirror dropped; admin 10s snapshot poll is the fallback. Not shared with V1 |
 
 ---
 
@@ -236,6 +239,24 @@ Change-log format:
 ---
 
 ## Change log
+
+- `[admin only] 2026-10-10` — **Plan 3 `data-load` verified on `musallam-delivery-prod` `default`.** `plan3-verify.mjs` mismatches=0 on every counted collection: deliveries 229533, storage_uploads 130130, driver_sessions 37058, drivers 891, profiles 910, attendance_logs 16009, esign_requests 21, driver_attendance 16009, driver_change_events 2132, driver_daily_shifts 14434, driver_push_tokens 1272, notification_campaigns 2426, notification_dispatch_items 2864, notification_dispatch_runs 2423, notification_events 2582, order_recon_rows 6675. History NEVER set (`driver_location_events` 23M and siblings) not loaded — that DIFF is expected. YAML `data-load` / `export-dump` / `billing-region` completed. Vercel preview only; no `--prod`, no `dpdadmin-prod` alias move. Play blocked.
+
+- `[admin only] 2026-10-10` — **`esignComposeSignedDocument` is ACTIVE in `me-central1`.** Secret Manager 403 was the first blocker; after `WORKER_SHARED_SECRET` existed the create landed. 1GiB, cpu 1, 120s, concurrency 1, maxInstances 2. Panel already calls `esign_compose_signed_document`. Unsigned templates stay Next `renderEsignPdf`. Vercel preview only.
+
+- `[admin only] 2026-10-10` — **Plan 2 search is exact-prefix on stored lowercase fields; rollups write at verify/complete/attendance.** No Algolia or Typesense. `name_lower` / `search_name` (and the sibling code, phone, request fields) are stamped on admin and staff writes for drivers, delivery rules, incentive rules, requests, and restaurants. List search uses a Firestore prefix range when any indexed doc exists; an empty index keeps the current scan so an in-progress dump does not blank the UI. `rollups_driver_day/{driverId}_{yyyy-mm-dd}` and `rollups_zone_month/{zoneId}_{yyyy-mm}` increment once per delivery status (marker) and once per attendance present-day. Status counts and the performance zone overlay read a rollup only when that covering doc exists and the window is one Kuwait day or one full calendar month on the delivered basis. No history backfill, no dump, no function deploy, no Vercel prod.
+
+- `[admin+app] 2026-10-10` — **Live Worker is off Supabase REST (`worker-port`).** Snapshot, zones, durable position flush, Class B events, and the ops relay go to gen2 HTTPS in `me-central1` (`workerFleetRead`, `adminIngestDriverPositions`, `adminRecordFleetEvents`), gated by `X-Worker-Secret` / `WORKER_SHARED_SECRET`. Coalesce stays 15s / 18m, with the 50m coarse, 40 m/s, and 500m gap rules, and `driver_locations/{uid}` is capped under 1 write/sec. The Supabase broadcast POST is dropped; the admin 10s snapshot poll remains the fallback. Ingest token verification is unchanged (Firebase JWKS). Worker `https://dpd-live.vizsoft.workers.dev` version `ecb39c9a-12eb-426c-b95e-031556e226b8`. No Vercel prod, no dump, no Play.
+
+- `[admin+app] 2026-10-10` — **Worker `dpd-live` left paused Supabase.** Snapshot / ops / ingest / events go to gen2 HTTPS `workerFleetRead` / `adminIngestDriverPositions` / `adminRecordFleetEvents` (`me-central1`) behind `X-Worker-Secret` (`WORKER_SHARED_SECRET`). Ingest token stays Firebase JWKS. Broadcast mirror dropped — admin 10s snapshot poll is the fallback. Worker `ecb39c9a-12eb-426c-b95e-031556e226b8` at `https://dpd-live.vizsoft.workers.dev`. Unauthorized POSTs to the three functions return 401. Vercel preview only. No Play.
+
+- `[admin only] 2026-10-10` — **Plan 2 admin leftovers closed; Vercel stays preview-only.** `src/` has no live `@/lib/supabase` / `@supabase` / `supabase.co` call. `proxy.ts` returns the response when the session probe is `unavailable` — it does not redirect to `/login`. Panel call sites (165 names via `callAdminFunction` / `callCronFunction`) map to exports in `functions/src/index.ts`; `.rpc-missing.txt` is empty. `claim_super_admin` stays Admin SDK + `setCustomUserClaims`, not a callable. Plan YAML `admin-auth-sdk` / `admin-rpcs` completed. **Still withheld:** `vercel deploy --prod`, `dpdadmin-prod` alias move, dump/load, Play. Worker REST cutover is the `worker-port` entry above. `esignComposeSignedDocument` is now ACTIVE. Search prefix + write-time rollups are in source (see search entry above); those callables are not redeployed.
+
+- `[admin only] 2026-10-10` — **Signed e-sign copy is `esignComposeSignedDocument` (gen2, me-central1, 1GiB, cpu 1, 120s, concurrency 1).** The old Supabase worker `esign-compose-signed-document` died on `WORKER_RESOURCE_LIMIT` before it could record `malformed_signature_image`. PNG/JPEG structure checks run before `pdf-lib`. Stamp placement matches `stampSignatureOnLastPage`. Objects stay on the existing `esign-documents/` GCS prefix — R2 keys are not copied. Unsigned template PDFs still compile in Next `renderEsignPdf` (Chrome). Staff-gated. Deploy later landed (see ACTIVE entry above). No Vercel prod, no dump, no Flutter.
+
+- `[admin+app] 2026-10-10` — Plan 1 rider callables + Worker Firebase ID token (Play withheld; dump ongoing; no Vercel prod).
+
+- `[admin+app] 2026-10-09` — **Rider leftovers Flutter already called now exist and are exported.** `driverGetAttendance` (Kuwait month, `present` + `online_unvalidated`, live open-session bonus, early-out clamp), `driverRecordLoginVerification` (`drivers/{uid}/login_verification/` only), `driverLogSecurityEvent` (Flutter `info|warning|blocked` plus SQL `low|medium|high`). List/storage Superagent ports are wired: `driverListMyDeliveries` / `driverListEarningsDaily` / `driverListPayouts` / request catalogues / visit lists, plus `driverGetUploadUrl` / `driverGetDownloadUrl` (GCS signed, buckets `fuel-fills` | `request-attachments` | `esign-documents`). Admin `getDriverEarningsDetail` stays; rider name is `driverGetEarningsDetail` only. Flutter `main.dart` no longer `Supabase.initialize`; leftover live `Supabase.instance` is gone. Compose stays Next/R2. **Not in this change:** function deploy, Vercel prod alias, Play, data dump.
 
 - `[admin only] 2026-10-09` — **206 gen2 callables are ACTIVE in `me-central1`.** Cloud Run's regional CPU cap is ~40 at 1 vCPU, so each function is `cpu: 0.08`, `concurrency: 1`, `maxInstances: 2`. `us-central1` leftovers are gone. Rules and indexes stay on the named `default` database in `me-central2`. Vercel production is still withheld.
 

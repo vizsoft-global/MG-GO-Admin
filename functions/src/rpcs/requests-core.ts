@@ -23,6 +23,8 @@ import {
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";
+import { lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
+import { anyTokenPrefix, requestPrefixQueries, requestSearchStamp, tokenPrefixMatch } from "../core/search-text";
 import {
   IN_FILTER_LIMIT,
   chunk,
@@ -117,10 +119,6 @@ function initcap(value: string): string {
   return out;
 }
 
-function containsCi(haystack: string | null, needle: string): boolean {
-  return haystack !== null && haystack.toLowerCase().includes(needle.toLowerCase());
-}
-
 /** `timestamptz - interval '1 month'`, clamping to the target month's last day. */
 function minusOneMonth(at: Date): Date {
   const year = at.getUTCFullYear();
@@ -185,6 +183,29 @@ async function scanRequests(lower: Date | null, upper: Date | null): Promise<Req
     const data = dataOf(doc);
     return { id: doc.id, data, createdAt: instantOf(data.created_at) };
   });
+}
+
+/**
+ * Prefix on stored lowercase fields when a search term is present and any
+ * request already has `request_code_lower`. Otherwise the date-window scan.
+ */
+async function loadRequests(
+  lower: Date | null,
+  upper: Date | null,
+  search: string | null,
+): Promise<RequestRow[]> {
+  const term = (search ?? "").trim();
+  if (!term) return scanRequests(lower, upper);
+  const db = getFirestore();
+  const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.requests, "request_code_lower");
+  if (!indexed) return scanRequests(lower, upper);
+  const ids = await prefixMatchIds(db, COLLECTIONS.requests, requestPrefixQueries(term));
+  const docs = await loadDocMap(COLLECTIONS.requests, ids);
+  return [...docs.entries()].map(([id, data]) => ({
+    id,
+    data,
+    createdAt: instantOf(data.created_at),
+  }));
 }
 
 type Senders = { drivers: Map<string, Dict>; profiles: Map<string, Dict> };
@@ -326,13 +347,18 @@ function matchesSearch(
   search: string | null,
   maskConfidential: boolean,
 ): boolean {
-  if (search === null) return true;
-  if (containsCi(textOf(row.data.request_code), search)) return true;
+  if (search === null || search.trim() === "") return true;
+  if (tokenPrefixMatch(textOf(row.data.request_code) ?? "", search)) return true;
   if (maskConfidential && boolOf(row.data.is_confidential)) return false;
   const driverId = textOf(row.data.driver_id);
-  return (
-    containsCi(senderName(senders, driverId), search) ||
-    containsCi(senderCode(senders, driverId), search)
+  return anyTokenPrefix(
+    [
+      senderName(senders, driverId),
+      senderCode(senders, driverId),
+      textOf(row.data.driver_name),
+      textOf(row.data.driver_code),
+    ],
+    search,
   );
 }
 
@@ -411,7 +437,7 @@ export const adminListRequests = onCall(async (request) => {
   const db = getFirestore();
   const [scanned, departmentSteps, assignedSteps, forwardedIds, handledIds, labels, templatesSnap] =
     await Promise.all([
-      scanRequests(prevFrom ?? from, to),
+      loadRequests(prevFrom ?? from, to, filters.search),
       filters.departmentKey !== null
         ? stepOrdersWhere("role_key", filters.departmentKey)
         : Promise.resolve(null),
@@ -1066,6 +1092,12 @@ export const adminCreateRequest = onCall(async (request) => {
     driver_name: textOf(driverProfileSnap.get("full_name")) ?? textOf(driver.name),
     driver_code: textOf(driver.driver_code),
     employee_id: textOf(driver.employee_id),
+    ...requestSearchStamp({
+      requestCode: code,
+      driverName: textOf(driverProfileSnap.get("full_name")) ?? textOf(driver.name),
+      driverCode: textOf(driver.driver_code),
+      employeeId: textOf(driver.employee_id),
+    }),
     created_day: kuwaitDayString(now),
     created_at: nowTs,
     updated_at: nowTs,
@@ -1159,7 +1191,7 @@ export const adminRequestsTrend = onCall(async (request) => {
   const weeks = Math.max(pickCount(data, 12, "weeks", "p_weeks"), 1);
 
   const [scanned, departmentSteps] = await Promise.all([
-    scanRequests(from, to),
+    loadRequests(from, to, filters.search),
     filters.departmentKey !== null
       ? stepOrdersWhere("role_key", filters.departmentKey)
       : Promise.resolve(null),

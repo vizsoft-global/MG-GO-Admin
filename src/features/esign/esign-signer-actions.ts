@@ -266,11 +266,20 @@ export async function submitMyEsignSignature(input: {
   if (error) return { ok: false, error: error.message };
   const payload = asRecord(data);
   if (payload.ok === false) return { ok: false, error: String(payload.error ?? "failed") };
+  const counterSignatureState = String(
+    payload.counter_signature_state ?? "signed",
+  ) as EsignCounterSignatureState;
+  if (counterSignatureState === "signed") {
+    // Compose failure stays on signed_document_error; the signature write already succeeded.
+    await callAdminFunction(
+      "esign_compose_signed_document",
+      { p_request_id: input.request_id },
+      { timeoutMs: 120_000 },
+    );
+  }
   return {
     ok: true,
-    counter_signature_state: String(
-      payload.counter_signature_state ?? "signed",
-    ) as EsignCounterSignatureState,
+    counter_signature_state: counterSignatureState,
   };
 }
 

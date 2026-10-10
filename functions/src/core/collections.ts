@@ -18,6 +18,9 @@ export const COLLECTIONS = {
   /** Inventory asset assignments (`asset_assignments`); catalogue is `asset_catalog`. */
   assetAssignments: "asset_assignments",
   deliveries: "deliveries",
+  /** Written at verify / complete time. Not a history backfill. */
+  rollupsDriverDay: "rollups_driver_day",
+  rollupsZoneMonth: "rollups_zone_month",
   deliveryVerifications: "delivery_verifications",
   attendanceLogs: "attendance_logs",
   driverSessions: "driver_sessions",
@@ -66,6 +69,8 @@ export const COLLECTIONS = {
   requests: "requests",
   requestTypeDefinitions: "request_type_definitions",
   requestFieldDefinitions: "request_field_definitions",
+  loanTenureOptions: "loan_tenure_options",
+  complaintCategories: "complaint_categories",
   requestApprovalSteps: "request_approval_steps",
   requestApprovalStepTemplates: "request_approval_step_templates",
   requestClarifications: "request_clarifications",

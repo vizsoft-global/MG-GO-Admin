@@ -438,6 +438,21 @@ export async function fetchEsignRequestDetail(
 }
 
 const ESIGN_BUCKET = "esign-documents";
+const COMPOSE_TIMEOUT_MS = 120_000;
+
+async function maybeComposeSignedCopy(id: string, row: DocRow): Promise<DocRow> {
+  if (String(row.status ?? "") !== "signed") return row;
+  if (hasStorageKey(row.signed_document_storage_key)) return row;
+  if (row.signed_document_error != null && String(row.signed_document_error).trim() !== "") return row;
+  const composed = await callAdminFunction(
+    "esign_compose_signed_document",
+    { p_request_id: id },
+    { timeoutMs: COMPOSE_TIMEOUT_MS },
+  );
+  if (composed.error) return row;
+  const again = await getDoc(COLLECTIONS.esignRequests, id);
+  return again.row ?? row;
+}
 
 function hasStorageKey(value: unknown): boolean {
   return value != null && String(value).trim() !== "";
@@ -462,7 +477,8 @@ export async function fetchEsignDocumentLinks(id: string): Promise<{
       error: loaded.error,
     };
   }
-  const row: DocRow = loaded.row ?? { id: "" };
+  let row: DocRow = loaded.row ?? { id: "" };
+  row = await maybeComposeSignedCopy(id, row);
 
   return {
     documentUrl: hasStorageKey(row.document_storage_key)

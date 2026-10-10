@@ -104,11 +104,16 @@ async function fleetSettings(): Promise<Dict> {
   };
 }
 
-export const adminLiveFleetSnapshot = onCall(async (request) => {
-  await requireStaff(request);
+export type LiveFleetZone = {
+  id: string;
+  name: string | null;
+  color: string | null;
+  zone_type: string | null;
+  geometry: unknown;
+};
 
-  const data = (request.data ?? {}) as Dict;
-  const seenWithin = Math.max(Math.trunc(num(data.seenWithinMinutes) ?? 30), 1);
+export async function buildLiveFleetSnapshot(seenWithinMinutes: number) {
+  const seenWithin = Math.max(Math.trunc(seenWithinMinutes || 30), 1);
   const now = new Date();
   const day = kuwaitDayString(now);
   const dayStart = kuwaitDayStart(day);
@@ -301,7 +306,29 @@ export const adminLiveFleetSnapshot = onCall(async (request) => {
     kuwait_day: day,
     settings,
     drivers: vehicles,
+    zones: zoneDocs.map((doc) => ({
+      id: String(doc.id),
+      name: typeof doc.name === "string" ? doc.name : null,
+      color: typeof doc.color === "string" ? doc.color : null,
+      zone_type: typeof doc.zone_type === "string" ? doc.zone_type : null,
+      geometry: doc.geometry ?? null,
+    })),
   };
+}
+
+export function snapshotForStaff<T extends { zones: readonly LiveFleetZone[] }>(
+  built: T,
+): Omit<T, "zones"> {
+  const snapshot = { ...built } as Omit<T, "zones"> & { zones?: readonly LiveFleetZone[] };
+  delete snapshot.zones;
+  return snapshot;
+}
+
+export const adminLiveFleetSnapshot = onCall(async (request) => {
+  await requireStaff(request);
+  const data = (request.data ?? {}) as Dict;
+  const seenWithin = num(data.seenWithinMinutes ?? data.p_seen_within_minutes) ?? 30;
+  return snapshotForStaff(await buildLiveFleetSnapshot(seenWithin));
 });
 
 export const adminListFleetEvents = onCall(async (request) => {

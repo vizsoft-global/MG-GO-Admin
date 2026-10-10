@@ -27,6 +27,7 @@ import { getAuth } from "firebase-admin/auth";
 import { COLLECTIONS, UNIQUE_LOCKS } from "../core/collections";
 import { daysInMonth, parseMonthKey, payrollMonths } from "../core/kuwait";
 import { requireStaff, type StaffContext } from "../core/staff";
+import { driverSearchStamp } from "../core/search-text";
 import {
   BATCH_LIMIT,
   SCAN_CAP,
@@ -309,6 +310,15 @@ async function approveInTransaction(
   const avatar = textOrNull(intake["avatar_url"]);
   const fullName = textOrNull(intake["full_name"]) as string;
   const driverCode = textOrNull(intake["driver_code"]);
+  const searchStamp = driverSearchStamp({
+    fullName,
+    driverCode,
+    employeeId,
+    phone,
+    clientId: intake["client_id"],
+    clientName: intake["client_name"],
+    zoneName: intake["zone_name"],
+  });
 
   const profile = profileSnap.exists ? dataOf(profileSnap) : {};
   tx.set(
@@ -356,6 +366,7 @@ async function approveInTransaction(
     archived_at: null,
     created_at: now,
     updated_at: now,
+    ...searchStamp,
   });
 
   tx.set(passcodeLockRef(db, passcode), { owner_id: uid, driver_id: uid, created_at: now });
@@ -402,6 +413,7 @@ async function approveInTransaction(
     workflow_status: "approved",
     status: "linked",
     updated_at: now,
+    ...searchStamp,
   });
 
   return { ok: true, driver_id: uid, driver_code: driverCode, app_passcode: passcode };

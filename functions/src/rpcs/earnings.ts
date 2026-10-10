@@ -23,6 +23,7 @@ import {
   type RawDelivery,
 } from "../core/incentive-store";
 import { driverRestaurantIds as restaurantIdsOf } from "./deliveries-shared";
+import { applyDeliveryRollup } from "../core/rollups";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 400;
@@ -655,6 +656,16 @@ export async function recalculateDriverEarningsCore(args: {
   });
 
   await syncDriverWalletEarningCredit({ driverId, earnDate, approvedBy: args.approvedBy ?? null });
+
+  for (const delivery of dayDeliveries) {
+    await applyDeliveryRollup(db, {
+      deliveryId: delivery.id,
+      driverId,
+      zoneId: delivery.zone_id,
+      day: delivery.shift_date ?? earnDate,
+      status: "verified",
+    });
+  }
 
   return { recalculated: true, deliveries, incentive_kwd: incentive, net_kwd: net };
 }
