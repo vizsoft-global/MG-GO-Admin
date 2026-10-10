@@ -50,7 +50,7 @@ MG-GO is off live Supabase onto Firebase Auth + Firestore + gen2 callables. Do n
 | Worker ingest | Same Firebase ID token as Bearer on `POST https://dpd-live.vizsoft.workers.dev/ingest`. Worker version `ecb39c9a-12eb-426c-b95e-031556e226b8` verifies via Google JWKS RS256, `iss` = `https://securetoken.google.com/musallam-delivery-prod`. |
 | Worker data | `worker-port` is live on that version. Snapshot + zones, durable flush, and Class B events are gen2 HTTPS in `me-central1`: `workerFleetRead`, `adminIngestDriverPositions`, `adminRecordFleetEvents`, header `X-Worker-Secret`. Zones come from Firestore `zones`. The Supabase broadcast mirror is dropped; the admin 10s snapshot poll is the fallback. |
 | Rules / indexes | `firestore.rules` + indexes deployed on named `default` in `me-central2`. |
-| Withheld | Plan 3 dump + load verified (`plan3-verify` mismatches=0; history NEVER set skipped). Vercel production alias not moved (preview only). **Play blocked.** |
+| Withheld | Plan 3 dump + load verified (`plan3-verify` mismatches=0; history NEVER set skipped). Search/rollup callables redeployed `me-central1`. Vercel production alias not moved (preview `dpl_9Xj6yuSEDDuU19FDq461jDMxtxwx` only). **Play blocked.** |
 
 Paused-stack notes in **§2**, **§9**, **§15** describe old APKs / the dump source. A Plan 1 build does not `Supabase.initialize` and does not send a Supabase JWT to `/ingest`.
 
