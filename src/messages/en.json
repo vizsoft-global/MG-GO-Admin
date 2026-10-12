@@ -173,6 +173,9 @@
     "emailAlreadyRegistered": "This email is already registered. Try signing in.",
     "signupFailed": "Could not create account. Try again.",
     "invalidCredentials": "Invalid email or password",
+    "firebaseNotConfigured": "This deployment is missing Firebase config. Sign-in cannot run.",
+    "unavailable": "Sign-in service is temporarily unavailable. Try again.",
+    "rateLimited": "Too many sign-in attempts. Wait a minute and try again.",
     "notAuthorized": "Your account is not authorized for the admin panel",
     "allowlistRequired": "Contact an administrator to be added to the allowlist",
     "claim": {

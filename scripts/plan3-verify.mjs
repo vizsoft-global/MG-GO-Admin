@@ -8,23 +8,27 @@ import { getFirestore } from "firebase-admin/firestore";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const expected = {
-  deliveries: 229533,
+  deliveries: 247269,
   storage_uploads: 130130,
-  driver_sessions: 37058,
+  driver_sessions: 39690,
   drivers: 891,
   profiles: 910,
-  attendance_logs: 16009,
+  attendance_logs: 17261,
   esign_requests: 21,
-  driver_location_events: 23349142,
-  driver_attendance: 16009,
+  driver_location_events: 23391259,
+  driver_attendance: 17261,
   driver_change_events: 2132,
-  driver_daily_shifts: 14434,
+  driver_daily_shifts: 15345,
   driver_push_tokens: 1272,
   notification_campaigns: 2426,
-  notification_dispatch_items: 2864,
+  notification_dispatch_items: 3604,
   notification_dispatch_runs: 2423,
-  notification_events: 2582,
+  notification_events: 3043,
   order_recon_rows: 6675,
+  geofence_events: 311249,
+  driver_operation_events: 957379,
+  // Supabase retention already dropped older telemetry rows. Firestore keeps them.
+  driver_telemetry_events: 2296023,
 };
 
 const only = process.argv.slice(2);

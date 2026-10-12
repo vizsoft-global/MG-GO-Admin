@@ -6,7 +6,8 @@
  *   node scripts/plan3-load-history.mjs --table driver_location_events --lo 0 --hi 2
  *   node scripts/plan3-load-history.mjs --table geofence_events
  */
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { createReadStream, mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { createInterface } from "node:readline";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
@@ -20,7 +21,46 @@ const ALLOW = new Set([
   "fleet_events",
   "driver_operation_events",
   "geofence_events",
+  "deliveries",
+  "driver_attendance",
+  "driver_sessions",
+  "attendance_logs",
+  "driver_daily_shifts",
+  "notification_events",
+  "notification_dispatch_items",
+  "notification_campaigns",
+  "notification_dispatch_runs",
+  "drivers",
+  "profiles",
+  "driver_change_events",
+  "driver_push_tokens",
+  "driver_locations",
+  "requests",
 ]);
+const CATCHUP = new Set([
+  "deliveries",
+  "driver_attendance",
+  "driver_sessions",
+  "attendance_logs",
+  "driver_daily_shifts",
+  "notification_events",
+  "notification_dispatch_items",
+  "notification_campaigns",
+  "notification_dispatch_runs",
+  "drivers",
+  "profiles",
+  "driver_change_events",
+  "driver_push_tokens",
+  "driver_locations",
+  "requests",
+]);
+const SINCE_FIELD = {
+  driver_location_events: "recorded_at",
+  deliveries: "updated_at",
+  driver_attendance: "updated_at",
+  notification_events: "created_at",
+  driver_change_events: "created_at",
+};
 const BIGINT_ID = new Set([
   "driver_telemetry_events",
   "fleet_events",
@@ -127,8 +167,9 @@ const table = arg("--table");
 const lo = arg("--lo").toLowerCase();
 const hi = arg("--hi").toLowerCase();
 const since = arg("--since");
-if (since && table !== "driver_location_events") {
-  console.error("since is only for driver_location_events");
+const sinceField = since ? arg("--since-field") || SINCE_FIELD[table] || (CATCHUP.has(table) ? "updated_at" : "") : "";
+if (since && !/^[a-z_]+$/.test(sinceField)) {
+  console.error("since field missing");
   process.exit(1);
 }
 if (since && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(since)) {
@@ -164,7 +205,9 @@ const db = getFirestore(app, "default");
 db.settings({ ignoreUndefinedProperties: true });
 const col = db.collection(table);
 mkdirSync(stateDir, { recursive: true });
-const sinceTag = since ? `-since-${since.replaceAll(":", "")}` : "";
+const sinceOffset = Boolean(since && CATCHUP.has(table));
+const sinceTie = table === "driver_locations" ? "driver_id" : "id";
+const sinceTag = since ? `-since-${sinceField}-${since.replaceAll(":", "")}` : "";
 const statePath = resolve(stateDir, `${table}-${lo || "all"}-${hi || "end"}${sinceTag}.txt`);
 let cursor = existsSync(statePath) ? readFileSync(statePath, "utf8").trim() : "";
 const lower = bigint ? lo : bound(lo);
@@ -174,13 +217,19 @@ console.log(`project=${account.projectId} database=default table=${table} lo=${l
 async function fetchPage(after) {
   const url = new URL(`${supabaseUrl}/rest/v1/${table}`);
   url.searchParams.set("select", "*");
-  url.searchParams.set("order", "id.asc");
   url.searchParams.set("limit", String(PAGE));
-  const start = after || lower;
-  if (start) url.searchParams.set("id", `gte.${start}`);
-  if (after) url.searchParams.set("id", `gt.${after}`);
-  if (upper) url.searchParams.append("id", `lt.${upper}`);
-  if (since) url.searchParams.set("recorded_at", `gte.${since}`);
+  if (sinceOffset) {
+    url.searchParams.set("order", `${sinceField}.asc,${sinceTie}.asc`);
+    url.searchParams.set(sinceField, `gte.${since}`);
+    if (after) url.searchParams.set("offset", after);
+  } else {
+    url.searchParams.set("order", "id.asc");
+    const start = after || lower;
+    if (start) url.searchParams.set("id", `gte.${start}`);
+    if (after) url.searchParams.set("id", `gt.${after}`);
+    if (upper) url.searchParams.append("id", `lt.${upper}`);
+    if (since) url.searchParams.set(sinceField, `gte.${since}`);
+  }
   let wait = 500;
   for (let attempt = 1; attempt <= 6; attempt += 1) {
     const res = await fetch(url, {
@@ -189,6 +238,7 @@ async function fetchPage(after) {
         Authorization: `Bearer ${serviceKey}`,
         Accept: "application/json",
       },
+      signal: AbortSignal.timeout(60000),
     });
     if (res.ok) return res.json();
     if (attempt === 6 || (res.status !== 429 && res.status < 500)) {
@@ -201,6 +251,37 @@ async function fetchPage(after) {
     wait *= 2;
   }
   return [];
+}
+
+const driverNames = new Map();
+if (table === "deliveries") {
+  const jsonlDir = resolve("C:/Users/Admin/Desktop/Vizsoft/dpd-plan3-dump/jsonl");
+  for (const file of ["drivers.jsonl", "profiles.jsonl"]) {
+    const path = resolve(jsonlDir, file);
+    if (!existsSync(path)) continue;
+    const rl = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
+    for await (const line of rl) {
+      if (!line) continue;
+      const row = JSON.parse(line);
+      if (!row?.id) continue;
+      const prev = driverNames.get(row.id) ?? {};
+      driverNames.set(row.id, {
+        driver_code: row.driver_code || prev.driver_code || null,
+        employee_id: row.employee_id || prev.employee_id || null,
+        name: row.full_name || row.name || prev.name || null,
+      });
+    }
+  }
+}
+
+function enrichDelivery(row) {
+  if (table !== "deliveries" || !row.driver_id) return row;
+  const cached = driverNames.get(String(row.driver_id));
+  if (!cached) return row;
+  if (!row.driver_code && cached.driver_code) row.driver_code = cached.driver_code;
+  if (!row.employee_id && cached.employee_id) row.employee_id = cached.employee_id;
+  if (!row.driver_name && cached.name) row.driver_name = cached.name;
+  return row;
 }
 
 let written = 0;
@@ -216,9 +297,10 @@ while (true) {
   let batch = db.batch();
   let pending = 0;
   for (const raw of rows) {
-    const id = raw?.id ? String(raw.id).replaceAll("/", "_") : "";
+    const idSource = table === "driver_locations" ? raw?.driver_id : raw?.id;
+    const id = idSource ? String(idSource).replaceAll("/", "_") : "";
     if (!id) continue;
-    batch.set(col.doc(id), convert(shape(table, raw)));
+    batch.set(col.doc(id), convert(enrichDelivery(shape(table, raw))));
     pending += 1;
     written += 1;
     if (pending === BATCH) {
@@ -231,7 +313,7 @@ while (true) {
   }
   if (pending) inflight.push(commitRetry(batch));
   await Promise.all(inflight);
-  cursor = String(rows[rows.length - 1].id);
+  cursor = sinceOffset ? String(Number(cursor || 0) + rows.length) : String(rows[rows.length - 1].id);
   writeFileSync(statePath, cursor);
   if (written % 8000 < PAGE) console.log(`progress ${table} lo=${lo || "all"} docs=${written}`);
   if (rows.length < PAGE) break;
