@@ -1,5 +1,6 @@
 import { FieldValue, type Transaction } from "firebase-admin/firestore";
-import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import { emptyEpochs, type EpochCounters } from "@/lib/auth/epoch-cache";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { clearMintedIdToken } from "@/lib/firebase/callable";
 import { getFirebaseAuth, getFirebaseFirestore } from "./admin";
@@ -148,7 +149,6 @@ export async function setStaffPassword(uid: string, password: string): Promise<b
 }
 
 export type StaffRevokeReason =
-  | "sign_out"
   | "access_request_rejected"
   | "staff_archive"
   | "role_removed"
@@ -156,7 +156,6 @@ export type StaffRevokeReason =
 
 function removalFields(reason: StaffRevokeReason): Record<string, unknown> {
   switch (reason) {
-    case "sign_out":
     case "demotion":
       return {};
     case "access_request_rejected":
@@ -173,22 +172,28 @@ function removalFields(reason: StaffRevokeReason): Record<string, unknown> {
 }
 
 /**
- * Ends the staff session: revoke refresh tokens, stamp sessions_revoked_at and
- * bump the access epoch in one transaction, then drop the minted callable token.
- * Every removal path calls this. Do not call revokeRefreshTokens anywhere else.
+ * Ends this staff member's access on every device.
+ *
+ * revokeRefreshTokens signs the user out on every device; sign-out of one
+ * browser must not use it. Call this only for access removal: demotion, role
+ * removal, archive, and access-request rejection. The profile write and the
+ * access-epoch bump are one transaction.
  */
 export async function revokeStaffAccess(
   uid: string,
   reason: StaffRevokeReason,
   extra?: (tx: Transaction) => void,
-): Promise<void> {
+): Promise<EpochCounters> {
   const auth = await getFirebaseAuth();
   if (auth) {
+    // revokeRefreshTokens signs the user out on every device; sign-out of one
+    // browser must not use it.
     await auth.revokeRefreshTokens(uid);
   }
   const db = await getFirebaseFirestore();
+  let epochs = emptyEpochs();
   if (db) {
-    await writeWithEpoch(db, "access", ({ tx }) => {
+    const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
       tx.set(
         db.collection(COLLECTIONS.profiles).doc(uid),
         {
@@ -199,11 +204,8 @@ export async function revokeStaffAccess(
       );
       extra?.(tx);
     });
+    epochs = written.epochs;
   }
   clearMintedIdToken(uid);
-}
-
-/** Sign-out and any leftover caller. */
-export async function revokeStaffSessions(uid: string): Promise<void> {
-  await revokeStaffAccess(uid, "sign_out");
+  return epochs;
 }

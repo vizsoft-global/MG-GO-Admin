@@ -7,12 +7,18 @@ import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
  * the epoch in the same getAll as the data and stores the entry under THAT
  * epoch. A write that lands between those two reads is stored under the epoch
  * the fill actually observed, so a newer counter is never paired with older data.
- * The profile document is not stored here.
+ * The profile document is not stored here. Maintenance mode is not stored here.
+ *
+ * Every entry also expires after EPOCH_CACHE_MAX_TTL_MS even when the epoch
+ * number is unchanged. Console edits, scripts, and imports never bump the
+ * counter, and a grep of app code cannot see them.
  */
 
 export const AUTH_EPOCHS_DOC_ID = "current";
 export const SESSION_REVOKE_SKEW_MS = 5_000;
 export const SETTINGS_CACHE_ID = "app_settings";
+/** Hard cap. An unchanged epoch number must not keep a value forever. */
+export const EPOCH_CACHE_MAX_TTL_MS = 5 * 60 * 1000;
 
 export const EPOCH_KINDS = ["access", "settings", "menu"] as const;
 export type EpochKind = (typeof EPOCH_KINDS)[number];
@@ -118,7 +124,7 @@ export type CachedDoc = {
   data: Record<string, unknown> | undefined;
 };
 
-type CacheBox = { epoch: number; doc: CachedDoc };
+type CacheBox = { epoch: number; storedAt: number; doc: CachedDoc };
 
 export type EpochCache = {
   get(kind: EpochKind, id: string, epoch: number): CachedDoc | undefined;
@@ -126,7 +132,7 @@ export type EpochCache = {
   snapshot(): Array<{ kind: EpochKind; id: string; epoch: number; doc: CachedDoc }>;
 };
 
-export function createEpochCache(): EpochCache {
+export function createEpochCache(now: () => number = Date.now): EpochCache {
   const maps: Record<EpochKind, Map<string, CacheBox>> = {
     access: new Map(),
     settings: new Map(),
@@ -136,10 +142,14 @@ export function createEpochCache(): EpochCache {
     get(kind, id, epoch) {
       const box = maps[kind].get(id);
       if (!box || box.epoch !== epoch) return undefined;
+      if (now() - box.storedAt >= EPOCH_CACHE_MAX_TTL_MS) {
+        maps[kind].delete(id);
+        return undefined;
+      }
       return box.doc;
     },
     set(kind, id, epoch, doc) {
-      maps[kind].set(id, { epoch, doc });
+      maps[kind].set(id, { epoch, storedAt: now(), doc });
     },
     snapshot() {
       const out: Array<{ kind: EpochKind; id: string; epoch: number; doc: CachedDoc }> = [];

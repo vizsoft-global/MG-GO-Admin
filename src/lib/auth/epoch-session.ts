@@ -42,6 +42,8 @@ export type EpochSessionOutcome = {
   unavailable: boolean;
   revoked: boolean;
   denied: boolean;
+  /** Rejected, archived, or no admin role. Distinct from a missing cookie. */
+  notAuthorized: boolean;
 };
 
 function blockedProfile(profile: ProfileDoc): boolean {
@@ -107,7 +109,7 @@ async function assemble(
   const denied = permission
     ? !isSuperAdmin && !permissions.has(permission)
     : false;
-  return { session, unavailable: false, revoked: false, denied };
+  return { session, unavailable: false, revoked: false, denied, notAuthorized: false };
 }
 
 /**
@@ -120,22 +122,22 @@ export async function loadReadSession(
   probe: EpochProbe,
 ): Promise<EpochSessionOutcome> {
   if (!probe.uid) {
-    return { session: null, unavailable: probe.unavailable, revoked: false, denied: false };
+    return { session: null, unavailable: probe.unavailable, revoked: false, denied: false, notAuthorized: false };
   }
   const [epochSnap, profileSnap] = await db.getAll(
     db.collection(COLLECTIONS.authEpochs).doc(AUTH_EPOCHS_DOC_ID),
     db.collection(COLLECTIONS.profiles).doc(probe.uid),
   );
   if (!profileSnap?.exists) {
-    return { session: null, unavailable: false, revoked: false, denied: false };
+    return { session: null, unavailable: false, revoked: false, denied: false, notAuthorized: true };
   }
   const profile = { id: probe.uid, ...(profileSnap.data() ?? {}) } as ProfileDoc;
   const epochs = epochCounters(epochSnap?.exists ? epochSnap.data() : undefined);
   if (sessionRevokedForRead(probe.authTimeMs, profile.sessions_revoked_at)) {
-    return { session: null, unavailable: false, revoked: true, denied: false };
+    return { session: null, unavailable: false, revoked: true, denied: false, notAuthorized: false };
   }
   if (blockedProfile(profile)) {
-    return { session: null, unavailable: false, revoked: false, denied: false };
+    return { session: null, unavailable: false, revoked: false, denied: false, notAuthorized: true };
   }
   return assemble(db, cache, probe, profile, epochs, false);
 }
@@ -147,18 +149,18 @@ export async function loadMutationSession(
   permission?: string,
 ): Promise<EpochSessionOutcome> {
   if (!probe.uid) {
-    return { session: null, unavailable: probe.unavailable, revoked: false, denied: false };
+    return { session: null, unavailable: probe.unavailable, revoked: false, denied: false, notAuthorized: false };
   }
   const profileSnap = await db.collection(COLLECTIONS.profiles).doc(probe.uid).get();
   if (!profileSnap.exists) {
-    return { session: null, unavailable: false, revoked: false, denied: false };
+    return { session: null, unavailable: false, revoked: false, denied: false, notAuthorized: true };
   }
   const profile = { id: probe.uid, ...(profileSnap.data() ?? {}) } as ProfileDoc;
   if (sessionRevokedForMutation(probe.authTimeMs, profile.sessions_revoked_at)) {
-    return { session: null, unavailable: false, revoked: true, denied: false };
+    return { session: null, unavailable: false, revoked: true, denied: false, notAuthorized: false };
   }
   if (blockedProfile(profile)) {
-    return { session: null, unavailable: false, revoked: false, denied: false };
+    return { session: null, unavailable: false, revoked: false, denied: false, notAuthorized: true };
   }
   const epochSnap = await db.collection(COLLECTIONS.authEpochs).doc(AUTH_EPOCHS_DOC_ID).get();
   const epochs = epochCounters(epochSnap.exists ? epochSnap.data() : undefined);

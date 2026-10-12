@@ -13,7 +13,6 @@ import {
   verifyStaffSessionCookie,
 } from "@/lib/firebase/session";
 import {
-  revokeStaffAccess,
   resetPasswordWithCode,
   sendStaffPasswordReset,
   setStaffPassword,
@@ -277,16 +276,8 @@ export async function updatePassword(
 }
 
 export async function signOut(locale: string) {
+  // The profile document is not cached. This browser only drops its cookie.
   const jar = await cookies();
-  const cookie = jar.get(STAFF_SESSION_COOKIE)?.value;
-  const probe = await verifyStaffSessionCookie(cookie, { checkRevoked: false });
-
-  // Revoking refresh tokens is what makes sign-out mean something: clearing the
-  // cookie alone leaves a valid session for anyone holding a copy of it.
-  if (probe.uid) {
-    await revokeStaffAccess(probe.uid, "sign_out");
-  }
-
   jar.delete(STAFF_SESSION_COOKIE);
   Sentry.setUser(null);
   redirect(`/${locale}/login`);

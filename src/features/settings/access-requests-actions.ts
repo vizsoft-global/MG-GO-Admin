@@ -1,7 +1,8 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import type { EpochCounters } from "@/lib/auth/epoch-cache";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { revokeStaffAccess } from "@/lib/firebase/staff-auth";
@@ -49,7 +50,7 @@ export async function approveUser(
   userId: string,
   roleId: string,
   accessKind: StaffAccessKind = "user",
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
@@ -90,8 +91,9 @@ export async function approveUser(
   }
   const allowEmail = email.toLowerCase();
 
+  let epochs: EpochCounters;
   try {
-    await writeWithEpoch(db, "access", ({ tx }) => {
+    const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
       tx.set(
         db.collection(COLLECTIONS.profiles).doc(userId),
         {
@@ -116,6 +118,7 @@ export async function approveUser(
         { merge: true },
       );
     });
+    epochs = written.epochs;
   } catch {
     return { error: "save_failed" };
   }
@@ -126,10 +129,10 @@ export async function approveUser(
     // Approval is already saved; claims refresh must not report it as failed.
   }
   updateTag("admin-roles");
-  return { success: true };
+  return { success: true, epochs };
 }
 
-export async function rejectUser(userId: string): Promise<{ error?: string; success?: boolean }> {
+export async function rejectUser(userId: string): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
@@ -151,13 +154,14 @@ export async function rejectUser(userId: string): Promise<{ error?: string; succ
     return { error: "user_not_found" };
   }
 
+  let epochs: EpochCounters;
   try {
-    await revokeStaffAccess(userId, "access_request_rejected");
+    epochs = await revokeStaffAccess(userId, "access_request_rejected");
   } catch {
     return { error: "save_failed" };
   }
 
-  return { success: true };
+  return { success: true, epochs };
 }
 
 export async function listPendingStaffAccessRequests(limit?: number): Promise<
@@ -203,15 +207,16 @@ export async function listPendingStaffAccessRequests(limit?: number): Promise<
 
 export async function setMaintenanceMode(
   enabled: boolean,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
   const db = await staffDb();
   if (!db) return { error: "save_failed" };
 
+  let epochs: EpochCounters;
   try {
-    await writeWithEpoch(db, "settings", ({ tx }) => {
+    const written = await writeWithEpochCounters(db, "settings", ({ tx }) => {
       tx.set(
         db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID),
         {
@@ -222,11 +227,12 @@ export async function setMaintenanceMode(
         { merge: true },
       );
     });
+    epochs = written.epochs;
   } catch {
     return { error: "save_failed" };
   }
 
   updateTag("app-settings");
   updateTag("app-ops-settings");
-  return { success: true };
+  return { success: true, epochs };
 }

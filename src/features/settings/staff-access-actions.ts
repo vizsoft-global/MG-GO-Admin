@@ -2,7 +2,8 @@
 
 import { updateTag } from "next/cache";
 import type { DocumentData, Firestore, QueryDocumentSnapshot, Transaction } from "firebase-admin/firestore";
-import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import type { EpochCounters } from "@/lib/auth/epoch-cache";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { revokeStaffAccess } from "@/lib/firebase/staff-auth";
@@ -367,7 +368,7 @@ export async function saveStaffAccess(input: {
   slugs: string[];
   department?: StaffDepartment | null;
   requestTypes?: RequestTypeGrant[];
-}): Promise<{ error?: string; success?: boolean }> {
+}): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireStaffMutation();
   if ("error" in auth) return auth;
 
@@ -441,13 +442,15 @@ export async function saveStaffAccess(input: {
     }
   };
 
+  let epochs: EpochCounters;
   try {
     if (demoted) {
-      await revokeStaffAccess(input.userId, "demotion", writeRows);
+      epochs = await revokeStaffAccess(input.userId, "demotion", writeRows);
     } else {
-      await writeWithEpoch(db, "access", ({ tx }) => {
+      const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
         writeRows(tx);
       });
+      epochs = written.epochs;
     }
   } catch (error) {
     return { error: error instanceof Error ? error.message : "save_failed" };
@@ -479,7 +482,7 @@ export async function saveStaffAccess(input: {
   });
 
   updateTag("admin-roles");
-  return { success: true };
+  return { success: true, epochs };
 }
 
 export async function copyRoleTemplateTicks(roleId: string): Promise<{

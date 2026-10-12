@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
+import { useApplySidebarEpochs } from "@/contexts/sidebar-epochs-context";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -188,6 +190,8 @@ function rebuildTree(
 
 export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
   const t = useTranslations("pages.settings.menuEditor");
+  const router = useRouter();
+  const applyEpochs = useApplySidebarEpochs();
   const [role, setRole] = useState("");
   const [rows, setRows] = useState<FlatRow[]>([]);
   const [groups, setGroups] = useState<MenuNode[]>([]);
@@ -356,7 +360,9 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
     setSaving(true);
     try {
       const tree = rebuildTree(rows, groups, order);
-      await saveMenuConfig(role, tree);
+      const epochs = await saveMenuConfig(role, tree);
+      applyEpochs(epochs);
+      router.refresh();
       setDirty(false);
       notifyMenuConfigUpdated(role);
       toast.success(t("saved"), {
@@ -373,7 +379,9 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
 
   const handleReset = async () => {
     if (!confirm(t("resetConfirm", { role: roleLabel(roles, role) }))) return;
-    await resetMenuConfig(role);
+    const epochs = await resetMenuConfig(role);
+    applyEpochs(epochs);
+    router.refresh();
     await load(role);
     toast.success(t("resetDone"));
   };
@@ -393,7 +401,9 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
 
     setCopying(true);
     try {
-      await copyMenuConfig(copyFromRole, copyToRole);
+      const epochs = await copyMenuConfig(copyFromRole, copyToRole);
+      applyEpochs(epochs);
+      router.refresh();
       notifyMenuConfigUpdated(copyToRole);
       if (copyToRole === role) {
         await load(role);

@@ -30,6 +30,8 @@ export type SessionOutcome = {
   session: SessionUser | null;
   /** The auth backend could not be reached — treat as unknown, not signed out. */
   unavailable: boolean;
+  /** Profile exists but this account may not enter the panel. */
+  notAuthorized: boolean;
 };
 
 const SESSION_BUDGET_MS = 8_000;
@@ -38,7 +40,7 @@ async function loadSessionOutcome(): Promise<SessionOutcome> {
   try {
     return await loadSessionOutcomeUnsafe();
   } catch {
-    return { session: null, unavailable: true };
+    return { session: null, unavailable: true, notAuthorized: false };
   }
 }
 
@@ -54,16 +56,20 @@ async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
   // The verifier did not answer, so the session is unproven rather than absent.
   // Throwing would be a logout caused by a backend blip.
   if (!probe.uid) {
-    return { session: null, unavailable: probe.unavailable };
+    return { session: null, unavailable: probe.unavailable, notAuthorized: false };
   }
 
   const db = await getFirebaseFirestore();
   if (!db) {
-    return { session: null, unavailable: true };
+    return { session: null, unavailable: true, notAuthorized: false };
   }
 
   const loaded = await loadReadSession(asEpochReader(db), getEpochCache(), probe);
-  return { session: loaded.session, unavailable: loaded.unavailable };
+  return {
+    session: loaded.session,
+    unavailable: loaded.unavailable,
+    notAuthorized: loaded.notAuthorized,
+  };
 }
 
 /**

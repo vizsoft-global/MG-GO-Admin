@@ -1,7 +1,8 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import type { EpochCounters } from "@/lib/auth/epoch-cache";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
@@ -25,7 +26,7 @@ function invalidateThemeCaches() {
 
 export async function setActiveTheme(
   themeId: string,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireManage();
   if ("error" in auth) return auth;
 
@@ -40,8 +41,9 @@ export async function setActiveTheme(
     if (!theme.exists) return { error: "theme_not_found" };
   }
 
+  let epochs: EpochCounters;
   try {
-    await writeWithEpoch(db, "settings", ({ tx }) => {
+    const written = await writeWithEpochCounters(db, "settings", ({ tx }) => {
       tx.set(
         db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID),
         {
@@ -52,12 +54,13 @@ export async function setActiveTheme(
         { merge: true },
       );
     });
+    epochs = written.epochs;
   } catch {
     return { error: "save_failed" };
   }
 
   invalidateThemeCaches();
-  return { success: true };
+  return { success: true, epochs };
 }
 
 export async function createCustomTheme(input: {
@@ -103,7 +106,7 @@ export async function updateCustomTheme(
     lightTokens?: Partial<ThemeTokens>;
     darkTokens?: Partial<ThemeTokens>;
   },
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireManage();
   if ("error" in auth) return auth;
 
@@ -132,7 +135,7 @@ export async function updateCustomTheme(
 
 export async function deleteCustomTheme(
   id: string,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireManage();
   if ("error" in auth) return auth;
 
@@ -143,14 +146,16 @@ export async function deleteCustomTheme(
 
   const settingsRef = db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID);
   const settings = await settingsRef.get();
+  let epochs: EpochCounters | undefined;
   if (settings.data()?.theme_id === id) {
-    await writeWithEpoch(db, "settings", ({ tx }) => {
+    const written = await writeWithEpochCounters(db, "settings", ({ tx }) => {
       tx.set(
         settingsRef,
         { theme_id: DEFAULT_THEME_ID, updated_at: new Date() },
         { merge: true },
       );
     });
+    epochs = written.epochs;
   }
 
   try {
@@ -160,5 +165,5 @@ export async function deleteCustomTheme(
   }
 
   invalidateThemeCaches();
-  return { success: true };
+  return { success: true, epochs };
 }

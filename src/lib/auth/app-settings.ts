@@ -6,6 +6,12 @@ import { withDeadline } from "@/lib/async/deadline";
 export type AppOpsSettings = {
   maintenanceMode: boolean;
   superAdminClaimed: boolean;
+  /**
+   * True only when the document says `super_admin_claimed === false`.
+   * A failed read is not unclaimed: forcing the claim page on an outage would
+   * trap a fleet that has already claimed.
+   */
+  unclaimedSuperAdmin: boolean;
   superAdminUserId: string | null;
 };
 
@@ -14,6 +20,7 @@ const OPS_SETTINGS_BUDGET_MS = 5_000;
 const FALLBACK: AppOpsSettings = {
   maintenanceMode: false,
   superAdminClaimed: false,
+  unclaimedSuperAdmin: false,
   superAdminUserId: null,
 };
 
@@ -29,6 +36,7 @@ async function fetchAppOpsSettings(): Promise<AppOpsSettings> {
     return {
       maintenanceMode: data.maintenance_mode ?? false,
       superAdminClaimed: data.super_admin_claimed ?? false,
+      unclaimedSuperAdmin: data.super_admin_claimed === false,
       superAdminUserId: (data.super_admin_user_id as string | null) ?? null,
     };
   } catch {

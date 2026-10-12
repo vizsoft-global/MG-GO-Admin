@@ -3,7 +3,8 @@
 import { refresh, revalidatePath, updateTag } from "next/cache";
 import type { Firestore } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import type { EpochCounters } from "@/lib/auth/epoch-cache";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   ALLOWED_LOGO_EXTENSIONS,
@@ -30,10 +31,14 @@ async function requireSettingsManager() {
   return { session: auth.session };
 }
 
-async function writeBrandingSettings(db: Firestore, patch: Record<string, unknown>): Promise<void> {
-  await writeWithEpoch(db, "settings", ({ tx }) => {
+async function writeBrandingSettings(
+  db: Firestore,
+  patch: Record<string, unknown>,
+): Promise<EpochCounters> {
+  const written = await writeWithEpochCounters(db, "settings", ({ tx }) => {
     tx.set(db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID), patch, { merge: true });
   });
+  return written.epochs;
 }
 
 function brandingObjectPath(relativePath: string): string {
@@ -75,7 +80,7 @@ async function removeBrandingObjects(relativePaths: string[]): Promise<void> {
 export async function updateBranding(
   _locale: string,
   formData: FormData,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -94,8 +99,9 @@ export async function updateBranding(
   const db = await staffDb();
   if (!db) return { error: "save_failed" };
 
+  let epochs: EpochCounters;
   try {
-    await writeBrandingSettings(db, {
+    epochs = await writeBrandingSettings(db, {
       app_name: appName,
       app_subtitle: appSubtitle,
       driver_app_login_hint: driverAppLoginHint,
@@ -115,13 +121,13 @@ export async function updateBranding(
     routeName: "updateBranding",
     after: { app_name: appName, font_family: fontFamily },
   });
-  return { success: true };
+  return { success: true, epochs };
 }
 
 export async function uploadLogo(
   _locale: string,
   formData: FormData,
-): Promise<{ error?: string; success?: boolean; logoUrl?: string }> {
+): Promise<{ error?: string; success?: boolean; logoUrl?: string; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -151,8 +157,9 @@ export async function uploadLogo(
   const db = await staffDb();
   if (!db) return { error: "save_failed" };
 
+  let epochs: EpochCounters;
   try {
-    await writeBrandingSettings(db, {
+    epochs = await writeBrandingSettings(db, {
       logo_url: logoUrl,
       logo_type: logoType,
       updated_at: new Date(),
@@ -163,12 +170,12 @@ export async function uploadLogo(
   }
 
   revalidateBranding(_locale);
-  return { success: true, logoUrl };
+  return { success: true, logoUrl, epochs };
 }
 
 export async function resetBranding(
   locale: string,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -177,8 +184,9 @@ export async function resetBranding(
   const db = await staffDb();
   if (!db) return { error: "save_failed" };
 
+  let epochs: EpochCounters;
   try {
-    await writeBrandingSettings(db, {
+    epochs = await writeBrandingSettings(db, {
       app_name: DEFAULT_APP_SETTINGS.app_name,
       app_subtitle: DEFAULT_APP_SETTINGS.app_subtitle,
       font_family: DEFAULT_APP_SETTINGS.font_family,
@@ -192,5 +200,5 @@ export async function resetBranding(
   }
 
   revalidateBranding(locale);
-  return { success: true };
+  return { success: true, epochs };
 }

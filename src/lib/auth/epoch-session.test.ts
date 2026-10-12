@@ -5,6 +5,7 @@ import test from "node:test";
 import type { Firestore } from "firebase-admin/firestore";
 import { writeWithEpoch } from "./auth-epochs";
 import {
+  EPOCH_CACHE_MAX_TTL_MS,
   createEpochCache,
   readEpochAndDocs,
   readEpochSettings,
@@ -15,6 +16,8 @@ import {
   type EpochReader,
 } from "./epoch-cache";
 import { loadMutationSession, loadReadSession, type EpochProbe } from "./epoch-session";
+import { panelGate, signedInEntryRedirect } from "./staff-entry";
+import { applyReturnedEpochs } from "../menu/apply-returned-epochs";
 
 /**
  * Out of scope for the writer grep (they still write app_settings without
@@ -501,7 +504,6 @@ test("epoch writers and removal paths go through the helpers", () => {
   }
 
   const removal: Array<[string, string]> = [
-    ["src/features/auth/actions.ts", "signOut"],
     ["src/features/settings/access-requests-actions.ts", "rejectUser"],
     ["src/features/settings/staff-access-actions.ts", "archiveStaff"],
     ["src/features/settings/staff-access-actions.ts", "removeStaffRole"],
@@ -511,4 +513,88 @@ test("epoch writers and removal paths go through the helpers", () => {
     const source = fs.readFileSync(path.join(ROOT, relative), "utf8");
     assert.match(functionBody(source, name), /revokeStaffAccess\(/, `${relative} ${name}`);
   }
+
+  const signOut = functionBody(
+    fs.readFileSync(path.join(ROOT, "src/features/auth/actions.ts"), "utf8"),
+    "signOut",
+  );
+  assert.match(signOut, /jar\.delete\(STAFF_SESSION_COOKIE\)/);
+  assert.doesNotMatch(signOut, /revokeStaffAccess\(/);
+  assert.doesNotMatch(signOut, /revokeRefreshTokens\(/);
+  assert.doesNotMatch(signOut, /sessions_revoked_at/);
+  assert.doesNotMatch(signOut, /auth_epochs|authEpochs|writeWithEpoch/);
+});
+
+test("an epoch cache entry older than five minutes is a miss", () => {
+  let now = 1_000_000;
+  const cache = createEpochCache(() => now);
+  const doc = { exists: true, data: { tree: ["a"] } };
+  cache.set("menu", "operator", 4, doc);
+  now += EPOCH_CACHE_MAX_TTL_MS - 1;
+  assert.equal(cache.get("menu", "operator", 4)?.exists, true);
+  now += 2;
+  assert.equal(cache.get("menu", "operator", 4), undefined);
+
+  cache.set("settings", "app", 4, doc);
+  now += EPOCH_CACHE_MAX_TTL_MS + 1;
+  assert.equal(cache.get("settings", "app", 4), undefined);
+});
+
+test("applyReturnedEpochs does not rewind a higher counter", () => {
+  const current = { access: 3, settings: 1, menu: 2 };
+  assert.deepEqual(applyReturnedEpochs(current, null), current);
+  assert.deepEqual(applyReturnedEpochs(current, undefined), current);
+  assert.deepEqual(
+    applyReturnedEpochs(current, { menu: 5, access: 1, settings: Number.NaN }),
+    { access: 3, settings: 1, menu: 5 },
+  );
+  assert.deepEqual(applyReturnedEpochs(current, { settings: 4 }), {
+    access: 3,
+    settings: 4,
+    menu: 2,
+  });
+});
+
+test("panel gate sends unclaimed staff to claim before pending or maintenance", () => {
+  const approved = {
+    hasSession: true,
+    unavailable: false,
+    notAuthorized: false,
+    approvalStatus: "approved" as const,
+    adminRoleId: "role",
+    archivedAt: null,
+    isSuperAdmin: false,
+    unclaimedSuperAdmin: false,
+    maintenanceMode: false,
+  };
+  assert.equal(
+    panelGate({ ...approved, unclaimedSuperAdmin: true, approvalStatus: "pending" }),
+    "claim",
+  );
+  assert.equal(panelGate({ ...approved, approvalStatus: "pending" }), "pending");
+  assert.equal(panelGate({ ...approved, maintenanceMode: true }), "maintenance");
+  assert.equal(panelGate({ ...approved, isSuperAdmin: true, maintenanceMode: true }), "ok");
+  assert.equal(panelGate({ ...approved, hasSession: false, notAuthorized: true }), "not_authorized");
+  assert.equal(panelGate({ ...approved, hasSession: false }), "login");
+  assert.equal(
+    panelGate({ ...approved, hasSession: false, unavailable: true }),
+    "unavailable",
+  );
+  assert.equal(
+    signedInEntryRedirect({ approval_status: "pending", admin_role_id: "role" }),
+    "/pending-approval",
+  );
+  assert.equal(
+    signedInEntryRedirect({ approval_status: "approved", admin_role_id: "role" }),
+    "/dashboard",
+  );
+});
+
+test("proxy verifies the cookie and does not read profiles or epochs", () => {
+  const proxy = fs.readFileSync(path.join(ROOT, "src/proxy.ts"), "utf8");
+  assert.doesNotMatch(proxy, /readProxyGate|COLLECTIONS\.profiles|auth_epochs|authEpochs|getAppOpsSettings/);
+  assert.match(proxy, /!probe\.uid && isProtectedPath/);
+  const middleware = fs.readFileSync(path.join(ROOT, "src/lib/firebase/middleware.ts"), "utf8");
+  assert.match(middleware, /checkRevoked:\s*false/);
+  assert.doesNotMatch(middleware, /COLLECTIONS\.profiles|auth_epochs|authEpochs/);
 });

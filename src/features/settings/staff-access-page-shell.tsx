@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useApplySidebarEpochs } from "@/contexts/sidebar-epochs-context";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { ExternalLink, Search } from "lucide-react";
@@ -187,6 +188,7 @@ export function StaffAccessDetailShell({
 }) {
   const t = useTranslations("pages.settings.staffAccess");
   const router = useRouter();
+  const applyEpochs = useApplySidebarEpochs();
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [kind, setKind] = useState<StaffAccessKind>(detail.accessKind);
@@ -279,6 +281,7 @@ export function StaffAccessDetailShell({
         return;
       }
       toast.success(t("saved"));
+      applyEpochs(result.epochs);
       void queryClient.invalidateQueries({ queryKey: queryKeys.menu.all() });
       router.refresh();
     });

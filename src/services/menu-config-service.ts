@@ -1,8 +1,13 @@
 "use server";
 
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
-import { writeWithEpoch } from "@/lib/auth/auth-epochs";
-import { asEpochReader, getEpochCache, readEpochQuery } from "@/lib/auth/epoch-cache";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import {
+  asEpochReader,
+  getEpochCache,
+  readEpochQuery,
+  type EpochCounters,
+} from "@/lib/auth/epoch-cache";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
@@ -73,7 +78,7 @@ async function requireMenuMutation() {
   return auth.session;
 }
 
-export async function saveMenuConfig(role: string, config: MenuNode[]): Promise<void> {
+export async function saveMenuConfig(role: string, config: MenuNode[]): Promise<EpochCounters> {
   const session = await requireMenuMutation();
 
   const { db, docs } = await menuDocsForRole(role);
@@ -88,7 +93,7 @@ export async function saveMenuConfig(role: string, config: MenuNode[]): Promise<
     updated_by: session.id,
   };
 
-  await writeWithEpoch(db, "menu", ({ tx }) => {
+  const written = await writeWithEpochCounters(db, "menu", ({ tx }) => {
     if (docs[0]) {
       tx.set(docs[0].ref, payload, { merge: true });
       return;
@@ -96,23 +101,25 @@ export async function saveMenuConfig(role: string, config: MenuNode[]): Promise<
     const id = crypto.randomUUID();
     tx.set(db.collection(COLLECTIONS.menuConfigs).doc(id), { id, ...payload });
   });
+  return written.epochs;
 }
 
-export async function resetMenuConfig(role: string): Promise<void> {
+export async function resetMenuConfig(role: string): Promise<EpochCounters> {
   await requireMenuMutation();
 
   const { db, docs } = await menuDocsForRole(role);
   if (!db) throw new Error("not_configured");
-  await writeWithEpoch(db, "menu", ({ tx }) => {
+  const written = await writeWithEpochCounters(db, "menu", ({ tx }) => {
     for (const doc of docs) tx.delete(doc.ref);
   });
+  return written.epochs;
 }
 
 /** Copy saved menu config from one role to another (overwrites target). */
-export async function copyMenuConfig(fromRole: string, toRole: string): Promise<void> {
+export async function copyMenuConfig(fromRole: string, toRole: string): Promise<EpochCounters> {
   if (fromRole === toRole) {
     throw new Error("Source and target roles must differ");
   }
   const config = await getMenuConfig(fromRole);
-  await saveMenuConfig(toRole, config);
+  return saveMenuConfig(toRole, config);
 }

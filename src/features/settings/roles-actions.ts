@@ -4,7 +4,8 @@ import { updateTag } from "next/cache";
 import type { Firestore } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { callAdminFunction } from "@/lib/firebase/callable";
-import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import type { EpochCounters } from "@/lib/auth/epoch-cache";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { CATALOG_SLUG_SET, isValidRoleSlug } from "@/lib/auth/permission-catalog";
@@ -59,18 +60,22 @@ async function readRoleSlugs(db: Firestore, roleId: string): Promise<string[]> {
   return Array.isArray(slugs) ? slugs.filter((slug): slug is string => typeof slug === "string") : [];
 }
 
-async function writeRoleSlugs(db: Firestore, roleId: string, slugs: string[]): Promise<boolean> {
+async function writeRoleSlugs(
+  db: Firestore,
+  roleId: string,
+  slugs: string[],
+): Promise<EpochCounters | null> {
   try {
-    await writeWithEpoch(db, "access", ({ tx }) => {
+    const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
       tx.set(
         db.collection(COLLECTIONS.adminRolePermissions).doc(roleId),
         { permission_slugs: slugs },
         { merge: true },
       );
     });
-    return true;
+    return written.epochs;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -117,7 +122,7 @@ export async function getRoleUsageCounts(): Promise<
 export async function updateRolePermissions(
   roleId: string,
   permissionSlugs: string[],
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireRolesManager();
   if ("error" in auth) return auth;
 
@@ -130,8 +135,8 @@ export async function updateRolePermissions(
   if (role.is_super_admin) return { error: "cannot_edit_super_admin" };
 
   const beforeSlugs = await readRoleSlugs(db, roleId);
-  const saved = await writeRoleSlugs(db, roleId, filtered);
-  if (!saved) return { error: "save_failed" };
+  const epochs = await writeRoleSlugs(db, roleId, filtered);
+  if (!epochs) return { error: "save_failed" };
 
   await syncClaimsForRole(db, roleId);
   updateTag("admin-roles");
@@ -143,28 +148,28 @@ export async function updateRolePermissions(
     before: { permissions: beforeSlugs },
     after: { permissions: filtered },
   });
-  return { success: true };
+  return { success: true, epochs };
 }
 
 async function saveRolePermissionsWithoutCache(
   db: Firestore,
   roleId: string,
   permissionSlugs: string[],
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; epochs?: EpochCounters }> {
   const filtered = filterValidPermissions(permissionSlugs);
   const role = await getRoleByIdInternal(db, roleId);
   if (!role) return { error: "role_not_found" };
   if (role.is_super_admin) return { error: "cannot_edit_super_admin" };
 
-  const saved = await writeRoleSlugs(db, roleId, filtered);
-  if (!saved) return { error: "save_failed" };
+  const epochs = await writeRoleSlugs(db, roleId, filtered);
+  if (!epochs) return { error: "save_failed" };
   await syncClaimsForRole(db, roleId);
-  return {};
+  return { epochs };
 }
 
 export async function updateMultipleRolePermissions(
   updates: { roleId: string; permissionSlugs: string[] }[],
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireRolesManager();
   if ("error" in auth) return auth;
 
@@ -175,9 +180,11 @@ export async function updateMultipleRolePermissions(
   const db = await staffDb();
   if (!db) return { error: "save_failed" };
 
+  let epochs: EpochCounters | undefined;
   for (const { roleId, permissionSlugs } of updates) {
     const result = await saveRolePermissionsWithoutCache(db, roleId, permissionSlugs);
     if (result.error) return result;
+    epochs = result.epochs;
   }
 
   updateTag("admin-roles");
@@ -187,14 +194,14 @@ export async function updateMultipleRolePermissions(
     routeName: "updateMultipleRolePermissions",
     context: { role_count: updates.length },
   });
-  return { success: true };
+  return { success: true, epochs };
 }
 
 export async function createCustomRole(
   name: string,
   slug: string,
   permissionSlugs: string[],
-): Promise<{ error?: string; success?: boolean; roleId?: string }> {
+): Promise<{ error?: string; success?: boolean; roleId?: string; epochs?: EpochCounters }> {
   const auth = await requireRolesManager();
   if ("error" in auth) return auth;
 
@@ -219,7 +226,7 @@ export async function createCustomRole(
 
   const roleId = crypto.randomUUID();
   try {
-    await writeWithEpoch(db, "access", ({ tx }) => {
+    await writeWithEpochCounters(db, "access", ({ tx }) => {
       tx.set(db.collection(COLLECTIONS.adminRoles).doc(roleId), {
         id: roleId,
         name: trimmedName,
@@ -243,14 +250,14 @@ export async function createCustomRole(
     after: { name: trimmedName, slug: normalizedSlug },
   });
 
-  return { success: true, roleId };
+  return { success: true, roleId, epochs: result.epochs };
 }
 
 export async function duplicateRole(
   sourceRoleId: string,
   name: string,
   slug: string,
-): Promise<{ error?: string; success?: boolean; roleId?: string }> {
+): Promise<{ error?: string; success?: boolean; roleId?: string; epochs?: EpochCounters }> {
   const auth = await requireRolesManager();
   if ("error" in auth) return auth;
 
@@ -285,7 +292,7 @@ export async function copyRolePermissionsToEditor(
 export async function applyCopyRolePermissions(
   sourceRoleId: string,
   targetRoleId: string,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const copy = await copyRolePermissionsToEditor(sourceRoleId, targetRoleId);
   if (copy.error || !copy.permissions) return { error: copy.error ?? "copy_failed" };
   return updateRolePermissions(targetRoleId, copy.permissions);
@@ -294,7 +301,7 @@ export async function applyCopyRolePermissions(
 export async function updateRoleMeta(
   roleId: string,
   name: string,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireRolesManager();
   if ("error" in auth) return auth;
 
@@ -310,25 +317,27 @@ export async function updateRoleMeta(
     return { error: "cannot_edit_system_role" };
   }
 
+  let epochs: EpochCounters;
   try {
-    await writeWithEpoch(db, "access", ({ tx }) => {
+    const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
       tx.set(
         db.collection(COLLECTIONS.adminRoles).doc(roleId),
         { name: trimmedName },
         { merge: true },
       );
     });
+    epochs = written.epochs;
   } catch {
     return { error: "save_failed" };
   }
 
   updateTag("admin-roles");
-  return { success: true };
+  return { success: true, epochs };
 }
 
 export async function deleteCustomRole(
   roleId: string,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireRolesManager();
   if ("error" in auth) return auth;
 
@@ -348,11 +357,13 @@ export async function deleteCustomRole(
     .get();
   if (countSnap.data().count > 0) return { error: "role_in_use" };
 
+  let epochs: EpochCounters;
   try {
-    await writeWithEpoch(db, "access", ({ tx }) => {
+    const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
       tx.delete(db.collection(COLLECTIONS.adminRoles).doc(roleId));
       tx.delete(db.collection(COLLECTIONS.adminRolePermissions).doc(roleId));
     });
+    epochs = written.epochs;
   } catch {
     return { error: "delete_failed" };
   }
@@ -365,5 +376,5 @@ export async function deleteCustomRole(
     routeName: "deleteCustomRole",
     before: { slug: role.slug, name: role.name },
   });
-  return { success: true };
+  return { success: true, epochs };
 }

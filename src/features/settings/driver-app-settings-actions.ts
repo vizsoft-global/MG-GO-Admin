@@ -2,7 +2,8 @@
 
 import { refresh, revalidatePath, updateTag } from "next/cache";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import type { EpochCounters } from "@/lib/auth/epoch-cache";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   ALLOWED_ICON_EXTENSIONS,
@@ -106,7 +107,7 @@ async function patchAppSettings(
   scope: string,
   patch: Record<string, unknown>,
   updatedBy: string,
-): Promise<{ error?: string; errorDetail?: string }> {
+): Promise<{ error?: string; errorDetail?: string; epochs?: EpochCounters }> {
   const db = await staffDb();
   if (!db) return { error: "save_failed", errorDetail: "not_configured" };
 
@@ -120,7 +121,7 @@ async function patchAppSettings(
           "app_settings row id=1 is missing — re-seed it with INSERT INTO app_settings (id) VALUES (1).",
       };
     }
-    await writeWithEpoch(db, "settings", ({ tx }) => {
+    const written = await writeWithEpochCounters(db, "settings", ({ tx }) => {
       tx.set(
         ref,
         {
@@ -131,7 +132,7 @@ async function patchAppSettings(
         { merge: true },
       );
     });
-    return {};
+    return { epochs: written.epochs };
   } catch (error) {
     logWriteError(scope, error);
     return {
@@ -200,7 +201,7 @@ function resolveSplashUploadMeta(
 export async function updateDriverAppSettings(
   locale: string,
   formData: FormData,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -225,13 +226,13 @@ export async function updateDriverAppSettings(
   if (result.error) return result;
 
   revalidateDriverAppSettings(locale);
-  return { success: true };
+  return { success: true, epochs: result.epochs };
 }
 
 export async function updateDriverAppMaintenanceMessage(
   locale: string,
   message: string,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -248,13 +249,13 @@ export async function updateDriverAppMaintenanceMessage(
   if (result.error) return result;
 
   revalidateDriverAppSettings(locale);
-  return { success: true };
+  return { success: true, epochs: result.epochs };
 }
 
 export async function updateDriverAppDeliveryProximity(
   locale: string,
   meters: number,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -281,13 +282,13 @@ export async function updateDriverAppDeliveryProximity(
     routeName: "updateDriverAppDeliveryProximity",
     after: { driver_app_delivery_proximity_meters: Math.round(meters) },
   });
-  return { success: true };
+  return { success: true, epochs: result.epochs };
 }
 
 export async function uploadDriverAppLogo(
   locale: string,
   formData: FormData,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean; logoUrl?: string }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; logoUrl?: string; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -321,7 +322,7 @@ export async function uploadDriverAppLogo(
     if (result.error) return result;
 
     revalidateDriverAppSettings(locale);
-    return { success: true, logoUrl };
+    return { success: true, logoUrl, epochs: result.epochs };
   } catch (error) {
     logWriteError("uploadDriverAppLogo:storage", error);
     return {
@@ -336,7 +337,7 @@ export async function uploadDriverAppLogo(
 export async function uploadDriverAppSplash(
   locale: string,
   formData: FormData,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean; splashUrl?: string }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; splashUrl?: string; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -372,7 +373,7 @@ export async function uploadDriverAppSplash(
     if (result.error) return result;
 
     revalidateDriverAppSettings(locale);
-    return { success: true, splashUrl };
+    return { success: true, splashUrl, epochs: result.epochs };
   } catch (error) {
     logWriteError("uploadDriverAppSplash:storage", error);
     return {
@@ -387,7 +388,7 @@ export async function uploadDriverAppSplash(
 export async function uploadDriverAppIcon(
   locale: string,
   formData: FormData,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean; iconUrl?: string }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; iconUrl?: string; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -421,7 +422,7 @@ export async function uploadDriverAppIcon(
     if (result.error) return result;
 
     revalidateDriverAppSettings(locale);
-    return { success: true, iconUrl };
+    return { success: true, iconUrl, epochs: result.epochs };
   } catch (error) {
     logWriteError("uploadDriverAppIcon:storage", error);
     return {
@@ -435,7 +436,7 @@ export async function uploadDriverAppIcon(
 
 export async function setDriverAppMaintenanceMode(
   enabled: boolean,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -447,7 +448,7 @@ export async function setDriverAppMaintenanceMode(
   if (result.error) return result;
 
   updateTag("app-settings");
-  return { success: true };
+  return { success: true, epochs: result.epochs };
 }
 
 export type DriverAppForceUpdateInput = {
@@ -466,7 +467,7 @@ export type DriverAppForceUpdateInput = {
 export async function updateDriverAppForceUpdate(
   locale: string,
   input: DriverAppForceUpdateInput,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -532,7 +533,7 @@ export async function updateDriverAppForceUpdate(
     before,
     after: patch,
   });
-  return { success: true };
+  return { success: true, epochs: result.epochs };
 }
 
 export type DriverAppInstallVersion = {
@@ -738,7 +739,7 @@ export async function notifyOutdatedInstalls(
 
 export async function setDriverAppLoginVerificationExemptAll(
   enabled: boolean,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -750,12 +751,12 @@ export async function setDriverAppLoginVerificationExemptAll(
   if (result.error) return result;
 
   updateTag("app-settings");
-  return { success: true };
+  return { success: true, epochs: result.epochs };
 }
 
 export async function resetDriverAppSettings(
   locale: string,
-): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -789,5 +790,5 @@ export async function resetDriverAppSettings(
   if (result.error) return result;
 
   revalidateDriverAppSettings(locale);
-  return { success: true };
+  return { success: true, epochs: result.epochs };
 }
