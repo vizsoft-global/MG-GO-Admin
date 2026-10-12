@@ -14,6 +14,7 @@
  * set — the property the SQL's shared `filtered` CTE existed to guarantee.
  */
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import {
   getFirestore,
   FieldValue,
@@ -414,7 +415,7 @@ function kpiOf(rows: readonly RequestRow[], now: number): KpiBlock {
  * The status tab narrows the rows and `filtered_total` only; the KPIs and the
  * status counts deliberately describe every status.
  */
-export const adminListRequests = onCall(async (request) => {
+export const adminListRequests = measureOnCall("adminListRequests", async (request) => {
   const staff = await requireStaff(request, "requests.view");
   const data = (request.data ?? {}) as Dict;
   const uid = staff.uid;

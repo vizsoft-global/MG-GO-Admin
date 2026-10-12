@@ -123,6 +123,7 @@ export {
   cleanupDriverTelemetryEvents,
   cleanupStaleDriverLocations,
 } from "./rpcs/retention";
+export { adminPerfPing } from "./rpcs/perf-ping";
 export {
   adminListDriversPage,
   adminDriversFilterValues,

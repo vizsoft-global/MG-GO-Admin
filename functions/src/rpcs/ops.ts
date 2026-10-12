@@ -1,4 +1,5 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayRange, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
@@ -1028,7 +1029,7 @@ function bucketKey(day: string, bucket: "day" | "week" | "month"): string {
   return day;
 }
 
-export const adminPerformanceOpsSnapshot = onCall(async (request) => {
+export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSnapshot", async (request) => {
   await requireStaff(request);
 
   const data = (request.data ?? {}) as Dict;

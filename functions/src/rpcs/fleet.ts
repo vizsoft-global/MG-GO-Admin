@@ -1,4 +1,5 @@
 import { onCall } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import { Timestamp, getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
@@ -324,7 +325,7 @@ export function snapshotForStaff<T extends { zones: readonly LiveFleetZone[] }>(
   return snapshot;
 }
 
-export const adminLiveFleetSnapshot = onCall(async (request) => {
+export const adminLiveFleetSnapshot = measureOnCall("adminLiveFleetSnapshot", async (request) => {
   await requireStaff(request);
   const data = (request.data ?? {}) as Dict;
   const seenWithin = num(data.seenWithinMinutes ?? data.p_seen_within_minutes) ?? 30;

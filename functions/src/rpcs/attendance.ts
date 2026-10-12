@@ -1,4 +1,5 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import { kuwaitDayString } from "../core/kuwait";
 import { parseId } from "../core/query";
 import { loadAppSettings } from "../core/settings";
@@ -141,7 +142,7 @@ function sortRows(rows: AttendanceRow[], sort: string): AttendanceRow[] {
 }
 
 /** `admin_list_attendance_daily` — same filters, same sort keys, same page shape. */
-export const adminListAttendanceDaily = onCall(async (request) => {
+export const adminListAttendanceDaily = measureOnCall("adminListAttendanceDaily", async (request) => {
   await requireStaff(request, "attendance.view");
 
   const data = (request.data ?? {}) as Record<string, unknown>;

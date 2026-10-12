@@ -131,14 +131,23 @@ function errorMessageOf(
   return body?.error?.message ?? body?.error?.status ?? `http_${status}`;
 }
 
+/** One line per call. Name, duration, status, attempt — never the payload or token. */
+function logCallableTiming(name: string, ms: number, status: string, attempt: number): void {
+  const safe = status.replace(/[\r\n]/g, " ").slice(0, 80);
+  console.info(JSON.stringify({ perf: "callable", name, ms, status: safe, attempt }));
+}
+
 async function postCallable<T>(
   projectId: string,
   rpcName: string,
   args: Record<string, unknown>,
   idToken: string,
   options: AdminFunctionOptions,
+  attempt: number,
 ): Promise<AdminFunctionResult<T>> {
-  const response = await fetch(`${functionsBaseUrl(projectId)}/${functionName(rpcName)}`, {
+  const started = Date.now();
+  const name = functionName(rpcName);
+  const response = await fetch(`${functionsBaseUrl(projectId)}/${name}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -148,18 +157,24 @@ async function postCallable<T>(
     signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
   }).catch(() => null);
 
-  if (!response) return { data: null, error: { message: "unavailable" } };
+  if (!response) {
+    logCallableTiming(name, Date.now() - started, "unavailable", attempt);
+    return { data: null, error: { message: "unavailable" } };
+  }
 
   const body = parseCallableBody(await response.json().catch(() => null));
   if (!response.ok || body?.error) {
+    const message = errorMessageOf(body, response.status);
+    logCallableTiming(name, Date.now() - started, message, attempt);
     return {
       data: null,
       error: {
-        message: errorMessageOf(body, response.status),
+        message,
         code: String(response.status),
       },
     };
   }
+  logCallableTiming(name, Date.now() - started, "ok", attempt);
   return { data: (body?.result ?? null) as T | null, error: null };
 }
 
@@ -184,7 +199,7 @@ export async function callAdminFunction<T = unknown>(
   const token = await mintIdToken(uid);
   if (!token) return { data: null, error: { message: "not_configured" } };
 
-  const attempt = await postCallable<T>(config.projectId, rpcName, args, token.token, options);
+  const attempt = await postCallable<T>(config.projectId, rpcName, args, token.token, options, 1);
   if (!attempt.error) return attempt;
 
   // A token the callable has already rejected is the one failure worth retrying:
@@ -196,7 +211,7 @@ export async function callAdminFunction<T = unknown>(
   tokenCache.delete(uid);
   const retry = await mintIdToken(uid);
   if (!retry) return attempt;
-  return postCallable<T>(config.projectId, rpcName, args, retry.token, options);
+  return postCallable<T>(config.projectId, rpcName, args, retry.token, options, 2);
 }
 
 /**
@@ -233,6 +248,6 @@ export async function callCronFunction<T = unknown>(
   const body = (await response.json().catch(() => null)) as { idToken?: string } | null;
   if (!body?.idToken) return { data: null, error: { message: "not_configured" } };
 
-  return postCallable<T>(config.projectId, rpcName, args, body.idToken, options);
+  return postCallable<T>(config.projectId, rpcName, args, body.idToken, options, 1);
 }
 

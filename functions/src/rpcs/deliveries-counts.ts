@@ -1,4 +1,5 @@
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS, DELIVERY_STATUSES, FIELDS, IN_PROGRESS_STATUSES } from "../core/collections";
 import { parseId, parseInstant } from "../core/query";
@@ -147,7 +148,7 @@ async function coveringRollup(
  * `under_review` and `in_progress` directly off the JSON, and renaming them here
  * would break the KPI strip with no error anywhere.
  */
-export const adminDeliveriesStatusCounts = onCall(async (request) => {
+export const adminDeliveriesStatusCounts = measureOnCall("adminDeliveriesStatusCounts", async (request) => {
   await requireStaff(request, "deliveries.view");
 
   const data = (request.data ?? {}) as Record<string, unknown>;
@@ -183,7 +184,9 @@ export const adminDeliveriesStatusCounts = onCall(async (request) => {
 });
 
 /** `admin_deliveries_counts_by_filters` — the same counts plus driver/restaurant. */
-export const adminDeliveriesCountsByFilters = onCall(async (request) => {
+export const adminDeliveriesCountsByFilters = measureOnCall(
+  "adminDeliveriesCountsByFilters",
+  async (request) => {
   await requireStaff(request, "deliveries.view");
 
   const data = (request.data ?? {}) as Record<string, unknown>;

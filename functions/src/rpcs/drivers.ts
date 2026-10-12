@@ -14,6 +14,7 @@
  * row that matched in Postgres matches here.
  */
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp, type Firestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
@@ -635,7 +636,7 @@ async function loadDriversForList(
  * computed over the base (not the page) so the tiles cannot disagree with the
  * table under them.
  */
-export const adminListDriversPage = onCall(async (request) => {
+export const adminListDriversPage = measureOnCall("adminListDriversPage", async (request) => {
   await requireStaff(request, "drivers.view");
 
   const data = (request.data ?? {}) as Dict;
@@ -694,7 +695,7 @@ export const adminListDriversPage = onCall(async (request) => {
  * Name additionally lists every active company, because a company added a moment
  * ago has no rider linked to it yet and would otherwise be unpickable.
  */
-export const adminDriversFilterValues = onCall(async (request) => {
+export const adminDriversFilterValues = measureOnCall("adminDriversFilterValues", async (request) => {
   await requireStaff(request, "drivers.view");
 
   const data = (request.data ?? {}) as Dict;

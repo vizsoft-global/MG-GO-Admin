@@ -1,4 +1,5 @@
-import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp, type DocumentSnapshot } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { daysInMonth, kuwaitDayString, monthKey, monthLabel, parseMonthKey } from "../core/kuwait";
@@ -123,7 +124,7 @@ function dayStringsBetween(from: string, to: string): string[] {
  * that resolved a status here would be a second engine, and the two would drift
  * the first time a threshold moved.
  */
-export const adminPayrollRuleSnapshot = onCall(async (request) => {
+export const adminPayrollRuleSnapshot = measureOnCall("adminPayrollRuleSnapshot", async (request) => {
   const staff = await requireStaff(request, "payroll.view");
   const data = (request.data ?? {}) as Record<string, unknown>;
 
