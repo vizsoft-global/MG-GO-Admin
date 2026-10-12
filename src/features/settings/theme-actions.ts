@@ -1,8 +1,8 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { DEFAULT_THEME_ID, isPresetThemeId } from "@/lib/theme/presets";
@@ -11,12 +11,11 @@ import type { ThemeTokens } from "@/lib/theme/presets";
 const THEMES = "app_themes";
 
 async function requireManage() {
-  const session = await getSessionUser();
-  if (!session) return { error: "not_authenticated" as const };
-  if (!hasPermissionInSet(session.permissions, "settings.manage", session.isSuperAdmin)) {
-    return { error: "not_authorized" as const };
+  const auth = await requireMutationAuth("settings.manage");
+  if ("error" in auth) {
+    return { error: auth.error === "not_configured" ? ("not_authenticated" as const) : auth.error };
   }
-  return { session };
+  return { session: auth.session };
 }
 
 function invalidateThemeCaches() {
@@ -42,14 +41,17 @@ export async function setActiveTheme(
   }
 
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      {
-        theme_id: id,
-        updated_at: new Date(),
-        updated_by: auth.session.id,
-      },
-      { merge: true },
-    );
+    await writeWithEpoch(db, "settings", ({ tx }) => {
+      tx.set(
+        db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID),
+        {
+          theme_id: id,
+          updated_at: new Date(),
+          updated_by: auth.session.id,
+        },
+        { merge: true },
+      );
+    });
   } catch {
     return { error: "save_failed" };
   }
@@ -142,10 +144,13 @@ export async function deleteCustomTheme(
   const settingsRef = db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID);
   const settings = await settingsRef.get();
   if (settings.data()?.theme_id === id) {
-    await settingsRef.set(
-      { theme_id: DEFAULT_THEME_ID, updated_at: new Date() },
-      { merge: true },
-    );
+    await writeWithEpoch(db, "settings", ({ tx }) => {
+      tx.set(
+        settingsRef,
+        { theme_id: DEFAULT_THEME_ID, updated_at: new Date() },
+        { merge: true },
+      );
+    });
   }
 
   try {

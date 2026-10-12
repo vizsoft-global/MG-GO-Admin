@@ -113,6 +113,7 @@ export const COLLECTIONS = {
   locales: "locales",
   supportThreads: "support_threads",
   supportMessages: "support_messages",
+  authEpochs: "auth_epochs",
   adminPermissions: "admin_permissions",
   adminRoles: "admin_roles",
   adminRolePermissions: "admin_role_permissions",

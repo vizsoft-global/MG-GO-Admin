@@ -2,15 +2,10 @@ import createIntlMiddleware from "next-intl/middleware";
 import { type NextRequest, NextResponse } from "next/server";
 import { routing } from "@/i18n/routing";
 import {
-  readProxyOpsSettings,
-  readProxyProfile,
+  readProxyGate,
   updateStaffSession,
   type ProxyOpsSettings,
 } from "@/lib/firebase/middleware";
-import {
-  cacheOpsSettings,
-  readCachedOpsSettings,
-} from "@/lib/firebase/ops-settings-cache";
 
 const intlMiddleware = createIntlMiddleware(routing);
 
@@ -94,21 +89,16 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  const wantsProfile = protectedPath || path === "/login" || path === "/signup";
-  const cachedOps = readCachedOpsSettings();
-
-  const [opsResult, profileResult] = await Promise.all([
-    cachedOps
-      ? Promise.resolve({ data: cachedOps, failed: false as const })
-      : readProxyOpsSettings(),
-    wantsProfile
-      ? readProxyProfile(uid)
-      : Promise.resolve({ data: null, failed: false as const }),
-  ]);
-
-  if (!cachedOps && !opsResult.failed) {
-    cacheOpsSettings(opsResult.data as ProxyOpsSettings | null);
+  const gate = await readProxyGate(uid, probe.authTimeMs);
+  if (gate.revoked) {
+    if (protectedPath) {
+      return NextResponse.redirect(new URL(`/${locale}/login`, request.url));
+    }
+    return response;
   }
+
+  const opsResult = gate.ops;
+  const profileResult = gate.profile;
 
   const opsSettings = opsResult.data as ProxyOpsSettings | null;
   const profileRow = profileResult.data;

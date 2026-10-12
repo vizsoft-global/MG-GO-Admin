@@ -1,5 +1,6 @@
 import "server-only";
 
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
 import { getFirebaseFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { PERMISSION_CATALOG } from "@/lib/auth/permission-catalog";
@@ -18,25 +19,24 @@ export async function syncAdminPermissionsFromCatalog(): Promise<{
   const db = await getFirebaseFirestore();
   if (!db) return { error: "firestore_unavailable" };
 
-  const batch = db.batch();
   const now = new Date().toISOString();
 
-  for (const entry of PERMISSION_CATALOG) {
-    batch.set(
-      db.collection(COLLECTIONS.adminPermissions).doc(entry.slug),
-      {
-        id: entry.slug,
-        slug: entry.slug,
-        label: entry.label,
-        category: entry.category,
-        updated_at: now,
-      },
-      { merge: true },
-    );
-  }
-
   try {
-    await batch.commit();
+    await writeWithEpoch(db, "access", ({ tx }) => {
+      for (const entry of PERMISSION_CATALOG) {
+        tx.set(
+          db.collection(COLLECTIONS.adminPermissions).doc(entry.slug),
+          {
+            id: entry.slug,
+            slug: entry.slug,
+            label: entry.label,
+            category: entry.category,
+            updated_at: now,
+          },
+          { merge: true },
+        );
+      }
+    });
   } catch (error) {
     return { error: error instanceof Error ? error.message : "sync_failed" };
   }
