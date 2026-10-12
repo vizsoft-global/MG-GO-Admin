@@ -35,6 +35,7 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { TrackingTableToolbar } from "@/features/driver-tracking/table-toolbar";
 import { downloadCsv } from "@/features/driver-tracking/csv-export";
 import { Link } from "@/i18n/navigation";
+import { LIST_SEARCH_DEBOUNCE_MS } from "@/lib/menu/sidebar-menu-query";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,7 +153,7 @@ function AttendancePageContent() {
   const [correctionOpen, setCorrectionOpen] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
 

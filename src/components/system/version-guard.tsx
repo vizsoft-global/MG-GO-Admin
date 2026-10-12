@@ -23,7 +23,7 @@ export function VersionGuard() {
   const { data, isSuccess } = useQuery({
     queryKey: queryKeys.app.buildId(),
     queryFn: fetchBuildId,
-    staleTime: 0,
+    staleTime: 60_000,
     refetchInterval: POLL_MS,
     // Deliberately *not* `refetchIntervalInBackground`. `/api/build-id` is
     // `force-dynamic` with `no-store`, so every poll is an uncacheable function
@@ -31,7 +31,7 @@ export function VersionGuard() {
     // see. `refetchOnWindowFocus` already asks the same question the moment the tab is
     // looked at, so the dialog still appears exactly when it did — just not while the
     // operator is working somewhere else.
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: "always",
     refetchOnReconnect: true,
     retry: 2,
   });

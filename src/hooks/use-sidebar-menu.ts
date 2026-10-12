@@ -15,6 +15,11 @@ import {
   resolveForSidebar,
   type ResolvedMenuNode,
 } from "@/lib/menu/menu-merge";
+import {
+  SIDEBAR_MENU_STALE_MS,
+  sidebarMenuQueryKey,
+  type SidebarMenuEpochs,
+} from "@/lib/menu/sidebar-menu-query";
 
 const MENU_CACHE_VERSION = "v20";
 const cacheByRole = new Map<string, ResolvedMenuNode[]>();
@@ -62,13 +67,13 @@ function resolveMenuTree(
   return resolved;
 }
 
-export function useSidebarMenu() {
-  // Stage G also edits this hook. This change is only the query-key inputs
-  // (access + menu epochs from SidebarEpochsProvider).
+export function useSidebarMenu(epochs: SidebarMenuEpochs = {}) {
   const { adminRoleSlug, can, isSuperAdmin, permissions } = useAuth();
-  const epochs = useSidebarEpochs();
+  const provided = useSidebarEpochs();
   const initialConfig = useInitialMenuConfig();
   const queryClient = useQueryClient();
+  const accessEpoch = epochs.accessEpoch ?? provided.access ?? 0;
+  const menuEpoch = epochs.menuEpoch ?? provided.menu ?? 0;
 
   const serverTree = useMemo(
     () => resolveMenuTree(initialConfig, can, isSuperAdmin),
@@ -76,7 +81,10 @@ export function useSidebarMenu() {
   );
 
   const { data: tree = serverTree, isLoading: loading } = useQuery({
-    queryKey: queryKeys.menu.sidebar(adminRoleSlug, isSuperAdmin, epochs.access, epochs.menu),
+    queryKey: sidebarMenuQueryKey(adminRoleSlug, isSuperAdmin, {
+      accessEpoch,
+      menuEpoch,
+    }),
     queryFn: async () => {
       try {
         const cfg = await getMenuConfig(adminRoleSlug);
@@ -90,8 +98,7 @@ export function useSidebarMenu() {
       }
     },
     initialData: serverTree.length > 0 ? serverTree : undefined,
-    staleTime: 60_000,
-    refetchOnMount: "always",
+    staleTime: SIDEBAR_MENU_STALE_MS,
   });
 
   useEffect(() => {
