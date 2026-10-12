@@ -9,6 +9,10 @@ import {
   STAFF_SESSION_COOKIE,
   verifyStaffSessionCookie,
 } from "./session";
+import { resolveAdminCallableRequest } from "./callable-route";
+import { clearIdTokenCache, forgetIdToken, loadCachedIdToken } from "./callable-token";
+
+export { functionName } from "./callable-route";
 
 /**
  * Server-side caller for the ported Cloud Functions.
@@ -31,77 +35,35 @@ export type AdminFunctionResult<T> = {
   error: { message: string; code?: string } | null;
 };
 
-/** Callables for a heavy report can legitimately run for a minute. */
-const DEFAULT_TIMEOUT_MS = 60_000;
-
-/** Firebase ID tokens live for an hour; refresh a little before that. */
-const TOKEN_TTL_MS = 45 * 60 * 1000;
-
-type CachedToken = { token: string; expiresAt: number };
-
-/**
- * Per-instance token cache, keyed by uid.
- *
- * A serverless instance is short-lived, so this is a bonus rather than a
- * guarantee: the worst case is one extra custom-token exchange per call, which is
- * two HTTPS round trips to Google, not a correctness problem.
- */
-const tokenCache = new Map<string, CachedToken>();
-
 export type AdminFunctionOptions = { timeoutMs?: number };
-
-/** `admin_list_requests` â†’ `adminListRequests`, the export name in `functions/src`. */
-export function functionName(rpcName: string): string {
-  if (!rpcName.includes("_")) return rpcName;
-  return rpcName.replace(/_([a-z0-9])/g, (_match, char: string) => char.toUpperCase());
-}
 
 function functionsRegion(): string {
   return process.env.NEXT_PUBLIC_FIREBASE_FUNCTIONS_REGION?.trim() || "me-central1";
 }
 
-function functionsBaseUrl(projectId: string): string {
-  return `https://${functionsRegion()}-${projectId}.cloudfunctions.net`;
-}
-
 /**
  * Exchanges a custom token for an ID token.
  *
- * Returns null when the web API key or the service account is absent â€” the panel
+ * Returns null when the web API key or the service account is absent — the panel
  * is then unable to call functions at all, which must read as a configuration
- * failure, not as a permission one.
+ * failure, not as a permission one. The cache is shared with cron mints and is
+ * keyed by uid; cron uses a separate key so a session token is not reused.
  */
-async function mintIdToken(uid: string): Promise<CachedToken | null> {
-  const cached = tokenCache.get(uid);
-  if (cached && cached.expiresAt > Date.now()) return cached;
-
+async function mintIdToken(uid: string): Promise<string | null> {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim();
   const auth = await getFirebaseAuth();
   if (!apiKey || !auth) return null;
-
-  const customToken = await auth.createCustomToken(uid);
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: customToken, returnSecureToken: true }),
-      signal: AbortSignal.timeout(15_000),
-    },
-  ).catch(() => null);
-
-  if (!response?.ok) return null;
-  const body = (await response.json().catch(() => null)) as { idToken?: string } | null;
-  if (!body?.idToken) return null;
-
-  const entry = { token: body.idToken, expiresAt: Date.now() + TOKEN_TTL_MS };
-  tokenCache.set(uid, entry);
-  return entry;
+  return loadCachedIdToken({
+    uid,
+    kind: "session",
+    apiKey,
+    createCustomToken: () => auth.createCustomToken(uid),
+  });
 }
 
 /** Test seam. */
 export function clearAdminFunctionTokenCache(): void {
-  tokenCache.clear();
+  clearIdTokenCache();
 }
 
 async function callerUid(): Promise<string | null> {
@@ -131,10 +93,16 @@ function errorMessageOf(
   return body?.error?.message ?? body?.error?.status ?? `http_${status}`;
 }
 
-/** One line per call. Name, duration, status, attempt — never the payload or token. */
-function logCallableTiming(name: string, ms: number, status: string, attempt: number): void {
+/** One line per call. Name, duration, status, attempt, lane. Never the payload or token. */
+function logCallableTiming(
+  name: string,
+  ms: number,
+  status: string,
+  attempt: number,
+  lane: string | null,
+): void {
   const safe = status.replace(/[\r\n]/g, " ").slice(0, 80);
-  console.info(JSON.stringify({ perf: "callable", name, ms, status: safe, attempt }));
+  console.info(JSON.stringify({ perf: "callable", name, ms, status: safe, attempt, lane }));
 }
 
 async function postCallable<T>(
@@ -146,26 +114,33 @@ async function postCallable<T>(
   attempt: number,
 ): Promise<AdminFunctionResult<T>> {
   const started = Date.now();
-  const name = functionName(rpcName);
-  const response = await fetch(`${functionsBaseUrl(projectId)}/${name}`, {
+  const route = resolveAdminCallableRequest({
+    routerMode: process.env.ADMIN_API_ROUTER,
+    projectId,
+    region: functionsRegion(),
+    rpcName,
+    args,
+    timeoutMs: options.timeoutMs,
+  });
+  const response = await fetch(route.url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ data: args }),
-    signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+    body: JSON.stringify(route.body),
+    signal: AbortSignal.timeout(route.timeoutMs),
   }).catch(() => null);
 
   if (!response) {
-    logCallableTiming(name, Date.now() - started, "unavailable", attempt);
+    logCallableTiming(route.functionName, Date.now() - started, "unavailable", attempt, route.lane);
     return { data: null, error: { message: "unavailable" } };
   }
 
   const body = parseCallableBody(await response.json().catch(() => null));
   if (!response.ok || body?.error) {
     const message = errorMessageOf(body, response.status);
-    logCallableTiming(name, Date.now() - started, message, attempt);
+    logCallableTiming(route.functionName, Date.now() - started, message, attempt, route.lane);
     return {
       data: null,
       error: {
@@ -174,7 +149,7 @@ async function postCallable<T>(
       },
     };
   }
-  logCallableTiming(name, Date.now() - started, "ok", attempt);
+  logCallableTiming(route.functionName, Date.now() - started, "ok", attempt, route.lane);
   return { data: (body?.result ?? null) as T | null, error: null };
 }
 
@@ -199,7 +174,7 @@ export async function callAdminFunction<T = unknown>(
   const token = await mintIdToken(uid);
   if (!token) return { data: null, error: { message: "not_configured" } };
 
-  const attempt = await postCallable<T>(config.projectId, rpcName, args, token.token, options, 1);
+  const attempt = await postCallable<T>(config.projectId, rpcName, args, token, options, 1);
   if (!attempt.error) return attempt;
 
   // A token the callable has already rejected is the one failure worth retrying:
@@ -208,10 +183,10 @@ export async function callAdminFunction<T = unknown>(
   const status = Number(attempt.error.code ?? 0);
   if (status !== 401 && status !== 403) return attempt;
 
-  tokenCache.delete(uid);
+  forgetIdToken(uid, "session");
   const retry = await mintIdToken(uid);
   if (!retry) return attempt;
-  return postCallable<T>(config.projectId, rpcName, args, retry.token, options, 2);
+  return postCallable<T>(config.projectId, rpcName, args, retry, options, 2);
 }
 
 /**
@@ -234,20 +209,14 @@ export async function callCronFunction<T = unknown>(
   const uid = settings.data()?.super_admin_user_id;
   if (typeof uid !== "string" || !uid) return { data: null, error: { message: "not_configured" } };
 
-  const customToken = await auth.createCustomToken(uid, { staff: true, superAdmin: true });
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: customToken, returnSecureToken: true }),
-      signal: AbortSignal.timeout(15_000),
-    },
-  ).catch(() => null);
-  if (!response?.ok) return { data: null, error: { message: "not_configured" } };
-  const body = (await response.json().catch(() => null)) as { idToken?: string } | null;
-  if (!body?.idToken) return { data: null, error: { message: "not_configured" } };
+  const idToken = await loadCachedIdToken({
+    uid,
+    kind: "cron",
+    apiKey,
+    createCustomToken: () => auth.createCustomToken(uid, { staff: true, superAdmin: true }),
+  });
+  if (!idToken) return { data: null, error: { message: "not_configured" } };
 
-  return postCallable<T>(config.projectId, rpcName, args, body.idToken, options, 1);
+  return postCallable<T>(config.projectId, rpcName, args, idToken, options, 1);
 }
 
