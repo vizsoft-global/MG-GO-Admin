@@ -33,6 +33,7 @@ import { signOut } from "@/features/auth/actions";
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { useNavBadges } from "@/hooks/use-nav-badges";
 import { useSidebarMenu } from "@/hooks/use-sidebar-menu";
+import type { SidebarMenuEpochs } from "@/lib/menu/sidebar-menu-query";
 import { moduleChipStyle } from "@/lib/menu/module-colors";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -62,7 +63,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSkeleton,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -437,20 +437,6 @@ function NavTree({ nodes }: { nodes: ResolvedMenuNode[] }) {
   );
 }
 
-function SidebarNavSkeleton() {
-  return (
-    <SidebarGroup>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SidebarMenuSkeleton key={i} showIcon />
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  );
-}
-
 function SidebarBrand() {
   const t = useTranslations("common");
   const { state, toggleSidebar } = useSidebar();
@@ -606,9 +592,11 @@ function SidebarUserMenu() {
   );
 }
 
-export function AppSidebar() {
-  const mounted = useHasMounted();
-  const { tree } = useSidebarMenu();
+export function AppSidebar({
+  accessEpoch = 0,
+  menuEpoch = 0,
+}: SidebarMenuEpochs = {}) {
+  const { tree } = useSidebarMenu({ accessEpoch, menuEpoch });
 
   return (
     <Sidebar
@@ -621,7 +609,7 @@ export function AppSidebar() {
         <SidebarCollapseTrigger />
       </SidebarHeader>
       <SidebarContent className="no-scrollbar flex-1 px-1.5 py-2 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:overflow-x-hidden group-data-[collapsible=icon]:overflow-y-auto group-data-[collapsible=icon]:!overflow-y-auto group-data-[collapsible=icon]:px-0">
-        {mounted ? <NavTree nodes={tree} /> : <SidebarNavSkeleton />}
+        <NavTree nodes={tree} />
       </SidebarContent>
       <SidebarUserMenu />
     </Sidebar>

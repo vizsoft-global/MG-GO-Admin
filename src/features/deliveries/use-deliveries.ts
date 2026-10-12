@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -35,6 +36,7 @@ export function useDeliveriesInfinite(filter: DeliveriesQueryFilter) {
       fetchDeliveriesPage({ ...filter, offset: pageParam }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
+    placeholderData: keepPreviousData,
     retry: false,
   });
 }
