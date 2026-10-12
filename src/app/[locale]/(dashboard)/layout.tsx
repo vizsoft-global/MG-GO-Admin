@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth/require-permission";
 import { getAppOpsSettings } from "@/lib/auth/app-settings";
 import { redirect } from "@/i18n/navigation";
 import { AuthProvider } from "@/contexts/auth-context";
+import { SidebarEpochsProvider } from "@/contexts/sidebar-epochs-context";
 import { SidebarMenuConfigProvider } from "@/contexts/sidebar-menu-context";
 import { getMenuConfigServer } from "@/services/menu-config-server";
 import { DashboardFrame } from "@/components/layout/dashboard-frame";
@@ -19,9 +20,10 @@ export default async function DashboardLayout({
   const { locale } = await params;
   setRequestLocale(locale);
 
+  const opsPromise = getAppOpsSettings();
   const session = await requireAuth(locale);
   const [ops, menuConfig] = await Promise.all([
-    getAppOpsSettings(),
+    opsPromise,
     getMenuConfigServer(session.adminRoleSlug),
   ]);
 
@@ -47,9 +49,11 @@ export default async function DashboardLayout({
       }}
     >
       <SentryUserSync />
-      <SidebarMenuConfigProvider config={menuConfig}>
-        <DashboardFrame>{children}</DashboardFrame>
-      </SidebarMenuConfigProvider>
+      <SidebarEpochsProvider access={session.epochs.access} menu={session.epochs.menu}>
+        <SidebarMenuConfigProvider config={menuConfig}>
+          <DashboardFrame>{children}</DashboardFrame>
+        </SidebarMenuConfigProvider>
+      </SidebarEpochsProvider>
     </AuthProvider>
   );
 }

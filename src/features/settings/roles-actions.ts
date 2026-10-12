@@ -4,7 +4,9 @@ import { updateTag } from "next/cache";
 import type { Firestore } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { callAdminFunction } from "@/lib/firebase/callable";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { CATALOG_SLUG_SET, isValidRoleSlug } from "@/lib/auth/permission-catalog";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
@@ -17,12 +19,21 @@ type RoleRow = {
   is_super_admin: boolean;
 };
 
-async function requireRolesManager() {
+async function requireRolesRead() {
   const session = await getSessionUser();
   if (!session?.isSuperAdmin) {
     return { error: "not_authorized" as const };
   }
   return { session };
+}
+
+async function requireRolesManager() {
+  const auth = await requireMutationAuth();
+  if ("error" in auth) return auth;
+  if (!auth.session.isSuperAdmin) {
+    return { error: "not_authorized" as const };
+  }
+  return { session: auth.session };
 }
 
 function filterValidPermissions(permissionSlugs: string[]): string[] {
@@ -50,10 +61,13 @@ async function readRoleSlugs(db: Firestore, roleId: string): Promise<string[]> {
 
 async function writeRoleSlugs(db: Firestore, roleId: string, slugs: string[]): Promise<boolean> {
   try {
-    await db.collection(COLLECTIONS.adminRolePermissions).doc(roleId).set(
-      { permission_slugs: slugs },
-      { merge: true },
-    );
+    await writeWithEpoch(db, "access", ({ tx }) => {
+      tx.set(
+        db.collection(COLLECTIONS.adminRolePermissions).doc(roleId),
+        { permission_slugs: slugs },
+        { merge: true },
+      );
+    });
     return true;
   } catch {
     return false;
@@ -205,12 +219,14 @@ export async function createCustomRole(
 
   const roleId = crypto.randomUUID();
   try {
-    await db.collection(COLLECTIONS.adminRoles).doc(roleId).set({
-      id: roleId,
-      name: trimmedName,
-      slug: normalizedSlug,
-      is_system: false,
-      is_super_admin: false,
+    await writeWithEpoch(db, "access", ({ tx }) => {
+      tx.set(db.collection(COLLECTIONS.adminRoles).doc(roleId), {
+        id: roleId,
+        name: trimmedName,
+        slug: normalizedSlug,
+        is_system: false,
+        is_super_admin: false,
+      });
     });
   } catch {
     return { error: "save_failed" };
@@ -249,7 +265,7 @@ export async function copyRolePermissionsToEditor(
   sourceRoleId: string,
   targetRoleId: string,
 ): Promise<{ error?: string; permissions?: string[] }> {
-  const auth = await requireRolesManager();
+  const auth = await requireRolesRead();
   if ("error" in auth) return auth;
 
   if (sourceRoleId === targetRoleId) {
@@ -295,10 +311,13 @@ export async function updateRoleMeta(
   }
 
   try {
-    await db.collection(COLLECTIONS.adminRoles).doc(roleId).set(
-      { name: trimmedName },
-      { merge: true },
-    );
+    await writeWithEpoch(db, "access", ({ tx }) => {
+      tx.set(
+        db.collection(COLLECTIONS.adminRoles).doc(roleId),
+        { name: trimmedName },
+        { merge: true },
+      );
+    });
   } catch {
     return { error: "save_failed" };
   }
@@ -330,8 +349,10 @@ export async function deleteCustomRole(
   if (countSnap.data().count > 0) return { error: "role_in_use" };
 
   try {
-    await db.collection(COLLECTIONS.adminRoles).doc(roleId).delete();
-    await db.collection(COLLECTIONS.adminRolePermissions).doc(roleId).delete();
+    await writeWithEpoch(db, "access", ({ tx }) => {
+      tx.delete(db.collection(COLLECTIONS.adminRoles).doc(roleId));
+      tx.delete(db.collection(COLLECTIONS.adminRolePermissions).doc(roleId));
+    });
   } catch {
     return { error: "delete_failed" };
   }

@@ -1,4 +1,8 @@
-import { getFirebaseAuth } from "./admin";
+import { FieldValue, type Transaction } from "firebase-admin/firestore";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { clearMintedIdToken } from "@/lib/firebase/callable";
+import { getFirebaseAuth, getFirebaseFirestore } from "./admin";
 
 /**
  * Staff email/password sign-in against Identity Toolkit, server-side.
@@ -143,9 +147,63 @@ export async function setStaffPassword(uid: string, password: string): Promise<b
   return true;
 }
 
-/** Ends every refresh token for the user — used on sign-out and staff revoke. */
-export async function revokeStaffSessions(uid: string): Promise<void> {
+export type StaffRevokeReason =
+  | "sign_out"
+  | "access_request_rejected"
+  | "staff_archive"
+  | "role_removed"
+  | "demotion";
+
+function removalFields(reason: StaffRevokeReason): Record<string, unknown> {
+  switch (reason) {
+    case "sign_out":
+    case "demotion":
+      return {};
+    case "access_request_rejected":
+      return { approval_status: "rejected" };
+    case "staff_archive":
+      return { archived_at: new Date().toISOString() };
+    case "role_removed":
+      return { admin_role_id: null };
+    default: {
+      const neverReason: never = reason;
+      return neverReason;
+    }
+  }
+}
+
+/**
+ * Ends the staff session: revoke refresh tokens, stamp sessions_revoked_at and
+ * bump the access epoch in one transaction, then drop the minted callable token.
+ * Every removal path calls this. Do not call revokeRefreshTokens anywhere else.
+ */
+export async function revokeStaffAccess(
+  uid: string,
+  reason: StaffRevokeReason,
+  extra?: (tx: Transaction) => void,
+): Promise<void> {
   const auth = await getFirebaseAuth();
-  if (!auth) return;
-  await auth.revokeRefreshTokens(uid);
+  if (auth) {
+    await auth.revokeRefreshTokens(uid);
+  }
+  const db = await getFirebaseFirestore();
+  if (db) {
+    await writeWithEpoch(db, "access", ({ tx }) => {
+      tx.set(
+        db.collection(COLLECTIONS.profiles).doc(uid),
+        {
+          sessions_revoked_at: FieldValue.serverTimestamp(),
+          ...removalFields(reason),
+        },
+        { merge: true },
+      );
+      extra?.(tx);
+    });
+  }
+  clearMintedIdToken(uid);
+}
+
+/** Sign-out and any leftover caller. */
+export async function revokeStaffSessions(uid: string): Promise<void> {
+  await revokeStaffAccess(uid, "sign_out");
 }

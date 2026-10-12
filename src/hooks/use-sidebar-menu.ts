@@ -5,7 +5,9 @@ import type { MenuNode } from "@/services/menu-config-service";
 import type { Permission } from "@/lib/auth/permissions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
+import { useSidebarEpochs } from "@/contexts/sidebar-epochs-context";
 import { useInitialMenuConfig } from "@/contexts/sidebar-menu-context";
+import { queryKeys } from "@/lib/query/query-keys";
 import { getMenuConfig } from "@/services/menu-config-service";
 import {
   buildInitialTree,
@@ -61,7 +63,10 @@ function resolveMenuTree(
 }
 
 export function useSidebarMenu() {
+  // Stage G also edits this hook. This change is only the query-key inputs
+  // (access + menu epochs from SidebarEpochsProvider).
   const { adminRoleSlug, can, isSuperAdmin, permissions } = useAuth();
+  const epochs = useSidebarEpochs();
   const initialConfig = useInitialMenuConfig();
   const queryClient = useQueryClient();
 
@@ -71,7 +76,7 @@ export function useSidebarMenu() {
   );
 
   const { data: tree = serverTree, isLoading: loading } = useQuery({
-    queryKey: ["sidebar-menu", adminRoleSlug, isSuperAdmin],
+    queryKey: queryKeys.menu.sidebar(adminRoleSlug, isSuperAdmin, epochs.access, epochs.menu),
     queryFn: async () => {
       try {
         const cfg = await getMenuConfig(adminRoleSlug);
@@ -99,7 +104,7 @@ export function useSidebarMenu() {
       if (!detail?.role || detail.role === adminRoleSlug) {
         cacheByRole.delete(adminRoleSlug);
         void queryClient.invalidateQueries({
-          queryKey: ["sidebar-menu", adminRoleSlug],
+          queryKey: queryKeys.menu.all(),
         });
       }
     };

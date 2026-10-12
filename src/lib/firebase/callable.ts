@@ -104,11 +104,21 @@ export function clearAdminFunctionTokenCache(): void {
   tokenCache.clear();
 }
 
+/**
+ * Drops the minted callable ID token for one uid.
+ * revokeStaffAccess is the only caller. Stage B owns the rest of this file.
+ */
+export function clearMintedIdToken(uid: string): void {
+  tokenCache.delete(uid);
+}
+
 async function callerUid(): Promise<string | null> {
   const cookieStore = await cookies();
   const cookie = cookieStore.get(STAFF_SESSION_COOKIE)?.value;
   const probe = await verifyStaffSessionCookie(cookie, {
     timeoutMs: MIDDLEWARE_SESSION_BUDGET_MS,
+    // Reads do not check revocation. Mutations go through requireMutationAuth.
+    checkRevoked: false,
   });
   return probe.uid;
 }

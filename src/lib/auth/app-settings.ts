@@ -38,6 +38,8 @@ async function fetchAppOpsSettings(): Promise<AppOpsSettings> {
 
 /**
  * Read on every dashboard render, so it cannot be allowed to hang the page.
+ * `cache()` dedupes only within one request. Maintenance mode and an unclaimed
+ * super admin are always this live read — they are not stored in the epoch cache.
  * A timeout yields the same defaults the function already returns for a failed
  * read, which leave maintenance mode off — the fail-open direction, matching
  * the proxy.

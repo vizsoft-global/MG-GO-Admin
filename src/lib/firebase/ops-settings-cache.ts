@@ -1,10 +1,9 @@
 /**
  * Per-isolate cache for the two `app_settings` flags the proxy reads.
  *
- * The proxy read them on every navigation, which is a database round trip per
- * request for a document that changes perhaps twice in the lifetime of the
- * project. Under the load that produced MIDDLEWARE_INVOCATION_TIMEOUT that read
- * is pure cost on the critical path.
+ * The proxy no longer consults this cache. Maintenance mode is a live read.
+ * The helpers stay so the deadline tests can still pin the unclaimed-super-admin
+ * rule: a claimed row may be stored, an unclaimed one must not.
  */
 export type ProxyOpsSettings = {
   super_admin_claimed: boolean | null;

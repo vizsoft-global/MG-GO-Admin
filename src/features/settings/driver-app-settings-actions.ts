@@ -2,8 +2,8 @@
 
 import { refresh, revalidatePath, updateTag } from "next/cache";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   ALLOWED_ICON_EXTENSIONS,
   ALLOWED_LOGO_EXTENSIONS,
@@ -120,14 +120,17 @@ async function patchAppSettings(
           "app_settings row id=1 is missing — re-seed it with INSERT INTO app_settings (id) VALUES (1).",
       };
     }
-    await ref.set(
-      {
-        ...patch,
-        updated_at: new Date(),
-        updated_by: updatedBy,
-      },
-      { merge: true },
-    );
+    await writeWithEpoch(db, "settings", ({ tx }) => {
+      tx.set(
+        ref,
+        {
+          ...patch,
+          updated_at: new Date(),
+          updated_by: updatedBy,
+        },
+        { merge: true },
+      );
+    });
     return {};
   } catch (error) {
     logWriteError(scope, error);
@@ -147,14 +150,9 @@ function revalidateDriverAppSettings(locale: string) {
 }
 
 async function requireSettingsManager() {
-  const session = await getSessionUser();
-  if (
-    !session ||
-    !hasPermissionInSet(session.permissions, "settings.manage", session.isSuperAdmin)
-  ) {
-    return { error: "not_authorized" as const };
-  }
-  return { session };
+  const auth = await requireMutationAuth("settings.manage");
+  if ("error" in auth) return auth;
+  return { session: auth.session };
 }
 
 function resolveIconUploadMeta(

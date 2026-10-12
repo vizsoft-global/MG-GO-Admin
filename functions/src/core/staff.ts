@@ -59,6 +59,10 @@ export async function requireStaff(
   }
 
   const db = getFirestore();
+  // Fresh profile on every call. Do not add a TTL cache here: approval, archive,
+  // and admin_role_id have to be current. Callable tokens are minted per request,
+  // so request.auth.token.auth_time is not the session cookie's auth_time and
+  // must not be compared with sessions_revoked_at.
   const profileSnap = await db.collection(COLLECTIONS.profiles).doc(uid).get();
   if (!profileSnap.exists) {
     throw new HttpsError("permission-denied", "not_authorized");

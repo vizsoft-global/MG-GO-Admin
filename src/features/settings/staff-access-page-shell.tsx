@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Link } from "@/i18n/navigation";
+import { queryKeys } from "@/lib/query/query-keys";
 import { selectOptionsFrom } from "@/lib/select-items";
 import type { AdminRoleRow } from "@/lib/auth/get-role-permissions";
 import { CATALOG_SLUGS } from "@/lib/auth/permission-catalog";
@@ -185,6 +187,7 @@ export function StaffAccessDetailShell({
 }) {
   const t = useTranslations("pages.settings.staffAccess");
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [kind, setKind] = useState<StaffAccessKind>(detail.accessKind);
   const [ticks, setTicks] = useState<Set<string>>(() => new Set(detail.slugs));
@@ -276,6 +279,7 @@ export function StaffAccessDetailShell({
         return;
       }
       toast.success(t("saved"));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.menu.all() });
       router.refresh();
     });
   };

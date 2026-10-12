@@ -1,9 +1,10 @@
 "use server";
 
 import { refresh, revalidatePath, updateTag } from "next/cache";
+import type { Firestore } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   ALLOWED_LOGO_EXTENSIONS,
   DEFAULT_APP_SETTINGS,
@@ -24,14 +25,15 @@ function revalidateBranding(locale: string) {
 }
 
 async function requireSettingsManager() {
-  const session = await getSessionUser();
-  if (
-    !session ||
-    !hasPermissionInSet(session.permissions, "settings.manage", session.isSuperAdmin)
-  ) {
-    return { error: "not_authorized" as const };
-  }
-  return { session };
+  const auth = await requireMutationAuth("settings.manage");
+  if ("error" in auth) return auth;
+  return { session: auth.session };
+}
+
+async function writeBrandingSettings(db: Firestore, patch: Record<string, unknown>): Promise<void> {
+  await writeWithEpoch(db, "settings", ({ tx }) => {
+    tx.set(db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID), patch, { merge: true });
+  });
 }
 
 function brandingObjectPath(relativePath: string): string {
@@ -93,17 +95,14 @@ export async function updateBranding(
   if (!db) return { error: "save_failed" };
 
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      {
-        app_name: appName,
-        app_subtitle: appSubtitle,
-        driver_app_login_hint: driverAppLoginHint,
-        font_family: fontFamily,
-        updated_at: new Date(),
-        updated_by: auth.session.id,
-      },
-      { merge: true },
-    );
+    await writeBrandingSettings(db, {
+      app_name: appName,
+      app_subtitle: appSubtitle,
+      driver_app_login_hint: driverAppLoginHint,
+      font_family: fontFamily,
+      updated_at: new Date(),
+      updated_by: auth.session.id,
+    });
   } catch {
     return { error: "save_failed" };
   }
@@ -153,15 +152,12 @@ export async function uploadLogo(
   if (!db) return { error: "save_failed" };
 
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      {
-        logo_url: logoUrl,
-        logo_type: logoType,
-        updated_at: new Date(),
-        updated_by: auth.session.id,
-      },
-      { merge: true },
-    );
+    await writeBrandingSettings(db, {
+      logo_url: logoUrl,
+      logo_type: logoType,
+      updated_at: new Date(),
+      updated_by: auth.session.id,
+    });
   } catch {
     return { error: "save_failed" };
   }
@@ -182,18 +178,15 @@ export async function resetBranding(
   if (!db) return { error: "save_failed" };
 
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      {
-        app_name: DEFAULT_APP_SETTINGS.app_name,
-        app_subtitle: DEFAULT_APP_SETTINGS.app_subtitle,
-        font_family: DEFAULT_APP_SETTINGS.font_family,
-        logo_url: null,
-        logo_type: DEFAULT_APP_SETTINGS.logo_type,
-        updated_at: new Date(),
-        updated_by: auth.session.id,
-      },
-      { merge: true },
-    );
+    await writeBrandingSettings(db, {
+      app_name: DEFAULT_APP_SETTINGS.app_name,
+      app_subtitle: DEFAULT_APP_SETTINGS.app_subtitle,
+      font_family: DEFAULT_APP_SETTINGS.font_family,
+      logo_url: null,
+      logo_type: DEFAULT_APP_SETTINGS.logo_type,
+      updated_at: new Date(),
+      updated_by: auth.session.id,
+    });
   } catch {
     return { error: "save_failed" };
   }

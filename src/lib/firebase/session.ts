@@ -24,6 +24,8 @@ export type StaffProbe = {
    * never answered must not be read as a signed-out admin.
    */
   unavailable: boolean;
+  /** Session cookie `auth_time` in milliseconds. Null when the cookie was not verified. */
+  authTimeMs: number | null;
 };
 
 export const SESSION_COOKIE_OPTIONS = {
@@ -49,33 +51,41 @@ export async function createStaffSessionCookie(
 }
 
 /**
- * Verifies the cookie and checks revocation. A revoked session, an expired
- * cookie and a malformed value are all a real "no session" answer; a network
- * failure or a stall is `unavailable`.
+ * Verifies the cookie. `checkRevoked` defaults to false: page and proxy reads
+ * compare auth_time with sessions_revoked_at instead. Mutations pass
+ * `checkRevoked: true` through requireMutationAuth.
+ * A bad, expired or revoked cookie is a real "no session"; a stall is `unavailable`.
  */
 export async function verifyStaffSessionCookie(
   cookie: string | undefined | null,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; checkRevoked?: boolean } = {},
 ): Promise<StaffProbe> {
-  if (!cookie) return { uid: null, claims: null, unavailable: false };
+  const checkRevoked = options.checkRevoked === true;
+  if (!cookie) return { uid: null, claims: null, unavailable: false, authTimeMs: null };
 
   const auth = await getFirebaseAuth();
-  if (!auth) return { uid: null, claims: null, unavailable: true };
+  if (!auth) return { uid: null, claims: null, unavailable: true, authTimeMs: null };
 
   const attempt: Promise<StaffProbe> = auth
-    .verifySessionCookie(cookie, true)
+    .verifySessionCookie(cookie, checkRevoked)
     .then((decoded): StaffProbe => {
       const claims = decoded as unknown as StaffClaims & { uid: string };
-      return { uid: decoded.uid, claims, unavailable: false };
+      const authTime = (decoded as { auth_time?: number }).auth_time;
+      return {
+        uid: decoded.uid,
+        claims,
+        unavailable: false,
+        authTimeMs: typeof authTime === "number" ? authTime * 1000 : null,
+      };
     })
     .catch((error: unknown): StaffProbe => {
       // The verifier rejects a bad/expired/revoked cookie with a specific
       // Firebase error. Those are facts about the session.
       const code = (error as { code?: string })?.code ?? "";
       if (code.startsWith("auth/")) {
-        return { uid: null, claims: null, unavailable: false };
+        return { uid: null, claims: null, unavailable: false, authTimeMs: null };
       }
-      return { uid: null, claims: null, unavailable: true };
+      return { uid: null, claims: null, unavailable: true, authTimeMs: null };
     });
 
   const ms = options.timeoutMs;
@@ -85,5 +95,6 @@ export async function verifyStaffSessionCookie(
     uid: null,
     claims: null,
     unavailable: true,
+    authTimeMs: null,
   }));
 }

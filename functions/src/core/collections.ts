@@ -41,6 +41,7 @@ export const COLLECTIONS = {
   adminPermissions: "admin_permissions",
   adminRolePermissions: "admin_role_permissions",
   adminUserPermissions: "admin_user_permissions",
+  authEpochs: "auth_epochs",
   driverEarningsDaily: "driver_earnings_daily",
   driverWalletEntries: "driver_wallet_entries",
   driverPayouts: "driver_payouts",
