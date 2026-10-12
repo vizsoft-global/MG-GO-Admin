@@ -7,6 +7,7 @@ import {
   type Transaction,
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
+import { stampStoredRow } from "../core/search-text";
 import { requireStaff, type StaffContext } from "../core/staff";
 import {
   pick,
@@ -966,6 +967,12 @@ export const adminUploadIncomingDocument = onCall(async (request) => {
       driver_name: driverName,
       driver_code: textOrNull(driver.driver_code),
       employee_id: textOrNull(driver.employee_id),
+      ...stampStoredRow("requests", {
+        request_code: code,
+        driver_name: driverName,
+        driver_code: textOrNull(driver.driver_code),
+        employee_id: textOrNull(driver.employee_id),
+      }),
       request_type: "document",
       status: "submitted",
       payload: {

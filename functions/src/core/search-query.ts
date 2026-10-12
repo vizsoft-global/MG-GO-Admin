@@ -3,6 +3,15 @@ import { prefixBounds } from "./search-text";
 
 const PER_FIELD_LIMIT = 200;
 
+/**
+ * Full-scan fallback. Prefix search stays off until a lowercase field is stored.
+ * Delete this only after the comparison report is clean and backfill --apply is approved.
+ * Callers still scan the collection when this returns true.
+ */
+export function fullScanFallback(indexed: boolean, term: string): boolean {
+  return term.trim().length === 0 || !indexed;
+}
+
 /** True once any document in the collection has stored the lowercase field. */
 export async function lowercaseFieldIndexed(
   db: Firestore,

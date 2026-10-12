@@ -24,8 +24,8 @@ import {
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";
-import { lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
-import { anyTokenPrefix, requestPrefixQueries, requestSearchStamp, tokenPrefixMatch } from "../core/search-text";
+import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
+import { anyTokenPrefix, requestPrefixQueries, stampStoredRow, tokenPrefixMatch } from "../core/search-text";
 import {
   IN_FILTER_LIMIT,
   chunk,
@@ -199,7 +199,7 @@ async function loadRequests(
   if (!term) return scanRequests(lower, upper);
   const db = getFirestore();
   const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.requests, "request_code_lower");
-  if (!indexed) return scanRequests(lower, upper);
+  if (fullScanFallback(indexed, term)) return scanRequests(lower, upper);
   const ids = await prefixMatchIds(db, COLLECTIONS.requests, requestPrefixQueries(term));
   const docs = await loadDocMap(COLLECTIONS.requests, ids);
   return [...docs.entries()].map(([id, data]) => ({
@@ -1093,11 +1093,11 @@ export const adminCreateRequest = onCall(async (request) => {
     driver_name: textOf(driverProfileSnap.get("full_name")) ?? textOf(driver.name),
     driver_code: textOf(driver.driver_code),
     employee_id: textOf(driver.employee_id),
-    ...requestSearchStamp({
-      requestCode: code,
-      driverName: textOf(driverProfileSnap.get("full_name")) ?? textOf(driver.name),
-      driverCode: textOf(driver.driver_code),
-      employeeId: textOf(driver.employee_id),
+    ...stampStoredRow("requests", {
+      request_code: code,
+      driver_name: textOf(driverProfileSnap.get("full_name")) ?? textOf(driver.name),
+      driver_code: textOf(driver.driver_code),
+      employee_id: textOf(driver.employee_id),
     }),
     created_day: kuwaitDayString(now),
     created_at: nowTs,

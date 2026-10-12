@@ -4,6 +4,7 @@ import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { applyDeliveryRollup } from "../core/rollups";
+import { stampStoredRow } from "../core/search-text";
 import { requireRider, riderError } from "../core/rider";
 import {
   haversineMeters,
@@ -33,6 +34,36 @@ const MAX_PROOF_LEN = 512;
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+function deliveryIdentityStamp(
+  driver: Record<string, unknown>,
+  profile: Record<string, unknown>,
+  orderId: unknown,
+): Record<string, string> {
+  return stampStoredRow("deliveries", {
+    external_order_id: orderId,
+    driver_name: asString(profile["full_name"]) ?? asString(driver["full_name"]) ?? asString(driver["name"]),
+    driver_code: driver.driver_code,
+    employee_id: driver.employee_id,
+  });
+}
+
+async function touchDeliveryStatusRollup(input: {
+  deliveryId: string;
+  driverId: string;
+  zoneId: string | null;
+  day: string | null;
+  status: string;
+}): Promise<void> {
+  if (!input.day || !/^\d{4}-\d{2}-\d{2}$/.test(input.day)) return;
+  await applyDeliveryRollup(getFirestore(), {
+    deliveryId: input.deliveryId,
+    driverId: input.driverId,
+    zoneId: input.zoneId,
+    day: input.day,
+    status: input.status,
+  });
 }
 
 function asDate(value: unknown): Date | null {
@@ -491,9 +522,17 @@ export const driverCreatePickup = onCall(async (request) => {
     shift_date: shiftDate,
     created_at: stamp,
     updated_at: stamp,
+    ...deliveryIdentityStamp(ctx.driver, ctx.profile, orderId),
   };
 
   await getFirestore().collection(COLLECTIONS.deliveries).doc(id).set(row);
+  await touchDeliveryStatusRollup({
+    deliveryId: id,
+    driverId: ctx.uid,
+    zoneId: asString(ctx.driver["zone_id"]),
+    day: shiftDate,
+    status: "in_transit",
+  });
   await logDriverOperation({
     driverId: ctx.uid,
     module: "delivery",
@@ -539,15 +578,13 @@ export const driverCompleteDelivery = onCall(async (request) => {
   const status = asString(current["status"]);
   if (status === "pending") {
     const retryDay = asString(current["shift_date"]) ?? asString(current["delivered_day"]);
-    if (retryDay && /^\d{4}-\d{2}-\d{2}$/.test(retryDay)) {
-      await applyDeliveryRollup(getFirestore(), {
-        deliveryId,
-        driverId: ctx.uid,
-        zoneId: asString(current["zone_id"]) ?? asString(ctx.driver.zone_id),
-        day: retryDay,
-        status: "pending",
-      });
-    }
+    await touchDeliveryStatusRollup({
+      deliveryId,
+      driverId: ctx.uid,
+      zoneId: asString(current["zone_id"]) ?? asString(ctx.driver["zone_id"]),
+      day: retryDay,
+      status: "pending",
+    });
     return serializeDelivery(snap.id, current);
   }
   if (status === "verified") {
@@ -571,12 +608,13 @@ export const driverCompleteDelivery = onCall(async (request) => {
     status: "pending",
     shift_date: shiftDate,
     updated_at: stamp,
+    ...deliveryIdentityStamp(ctx.driver, ctx.profile, current["external_order_id"]),
   };
   await snap.ref.set(patch, { merge: true });
-  await applyDeliveryRollup(getFirestore(), {
+  await touchDeliveryStatusRollup({
     deliveryId,
     driverId: ctx.uid,
-    zoneId: asString(current["zone_id"]) ?? asString(ctx.driver.zone_id),
+    zoneId: asString(current["zone_id"]) ?? asString(ctx.driver["zone_id"]),
     day: shiftDate,
     status: "pending",
   });
@@ -643,8 +681,16 @@ export const driverCancelDelivery = onCall(async (request) => {
     cancel_lng: lng,
     status: "cancelled",
     updated_at: stamp,
+    ...deliveryIdentityStamp(ctx.driver, ctx.profile, current["external_order_id"]),
   };
   await snap.ref.set(patch, { merge: true });
+  await touchDeliveryStatusRollup({
+    deliveryId,
+    driverId: ctx.uid,
+    zoneId: asString(current["zone_id"]) ?? asString(ctx.driver["zone_id"]),
+    day: asString(current["shift_date"]) ?? asString(current["created_day"]),
+    status: "cancelled",
+  });
   await logDriverOperation({
     driverId: ctx.uid,
     module: "delivery",
