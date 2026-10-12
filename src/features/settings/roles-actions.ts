@@ -65,6 +65,8 @@ async function writeRoleSlugs(
   roleId: string,
   slugs: string[],
 ): Promise<EpochCounters | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   try {
     const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
       tx.set(

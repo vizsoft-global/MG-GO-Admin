@@ -2656,6 +2656,8 @@
       "loadingMore": "Loading more…",
       "showingCount": "Showing {count} of {total}",
       "allLoaded": "All {total} loaded",
+      "searchIncomplete": "These results are incomplete. The search hit the result cap, so newer matches outside that window are missing.",
+      "prefixTooShort": "Enter at least 4 characters to search by the start of an order id or name.",
       "kpiTotal": "Total Deliveries",
       "kpiAllTime": "All time",
       "kpiErrorHint": "All-time counters could not be loaded.",

@@ -89,6 +89,8 @@ async function saveBrandingObject(
 }
 
 async function removeStoragePaths(paths: string[]) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   if (paths.length === 0) return;
   const bucket = await brandingBucket();
   if (!bucket) return;
@@ -108,6 +110,8 @@ async function patchAppSettings(
   patch: Record<string, unknown>,
   updatedBy: string,
 ): Promise<{ error?: string; errorDetail?: string; epochs?: EpochCounters }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const db = await staffDb();
   if (!db) return { error: "save_failed", errorDetail: "not_configured" };
 

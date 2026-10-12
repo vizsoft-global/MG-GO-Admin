@@ -21,6 +21,7 @@ import type {
   DriverImportJobSummary,
 } from "./import/import-job-types";
 import type { DriverImportCredential, DriverImportPreviewRow } from "./types";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 
 const MAX_EVENTS = 2000;
 
@@ -65,6 +66,8 @@ function mapSummary(row: {
 async function pauseStaleJobs(
   db: StaffClient,
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const staleBefore = new Date(Date.now() - IMPORT_JOB_STALE_MS).toISOString();
   await db
     .from("driver_import_batches")
@@ -126,6 +129,8 @@ export async function startDriverImportJob(payload: {
   duplicateStrategy: "skip" | "update";
   approveImmediately: boolean;
 }): Promise<{ job: DriverImportJobSummary } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
 
@@ -192,6 +197,8 @@ export async function processDriverImportChunk(
     }
   | { error: string }
 > {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
   if (!jobId) return { error: "missing_fields" };
@@ -362,6 +369,8 @@ export async function setDriverImportJobStatus(
   jobId: string,
   action: ImportJobAction,
 ): Promise<{ job: DriverImportJobSummary } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
   if (!jobId) return { error: "missing_fields" };

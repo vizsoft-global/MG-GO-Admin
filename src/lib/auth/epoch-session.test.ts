@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import type { Firestore } from "firebase-admin/firestore";
 import { writeWithEpoch } from "./auth-epochs";
+import { claimSuperAdminAtomic } from "./sync-profile";
 import {
   EPOCH_CACHE_MAX_TTL_MS,
   createEpochCache,
@@ -20,10 +21,8 @@ import { panelGate, signedInEntryRedirect } from "./staff-entry";
 import { applyReturnedEpochs } from "../menu/apply-returned-epochs";
 
 /**
- * Out of scope for the writer grep (they still write app_settings without
- * writeWithEpoch): src/features/performance/performance-actions.ts
- * updatePerformanceScoreWeights, src/features/esign/esign-actions.ts
- * updateEsignScreenshotDefault, src/features/attendance/attendance-reporting-actions.ts.
+ * Epoch writers are checked per function across src and functions/src.
+ * A function that only reads app settings does not count.
  */
 
 type Stored = Record<string, unknown>;
@@ -365,6 +364,46 @@ test("unclaimed settings and maintenance mode are not served from the epoch cach
   assert.equal(stored?.doc.data?.app_name, "claimed");
 });
 
+test("first super-admin claim succeeds once and is rejected when one exists", async () => {
+  const db = createFakeDb();
+  db.seed("app_settings/1", { super_admin_claimed: false });
+  db.seed("auth_epochs/current", { access: 4, settings: 2, menu: 1 });
+  db.seed("profiles/first", { role: "staff" });
+
+  const first = await claimSuperAdminAtomic(asFirestore(db), "first");
+  assert.equal(first, true);
+  assert.equal(db.read("app_settings/1")?.super_admin_claimed, true);
+  assert.equal(db.read("app_settings/1")?.super_admin_user_id, "first");
+  assert.equal(db.read("profiles/first")?.access_kind, "manager");
+  assert.equal(db.read("auth_epochs/current")?.access, 5);
+  assert.equal(db.read("auth_epochs/current")?.settings, 3);
+  assert.equal(db.read("auth_epochs/current")?.menu, 1);
+
+  const again = await claimSuperAdminAtomic(asFirestore(db), "second");
+  assert.equal(again, false);
+  assert.equal(db.read("app_settings/1")?.super_admin_user_id, "first");
+  assert.equal(db.read("profiles/second"), undefined);
+  assert.equal(db.read("auth_epochs/current")?.access, 5);
+  assert.equal(db.read("auth_epochs/current")?.settings, 3);
+
+  const taken = createFakeDb();
+  taken.seed("app_settings/1", {
+    super_admin_claimed: true,
+    super_admin_user_id: "existing",
+  });
+  taken.seed("auth_epochs/current", { access: 1, settings: 1, menu: 0 });
+  const rejected = await claimSuperAdminAtomic(asFirestore(taken), "other");
+  assert.equal(rejected, false);
+  assert.equal(taken.read("app_settings/1")?.super_admin_user_id, "existing");
+  assert.equal(taken.read("auth_epochs/current")?.access, 1);
+  assert.equal(taken.read("auth_epochs/current")?.settings, 1);
+
+  const action = fs.readFileSync(path.join(ROOT, "src/features/auth/actions.ts"), "utf8");
+  const body = functionBody(action, "claimSuperAdmin");
+  assert.match(body, /if \(!claimed\)/);
+  assert.match(body, /error: "claim_failed"/);
+});
+
 test("reads do not check revocation and mutations do", () => {
   const root = path.resolve(import.meta.dirname, "../../..");
   const session = fs.readFileSync(path.join(root, "src/lib/firebase/session.ts"), "utf8");
@@ -390,8 +429,10 @@ test("reads do not check revocation and mutations do", () => {
     path.join(root, "functions/src/rpcs/performance-extra.ts"),
     "utf8",
   );
-  assert.match(performance, /FieldValue\.increment/);
-  assert.match(performance, /authEpochs/);
+  const epochWrite = fs.readFileSync(path.join(root, "functions/src/core/epoch-write.ts"), "utf8");
+  assert.match(epochWrite, /FieldValue\.increment/);
+  assert.match(epochWrite, /auth_epochs/);
+  assert.match(performance, /writeWithEpoch\(db,\s*"settings"/);
 });
 
 const ROOT = path.resolve(import.meta.dirname, "../../..");
@@ -444,43 +485,235 @@ function functionBody(source: string, name: string): string {
   throw new Error(`unclosed ${name}`);
 }
 
-function hasFirestoreWrite(source: string): boolean {
-  return source.split("\n").some((line) => {
-    if (/cache\.set|maps\[|tokenCache\.set|localStorage\.set|queryClient\.set/.test(line)) {
-      return false;
+const EPOCH_SPECS = [
+  { expr: "COLLECTIONS.appSettings", literal: "app_settings" },
+  { expr: "COLLECTIONS.menuConfigs", literal: "menu_configs" },
+  { expr: "COLLECTIONS.adminRoles", literal: "admin_roles" },
+  { expr: "COLLECTIONS.adminRolePermissions", literal: "admin_role_permissions" },
+  { expr: "COLLECTIONS.adminUserPermissions", literal: "admin_user_permissions" },
+  { expr: "COLLECTIONS.adminPermissions", literal: "admin_permissions" },
+] as const;
+
+const EPOCH_HELPER_FILE = "functions/src/core/epoch-write.ts";
+
+function escapeReg(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripComments(source: string): string {
+  let out = "";
+  let quote: "'" | "\"" | "`" | null = null;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] ?? "";
+    const next = source[index + 1] ?? "";
+    if (quote) {
+      out += char;
+      if (char === "\\" && quote !== "`") {
+        index += 1;
+        out += source[index] ?? "";
+        continue;
+      }
+      if (char === quote) quote = null;
+      continue;
     }
-    return (
-      /(?:tx|batch)\.(?:set|delete|update)\(/.test(line) ||
-      /\.ref\.(?:set|delete|update)\(/.test(line) ||
-      /[Rr]ef\.(?:set|delete|update)\(/.test(line) ||
-      /\)\.(?:set|delete|update)\(/.test(line)
+    if (char === "'" || char === "\"" || char === "`") {
+      quote = char;
+      out += char;
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      index += 1;
+      while (index + 1 < source.length && source[index + 1] !== "\n") index += 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      index += 2;
+      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) index += 1;
+      index += 1;
+      out += " ";
+      continue;
+    }
+    out += char;
+  }
+  return out;
+}
+
+function epochTokens(source: string): string[] {
+  const tokens = new Set<string>();
+  for (const spec of EPOCH_SPECS) {
+    const quoted = [`"${spec.literal}"`, `'${spec.literal}'`];
+    if (!source.includes(spec.expr) && !quoted.some((literal) => source.includes(literal))) continue;
+    tokens.add(spec.expr);
+    for (const literal of quoted) tokens.add(literal);
+  }
+  const alias = /const\s+([A-Za-z0-9_]+)\s*=\s*(COLLECTIONS\.[A-Za-z0-9_]+|"[^"]+"|'[^']+')/g;
+  let match: RegExpExecArray | null;
+  while ((match = alias.exec(source))) {
+    if (tokens.has(match[2] ?? "")) tokens.add(match[1] ?? "");
+  }
+  return [...tokens].filter((token) => token.length > 0);
+}
+
+type SourceFn = { name: string; body: string };
+
+function splitTopLevelFunctions(source: string): SourceFn[] {
+  const starts: Array<{ name: string; index: number }> = [];
+  const re =
+    /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)|^(?:export\s+)?const\s+([A-Za-z0-9_]+)\s*=\s*(?:async\s+)?(?:<[^>\n]{0,120}>\s*)?(?:\(|function\b|onCall\b|onRequest\b|onSchedule\b|measureOnCall\b)/gm;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(source))) {
+    starts.push({ name: match[1] || match[2] || "anonymous", index: match.index });
+  }
+  if (starts.length === 0) return [{ name: "<module>", body: source }];
+  const fns = starts.map((start, index) => ({
+    name: start.name,
+    body: source.slice(start.index, starts[index + 1]?.index ?? source.length),
+  }));
+  const preamble = source.slice(0, starts[0]?.index ?? 0);
+  if (/\b(?:set|update|delete|create|patchDoc|setDoc|insertDoc|deleteDoc)\s*\(/.test(preamble)) {
+    fns.unshift({ name: "<module>", body: preamble });
+  }
+  return fns;
+}
+
+function hasEpochHelperCall(body: string): boolean {
+  return /\bwriteWithEpoch(?:Counters)?\s*\(/.test(body);
+}
+
+function rawEpochWrite(body: string, tokens: string[]): boolean {
+  for (const token of tokens) {
+    const t = escapeReg(token);
+    if (
+      new RegExp(
+        `collection\\(\\s*${t}\\s*\\)\\s*\\.\\s*doc\\([\\s\\S]{0,200}?\\)\\s*\\.\\s*(?:set|update|delete|create)\\(`,
+      ).test(body)
+    ) {
+      return true;
+    }
+    if (
+      new RegExp(
+        `\\b(?:tx|batch|transaction)\\s*\\.\\s*(?:set|update|delete|create)\\(\\s*(?:[A-Za-z_]\\w*\\s*\\.\\s*)?collection\\(\\s*${t}\\s*\\)`,
+      ).test(body)
+    ) {
+      return true;
+    }
+    if (new RegExp(`\\b(?:patchDoc|setDoc|insertDoc|deleteDoc)\\s*\\([\\s\\S]{0,160}?${t}`).test(body)) {
+      return true;
+    }
+    const assign = new RegExp(
+      `(?:const|let|var)\\s+(\\w+)\\s*=\\s*(?:await\\s+)?[^;]{0,500}?collection\\(\\s*${t}\\s*\\)\\s*\\.\\s*doc\\(`,
+      "g",
     );
-  });
+    let assigned: RegExpExecArray | null;
+    while ((assigned = assign.exec(body))) {
+      const name = escapeReg(assigned[1] ?? "");
+      if (
+        new RegExp(
+          `\\b${name}\\s*\\.\\s*(?:set|update|delete|create)\\(|\\b(?:tx|batch|transaction)\\s*\\.\\s*(?:set|update|delete|create)\\(\\s*${name}\\b`,
+        ).test(body)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function writesHelperEpochDocs(body: string, helpers: SourceFn[], tokens: string[]): boolean {
+  for (const helper of helpers) {
+    const touches = tokens.some((token) =>
+      new RegExp(`collection\\(\\s*${escapeReg(token)}\\s*\\)`).test(helper.body),
+    );
+    if (!touches) continue;
+    const call = new RegExp(
+      `(?:const|let)\\s*(?:\\{([^}]+)\\}|([A-Za-z_]\\w*))\\s*=\\s*await\\s+${escapeReg(helper.name)}\\s*\\(`,
+      "g",
+    );
+    let match: RegExpExecArray | null;
+    while ((match = call.exec(body))) {
+      const names = (match[1] ?? match[2] ?? "")
+        .split(",")
+        .map((part) => part.trim().split(/\s+/).pop() ?? "")
+        .map((part) => (part.split(":")[0] ?? "").trim())
+        .filter((name) => /^[A-Za-z_]\w*$/.test(name));
+      for (const name of names) {
+        const n = escapeReg(name);
+        if (
+          new RegExp(
+            `\\b(?:tx|batch|transaction)\\s*\\.\\s*(?:set|update|delete|create)\\(\\s*${n}(?:\\[\\d+\\])?\\.ref\\b|\\b${n}(?:\\[\\d+\\])?\\.ref\\s*\\.\\s*(?:set|update|delete|create)\\(|for\\s*\\(const\\s+(\\w+)\\s+of\\s+${n}\\)[\\s\\S]{0,500}?\\b(?:tx|batch|transaction)\\s*\\.\\s*(?:set|update|delete|create)\\(\\s*\\1\\.ref\\b`,
+          ).test(body)
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function classifyEpochWriters(relative: string, source: string): Array<{ name: string; guarded: boolean }> {
+  const posix = relative.split(path.sep).join("/");
+  if (posix === EPOCH_HELPER_FILE || posix.startsWith("functions/lib/")) return [];
+  if (posix.endsWith(".test.ts") || posix.endsWith(".test.tsx") || posix.endsWith(".d.ts")) return [];
+  const stripped = stripComments(source);
+  const tokens = epochTokens(stripped);
+  if (tokens.length === 0) return [];
+  const fns = splitTopLevelFunctions(stripped);
+  const rows: Array<{ name: string; guarded: boolean }> = [];
+  for (const fn of fns) {
+    const others = fns.filter((other) => other !== fn);
+    const writes = rawEpochWrite(fn.body, tokens) || writesHelperEpochDocs(fn.body, others, tokens);
+    if (!writes) continue;
+    rows.push({ name: fn.name, guarded: hasEpochHelperCall(fn.body) });
+  }
+  return rows;
+}
+
+function epochWriterMisses(relative: string, source: string): string[] {
+  const posix = relative.split(path.sep).join("/");
+  return classifyEpochWriters(relative, source)
+    .filter((row) => !row.guarded)
+    .map((row) => `${posix} ${row.name}`);
 }
 
 test("epoch writers and removal paths go through the helpers", () => {
-  const writerRoots = [
-    "src/features/settings",
-    "src/features/auth",
-    "src/services",
-    "src/lib/branding",
-    "src/lib/auth",
-  ];
-  const epochCollection =
-    /COLLECTIONS\.(?:adminRoles|adminRolePermissions|adminUserPermissions|appSettings|menuConfigs|adminPermissions)\b/;
-  for (const relative of writerRoots) {
-    for (const file of walk(path.join(ROOT, relative))) {
-      if (file.endsWith(".test.ts")) continue;
-      const source = fs.readFileSync(file, "utf8");
-      if (!epochCollection.test(source) || !hasFirestoreWrite(source)) continue;
-      assert.match(source, /writeWithEpoch/, path.relative(ROOT, file));
+  const misses: string[] = [];
+  for (const rootName of ["src", "functions/src"]) {
+    for (const file of walk(path.join(ROOT, rootName))) {
+      const relative = path.relative(ROOT, file);
+      if (relative.endsWith(".test.ts") || relative.endsWith(".test.tsx")) continue;
+      misses.push(...epochWriterMisses(relative, fs.readFileSync(file, "utf8")));
     }
   }
+  assert.deepEqual(misses, []);
+
+  const detected = (relative: string) =>
+    classifyEpochWriters(relative, fs.readFileSync(path.join(ROOT, relative), "utf8")).map((row) => row.name);
+  const expectWriters: Array<[string, string[]]> = [
+    ["src/features/attendance/attendance-reporting-actions.ts", ["updateAttendanceThresholdSettings"]],
+    ["src/features/performance/performance-actions.ts", ["updatePerformanceScoreWeights"]],
+    ["src/features/esign/esign-actions.ts", ["updateEsignScreenshotDefault"]],
+    ["functions/src/rpcs/performance-extra.ts", ["adminUpdatePerformanceComponents"]],
+    ["src/services/menu-config-service.ts", ["saveMenuConfig", "resetMenuConfig"]],
+    ["src/features/settings/branding-actions.ts", ["writeBrandingSettings"]],
+    ["src/features/settings/theme-actions.ts", ["setActiveTheme", "deleteCustomTheme"]],
+    ["src/lib/auth/epoch-cache.ts", []],
+  ];
+  for (const [relative, names] of expectWriters) {
+    assert.deepEqual(detected(relative).sort(), [...names].sort(), relative);
+  }
+  assert.equal(detected("src/services/menu-config-service.ts").includes("getMenuConfig"), false);
+  assert.equal(detected("src/features/settings/theme-actions.ts").includes("createCustomTheme"), false);
 
   const scans = [
     ...walk(path.join(ROOT, "src")),
     ...walk(path.join(ROOT, "functions/src")),
-  ].filter((file) => !file.endsWith(".test.ts"));
+  ].filter(
+    (file) =>
+      !file.endsWith(".test.ts") &&
+      // Detector regex names revokeRefreshTokens; it does not call it.
+      !file.endsWith(`${path.sep}mutation-write-scan.ts`),
+  );
 
   for (const file of scans) {
     const source = fs.readFileSync(file, "utf8");

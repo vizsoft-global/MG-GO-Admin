@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 
@@ -13,6 +14,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ code: string }> },
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return NextResponse.json({ error: mutationAuth.error }, { status: mutationAuth.error === "not_configured" ? 503 : 401 });
   try {
     const { code } = await params;
     const body = (await request.json()) as {

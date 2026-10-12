@@ -1,5 +1,6 @@
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
-import { FieldValue, getFirestore, Timestamp } from "../core/fs";
+import { getFirestore, Timestamp } from "../core/fs";
+import { writeWithEpoch } from "../core/epoch-write";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { parseId } from "../core/query";
@@ -760,13 +761,8 @@ export const adminUpdatePerformanceComponents = onCall(async (request) => {
     if (sla !== null) patch.delivery_ontime_minutes = sla;
 
     // Same increment as Next writeWithEpoch("settings"). Do not cache the staff profile.
-    await db.runTransaction(async (tx) => {
+    await writeWithEpoch(db, "settings", ({ tx }) => {
       tx.set(settingsRef, patch, { merge: true });
-      tx.set(
-        db.collection(COLLECTIONS.authEpochs).doc("current"),
-        { settings: FieldValue.increment(1) },
-        { merge: true },
-      );
     });
   }
 

@@ -3,6 +3,7 @@
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS, UNIQ_COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import {
@@ -128,6 +129,8 @@ async function identityTaken(
 }
 
 async function claimPlate(db: Firestore, plate: string, ownerId: string): Promise<boolean> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const ref = db.collection(UNIQ_COLLECTIONS.plate).doc(encodeURIComponent(plate));
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -139,6 +142,8 @@ async function claimPlate(db: Firestore, plate: string, ownerId: string): Promis
 }
 
 async function releasePlate(db: Firestore, plate: string, ownerId: string) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const ref = db.collection(UNIQ_COLLECTIONS.plate).doc(encodeURIComponent(plate));
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -372,6 +377,8 @@ async function updateLinkedIntakes(
   driverId: string,
   patch: Record<string, unknown>,
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const snap = await db
     .collection(COLLECTIONS.driverIntakes)
     .where("linked_profile_id", "==", driverId)
@@ -394,6 +401,8 @@ async function updateLinkedIntakes(
 export async function saveVehicle(
   formData: FormData,
 ): Promise<{ error?: string; id?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
 
@@ -540,6 +549,8 @@ export async function assignVehicleDriver(
   vehicleId: string,
   driverId: string | null,
 ): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
   const id = vehicleId.trim();
@@ -626,6 +637,8 @@ export async function bulkUpdateVehicles(
   ids: string[],
   patch: { status?: VehicleStatus; ownerPartnerId?: string | null },
 ): Promise<{ error?: string; updated?: number }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
   const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))].slice(0, BULK_VEHICLE_CAP);
@@ -677,6 +690,8 @@ export async function bulkUpdateVehicles(
 }
 
 export async function updateVehicleTypeLabel(formData: FormData): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
 

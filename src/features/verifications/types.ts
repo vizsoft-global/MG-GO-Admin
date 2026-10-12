@@ -163,6 +163,7 @@ export type VerificationExportData = {
 
 export type VerificationActionError =
   | "not_authorized"
+  | "not_configured"
   | "missing_fields"
   | "invalid_count"
   | "driver_not_found"

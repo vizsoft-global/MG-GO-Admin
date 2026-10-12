@@ -5,6 +5,7 @@ import { staffClient } from "@/features/drivers/driver-uniqueness";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
 import { parseSearchTerm } from "@/features/drivers/search-active-drivers";
 import { lookupToImportMatch } from "@/features/drivers/resolve-import-row";
@@ -221,6 +222,8 @@ export type SaveDriverGroupInput = {
 export async function createDriverGroup(
   input: SaveDriverGroupInput,
 ): Promise<{ id: string } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireDriverGroupsManage("create");
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim()) return { error: "invalid_input" };
@@ -255,6 +258,8 @@ export async function updateDriverGroup(
   id: string,
   input: SaveDriverGroupInput,
 ): Promise<{ ok: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireDriverGroupsManage("edit");
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim()) return { error: "invalid_input" };
@@ -285,6 +290,8 @@ export async function updateDriverGroup(
 }
 
 export async function deleteDriverGroup(id: string): Promise<{ ok: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireDriverGroupsManage("delete");
   if (!session) return { error: "not_authorized" };
 
@@ -308,6 +315,8 @@ async function syncGroupMembers(
   groupId: string,
   memberIds: string[],
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   await db.from("driver_group_members").delete().eq("group_id", groupId);
   const unique = [...new Set(memberIds)];
   if (unique.length > 0) {
@@ -394,6 +403,8 @@ export async function applyGroupMemberImport(
   groupId: string,
   rows: GroupImportInputRow[],
 ): Promise<{ added: number; rejected: number } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireDriverGroupsManage();
   if (!session) return { error: "not_authorized" };
 

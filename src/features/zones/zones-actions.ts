@@ -3,6 +3,7 @@
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import {
@@ -71,6 +72,8 @@ async function upsertZoneGeofenceSettings(
   zoneId: string,
   settings: ZoneGeofenceInput,
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   await db
     .collection(SETTINGS_COLLECTION)
     .doc(zoneId)
@@ -103,6 +106,8 @@ export async function createZone(input: {
   geometry: ZoneGeoFeature;
   geofence?: Partial<ZoneGeofenceInput>;
 }): Promise<ZoneMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireZonesManager("create");
   if ("error" in auth) return auth;
 
@@ -169,6 +174,8 @@ export async function updateZone(input: {
   geometry: ZoneGeoFeature;
   geofence?: Partial<ZoneGeofenceInput>;
 }): Promise<ZoneMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireZonesManager("edit");
   if ("error" in auth) return auth;
 
@@ -243,6 +250,8 @@ export async function updateZone(input: {
 }
 
 async function clearZoneLinks(db: Firestore, zoneId: string) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const drivers = await db.collection(COLLECTIONS.drivers).where("zone_id", "==", zoneId).get();
   let batch = db.batch();
   let pending = 0;
@@ -274,6 +283,8 @@ async function clearZoneLinks(db: Firestore, zoneId: string) {
 }
 
 export async function deleteZone(id: string, force = false): Promise<ZoneMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireZonesManager("delete");
   if ("error" in auth) return auth;
 

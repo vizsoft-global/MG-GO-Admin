@@ -5,8 +5,10 @@ import { callAdminFunction } from "@/lib/firebase/callable";
 import { getFirebaseStorage } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { effectiveEsignStatus, isEsignDueDateAllowed } from "./esign-due-date";
@@ -191,6 +193,8 @@ async function patchDoc(
   id: string,
   data: Record<string, unknown>,
 ): Promise<string | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return mutationAuth.error;
   const db = await openDb();
   if (!db) return "not_configured";
   try {
@@ -208,6 +212,8 @@ async function insertDoc(
   name: string,
   data: Record<string, unknown>,
 ): Promise<{ id?: string; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const db = await openDb();
   if (!db) return { error: "not_configured" };
   const id = crypto.randomUUID();
@@ -220,6 +226,8 @@ async function insertDoc(
 }
 
 async function deleteDoc(name: string, id: string): Promise<string | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return mutationAuth.error;
   const db = await openDb();
   if (!db) return "not_configured";
   try {
@@ -626,6 +634,11 @@ export async function upsertEsignCategory(input: {
   is_active?: boolean;
   sort_order?: number;
 }): Promise<{ ok: boolean; error?: string; id?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) {
+    if (mutationAuth.error === "not_configured") return { ok: false, error: "not_configured" };
+    throw new Error("not_authorized");
+  }
   await requireRequestsManage();
   const key = input.key.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
   const label_en = input.label_en.trim();
@@ -674,6 +687,11 @@ export async function upsertEsignCategory(input: {
 export async function deleteEsignCategory(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) {
+    if (mutationAuth.error === "not_configured") return { ok: false, error: "not_configured" };
+    throw new Error("not_authorized");
+  }
   await requireRequestsManage();
   const error = await deleteDoc(COLLECTIONS.esignCategories, id);
   if (error) return { ok: false, error };
@@ -700,12 +718,34 @@ export async function fetchEsignScreenshotDefault(): Promise<{
 export async function updateEsignScreenshotDefault(
   value: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) {
+    if (mutationAuth.error === "not_configured") return { ok: false, error: "not_configured" };
+    throw new Error("not_authorized");
+  }
   await requireRequestsManage();
-  const error = await patchDoc(COLLECTIONS.appSettings, APP_SETTINGS_DOC_ID, {
-    esign_screenshot_default: value,
-    updated_at: new Date(),
-  });
-  if (error) return { ok: false, error };
+  const db = await openDb();
+  if (!db) return { ok: false, error: "not_configured" };
+  try {
+    await writeWithEpoch(db, "settings", async ({ tx, skipEpoch }) => {
+      const ref = db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID);
+      const snap = await tx.get(ref);
+      if (!snap.exists) {
+        skipEpoch();
+        return;
+      }
+      tx.set(
+        ref,
+        {
+          esign_screenshot_default: value,
+          updated_at: new Date(),
+        },
+        { merge: true },
+      );
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "write_failed" };
+  }
 
   await logAdminMutation({
     action: "update",

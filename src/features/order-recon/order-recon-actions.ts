@@ -2,6 +2,7 @@
 
 import { getSessionUser, type SessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import type { DocumentSnapshot } from "firebase-admin/firestore";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
@@ -194,6 +195,8 @@ type CompareRow = {
 export async function commitOrderRecon(
   preview: ReconPreview,
 ): Promise<{ run: OrderReconRun } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireOrderRecon("manage");
   if ("error" in auth) return auth;
 
@@ -505,6 +508,8 @@ export async function redoOrderReconImport(): Promise<{ error?: string }> {
 }
 
 async function replayReconImport(direction: "undo" | "redo"): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireOrderRecon("manage");
   if ("error" in auth) return auth;
 

@@ -5,8 +5,10 @@ import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import type {
   AttendanceDailyRow,
   AttendanceExceptionRow,
@@ -281,13 +283,18 @@ export async function fetchAttendanceThresholdSettings(): Promise<AttendanceThre
 export async function updateAttendanceThresholdSettings(
   input: AttendanceThresholdSettings,
 ): Promise<{ success: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error("not_authorized");
   await requireAttendanceManage();
   const db = await reportingDb();
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      { ...input, updated_at: new Date().toISOString() },
-      { merge: true },
-    );
+    await writeWithEpoch(db, "settings", ({ tx }) => {
+      tx.set(
+        db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID),
+        { ...input, updated_at: new Date().toISOString() },
+        { merge: true },
+      );
+    });
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "save_failed" };
   }

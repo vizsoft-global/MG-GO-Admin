@@ -1,6 +1,8 @@
 ﻿import "server-only";
 import { cookies } from "next/headers";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { getFirebaseAuth } from "./admin";
+import { isMutatingAdminRpc } from "./mutating-rpc";
 import { getFirebaseAdminConfig } from "./config";
 import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "./db";
 import { staffDb } from "./staff-db";
@@ -179,7 +181,16 @@ export async function callAdminFunction<T = unknown>(
   const config = getFirebaseAdminConfig();
   if (!config) return { data: null, error: { message: "not_configured" } };
 
-  const uid = await callerUid();
+  let uid: string | null;
+  if (isMutatingAdminRpc(rpcName)) {
+    const mutationAuth = await requireMutationAuth();
+    if ("error" in mutationAuth) {
+      return { data: null, error: { message: mutationAuth.error } };
+    }
+    uid = mutationAuth.session.id;
+  } else {
+    uid = await callerUid();
+  }
   if (!uid) return { data: null, error: { message: "not_authenticated" } };
 
   const token = await mintIdToken(uid);

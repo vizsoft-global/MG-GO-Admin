@@ -8,6 +8,7 @@ import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import type {
   ImportMappedRow,
   ImportPreviewRow,
@@ -559,6 +560,8 @@ export async function createVerification(input: {
   reportedCount: number;
   notes?: string;
 }): Promise<VerificationMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireVerificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -617,6 +620,8 @@ export async function updateVerification(input: {
   reportedCount: number;
   notes?: string;
 }): Promise<VerificationMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireVerificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -677,6 +682,8 @@ export async function reconcileVerification(
 export async function deleteVerification(
   id: string,
 ): Promise<VerificationMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireSuperAdmin();
   if (!session) return { error: "not_authorized" };
 
@@ -853,6 +860,8 @@ export async function applyImportBatch(payload: {
     }
   | { error: VerificationActionError; errorDetail?: string }
 > {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireVerificationsManage();
   if (!session) return { error: "not_authorized" };
 

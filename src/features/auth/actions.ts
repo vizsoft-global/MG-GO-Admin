@@ -18,6 +18,7 @@ import {
   setStaffPassword,
   signInStaffWithPassword,
 } from "@/lib/firebase/staff-auth";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { claimSuperAdminAtomic, syncAdminProfile } from "@/lib/auth/sync-profile";
 import { getAppOpsSettings } from "@/lib/auth/app-settings";
 import { logAdminAuthEvent } from "@/lib/audit/log-admin-activity";
@@ -266,6 +267,9 @@ export async function updatePassword(
   if (!probe.uid) {
     return { error: "update_failed" };
   }
+
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
 
   const ok = await setStaffPassword(probe.uid, password);
   if (!ok) {

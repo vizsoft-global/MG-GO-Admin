@@ -3,6 +3,7 @@
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { employeeIdKey, normalizeEmployeeId } from "./driver-errors";
 import {
@@ -128,6 +129,8 @@ function syntheticDriverEmail(driverCode: string): string {
 export async function approveDriverIntake(
   intakeId: string,
 ): Promise<ApproveDriverResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
   if (!intakeId) return { error: "missing_fields" };
@@ -534,6 +537,8 @@ export async function applyOneImportRow(
       failure: { rowIndex: row.rowIndex, reason },
     };
   };
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return fail(mutationAuth.error);
 
   const phone = row.phone?.trim() ? normalizeKuwaitPhone(row.phone) : null;
   const civilId = row.civil_id?.trim() ? normalizeCivilId(row.civil_id) : null;
@@ -866,6 +871,8 @@ export async function applyDriverImportChunk(payload: {
     }
   | { error: string }
 > {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
 

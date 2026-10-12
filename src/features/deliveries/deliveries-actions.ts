@@ -6,12 +6,15 @@ import type { DriverLocationEvent } from "@/features/locations/types";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { deleteObject } from "@/lib/storage/r2-client";
 import { isR2ObjectKey } from "@/lib/storage/r2-keys";
 import { resolveOrderProofUrl } from "@/lib/storage/order-proof-resolve";
+import { stampedPatch } from "@/lib/search/prefix";
+import { applyDeliveryRollup } from "../../../functions/src/core/rollups";
 import type { DocumentData, Firestore, Query, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { earningsRecalcDateFromDeliveredAt } from "./delivery-earn-date";
 import { trailPathFromEvents } from "./delivery-gps-audit";
@@ -19,6 +22,16 @@ import { listTotalFromStatusCounts, parseDeliveriesStatusCounts } from "./delive
 import { mergeProofKeys } from "./delivery-proof-keys";
 import { IN_PROGRESS_DELIVERY_STATUSES, normalizeDeliveryStatusFilter } from "./delivery-status-filter";
 import { collectExportPages } from "./export-pagination";
+import {
+  DELIVERY_LIST_PREFIX_FIELDS,
+  DELIVERY_SEARCH_CAP,
+  capPrefixMatchSet,
+  gpsInChunks,
+  pagePrefixMatches,
+  routeDeliveryList,
+  type DeliveryListRoute,
+  type DeliverySearchShape,
+} from "./delivery-list-plan";
 import { mapDeliveryDbRowsToListRows, type DeliveryDbRowForList } from "./map-delivery-list-row";
 import { CANCEL_REASON_CODES } from "./parse-cancel-reason";
 import { enrichDeliveryListRows } from "./resolve-delivery-restaurant";
@@ -179,6 +192,8 @@ async function syncVerificationForDelivery(
   },
   actorId: string,
 ): Promise<void> {
+  const mutation = await requireMutationAuth();
+  if ("error" in mutation) return;
   if (!delivery.partner_id) return;
   const serviceDate = earnDateFromDeliveredAt(delivery.delivered_at);
   const restaurantId = await resolveDeliveryRestaurantId({
@@ -276,6 +291,7 @@ export type DeliveriesQueryFilter = {
   partnerId?: string;
   cancelReason?: string;
   search?: string;
+  searchShape?: DeliverySearchShape;
   dateFrom?: string;
   dateTo?: string;
   dateToExclusive?: boolean;
@@ -285,6 +301,8 @@ export type DeliveriesPage = {
   rows: DeliveryListRow[];
   nextOffset: number | null;
   total: number;
+  unindexedFilters?: string[];
+  searchTruncated?: boolean;
 };
 
 export type DeliveriesKpiCounts = {
@@ -649,6 +667,227 @@ function inclusiveUpperBound(to: string, exclusive?: boolean): string {
   return new Date(ms - 1).toISOString();
 }
 
+const LOWERCASE_PROBE_MS = 60_000;
+let lowercaseProbe: { at: number; indexed: boolean } | null = null;
+
+function createdAtMs(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    const ms = (value as { toDate: () => Date }).toDate().getTime();
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return 0;
+}
+
+async function deliveriesLowercaseIndexed(db: Firestore): Promise<boolean> {
+  const now = Date.now();
+  if (lowercaseProbe && now - lowercaseProbe.at < LOWERCASE_PROBE_MS) return lowercaseProbe.indexed;
+  let indexed = false;
+  try {
+    const snap = await db.collection(COLLECTIONS.deliveries).orderBy("order_id_lower").limit(1).get();
+    indexed = !snap.empty;
+  } catch {
+    indexed = false;
+  }
+  lowercaseProbe = { at: now, indexed };
+  return indexed;
+}
+
+function deliveryRoute(
+  params: DeliveriesQueryFilter,
+  indexed: boolean,
+  offset: number,
+  limit: number,
+): DeliveryListRoute {
+  return routeDeliveryList({
+    search: params.search,
+    searchShape: params.searchShape,
+    cancelReason: params.cancelReason,
+    dateFrom: params.dateFrom,
+    dateTo: params.dateTo,
+    status: params.status,
+    zoneId: params.zoneId,
+    partnerId: params.partnerId,
+    indexed,
+    offset,
+    limit,
+  });
+}
+
+function withPrefixEquality(
+  query: Query,
+  params: DeliveriesQueryFilter,
+  fieldEquality: "status" | "zone_id" | "partner_id" | null,
+): Query {
+  switch (fieldEquality) {
+    case null:
+      return query;
+    case "status":
+      if (!params.status || params.status === "all") return query;
+      if (params.status === "in_progress") {
+        return query.where("status", "in", [...IN_PROGRESS_DELIVERY_STATUSES]);
+      }
+      return query.where("status", "==", normalizeDeliveryStatusFilter(params.status));
+    case "zone_id":
+      if (!params.zoneId || params.zoneId === "all") return query;
+      return query.where("zone_id", "==", params.zoneId);
+    case "partner_id":
+      if (!params.partnerId || params.partnerId === "all") return query;
+      return query.where("partner_id", "==", params.partnerId);
+    default: {
+      const unexpected: never = fieldEquality;
+      return unexpected;
+    }
+  }
+}
+
+/**
+ * Prefix-field order, capped at the search cap. Newest-first is applied by
+ * pagePrefixMatches. A Firestore cursor is not created_at order.
+ * Returns null when a query throws (index not deployed) so the caller can scan.
+ */
+async function pageByPrefix(
+  db: Firestore,
+  params: DeliveriesQueryFilter,
+  route: Extract<DeliveryListRoute, { kind: "prefix" }>,
+  offset: number,
+  limit: number,
+): Promise<{ rows: Row[]; total: number; capped: boolean } | null> {
+  try {
+    const matches = new Map<string, number>();
+    let capped = false;
+    await Promise.all(
+      DELIVERY_LIST_PREFIX_FIELDS.map(async (field) => {
+        const snap = await withPrefixEquality(db.collection(COLLECTIONS.deliveries), params, route.fieldEquality)
+          .where(field, ">=", route.bounds.start)
+          .where(field, "<=", route.bounds.end)
+          .orderBy(field, "asc")
+          .select(field, "created_at")
+          .limit(DELIVERY_SEARCH_CAP)
+          .get();
+        if (snap.size >= DELIVERY_SEARCH_CAP) capped = true;
+        for (const doc of snap.docs) {
+          const ms = createdAtMs(doc.get("created_at"));
+          const prev = matches.get(doc.id);
+          if (prev === undefined || ms > prev) matches.set(doc.id, ms);
+        }
+      }),
+    );
+    const cappedSet = capPrefixMatchSet(
+      [...matches].map(([id, createdAtMs]) => ({ id, createdAtMs })),
+      DELIVERY_SEARCH_CAP,
+      capped,
+    );
+    const page = pagePrefixMatches(cappedSet.rows, offset, limit);
+    const byId = await rowsByIds(
+      db,
+      COLLECTIONS.deliveries,
+      page.map((row) => row.id),
+    );
+    const rows: Row[] = [];
+    for (const match of page) {
+      const row = byId.get(match.id);
+      if (row) rows.push(row);
+    }
+    return { rows, total: cappedSet.rows.length, capped: cappedSet.truncated };
+  } catch {
+    return null;
+  }
+}
+
+async function indexedStatusTotal(params: DeliveriesQueryFilter): Promise<number | null> {
+  const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
+  const { data: rawCounts, error: countError } = await callAdminFunction("admin_deliveries_status_counts", {
+    p_from: params.dateFrom ?? undefined,
+    p_to: params.dateTo ? inclusiveUpperBound(params.dateTo, params.dateToExclusive) : undefined,
+    p_zone_id: params.zoneId && params.zoneId !== "all" ? params.zoneId : undefined,
+    p_partner_id: params.partnerId && params.partnerId !== "all" ? params.partnerId : undefined,
+    p_date_basis: hasDateWindow ? "delivered" : undefined,
+  });
+  if (countError) return null;
+  return listTotalFromStatusCounts(parseDeliveriesStatusCounts(rawCounts), params.status);
+}
+
+type LoadedSlice = {
+  rows: Row[];
+  total: number | null;
+  reasons: string[];
+  /** Set once a contains/scan path has resolved rider ids. Null means that path did not run. */
+  resolvedDriverIds: string[] | null;
+  searchTruncated: boolean;
+};
+
+async function loadDeliverySlice(
+  db: Firestore,
+  params: DeliveriesQueryFilter,
+  offset: number,
+  limit: number,
+  knownDriverIds: string[] | null,
+): Promise<LoadedSlice> {
+  const indexed = await deliveriesLowercaseIndexed(db);
+  const route = deliveryRoute(params, indexed, offset, limit);
+  const reasons = [...route.reasons];
+  switch (route.kind) {
+    case "indexed": {
+      const [page, total] = await Promise.all([
+        pageDeliveryRows(db, params, [], offset, limit),
+        indexedStatusTotal(params),
+      ]);
+      return { rows: page.rows, total, reasons, resolvedDriverIds: null, searchTruncated: false };
+    }
+    case "prefix_too_short":
+      return {
+        rows: [],
+        total: 0,
+        reasons,
+        resolvedDriverIds: null,
+        searchTruncated: false,
+      };
+    case "prefix": {
+      const prefix = await pageByPrefix(db, params, route, offset, limit);
+      if (prefix) {
+        if (prefix.capped) reasons.push("prefix_cap");
+        return {
+          rows: prefix.rows,
+          total: prefix.total,
+          reasons,
+          resolvedDriverIds: null,
+          searchTruncated: prefix.capped,
+        };
+      }
+      reasons.push("index_not_ready");
+      break;
+    }
+    case "scan":
+      break;
+    default: {
+      const unexpected: never = route;
+      return unexpected;
+    }
+  }
+  const search = params.search?.trim() ?? "";
+  const driverIds = knownDriverIds ?? (search ? await resolveSearchDriverIds(search) : []);
+  const page = await pageDeliveryRows(db, params, driverIds, offset, limit);
+  if (page.hitCap) reasons.push("contains_scan_cap");
+  return {
+    rows: page.rows,
+    total: null,
+    reasons,
+    resolvedDriverIds: driverIds,
+    searchTruncated: page.hitCap,
+  };
+}
+
 export async function fetchDeliveriesPage(
   params: DeliveriesQueryFilter & { offset?: number },
 ): Promise<DeliveriesPage> {
@@ -885,11 +1124,22 @@ export async function fetchRecentDeliveriesForDriver(
   });
 }
 
+function deliveryRollupDay(row: Row): string | null {
+  const shift = str(row.shift_date);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(shift)) return shift;
+  return (
+    earningsRecalcDateFromDeliveredAt(strOrNull(row.delivered_at)) ??
+    earningsRecalcDateFromDeliveredAt(strOrNull(row.pickup_at))
+  );
+}
+
 export async function updateDeliveryStatus(
   deliveryId: string,
   status: ReviewableDeliveryStatus,
   rejectionReason?: string,
 ): Promise<DeliveryMutationResult> {
+  const mutation = await requireMutationAuth();
+  if ("error" in mutation) return { error: "not_authorized" };
   const session = await requireDeliveriesManage();
   if (!session) return { error: "not_authorized" };
   if (status === "rejected") {
@@ -923,7 +1173,7 @@ export async function updateDeliveryStatus(
   }
 
   try {
-    await existingSnap.ref.set(updatePayload, { merge: true });
+    await existingSnap.ref.set(stampedPatch("deliveries", existing, updatePayload), { merge: true });
   } catch (error) {
     return {
       error: "update_failed",
@@ -945,6 +1195,17 @@ export async function updateDeliveryStatus(
   });
 
   try {
+    const day = deliveryRollupDay(existing);
+    const driverId = str(existing.driver_id);
+    if (day && driverId && existing.status !== status) {
+      await applyDeliveryRollup(db, {
+        deliveryId,
+        driverId,
+        zoneId: strOrNull(existing.zone_id),
+        day,
+        status,
+      });
+    }
     const affectsEarnings = existing.status === "verified" || status === "verified";
     if (affectsEarnings && str(existing.delivered_at)) {
       await recalcEarningsForDelivery(str(existing.driver_id), str(existing.delivered_at));
@@ -998,6 +1259,8 @@ export async function bulkUpdateDeliveries(
   status: Extract<ReviewableDeliveryStatus, "verified" | "rejected">,
   rejectionReason?: string,
 ): Promise<BulkUpdateDeliveriesResult> {
+  const mutation = await requireMutationAuth();
+  if ("error" in mutation) return { error: "not_authorized" };
   const session = await requireDeliveriesManage();
   if (!session) return { error: "not_authorized" };
   const ids = [...new Set(deliveryIds.filter(Boolean))];
@@ -1044,6 +1307,8 @@ export async function bulkUpdateDeliveries(
 }
 
 export async function deleteDelivery(deliveryId: string): Promise<DeliveryMutationResult> {
+  const mutation = await requireMutationAuth();
+  if ("error" in mutation) return { error: "not_authorized" };
   const session = await requireSuperAdmin();
   if (!session) return { error: "not_authorized" };
   const db = await openDb();

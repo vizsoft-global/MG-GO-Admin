@@ -191,6 +191,7 @@ export type NotificationListFilters = {
 
 export type NotificationActionError =
   | "not_authorized"
+  | "not_configured"
   | "not_found"
   | "invalid_input"
   | "approval_required"

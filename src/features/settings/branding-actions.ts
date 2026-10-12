@@ -35,6 +35,8 @@ async function writeBrandingSettings(
   db: Firestore,
   patch: Record<string, unknown>,
 ): Promise<EpochCounters> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const written = await writeWithEpochCounters(db, "settings", ({ tx }) => {
     tx.set(db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID), patch, { merge: true });
   });
@@ -68,6 +70,8 @@ async function saveBrandingObject(
 }
 
 async function removeBrandingObjects(relativePaths: string[]): Promise<void> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const bucket = await brandingBucket();
   if (!bucket) return;
   await Promise.all(

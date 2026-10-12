@@ -3,6 +3,7 @@
 import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
@@ -109,6 +110,8 @@ async function removeWhere(
   name: string,
   filters: Array<[string, unknown]>,
 ): Promise<{ error: string | null }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const found = await queryDocs(name, filters);
   if (found.error) return { error: found.error };
   const db = await openDb();
@@ -268,6 +271,8 @@ function validateType(input: RequestTypeInput): string | null {
 export async function createRequestType(
   input: RequestTypeInput,
 ): Promise<{ ok: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { ok: false, error: mutationAuth.error };
   await requireRequestsManage();
   const invalid = validateType(input);
   if (invalid) return { ok: false, error: invalid };
@@ -312,6 +317,8 @@ export async function updateRequestType(
   key: string,
   patch: Partial<Omit<RequestTypeInput, "key">>,
 ): Promise<{ ok: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { ok: false, error: mutationAuth.error };
   await requireRequestsManage();
   if (patch.label_en !== undefined && !patch.label_en.trim()) {
     return { ok: false, error: "label_required" };
@@ -351,6 +358,8 @@ export async function updateRequestType(
 export async function deleteRequestType(
   key: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { ok: false, error: mutationAuth.error };
   await requireRequestsManage();
 
   const existing = await findTypeDef(key);
@@ -388,6 +397,8 @@ export async function saveRequestFieldDefinitions(
   typeKey: string,
   fields: RequestFieldDefinitionRow[],
 ): Promise<{ ok: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { ok: false, error: mutationAuth.error };
   await requireRequestsManage();
 
   const seen = new Set<string>();

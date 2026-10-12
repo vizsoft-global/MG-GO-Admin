@@ -7,6 +7,7 @@ import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { isEsignDueDateAllowed } from "./esign-due-date";
@@ -199,6 +200,8 @@ async function patchDoc(
 }
 
 async function deleteDoc(name: string, id: string): Promise<string | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return mutationAuth.error;
   const db = await openDb();
   if (!db) return "not_configured";
   try {
@@ -1137,6 +1140,19 @@ export async function runEsignBatchChunk(input: {
   batch_status?: EsignBatchStatus;
   error?: string;
 }> {
+  if (!input.asWorker) {
+    const mutationAuth = await requireMutationAuth();
+    if ("error" in mutationAuth) {
+      return {
+        ok: false,
+        processed: 0,
+        created: 0,
+        failed: 0,
+        remaining: 0,
+        error: mutationAuth.error,
+      };
+    }
+  }
   const mode = input.mode ?? "pending";
   const { data, error } = await callRpc(Boolean(input.asWorker))(
     input.asWorker ? "esign_worker_claim_batch_rows" : "admin_claim_esign_batch_rows",
