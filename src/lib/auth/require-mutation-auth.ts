@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { asEpochReader } from "@/lib/auth/epoch-cache";
 import { loadMutationSession, type EpochSession } from "@/lib/auth/epoch-session";
 import type { Permission } from "@/lib/auth/permissions";
 import { STAFF_SESSION_COOKIE, verifyStaffSessionCookie } from "@/lib/firebase/session";
@@ -21,7 +22,7 @@ export async function requireMutationAuth(
   }
   const db = await staffDb();
   if (!db) return { error: "not_configured" };
-  const loaded = await loadMutationSession(db, probe, permission);
+  const loaded = await loadMutationSession(asEpochReader(db), probe, permission);
   if (loaded.unavailable || loaded.revoked || loaded.denied || !loaded.session) {
     return { error: "not_authorized" };
   }

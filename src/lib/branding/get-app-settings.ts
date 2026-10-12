@@ -1,7 +1,7 @@
 import { cache } from "react";
 import type { DocumentData } from "firebase-admin/firestore";
 import { withDeadline } from "@/lib/async/deadline";
-import { getEpochCache, readEpochSettings } from "@/lib/auth/epoch-cache";
+import { asEpochReader, getEpochCache, readEpochSettings } from "@/lib/auth/epoch-cache";
 import { getSessionUser } from "@/lib/auth/get-session";
 import {
   DEFAULT_APP_SETTINGS,
@@ -183,7 +183,7 @@ async function loadAppSettingsRow(): Promise<SettingsRow | null> {
     const db = await staffDb();
     if (!db) return null;
     const session = await getSessionUser();
-    const row = await readEpochSettings(db, getEpochCache(), session ? session.epochs.settings : null);
+    const row = await readEpochSettings(asEpochReader(db), getEpochCache(), session ? session.epochs.settings : null);
     if (!row) return null;
     return rowFromDoc(row);
   } catch {

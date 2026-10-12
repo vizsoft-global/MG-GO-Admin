@@ -1,4 +1,4 @@
-import { getEpochCache, readEpochQuery } from "@/lib/auth/epoch-cache";
+import { asEpochReader, getEpochCache, readEpochQuery } from "@/lib/auth/epoch-cache";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
@@ -24,7 +24,7 @@ export async function getMenuConfigServer(role: string): Promise<MenuNode[]> {
     if (!db) return [];
 
     return await readEpochQuery(
-      db,
+      asEpochReader(db),
       getEpochCache(),
       "menu",
       `menu:${role}`,

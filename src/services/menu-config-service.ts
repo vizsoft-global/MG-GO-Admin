@@ -2,7 +2,7 @@
 
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { writeWithEpoch } from "@/lib/auth/auth-epochs";
-import { getEpochCache, readEpochQuery } from "@/lib/auth/epoch-cache";
+import { asEpochReader, getEpochCache, readEpochQuery } from "@/lib/auth/epoch-cache";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
@@ -49,7 +49,7 @@ export async function getMenuConfig(role: string): Promise<MenuNode[]> {
     const db = await staffDb();
     if (!db) return [];
     return await readEpochQuery(
-      db,
+      asEpochReader(db),
       getEpochCache(),
       "menu",
       `menu:${role}`,

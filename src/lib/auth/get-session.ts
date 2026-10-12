@@ -10,7 +10,7 @@ import { COLLECTIONS } from "@/lib/firebase/db";
 import { withDeadline } from "@/lib/async/deadline";
 import type { EnrichedProfile } from "@/lib/auth/profile-auth";
 import type { AdminApprovalStatus } from "@/lib/auth/permissions";
-import { getEpochCache, type EpochCounters } from "@/lib/auth/epoch-cache";
+import { asEpochReader, getEpochCache, type EpochCounters } from "@/lib/auth/epoch-cache";
 import { loadReadSession } from "@/lib/auth/epoch-session";
 import type { StaffAccessKind } from "@/lib/auth/staff-access";
 
@@ -62,7 +62,7 @@ async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
     return { session: null, unavailable: true };
   }
 
-  const loaded = await loadReadSession(db, getEpochCache(), probe);
+  const loaded = await loadReadSession(asEpochReader(db), getEpochCache(), probe);
   return { session: loaded.session, unavailable: loaded.unavailable };
 }
 

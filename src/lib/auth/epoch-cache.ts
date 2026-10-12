@@ -100,6 +100,19 @@ export type EpochReader = {
   getAll(...refs: DocRef[]): Promise<DocSnap[]>;
 };
 
+/**
+ * Firestore.getAll also accepts a ReadOptions rest argument, so the Admin SDK
+ * handle is not structurally a DocRef-only getAll. Callers still pass refs only.
+ */
+export function asEpochReader(db: {
+  collection(name: string): {
+    doc(id: string): { id: string; path: string; get(): Promise<DocSnap> };
+  };
+  getAll(...refs: never[]): Promise<DocSnap[]>;
+}): EpochReader {
+  return db as EpochReader;
+}
+
 export type CachedDoc = {
   exists: boolean;
   data: Record<string, unknown> | undefined;
