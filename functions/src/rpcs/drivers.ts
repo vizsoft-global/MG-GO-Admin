@@ -16,6 +16,7 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp, type Firestore } from "../core/fs";
+import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
 import { lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
@@ -364,16 +365,21 @@ async function docsByIds(db: Firestore, collection: string, ids: readonly string
   return docs;
 }
 
-async function loadDriverRows(archived: boolean, onlyIds?: ReadonlySet<string> | null): Promise<Dict[]> {
+async function loadDriverRows(
+  archived: boolean,
+  onlyIds?: ReadonlySet<string> | null,
+  phases?: PhaseMarks,
+): Promise<Dict[]> {
   if (onlyIds && onlyIds.size === 0) return [];
   const db = getFirestore();
+  const marks = phases ?? {};
   const now = new Date();
   const dayStart = kuwaitDayStart(now);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
   const multiCutoff = new Date(now.getTime() - MULTI_DEVICE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   const [partnerSnap, zoneSnap, companySnap, intakeRestSnap, driverRestSnap, restaurantSnap, deliverySnap, deviceSnap] =
-    await Promise.all([
+    await timedPhase(marks, "parallelMs", () => Promise.all([
       db.collection(COLLECTIONS.partners).get(),
       db.collection(COLLECTIONS.zones).get(),
       db.collection(COLLECTIONS.sourceCompanies).get(),
@@ -389,11 +395,12 @@ async function loadDriverRows(archived: boolean, onlyIds?: ReadonlySet<string> |
         .collection(COLLECTIONS.driverDeviceSessions)
         .where("last_seen_at", ">=", Timestamp.fromDate(multiCutoff))
         .get(),
-    ]);
+    ]),
+    );
 
   const intakeDocs = onlyIds
-    ? await docsByIds(db, COLLECTIONS.driverIntakes, [...onlyIds])
-    : (await db.collection(COLLECTIONS.driverIntakes).get()).docs;
+    ? await timedPhase(marks, "intakesMs", () => docsByIds(db, COLLECTIONS.driverIntakes, [...onlyIds]))
+    : await timedPhase(marks, "intakesMs", async () => (await db.collection(COLLECTIONS.driverIntakes).get()).docs);
 
   const intakes = intakeDocs.filter((doc) =>
     archived ? doc.get("archived_at") != null : doc.get("archived_at") == null,
@@ -417,9 +424,15 @@ async function loadDriverRows(archived: boolean, onlyIds?: ReadonlySet<string> |
   const profileIds: string[] = linkedIds;
   const driverRefs = profileIds.map((id) => db.collection(COLLECTIONS.drivers).doc(id));
   if (driverRefs.length > 0) {
-    const driverSnaps = await db.getAll(...driverRefs);
+    const driverSnaps = await timedPhase(marks, "driversGetAllMs", () => db.getAll(...driverRefs));
     for (const snap of driverSnaps) {
       if (snap.exists) driverById.set(snap.id, (snap.data() ?? {}) as Dict);
+    }
+  } else {
+    try {
+      marks.driversGetAllMs = 0;
+    } catch {
+      // A broken mark must not replace the request result.
     }
   }
 
@@ -614,18 +627,19 @@ async function fleetKpiCounts(archived: boolean): Promise<DriverKpis> {
 async function loadDriversForList(
   archived: boolean,
   search: string | null,
+  phases?: PhaseMarks,
 ): Promise<{ rows: Dict[]; kpis: DriverKpis | null }> {
   const term = (search ?? "").trim();
-  if (!term) return { rows: await loadDriverRows(archived), kpis: null };
+  if (!term) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
   const db = getFirestore();
   const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.driverIntakes, "name_lower");
-  if (!indexed) return { rows: await loadDriverRows(archived), kpis: null };
+  if (!indexed) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
   const ids = await prefixMatchIds(db, COLLECTIONS.driverIntakes, driverPrefixQueries(term));
-  const rows = await loadDriverRows(archived, new Set(ids));
+  const rows = await loadDriverRows(archived, new Set(ids), phases);
   try {
     return { rows, kpis: await fleetKpiCounts(archived) };
   } catch {
-    return { rows: await loadDriverRows(archived), kpis: null };
+    return { rows: await loadDriverRows(archived, null, phases), kpis: null };
   }
 }
 
@@ -637,7 +651,9 @@ async function loadDriversForList(
  * table under them.
  */
 export const adminListDriversPage = measureOnCall("adminListDriversPage", async (request) => {
-  await requireStaff(request, "drivers.view");
+  const phases: PhaseMarks = {};
+  try {
+  await timedPhase(phases, "requireStaffMs", () => requireStaff(request, "drivers.view"));
 
   const data = (request.data ?? {}) as Dict;
   const tab = (pickText(data, "tab", "p_tab") ?? "all").toLowerCase();
@@ -654,7 +670,7 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
   const limit = Math.min(Math.max(pickCount(data, 100, "limit", "p_limit"), 1), MAX_LIMIT);
   const offset = Math.max(pickCount(data, 0, "offset", "p_offset"), 0);
 
-  const loaded = await loadDriversForList(tab === "archived", search);
+  const loaded = await loadDriversForList(tab === "archived", search, phases);
   const base = loaded.rows;
   const tabbed = base.filter((row) => tabMatches(row, tab));
   const filtered = tabbed.filter(
@@ -686,6 +702,9 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
       : tabbed.length,
     kpis: loaded.kpis ?? kpisFromRows(base),
   };
+  } finally {
+    logPhases("adminListDriversPage", phases);
+  }
 });
 
 /**
