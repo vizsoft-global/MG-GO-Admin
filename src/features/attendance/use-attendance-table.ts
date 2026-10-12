@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   fetchAttendanceAnalyticsSummary,
@@ -28,6 +33,7 @@ export function useAttendanceDailyList(
     queryFn: () => fetchAttendanceDailyList(filters),
     enabled: options?.enabled ?? true,
     refetchInterval: options?.refetchInterval ?? false,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -57,6 +63,7 @@ export function useAttendanceExceptionsList(
     queryKey: queryKeys.attendance.exceptions(params),
     queryFn: () => fetchAttendanceExceptionsList(params),
     enabled,
+    placeholderData: keepPreviousData,
   });
 }
 

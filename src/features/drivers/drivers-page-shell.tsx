@@ -51,6 +51,7 @@ import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-f
 import { customFieldColumnId, type CustomFieldDefinition } from "@/lib/custom-fields/types";
 import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
 import { useDriversListColumns } from "./use-drivers-list-columns";
+import { LIST_SEARCH_DEBOUNCE_MS } from "@/lib/menu/sidebar-menu-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { fetchDriversForExport } from "./drivers-list-actions";
@@ -192,7 +193,7 @@ function DriversPageContent() {
   const [sort, setSort] = useState<DriversSort>(DEFAULT_DRIVERS_SORT);
 
   useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
   }, [search]);
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { LIST_SEARCH_DEBOUNCE_MS } from "@/lib/menu/sidebar-menu-query";
 import { useTranslations } from "next-intl";
 import {
   Activity,
@@ -214,7 +215,7 @@ function DeliveriesPageContent() {
 
   // Debounce free-text search so we don't refetch on every keystroke.
   useEffect(() => {
-    const handle = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    const handle = setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [search]);
 
