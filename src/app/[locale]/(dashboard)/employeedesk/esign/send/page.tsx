@@ -1,20 +1,10 @@
 import { setRequestLocale } from "next-intl/server";
-import { EsignSendShell } from "@/features/esign/esign-send-shell";
+import { redirect } from "@/i18n/navigation";
 import { requireAnyPermission } from "@/lib/auth/require-permission";
 
 /**
- * EmployeeDesk V2's send screen.
- *
- * It renders the **same** `EsignSendShell` the V1 route at
- * `/requests/esign/send` renders, and that is deliberate rather than a
- * shortcut: sending a document is one workflow, and a second copy of it would
- * be a second place for the resolve rules, the due-date guard and the
- * screenshot policy to drift. What the V2 route adds is a home under
- * EmployeeDesk and the `?template=` hand-off from the builder.
- *
- * `initialTemplateId` is read here, on the server, from the query string. The
- * shell cannot read it itself without a `useSearchParams` hook and the Suspense
- * boundary that hook needs, and the page already has the value in hand.
+ * The create-from-template screen lives at `/employeedesk/esign/templates/new`.
+ * This path stays so hub tiles and saved links still open that screen.
  */
 export default async function EmployeeDeskEsignSendPage({
   params,
@@ -25,20 +15,19 @@ export default async function EmployeeDeskEsignSendPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const template = query.template;
-  const draft = query.draft;
-  const category = query.category;
-  const driver = query.driver;
-  const resentFrom = query.resentFrom;
   setRequestLocale(locale);
   await requireAnyPermission(locale, ["employeedesk.manage", "requests.manage"]);
-  return (
-    <EsignSendShell
-      initialTemplateId={typeof template === "string" ? template : undefined}
-      initialDraftId={typeof draft === "string" ? draft : undefined}
-      initialCategoryKey={typeof category === "string" ? category : undefined}
-      initialDriverId={typeof driver === "string" ? driver : undefined}
-      initialResentFromId={typeof resentFrom === "string" ? resentFrom : undefined}
-    />
-  );
+
+  const parts: string[] = [];
+  for (const key of ["template", "draft", "category", "driver", "resentFrom"] as const) {
+    const value = query[key];
+    if (typeof value === "string" && value) {
+      parts.push(`${key}=${encodeURIComponent(value)}`);
+    }
+  }
+  const href =
+    parts.length > 0
+      ? `/employeedesk/esign/templates/new?${parts.join("&")}`
+      : "/employeedesk/esign/templates/new";
+  redirect({ href, locale });
 }

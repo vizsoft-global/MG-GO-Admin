@@ -3,27 +3,30 @@ import { describe, it } from "node:test";
 import {
   buildEsignDocumentHtml,
   sampleEmployee,
-  SIGNATURE_BAND_PT,
 } from "./esign-document-html";
+import { isBottomRightFallback, resolveEmployeeStampSlot } from "./esign-document-layout";
 
 const fields = [
-  { key: "penalty_date", label: "Penalty date", value: "2026-09-01" },
-  { key: "decision", label: "Decision", value: "Warning" },
+  { key: "penalty_date", label: "Penalty date", labelEn: "Penalty date", labelAr: "تاريخ الجزاء", value: "2026-09-01" },
+  { key: "decision", label: "Decision", labelEn: "Decision", labelAr: "القرار", value: "Warning" },
 ];
 
 function base(language: "en" | "ar") {
   return buildEsignDocumentHtml({
     language,
-    header: "Notice for {{employee_name}}",
-    body: "Company {{company_name}} / ID {{employee_id}}",
-    declaration: "I acknowledge.",
+    kind: "penalty",
+    headerEn: "Notice for {{employee_name}}",
+    headerAr: "إشعار لـ {{employee_name}}",
+    bodyEn: "Company {{company_name}} / ID {{employee_id}}",
+    bodyAr: "الشركة {{company_name}} / {{employee_id}}",
+    declarationEn: "I acknowledge.",
+    declarationAr: "أقر بذلك.",
     description: "Late return",
     fields,
     employee: sampleEmployee(),
   });
 }
 
-/** The employee block only — assertions about placement must not see the body. */
 function employeeBlockOf(html: string): string {
   const start = html.indexOf('<section class="employee-block"');
   const end = html.indexOf("</section>", start);
@@ -32,11 +35,23 @@ function employeeBlockOf(html: string): string {
 }
 
 describe("buildEsignDocumentHtml", () => {
-  it("uses dir=ltr for EN and dir=rtl for AR", () => {
+  it("never sets html dir=rtl — Arabic is per-span", () => {
     const en = base("en");
     const ar = base("ar");
     assert.match(en, /lang="en" dir="ltr"/);
-    assert.match(ar, /lang="ar" dir="rtl"/);
+    assert.match(ar, /lang="en" dir="ltr"/);
+    assert.doesNotMatch(en, /<html[^>]*dir="rtl"/);
+    assert.doesNotMatch(ar, /<html[^>]*dir="rtl"/);
+    assert.match(en, /dir="rtl"/);
+    assert.match(ar, /إشعار جزاء|إشعار لـ/);
+  });
+
+  it("prints both English and Arabic on one sheet", () => {
+    const html = base("en");
+    assert.match(html, /Penalty Notice|Notice for Ahmed Ali/);
+    assert.match(html, /إشعار/);
+    assert.match(html, /Employee Name/);
+    assert.match(html, /اسم الموظف/);
   });
 
   it("keeps the same employee block fields on EN and AR", () => {
@@ -59,7 +74,6 @@ describe("buildEsignDocumentHtml", () => {
       description: "",
       fields: [],
       employee: sampleEmployee(),
-      // note is not an employee key — comes from merged field values via header token only
     });
     const injected = buildEsignDocumentHtml({
       language: "en",
@@ -75,10 +89,14 @@ describe("buildEsignDocumentHtml", () => {
     assert.match(injected, /&lt;script&gt;/);
   });
 
-  it("reserves the signature band", () => {
+  it("draws named signature slots instead of a 56% bottom-right band", () => {
     const html = base("en");
     assert.match(html, /data-signature-band="1"/);
-    assert.match(html, new RegExp(`height: ${SIGNATURE_BAND_PT}pt`));
+    assert.match(html, /data-slot-role="employee"/);
+    assert.match(html, /data-slot-role="hr"/);
+    assert.doesNotMatch(html, /max-width: 56%/);
+    const employee = resolveEmployeeStampSlot({ kind: "penalty" });
+    assert.equal(isBottomRightFallback(employee), false);
   });
 
   it("prints the core employee rows even when the record has nothing else", () => {
@@ -105,15 +123,22 @@ describe("buildEsignDocumentHtml", () => {
     const block = employeeBlockOf(html);
     assert.match(block, /Bare Record/);
     assert.match(block, /10099/);
-    // A rider with no civil ID must not get "Civil ID —" on a document a person
-    // signs; the row is absent, not blank.
     assert.doesNotMatch(block, /Civil ID/);
     assert.doesNotMatch(block, /Joining date/);
     assert.doesNotMatch(block, /Accommodation/);
   });
 
   it("prints the record rows when the rider has them, in catalogue order", () => {
-    const block = employeeBlockOf(base("en"));
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      header: "",
+      body: "",
+      declaration: "",
+      description: "",
+      fields: [],
+      employee: sampleEmployee(),
+    });
+    const block = employeeBlockOf(html);
     const civil = block.indexOf("Civil ID");
     const joined = block.indexOf("Joining date");
     const accommodation = block.indexOf("Accommodation");
@@ -122,8 +147,17 @@ describe("buildEsignDocumentHtml", () => {
     assert.ok(joined < accommodation, "Joining date should print before Accommodation");
   });
 
-  it("translates the employee block labels", () => {
-    const block = employeeBlockOf(base("ar"));
+  it("prints Arabic employee labels on the same page", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      header: "",
+      body: "",
+      declaration: "",
+      description: "",
+      fields: [],
+      employee: sampleEmployee(),
+    });
+    const block = employeeBlockOf(html);
     assert.match(block, /الرقم المدني/);
     assert.match(block, /تاريخ الانضمام/);
   });
@@ -161,36 +195,195 @@ describe("buildEsignDocumentHtml", () => {
     assert.doesNotMatch(employeeBlockOf(html), /Legacy row/);
   });
 
-  it("fills the reserved band with the bottom skeleton instead of leaving it empty", () => {
+  it("fills the reserved band with named slots and the management box", () => {
     const html = base("en");
-    const band = html.slice(html.indexOf('data-signature-band="1"'));
-    assert.match(band, /Employee Authorized signature/);
-    assert.match(band, /HR signature/);
-    assert.match(band, /Management Use Only/);
-    assert.match(band, /CEO Decision/);
-    assert.match(band, /Approved/);
-    assert.match(band, /Not approved/);
-    assert.match(band, /HR \/ Admin Department/);
-    assert.match(band, /General Manager/);
-    assert.match(band, /Approval Status/);
-    assert.match(band, /Decision/);
+    assert.match(html, /data-signature-band="1"/);
+    assert.match(html, /data-slot-role="employee"/);
+    assert.match(html, /data-slot-role="hr"/);
+    assert.match(html, /data-slot-role="gm"/);
+    assert.match(html, /Employee Signature/);
+    assert.match(html, /توقيع الموظف/);
+    assert.match(html, /Management Use Only/);
+    assert.match(html, /HR \/ Admin Department/);
+    assert.match(html, /General Manager/);
+    assert.match(html, /Form Ref\.: MG HR Ref Emp\. 0011/);
+    assert.doesNotMatch(html, /max-width: 56%/);
   });
 
-  it("translates the bottom skeleton", () => {
+  it("prints a penalty opening paragraph, declaration, leftover field, and author sign labels", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "penalty",
+      header: "Penalty",
+      body: "Please read this notice.",
+      declaration: "I acknowledge.",
+      description: "",
+      fields: [
+        { key: "penalty_action", labelEn: "Action", labelAr: "الإجراء", value: "Warning" },
+        {
+          key: "employee_signature",
+          labelEn: "Employee Sign",
+          labelAr: "توقيع الموظف",
+          value: "",
+          source: "signature",
+        },
+      ],
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /data-section="opening"/);
+    assert.match(html, /Opening paragraph/);
+    assert.match(html, /Please read this notice\./);
+    assert.match(html, /data-section="declaration"/);
+    assert.match(html, /I acknowledge\./);
+    assert.match(html, /Warning/);
+    assert.match(html, /Employee Sign/);
+  });
+
+  it("prints a general opening paragraph and a named signature caption", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      header: "Leave",
+      body: "Leave starts Monday.",
+      declaration: "I confirm.",
+      description: "",
+      fields: [
+        {
+          key: "employee_signature",
+          labelEn: "Employee Sign",
+          labelAr: "توقيع الموظف",
+          value: "",
+          source: "signature",
+        },
+      ],
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /data-section="opening"/);
+    assert.match(html, /Leave starts Monday\./);
+    assert.match(html, /I confirm\./);
+    assert.match(html, /Employee Sign/);
+    assert.doesNotMatch(html, /data-section="author_signs"/);
+  });
+
+  it("prints Arabic section captions without flipping the page", () => {
     const html = base("ar");
-    const band = html.slice(html.indexOf('data-signature-band="1"'));
-    assert.match(band, /للاستخدام الإداري فقط/);
-    assert.match(band, /قرار الرئيس التنفيذي/);
-    assert.match(band, /المدير العام/);
+    assert.match(html, /بيانات الموظف/);
+    assert.match(html, /تفاصيل المخالفة/);
+    assert.match(html, /الجزاء/);
+    assert.match(html, /lang="en" dir="ltr"/);
+    assert.doesNotMatch(html, /<html[^>]*dir="rtl"/);
   });
 
-  it("keeps the band out of the region the signature is stamped into", () => {
-    // The signed copy is composited at absolute coordinates in the bottom-right
-    // of the last page (esign-compose-stamp.ts). 56% of the A4 text column
-    // leaves ~230pt clear, and the stamp needs at most 216pt.
-    const html = base("en");
-    assert.match(html, /max-width: 56%/);
-    const bandHeight = Number(/height: (\d+)pt/.exec(html)?.[1]);
-    assert.equal(bandHeight, SIGNATURE_BAND_PT);
+  it("keeps the classic management labels on a general document", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      header: "Note",
+      body: "",
+      declaration: "",
+      description: "",
+      fields: [],
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /Employee Authorized signature/);
+    assert.match(html, /Management Use Only/);
+    assert.match(html, /CEO Decision/);
+    assert.match(html, /للاستخدام الإداري فقط/);
+    assert.match(html, /قرار الرئيس التنفيذي/);
+  });
+
+  it("prints a payslip identity grid and amount table without a bottom stamp", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "payslip",
+      headerEn: "Salary Slip — August 2026",
+      headerAr: "قسيمة راتب",
+      bodyEn: "",
+      bodyAr: "",
+      declarationEn: "",
+      declarationAr: "",
+      fields: [
+        { key: "actual_working_days", label: "Actual Working Days", labelEn: "Actual Working Days", labelAr: "أيام العمل الفعلية", value: "26" },
+        { key: "net_salary_kwd", label: "Net Salary", labelEn: "Net Salary", labelAr: "صافي الراتب", value: "245.000" },
+      ],
+      employee: sampleEmployee({
+        company_name: "MGGO Logistics LLC",
+        bank_number: "KW81XXXX1041",
+        position: "Rider",
+      }),
+    });
+    assert.match(html, /data-payslip="identity"/);
+    assert.match(html, /data-payslip="sheet"/);
+    assert.match(html, /Code \/ Name/);
+    assert.match(html, /الرمز \/ الاسم/);
+    assert.match(html, /MGGO Logistics LLC/);
+    assert.match(html, /KW81…1041/);
+    assert.match(html, /data-payslip-line="actual_working_days"/);
+    assert.match(html, /data-tone="net"/);
+    assert.match(html, /1\.00/);
+    assert.doesNotMatch(html, /data-management="1"/);
+    assert.doesNotMatch(html, /data-section="opening"/);
+    assert.doesNotMatch(html, /data-section="declaration"/);
+    assert.match(html, /data-signature-band="1"/);
+    assert.match(html, /Employee Sign/);
+    assert.match(html, /Management Sign/);
+    assert.match(html, /توقيع الموظف/);
+    assert.match(html, /توقيع الإدارة/);
+  });
+
+  it("prints the payslip opening paragraph, declaration, extra fields, and named sign boxes", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "payslip",
+      headerEn: "Payslip",
+      bodyEn: "This slip covers the month.",
+      bodyAr: "هذه القسيمة للشهر.",
+      declarationEn: "I received this payslip.",
+      declarationAr: "استلمت هذه القسيمة.",
+      fields: [
+        {
+          key: "admin_deduction",
+          label: "Admin deduction",
+          labelEn: "Admin deduction",
+          labelAr: "خصم",
+          value: "12.000",
+          source: "entry",
+        },
+        {
+          key: "open_note",
+          label: "Open note",
+          labelEn: "Open note",
+          labelAr: "ملاحظة",
+          value: "Night shift",
+          source: "entry",
+        },
+        {
+          key: "employee_signature",
+          label: "Employee Sign",
+          labelEn: "Employee Sign",
+          labelAr: "توقيع الموظف",
+          value: "",
+          source: "signature",
+        },
+        {
+          key: "management_signature",
+          label: "Management Sign",
+          labelEn: "Management Sign",
+          labelAr: "توقيع الإدارة",
+          value: "",
+          source: "signature",
+        },
+      ],
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /data-section="opening"/);
+    assert.match(html, /This slip covers the month/);
+    assert.match(html, /data-section="declaration"/);
+    assert.match(html, /I received this payslip/);
+    assert.match(html, /data-section="payslip_extra"/);
+    assert.match(html, /Night shift/);
+    assert.match(html, /data-payslip-line="deduction_amount_kwd"/);
+    assert.match(html, /12\.000/);
+    assert.match(html, /data-slot-role="employee"/);
+    assert.match(html, /data-slot-role="hr"/);
+    assert.doesNotMatch(html, /data-management="1"/);
   });
 });

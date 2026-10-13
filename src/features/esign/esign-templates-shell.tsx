@@ -115,7 +115,6 @@ export function EsignTemplatesShell() {
             columns={[
               { id: "name", label: t("colName") },
               { id: "category", label: t("colCategory") },
-              { id: "language", label: t("colLanguage") },
               { id: "fields", label: t("colFields") },
               { id: "status", label: t("colStatus") },
             ]}
@@ -141,7 +140,6 @@ export function EsignTemplatesShell() {
                   </Link>
                 </TableCell>
                 <TableCell className="text-sm">{row.category_key}</TableCell>
-                <TableCell className="text-sm uppercase">{row.default_language}</TableCell>
                 <TableCell className="text-sm tabular-nums">{row.field_count}</TableCell>
                 <TableCell>
                   <StatusPill variant={row.is_active ? "success" : "neutral"}>

@@ -60,6 +60,11 @@ import { cellsFromSelection, fillTargetCells, tilePasteOntoSelection, visibleFil
 import type { PayrollAdjustmentCell, PayrollRiderRow } from "./payroll-types";
 import { PayrollCellMenu, type PayrollCellMenuState } from "./payroll-cell-menu";
 import {
+  layoutFromSampleCell,
+  startGridEdgeScroll,
+  type GridEdgeScrollLayout,
+} from "./grid-edge-scroll";
+import {
   columnHiddenIn,
   resolveColumnLabel,
   type PayrollColumnConfigRow,
@@ -271,6 +276,10 @@ export function PayrollDayGrid({
     rowIds: readonly string[];
   } | null>(null);
   const rectRef = useRef<CellRect | null>(null);
+  const layoutRef = useRef<GridEdgeScrollLayout | null>(null);
+  const dragStopRef = useRef<(() => void) | null>(null);
+  const endDragRef = useRef<() => void>(() => undefined);
+  const gridMetricsRef = useRef({ rowCount: 0, colCount: 0, frozenCount: 0 });
 
   const contextFor = useCallback(
     (row: PayrollRiderRow | undefined, dayIndex: number) => {
@@ -403,16 +412,83 @@ export function PayrollDayGrid({
     openAdjust(inputs, moved ? "select" : "click", t("adjust.nothingSelected"), first);
   }, [visibleRows, days, identityCount, dates, openAdjust, t]);
 
+  endDragRef.current = endDrag;
+  gridMetricsRef.current = {
+    rowCount: visibleRows.length,
+    colCount: days,
+    frozenCount: identityCount,
+  };
+
+  const applyHoverCell = useCallback((row: number, columnIndex: number) => {
+    const active = drag.current;
+    if (!active) return;
+    setRect((current) =>
+      current
+        ? { ...current, r1: row, c1: columnIndex }
+        : { r0: active.r0, c0: active.c0, r1: row, c1: columnIndex },
+    );
+    if (active.mode === "fill") {
+      setFillPreview({
+        r0: Math.min(active.r0, row),
+        c0: Math.min(active.c0, columnIndex),
+        r1: Math.max(active.r1, row),
+        c1: Math.max(active.c1, columnIndex),
+      });
+    }
+  }, []);
+
+  const beginEdgeDrag = useCallback(
+    (cellEl: HTMLElement, selectableCol: number, clientX: number, clientY: number) => {
+      const container = parentRef.current;
+      if (!container) return;
+      const crect = container.getBoundingClientRect();
+      const thead = container.querySelector("thead");
+      const metrics = gridMetricsRef.current;
+      layoutRef.current = layoutFromSampleCell({
+        containerLeft: crect.left,
+        containerTop: crect.top,
+        scrollLeft: container.scrollLeft,
+        scrollTop: container.scrollTop,
+        headerHeight: thead?.getBoundingClientRect().height ?? 0,
+        cellLeft: cellEl.getBoundingClientRect().left,
+        cellWidth: cellEl.offsetWidth,
+        cellHeight: cellEl.offsetHeight,
+        cellCol: selectableCol,
+        rowCount: metrics.rowCount,
+        colCount: metrics.colCount,
+      });
+      dragStopRef.current?.();
+      dragStopRef.current = startGridEdgeScroll({
+        getContainer: () => parentRef.current,
+        getLayout: () => {
+          const current = layoutRef.current;
+          if (!current) return null;
+          const next = gridMetricsRef.current;
+          return { ...current, rowCount: next.rowCount, colCount: next.colCount };
+        },
+        onHover: (row, col) => applyHoverCell(row, col + gridMetricsRef.current.frozenCount),
+        onEnd: () => {
+          dragStopRef.current = null;
+          endDragRef.current();
+        },
+        clientX,
+        clientY,
+      });
+    },
+    [applyHoverCell],
+  );
+
   useEffect(() => {
     rectRef.current = rect;
   }, [rect]);
 
-  useEffect(() => {
-    if (!editable) return;
-    const onUp = () => endDrag();
-    document.addEventListener("mouseup", onUp);
-    return () => document.removeEventListener("mouseup", onUp);
-  }, [editable, endDrag]);
+  useEffect(
+    () => () => {
+      dragStopRef.current?.();
+      dragStopRef.current = null;
+    },
+    [],
+  );
 
   const selectedMeta = useMemo(() => {
     if (!rect) return null;
@@ -795,27 +871,14 @@ export function PayrollDayGrid({
                                     };
                                     setRect(next);
                                     setFillPreview(null);
+                                    beginEdgeDrag(event.currentTarget, i, event.clientX, event.clientY);
                                   }
                                 : undefined
                             }
                             onMouseEnter={
                               editable
                                 ? () => {
-                                    const active = drag.current;
-                                    if (!active) return;
-                                    setRect((current) =>
-                                      current
-                                        ? { ...current, r1: item.index, c1: columnIndex }
-                                        : { r0: active.r0, c0: active.c0, r1: item.index, c1: columnIndex },
-                                    );
-                                    if (active.mode === "fill") {
-                                      setFillPreview({
-                                        r0: Math.min(active.r0, item.index),
-                                        c0: Math.min(active.c0, columnIndex),
-                                        r1: Math.max(active.r1, item.index),
-                                        c1: Math.max(active.c1, columnIndex),
-                                      });
-                                    }
+                                    applyHoverCell(item.index, columnIndex);
                                   }
                                 : undefined
                             }
@@ -849,6 +912,15 @@ export function PayrollDayGrid({
                                     c1: bounds.right,
                                     rowIds: visibleRows.map((item) => item.driverId),
                                   };
+                                  const cell = event.currentTarget.closest("td");
+                                  if (cell) {
+                                    beginEdgeDrag(
+                                      cell,
+                                      bounds.right - identityCount,
+                                      event.clientX,
+                                      event.clientY,
+                                    );
+                                  }
                                 }}
                               />
                             ) : null}

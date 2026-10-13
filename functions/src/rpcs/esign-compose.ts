@@ -152,6 +152,8 @@ export const esignComposeSignedDocument = onCall(
         signatureBytes: signatureFile,
         signatureKind,
         captions,
+        kind: row.document_kind,
+        persistedSlots: row.signature_slots,
       });
       pdfBytes = composed.pdfBytes;
       pageCount = composed.pageCount;
@@ -159,6 +161,9 @@ export const esignComposeSignedDocument = onCall(
       console.error("esign compose failed", error);
       const message = error instanceof Error ? error.message : String(error);
       if (message === "empty_document") return fail("empty_document");
+      if (message === "missing_employee_signature_slot" || message === "invalid_signature_slot") {
+        return fail(message);
+      }
       return fail("compose_failed", { detail: message });
     }
 

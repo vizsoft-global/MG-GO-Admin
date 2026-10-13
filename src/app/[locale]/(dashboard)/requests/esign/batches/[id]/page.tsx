@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { setRequestLocale } from "next-intl/server";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { EsignBatchDetailShell } from "@/features/esign/esign-batch-detail-shell";
@@ -10,5 +11,9 @@ export default async function EsignBatchDetailPage({
   const { locale, id } = await params;
   setRequestLocale(locale);
   await requirePermission(locale, "requests.manage");
-  return <EsignBatchDetailShell batchId={id} />;
+  return (
+    <Suspense fallback={null}>
+      <EsignBatchDetailShell batchId={id} />
+    </Suspense>
+  );
 }

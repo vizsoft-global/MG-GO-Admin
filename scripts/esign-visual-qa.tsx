@@ -100,7 +100,6 @@ function previewHtml(locale: "en" | "ar"): string {
         declaration="I acknowledge receipt of this notice and understand the penalty recorded above."
         fields={penaltyFields}
         values={values}
-        locale={locale}
         documentKind="penalty"
         signers={{ employeeLabel: "Employee signature", staffLabel: "HR signature" }}
       />

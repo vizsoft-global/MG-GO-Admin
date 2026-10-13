@@ -98,6 +98,26 @@ const META: Record<EsignEmployeeRowKey, Omit<EsignEmployeeRow, "key">> = {
     label_ar: "الجنسية",
     sample: "Kuwait",
   },
+  position: {
+    label_en: "Position",
+    label_ar: "المنصب",
+    sample: "Rider",
+  },
+  sponsor: {
+    label_en: "Sponsor",
+    label_ar: "الكفيل",
+    sample: "Musallam",
+  },
+  pay_through: {
+    label_en: "Pay through",
+    label_ar: "يُصرف حتى",
+    sample: "2026-10-31",
+  },
+  bank_number: {
+    label_en: "Bank number",
+    label_ar: "رقم البنك",
+    sample: "KW00BANK0000000000000000000000",
+  },
 };
 
 export const ESIGN_EMPLOYEE_ROWS: readonly EsignEmployeeRow[] =

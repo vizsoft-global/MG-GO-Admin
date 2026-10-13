@@ -38,6 +38,7 @@ import type {
   RequestListRow,
   RequestRescheduleInput,
 } from "./types";
+import type { RequestQueueFact } from "./rcm-type-queue-columns";
 
 async function requireRequestsView(extra?: Permission) {
   const session = await getSessionUser();
@@ -359,6 +360,7 @@ export async function fetchAdminRequestsList(
         department_label:
           r.department_label != null ? String(r.department_label) : null,
         is_confidential: Boolean(r.is_confidential),
+        sla_due_at: r.sla_due_at != null ? String(r.sla_due_at) : null,
       };
     }),
     kpi: {
@@ -1017,6 +1019,12 @@ export async function fetchRequestCreateOptions(): Promise<
     liveDrivers.map((row) => row.id),
   );
   const profileById = new Map(profiles.map((row) => [row.id, row]));
+  const zoneRows = await listDocs(COLLECTIONS.zones);
+  const zoneNames = new Map(
+    zoneRows.rows
+      .filter((zone) => zone.name != null && String(zone.name).trim() !== "")
+      .map((zone) => [zone.id, String(zone.name)]),
+  );
 
   const types = sortRows(typesListed.rows, [["sort_order", "asc"]]).map((row) => ({
     key: String(row.key ?? row.id),
@@ -1037,6 +1045,8 @@ export async function fetchRequestCreateOptions(): Promise<
         driver_code: row.driver_code != null ? String(row.driver_code) : "",
         employee_id: row.employee_id != null ? String(row.employee_id) : null,
         phone: profile?.phone != null ? String(profile.phone) : null,
+        zone_name:
+          row.zone_id != null ? zoneNames.get(String(row.zone_id)) ?? null : null,
       };
     }),
     loanTenures: sortRows(tenuresListed.rows, [
@@ -1221,19 +1231,114 @@ export async function saveRequestDecisionTerms(input: {
   return { ok: true };
 }
 
-export async function fetchStaffForForward(): Promise<
-  Array<{ id: string; full_name: string; email: string | null }>
-> {
+function textOrNull(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+/** Page-sized facts the list callable does not return (dates, plate, subject). */
+export async function fetchRequestQueueFacts(
+  ids: string[],
+): Promise<Record<string, RequestQueueFact>> {
+  await requireRequestsView();
+  const unique = [...new Set(ids.filter((id) => id.length > 0))].slice(0, 50);
+  if (unique.length === 0) return {};
+  const rows = await docsByIds(COLLECTIONS.requests, unique);
+  const vehicleIds = rows
+    .map((row) => (row.vehicle_id != null ? String(row.vehicle_id) : ""))
+    .filter((id) => id.length > 0);
+  const vehicles = await docsByIds(COLLECTIONS.vehicles, vehicleIds);
+  const plateById = new Map(
+    vehicles.map((row) => [row.id, textOrNull(row.reg_number) ?? textOrNull(row.bike_id)]),
+  );
+  const facts: Record<string, RequestQueueFact> = {};
+  for (const row of rows) {
+    const payload = asRecord(row.payload);
+    const vehicleId = row.vehicle_id != null ? String(row.vehicle_id) : "";
+    facts[row.id] = {
+      tenureMonths: textOrNull(payload.tenure_months),
+      startDate: textOrNull(row.start_date),
+      endDate: textOrNull(row.end_date),
+      vehicleLabel: vehicleId ? (plateById.get(vehicleId) ?? null) : textOrNull(payload.vehicle_plate),
+      item: textOrNull(payload.asset_type),
+      category: textOrNull(payload.category),
+      month: textOrNull(payload.salary_month) ?? textOrNull(payload.period_month),
+      subject: textOrNull(payload.subject) ?? textOrNull(row.details),
+    };
+  }
+  return facts;
+}
+
+/**
+ * Complaint closing summary. `admin_decide_request` keeps the reviewer's text
+ * on `decision_note` and does not write `requests.payload`, so this merges
+ * one field onto the existing payload.
+ */
+export async function saveRequestClosingRemark(input: {
+  requestId: string;
+  remark: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsDecide();
+  const remark = input.remark.trim();
+  if (!remark) return { ok: false, error: "remark_required" };
+  const db = await openDb();
+  if (!db) return { ok: false, error: "not_configured" };
+  const ref = db.collection(COLLECTIONS.requests).doc(input.requestId);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "not_found" };
+  const data = snap.data() ?? {};
+  const payload =
+    data.payload && typeof data.payload === "object" && !Array.isArray(data.payload)
+      ? { ...(data.payload as Record<string, unknown>) }
+      : {};
+  payload.closing_remark = remark;
+  await ref.update({ payload, updated_at: new Date() });
+  await logAdminMutation({
+    action: "update",
+    entityType: "requests",
+    entityId: input.requestId,
+    routeName: "requests.closingRemark",
+    context: { field: "payload.closing_remark" },
+  });
+  return { ok: true };
+}
+
+export type ForwardStaffOption = {
+  id: string;
+  full_name: string;
+  email: string | null;
+  department: string | null;
+  accessKind: "manager" | "user" | null;
+  roleName: string | null;
+};
+
+export async function fetchStaffForForward(): Promise<ForwardStaffOption[]> {
   await requireRequestsDecide();
   const listed = await queryDocs(COLLECTIONS.profiles, [
     ["role", "staff"],
     ["approval_status", "approved"],
   ]);
-  return sortRows(listed.rows, [["full_name", "asc"]]).map((row) => ({
-    id: row.id,
-    full_name: row.full_name != null ? String(row.full_name) : "—",
-    email: row.email != null ? String(row.email) : null,
-  }));
+  const roleIds = listed.rows
+    .map((row) => (typeof row.admin_role_id === "string" ? row.admin_role_id : ""))
+    .filter((id) => id.length > 0);
+  const roles = await docsByIds(COLLECTIONS.adminRoles, roleIds);
+  const roleName = new Map(
+    roles.map((row) => [row.id, row.name != null ? String(row.name) : ""]),
+  );
+  return sortRows(listed.rows, [["full_name", "asc"]]).map((row) => {
+    const roleId = typeof row.admin_role_id === "string" ? row.admin_role_id : "";
+    const accessKind =
+      row.access_kind === "manager" || row.access_kind === "user" ? row.access_kind : null;
+    return {
+      id: row.id,
+      full_name: row.full_name != null ? String(row.full_name) : "—",
+      email: row.email != null ? String(row.email) : null,
+      department: row.staff_department != null ? String(row.staff_department) : null,
+      accessKind,
+      roleName: roleId ? roleName.get(roleId) || null : null,
+    };
+  });
 }
 
 export async function forwardAdminRequest(input: {

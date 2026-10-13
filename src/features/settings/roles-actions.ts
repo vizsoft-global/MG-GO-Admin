@@ -190,7 +190,7 @@ export async function createCustomRole(
   if (!trimmedName) return { error: "invalid_name" };
   if (!isValidRoleSlug(normalizedSlug)) return { error: "invalid_slug" };
 
-  const reserved = new Set(["super_admin", "administrator", "operator"]);
+  const reserved = new Set(["super_admin", "administrator", "operator", "account"]);
   if (reserved.has(normalizedSlug)) return { error: "slug_reserved" };
 
   const db = await staffDb();

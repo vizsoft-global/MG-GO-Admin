@@ -14,7 +14,6 @@ import {
   FileSpreadsheet,
   FileText,
   FilePenLine,
-  Languages,
   Lock,
   Plus,
   Save,
@@ -56,7 +55,6 @@ import {
 import { buildEsignExampleSheet } from "@/features/esign/esign-example-sheet";
 import {
   ESIGN_EMPLOYEE_ROWS,
-  employeeRowLabel,
 } from "@/features/esign/employee-block";
 import type {
   EsignDocumentKind,
@@ -171,9 +169,6 @@ export function TemplateBuilderShell({
   );
   const [selectedId, setSelectedId] = useState<string | null>(
     template.fields[0]?.id ?? null,
-  );
-  const [previewLocale, setPreviewLocale] = useState<EsignLocale>(
-    template.default_language as EsignLocale,
   );
   /**
    * The preview's sample values, keyed by `field_key`.
@@ -399,7 +394,7 @@ export function TemplateBuilderShell({
       }
       toast.success(isDraft ? t("draftSaved") : t("saved"));
       if (isNew) {
-        router.replace(`/employeedesk/esign/templates/${templateId}`);
+        router.replace(`/employeedesk/esign/templates/${templateId}/edit`);
       } else {
         router.refresh();
       }
@@ -619,56 +614,38 @@ export function TemplateBuilderShell({
                 </Field>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label={t("defaultLanguage")} icon={Languages}>
-                  <div className="flex gap-1.5" role="radiogroup">
-                    {(["en", "ar"] as EsignLocale[]).map((code) => (
-                      <SegmentOption
-                        key={code}
-                        selected={previewLocale === code}
-                        onClick={() => {
-                          setPreviewLocale(code);
-                          patchDraft("default_language", code);
-                        }}
-                      >
-                        {code === "en" ? t("langEn") : t("langAr")}
-                      </SegmentOption>
-                    ))}
-                  </div>
-                </Field>
-                <Field label={t("status")}>
-                  <div className="flex gap-1.5" role="radiogroup">
-                    <SegmentOption
-                      variant="success"
-                      selected={draft.is_active && !draft.is_draft}
-                      onClick={() => {
-                        patchDraft("is_active", true);
-                        patchDraft("is_draft", false);
-                      }}
-                    >
-                      {t("statusActive")}
-                    </SegmentOption>
-                    <SegmentOption
-                      selected={draft.is_draft}
-                      onClick={() => {
-                        patchDraft("is_draft", true);
-                        patchDraft("is_active", false);
-                      }}
-                    >
-                      {t("statusDraft")}
-                    </SegmentOption>
-                    <SegmentOption
-                      selected={!draft.is_active && !draft.is_draft}
-                      onClick={() => {
-                        patchDraft("is_active", false);
-                        patchDraft("is_draft", false);
-                      }}
-                    >
-                      {t("statusInactive")}
-                    </SegmentOption>
-                  </div>
-                </Field>
-              </div>
+              <Field label={t("status")}>
+                <div className="flex gap-1.5" role="radiogroup">
+                  <SegmentOption
+                    variant="success"
+                    selected={draft.is_active && !draft.is_draft}
+                    onClick={() => {
+                      patchDraft("is_active", true);
+                      patchDraft("is_draft", false);
+                    }}
+                  >
+                    {t("statusActive")}
+                  </SegmentOption>
+                  <SegmentOption
+                    selected={draft.is_draft}
+                    onClick={() => {
+                      patchDraft("is_draft", true);
+                      patchDraft("is_active", false);
+                    }}
+                  >
+                    {t("statusDraft")}
+                  </SegmentOption>
+                  <SegmentOption
+                    selected={!draft.is_active && !draft.is_draft}
+                    onClick={() => {
+                      patchDraft("is_active", false);
+                      patchDraft("is_draft", false);
+                    }}
+                  >
+                    {t("statusInactive")}
+                  </SegmentOption>
+                </div>
+              </Field>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label={t("bodyEn")}>
@@ -751,7 +728,12 @@ export function TemplateBuilderShell({
                       <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="truncate text-xs font-medium">
-                          {employeeRowLabel(row, previewLocale)}
+                          {row.label_en}
+                          {row.label_ar ? (
+                            <span className="ms-1 text-muted-foreground" dir="rtl">
+                              {row.label_ar}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="truncate font-mono text-[10px] text-muted-foreground">
                           {`{{${row.key}}}`}
@@ -1103,17 +1085,6 @@ export function TemplateBuilderShell({
               <FileSignature className="size-3.5 text-primary" aria-hidden />
               {t("previewTitle")}
             </CardTitle>
-            <div className="flex gap-1.5" role="radiogroup">
-              {(["en", "ar"] as EsignLocale[]).map((code) => (
-                <SegmentOption
-                  key={code}
-                  selected={previewLocale === code}
-                  onClick={() => setPreviewLocale(code)}
-                >
-                  {code === "en" ? t("langEn") : t("langAr")}
-                </SegmentOption>
-              ))}
-            </div>
           </CardHeader>
           <CardContent className="p-4 pt-2">
             <div className="rounded-md bg-muted/40 p-3">
@@ -1121,13 +1092,12 @@ export function TemplateBuilderShell({
                 templateName={draft.name_en}
                 nameAr={draft.name_ar}
                 company={t("previewCompany")}
-                body={previewLocale === "ar" ? draft.body_ar : draft.body_en}
-                declaration={
-                  previewLocale === "ar" ? draft.declaration_ar : draft.declaration_en
-                }
+                body={draft.body_en}
+                bodyAr={draft.body_ar}
+                declaration={draft.declaration_en}
+                declarationAr={draft.declaration_ar}
                 fields={visibleFields}
                 values={values}
-                locale={previewLocale}
                 documentKind={draft.document_kind}
                 signers={{
                   employeeLabel: t("previewEmployeeSignature"),
@@ -1155,7 +1125,7 @@ export function TemplateBuilderShell({
                 size="sm"
                 disabled={isNew}
                 onClick={() =>
-                  router.push(`/employeedesk/esign/send?template=${template.id}`)
+                  router.push(`/employeedesk/esign/templates/${template.id}`)
                 }
               >
                 <Send className="size-3.5" aria-hidden />

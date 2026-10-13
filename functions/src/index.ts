@@ -217,6 +217,8 @@ export {
   adminUpdateEsignBatchRow,
   adminRemoveEsignBatchRow,
   esignWorkerDrainableBatches,
+  adminEsignResolveEmployees,
+  esignWorkerResolveEmployees,
   adminSaveEsignDraft,
   adminListEsignDrafts,
   adminGetEsignDraft,

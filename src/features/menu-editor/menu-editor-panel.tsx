@@ -36,6 +36,7 @@ import {
 } from "@/services/menu-config-service";
 import { mergeMenu } from "@/lib/menu/menu-merge";
 import { MENU_REGISTRY } from "@/lib/menu/menu-registry";
+import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
 import type { AdminRoleRow } from "@/lib/auth/get-role-permissions";
 import {
@@ -65,7 +66,12 @@ function roleLabel(roles: AdminRoleRow[], slug: string): string {
 function notifyMenuConfigUpdated(targetRole: string) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(`sidebar-menu-cache:v3:${targetRole}`);
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key?.startsWith("sidebar-menu-cache:") && key.endsWith(`:${targetRole}`)) {
+        localStorage.removeItem(key);
+      }
+    }
     window.dispatchEvent(
       new CustomEvent("menu-config-updated", { detail: { role: targetRole } }),
     );
@@ -188,6 +194,7 @@ function rebuildTree(
 
 export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
   const t = useTranslations("pages.settings.menuEditor");
+  const { adminRoleSlug } = useAuth();
   const [role, setRole] = useState("");
   const [rows, setRows] = useState<FlatRow[]>([]);
   const [groups, setGroups] = useState<MenuNode[]>([]);
@@ -200,11 +207,13 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
   const [copyToRole, setCopyToRole] = useState("");
 
   useEffect(() => {
-    if (roles.length > 0 && !role) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- bootstrap default role tab
-      setRole(roles[0]!.slug);
-    }
-  }, [roles, role]);
+    if (roles.length === 0 || role) return;
+    const signedIn = roles.some((r) => r.slug === adminRoleSlug)
+      ? adminRoleSlug
+      : roles[0]!.slug;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bootstrap the tab the sidebar is showing
+    setRole(signedIn);
+  }, [adminRoleSlug, roles, role]);
 
   useEffect(() => {
     if (role) {
@@ -375,6 +384,7 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
     if (!confirm(t("resetConfirm", { role: roleLabel(roles, role) }))) return;
     await resetMenuConfig(role);
     await load(role);
+    notifyMenuConfigUpdated(role);
     toast.success(t("resetDone"));
   };
 

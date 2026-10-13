@@ -3,16 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import {
-  BellRing,
-  Download,
-  ExternalLink,
-  FileSignature,
-  Hourglass,
-  Loader2,
-  RefreshCw,
-  TriangleAlert,
-} from "lucide-react";
+import { ChevronDown, Loader2, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader, AppListToolbar } from "@/components/app";
 import {
@@ -20,14 +11,14 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
-import { StatusPill } from "@/components/dashboard/status-pill";
-import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Link, useRouter } from "@/i18n/navigation";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SearchSelect } from "@/components/ui/search-select";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
-import { EsignKpiStrip } from "./esign-kpi-strip";
-import { EsignRemindDialog, type EsignRemindTarget } from "./esign-remind-dialog";
+import { cn } from "@/lib/utils";
+import { EsignDotKpis } from "./esign-kpi-strip";
 import {
   ESIGN_TRACKER_TABS,
   batchStageKey,
@@ -71,10 +62,24 @@ const NO_RECIPIENTS: EsignTrackerRecipient[] = [];
  * The four tiles come from `admin_esign_batch_kpis`, not a capped page
  * roll-up, so a 200-row list cannot under-count the fleet.
  */
+function esignDeskPaths(pathname: string) {
+  const desk = pathname.includes("/employeedesk");
+  return {
+    desk,
+    outgoingHref: desk ? "/employeedesk" : "/requests/esign",
+    batchesHref: desk ? "/employeedesk/esign/batches" : "/requests/esign/batches",
+    sendHref: desk ? "/employeedesk/esign/send" : "/requests/esign/send",
+    detailHref: (id: string) =>
+      desk ? `/employeedesk/esign/batches/${id}` : `/requests/esign/batches/${id}`,
+  };
+}
+
 export function EsignBatchesShell() {
   const t = useTranslations("pages.requests.esign.tracker");
-  const tHub = useTranslations("pages.requests.esign.hub");
+  const tRcm = useTranslations("pages.rcmV2");
   const router = useRouter();
+  const pathname = usePathname();
+  const paths = esignDeskPaths(pathname);
   const queryClient = useQueryClient();
 
   const batchesQuery = useEsignBatches();
@@ -83,10 +88,10 @@ export function EsignBatchesShell() {
 
   const [tab, setTab] = useState<EsignTrackerTab>("all");
   const [search, setSearch] = useState("");
-  const [templateId, setTemplateId] = useState("");
-  const [remindOpen, setRemindOpen] = useState(false);
-  const [busyBatchId, setBusyBatchId] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [senderId, setSenderId] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [retryingAll, setRetryingAll] = useState(false);
 
   // Module-level fallbacks, not `?? []`: a fresh array on every render is a new
@@ -112,47 +117,26 @@ export function EsignBatchesShell() {
     const needle = search.trim().toLowerCase();
     return filterTrackerBatches(tracker, tab).filter((row) => {
       if (templateId && row.batch.template_id !== templateId) return false;
+      if (senderId && row.batch.created_by_id !== senderId) return false;
+      const day = kuwaitBatchDay(row.batch.created_at);
+      if (dateFrom && day < dateFrom) return false;
+      if (dateTo && day > dateTo) return false;
       if (!needle) return true;
+      const codeHit = recipients.some(
+        (recipient) =>
+          recipient.batch_id === row.batch.id &&
+          recipient.request_code.toLowerCase().includes(needle),
+      );
       return (
+        codeHit ||
         row.batch.batch_code.toLowerCase().includes(needle) ||
         row.batch.title.toLowerCase().includes(needle) ||
-        (row.batch.template_name ?? "").toLowerCase().includes(needle)
+        (row.batch.template_name ?? "").toLowerCase().includes(needle) ||
+        (row.batch.category_label ?? "").toLowerCase().includes(needle) ||
+        (row.batch.created_by_name ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [tracker, tab, templateId, search]);
-
-  /**
-   * Every outstanding rider across the batches currently on screen.
-   *
-   * Deliberately built from `visible`, not from `tracker`: the drawer chases
-   * "what I am looking at", and a reminder that reached riders the operator had
-   * filtered away would make the count on the button a number they cannot
-   * account for. The drawer filters to the two waiting stages itself, so this
-   * passes every stage through rather than duplicating that rule.
-   */
-  const reminderTargets: EsignRemindTarget[] = useMemo(
-    () =>
-      visible.map((row) => row.batch.id).flatMap((batchId) =>
-        recipients
-          .filter((r) => r.batch_id === batchId)
-          .map((r) => ({
-            id: r.id,
-            request_code: r.request_code,
-            status: r.status,
-            viewed_at: r.viewed_at,
-          })),
-      ),
-    [visible, recipients],
-  );
-
-  const waitingCount = useMemo(
-    () =>
-      visible.reduce(
-        (total, row) => total + row.progress.opened + row.progress.notOpened,
-        0,
-      ),
-    [visible],
-  );
+  }, [tracker, tab, templateId, senderId, dateFrom, dateTo, search, recipients]);
 
   const failedBatches = useMemo(
     () => visible.filter((row) => row.batch.failed_count > 0),
@@ -192,64 +176,6 @@ export function EsignBatchesShell() {
     toast.success(t("retryDone", { created: sent, failed }));
   }
 
-  async function retryOne(row: EsignTrackerBatch) {
-    setBusyBatchId(row.batch.id);
-    const result = await retryFailedEsignBatchRows(row.batch.id);
-    setBusyBatchId(null);
-    await queryClient.invalidateQueries({ queryKey: queryKeys.esign.all() });
-    if (!result.ok) {
-      toast.error(result.error ?? t("errors.retryFailed"));
-      return;
-    }
-    if (result.created === 0 && result.failed === 0) {
-      toast.info(t("retryNone"));
-      return;
-    }
-    // The same recount-vs-delta distinction as `retryAll`: `created` is the
-    // batch's total after the pass, so the delta is what this retry saved.
-    toast.success(
-      t("retryDone", {
-        created: Math.max(result.created - row.batch.created_count, 0),
-        failed: result.failed,
-      }),
-    );
-  }
-
-  /**
-   * The archive is fetched rather than linked.
-   *
-   * A plain `<a href>` would navigate the operator to the route's JSON body on
-   * a refusal (`nothing_signed`, `too_many_documents`, `archive_too_large`), so
-   * a batch where only three of forty rows are signed would replace the page
-   * with `{"error":"nothing_signed"}`. Reading the status lets each refusal say
-   * which of the three it is, and the object URL carries the filename where a
-   * direct navigation would have to trust `Content-Disposition` alone.
-   */
-  async function downloadArchive(batchId: string, batchCode: string) {
-    setDownloadingId(batchId);
-    try {
-      const response = await fetch(`/api/esign/batch-zip?id=${encodeURIComponent(batchId)}`);
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        toast.error(
-          body?.error === "nothing_signed" ? t("downloadNone") : t("errors.downloadFailed"),
-        );
-        return;
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${batchCode}.zip`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error(t("errors.downloadFailed"));
-    } finally {
-      setDownloadingId(null);
-    }
-  }
-
   const loading = batchesQuery.isLoading || recipientsQuery.isLoading;
   const error = batchesQuery.data?.error ?? recipientsQuery.data?.error;
 
@@ -257,8 +183,13 @@ export function EsignBatchesShell() {
   // read from `trackerTabCounts`, the same roll-up the tiles and the filter use.
   const tabItems = ESIGN_TRACKER_TABS.map((id) => ({
     id,
-    label: `${t(`tabs.${tabKey(id)}`)} (${tabCounts[id]})`,
+    label: t(`tabs.${tabKey(id)}`),
+    count: tabCounts[id],
   }));
+  const dateLabel =
+    dateFrom || dateTo
+      ? [dateFrom || t("dateFrom"), dateTo || t("dateTo")].join(" – ")
+      : t("dateRange");
 
   return (
     <AppPage>
@@ -266,86 +197,121 @@ export function EsignBatchesShell() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
-          { label: tHub("requests"), href: "/requests" },
-          { label: tHub("title"), href: "/requests/esign" },
+          { label: tRcm("hubTitle"), href: "/employeedesk" },
+          { label: tRcm("outgoingShort"), href: "/employeedesk" },
           { label: t("title") },
         ]}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 cursor-pointer"
-              render={<Link href="/requests/esign/batches" />}
-            >
-              {t("colBatch")}
-            </Button>
-            <Button
-              size="sm"
-              className="h-9 cursor-pointer"
-              disabled={waitingCount === 0}
-              onClick={() => setRemindOpen(true)}
-            >
-              <BellRing className="me-1.5 h-3.5 w-3.5" />
-              {waitingCount === 0 ? t("remindNone") : t("remind")}
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            className="h-9 cursor-pointer bg-zinc-950 text-white hover:bg-zinc-800"
+            render={<Link href="/employeedesk/esign/templates/new" />}
+          >
+            <Plus className="me-1.5 h-3.5 w-3.5" />
+            {t("newFromTemplate")}
+          </Button>
         }
       />
 
-      <EsignKpiStrip
+      <EsignDotKpis
         items={[
           {
             label: t("kpiBatches30d"),
             value: kpis.batchesSent,
-            icon: FileSignature,
-            accent: "primary",
+            dotClass: "bg-rose-500",
           },
           {
             label: t("kpiWaiting"),
             value: kpis.waitingSignatures,
-            icon: Hourglass,
-            accent: "warning",
+            unit: t("unitEmployees"),
+            dotClass: "bg-sky-500",
           },
           {
             label: t("kpiSigned"),
             value: kpis.fullySigned,
-            icon: FileSignature,
-            accent: "success",
+            unit: t("unitBatches"),
+            dotClass: "bg-emerald-500",
           },
           {
             label: t("kpiDeclined"),
             value: kpis.declined,
-            icon: TriangleAlert,
-            accent: "danger",
+            unit: t("unitEmployees"),
+            dotClass: "bg-rose-500",
           },
         ]}
       />
 
       <AppListCard className="p-0">
         <div className="flex flex-col gap-3 border-b border-border p-3">
-          <TabBar items={tabItems} activeId={tab} onSelect={(id) => setTab(id as EsignTrackerTab)} />
+          <CountPills
+            items={tabItems}
+            activeId={tab}
+            onSelect={(id) => setTab(id)}
+          />
           <AppListToolbar
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder={t("searchPlaceholder")}
-            countLabel={`${visible.length} / ${tracker.length}`}
             filterSlot={
-              options.templates.length > 0 ? (
-                <select
+              <div className="flex flex-wrap items-center gap-2">
+                <SearchSelect
+                  items={options.templates}
                   value={templateId}
-                  onChange={(event) => setTemplateId(event.target.value)}
-                  className="h-9 w-full cursor-pointer rounded-lg border border-border bg-background px-2 text-xs sm:w-56"
-                  aria-label={t("colTemplate")}
-                >
-                  <option value="">{t("templateAll")}</option>
-                  {options.templates.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              ) : null
+                  onChange={setTemplateId}
+                  placeholder={t("templateAll")}
+                  searchPlaceholder={t("searchPlaceholder")}
+                  recentsKey="esign-batch-template"
+                  className="w-40"
+                />
+                <SearchSelect
+                  items={options.senders}
+                  value={senderId}
+                  onChange={setSenderId}
+                  placeholder={t("senderAll")}
+                  searchPlaceholder={t("senderSearch")}
+                  recentsKey="esign-batch-sender"
+                  className="w-36"
+                />
+                <Popover>
+                  <PopoverTrigger
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium"
+                  >
+                    {dateLabel}
+                    <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 space-y-2 p-3">
+                    <label className="block space-y-1 text-[10px] font-medium text-muted-foreground">
+                      {t("dateFrom")}
+                      <Input
+                        type="date"
+                        className="h-9"
+                        value={dateFrom}
+                        onChange={(event) => setDateFrom(event.target.value)}
+                      />
+                    </label>
+                    <label className="block space-y-1 text-[10px] font-medium text-muted-foreground">
+                      {t("dateTo")}
+                      <Input
+                        type="date"
+                        className="h-9"
+                        value={dateTo}
+                        onChange={(event) => setDateTo(event.target.value)}
+                      />
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 w-full"
+                      onClick={() => {
+                        setDateFrom("");
+                        setDateTo("");
+                      }}
+                    >
+                      {t("clearFilters")}
+                    </Button>
+                  </PopoverContent>
+                </Popover>
+              </div>
             }
             trailing={
               failedBatches.length > 0 ? (
@@ -384,6 +350,7 @@ export function EsignBatchesShell() {
             columns={[
               { id: "batch", label: t("colBatch") },
               { id: "template", label: t("colTemplate") },
+              { id: "recipients", label: t("colRecipients") },
               { id: "progress", label: t("colProgress") },
               { id: "status", label: t("colStatus") },
               { id: "sent", label: t("colSent") },
@@ -395,148 +362,159 @@ export function EsignBatchesShell() {
                 key={row.batch.id}
                 row={row}
                 t={t}
-                busy={busyBatchId === row.batch.id}
-                downloading={downloadingId === row.batch.id}
-                onOpen={() => router.push(`/requests/esign/batches/${row.batch.id}`)}
-                onRetry={() => void retryOne(row)}
-                onDownload={() => void downloadArchive(row.batch.id, row.batch.batch_code)}
+                trackLabel={tRcm("track")}
+                onOpen={() => router.push(paths.detailHref(row.batch.id))}
               />
             ))}
           </AppDataTable>
         )}
       </AppListCard>
-
-      <EsignRemindDialog
-        open={remindOpen}
-        onOpenChange={setRemindOpen}
-        recipients={reminderTargets}
-      />
     </AppPage>
   );
 }
 
 /** `TabBar` ids are the stage keys; only the two multi-word labels differ. */
 function tabKey(id: EsignTrackerTab): string {
-  if (id === "in_progress") return "inProgress";
-  if (id === "has_declines") return "hasDeclines";
-  return id;
+  switch (id) {
+    case "all":
+      return "all";
+    case "in_progress":
+      return "inProgress";
+    case "completed":
+      return "completed";
+    case "has_declines":
+      return "hasDeclines";
+    case "waiting":
+      return "waiting";
+    default: {
+      const _exhaustive: never = id;
+      return _exhaustive;
+    }
+  }
 }
 
-function batchVariant(stage: EsignBatchStage): "success" | "warning" | "danger" | "neutral" {
-  if (stage === "completed") return "success";
-  if (stage === "has_declines") return "danger";
-  if (stage === "in_progress") return "warning";
-  return "neutral";
+function kuwaitBatchDay(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kuwait",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function stageDotClass(stage: EsignBatchStage): string {
+  switch (stage) {
+    case "completed":
+      return "text-emerald-700";
+    case "has_declines":
+      return "text-rose-700";
+    case "in_progress":
+      return "text-amber-700";
+    case "waiting":
+      return "text-sky-700";
+    default: {
+      const unexpected: never = stage;
+      return unexpected;
+    }
+  }
+}
+
+function CountPills({
+  items,
+  activeId,
+  onSelect,
+}: {
+  items: { id: EsignTrackerTab; label: string; count: number }[];
+  activeId: EsignTrackerTab;
+  onSelect: (id: EsignTrackerTab) => void;
+}) {
+  return (
+    <div className="inline-flex w-fit flex-wrap gap-1 rounded-lg bg-muted/70 p-1">
+      {items.map((item) => {
+        const active = item.id === activeId;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelect(item.id)}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium",
+              active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            {item.label}
+            <span className="tabular-nums">{item.count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function BatchRow({
   row,
   t,
-  busy,
-  downloading,
+  trackLabel,
   onOpen,
-  onRetry,
-  onDownload,
 }: {
   row: EsignTrackerBatch;
   t: ReturnType<typeof useTranslations>;
-  busy: boolean;
-  downloading: boolean;
+  trackLabel: string;
   onOpen: () => void;
-  onRetry: () => void;
-  onDownload: () => void;
 }) {
   const { batch, progress, stage } = row;
-  const waiting = progress.opened + progress.notOpened;
+  const tone = stageDotClass(stage);
 
   return (
     <AppDataTableRow onClick={onOpen}>
       <TableCell>
-        <span className="font-mono text-xs font-semibold">{batch.batch_code}</span>
-        <span className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-          {batch.title}
-          <ExternalLink className="h-3 w-3" />
+        <span className="text-xs font-semibold">{batch.batch_code}</span>
+      </TableCell>
+      <TableCell className="text-xs">
+        <span className="block font-medium">{batch.title}</span>
+        <span className="block text-[10px] text-muted-foreground">
+          {batch.template_name ?? batch.category_label ?? "—"}
         </span>
       </TableCell>
-      <TableCell className="text-xs">{batch.template_name ?? "—"}</TableCell>
+      <TableCell className="text-xs text-muted-foreground">
+        {t("employeesCount", { count: progress.total })}
+      </TableCell>
       <TableCell>
         <div className="flex min-w-[140px] flex-col gap-1">
+          <span className="text-[11px] tabular-nums text-muted-foreground">
+            {t("progressSlash", { signed: progress.signed, total: progress.total })}
+          </span>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-emerald-500 transition-[width] duration-200"
               style={{ width: `${progress.percent}%` }}
             />
           </div>
-          <span className="text-[11px] tabular-nums text-muted-foreground">
-            {t("progressLabel", { signed: progress.signed, total: progress.total })}
-          </span>
-          <span className="text-[10px] tabular-nums text-muted-foreground">
-            {t("progressHint", { waiting, declined: progress.declined })}
-          </span>
         </div>
       </TableCell>
       <TableCell>
-        <StatusPill variant={batchVariant(stage)}>
+        <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", tone)}>
+          <span className={cn("size-1.5 rounded-full bg-current")} aria-hidden />
           {t(`batchStatus.${batchStageKey(stage)}`)}
-        </StatusPill>
+        </span>
       </TableCell>
       <TableCell className="text-xs tabular-nums text-muted-foreground">
         {formatEsignTrackerDate(batch.created_at)}
       </TableCell>
       <TableCell className="text-end">
-        <div
-          className="flex items-center justify-end gap-1"
-          onClick={(event) => event.stopPropagation()}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 cursor-pointer px-3 text-xs font-medium"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpen();
+          }}
         >
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 cursor-pointer p-0"
-                  disabled={batch.failed_count === 0 || busy}
-                  onClick={onRetry}
-                  aria-label={t("retryShort")}
-                >
-                  {busy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              }
-            />
-            <TooltipContent>
-              {batch.failed_count === 0
-                ? t("retryNone")
-                : `${t("retry")} · ${batch.failed_count}`}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 cursor-pointer p-0 text-primary hover:bg-primary/10"
-                  disabled={progress.signed === 0 || downloading}
-                  onClick={onDownload}
-                  aria-label={t("downloadShort")}
-                >
-                  {downloading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Download className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              }
-            />
-            <TooltipContent>
-              {progress.signed === 0 ? t("downloadNone") : t("download")}
-            </TooltipContent>
-          </Tooltip>
-        </div>
+          {trackLabel}
+        </Button>
       </TableCell>
     </AppDataTableRow>
   );

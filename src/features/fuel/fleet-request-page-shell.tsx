@@ -31,7 +31,13 @@ import { formatKwd } from "./fuel-week";
 import { useFleetRequests } from "./use-fleet-requests";
 import type { FleetRequestListRow } from "./fleet-request-types";
 
-export function FleetRequestPageShell({ type }: { type: FleetQueueRequestType }) {
+export function FleetRequestPageShell({
+  type,
+  embedded = false,
+}: {
+  type: FleetQueueRequestType;
+  embedded?: boolean;
+}) {
   const t = useTranslations("pages.fleetFuelQueue");
   const statusT = useTranslations("pages.requests.status");
   const { data, isPending } = useFleetRequests(type);
@@ -55,18 +61,8 @@ export function FleetRequestPageShell({ type }: { type: FleetQueueRequestType })
   );
   const selected = rows.find((row) => row.id === selectedId) ?? null;
 
-  return (
-    <AppPage>
-      <AppPageHeader
-        title={type === "fuel" ? t("requestsTitle") : type === "fuel_refund" ? t("refundsTitle") : t("assetsTitle")}
-        description={
-          type === "fuel"
-            ? t("requestsSubtitle")
-            : type === "fuel_refund"
-              ? t("refundsSubtitle")
-              : t("assetsSubtitle")
-        }
-      />
+  const body = (
+    <>
       <AppListCard
         toolbar={
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -177,6 +173,22 @@ export function FleetRequestPageShell({ type }: { type: FleetQueueRequestType })
           if (!open) setSelectedId(null);
         }}
       />
+    </>
+  );
+  if (embedded) return body;
+  return (
+    <AppPage>
+      <AppPageHeader
+        title={type === "fuel" ? t("requestsTitle") : type === "fuel_refund" ? t("refundsTitle") : t("assetsTitle")}
+        description={
+          type === "fuel"
+            ? t("requestsSubtitle")
+            : type === "fuel_refund"
+              ? t("refundsSubtitle")
+              : t("assetsSubtitle")
+        }
+      />
+      {body}
     </AppPage>
   );
 }

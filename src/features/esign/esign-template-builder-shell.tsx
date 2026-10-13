@@ -51,7 +51,6 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
   const [nameEn, setNameEn] = useState("");
   const [nameAr, setNameAr] = useState("");
   const [categoryKey, setCategoryKey] = useState("");
-  const [language, setLanguage] = useState<"en" | "ar">("en");
   const [active, setActive] = useState(true);
   const [headerEn, setHeaderEn] = useState("");
   const [headerAr, setHeaderAr] = useState("");
@@ -73,7 +72,6 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
     setNameEn(template.name_en);
     setNameAr(template.name_ar ?? "");
     setCategoryKey(template.category_key);
-    setLanguage(template.default_language);
     setActive(template.is_active);
     setHeaderEn(template.header_en);
     setHeaderAr(template.header_ar);
@@ -91,14 +89,21 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
   function insertToken(key: string) {
     const token = `{{${key}}}`;
     const apply = (prev: string) => (prev ? `${prev} ${token}` : token);
-    if (target === "header") {
-      if (language === "ar") setHeaderAr(apply);
-      else setHeaderEn(apply);
-    } else if (target === "declaration") {
-      if (language === "ar") setDeclAr(apply);
-      else setDeclEn(apply);
-    } else if (language === "ar") setBodyAr(apply);
-    else setBodyEn(apply);
+    switch (target) {
+      case "header":
+        setHeaderEn(apply);
+        return;
+      case "declaration":
+        setDeclEn(apply);
+        return;
+      case "body":
+        setBodyEn(apply);
+        return;
+      default: {
+        const exhaustive: never = target;
+        return exhaustive;
+      }
+    }
   }
 
   async function saveTemplate() {
@@ -112,7 +117,7 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
       name_en: nameEn.trim(),
       name_ar: nameAr.trim() || null,
       category_key: categoryKey,
-      default_language: language,
+      default_language: "en",
       is_active: active,
       header_en: headerEn,
       header_ar: headerAr,
@@ -244,14 +249,8 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>{t("fieldLanguage")}</Label>
+              <Label>{t("active")}</Label>
               <div className="flex gap-1">
-                <ToggleChip selected={language === "en"} onClick={() => setLanguage("en")}>
-                  EN
-                </ToggleChip>
-                <ToggleChip selected={language === "ar"} onClick={() => setLanguage("ar")}>
-                  AR
-                </ToggleChip>
                 <ToggleChip selected={active} onClick={() => setActive((v) => !v)}>
                   {active ? t("active") : t("inactive")}
                 </ToggleChip>

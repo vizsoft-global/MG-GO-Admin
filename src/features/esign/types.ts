@@ -360,6 +360,11 @@ export type EsignTemplateRow = {
    * one that only has the standard employee/HR blocks, so the card says so.
    */
   has_signature_rows?: boolean;
+  /**
+   * How a bulk send uses this template. Absent on older rows — the library
+   * then shows a fallback subtitle instead of inventing "Bulk sign and return".
+   */
+  bulk_mode?: "sign_and_return" | "import" | null;
 };
 
 export type EsignTemplateDetail = EsignTemplateRow & {
@@ -400,6 +405,12 @@ export type EsignBatchRow = {
   due_at: string | null;
   source_filename: string | null;
   created_at: string;
+  /** Category label joined from the template. Absent on older rows. */
+  category_label?: string | null;
+  /** Staff uid. Never shown in a trigger — the name is. */
+  created_by_id?: string | null;
+  /** Human sender name. Null when the profile has no name. */
+  created_by_name?: string | null;
 };
 
 export type EsignBatchLine = {
@@ -453,6 +464,8 @@ export type EsignBatchLine = {
    * be worth anything.
    */
   declined_reason?: string | null;
+  recipient_signed_at?: string | null;
+  recipient_declined_at?: string | null;
 };
 
 export type EsignDetail = EsignListRow & {

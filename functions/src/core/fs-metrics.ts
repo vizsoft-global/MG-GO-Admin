@@ -30,6 +30,37 @@ type ActiveRead = { overlapped: boolean };
 const storage = new AsyncLocalStorage<FsMetrics>();
 
 let patched = false;
+let disabled = false;
+
+/** A Firestore class export. Missing at runtime on some Admin SDK builds. */
+type ProtoCtor = { prototype?: object } | undefined;
+
+export type FsMetricClasses = {
+  Query?: ProtoCtor;
+  DocumentReference?: ProtoCtor;
+  Firestore?: ProtoCtor;
+  AggregateQuery?: ProtoCtor;
+  Transaction?: ProtoCtor;
+};
+
+function defaultClasses(): FsMetricClasses {
+  return {
+    Query,
+    DocumentReference,
+    Firestore,
+    AggregateQuery: AggregateQuery as FsMetricClasses["AggregateQuery"],
+    Transaction,
+  };
+}
+
+let loadClasses: () => FsMetricClasses = defaultClasses;
+
+function prototypeOf(ctor: unknown): object | null {
+  if (typeof ctor !== "function") return null;
+  const proto = (ctor as { prototype?: unknown }).prototype;
+  if (!proto || typeof proto !== "object") return null;
+  return proto;
+}
 
 function noteStart(): ActiveRead | null {
   const metrics = storage.getStore();
@@ -89,26 +120,56 @@ function patchMethod(
   host[method] = wrapped;
 }
 
-/** Install once. Outside a measured request the wrappers only forward. */
+function docsOfSnapshot(value: unknown): number {
+  const snap = value as { exists?: boolean; size?: number };
+  if (typeof snap.size === "number") return snap.size;
+  return snap.exists ? 1 : 0;
+}
+
+/**
+ * Install once. A missing class (AggregateQuery on some builds) is skipped.
+ * Any throw disables metrics for this process and is logged once. Callers
+ * never see that error. Outside a measured request the wrappers only forward.
+ */
 export function installFsMetrics(): void {
-  if (patched) return;
-  patched = true;
-  patchMethod(Query.prototype, "get", (value) => {
-    const snap = value as { size?: number };
-    return typeof snap.size === "number" ? snap.size : 0;
-  });
-  patchMethod(DocumentReference.prototype, "get", (value) => {
-    const snap = value as { exists?: boolean };
-    return snap.exists ? 1 : 0;
-  });
-  patchMethod(Firestore.prototype, "getAll", (value) => (Array.isArray(value) ? value.length : 0));
-  patchMethod(AggregateQuery.prototype, "get", () => 1);
-  patchMethod(Transaction.prototype, "get", (value) => {
-    if (Array.isArray(value)) return value.length;
-    const snap = value as { exists?: boolean; size?: number };
-    if (typeof snap.size === "number") return snap.size;
-    return snap.exists ? 1 : 0;
-  });
+  if (patched || disabled) return;
+  try {
+    const classes = loadClasses();
+    const query = prototypeOf(classes.Query);
+    if (query) {
+      patchMethod(query, "get", (value) => {
+        const snap = value as { size?: number };
+        return typeof snap.size === "number" ? snap.size : 0;
+      });
+    }
+    const document = prototypeOf(classes.DocumentReference);
+    if (document) {
+      patchMethod(document, "get", (value) => {
+        const snap = value as { exists?: boolean };
+        return snap.exists ? 1 : 0;
+      });
+    }
+    const firestore = prototypeOf(classes.Firestore);
+    if (firestore) {
+      patchMethod(firestore, "getAll", (value) => (Array.isArray(value) ? value.length : 0));
+    }
+    const aggregate = prototypeOf(classes.AggregateQuery);
+    if (aggregate) patchMethod(aggregate, "get", () => 1);
+    const transaction = prototypeOf(classes.Transaction);
+    if (transaction) patchMethod(transaction, "get", docsOfSnapshot);
+    patched = true;
+  } catch (error) {
+    disabled = true;
+    const message = error instanceof Error ? error.message : "install failed";
+    console.error(`fs-metrics disabled: ${message}`);
+  }
+}
+
+/** Test seam. Production always uses the firebase-admin exports. */
+export function setFsMetricsClassesForTests(loader: (() => FsMetricClasses) | null): void {
+  patched = false;
+  disabled = false;
+  loadClasses = loader ?? defaultClasses;
 }
 
 export async function runWithFsMetrics<T>(name: string, fn: () => Promise<T>): Promise<T> {

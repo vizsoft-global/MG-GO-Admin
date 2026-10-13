@@ -1,6 +1,5 @@
 import { setRequestLocale } from "next-intl/server";
-import { requirePermission } from "@/lib/auth/require-permission";
-import { RequestsHubShell } from "@/features/requests/requests-hub-shell";
+import { redirect } from "@/i18n/navigation";
 
 export default async function RequestsPage({
   params,
@@ -9,6 +8,5 @@ export default async function RequestsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requirePermission(locale, "requests.view");
-  return <RequestsHubShell />;
+  redirect({ href: "/employeedesk", locale });
 }

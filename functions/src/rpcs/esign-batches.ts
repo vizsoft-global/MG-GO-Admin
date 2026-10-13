@@ -8,6 +8,7 @@
  * so the batch header can never print a figure no row supports.
  */
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { esignEmployeeSnapshotFor } from "./esign-requests";
 import {
   getFirestore,
   FieldValue,
@@ -103,10 +104,42 @@ async function recountBatch(batchId: string): Promise<void> {
   );
 }
 
+type EmployeeResolveStatus = "ok" | "unknown_id" | "ambiguous" | "archived" | "blocked";
+type ResolveRowStatus = EmployeeResolveStatus | "invalid";
+
+const RESOLVE_ROW_CAP = 500;
+const RESOLVE_LOOKUP_WIDTH = 20;
+
+function classifyDriver(
+  driver: Dict,
+  driverId: string,
+): { status: EmployeeResolveStatus; driverId: string | null } {
+  if (driver[FIELDS.drivers.archivedAt]) return { status: "archived", driverId: null };
+  if (driver.is_blocked === true) return { status: "blocked", driverId: null };
+  return { status: "ok", driverId };
+}
+
+function resolveRowOk(status: ResolveRowStatus): boolean {
+  switch (status) {
+    case "ok":
+      return true;
+    case "unknown_id":
+    case "ambiguous":
+    case "archived":
+    case "blocked":
+    case "invalid":
+      return false;
+    default: {
+      const unreachable: never = status;
+      return unreachable;
+    }
+  }
+}
+
 /** One-row form of `admin_esign_resolve_employees`: the status code and driver. */
 async function resolveEmployee(
   employeeId: string,
-): Promise<{ status: string; driverId: string | null }> {
+): Promise<{ status: EmployeeResolveStatus; driverId: string | null }> {
   const snap = await getFirestore()
     .collection(COLLECTIONS.drivers)
     .where(FIELDS.drivers.employeeId, "==", employeeId)
@@ -115,10 +148,83 @@ async function resolveEmployee(
   if (snap.empty) return { status: "unknown_id", driverId: null };
   if (snap.size > 1) return { status: "ambiguous", driverId: null };
   const doc = snap.docs[0];
-  const driver = dataOf(doc);
-  if (driver[FIELDS.drivers.archivedAt]) return { status: "archived", driverId: null };
-  if (driver.is_blocked === true) return { status: "blocked", driverId: null };
-  return { status: "ok", driverId: doc.id };
+  return classifyDriver(dataOf(doc), doc.id);
+}
+
+function employeeIdOf(row: unknown): string {
+  if (!row || typeof row !== "object") return "";
+  const record = row as Dict;
+  const raw = record.employee_id ?? record.employeeId;
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function rowIndexOf(row: unknown, fallback: number): number {
+  if (!row || typeof row !== "object") return fallback;
+  const raw = (row as Dict).row_index ?? (row as Dict).rowIndex;
+  if (typeof raw === "number" && Number.isFinite(raw)) return Math.trunc(raw);
+  if (typeof raw === "string" && raw.trim() !== "" && Number.isFinite(Number(raw))) {
+    return Math.trunc(Number(raw));
+  }
+  return fallback;
+}
+
+/**
+ * `{ p_rows: [{ employee_id }] }` → `{ ok, rows }` in the same order.
+ * `row_index` is the array index unless the row already carries one.
+ */
+async function resolveEmployeesPayload(data: unknown): Promise<Dict> {
+  const body = (data ?? {}) as Dict;
+  const raw = pick(body, "p_rows", "rows");
+  if (!Array.isArray(raw)) return { ok: false, error: "invalid_input" };
+  if (raw.length > RESOLVE_ROW_CAP) return { ok: false, error: "too_many_rows" };
+
+  const hits: { status: ResolveRowStatus; driverId: string | null }[] = new Array(raw.length);
+  for (const group of chunk(
+    raw.map((_, index) => index),
+    RESOLVE_LOOKUP_WIDTH,
+  )) {
+    await Promise.all(
+      group.map(async (index) => {
+        const employeeId = employeeIdOf(raw[index]);
+        hits[index] = employeeId
+          ? await resolveEmployee(employeeId)
+          : { status: "invalid", driverId: null };
+      }),
+    );
+  }
+
+  const driverIds = [
+    ...new Set(
+      hits.flatMap((hit) => (hit.status === "ok" && hit.driverId ? [hit.driverId] : [])),
+    ),
+  ];
+  const snapshots = new Map<string, Dict | null>();
+  for (const group of chunk(driverIds, RESOLVE_LOOKUP_WIDTH)) {
+    const pairs = await Promise.all(
+      group.map(async (id) => [id, await esignEmployeeSnapshotFor(id)] as const),
+    );
+    for (const [id, snapshot] of pairs) snapshots.set(id, snapshot);
+  }
+
+  const rows = raw.map((row, index) => {
+    const hit = hits[index];
+    let status = hit.status;
+    const driverId = hit.driverId;
+    const snapshot = status === "ok" && driverId ? snapshots.get(driverId) ?? null : null;
+    if (status === "ok" && !snapshot) status = "unknown_id";
+    const out: Dict = {
+      row_index: rowIndexOf(row, index),
+      employee_id: employeeIdOf(row),
+      ok: resolveRowOk(status),
+      status,
+    };
+    if (status === "ok" && driverId && snapshot) {
+      out.driver_id = driverId;
+      out.snapshot = snapshot;
+    }
+    return out;
+  });
+  return { ok: true, rows };
 }
 
 /** `admin_create_esign_batch` — header (BAT-####) plus one row per sheet row. */
@@ -523,4 +629,20 @@ export const adminDeleteEsignDraft = onCall(async (request) => {
   const id = pickId(data, "id", "p_id");
   if (id) await getFirestore().collection(COLLECTIONS.esignDrafts).doc(id).delete();
   return { ok: true };
+});
+
+/** `admin_esign_resolve_employees` — staff with `requests.manage`. */
+export const adminEsignResolveEmployees = onCall(async (request) => {
+  await requireStaff(request, "requests.manage");
+  return resolveEmployeesPayload(request.data);
+});
+
+/**
+ * `esign_worker_resolve_employees` — cron mints a super-admin token
+ * (`callCronFunction`). Same gate as `esignWorkerDrainableBatches`.
+ */
+export const esignWorkerResolveEmployees = onCall(async (request) => {
+  const staff = await requireStaff(request);
+  if (!staff.isSuperAdmin) throw new HttpsError("permission-denied", "not_authorized");
+  return resolveEmployeesPayload(request.data);
 });

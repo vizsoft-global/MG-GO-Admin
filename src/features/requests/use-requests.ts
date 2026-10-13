@@ -14,6 +14,7 @@ import {
   fetchAdminRequestDetail,
   fetchAdminRequestsList,
   fetchRequestCreateOptions,
+  fetchRequestQueueFacts,
   fetchRequestTypeCounts,
   saveRequestDecisionTerms,
   setFuelTransferType,
@@ -31,6 +32,15 @@ export function useAdminRequestsList(filters: RequestListFilters) {
   return useQuery({
     queryKey: queryKeys.requests.list(filters),
     queryFn: () => fetchAdminRequestsList(filters),
+  });
+}
+
+export function useRequestQueueFacts(ids: string[]) {
+  const sorted = [...ids].sort();
+  return useQuery({
+    queryKey: queryKeys.requests.queueFacts(sorted),
+    queryFn: () => fetchRequestQueueFacts(sorted),
+    enabled: sorted.length > 0,
   });
 }
 
