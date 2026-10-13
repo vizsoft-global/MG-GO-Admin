@@ -240,6 +240,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-13` — **`adminLiveFleetSnapshot` updated in `me-central1`.** Existing callable, no `--force`, no new IAM. Unauthenticated `{data:{}}` is 401. Eighteen delivery prefix indexes are CREATING; `rollups_driver_day` driver+day is READY. `order_id_lower` with `created_at` was not deployed. Production alias is still `dpl_Fuoo3cbEgaqichhpWL9HTX19sYBD`. Backfill `--apply` was not run.
+
 - `[admin only] 2026-10-13` — **Prefix indexes and the live snapshot cache.** Nineteen composites: status, zone, or partner plus a delivery prefix field, and `rollups_driver_day` on driver plus day. `order_id_lower` with `created_at` stays out. `adminLiveFleetSnapshot` caches one unscoped base and projects each caller's zone, partner, and contact fields. Stage D readers are preview `dpl_5XASEkU6nSJf9qKw5uwhNbJzGTwb` (`fra1`, target preview). Production alias is still `dpl_Fuoo3cbEgaqichhpWL9HTX19sYBD`.
 
 - `[admin only] 2026-10-13` — **Delivery status writes stamp and roll up inside the panel.** `stampedPatch` lives in `src/lib/search/prefix.ts` and stamps `deliveries`. `applyDeliveryRollup` lives in `src/lib/search/delivery-rollup.ts` and uses `firebase-admin`, so the Next build does not import `functions/src`. No function deploy in this commit.
