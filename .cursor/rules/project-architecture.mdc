@@ -240,6 +240,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-13` — **Delivery status writes stamp and roll up inside the panel.** `stampedPatch` lives in `src/lib/search/prefix.ts` and stamps `deliveries`. `applyDeliveryRollup` lives in `src/lib/search/delivery-rollup.ts` and uses `firebase-admin`, so the Next build does not import `functions/src`. No function deploy in this commit.
+
 - `[admin only] 2026-10-13` — **Eleven staff writes now check the session before they write.** `correctAttendanceLog`, `restoreDriverIntake`, `regenerateDriverPasscode`, `forceSignOutDriver`, `recomputePayrollZoneMetrics`, `enqueueNotificationAutomationEvent`, `adjustAssetStock`, `returnAssetAssignment`, `clearUserUiPreference`, `assignVehicleAsset`, and `revertImportBatch` call `requireMutationAuth` (`checkRevoked: true`) before their existing permission check. The deliveries search box uses prefix shape, so fewer than 4 characters shows `prefixTooShort` and a capped page shows `searchIncomplete`. No function deploy in this commit.
 
 - `[admin only] 2026-10-13` — **Stage D epoch caches sit on the Stage G lane.** Settings, role, tick, and menu writers use `writeWithEpoch`. Mutations use `requireMutationAuth` (`checkRevoked: true`). Sign-out clears only this browser's cookie. Epoch cache TTL stays 5 minutes. No function deploy in this commit.
