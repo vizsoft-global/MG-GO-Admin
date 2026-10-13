@@ -92,14 +92,19 @@ export function AppLauncherShell() {
 
   return (
     <div
-      className="flex min-h-svh flex-col text-white"
-      style={{ backgroundColor: LAUNCHER_BRAND.canvas }}
+      className="relative flex min-h-svh flex-col overflow-hidden"
+      style={{ backgroundColor: LAUNCHER_BRAND.canvas, color: LAUNCHER_BRAND.text }}
     >
+      <img
+        src="/launcher-mg-watermark.png"
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute -end-10 -bottom-[150px] w-[520px] opacity-60"
+      />
       <header
-        className="flex h-16 shrink-0 items-center gap-4 px-6"
+        className="relative z-10 flex h-16 shrink-0 items-center gap-4 px-6 text-white"
         style={{
           backgroundColor: LAUNCHER_BRAND.topBar,
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
         }}
       >
         <Link href="/dashboard" className="flex shrink-0 items-center gap-[10px]">
@@ -186,8 +191,8 @@ export function AppLauncherShell() {
         </div>
       </header>
 
-      <section className="mt-[72px] flex flex-col items-center gap-1.5 text-center">
-        <h1 className="text-[24px] font-semibold leading-none tracking-tight">
+      <section className="relative z-10 mt-[72px] flex flex-col items-center gap-1.5 text-center">
+        <h1 className="text-[24px] font-semibold leading-none tracking-tight" style={{ color: LAUNCHER_BRAND.text }}>
           {t(`greeting.${greeting}`)}, {displayName}
         </h1>
         <p className="text-[14px]" style={{ color: LAUNCHER_BRAND.subText }}>
@@ -195,7 +200,7 @@ export function AppLauncherShell() {
         </p>
       </section>
 
-      <div className="mx-auto mt-[52px] grid w-full max-w-[690px] grid-cols-3 justify-items-center gap-x-[30px] gap-y-[24px] sm:grid-cols-4 lg:grid-cols-6">
+      <div className="relative z-10 mx-auto mt-[52px] grid w-full max-w-[690px] grid-cols-3 justify-items-center gap-x-[30px] gap-y-[24px] sm:grid-cols-4 lg:grid-cols-6">
         {visible.map((item) => {
           const Icon = resolveIcon(item.defaultIcon);
           const badge = badges[item.id];
@@ -213,7 +218,10 @@ export function AppLauncherShell() {
                 {badge ? (
                   <span
                     className="absolute -end-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums text-white"
-                    style={{ backgroundColor: LAUNCHER_BRAND.badge }}
+                    style={{
+                      backgroundColor: LAUNCHER_BRAND.badge,
+                      border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,
+                    }}
                   >
                     {badge > 999 ? "999+" : badge}
                   </span>
@@ -221,7 +229,7 @@ export function AppLauncherShell() {
               </span>
               <p
                 className="text-[13px] font-medium leading-snug"
-                style={{ color: LAUNCHER_BRAND.text }}
+                style={{ color: LAUNCHER_BRAND.tileLabel }}
               >
                 {labels.get(item.id) ?? item.defaultLabel}
               </p>
@@ -231,8 +239,8 @@ export function AppLauncherShell() {
       </div>
 
       <footer
-        className="mt-auto pt-12 pb-6 text-center text-[12px]"
-        style={{ color: LAUNCHER_BRAND.muted }}
+        className="relative z-10 mt-auto pt-12 pb-6 text-center text-[12px]"
+        style={{ color: LAUNCHER_BRAND.footer }}
       >
         {t("footer", {
           name: branding.appName,

@@ -237,6 +237,8 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "adminUpdateEsignBatchRow",
     "adminRemoveEsignBatchRow",
     "esignWorkerDrainableBatches",
+    "adminEsignResolveEmployees",
+    "esignWorkerResolveEmployees",
     "adminSaveEsignDraft",
     "adminListEsignDrafts",
     "adminGetEsignDraft",

@@ -1,10 +1,16 @@
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import {
+  fitImageInSlot,
+  INVALID_SIGNATURE_SLOT,
+  isUsableSlot,
+  resolveEmployeeStampSlot,
+  type SignSlot,
+} from "./esign-signature-slots";
 
 /**
- * Signed-copy layout. Same placement as `stampSignatureOnLastPage` in
- * `src/features/esign/render/esign-compose-stamp.ts` and the old
- * `esign-compose-signed-document` worker: last page, bottom-right, 36pt
- * margin, signature scaled into 180×60pt, Helvetica 7.5pt caption.
+ * Signed-copy layout. Employee PNG goes in the named SignSlot (D1/D2), never
+ * last-page bottom-right. Slot math is duplicated in esign-signature-slots.ts
+ * because functions/src cannot import src/features.
  */
 
 export const ESIGN_OBJECT_PREFIX = "esign-documents";
@@ -127,32 +133,45 @@ function canEncodeWinAnsi(font: PDFFont, text: string): boolean {
   }
 }
 
-function drawStamp(
+function resolveStampSlot(input: {
+  slot?: SignSlot;
+  kind?: unknown;
+  persistedSlots?: unknown;
+}): SignSlot {
+  if (input.slot) {
+    if (!isUsableSlot(input.slot) || input.slot.role !== "employee") {
+      throw new Error(INVALID_SIGNATURE_SLOT);
+    }
+    return input.slot;
+  }
+  return resolveEmployeeStampSlot({
+    persisted: input.persistedSlots,
+    kind: input.kind,
+  });
+}
+
+function drawStampInSlot(
   page: PDFPage,
   signature: PDFImage,
   captions: string[],
   font: PDFFont,
-  pageWidth: number,
+  slot: SignSlot,
 ) {
-  const scale = Math.min(SIG_MAX_WIDTH / signature.width, SIG_MAX_HEIGHT / signature.height, 1);
-  const sigWidth = signature.width * scale;
-  const sigHeight = signature.height * scale;
-  const captionBlockHeight = captions.length * CAPTION_LEADING;
-  const sigX = Math.max(COMPOSE_MARGIN, pageWidth - COMPOSE_MARGIN - sigWidth);
-  const sigY = COMPOSE_MARGIN + captionBlockHeight;
-
+  const fitted = fitImageInSlot(signature.width, signature.height, slot);
   page.drawImage(signature, {
-    x: sigX,
-    y: sigY,
-    width: sigWidth,
-    height: sigHeight,
+    x: fitted.x,
+    y: fitted.y,
+    width: fitted.w,
+    height: fitted.h,
   });
-
+  const captionTop = fitted.y - 2;
   captions.forEach((line, index) => {
+    const y = captionTop - (index + 1) * CAPTION_LEADING;
+    if (y < slot.yPt - 4) return;
     const textWidth = font.widthOfTextAtSize(line, CAPTION_SIZE);
     page.drawText(line, {
-      x: Math.max(COMPOSE_MARGIN, pageWidth - COMPOSE_MARGIN - textWidth),
-      y: COMPOSE_MARGIN + captionBlockHeight - (index + 1) * CAPTION_LEADING,
+      x: Math.min(Math.max(slot.xPt, fitted.x), slot.xPt + slot.wPt - textWidth),
+      y,
       size: CAPTION_SIZE,
       font,
       color: rgb(0.25, 0.28, 0.32),
@@ -188,6 +207,9 @@ export async function composeSignedPdf(input: {
   signatureBytes: Uint8Array;
   signatureKind: "png" | "jpeg";
   captions: string[];
+  slot?: SignSlot;
+  kind?: unknown;
+  persistedSlots?: unknown;
 }): Promise<{ pdfBytes: Uint8Array; pageCount: number }> {
   const pdf = await loadDocument(input.sourceBytes, input.sourceKind);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -200,9 +222,10 @@ export async function composeSignedPdf(input: {
   if (pageCount === 0) {
     throw new Error("empty_document");
   }
-  const page = pages[pageCount - 1];
-  const { width: pageWidth } = page.getSize();
+  const slot = resolveStampSlot(input);
+  const pageIndex = Math.min(Math.max(slot.page, 1), pageCount) - 1;
+  const page = pages[pageIndex];
   const captions = input.captions.filter((line) => line.length > 0 && canEncodeWinAnsi(font, line));
-  drawStamp(page, signature, captions, font, pageWidth);
+  drawStampInSlot(page, signature, captions, font, slot);
   return { pdfBytes: await pdf.save(), pageCount };
 }

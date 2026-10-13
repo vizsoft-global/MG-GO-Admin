@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { FIELD_SOURCE_META, resolveFieldSource } from "@/features/esign/template-source";
@@ -8,11 +9,13 @@ import {
   employeeRowLabel,
   employeeSampleValues,
 } from "@/features/esign/employee-block";
-import type {
-  EsignDocumentKind,
-  EsignLocale,
-  EsignTemplateFieldRow,
-} from "@/features/esign/types";
+import { buildEsignDocumentHtml, sampleEmployee } from "@/features/esign/render/esign-document-html";
+import type { EsignDocumentKind, EsignTemplateFieldRow } from "@/features/esign/types";
+
+/** CSS pixels of an A4 page at 96dpi, scaled to the 620px preview column. */
+const A4_CSS_WIDTH = (595.28 * 96) / 72;
+const A4_CSS_HEIGHT = (841.89 * 96) / 72;
+const FIGMA_PREVIEW_SCALE = 620 / A4_CSS_WIDTH;
 
 /**
  * Sample values for the system-filled rows.
@@ -29,62 +32,6 @@ import type {
  * the one thing a preview must not do.
  */
 const SYSTEM_SAMPLES = employeeSampleValues();
-
-/**
- * The payslip layout, declared as the reference draws it.
- *
- * Panel C2 does not print a payslip as an Item / Value list. It prints the month
- * block first, then the day counts, then the money — and each money row carries
- * the **column code the bulk sheet uses** (`BASIC`, `NET`, `All`, `Ded`) beside
- * its label, because the reader of a payslip is comparing the sheet against the
- * voucher and the code is what the two have in common. Without the codes the
- * screen shows the right numbers in the right order and still cannot be held
- * against the sheet a payroll clerk is reading.
- *
- * The `label` half of each row is *not* declared here: it is the field's own
- * `label_en` / `label_ar`, printed from the template. A hard-coded English label
- * would read as English inside an Arabic document, which is the one thing the
- * reference's Arabic subtitle exists to avoid.
- *
- * A key this template does not carry is skipped rather than printed blank: a
- * payslip whose author removed `Gross salary` must not grow an empty row back.
- */
-const PAYSLIP_GROUPS = [
-  { key: "month", fieldKeys: ["slip_month"] },
-  { key: "period", fieldKeys: ["period_from", "period_to"] },
-  { key: "computedOn", fieldKeys: ["computed_on"] },
-  { key: "workingDays", fieldKeys: ["fixed_working_days", "actual_working_days"] },
-  {
-    key: "money",
-    fieldKeys: [
-      "gross_salary_kwd",
-      "deduction_amount_kwd",
-      "basic_salary_kwd",
-      "extra_input_kwd",
-      "net_salary_kwd",
-      "rate_kwd",
-      "amount",
-    ],
-  },
-  { key: "reason", fieldKeys: ["deduction_reason"] },
-] as const;
-
-/**
- * Sheet column code per money row, exactly the four panel C2 prints.
- *
- * Only the four that appear on the reference's own sheet are mapped. It would be
- * easy to coin a fifth for `Gross salary` — and wrong: the example sheet's
- * columns are Employee ID, Date from, Date to, Computed on, Actual days,
- * Administration deduction, Extra input, Basic salary, Net salary, Civil ID, so a
- * `GROSS` chip would print a column code that no sheet the operator can download
- * actually has. A row with no code renders as a plain row instead.
- */
-const PAYSLIP_COLUMN_CODES: Record<string, string> = {
-  basic_salary_kwd: "BASIC",
-  net_salary_kwd: "NET",
-  extra_input_kwd: "All",
-  deduction_amount_kwd: "Ded",
-};
 
 function sampleFor(field: EsignTemplateFieldRow): string {
   if (SYSTEM_SAMPLES[field.field_key]) return SYSTEM_SAMPLES[field.field_key];
@@ -119,20 +66,19 @@ export type DocumentPreviewSigners = {
  * signature row and the Management Use Only box — because every penalty and loan
  * document carries them; only the middle section varies with `documentKind`.
  *
- * `dir` follows the template's own default language, not the panel locale: an
- * Arabic template prints Arabic with the grid reading right-to-left regardless of
- * which language the operator is using, and previewing it any other way would
- * hide exactly the bidi problems the preview exists to catch.
+ * Penalty, loan, and payslip render the bilingual A4 sheet (English and Arabic
+ * together). General keeps the React preview. There is no language switch.
  */
 export function EsignDocumentPreview({
   templateName,
   nameAr,
   company,
   body,
+  bodyAr,
   declaration,
+  declarationAr,
   fields,
   values,
-  locale,
   documentKind,
   signers,
   className,
@@ -141,16 +87,106 @@ export function EsignDocumentPreview({
   nameAr?: string | null;
   company: string;
   body: string;
+  bodyAr?: string;
   declaration: string;
+  declarationAr?: string;
   fields: EsignTemplateFieldRow[];
   values: Record<string, string>;
-  locale: EsignLocale;
   documentKind: EsignDocumentKind;
   signers: DocumentPreviewSigners;
   className?: string;
 }) {
   const t = useTranslations("pages.employeedesk.esign.templateBuilder.preview");
-  const dir = locale === "ar" ? "rtl" : "ltr";
+  const sheetBox = useRef<HTMLDivElement>(null);
+  const resolvedBodyAr = bodyAr ?? "";
+  const resolvedDeclarationAr = declarationAr ?? "";
+  const resolvedBodyEn = body;
+  const resolvedDeclarationEn = declaration;
+
+  const sheetHtml = useMemo(() => {
+    if (documentKind !== "penalty" && documentKind !== "loan" && documentKind !== "payslip") return "";
+    const employee = sampleEmployee({
+      company_name: values.company_name?.trim() || company || "Musallam Delivery",
+      employee_name: values.employee_name?.trim() || values.full_name?.trim() || "Ahmed Ali",
+      employee_id: values.employee_id?.trim() || "10421",
+      ...(values.civil_id?.trim() ? { civil_id: values.civil_id.trim() } : {}),
+      ...(values.accommodation?.trim() ? { accommodation: values.accommodation.trim() } : {}),
+      ...(values.joined_at?.trim() ? { joined_at: values.joined_at.trim() } : {}),
+      ...(values.position?.trim()
+        ? { position: values.position.trim(), project: values.position.trim() }
+        : {}),
+      ...(values.sponsor?.trim() ? { sponsor: values.sponsor.trim() } : {}),
+      ...(values.pay_through?.trim() ? { pay_through: values.pay_through.trim() } : {}),
+      ...(values.bank_number?.trim() ? { bank_number: values.bank_number.trim() } : {}),
+    });
+    return buildEsignDocumentHtml({
+      language: "en",
+      kind: documentKind,
+      headerEn: templateName,
+      headerAr: nameAr ?? "",
+      bodyEn: resolvedBodyEn,
+      bodyAr: resolvedBodyAr,
+      declarationEn: resolvedDeclarationEn,
+      declarationAr: resolvedDeclarationAr,
+      company,
+      fields: fields.map((field) => ({
+        key: field.field_key,
+        label: field.label_en,
+        labelEn: field.label_en,
+        labelAr: field.label_ar || field.label_en,
+        value:
+          values[field.field_key]?.trim() ||
+          (resolveFieldSource(field) === "signature" ? "" : sampleFor(field)),
+        section: field.section_key === "employee" ? "employee" : "document",
+        source: resolveFieldSource(field),
+      })),
+      employee,
+    });
+  }, [
+    company,
+    declaration,
+    declarationAr,
+    documentKind,
+    fields,
+    nameAr,
+    resolvedBodyAr,
+    resolvedBodyEn,
+    resolvedDeclarationAr,
+    resolvedDeclarationEn,
+    templateName,
+    values,
+  ]);
+
+  if (documentKind === "penalty" || documentKind === "loan" || documentKind === "payslip") {
+    return (
+      <div
+        ref={sheetBox}
+        className={cn("relative mx-auto w-full max-w-[620px] overflow-hidden", className)}
+        style={{ height: A4_CSS_HEIGHT * FIGMA_PREVIEW_SCALE }}
+      >
+        <iframe
+          title={templateName || "Document preview"}
+          srcDoc={sheetHtml}
+          className="pointer-events-none absolute start-0 top-0 border-0 bg-white"
+          style={{
+            width: A4_CSS_WIDTH,
+            height: A4_CSS_HEIGHT,
+            transform: `scale(${FIGMA_PREVIEW_SCALE})`,
+            transformOrigin: "top left",
+          }}
+          onLoad={(event) => {
+            const frame = event.currentTarget;
+            const page = frame.contentDocument?.querySelector(".page");
+            const box = sheetBox.current;
+            if (!page || !box) return;
+            const height = Math.max(page.scrollHeight, A4_CSS_HEIGHT);
+            frame.style.height = `${height}px`;
+            box.style.height = `${Math.ceil(height * FIGMA_PREVIEW_SCALE)}px`;
+          }}
+        />
+      </div>
+    );
+  }
 
   // Employee Information is its own two-column grid; everything else is the
   // document body. Splitting on the stored `section_key` is what lets the
@@ -194,23 +230,9 @@ export function EsignDocumentPreview({
    */
   const employeeRef = values.employee_id?.trim() || SYSTEM_SAMPLES.employee_id || "—";
 
-  /**
-   * The payslip rows, in the reference's reading order.
-   *
-   * Built by walking `PAYSLIP_GROUPS` and keeping only the keys this template
-   * actually carries, so a removed row stays removed and the flat list the panel
-   * draws comes out in the panel's order. The label is the field's own, which is
-   * what keeps an Arabic payslip Arabically labelled.
-   */
-  const payslipRows = documentKind === "payslip"
-    ? PAYSLIP_GROUPS.flatMap((group) => group.fieldKeys)
-        .map((key) => documentBodyFields.find((f) => f.field_key === key))
-        .filter((field): field is EsignTemplateFieldRow => Boolean(field))
-    : [];
-
   return (
     <div
-      dir={dir}
+      dir="ltr"
       className={cn(
         // A4 proportions, not content height. The reference draws the pane as a
         // page, and an author needs it that way: the whole question the preview
@@ -238,12 +260,15 @@ export function EsignDocumentPreview({
           </div>
         </div>
         <div className="text-end leading-tight">
-          <p className="text-[12px] font-bold">{templateName || t("untitled")}</p>
-          {nameAr ? (
-            <p className="text-[10px] text-neutral-600" dir="rtl">
-              {nameAr}
-            </p>
-          ) : null}
+          <p className="text-[12px] font-bold">
+            {templateName || t("untitled")}
+            {nameAr && nameAr !== templateName ? (
+              <>
+                {" — "}
+                <span dir="rtl">{nameAr}</span>
+              </>
+            ) : null}
+          </p>
         </div>
       </header>
 
@@ -261,7 +286,8 @@ export function EsignDocumentPreview({
             {ESIGN_EMPLOYEE_ROWS.map((row) => (
               <PreviewRow
                 key={row.key}
-                label={employeeRowLabel(row, locale)}
+                label={employeeRowLabel(row, "en")}
+                labelAr={employeeRowLabel(row, "ar")}
                 value={row.sample}
                 muted
               />
@@ -269,7 +295,8 @@ export function EsignDocumentPreview({
             {employeeFields.filter((f) => !isSignatureRow(f)).map((field) => (
               <PreviewRow
                 key={field.id || field.field_key}
-                label={locale === "ar" ? field.label_ar || field.label_en : field.label_en}
+                label={field.label_en}
+                labelAr={field.label_ar || field.label_en}
                 value={valueOf(field)}
                 muted={!values[field.field_key]?.trim()}
               />
@@ -277,93 +304,30 @@ export function EsignDocumentPreview({
           </div>
         </section>
 
-        {/* Document body — the kind-specific middle, which is where a penalty
-            table and a loan breakdown genuinely differ. */}
-        {body.trim() ? (
-          <p className="whitespace-pre-line text-[10.5px] text-neutral-700">{body}</p>
+        {resolvedBodyEn.trim() || resolvedBodyAr.trim() ? (
+          <section>
+            <SectionTitle>{t("openingParagraph")}</SectionTitle>
+            <p className="whitespace-pre-line text-[10.5px] text-neutral-700">
+              {resolvedBodyEn.trim() ? <span>{resolvedBodyEn}</span> : null}
+              {resolvedBodyEn.trim() && resolvedBodyAr.trim() ? " — " : null}
+              {resolvedBodyAr.trim() ? <span dir="rtl">{resolvedBodyAr}</span> : null}
+            </p>
+          </section>
         ) : null}
 
         <section>
-          <SectionTitle>
-            {documentKind === "penalty"
-              ? t("penaltyDetails")
-              : documentKind === "loan"
-                ? t("loanDetails")
-                : documentKind === "payslip"
-                  ? t("payslipDetails")
-                  : t("documentDetails")}
-          </SectionTitle>
-          {documentKind === "payslip" ? (
-            /* Panel C2's shape: one flat ruled list, month → period → days →
-               money → reason, with the bulk sheet's column code beside every
-               money row. No sub-headings — the reference draws none, and adding
-               them would put a heading on screen that the printed PDF lacks. */
-            payslipRows.length === 0 ? (
-              <p className="rounded border border-dashed border-neutral-300 px-2 py-3 text-center text-[10px] text-neutral-400">
-                {t("noDocumentFields")}
-              </p>
-            ) : (
-              <ul className="divide-y divide-neutral-200 rounded border border-neutral-200">
-                {payslipRows.map((field) => {
-                  const code = PAYSLIP_COLUMN_CODES[field.field_key];
-                  return (
-                    <li
-                      key={field.id || field.field_key}
-                      className="flex items-baseline justify-between gap-3 px-2.5 py-1.5"
-                    >
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        {code ? (
-                          <span className="shrink-0 rounded border border-neutral-300 bg-neutral-100 px-1 py-px font-mono text-[8.5px] font-semibold uppercase tracking-wide text-neutral-600">
-                            {code}
-                          </span>
-                        ) : null}
-                        <span className="truncate text-neutral-700">
-                          {locale === "ar" ? field.label_ar || field.label_en : field.label_en}
-                        </span>
-                      </span>
-                      <span className="shrink-0 font-medium tabular-nums">
-                        {valueOf(field) || "—"}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )
-          ) : documentBodyFields.length === 0 ? (
+          <SectionTitle>{t("documentDetails")}</SectionTitle>
+          {documentBodyFields.length === 0 ? (
             <p className="rounded border border-dashed border-neutral-300 px-2 py-3 text-center text-[10px] text-neutral-400">
               {t("noDocumentFields")}
             </p>
-          ) : documentKind === "penalty" ? (
-            <table className="w-full border-collapse text-[10.5px]">
-              <thead>
-                <tr className="bg-neutral-100 text-[9px] uppercase tracking-wide text-neutral-600">
-                  <th className="border border-neutral-300 px-2 py-1 text-start font-semibold">
-                    {t("columnItem")}
-                  </th>
-                  <th className="w-28 border border-neutral-300 px-2 py-1 text-start font-semibold">
-                    {t("columnValue")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {documentBodyFields.map((field) => (
-                  <tr key={field.id || field.field_key}>
-                    <td className="border border-neutral-300 px-2 py-1">
-                      {locale === "ar" ? field.label_ar || field.label_en : field.label_en}
-                    </td>
-                    <td className="border border-neutral-300 px-2 py-1 font-medium">
-                      {valueOf(field) || "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-2">
               {documentBodyFields.map((field) => (
                 <PreviewRow
                   key={field.id || field.field_key}
-                  label={locale === "ar" ? field.label_ar || field.label_en : field.label_en}
+                  label={field.label_en}
+                  labelAr={field.label_ar || field.label_en}
                   value={valueOf(field)}
                   muted={!values[field.field_key]?.trim()}
                   source={resolveFieldSource(field)}
@@ -371,23 +335,17 @@ export function EsignDocumentPreview({
               ))}
             </div>
           )}
-
-          {/* The loan clause is part of the loan artefact, not of the skeleton:
-              the reference prints it on a voucher and it would be nonsense on a
-              penalty notice. It is a line to be completed on paper, so it is a
-              ruled blank rather than a value. */}
-          {documentKind === "loan" ? (
-            <p className="mt-2 flex items-baseline gap-2 text-[10.5px]">
-              <span className="shrink-0 text-neutral-700">{t("loanNotReceived")}</span>
-              <span className="min-w-0 flex-1 border-b border-dotted border-neutral-400" />
-            </p>
-          ) : null}
         </section>
 
-        {declaration.trim() ? (
-          <p className="rounded border border-neutral-300 bg-neutral-50 px-3 py-2 text-[10px] leading-relaxed text-neutral-700">
-            {declaration}
-          </p>
+        {resolvedDeclarationEn.trim() || resolvedDeclarationAr.trim() ? (
+          <section>
+            <SectionTitle>{t("declaration")}</SectionTitle>
+            <p className="rounded border border-neutral-300 bg-neutral-50 px-3 py-2 text-[10px] leading-relaxed text-neutral-700">
+              {resolvedDeclarationEn.trim() ? <span>{resolvedDeclarationEn}</span> : null}
+              {resolvedDeclarationEn.trim() && resolvedDeclarationAr.trim() ? " — " : null}
+              {resolvedDeclarationAr.trim() ? <span dir="rtl">{resolvedDeclarationAr}</span> : null}
+            </p>
+          </section>
         ) : null}
       </div>
 
@@ -402,8 +360,7 @@ export function EsignDocumentPreview({
         <SignatureBlock label={signers.employeeLabel} t={t} />
         <SignatureBlock label={signers.staffLabel} t={t} />
         {signatureFields.map((field) => {
-          const label =
-            locale === "ar" ? field.label_ar || field.label_en : field.label_en;
+          const label = [field.label_en, field.label_ar].filter(Boolean).join(" — ");
           const entered = values[field.field_key]?.trim();
           return (
             <SignatureBlock
@@ -469,20 +426,37 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+function PairLabel({ en, ar }: { en: string; ar?: string | null }) {
+  if (ar && ar !== en) {
+    return (
+      <>
+        {en}
+        {" — "}
+        <span dir="rtl">{ar}</span>
+      </>
+    );
+  }
+  return <>{en || ar}</>;
+}
+
 function PreviewRow({
   label,
+  labelAr,
   value,
   muted,
   source,
 }: {
   label: string;
+  labelAr?: string;
   value: string;
   muted?: boolean;
   source?: keyof typeof FIELD_SOURCE_META;
 }) {
   return (
     <div className="flex min-w-0 items-baseline gap-1.5">
-      <span className="shrink-0 text-[9.5px] text-neutral-500">{label}</span>
+      <span className="shrink-0 text-[9.5px] text-neutral-500">
+        <PairLabel en={label} ar={labelAr} />
+      </span>
       <span
         className={cn(
           "min-w-0 flex-1 truncate border-b border-dotted border-neutral-300 pb-px",

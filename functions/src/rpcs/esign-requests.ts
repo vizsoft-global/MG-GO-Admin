@@ -26,6 +26,7 @@ import {
 } from "../core/fs";
 
 import { COLLECTIONS, FIELDS } from "../core/collections";
+import { readEsignSnapshotExtra } from "./esign-snapshot-extra";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";
 import {
@@ -48,6 +49,7 @@ import {
   type Dict,
 } from "./_shared";
 import { asDate, dayTextOf, notifyDriverTransactional } from "./visits-shared";
+import { normalizeDocumentKind, slotsForKind } from "./esign-signature-slots";
 
 const APP_SETTINGS_DOC_ID = "1";
 const REQUEST_CODE_COUNTER = "esign_code_seq";
@@ -223,13 +225,15 @@ export async function esignEmployeeSnapshotFor(driverId: string): Promise<Dict |
   const driver = dataOf(driverSnap);
 
   const zoneId = textOrNull(driver[FIELDS.drivers.zoneId]);
-  const [profileSnap, zoneSnap, settings] = await Promise.all([
+  const [profileSnap, zoneSnap, settings, intakeSnap] = await Promise.all([
     db.collection(COLLECTIONS.profiles).doc(driverId).get(),
     zoneId ? db.collection(COLLECTIONS.zones).doc(zoneId).get() : Promise.resolve(null),
     loadAppSettings(),
+    db.collection(COLLECTIONS.driverIntakes).doc(driverId).get(),
   ]);
   const profile = profileSnap.exists ? dataOf(profileSnap) : {};
   const zone = zoneSnap && zoneSnap.exists ? dataOf(zoneSnap) : null;
+  const intake = intakeSnap.exists ? dataOf(intakeSnap) : null;
 
   const driverCode = textOrNull(driver[FIELDS.drivers.driverCode]);
   const joinedAt = asDate(driver.joined_at);
@@ -248,6 +252,7 @@ export async function esignEmployeeSnapshotFor(driverId: string): Promise<Dict |
     zone: zone ? textOrNull(zone.name) : null,
     project: textOrNull(driver[FIELDS.drivers.projectKey]),
     nationality: textOrNull(driver.nationality),
+    ...readEsignSnapshotExtra(driver, intake),
   };
 }
 
@@ -496,6 +501,7 @@ export async function createEsignRequestCore(
   if (!category || category.is_active !== true) return { ok: false, error: "invalid_category" };
 
   let templateVersion: number | null = null;
+  let documentKind = normalizeDocumentKind(null);
   if (input.templateId) {
     const templateSnap = await db.collection(COLLECTIONS.esignTemplates).doc(input.templateId).get();
     const template = templateSnap.exists ? dataOf(templateSnap) : null;
@@ -504,6 +510,7 @@ export async function createEsignRequestCore(
       return { ok: false, error: "template_category_mismatch" };
     }
     templateVersion = numberOrNull(template.version);
+    documentKind = normalizeDocumentKind(template.document_kind);
 
     const fields = await db
       .collection(COLLECTIONS.esignTemplateFields)
@@ -570,6 +577,8 @@ export async function createEsignRequestCore(
       description: description === "" ? null : description,
       field_values: input.fieldValues,
       employee_snapshot: snapshot,
+      document_kind: documentKind,
+      signature_slots: slotsForKind(documentKind),
       sent_at: now,
       viewed_at: null,
       declined_at: null,

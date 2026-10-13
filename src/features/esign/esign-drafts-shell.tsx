@@ -144,7 +144,6 @@ export function EsignDraftsShell() {
               { id: "draft", label: t("colDraft") },
               { id: "template", label: t("colTemplate") },
               { id: "rows", label: t("colRecipients") },
-              { id: "lang", label: t("colLanguage") },
               { id: "author", label: t("colAuthor") },
               { id: "updated", label: t("colUpdated") },
               { id: "actions", label: t("colActions"), className: "text-end" },
@@ -167,7 +166,6 @@ export function EsignDraftsShell() {
                 <TableCell className="text-xs tabular-nums">
                   {row.kind === "bulk" ? row.row_count : 1}
                 </TableCell>
-                <TableCell className="text-xs uppercase">{row.language}</TableCell>
                 <TableCell className="max-w-[160px] truncate text-xs">
                   {row.created_by_name ?? "—"}
                 </TableCell>

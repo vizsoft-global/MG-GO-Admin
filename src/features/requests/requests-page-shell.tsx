@@ -218,7 +218,9 @@ export function RequestsPageShell({
   initialStatus?: string;
 }) {
   const t = useTranslations("pages.requests");
+  const tRcm = useTranslations("pages.rcmV2");
   const router = useRouter();
+  const fromEmployeeDesk = listScope != null || scopeTabs;
   const [datePreset, setDatePreset] = useState<RequestDatePreset>(
     parseRequestDatePreset(initialDatePreset),
   );
@@ -276,6 +278,7 @@ export function RequestsPageShell({
   }, [initialStatus]);
 
   const { can } = useAuth();
+  const isLoanQueue = type === "loan";
   const canDecide = can("requests.approve") || can("requests.manage");
   const canCreate = can("requests.create");
   const bulkDecide = useBulkDecideRequests();
@@ -411,15 +414,37 @@ export function RequestsPageShell({
           queue tabs, so the KPI strip and the table both stay above the fold. */}
       <Breadcrumb>
         <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/requests">{t("hub.title")}</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>
-              {type === "all" ? t("overviewTitle") : t(`types.${type}` as "types.leave")}
-            </BreadcrumbPage>
-          </BreadcrumbItem>
+          {fromEmployeeDesk ? (
+            <>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/employeedesk">{tRcm("breadcrumb")}</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/employeedesk">{tRcm("incomingShort")}</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>
+                  {type === "all"
+                    ? t("overviewTitle")
+                    : tRcm(`types.${type}` as "types.loan")}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            </>
+          ) : (
+            <>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/requests">{t("hub.title")}</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>
+                  {type === "all" ? t("overviewTitle") : t(`types.${type}` as "types.leave")}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            </>
+          )}
         </BreadcrumbList>
       </Breadcrumb>
 
@@ -745,6 +770,12 @@ export function RequestsPageShell({
                 : []),
               { id: "code", label: t("colCode") },
               { id: "driver", label: t("colDriver") },
+              ...(isLoanQueue
+                ? [
+                    { id: "amount", label: t("colLoanAmount") },
+                    { id: "repayment", label: t("colRepaymentPeriod") },
+                  ]
+                : []),
               { id: "type", label: t("colType") },
               { id: "department", label: t("colDepartment") },
               { id: "status", label: t("colStatus") },
@@ -760,7 +791,11 @@ export function RequestsPageShell({
                   "cursor-pointer",
                   row.needs_attention && "bg-primary/10",
                 )}
-                onClick={() => router.push(`/requests/${row.id}`)}
+                onClick={() =>
+                  router.push(
+                    fromEmployeeDesk ? `/employeedesk/${row.id}` : `/requests/${row.id}`,
+                  )
+                }
               >
                 {showSelectColumn ? (
                   <TableCell onClick={(e) => e.stopPropagation()}>
@@ -811,6 +846,14 @@ export function RequestsPageShell({
                     </div>
                   </div>
                 </TableCell>
+                {isLoanQueue ? (
+                  <>
+                    <TableCell className="text-sm tabular-nums">
+                      {row.amount_kwd != null ? `${row.amount_kwd} KD` : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">—</TableCell>
+                  </>
+                ) : null}
                 <TableCell className="text-sm">
                   {t(`types.${row.request_type}` as "types.leave")}
                 </TableCell>

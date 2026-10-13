@@ -31,7 +31,13 @@ import { applyWithdrawnOverride, formatKwd, buildFuelWeekRows, fuelWeekMatchesSe
 import { useFleetRequests } from "./use-fleet-requests";
 import { useFuelFills, useFuelWithdrawnOverrides } from "./use-fuel";
 
-export function FuelPageShell({ initialAnchor }: { initialAnchor: string }) {
+export function FuelPageShell({
+  initialAnchor,
+  embedded = false,
+}: {
+  initialAnchor: string;
+  embedded?: boolean;
+}) {
   const t = useTranslations("pages.fuel");
   const { can } = useAuth();
   const canEditFuel = can("fuel.edit");
@@ -136,13 +142,8 @@ export function FuelPageShell({ initialAnchor }: { initialAnchor: string }) {
     setMode(next);
   };
 
-  return (
-    <AppPage>
-      <AppPageHeader
-        title={t("title")}
-        description={t("subtitle")}
-        actions={<ClearAllModuleButton entity="fuel" />}
-      />
+  const body = (
+    <>
       <AppListCard
         title={t("rangeTitle", {
           from: formatKuwaitDayLabel(range.start),
@@ -321,6 +322,17 @@ export function FuelPageShell({ initialAnchor }: { initialAnchor: string }) {
           if (!open) setEditRow(null);
         }}
       />
+    </>
+  );
+  if (embedded) return body;
+  return (
+    <AppPage>
+      <AppPageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={<ClearAllModuleButton entity="fuel" />}
+      />
+      {body}
     </AppPage>
   );
 }

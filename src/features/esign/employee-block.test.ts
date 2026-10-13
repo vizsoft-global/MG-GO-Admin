@@ -37,6 +37,15 @@ describe("esign employee block catalogue", () => {
     }
   });
 
+  it("carries the Figma from-the-system chips after nationality", () => {
+    assert.deepEqual(ESIGN_EMPLOYEE_ROWS.map((row) => row.key).slice(-4), [
+      "position",
+      "sponsor",
+      "pay_through",
+      "bank_number",
+    ]);
+  });
+
   it("keeps the first three rows as the ones a document always opens with", () => {
     assert.deepEqual(
       ESIGN_EMPLOYEE_CORE_ROWS.map((row) => row.key),

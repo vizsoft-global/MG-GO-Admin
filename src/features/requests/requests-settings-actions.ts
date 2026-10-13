@@ -31,7 +31,12 @@ import type {
   StepTemplateRow,
 } from "./settings-types";
 
-const GRANTABLE_ACCESS_LEVELS: AccessLevel[] = ["view_only", "approver"];
+/**
+ * Role cards on `/requests/settings/roles` (Figma `5886:15917`): Sender,
+ * Receiver · view, Receiver · decide. Grants written to `request_staff_access`
+ * stay `view_only` | `approver` — Sender has no column on that table.
+ */
+const SETTINGS_ROLE_CARDS = 3;
 const COMPLAINT_CATEGORIES = "complaint_categories";
 const LOAN_TENURE_OPTIONS = "loan_tenure_options";
 const DEPARTMENT_MEMBERS = "request_department_members";
@@ -729,17 +734,19 @@ export async function fetchRequestsAuditLogs(): Promise<{
   };
 }
 
-/** Tile meta counts for the Settings hub (Figma 12-Settings-Home). */
+/** Tile meta counts for the Settings hub (Figma S0 `5926:6246`). */
 export async function fetchSettingsHubCounts(): Promise<SettingsHubCounts> {
   await requireRequestsManage();
 
-  const [workflowTypes, activeTypes, assets, departments, esignCategories] = await Promise.all([
-    listDocs(COLLECTIONS.requestApprovalStepTemplates),
-    countDocs(COLLECTIONS.requestTypeDefinitions, [["is_active", true]]),
-    countDocs(COLLECTIONS.assetCatalog, [["is_active", true]]),
-    countDocs(COLLECTIONS.requestDepartments, [["is_active", true]]),
-    countDocs(COLLECTIONS.esignCategories, [["is_active", true]]),
-  ]);
+  const [workflowTypes, activeTypes, assets, departments, esignCategories, templates] =
+    await Promise.all([
+      listDocs(COLLECTIONS.requestApprovalStepTemplates),
+      countDocs(COLLECTIONS.requestTypeDefinitions, [["is_active", true]]),
+      countDocs(COLLECTIONS.assetCatalog, [["is_active", true]]),
+      countDocs(COLLECTIONS.requestDepartments, [["is_active", true]]),
+      countDocs(COLLECTIONS.esignCategories, [["is_active", true]]),
+      countDocs(COLLECTIONS.esignTemplates, []),
+    ]);
 
   const distinctWorkflows = new Set(workflowTypes.rows.map((row) => String(row.request_type)));
   return {
@@ -747,10 +754,9 @@ export async function fetchSettingsHubCounts(): Promise<SettingsHubCounts> {
     types: activeTypes.count,
     assets: assets.count,
     departments: departments.count,
-    // The two grantable access levels the Roles panel exposes (view_only, approver).
-    // Not derived from request_staff_access — that table holds grants, not roles.
-    roles: GRANTABLE_ACCESS_LEVELS.length,
+    roles: SETTINGS_ROLE_CARDS,
     esignCategories: esignCategories.count,
+    templates: templates.count,
   };
 }
 

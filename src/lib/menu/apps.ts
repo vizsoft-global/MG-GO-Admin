@@ -1,6 +1,7 @@
 import type { Permission } from "@/lib/auth/permissions";
 
 export const APP_IDS = [
+  "visits",
   "employeedesk",
   "fleet",
   "operations",
@@ -23,19 +24,27 @@ export type AppDefinition = {
 
 export const APP_REGISTRY: readonly AppDefinition[] = [
   {
+    id: "visits",
+    href: "/visit-bookings",
+    icon: "CalendarCheck",
+    prefixes: ["/visit-bookings", "/employeedesk/visits"],
+    groups: [],
+    permissionAnyOf: ["visits.view"],
+  },
+  {
     id: "employeedesk",
     href: "/employeedesk",
     icon: "Inbox",
-    prefixes: ["/employeedesk", "/requests", "/visit-bookings"],
+    prefixes: ["/employeedesk", "/requests"],
     groups: ["EmployeeDesk"],
     permissionAnyOf: ["requests.view", "employeedesk.view"],
   },
   {
     id: "fleet",
-    href: "/vehicles",
+    href: "/fleet",
     icon: "Car",
-    prefixes: ["/vehicles", "/fuel", "/assets"],
-    groups: ["Fleet"],
+    prefixes: ["/fleet", "/vehicles", "/fuel", "/assets"],
+    groups: [],
     permissionAnyOf: ["vehicles.view", "fuel.view", "assets.view"],
   },
   {

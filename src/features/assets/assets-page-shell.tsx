@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { Suspense, useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ClipboardList,
   Download,
+  FileText,
   Filter,
   Loader2,
   Package,
@@ -44,6 +46,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
+import { FleetRequestPageShell } from "@/features/fuel/fleet-request-page-shell";
+import { useRouter } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import { TabBar } from "@/components/dashboard/tab-bar";
@@ -56,6 +60,12 @@ import { useAssetsCatalog } from "./use-assets";
 import type { AssetCatalogRow } from "./types";
 
 type StatusFilter = "all" | "lowStock" | "inactive" | "assigned";
+const ASSET_TABS = ["assignments", "catalog", "request"] as const;
+type AssetTab = (typeof ASSET_TABS)[number];
+
+function parseAssetTab(value: string | null): AssetTab | null {
+  return ASSET_TABS.includes(value as AssetTab) ? (value as AssetTab) : null;
+}
 
 function exportAssetsCsv(rows: AssetCatalogRow[]) {
   const header = [
@@ -115,12 +125,28 @@ function AssetsPageSkeleton() {
 }
 
 function AssetsPageContent() {
-  const locale = useLocale();
   const t = useTranslations("pages.assets");
   const { can } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const canCreate = can("assets.create");
   const canEdit = can("assets.edit");
+  const canViewAssets = can("assets.view");
+  const canViewRequests = can("asset_requests.view");
   const queryClient = useQueryClient();
+  const allowedTabs = useMemo(() => {
+    const tabs: AssetTab[] = [];
+    if (canViewAssets) {
+      tabs.push("assignments", "catalog");
+    }
+    if (canViewRequests) tabs.push("request");
+    return tabs;
+  }, [canViewAssets, canViewRequests]);
+  const requestedTab = parseAssetTab(searchParams.get("tab"));
+  const tab =
+    requestedTab && allowedTabs.includes(requestedTab)
+      ? requestedTab
+      : (allowedTabs[0] ?? "assignments");
 
   const { data, isLoading, refetch } = useAssetsCatalog();
   const items = data?.items ?? [];
@@ -140,7 +166,6 @@ function AssetsPageContent() {
   const [editingAsset, setEditingAsset] = useState<AssetCatalogRow | null>(null);
   const [detailAsset, setDetailAsset] = useState<AssetCatalogRow | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [tab, setTab] = useState<"assignments" | "catalog">("assignments");
 
   const hasActiveFilters = statusFilter !== "all" || categoryFilter !== "all";
 
@@ -227,10 +252,16 @@ function AssetsPageContent() {
     <AppPage>
       <AppPageHeader
         title={t("title")}
-        description={tab === "assignments" ? t("assignmentsSubtitle") : t("subtitle")}
+        description={
+          tab === "assignments"
+            ? t("assignmentsSubtitle")
+            : tab === "request"
+              ? t("requestSubtitle")
+              : t("subtitle")
+        }
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <ClearAllModuleButton entity="assets" />
+            {tab !== "request" ? <ClearAllModuleButton entity="assets" /> : null}
             {tab === "catalog" ? (
               <>
                 <Button
@@ -259,7 +290,7 @@ function AssetsPageContent() {
                 </Button>
               </>
             ) : null}
-            {canCreate ? (
+            {canCreate && tab === "catalog" ? (
               <Button
                 type="button"
                 size="sm"
@@ -273,15 +304,24 @@ function AssetsPageContent() {
           </div>
         }
       />
-      <TabBar
-        items={[
-          { id: "assignments", label: t("tabAssignments"), icon: ClipboardList },
-          { id: "catalog", label: t("tabCatalog"), icon: Package },
-        ]}
-        activeId={tab}
-        onSelect={(id) => setTab(id === "catalog" ? "catalog" : "assignments")}
-      />
+      {allowedTabs.length > 0 ? (
+        <TabBar
+          items={allowedTabs.map((id) => ({
+            id,
+            label:
+              id === "assignments"
+                ? t("tabAssignments")
+                : id === "catalog"
+                  ? t("tabCatalog")
+                  : t("tabRequest"),
+            icon: id === "assignments" ? ClipboardList : id === "catalog" ? Package : FileText,
+          }))}
+          activeId={tab}
+          onSelect={(id) => router.replace(`/assets?tab=${id}`)}
+        />
+      ) : null}
       {tab === "assignments" ? <AssetsAssignmentsPanel /> : null}
+      {tab === "request" ? <FleetRequestPageShell type="asset" embedded /> : null}
       {tab === "catalog" ? (
       <>
       <div className="space-y-3">
@@ -575,5 +615,9 @@ function AssetsPageContent() {
 }
 
 export function AssetsPageShell() {
-  return <AssetsPageContent />;
+  return (
+    <Suspense fallback={<AssetsPageSkeleton />}>
+      <AssetsPageContent />
+    </Suspense>
+  );
 }

@@ -46,6 +46,10 @@ describe("app scope", () => {
     assert.equal(deriveActiveApp("/en/employeedesk/esign/signing"), "employeedesk");
     assert.equal(deriveActiveApp("/en/live-tracking-v2"), "live");
     assert.equal(deriveActiveApp("/en/payroll/combined"), "payroll");
+    assert.equal(deriveActiveApp("/en/visit-bookings"), "visits");
+    assert.equal(deriveActiveApp("/en/employeedesk/visits/calendar"), "visits");
+    assert.equal(deriveActiveApp("/en/employeedesk"), "employeedesk");
+    assert.equal(deriveActiveApp("/en/fleet"), "fleet");
   });
 
   it("keeps the full tree on every path (flat sidebar)", () => {

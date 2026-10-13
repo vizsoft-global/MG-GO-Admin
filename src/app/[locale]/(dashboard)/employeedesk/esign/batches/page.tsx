@@ -1,10 +1,13 @@
 import { setRequestLocale } from "next-intl/server";
-import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { EsignBatchesShell } from "@/features/esign/esign-batches-shell";
+import { requireAnyPermission } from "@/lib/auth/require-permission";
 
 /**
- * The `/employeedesk` twin of `/requests/esign/batches`.
- * Same shell. A bookmark on either URL is the tracker.
+ * EmployeeDesk V2's sent-batches list.
+ *
+ * Same `EsignBatchesShell` as `/requests/esign/batches`. The V2 route only
+ * changes the home (Outgoing) and the permission door — send already uses
+ * `requireAnyPermission` for `employeedesk.manage` or `requests.manage`.
  */
 export default async function EmployeeDeskEsignBatchesPage({
   params,

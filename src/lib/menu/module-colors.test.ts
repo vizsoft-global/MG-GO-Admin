@@ -22,22 +22,25 @@ describe("moduleTint", () => {
     assert.equal(moduleTint("employeedesk").tile, "#E11D48");
   });
 
-  it("matches the Figma launcher canvas and chrome", () => {
-    assert.equal(LAUNCHER_BRAND.canvas, "#212134");
-    assert.equal(LAUNCHER_BRAND.topBar, "#28283E");
-    assert.equal(LAUNCHER_BRAND.logoChip, "#D9D2CF");
-    assert.equal(LAUNCHER_BRAND.badge, "#F03838");
-    assert.equal(LAUNCHER_BRAND.muted, "#80808F");
+  it("matches the Odoo Classic cream chrome", () => {
+    assert.equal(LAUNCHER_BRAND.canvas, "#f9f1eb");
+    assert.equal(LAUNCHER_BRAND.topBar, "#29293f");
+    assert.equal(LAUNCHER_BRAND.logoChip, "#dad2cf");
+    assert.equal(LAUNCHER_BRAND.badge, "#29293f");
+    assert.equal(LAUNCHER_BRAND.badgeBorder, "#f9f1eb");
+    assert.equal(LAUNCHER_BRAND.tileLabel, "#3a3a52");
+    assert.equal(LAUNCHER_BRAND.footer, "#5a5a6e");
+    assert.equal(LAUNCHER_BRAND.muted, "#dad2cf");
   });
 
-  it("gives every launcher tile its own Figma fill", () => {
+  it("gives every launcher tile its own artifact fill", () => {
     for (const id of LAUNCHER_TILE_IDS) {
       assert.equal(launcherTileHex(id), LAUNCHER_TILE_HEX[id], id);
     }
-    assert.equal(launcherTileHex("dashboard-ops"), "#544D99");
-    assert.equal(launcherTileHex("drivers"), "#C27047");
-    assert.equal(launcherTileHex("deliveries"), "#478F75");
-    assert.equal(launcherTileHex("employeedesk"), "#B8474D");
+    assert.equal(launcherTileHex("dashboard-ops"), "#4b4b80");
+    assert.equal(launcherTileHex("drivers"), "#b5643f");
+    assert.equal(launcherTileHex("deliveries"), "#557f6a");
+    assert.equal(launcherTileHex("employeedesk"), "#a73d24");
   });
 
   it("falls back to the brand teal for an unknown module", () => {

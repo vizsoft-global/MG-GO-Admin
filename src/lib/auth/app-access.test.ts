@@ -19,6 +19,12 @@ describe("app access catalog", () => {
   it("covers every launcher tile", () => {
     assert.equal(catalogCoversLauncherTiles(), true);
     assert.equal(APP_ACCESS_CATALOG.length > 0, true);
+    assert.equal(
+      APP_ACCESS_CATALOG.some((entry) => entry.appId === "requests"),
+      false,
+    );
+    assert.ok(APP_ACCESS_CATALOG.some((entry) => entry.appId === "employeedesk" && entry.rcm));
+    assert.ok(APP_ACCESS_CATALOG.some((entry) => entry.appId === "visit-bookings"));
   });
 });
 

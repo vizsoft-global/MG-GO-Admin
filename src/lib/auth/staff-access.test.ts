@@ -168,6 +168,28 @@ describe("resolveSessionPermissionSlugs", () => {
     assert.deepEqual([...slugs], ["assets.create"]);
   });
 
+  it("keeps role-granted view and a User tick after Role defaults UI is unmounted", () => {
+    assert.equal(hasPermissionInSet(new Set(["drivers.view"]), "drivers.view", false), true);
+    assert.equal(hasPermissionInSet(new Set(["payroll.view"]), "payroll.view", false), true);
+    const roleSession = resolveSessionPermissionSlugs({
+      isSuperAdmin: false,
+      accessKind: null,
+      userTicks: null,
+      roleSlugs: ["drivers.view"],
+      catalogSlugs: CATALOG_SLUGS,
+    });
+    assert.ok(roleSession.has("drivers.view"));
+    const userSession = resolveSessionPermissionSlugs({
+      isSuperAdmin: false,
+      accessKind: "user",
+      userTicks: ["payroll.view"],
+      roleSlugs: ["drivers.view"],
+      catalogSlugs: CATALOG_SLUGS,
+    });
+    assert.ok(userSession.has("payroll.view"));
+    assert.equal(userSession.has("drivers.view"), false);
+  });
+
   it("opens data cleanup when a User holds any bulk_delete tick", () => {
     const slugs = resolveSessionPermissionSlugs({
       isSuperAdmin: false,
@@ -178,5 +200,31 @@ describe("resolveSessionPermissionSlugs", () => {
     });
     assert.ok(slugs.has("drivers.bulk_delete"));
     assert.ok(slugs.has("data.cleanup"));
+  });
+});
+
+describe("access retention after Role defaults UI unmount", () => {
+  it("keeps role-granted drivers.view and a user tick payroll.view", () => {
+    // RolesPermissionsPanel is unmounted only. Session load in get-session.ts
+    // still resolves role slugs and user ticks. Hiding Role defaults does not
+    // call saveRolePermissions or wipe admin_role_permissions / admin_user_permissions.
+    assert.equal(hasPermissionInSet(new Set(["drivers.view"]), "drivers.view", false), true);
+    assert.equal(hasPermissionInSet(new Set(["payroll.view"]), "payroll.view", false), true);
+    const userTicks = resolveSessionPermissionSlugs({
+      isSuperAdmin: false,
+      accessKind: "user",
+      userTicks: ["payroll.view"],
+      roleSlugs: ["drivers.view"],
+      catalogSlugs: CATALOG_SLUGS,
+    });
+    assert.equal(userTicks.has("payroll.view"), true);
+    const roleGranted = resolveSessionPermissionSlugs({
+      isSuperAdmin: false,
+      accessKind: null,
+      userTicks: null,
+      roleSlugs: ["drivers.view"],
+      catalogSlugs: CATALOG_SLUGS,
+    });
+    assert.equal(roleGranted.has("drivers.view"), true);
   });
 });

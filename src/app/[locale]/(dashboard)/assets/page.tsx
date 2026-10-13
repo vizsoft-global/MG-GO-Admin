@@ -1,6 +1,6 @@
 import { setRequestLocale } from "next-intl/server";
-import { requirePermission } from "@/lib/auth/require-permission";
 import { AssetsPageShell } from "@/features/assets/assets-page-shell";
+import { requireAnyPermission } from "@/lib/auth/require-permission";
 
 export default async function AssetsPage({
   params,
@@ -9,7 +9,7 @@ export default async function AssetsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requirePermission(locale, "assets.view");
+  await requireAnyPermission(locale, ["assets.view", "asset_requests.view"]);
 
   return <AssetsPageShell />;
 }

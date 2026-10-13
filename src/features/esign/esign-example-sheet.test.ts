@@ -102,6 +102,10 @@ describe("bulk sheet column groups", () => {
       "Zone",
       "Project",
       "Nationality",
+      "Position",
+      "Sponsor",
+      "Pay through",
+      "Bank number",
     ]);
     assert.ok(
       !groups.system.includes(EXAMPLE_EMPLOYEE_COLUMN),

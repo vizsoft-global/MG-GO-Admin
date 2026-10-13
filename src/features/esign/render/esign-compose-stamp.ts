@@ -1,4 +1,11 @@
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import {
+  fitImageInSlot,
+  INVALID_SIGNATURE_SLOT,
+  isUsableSlot,
+  resolveEmployeeStampSlot,
+  type SignSlot,
+} from "./esign-document-layout";
 
 export const COMPOSE_MARGIN = 36;
 export const SIG_MAX_WIDTH = 180;
@@ -6,12 +13,14 @@ export const SIG_MAX_HEIGHT = 60;
 export const CAPTION_SIZE = 7.5;
 export const CAPTION_LEADING = 9.5;
 
-/** Matches esign-compose-signed-document — stamp on last page, no new page. */
 export type StampInput = {
   pdfBytes: Uint8Array;
   signaturePng: Uint8Array;
   captions: string[];
   dropUnencodableCaptions?: boolean;
+  slot?: SignSlot;
+  kind?: unknown;
+  persistedSlots?: unknown;
 };
 
 export function canEncodeWinAnsi(font: PDFFont, text: string): boolean {
@@ -27,6 +36,7 @@ export async function stampSignatureOnLastPage(input: StampInput): Promise<{
   pdfBytes: Uint8Array;
   pageCount: number;
   droppedCaptions: string[];
+  stamp: { x: number; y: number; w: number; h: number; page: number };
 }> {
   const pdf = await PDFDocument.load(input.pdfBytes);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -36,8 +46,10 @@ export async function stampSignatureOnLastPage(input: StampInput): Promise<{
   if (pageCount === 0) {
     throw new Error("empty_document");
   }
-  const page = pages[pageCount - 1];
-  const { width: pageWidth } = page.getSize();
+
+  const slot = resolveStampSlot(input);
+  const pageIndex = Math.min(Math.max(slot.page, 1), pageCount) - 1;
+  const page = pages[pageIndex];
 
   const droppedCaptions: string[] = [];
   const captions = input.captions.filter((line) => {
@@ -50,45 +62,57 @@ export async function stampSignatureOnLastPage(input: StampInput): Promise<{
     throw new Error(`winansi_unencodable:${line}`);
   });
 
-  drawStamp(page, signature, captions, font, pageWidth);
-  return { pdfBytes: await pdf.save(), pageCount, droppedCaptions };
+  const stamp = drawStampInSlot(page, signature, captions, font, slot);
+  return { pdfBytes: await pdf.save(), pageCount, droppedCaptions, stamp };
 }
 
-function drawStamp(
+function resolveStampSlot(input: StampInput): SignSlot {
+  if (input.slot) {
+    if (!isUsableSlot(input.slot) || input.slot.role !== "employee") {
+      throw new Error(INVALID_SIGNATURE_SLOT);
+    }
+    return input.slot;
+  }
+  return resolveEmployeeStampSlot({
+    persisted: input.persistedSlots,
+    kind: input.kind,
+  });
+}
+
+function drawStampInSlot(
   page: PDFPage,
   signature: PDFImage,
   captions: string[],
   font: PDFFont,
-  pageWidth: number,
-) {
-  const scale = Math.min(
-    SIG_MAX_WIDTH / signature.width,
-    SIG_MAX_HEIGHT / signature.height,
-    1,
-  );
-  const sigWidth = signature.width * scale;
-  const sigHeight = signature.height * scale;
-  const captionBlockHeight = captions.length * CAPTION_LEADING;
-  const sigX = Math.max(COMPOSE_MARGIN, pageWidth - COMPOSE_MARGIN - sigWidth);
-  const sigY = COMPOSE_MARGIN + captionBlockHeight;
-
+  slot: SignSlot,
+): { x: number; y: number; w: number; h: number; page: number } {
+  const fitted = fitImageInSlot(signature.width, signature.height, slot);
   page.drawImage(signature, {
-    x: sigX,
-    y: sigY,
-    width: sigWidth,
-    height: sigHeight,
+    x: fitted.x,
+    y: fitted.y,
+    width: fitted.w,
+    height: fitted.h,
   });
 
+  const captionTop = fitted.y - 2;
   captions.forEach((line, index) => {
+    const y = captionTop - (index + 1) * CAPTION_LEADING;
+    if (y < slot.yPt - 4) return;
     const textWidth = font.widthOfTextAtSize(line, CAPTION_SIZE);
+    const x = Math.min(
+      Math.max(slot.xPt, fitted.x),
+      slot.xPt + slot.wPt - textWidth,
+    );
     page.drawText(line, {
-      x: Math.max(COMPOSE_MARGIN, pageWidth - COMPOSE_MARGIN - textWidth),
-      y: COMPOSE_MARGIN + captionBlockHeight - (index + 1) * CAPTION_LEADING,
+      x,
+      y,
       size: CAPTION_SIZE,
       font,
       color: rgb(0.25, 0.28, 0.32),
     });
   });
+
+  return { ...fitted, page: slot.page };
 }
 
 /** 1x1 opaque PNG — enough for stamp geometry tests. */

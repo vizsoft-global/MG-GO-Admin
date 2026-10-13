@@ -21,7 +21,7 @@ export const RCM_ADMIN_CHIPS = [
   { id: "reports", href: "/employeedesk/reports" },
   { id: "audit", href: "/settings/logs?module=requests" },
   { id: "settings", href: "/employeedesk/settings" },
-  { id: "visits", href: "/employeedesk/visits/calendar" },
+  { id: "visits", href: "/employeedesk/visits" },
 ] as const;
 
 export function rcmAccessChips(

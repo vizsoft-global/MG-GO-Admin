@@ -1,7 +1,14 @@
+import { Suspense } from "react";
 import { setRequestLocale } from "next-intl/server";
-import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { EsignBatchDetailShell } from "@/features/esign/esign-batch-detail-shell";
+import { requireAnyPermission } from "@/lib/auth/require-permission";
 
+/**
+ * EmployeeDesk V2's batch detail.
+ *
+ * Same `EsignBatchDetailShell` as `/requests/esign/batches/[id]`. The V2
+ * route only changes the home and the permission door.
+ */
 export default async function EmployeeDeskEsignBatchDetailPage({
   params,
 }: {
@@ -10,5 +17,9 @@ export default async function EmployeeDeskEsignBatchDetailPage({
   const { locale, id } = await params;
   setRequestLocale(locale);
   await requireAnyPermission(locale, ["employeedesk.manage", "requests.manage"]);
-  return <EsignBatchDetailShell batchId={id} />;
+  return (
+    <Suspense fallback={null}>
+      <EsignBatchDetailShell batchId={id} />
+    </Suspense>
+  );
 }

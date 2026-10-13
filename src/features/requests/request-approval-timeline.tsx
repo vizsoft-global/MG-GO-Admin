@@ -54,12 +54,17 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
               ) : overdue ? (
                 <AlertTriangle className="h-[18px] w-[18px] text-danger" />
               ) : isActive ? (
-                <Circle className="h-[18px] w-[18px] fill-warning text-warning" />
+                <span className="mt-px block size-[18px] rounded-full border-2 border-orange-500 bg-amber-50" />
               ) : (
                 <Circle className="h-[18px] w-[18px] text-muted-foreground/40" />
               )}
             </span>
-            <div className="min-w-0 flex-1">
+            <div
+              className={cn(
+                "min-w-0 flex-1",
+                isActive && "rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5",
+              )}
+            >
               <p
                 className={cn(
                   "text-sm font-medium",
@@ -67,9 +72,9 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
                   (step.status === "pending" || isSkipped) && "text-muted-foreground",
                 )}
               >
-                {step.step_order}. {step.step_name}
+                {step.step_name}
               </p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className={cn("text-[11px]", isActive ? "font-medium text-orange-700" : "text-muted-foreground")}>
                 {isCompleted
                   ? formatStamp(step.decided_at)
                   : isRejected
@@ -78,7 +83,7 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
                       ? t("detail.stepSkipped")
                       : isActive
                         ? step.started_at
-                          ? t("detail.stepSince", { stamp: formatStamp(step.started_at) })
+                          ? t("detail.stepWaitingOnYou", { stamp: formatStamp(step.started_at) })
                           : t("detail.stepWaiting")
                         : t("detail.stepNotStarted")}
               </p>

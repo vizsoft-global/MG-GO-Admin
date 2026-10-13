@@ -233,6 +233,10 @@ function mapSnapshot(value: unknown): EsignEmployeeSnapshot | undefined {
     zone: r.zone != null ? String(r.zone) : null,
     project: r.project != null ? String(r.project) : null,
     nationality: r.nationality != null ? String(r.nationality) : null,
+    position: r.position != null ? String(r.position) : null,
+    sponsor: r.sponsor != null ? String(r.sponsor) : null,
+    pay_through: r.pay_through != null ? String(r.pay_through) : null,
+    bank_number: r.bank_number != null ? String(r.bank_number) : null,
   };
 }
 
@@ -270,6 +274,11 @@ function mapField(r: Record<string, unknown>): EsignTemplateFieldRow {
  * `./document-kind` — this file used to carry its own copy of that allowlist and
  * silently rewrote a `payslip` row to `general`.
  */
+function mapBulkMode(value: unknown): "sign_and_return" | "import" | null {
+  if (value === "sign_and_return" || value === "import") return value;
+  return null;
+}
+
 function mapTemplate(r: Record<string, unknown>, fieldCount = 0): EsignTemplateRow {
   const kind = normalizeDocumentKind(r.document_kind);
   const fields = Array.isArray(r.esign_template_fields)
@@ -310,6 +319,7 @@ function mapTemplate(r: Record<string, unknown>, fieldCount = 0): EsignTemplateR
     default_language: r.default_language === "ar" ? "ar" : "en",
     is_active: r.is_active !== false,
     document_kind: kind,
+    bulk_mode: mapBulkMode(r.bulk_mode),
     is_draft: r.is_draft === true,
     version: Number(r.version ?? 1),
     created_at: String(r.created_at ?? ""),
@@ -560,24 +570,32 @@ export async function fetchEsignSnapshot(
 
 function documentForLocale(
   template: EsignTemplateDetail,
-  locale: EsignLocale,
+  _locale: EsignLocale,
   snapshot: EsignEmployeeSnapshot,
   fieldValues: Record<string, string>,
   description: string,
 ) {
   const fields = template.fields.map((f) => ({
     key: f.field_key,
-    label: locale === "ar" ? (f.label_ar || f.label_en) : f.label_en,
+    label: f.label_en,
+    labelEn: f.label_en,
+    labelAr: f.label_ar || f.label_en,
     value: fieldValues[f.field_key] ?? "",
-    // Carried through so a row the author placed in the employee tab prints in
-    // the employee block, which is where the builder's preview draws it.
     section: f.section_key,
+    source: f.source_kind,
   }));
   return {
-    language: locale,
-    header: locale === "ar" ? template.header_ar : template.header_en,
-    body: locale === "ar" ? template.body_ar : template.body_en,
-    declaration: locale === "ar" ? template.declaration_ar : template.declaration_en,
+    language: "en" as const,
+    kind: template.document_kind,
+    headerEn: template.header_en,
+    headerAr: template.header_ar,
+    bodyEn: template.body_en,
+    bodyAr: template.body_ar,
+    declarationEn: template.declaration_en,
+    declarationAr: template.declaration_ar,
+    header: template.header_en,
+    body: template.body_en,
+    declaration: template.declaration_en,
     description,
     fields,
     employee: snapshot,
@@ -736,6 +754,7 @@ export async function createEsignBatch(input: {
 
 function mapBatch(r: Record<string, unknown>): EsignBatchRow {
   const tpl = asRecord(r.esign_templates);
+  const senderName = r.created_by_name != null ? String(r.created_by_name).trim() : "";
   return {
     id: String(r.id),
     batch_code: String(r.batch_code ?? ""),
@@ -750,6 +769,9 @@ function mapBatch(r: Record<string, unknown>): EsignBatchRow {
     due_at: r.due_at != null ? String(r.due_at) : null,
     source_filename: r.source_filename != null ? String(r.source_filename) : null,
     created_at: String(r.created_at ?? ""),
+    category_label: r.category_label != null ? String(r.category_label) : null,
+    created_by_id: r.created_by != null ? String(r.created_by) : null,
+    created_by_name: senderName || null,
   };
 }
 
@@ -988,15 +1010,34 @@ export async function fetchEsignBatches(): Promise<{
     listed.rows.map((row) => String(row.template_id ?? "")),
   );
   const templateById = new Map(templates.map((row) => [row.id, row]));
+  const categoryListed = await listDocs(COLLECTIONS.esignCategories);
+  const categoryByKey = new Map<string, DocRow>();
+  for (const row of categoryListed.rows) {
+    categoryByKey.set(row.id, row);
+    if (row.key != null) categoryByKey.set(String(row.key), row);
+  }
+  const profiles = await docsByIds(
+    COLLECTIONS.profiles,
+    listed.rows.map((row) => String(row.created_by ?? "")),
+  );
+  const profileById = new Map(profiles.map((row) => [row.id, row]));
   await logAdminRead("esign_batches", "esign.batches.list", {});
   return {
     rows: sortRows(listed.rows, [["created_at", "desc"]])
       .slice(0, 200)
       .map((row) => {
         const template = templateById.get(String(row.template_id ?? ""));
+        const category = template
+          ? categoryByKey.get(String(template.category_key ?? ""))
+          : undefined;
+        const profile = profileById.get(String(row.created_by ?? ""));
+        const senderName =
+          profile?.full_name != null ? String(profile.full_name).trim() : "";
         return mapBatch({
           ...row,
           esign_templates: template ? { name_en: template.name_en } : null,
+          category_label: category?.label_en != null ? String(category.label_en) : null,
+          created_by_name: senderName || null,
         });
       }),
   };
@@ -1096,6 +1137,8 @@ export async function fetchEsignBatch(id: string): Promise<{
           const reason = meta.declined_reason;
           return reason != null && String(reason).trim() !== "" ? String(reason) : null;
         })(),
+        recipient_signed_at: req.signed_at != null ? String(req.signed_at) : null,
+        recipient_declined_at: req.declined_at != null ? String(req.declined_at) : null,
       };
     }),
   };

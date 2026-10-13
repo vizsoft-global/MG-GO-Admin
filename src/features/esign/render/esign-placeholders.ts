@@ -22,6 +22,10 @@ export const EMPLOYEE_PLACEHOLDER_KEYS = [
   "zone",
   "project",
   "nationality",
+  "position",
+  "sponsor",
+  "pay_through",
+  "bank_number",
 ] as const;
 
 export type EsignEmployeeSnapshot = {
@@ -36,6 +40,11 @@ export type EsignEmployeeSnapshot = {
   zone: string | null;
   project: string | null;
   nationality: string | null;
+  /** Optional so a snapshot stored before these chips still type-checks. */
+  position?: string | null;
+  sponsor?: string | null;
+  pay_through?: string | null;
+  bank_number?: string | null;
 };
 
 export function escapeHtml(value: string): string {
@@ -59,6 +68,10 @@ export function snapshotValues(snapshot: EsignEmployeeSnapshot): Record<string, 
     zone: snapshot.zone ?? "",
     project: snapshot.project ?? "",
     nationality: snapshot.nationality ?? "",
+    position: snapshot.position ?? "",
+    sponsor: snapshot.sponsor ?? "",
+    pay_through: snapshot.pay_through ?? "",
+    bank_number: snapshot.bank_number ?? "",
   };
 }
 

@@ -47,59 +47,61 @@ const BY_ID: Record<string, ModuleTint> = {
 };
 
 /**
- * Home launcher: Figma `Launcher/00-App-Launcher` canvas is `#212134`, not the
- * MG teal. Tiles take `launcherTileHex(id)`; `moduleTint(id)` still paints the
- * sidebar chips and the Roles & Permissions app cards.
+ * Home launcher chrome from Claude artifact `Main.dc.html` (A · Odoo Classic).
+ * Tiles take `launcherTileHex(id)`; `moduleTint(id)` still paints the sidebar
+ * chips and the Roles & Permissions app cards.
  */
 export const LAUNCHER_BRAND_TINT: ModuleTint = PALETTE[0];
 
 export const LAUNCHER_BRAND = {
-  canvas: "#212134",
-  topBar: "#28283E",
-  search: "#242438",
-  searchBorder: "rgba(255,255,255,0.1)",
-  searchHint: "#383854",
-  logoChip: "#D9D2CF",
-  badge: "#F03838",
-  muted: "#80808F",
-  text: "#F4F4F5",
-  subText: "#C4C4CE",
+  canvas: "#f9f1eb",
+  topBar: "#29293f",
+  search: "rgba(255,255,255,0.08)",
+  searchBorder: "rgba(255,255,255,0.14)",
+  searchHint: "transparent",
+  logoChip: "#dad2cf",
+  badge: "#29293f",
+  badgeBorder: "#f9f1eb",
+  muted: "#dad2cf",
+  text: "#29293f",
+  subText: "#6b6476",
+  tileLabel: "#3a3a52",
+  footer: "#5a5a6e",
+  accent: "#a73d24",
 } as const;
 
 /**
- * Home Launcher tile fill per module, taken from Figma
- * `Launcher/00-App-Launcher` (5944:4011). Every tile is one solid accent and
- * carries the module glyph in white — the launcher is the one surface that
- * does not use `moduleTint`, which stays the sidebar-chip palette.
+ * Home Launcher tile fills from the same artifact `LIST`. Unused extras keep
+ * the previous Figma hex. The launcher does not use `moduleTint`.
  */
 export const LAUNCHER_TILE_HEX: Record<string, string> = {
-  "dashboard-ops": "#544D99",
-  dashboard: "#544D99",
-  performance: "#544D99",
-  "live-tracking-v2": "#387A9E",
-  "live-tracking": "#387A9E",
-  "operations-hub": "#387A9E",
-  "visit-bookings": "#38859E",
-  "employeedesk-visits": "#38859E",
-  notifications: "#388F85",
-  attendance: "#6161A3",
-  "driver-groups": "#7A5CAD",
-  "dpd-verification": "#9E5CAD",
-  assistant: "#7A5CAD",
+  "dashboard-ops": "#4b4b80",
+  dashboard: "#4b4b80",
+  performance: "#3a3a5e",
+  "live-tracking-v2": "#4a6f92",
+  "live-tracking": "#4a6f92",
+  "operations-hub": "#4a6f92",
+  "visit-bookings": "#44738a",
+  "employeedesk-visits": "#44738a",
+  notifications: "#3f7a73",
+  attendance: "#5a5a92",
+  "driver-groups": "#6e4f8a",
+  "dpd-verification": "#85547d",
+  assistant: "#732b1a",
   "app-releases": "#7A4DA8",
-  drivers: "#C27047",
-  deliveries: "#478F75",
-  employeedesk: "#B8474D",
-  requests: "#B8474D",
+  drivers: "#b5643f",
+  deliveries: "#557f6a",
+  employeedesk: "#a73d24",
+  requests: "#a73d24",
   "document-expiry": "#A84D4D",
-  earnings: "#C29947",
-  payroll: "#C29947",
+  earnings: "#a8843a",
+  payroll: "#b0873a",
   restaurants: "#B25C70",
   roles: "#3D7070",
-  profile: "#61708F",
+  profile: "#5d6275",
   "driver-app": "#4761A3",
-  vehicles: "#8F754D",
-  assets: "#8F754D",
+  vehicles: "#6f7a4a",
+  assets: "#8a7254",
 };
 
 /** Launcher tile fill for a module id; falls back to the brand teal. */

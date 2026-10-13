@@ -1,7 +1,7 @@
 import type { EsignTemplateDetail } from "@/features/esign/types";
 
 /**
- * The starting document for `/employeedesk/esign/templates/new`.
+ * The starting document for `/employeedesk/esign/templates/new/builder`.
  *
  * It deliberately has no id: the builder reads an absent id as "insert on save",
  * which is the same branch the upsert RPC already takes for a new template. The

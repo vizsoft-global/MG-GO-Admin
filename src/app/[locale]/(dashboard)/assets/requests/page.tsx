@@ -1,5 +1,5 @@
 import { setRequestLocale } from "next-intl/server";
-import { FleetRequestPageShell } from "@/features/fuel/fleet-request-page-shell";
+import { redirect } from "@/i18n/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 
 export default async function AssetRequestsPage({
@@ -10,5 +10,5 @@ export default async function AssetRequestsPage({
   const { locale } = await params;
   setRequestLocale(locale);
   await requirePermission(locale, "asset_requests.view");
-  return <FleetRequestPageShell type="asset" />;
+  redirect({ href: "/assets?tab=request", locale });
 }

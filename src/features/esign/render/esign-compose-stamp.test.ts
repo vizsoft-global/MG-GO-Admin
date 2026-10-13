@@ -37,9 +37,12 @@ describe("stampSignatureOnLastPage", () => {
       pdfBytes: src,
       signaturePng: tinyPng(),
       captions: ["Signed by driver", "2026-09-23", "SIG-1401"],
+      kind: "penalty",
     });
     assert.equal(out.pageCount, 1);
     assert.equal(out.droppedCaptions.length, 0);
+    assert.ok(out.stamp.y > 80);
+    assert.ok(out.stamp.x < 400);
     const loaded = await PDFDocument.load(out.pdfBytes);
     assert.equal(loaded.getPageCount(), 1);
   });

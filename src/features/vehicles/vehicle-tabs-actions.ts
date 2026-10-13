@@ -58,6 +58,23 @@ export type VehicleAssetRow = {
   assigned_at: string | null;
 };
 
+export type FleetVehicleServiceRow = VehicleServiceRow & {
+  vehicle_id: string;
+  plate: string | null;
+};
+
+export type FleetVehicleHandoverRow = VehicleHandoverRow & {
+  vehicle_id: string;
+  plate: string | null;
+};
+
+export type FleetVehicleAccidentRow = VehicleAccidentRow & {
+  vehicle_id: string;
+  plate: string | null;
+};
+
+const FLEET_LEDGER_CAP = 200;
+
 export type VehicleDriverOption = {
   id: string;
   label: string;
@@ -164,6 +181,28 @@ async function byVehicle(db: Firestore, collection: string, vehicleId: string, o
   return snap.docs
     .map((doc) => asRow(doc.id, doc.data()))
     .sort((a, b) => str(b[orderField]).localeCompare(str(a[orderField])));
+}
+
+async function fleetLedgerRows(db: Firestore, collection: string, orderField: string) {
+  const snap = await db.collection(collection).get();
+  return snap.docs
+    .map((doc) => asRow(doc.id, doc.data()))
+    .sort((a, b) => str(b[orderField]).localeCompare(str(a[orderField])))
+    .slice(0, FLEET_LEDGER_CAP);
+}
+
+function vehiclePlate(row: Row | undefined): string | null {
+  if (!row) return null;
+  return str(row.reg_number) || str(row.bike_id) || null;
+}
+
+async function platesByVehicleId(db: Firestore, vehicleIds: string[]): Promise<Map<string, string | null>> {
+  const vehicles = await rowsByIds(db, COLLECTIONS.vehicles, vehicleIds);
+  const map = new Map<string, string | null>();
+  for (const id of vehicleIds) {
+    map.set(id, vehiclePlate(vehicles.get(id)));
+  }
+  return map;
 }
 
 export async function listVehicleTabDrivers(): Promise<VehicleDriverOption[]> {
@@ -354,6 +393,85 @@ export async function listVehicleServices(vehicleId: string): Promise<VehicleSer
     cost_kwd: row.cost_kwd == null ? null : Number(row.cost_kwd),
     notes: str(row.notes) || null,
   }));
+}
+
+export async function listFleetVehicleServices(): Promise<FleetVehicleServiceRow[]> {
+  const auth = await requireVehicles("vehicles.view");
+  if ("error" in auth) return [];
+  const db = await openDb();
+  const rows = await fleetLedgerRows(db, SERVICES, "serviced_at");
+  const plates = await platesByVehicleId(
+    db,
+    rows.map((row) => str(row.vehicle_id)).filter(Boolean),
+  );
+  return rows.map((row) => {
+    const vehicleId = str(row.vehicle_id);
+    return {
+      id: row.id,
+      vehicle_id: vehicleId,
+      plate: plates.get(vehicleId) ?? null,
+      serviced_at: str(row.serviced_at),
+      kind: str(row.kind),
+      odometer: row.odometer == null ? null : Number(row.odometer),
+      vendor: str(row.vendor) || null,
+      cost_kwd: row.cost_kwd == null ? null : Number(row.cost_kwd),
+      notes: str(row.notes) || null,
+    };
+  });
+}
+
+export async function listFleetVehicleHandovers(): Promise<FleetVehicleHandoverRow[]> {
+  const auth = await requireVehicles("vehicles.view");
+  if ("error" in auth) return [];
+  const db = await openDb();
+  const rows = await fleetLedgerRows(db, HANDOVERS, "handed_at");
+  const driverIds = [
+    ...new Set(rows.flatMap((row) => [str(row.from_driver_id), str(row.to_driver_id)].filter(Boolean))),
+  ];
+  const profiles = driverIds.length ? await rowsByIds(db, COLLECTIONS.profiles, driverIds) : new Map<string, Row>();
+  const plates = await platesByVehicleId(
+    db,
+    rows.map((row) => str(row.vehicle_id)).filter(Boolean),
+  );
+  return rows.map((row) => {
+    const vehicleId = str(row.vehicle_id);
+    return {
+      id: row.id,
+      vehicle_id: vehicleId,
+      plate: plates.get(vehicleId) ?? null,
+      handed_at: str(row.handed_at),
+      from_driver_id: str(row.from_driver_id) || null,
+      to_driver_id: str(row.to_driver_id) || null,
+      from_name: str(profiles.get(str(row.from_driver_id))?.full_name) || null,
+      to_name: str(profiles.get(str(row.to_driver_id))?.full_name) || null,
+      notes: str(row.notes) || null,
+      storage_key: str(row.storage_key) || null,
+    };
+  });
+}
+
+export async function listFleetVehicleAccidents(): Promise<FleetVehicleAccidentRow[]> {
+  const auth = await requireVehicles("vehicles.view");
+  if ("error" in auth) return [];
+  const db = await openDb();
+  const rows = await fleetLedgerRows(db, ACCIDENTS, "occurred_at");
+  const plates = await platesByVehicleId(
+    db,
+    rows.map((row) => str(row.vehicle_id)).filter(Boolean),
+  );
+  return rows.map((row) => {
+    const vehicleId = str(row.vehicle_id);
+    return {
+      id: row.id,
+      vehicle_id: vehicleId,
+      plate: plates.get(vehicleId) ?? null,
+      occurred_at: str(row.occurred_at),
+      location_text: str(row.location_text) || null,
+      severity: str(row.severity),
+      notes: str(row.notes) || null,
+      storage_key: str(row.storage_key) || null,
+    };
+  });
 }
 
 export async function listVehicleAssignedAssets(driverId: string | null): Promise<VehicleAssetRow[]> {
