@@ -8,6 +8,9 @@ import {
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
+import { kuwaitDayString } from "../core/kuwait";
+import { applyDeliveryRollup } from "../core/rollups";
+import { stampStoredRow } from "../core/search-text";
 import { notifyDriverTransactional as writeTransactionalNotification } from "./visits-shared";
 
 /**
@@ -375,12 +378,14 @@ export const adminExpireStalePickups = onCall(async (request) => {
     const batch = db.batch();
     for (const doc of group) {
       const existing = textOrNull(doc.get("cancel_reason"));
+      const raw = (doc.data() ?? {}) as Record<string, unknown>;
       batch.update(doc.ref, {
         status: "cancelled",
         cancelled_at: now,
         cancel_reason:
           existing ??
           `Auto-cancelled: pickup not completed within ${hours}h`,
+        ...stampStoredRow("deliveries", raw),
       });
 
       const driverId = doc.get("driver_id");
@@ -404,6 +409,36 @@ export const adminExpireStalePickups = onCall(async (request) => {
       }
     }
     await batch.commit();
+  }
+
+  for (const doc of expired) {
+    const driverId = textOrNull(doc.get("driver_id"));
+    if (!driverId) continue;
+    const shift = textOrNull(doc.get("shift_date"));
+    const createdDay = textOrNull(doc.get("created_day"));
+    const pickup = doc.get("pickup_at");
+    const pickupAt =
+      pickup && typeof pickup === "object" && "toDate" in pickup
+        ? (pickup as { toDate: () => Date }).toDate()
+        : pickup instanceof Date
+          ? pickup
+          : null;
+    const day =
+      shift && /^\d{4}-\d{2}-\d{2}$/.test(shift)
+        ? shift
+        : createdDay && /^\d{4}-\d{2}-\d{2}$/.test(createdDay)
+          ? createdDay
+          : pickupAt
+            ? kuwaitDayString(pickupAt)
+            : "";
+    const zone = textOrNull(doc.get("zone_id"));
+    await applyDeliveryRollup(db, {
+      deliveryId: doc.id,
+      driverId,
+      zoneId: zone,
+      day,
+      status: "cancelled",
+    });
   }
 
   return expired.length;

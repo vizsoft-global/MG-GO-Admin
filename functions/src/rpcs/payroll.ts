@@ -1,3 +1,4 @@
+import type { QuerySnapshot } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp, type DocumentSnapshot } from "../core/fs";
@@ -6,6 +7,8 @@ import { daysInMonth, kuwaitDayString, monthKey, monthLabel, parseMonthKey } fro
 import { parseIdList } from "../core/query";
 import { loadAppSettings } from "../core/settings";
 import { requireStaff, type StaffContext } from "../core/staff";
+import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
+import { PAYROLL_ATTENDANCE_FIELDS, PAYROLL_RECON_FIELDS, payrollHoursFromFields } from "./payroll-read-plan";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GET_ALL_CHUNK = 300;
@@ -125,7 +128,9 @@ function dayStringsBetween(from: string, to: string): string[] {
  * the first time a threshold moved.
  */
 export const adminPayrollRuleSnapshot = measureOnCall("adminPayrollRuleSnapshot", async (request) => {
-  const staff = await requireStaff(request, "payroll.view");
+  const phases: PhaseMarks = {};
+  try {
+  const staff = await timedPhase(phases, "requireStaffMs", () => requireStaff(request, "payroll.view"));
   const data = (request.data ?? {}) as Record<string, unknown>;
 
   const today = kuwaitDayString(new Date());
@@ -156,8 +161,11 @@ export const adminPayrollRuleSnapshot = measureOnCall("adminPayrollRuleSnapshot"
   const lastDay = kuwaitDayString(new Date(end.getTime() - 1));
   const settings = await loadAppSettings();
 
-  const ctx = await loadPayrollContext({ month, zoneMonth, start, end, lastDay, days, settings });
+  const ctx = await loadPayrollContext({ month, zoneMonth, start, end, lastDay, days, settings, phases });
   return buildSnapshot(ctx, slicers, staff);
+  } finally {
+    logPhases("adminPayrollRuleSnapshot", phases);
+  }
 });
 
 type PayrollContext = Awaited<ReturnType<typeof loadPayrollContext>>;
@@ -170,18 +178,21 @@ async function loadPayrollContext(input: {
   lastDay: string;
   days: number;
   settings: Awaited<ReturnType<typeof loadAppSettings>>;
+  phases?: PhaseMarks;
 }) {
   const db = getFirestore();
   const { month, zoneMonth, start, lastDay, days } = input;
+  const phases = input.phases ?? {};
   const firstDay = kuwaitDayString(start);
 
   const [driverSnap, attendanceSnap, clientsSnap, zonesSnap, restaurantsSnap, adjustmentsSnap, offSnap] =
-    await Promise.all([
+    await timedPhase(phases, "fanoutMs", () => Promise.all([
       db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
       db
         .collection(COLLECTIONS.attendanceLogs)
         .where("log_date", ">=", firstDay)
         .where("log_date", "<=", lastDay)
+        .select(...PAYROLL_ATTENDANCE_FIELDS)
         .limit(SCAN_CAP)
         .get(),
       db.collection(COLLECTIONS.payrollClients).where("is_active", "==", true).get(),
@@ -193,13 +204,13 @@ async function loadPayrollContext(input: {
         .where("work_date", "<=", lastDay)
         .get(),
       db.collection(COLLECTIONS.driverOffStructure).where("period_month", "==", `${month}-01`).get(),
-    ]);
+    ]));
 
   const clientKeys = clientsSnap.docs
     .map((doc) => asString(doc.get("key")))
     .filter((key): key is string => Boolean(key));
 
-  const ruleQueries = [];
+  const ruleQueries: Array<Promise<QuerySnapshot>> = [];
   for (let index = 0; index < clientKeys.length; index += 30) {
     ruleQueries.push(
       db
@@ -208,9 +219,9 @@ async function loadPayrollContext(input: {
         .get(),
     );
   }
-  const rulesSnaps = await Promise.all(ruleQueries);
+  const rulesSnaps = await timedPhase(phases, "rulesMs", () => Promise.all(ruleQueries));
 
-  const [metricsSnap, requestsSnap] = await Promise.all([
+  const [metricsSnap, requestsSnap] = await timedPhase(phases, "metricsMs", () => Promise.all([
     db
       .collection(COLLECTIONS.payrollZoneMetrics)
       .where("period_month", "==", `${zoneMonth}-01`)
@@ -224,9 +235,9 @@ async function loadPayrollContext(input: {
       .where("window_start_day", "<=", lastDay)
       .limit(SCAN_CAP)
       .get(),
-  ]);
+  ]));
 
-  const recon = await loadReconOrders(firstDay, lastDay);
+  const recon = await timedPhase(phases, "reconMs", () => loadReconOrders(firstDay, lastDay));
 
   const restaurantById = new Map<string, Record<string, unknown>>();
   for (const doc of restaurantsSnap.docs) restaurantById.set(doc.id, doc.data());
@@ -296,13 +307,7 @@ async function loadPayrollContext(input: {
  * which is the same split the SQL depended on.
  */
 function hoursFromLog(doc: DocumentSnapshot): number {
-  const raw = doc.data() ?? {};
-  const minutes = raw["worked_minutes"];
-  if (typeof minutes === "number" && Number.isFinite(minutes)) return minutes / 60;
-  const checkIn = asDate(raw["check_in_at"]);
-  const checkOut = asDate(raw["check_out_at"]);
-  if (!checkIn || !checkOut) return 0;
-  return Math.max(0, (checkOut.getTime() - checkIn.getTime()) / 3_600_000);
+  return payrollHoursFromFields(doc.data() ?? {});
 }
 
 /**
@@ -319,6 +324,7 @@ async function loadReconOrders(firstDay: string, lastDay: string) {
     .collection(COLLECTIONS.orderReconRows)
     .where("work_date", ">=", firstDay)
     .where("work_date", "<=", lastDay)
+    .select(...PAYROLL_RECON_FIELDS)
     .limit(SCAN_CAP)
     .get();
 

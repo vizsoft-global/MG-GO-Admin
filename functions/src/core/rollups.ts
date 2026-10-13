@@ -91,7 +91,9 @@ export async function applyDeliveryRollup(
   input: DeliveryRollupInput,
 ): Promise<Record<string, number>> {
   if (!input.deliveryId || !input.driverId || !DAY_RE.test(input.day)) return {};
-  if (!isRollupStatus(input.status)) return {};
+  const removing = input.status === "";
+  if (!removing && !isRollupStatus(input.status)) return {};
+  const nextStatus = removing ? null : input.status;
 
   const dayRef = db.collection(COLLECTIONS.rollupsDriverDay).doc(driverDayId(input.driverId, input.day));
   const markerRef = dayRef.collection("applied").doc(input.deliveryId);
@@ -106,7 +108,7 @@ export async function applyDeliveryRollup(
       markerSnap.exists && typeof markerSnap.get("status") === "string"
         ? (markerSnap.get("status") as string)
         : null;
-    const delta = statusDelta(previous, input.status);
+    const delta = statusDelta(previous, nextStatus);
     if (Object.keys(delta).length === 0) return {};
 
     const prevVerified = numberField(daySnap.get("verified"));
@@ -125,7 +127,7 @@ export async function applyDeliveryRollup(
       patch[key] = FieldValue.increment(amount);
     }
     tx.set(dayRef, patch, { merge: true });
-    tx.set(markerRef, { status: input.status, updated_at: now }, { merge: true });
+    tx.set(markerRef, { status: removing ? "" : input.status, updated_at: now }, { merge: true });
 
     if (zoneRef) {
       const zonePatch: Record<string, unknown> = {

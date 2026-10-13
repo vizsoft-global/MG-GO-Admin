@@ -14,7 +14,7 @@ describe("rethrowAttendanceWindow", () => {
         assert.ok(error instanceof HttpsError);
         assert.equal(error.code, "failed-precondition");
         assert.equal(error.message, ATTENDANCE_WINDOW_TOO_LARGE_MESSAGE);
-        assert.match(error.message, /more than 5000 attendance rows/);
+        assert.match(error.message, /more attendance rows than the list can rank/);
         return true;
       },
     );

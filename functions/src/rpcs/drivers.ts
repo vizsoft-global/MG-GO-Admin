@@ -31,6 +31,7 @@ import {
   pickTriBool,
   type Dict,
 } from "./_shared";
+import { canDeferDriverJoin, dedupeRestaurantEdges, rosterKpis } from "./driver-list-plan";
 
 /** Asia/Kuwait is a fixed UTC+3 with no DST, so the day boundary is arithmetic. */
 const KUWAIT_OFFSET_MS = 3 * 60 * 60 * 1000;
@@ -369,6 +370,7 @@ async function loadDriverRows(
   archived: boolean,
   onlyIds?: ReadonlySet<string> | null,
   phases?: PhaseMarks,
+  deferLive = false,
 ): Promise<Dict[]> {
   if (onlyIds && onlyIds.size === 0) return [];
   const db = getFirestore();
@@ -378,23 +380,26 @@ async function loadDriverRows(
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
   const multiCutoff = new Date(now.getTime() - MULTI_DEVICE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  const [partnerSnap, zoneSnap, companySnap, intakeRestSnap, driverRestSnap, restaurantSnap, deliverySnap, deviceSnap] =
+  const [partnerSnap, zoneSnap, companySnap, restaurantLinkSnap, restaurantSnap, deliverySnap, deviceSnap] =
     await timedPhase(marks, "parallelMs", () => Promise.all([
       db.collection(COLLECTIONS.partners).get(),
       db.collection(COLLECTIONS.zones).get(),
       db.collection(COLLECTIONS.sourceCompanies).get(),
       db.collection(COLLECTIONS.driverRestaurants).get(),
-      db.collection(COLLECTIONS.driverRestaurants).get(),
       db.collection(COLLECTIONS.restaurants).get(),
-      db
-        .collection(COLLECTIONS.deliveries)
-        .where("delivered_at", ">=", Timestamp.fromDate(dayStart))
-        .where("delivered_at", "<", Timestamp.fromDate(dayEnd))
-        .get(),
-      db
-        .collection(COLLECTIONS.driverDeviceSessions)
-        .where("last_seen_at", ">=", Timestamp.fromDate(multiCutoff))
-        .get(),
+      deferLive
+        ? Promise.resolve(null)
+        : db
+            .collection(COLLECTIONS.deliveries)
+            .where("delivered_at", ">=", Timestamp.fromDate(dayStart))
+            .where("delivered_at", "<", Timestamp.fromDate(dayEnd))
+            .get(),
+      deferLive
+        ? Promise.resolve(null)
+        : db
+            .collection(COLLECTIONS.driverDeviceSessions)
+            .where("last_seen_at", ">=", Timestamp.fromDate(multiCutoff))
+            .get(),
     ]),
     );
 
@@ -421,7 +426,7 @@ async function loadDriverRows(
     .filter((id): id is string => id !== null);
 
   const driverById = new Map<string, Dict>();
-  const profileIds: string[] = linkedIds;
+  const profileIds: string[] = deferLive ? [] : linkedIds;
   const driverRefs = profileIds.map((id) => db.collection(COLLECTIONS.drivers).doc(id));
   if (driverRefs.length > 0) {
     const driverSnaps = await timedPhase(marks, "driversGetAllMs", () => db.getAll(...driverRefs));
@@ -438,28 +443,23 @@ async function loadDriverRows(
 
   /** `array_agg(name ORDER BY name, id)` from an (owner, restaurant) edge list. */
   const collectRestaurants = (ownerKey: string) => {
-    const byOwner = new Map<string, { id: string; name: string }[]>();
-    for (const doc of [...intakeRestSnap.docs, ...driverRestSnap.docs]) {
+    const edges = restaurantLinkSnap.docs.map((doc) => {
       const data = doc.data() as Dict;
-      const owner = asStr(data[ownerKey]);
-      const restaurantId = asStr(data["restaurant_id"]);
-      if (!owner || !restaurantId) continue;
-      const name = asStr(restaurantById.get(restaurantId)?.["name"]) ?? restaurantId;
-      const bucket = byOwner.get(owner) ?? [];
-      bucket.push({ id: restaurantId, name });
-      byOwner.set(owner, bucket);
-    }
-    for (const bucket of byOwner.values()) {
-      bucket.sort((a, b) => (a.name === b.name ? a.id.localeCompare(b.id) : a.name.localeCompare(b.name)));
-    }
-    return byOwner;
+      const restaurantId = asStr(data["restaurant_id"]) ?? "";
+      return {
+        owner: asStr(data[ownerKey]) ?? "",
+        restaurantId,
+        name: asStr(restaurantById.get(restaurantId)?.["name"]) ?? restaurantId,
+      };
+    });
+    return dedupeRestaurantEdges(edges);
   };
 
   const intakeRestaurants = collectRestaurants("intake_id");
   const driverRestaurants = collectRestaurants("driver_id");
 
   const deliveriesToday = new Map<string, number>();
-  for (const doc of deliverySnap.docs) {
+  for (const doc of deliverySnap?.docs ?? []) {
     const data = doc.data() as Dict;
     const driverId = asStr(data["driver_id"]);
     if (!driverId) continue;
@@ -468,7 +468,7 @@ async function loadDriverRows(
 
   const multiDevice = new Set<string>();
   const devicesSeen = new Map<string, Set<string>>();
-  for (const doc of deviceSnap.docs) {
+  for (const doc of deviceSnap?.docs ?? []) {
     const data = doc.data() as Dict;
     const driverId = asStr(data["driver_id"]);
     const deviceId = asStr(data["device_id"]);
@@ -557,21 +557,17 @@ type DriverKpis = {
 };
 
 function kpisFromRows(base: Dict[]): DriverKpis {
-  return {
-    total: base.length,
-    activeToday: base.filter((row) => row["account_status"] === "active").length,
-    onlineNow: base.filter((row) => row["is_on_duty"] === true).length,
-    inactive: base.filter(
-      (row) => row["account_status"] === "active" && row["is_on_duty"] !== true,
-    ).length,
-    pendingVerification: base.filter(
-      (row) =>
-        row["linked_profile_id"] === null ||
-        row["workflow_status"] === "pending" ||
-        row["account_status"] === "pending",
-    ).length,
-    suspended: base.filter((row) => row["account_status"] === "suspended").length,
-  };
+  return rosterKpis(
+    base.map((row) => ({
+      linkedProfileId:
+        row["linked_profile_id"] === null || row["linked_profile_id"] === undefined
+          ? null
+          : String(row["linked_profile_id"]),
+      workflowStatus: typeof row["workflow_status"] === "string" ? row["workflow_status"] : null,
+      accountStatus: typeof row["account_status"] === "string" ? row["account_status"] : null,
+      onDuty: row["is_on_duty"] === true,
+    })),
+  );
 }
 
 function tabTotalOf(tab: string, kpis: DriverKpis): number {
@@ -588,35 +584,120 @@ function tabTotalOf(tab: string, kpis: DriverKpis): number {
   }
 }
 
-/** Single-field counts. Used only when a search term can be answered by prefix. */
+/**
+ * Intake rows joined to driver status and duty only. Same predicates as
+ * `kpisFromRows`. A driver with no intake is not counted.
+ */
 async function fleetKpiCounts(archived: boolean): Promise<DriverKpis> {
   const db = getFirestore();
-  const intakes = db.collection(COLLECTIONS.driverIntakes);
-  if (archived) {
-    const total = (await intakes.where("archived_at", ">", new Date(0)).count().get()).data().count;
-    return { total, activeToday: 0, onlineNow: 0, inactive: 0, pendingVerification: 0, suspended: 0 };
-  }
-  const drivers = db.collection(COLLECTIONS.drivers);
-  const [all, archivedCount, active, online, suspended, pendingWorkflow, unlinked] = await Promise.all([
-    intakes.count().get(),
-    intakes.where("archived_at", ">", new Date(0)).count().get(),
-    drivers.where("status", "==", "active").count().get(),
-    drivers.where("is_on_duty", "==", true).count().get(),
-    drivers.where("status", "==", "suspended").count().get(),
-    intakes.where("workflow_status", "==", "pending").count().get(),
-    intakes.where("linked_profile_id", "==", null).count().get(),
+  const [intakeSnap, driverSnap] = await Promise.all([
+    db.collection(COLLECTIONS.driverIntakes).select("archived_at", "linked_profile_id", "workflow_status").get(),
+    db.collection(COLLECTIONS.drivers).select("status", "is_on_duty").get(),
   ]);
-  const total = Math.max(0, all.data().count - archivedCount.data().count);
-  const activeToday = active.data().count;
-  const onlineNow = online.data().count;
-  return {
-    total,
-    activeToday,
-    onlineNow,
-    inactive: Math.max(0, activeToday - onlineNow),
-    pendingVerification: pendingWorkflow.data().count + unlinked.data().count,
-    suspended: suspended.data().count,
-  };
+  const driverById = new Map(driverSnap.docs.map((doc) => [doc.id, doc.data() as Dict]));
+  const rows = intakeSnap.docs.filter((doc) =>
+    archived ? doc.get("archived_at") != null : doc.get("archived_at") == null,
+  );
+  return rosterKpis(
+    rows.map((doc) => {
+      const linked = asStr(doc.get("linked_profile_id"));
+      const driver = linked ? driverById.get(linked) : undefined;
+      return {
+        linkedProfileId: linked,
+        workflowStatus: asStr(doc.get("workflow_status")),
+        accountStatus: (driver ? asStr(driver["status"]) : null) ?? "pending",
+        onDuty: driver ? driver["is_on_duty"] === true : false,
+      };
+    }),
+  );
+}
+
+/** Driver, device and today's delivery facts for one already-sorted page. */
+async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<void> {
+  const db = getFirestore();
+  const linked = [...new Set(rows.map((row) => asStr(row["linked_profile_id"])).filter((id): id is string => id !== null))];
+  const driverById = new Map<string, Dict>();
+  if (linked.length > 0) {
+    const snaps = await timedPhase(phases, "pageDriversMs", () =>
+      db.getAll(...linked.map((id) => db.collection(COLLECTIONS.drivers).doc(id))),
+    );
+    for (const snap of snaps) {
+      if (snap.exists) driverById.set(snap.id, (snap.data() ?? {}) as Dict);
+    }
+  } else {
+    phases.pageDriversMs = 0;
+  }
+
+  const now = new Date();
+  const dayStart = kuwaitDayStart(now);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  const cutoff = new Date(now.getTime() - MULTI_DEVICE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const want = new Set(linked);
+  await timedPhase(phases, "pageLiveMs", async () => {
+    const deliveriesToday = new Map<string, number>();
+    const multiDevice = new Set<string>();
+    const [deliverySnap] = await Promise.all([
+      db
+        .collection(COLLECTIONS.deliveries)
+        .where("delivered_at", ">=", Timestamp.fromDate(dayStart))
+        .where("delivered_at", "<", Timestamp.fromDate(dayEnd))
+        .select("driver_id")
+        .get(),
+      (async () => {
+        const devicesSeen = new Map<string, Set<string>>();
+        for (let index = 0; index < linked.length; index += 30) {
+          const chunk = linked.slice(index, index + 30);
+          if (chunk.length === 0) continue;
+          const snap = await db.collection(COLLECTIONS.driverDeviceSessions).where("driver_id", "in", chunk).get();
+          for (const doc of snap.docs) {
+            const driverId = asStr(doc.get("driver_id"));
+            const deviceId = asStr(doc.get("device_id"));
+            const seen = instantOf(doc.get("last_seen_at"));
+            if (!driverId || !deviceId || !seen || seen < cutoff) continue;
+            const set = devicesSeen.get(driverId) ?? new Set<string>();
+            set.add(deviceId);
+            devicesSeen.set(driverId, set);
+          }
+        }
+        for (const [driverId, devices] of devicesSeen) {
+          if (devices.size > 1) multiDevice.add(driverId);
+        }
+      })(),
+    ]);
+    for (const doc of deliverySnap.docs) {
+      const driverId = asStr(doc.get("driver_id"));
+      if (!driverId || !want.has(driverId)) continue;
+      deliveriesToday.set(driverId, (deliveriesToday.get(driverId) ?? 0) + 1);
+    }
+    const zoneIds = [...new Set(
+      [...driverById.values()].map((driver) => asStr(driver["zone_id"])).filter((id): id is string => id !== null),
+    )];
+    const zoneName = new Map<string, string | null>();
+    if (zoneIds.length > 0) {
+      const zoneSnaps = await db.getAll(...zoneIds.map((id) => db.collection(COLLECTIONS.zones).doc(id)));
+      for (const snap of zoneSnaps) zoneName.set(snap.id, asStr(snap.get("name")));
+    }
+    for (const row of rows) {
+      const linkedId = asStr(row["linked_profile_id"]);
+      const driver = linkedId ? driverById.get(linkedId) : undefined;
+      if (!driver || !linkedId) continue;
+      const zoneId = asStr(driver["zone_id"]) ?? asStr(row["zone_id"]);
+      const accountStatus = asStr(driver["status"]) ?? "pending";
+      const isBlocked = driver["is_blocked"] === true;
+      row["mg_id"] = asStr(driver["employee_id"]) ?? asStr(row["mg_id"]);
+      row["zone_id"] = zoneId;
+      row["zone_name"] = zoneId ? zoneName.get(zoneId) ?? asStr(row["zone_name"]) : null;
+      row["account_status"] = accountStatus;
+      row["status_key"] = isBlocked ? "blocked" : accountStatus;
+      row["is_blocked"] = isBlocked;
+      row["is_on_duty"] = driver["is_on_duty"] === true;
+      row["attendance_key"] = driver["is_on_duty"] === true ? "on_duty" : "off_duty";
+      row["today_deliveries"] = deliveriesToday.get(linkedId) ?? 0;
+      row["app_passcode"] = driver["archived_at"] != null ? null : asStr(driver["app_passcode"]);
+      row["avatar_object_key"] = asStr(driver["avatar_object_key"]);
+      row["multi_device"] = multiDevice.has(linkedId);
+    }
+  });
 }
 
 /**
@@ -628,9 +709,14 @@ async function loadDriversForList(
   archived: boolean,
   search: string | null,
   phases?: PhaseMarks,
+  deferLive = false,
 ): Promise<{ rows: Dict[]; kpis: DriverKpis | null }> {
   const term = (search ?? "").trim();
-  if (!term) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
+  if (!term) {
+    const rows = await loadDriverRows(archived, null, phases, deferLive);
+    const kpis = deferLive ? await timedPhase(phases ?? {}, "kpiMs", () => fleetKpiCounts(archived)) : null;
+    return { rows, kpis };
+  }
   const db = getFirestore();
   const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.driverIntakes, "name_lower");
   if (fullScanFallback(indexed, term)) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
@@ -669,8 +755,14 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
   const desc = sortDir === "desc";
   const limit = Math.min(Math.max(pickCount(data, 100, "limit", "p_limit"), 1), MAX_LIMIT);
   const offset = Math.max(pickCount(data, 0, "offset", "p_offset"), 0);
+  const deferLive = canDeferDriverJoin({
+    tab,
+    search,
+    filterCount: Object.keys(filters).length,
+    sortKey,
+  });
 
-  const loaded = await loadDriversForList(tab === "archived", search, phases);
+  const loaded = await loadDriversForList(tab === "archived", search, phases, deferLive);
   const base = loaded.rows;
   const tabbed = base.filter((row) => tabMatches(row, tab));
   const filtered = tabbed.filter(
@@ -692,8 +784,11 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
     return String(left["id"]).localeCompare(String(right["id"]));
   });
 
+  const pageRows = sorted.slice(offset, offset + limit);
+  if (deferLive) await hydrateDeferredPage(pageRows, phases);
+
   return {
-    rows: sorted.slice(offset, offset + limit),
+    rows: pageRows,
     filtered_total: filtered.length,
     tab_total: loaded.kpis
       ? tab === "multi_device"

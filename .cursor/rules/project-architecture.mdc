@@ -240,6 +240,14 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-13` — **Non-rider latency updates deployed in `me-central1`; nothing rolled back.** Updated `adminListAttendanceDaily`, `adminPayrollRuleSnapshot`, `adminAttendanceKpis`, `adminExpireStalePickups` (not invoked), `reconcileDeliveryVerification` (empty id only), `adminListDriversPage`, and `adminApiScan`. `adminBulkUpdateDeliveries` was skipped: Cloud Run has no invoker binding and returns HTML 401 before the handler. No `driver*` deploy, no `--force`, no IAM change, no `--apply`, no production alias change.
+
+- `[admin only] 2026-10-13` — **Cutover plan, reconcile mode, and the EmployeeDesk batches twin.** `docs/CUTOVER.md` is the ordered production plan. `scripts/perf-backfill.mjs --reconcile` scans again and SETs absolute counts. It was emulator-tested and was not run against `musallam-delivery-prod`. `/employeedesk/esign/batches` renders the existing tracker. Attendance date pages no longer stop at 5000 rows; computed sorts keyset up to 40000. No production alias change.
+
+- `[admin only] 2026-10-13` — **Backfill `--apply` compares the in-memory rollup plan to an independent scan and can SET batches of 400, resuming by document id.** It stays unwired from production: this pass did not run `--apply` against `musallam-delivery-prod`. Driver, attendance, and payroll list reads narrow the documents they fetch and log per-phase times. No deploy, no production alias change.
+
+- `[admin only] 2026-10-13` — **Delivery search stays on the full scan until backfill, and in-repo status writes stamp search fields and rollups.** `DELIVERY_SEARCH_BACKFILL_COMPLETE` is false, so one `order_id_lower` cannot turn a prefix page into a false empty result. `driverCompleteDelivery` clears the previous shift day when the day moves. Bulk verify, verification reconcile, stale-pickup expiry, and import revert now stamp or roll up. No deploy, no `--apply`, no production alias change.
+
 - `[admin only] 2026-10-13` — **`adminLiveFleetSnapshot` updated in `me-central1`.** Existing callable, no `--force`, no new IAM. Unauthenticated `{data:{}}` is 401. Eighteen delivery prefix indexes are CREATING; `rollups_driver_day` driver+day is READY. `order_id_lower` with `created_at` was not deployed. Production alias is still `dpl_Fuoo3cbEgaqichhpWL9HTX19sYBD`. Backfill `--apply` was not run.
 
 - `[admin only] 2026-10-13` — **Prefix indexes and the live snapshot cache.** Nineteen composites: status, zone, or partner plus a delivery prefix field, and `rollups_driver_day` on driver plus day. `order_id_lower` with `created_at` stays out. `adminLiveFleetSnapshot` caches one unscoped base and projects each caller's zone, partner, and contact fields. Stage D readers are preview `dpl_5XASEkU6nSJf9qKw5uwhNbJzGTwb` (`fra1`, target preview). Production alias is still `dpl_Fuoo3cbEgaqichhpWL9HTX19sYBD`.

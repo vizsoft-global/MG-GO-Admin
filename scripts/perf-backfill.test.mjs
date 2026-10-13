@@ -13,7 +13,13 @@ function run(args, env = {}) {
   return spawnSync(process.execPath, ["--import", "tsx", script, ...args], {
     cwd: functionsDir,
     encoding: "utf8",
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      CONFIRM_BACKFILL_APPLY: "",
+      BACKFILL_SNAPSHOT_ID: "",
+      FIRESTORE_EMULATOR_HOST: "",
+      ...env,
+    },
   });
 }
 
@@ -34,12 +40,35 @@ describe("perf-backfill", () => {
     assert.match(result.stderr, /confirm_required/);
   });
 
-  it("exits non-zero when a comparison report has mismatches", () => {
+  it("ignores a stored comparison file and still requires a snapshot id", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "perf-backfill-"));
     const file = path.join(dir, "report.json");
     writeFileSync(file, JSON.stringify({ source: "synthetic", mismatches: 3, driverDays: 1, zoneMonths: 1 }));
-    const result = run(["--comparison", file, "--apply"], { CONFIRM_BACKFILL_APPLY: "yes" });
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /comparison_mismatch/);
+    const result = run(["--comparison", file, "--apply"], {
+      CONFIRM_BACKFILL_APPLY: "yes",
+      BACKFILL_SNAPSHOT_ID: "",
+      FIRESTORE_EMULATOR_HOST: "",
+    });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /snapshot_required/);
+    assert.equal(result.stderr.includes("comparison_mismatch"), false);
+  });
+
+  it("refuses reconcile without the confirm env", () => {
+    const result = run(["--reconcile"], { CONFIRM_BACKFILL_APPLY: "" });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /confirm_required/);
+  });
+
+  it("refuses fixture apply unless the firestore emulator is set", () => {
+    const result = run(["--fixtures", "--apply"], {
+      CONFIRM_BACKFILL_APPLY: "yes",
+      BACKFILL_SNAPSHOT_ID: "unit-snapshot",
+      FIRESTORE_EMULATOR_HOST: "",
+    });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /fixtures_require_emulator/);
+    assert.equal(result.stdout.includes("apply_writes="), false);
+    assert.equal(result.stdout.includes("unit-snapshot"), false);
   });
 });

@@ -6,7 +6,12 @@
  * Requires PERF_PROBE_EMAIL and PERF_PROBE_PASSWORD in .env.local.
  * Run only after adminApiScan exists. Client timeout is 60s. Samples alternate.
  */
+import { setDefaultResultOrder } from "node:dns";
+import { setDefaultAutoSelectFamily } from "node:net";
 import { assertProd, loadEnv, loadServiceAccount } from "./perf-env.mjs";
+
+setDefaultResultOrder("ipv4first");
+setDefaultAutoSelectFamily(false);
 
 const PAGE = { tab: "all", limit: 25, offset: 0 };
 const SAMPLES = 10;
@@ -129,7 +134,41 @@ function groupCases(which) {
 
 const mode = process.argv[2] ?? "drivers";
 const today = kuwaitDay();
-const cases =
+const oneName = process.argv[3] ?? "";
+const onePayloads = {
+  adminPayrollRuleSnapshot: { lane: "adminApiScan", data: { month: today.slice(0, 7) } },
+  adminAttendanceKpis: { lane: "adminApiScan", data: { date: today } },
+  adminListDriversPage: { lane: "adminApiScan", data: PAGE },
+  adminBulkUpdateDeliveries: { lane: "adminBulkUpdateDeliveries", data: { status: "verified", ids: [] } },
+};
+const cases = mode === "full"
+  ? [
+      ...groupCases("lanes").map((item) =>
+        item.name === "adminPerformanceOpsSnapshot" ? { ...item, tag: "1d" } : item,
+      ),
+      {
+        name: "adminPerformanceOpsSnapshot",
+        lane: "adminApiScan",
+        tag: "7d",
+        data: { from: shiftDay(today, -6), to: today, bucket: "day" },
+      },
+      {
+        name: "adminPerformanceOpsSnapshot",
+        lane: "adminApiScan",
+        tag: "30d",
+        data: { from: shiftDay(today, -29), to: today, bucket: "day" },
+      },
+      { name: "adminAttendanceKpis", lane: "adminApiScan", data: { date: today } },
+      { name: "adminPayrollMonthSnapshot", lane: "adminApiScan", data: { month: today.slice(0, 7) } },
+      {
+        name: "adminIncentiveDailyReport",
+        lane: "adminApiScan",
+        data: { from: shiftDay(today, -1), to: shiftDay(today, -1) },
+      },
+    ]
+  : mode === "one" && onePayloads[oneName]
+  ? [{ name: oneName, lane: onePayloads[oneName].lane, data: onePayloads[oneName].data }]
+  :
   mode === "scan"
     ? scanCases()
     : mode === "attendance"
@@ -159,24 +198,27 @@ const cases =
               : [{ name: "adminListDriversPage", lane: "adminApiScan", data: PAGE }];
 
 for (const item of cases) {
-  const targets = [
-    {
-      name: item.lane,
-      url: `${base}/${item.lane}`,
-      body: { data: { fn: item.name, data: item.data } },
-    },
-    {
-      name: item.name,
-      url: `${base}/${item.name}`,
-      body: { data: item.data },
-    },
-  ];
+  const laneTarget = {
+    name: item.lane,
+    url: `${base}/${item.lane}`,
+    body: item.lane === item.name ? { data: item.data } : { data: { fn: item.name, data: item.data } },
+  };
+  const targets = mode === "full" || item.lane === item.name
+    ? [laneTarget]
+    : [
+        laneTarget,
+        {
+          name: item.name,
+          url: `${base}/${item.name}`,
+          body: { data: item.data },
+        },
+      ];
   const samples = { [item.lane]: [], [item.name]: [] };
   for (let i = 0; i < SAMPLES; i += 1) {
     for (const target of targets) {
       const result = await callOnce(target.url, target.body);
       samples[target.name].push(result);
-      console.log(JSON.stringify({ fn: item.name, name: target.name, i, ms: result.ms, status: result.status }));
+      console.log(JSON.stringify({ fn: item.name, tag: item.tag ?? null, name: target.name, i, ms: result.ms, status: result.status }));
     }
   }
   for (const target of targets) {
@@ -188,6 +230,7 @@ for (const item of cases) {
     console.log(
       JSON.stringify({
         fn: item.name,
+        tag: item.tag ?? null,
         name: target.name,
         n: samples[target.name].length,
         ok: ok.length,

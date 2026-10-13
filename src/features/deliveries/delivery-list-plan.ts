@@ -13,6 +13,54 @@ export const DELIVERY_SEARCH_CAP = 20_000;
 export const DELIVERY_PREFIX_MIN_LENGTH = 4;
 
 /**
+ * Prefix search is safe only after every delivery stores `order_id_lower`.
+ * One stamped row is not enough: the probe would turn prefix on and an
+ * unstamped order would come back as an empty page. Stays false until a
+ * backfill `--apply` is approved and checked.
+ */
+export const DELIVERY_SEARCH_BACKFILL_COMPLETE = false;
+
+/** True only when the field exists on the collection and the backfill is done. */
+export function deliverySearchUsesPrefix(probeFoundField: boolean, backfillComplete: boolean): boolean {
+  return backfillComplete && probeFoundField;
+}
+
+/**
+ * An empty prefix page is not "no results" while deliveries can still lack
+ * `order_id_lower`. A capped page is left alone: falling through would scan
+ * a set the prefix query already said is larger than the cap.
+ */
+export function prefixPageNeedsFullScan(input: {
+  backfillComplete: boolean;
+  rowCount: number;
+  capped: boolean;
+}): boolean {
+  if (input.backfillComplete) return false;
+  if (input.capped) return false;
+  return input.rowCount === 0;
+}
+
+export function prefixPageDecision(input: {
+  backfillComplete: boolean;
+  probeFoundField: boolean;
+  prefixRowCount: number | null;
+  capped: boolean;
+}): "prefix" | "scan" {
+  if (!deliverySearchUsesPrefix(input.probeFoundField, input.backfillComplete)) return "scan";
+  if (input.prefixRowCount === null) return "scan";
+  if (
+    prefixPageNeedsFullScan({
+      backfillComplete: input.backfillComplete,
+      rowCount: input.prefixRowCount,
+      capped: input.capped,
+    })
+  ) {
+    return "scan";
+  }
+  return "prefix";
+}
+
+/**
  * Prefix queries page in prefix-field order. Firestore applies the range
  * field as the first orderBy, so an index of (order_id_lower, created_at desc)
  * does not return newest-first. The deliveries list loads at most

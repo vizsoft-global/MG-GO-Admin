@@ -4,91 +4,26 @@ import type { Firestore } from "../core/fs";
 import {
   applyGuard,
   BACKFILL_BATCH,
+  buildApplyPlan,
   driverDayNumbers,
   FIXTURE_SOURCE,
   formatDryRunCounts,
   mismatchCount,
+  planApplyWrites,
   planRollupDocuments,
   planSearchWrites,
   resumeSlice,
+  scanPlanMismatches,
+  scanRollupFacts,
   searchWriteUsesPrefixFields,
   syntheticComparisonFixture,
   SYNTHETIC_SAMPLE_DAYS,
   zoneMonthNumbers,
-  type AttendanceFact,
-  type DeliveryFact,
 } from "../core/backfill-plan";
+import { deliveryFactFromData, driverZoneMap } from "../core/backfill-apply";
 import { COLLECTIONS } from "../core/collections";
 import { applyAttendanceRollup, applyDeliveryRollup, driverDayId, zoneMonthId } from "../core/rollups";
 import { createMemoryFirestore } from "./memory-firestore";
-
-const STATUSES = ["verified", "pending", "in_transit", "under_review", "rejected", "cancelled"] as const;
-
-function scanFixture(deliveries: readonly DeliveryFact[], attendance: readonly AttendanceFact[]) {
-  const days = new Map<string, { zoneId: string | null; counts: Record<string, number> }>();
-  const ensure = (driverId: string, day: string, zoneId: string | null) => {
-    const id = `${driverId}_${day}`;
-    const existing = days.get(id);
-    if (existing) {
-      if (existing.zoneId === null) existing.zoneId = zoneId;
-      return existing;
-    }
-    const counts: Record<string, number> = {
-      verified: 0,
-      pending: 0,
-      in_transit: 0,
-      under_review: 0,
-      rejected: 0,
-      cancelled: 0,
-      orders: 0,
-      attendance_present: 0,
-    };
-    const created = { zoneId, counts };
-    days.set(id, created);
-    return created;
-  };
-
-  for (const row of deliveries) {
-    if (!(STATUSES as readonly string[]).includes(row.status)) continue;
-    const bucket = ensure(row.driverId, row.day, row.zoneId);
-    bucket.counts[row.status] = (bucket.counts[row.status] ?? 0) + 1;
-    bucket.counts.orders = bucket.counts.verified ?? 0;
-  }
-  for (const row of attendance) {
-    if (!row.present) continue;
-    const bucket = ensure(row.driverId, row.day, row.zoneId);
-    bucket.counts.attendance_present = (bucket.counts.attendance_present ?? 0) + 1;
-  }
-
-  const zones = new Map<string, Record<string, number>>();
-  for (const [id, bucket] of days) {
-    if (!bucket.zoneId) continue;
-    const day = id.slice(id.lastIndexOf("_") + 1);
-    const month = day.slice(0, 7);
-    const zoneId = `${bucket.zoneId}_${month}`;
-    const zone = zones.get(zoneId) ?? {
-      verified: 0,
-      pending: 0,
-      in_transit: 0,
-      under_review: 0,
-      rejected: 0,
-      cancelled: 0,
-      orders: 0,
-      attendance_present: 0,
-      verified_driver_days: 0,
-      attendance_days: 0,
-    };
-    for (const status of STATUSES) zone[status] = (zone[status] ?? 0) + (bucket.counts[status] ?? 0);
-    zone.orders = (zone.orders ?? 0) + (bucket.counts.verified ?? 0);
-    if ((bucket.counts.verified ?? 0) > 0) zone.verified_driver_days = (zone.verified_driver_days ?? 0) + 1;
-    if ((bucket.counts.attendance_present ?? 0) > 0) zone.attendance_days = (zone.attendance_days ?? 0) + 1;
-    zones.set(zoneId, zone);
-  }
-
-  const driverDays = new Map<string, Record<string, number>>();
-  for (const [id, bucket] of days) driverDays.set(id, bucket.counts);
-  return { driverDays, zones };
-}
 
 describe("backfill planner", () => {
   it("plans absolute search sets from the shared stamp helpers", () => {
@@ -133,16 +68,34 @@ describe("backfill planner", () => {
     ));
   });
 
-  it("refuses apply when the comparison mismatches", () => {
-    assert.deepEqual(applyGuard({ apply: false, confirm: undefined, report: null }), { ok: true });
-    assert.equal(applyGuard({ apply: true, confirm: undefined, report: null }).ok, false);
-    assert.equal(applyGuard({ apply: true, confirm: "yes", report: null }).ok, false);
+  it("refuses apply unless the scan matches and a snapshot id is set", () => {
+    assert.deepEqual(
+      applyGuard({ apply: false, confirm: undefined, snapshotId: undefined, scanMismatches: null }),
+      { ok: true },
+    );
+    assert.deepEqual(
+      applyGuard({ apply: true, confirm: undefined, snapshotId: "snap", scanMismatches: 0 }),
+      { ok: false, code: 2, reason: "confirm_required" },
+    );
+    assert.deepEqual(
+      applyGuard({ apply: true, confirm: "yes", snapshotId: "  ", scanMismatches: 0 }),
+      { ok: false, code: 2, reason: "snapshot_required" },
+    );
+    assert.deepEqual(
+      applyGuard({ apply: true, confirm: "yes", snapshotId: "snap", scanMismatches: null }),
+      { ok: false, code: 2, reason: "comparison_required" },
+    );
     const blocked = applyGuard({
       apply: true,
       confirm: "yes",
-      report: { source: FIXTURE_SOURCE, mismatches: 2, driverDays: 1, zoneMonths: 1 },
+      snapshotId: "snap",
+      scanMismatches: 2,
     });
     assert.deepEqual(blocked, { ok: false, code: 1, reason: "comparison_mismatch" });
+    assert.deepEqual(
+      applyGuard({ apply: true, confirm: "yes", snapshotId: "snap", scanMismatches: 0 }),
+      { ok: true },
+    );
     const text = formatDryRunCounts({
       source: "none",
       searchWrites: 0,
@@ -172,7 +125,8 @@ describe("synthetic rollup comparison", () => {
     assert.equal(fixture.deliveries.some((row) => row.status === "cancelled"), true);
     assert.equal(fixture.deliveries.some((row) => row.status === "rejected"), true);
 
-    const scanned = scanFixture(fixture.deliveries, fixture.attendance);
+    const scanned = scanRollupFacts(fixture.deliveries, fixture.attendance);
+    assert.equal(scanPlanMismatches(fixture.deliveries, fixture.attendance), 0);
     const planned = planRollupDocuments(fixture.deliveries, fixture.attendance);
     const plannedDays = new Map(planned.driverDays.map((doc) => [doc.id, driverDayNumbers(doc.data)]));
     const plannedZones = new Map(planned.zoneMonths.map((doc) => [doc.id, zoneMonthNumbers(doc.data)]));
@@ -237,9 +191,54 @@ describe("synthetic rollup comparison", () => {
     const guard = applyGuard({
       apply: true,
       confirm: "yes",
-      report: { source: FIXTURE_SOURCE, mismatches, driverDays: broken.size, zoneMonths: plannedZones.size },
+      snapshotId: "snap",
+      scanMismatches: mismatches,
     });
     assert.equal(guard.ok, false);
     if (!guard.ok) assert.equal(guard.code, 1);
+
+    const built = buildApplyPlan(fixture);
+    assert.equal(built.mismatches, 0);
+    assert.deepEqual(built.writes, planApplyWrites({
+      search: planSearchWrites(fixture.searchDocs),
+      rollups: planned,
+      deliveries: fixture.deliveries,
+      attendance: fixture.attendance,
+    }));
+    const searchWrite = built.writes.find((write) => write.path.startsWith(`${COLLECTIONS.deliveries}/`));
+    assert.equal(searchWrite?.merge, true);
+    const parent = built.writes.find((write) => write.path === `${COLLECTIONS.rollupsDriverDay}/${planned.driverDays[0]?.id}`);
+    assert.equal(parent?.merge, false);
+    assert.equal(parent?.data.partial, false);
+    const sample = fixture.deliveries[0];
+    assert.ok(sample);
+    const marker = built.writes.find((write) => write.path.endsWith(`/applied/${sample.id}`));
+    assert.equal(marker?.merge, false);
+    assert.equal(marker?.data.status, sample.status);
+    const ids = new Set(built.writes.map((write) => write.id));
+    assert.equal(ids.size, built.writes.length);
+  });
+});
+
+describe("production fact mapping", () => {
+  it("uses the driver zone and skips a missing driver", () => {
+    const zones = driverZoneMap([
+      { id: "drv", data: { zone_id: "driver-zone", archived_at: null } },
+      { id: "gone", data: { zone_id: "old", archived_at: "2026-01-01" } },
+    ]);
+    const fact = deliveryFactFromData(
+      "del-1",
+      { driver_id: "drv", shift_date: "2026-01-05", status: "verified", zone_id: "delivery-zone" },
+      zones,
+    );
+    assert.equal(fact?.zoneId, "driver-zone");
+    assert.equal(
+      deliveryFactFromData("del-2", { driver_id: "gone", shift_date: "2026-01-05", status: "verified" }, zones),
+      null,
+    );
+    assert.equal(
+      deliveryFactFromData("del-3", { driver_id: "missing", shift_date: "2026-01-05", status: "verified" }, zones),
+      null,
+    );
   });
 });

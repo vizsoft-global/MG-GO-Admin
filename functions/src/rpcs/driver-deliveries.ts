@@ -611,10 +611,21 @@ export const driverCompleteDelivery = onCall(async (request) => {
     ...deliveryIdentityStamp(ctx.driver, ctx.profile, current["external_order_id"]),
   };
   await snap.ref.set(patch, { merge: true });
+  const previousDay = asString(current["shift_date"]);
+  const zoneId = asString(current["zone_id"]) ?? asString(ctx.driver["zone_id"]);
+  if (previousDay && shiftDate && previousDay !== shiftDate) {
+    await touchDeliveryStatusRollup({
+      deliveryId,
+      driverId: ctx.uid,
+      zoneId,
+      day: previousDay,
+      status: "",
+    });
+  }
   await touchDeliveryStatusRollup({
     deliveryId,
     driverId: ctx.uid,
-    zoneId: asString(current["zone_id"]) ?? asString(ctx.driver["zone_id"]),
+    zoneId,
     day: shiftDate,
     status: "pending",
   });

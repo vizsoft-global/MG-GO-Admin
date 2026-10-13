@@ -7,7 +7,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export function loadEnv() {
   const env = {};
-  const text = readFileSync(resolve(root, ".env.local"), "utf8");
+  const file = process.env.PERF_ENV_FILE
+    ? resolve(process.env.PERF_ENV_FILE)
+    : resolve(root, ".env.local");
+  const text = readFileSync(file, "utf8");
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;

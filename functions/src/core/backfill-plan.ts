@@ -280,15 +280,169 @@ export function mismatchCount(
   return mismatches;
 }
 
+/**
+ * Counts the same driver-day and zone-month numbers as `planRollupDocuments`
+ * without calling it. The first apply compares these two in-memory results.
+ * Stored `rollups_*` documents are not an input: they are empty before the
+ * first apply, so a stored-doc compare would refuse every first run.
+ */
+export function scanRollupFacts(
+  deliveries: readonly DeliveryFact[],
+  attendance: readonly AttendanceFact[],
+): {
+  driverDays: Map<string, Record<string, number>>;
+  zones: Map<string, Record<string, number>>;
+} {
+  const days = new Map<string, { zoneId: string | null; counts: Record<string, number> }>();
+  const ensure = (driverId: string, day: string, zoneId: string | null) => {
+    const id = dayKey(driverId, day);
+    const existing = days.get(id);
+    if (existing) {
+      if (existing.zoneId === null) existing.zoneId = zoneId;
+      return existing;
+    }
+    const created = {
+      zoneId,
+      counts: {
+        verified: 0,
+        pending: 0,
+        in_transit: 0,
+        under_review: 0,
+        rejected: 0,
+        cancelled: 0,
+        orders: 0,
+        attendance_present: 0,
+      },
+    };
+    days.set(id, created);
+    return created;
+  };
+
+  for (const row of deliveries) {
+    if (!isStatus(row.status)) continue;
+    const bucket = ensure(row.driverId, row.day, row.zoneId);
+    bucket.counts[row.status] = (bucket.counts[row.status] ?? 0) + 1;
+    bucket.counts.orders = bucket.counts.verified ?? 0;
+  }
+  for (const row of attendance) {
+    if (!row.present) continue;
+    const bucket = ensure(row.driverId, row.day, row.zoneId);
+    bucket.counts.attendance_present = (bucket.counts.attendance_present ?? 0) + 1;
+  }
+
+  const zones = new Map<string, Record<string, number>>();
+  for (const [id, bucket] of days) {
+    if (!bucket.zoneId) continue;
+    const day = id.slice(id.lastIndexOf("_") + 1);
+    const zoneId = `${bucket.zoneId}_${day.slice(0, 7)}`;
+    const zone = zones.get(zoneId) ?? {
+      verified: 0,
+      pending: 0,
+      in_transit: 0,
+      under_review: 0,
+      rejected: 0,
+      cancelled: 0,
+      orders: 0,
+      attendance_present: 0,
+      verified_driver_days: 0,
+      attendance_days: 0,
+    };
+    for (const status of STATUS_KEYS) zone[status] = (zone[status] ?? 0) + (bucket.counts[status] ?? 0);
+    zone.orders = (zone.orders ?? 0) + (bucket.counts.verified ?? 0);
+    if ((bucket.counts.verified ?? 0) > 0) zone.verified_driver_days = (zone.verified_driver_days ?? 0) + 1;
+    if ((bucket.counts.attendance_present ?? 0) > 0) zone.attendance_days = (zone.attendance_days ?? 0) + 1;
+    zones.set(zoneId, zone);
+  }
+
+  const driverDays = new Map<string, Record<string, number>>();
+  for (const [id, bucket] of days) driverDays.set(id, bucket.counts);
+  return { driverDays, zones };
+}
+
+export function scanPlanMismatches(
+  deliveries: readonly DeliveryFact[],
+  attendance: readonly AttendanceFact[],
+): number {
+  const scanned = scanRollupFacts(deliveries, attendance);
+  const planned = planRollupDocuments(deliveries, attendance);
+  const plannedDays = new Map(planned.driverDays.map((doc) => [doc.id, driverDayNumbers(doc.data)]));
+  const plannedZones = new Map(planned.zoneMonths.map((doc) => [doc.id, zoneMonthNumbers(doc.data)]));
+  return mismatchCount(scanned.driverDays, plannedDays) + mismatchCount(scanned.zones, plannedZones);
+}
+
+export type ApplyWrite = {
+  id: string;
+  path: string;
+  data: Record<string, unknown>;
+  merge: boolean;
+};
+
+/** Absolute rollup SET plus search-field merge. A second run replaces the same numbers. */
+export function planApplyWrites(input: {
+  search: readonly SearchWrite[];
+  rollups: { driverDays: readonly PlannedDoc[]; zoneMonths: readonly PlannedDoc[] };
+  deliveries: readonly DeliveryFact[];
+  attendance: readonly AttendanceFact[];
+}): ApplyWrite[] {
+  const writes: ApplyWrite[] = [];
+  for (const write of input.search) {
+    const path = `${write.collection}/${write.id}`;
+    writes.push({ id: path, path, data: { ...write.set }, merge: true });
+  }
+  for (const doc of input.rollups.driverDays) {
+    const path = `${COLLECTIONS.rollupsDriverDay}/${doc.id}`;
+    writes.push({ id: path, path, data: doc.data, merge: false });
+  }
+  for (const doc of input.rollups.zoneMonths) {
+    const path = `${COLLECTIONS.rollupsZoneMonth}/${doc.id}`;
+    writes.push({ id: path, path, data: doc.data, merge: false });
+  }
+  for (const row of input.deliveries) {
+    if (!isStatus(row.status)) continue;
+    const path = `${COLLECTIONS.rollupsDriverDay}/${dayKey(row.driverId, row.day)}/applied/${row.id}`;
+    writes.push({ id: path, path, data: { status: row.status }, merge: false });
+  }
+  for (const row of input.attendance) {
+    if (!row.present) continue;
+    const path = `${COLLECTIONS.rollupsDriverDay}/${dayKey(row.driverId, row.day)}/attendance/${row.id}`;
+    writes.push({ id: path, path, data: { present: true }, merge: false });
+  }
+  writes.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+  return writes;
+}
+
+export function buildApplyPlan(input: {
+  deliveries: readonly DeliveryFact[];
+  attendance: readonly AttendanceFact[];
+  searchDocs: readonly StoredDoc[];
+}): { writes: ApplyWrite[]; mismatches: number; driverDays: number; zoneMonths: number } {
+  const rollups = planRollupDocuments(input.deliveries, input.attendance);
+  return {
+    mismatches: scanPlanMismatches(input.deliveries, input.attendance),
+    writes: planApplyWrites({
+      search: planSearchWrites(input.searchDocs),
+      rollups,
+      deliveries: input.deliveries,
+      attendance: input.attendance,
+    }),
+    driverDays: rollups.driverDays.length,
+    zoneMonths: rollups.zoneMonths.length,
+  };
+}
+
 export function applyGuard(options: {
   apply: boolean;
   confirm: string | undefined;
-  report: ComparisonReport | null;
+  snapshotId: string | undefined;
+  scanMismatches: number | null;
 }): { ok: true } | { ok: false; code: number; reason: string } {
   if (!options.apply) return { ok: true };
   if (options.confirm !== "yes") return { ok: false, code: 2, reason: "confirm_required" };
-  if (!options.report) return { ok: false, code: 2, reason: "comparison_required" };
-  if (options.report.mismatches !== 0) return { ok: false, code: 1, reason: "comparison_mismatch" };
+  if (!options.snapshotId || options.snapshotId.trim() === "") {
+    return { ok: false, code: 2, reason: "snapshot_required" };
+  }
+  if (options.scanMismatches === null) return { ok: false, code: 2, reason: "comparison_required" };
+  if (options.scanMismatches !== 0) return { ok: false, code: 1, reason: "comparison_mismatch" };
   return { ok: true };
 }
 

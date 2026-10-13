@@ -19,10 +19,9 @@ import { requireAnyPermission } from "@/lib/auth/require-permission";
  * EmployeeDesk → E-Signature hub.
  *
  * Every door onto the EmployeeDesk tree is listed here, which is the point: the
- * V2 routes (`templates`, `send`, `bulk`, `waiting`, `signing`) are twins of
- * their `/requests/esign` originals, and a twin nothing links to is a fork with
- * extra steps. Drafts, Sent and Batches stay on the V1 routes deliberately —
- * there is no V2 screen for them, so listing a second URL would be inventing one.
+ * V2 routes (`templates`, `send`, `bulk`, `waiting`, `signing`, `batches`) are
+ * twins of their `/requests/esign` originals. Drafts and Sent stay on the V1
+ * routes: a second URL there would fork a screen that has no twin.
  */
 const CARDS = [
   { key: "templates", href: "/employeedesk/esign/templates", icon: FileSignature },
@@ -32,7 +31,7 @@ const CARDS = [
   { key: "sent", href: "/requests/esign/sent", icon: Send },
   { key: "waiting", href: "/employeedesk/esign/waiting", icon: BellRing },
   { key: "signing", href: "/employeedesk/esign/signing", icon: PenLine },
-  { key: "batches", href: "/requests/esign/batches", icon: Layers },
+  { key: "batches", href: "/employeedesk/esign/batches", icon: Layers },
 ] as const;
 
 export default async function EmployeeDeskEsignHubPage({

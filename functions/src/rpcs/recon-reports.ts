@@ -27,6 +27,8 @@ import {
   type Dict,
 } from "./_shared";
 import { driverRestaurantIds } from "./deliveries-shared";
+import { applyDeliveryRollup } from "../core/rollups";
+import { stampStoredRow } from "../core/search-text";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RECON_MAX_SPAN_DAYS = 93;
@@ -414,12 +416,12 @@ export const reconcileDeliveryVerification = onCall(async (request) => {
   const db = getFirestore();
   const verificationRef = db.collection(COLLECTIONS.deliveryVerifications).doc(verificationId);
 
-  return db.runTransaction(async (tx) => {
+  const outcome = await db.runTransaction(async (tx) => {
     const snap = await tx.get(verificationRef);
     if (!snap.exists) throw new HttpsError("not-found", "verification_not_found");
     const row = (snap.data() ?? {}) as Dict;
 
-    if (row.status === "reverted") return { ok: true, skipped: "reverted" };
+    if (row.status === "reverted") return { ok: true as const, skipped: "reverted" as const, touches: [] };
 
     const driverId = str(row.driver_id);
     const restaurantId = str(row.restaurant_id);
@@ -427,7 +429,15 @@ export const reconcileDeliveryVerification = onCall(async (request) => {
     const serviceDate = dayOf(row.service_date);
     const reported = Math.max(0, Math.trunc(numberOrNull(row.reported_count) ?? 0));
 
-    let candidates: Array<{ id: string; at: number }> = [];
+    type ReconcileCandidate = {
+      id: string;
+      at: number;
+      driverId: string;
+      zoneId: string | null;
+      day: string;
+      stamp: Record<string, string>;
+    };
+    let candidates: ReconcileCandidate[] = [];
     if (driverId && serviceDate) {
       const deliveriesSnap = await tx.get(
         db
@@ -452,7 +462,18 @@ export const reconcileDeliveryVerification = onCall(async (request) => {
             (deliveryRestaurant === null && partnerId !== null && str(raw.partner_id) === partnerId)
           );
         })
-        .map(({ id, raw }) => ({ id, at: millisOf(raw.delivered_at) ?? 0 }))
+        .map(({ id, raw }) => {
+          const shift = str(raw.shift_date);
+          const day = shift && /^\d{4}-\d{2}-\d{2}$/.test(shift) ? shift : serviceDate;
+          return {
+            id,
+            at: millisOf(raw.delivered_at) ?? 0,
+            driverId,
+            zoneId: str(raw.zone_id),
+            day,
+            stamp: stampStoredRow("deliveries", raw),
+          };
+        })
         .sort((a, b) => a.at - b.at || compareText(a.id, b.id));
     }
 
@@ -468,10 +489,26 @@ export const reconcileDeliveryVerification = onCall(async (request) => {
     else status = "matched";
 
     const now = FieldValue.serverTimestamp();
+    const touches: Array<{
+      deliveryId: string;
+      driverId: string;
+      zoneId: string | null;
+      day: string;
+      status: "verified" | "under_review";
+    }> = [];
     candidates.forEach((candidate, index) => {
+      const nextStatus = index < take ? "verified" : "under_review";
       tx.update(db.collection(COLLECTIONS.deliveries).doc(candidate.id), {
-        status: index < take ? "verified" : "under_review",
+        ...candidate.stamp,
+        status: nextStatus,
         updated_at: now,
+      });
+      touches.push({
+        deliveryId: candidate.id,
+        driverId: candidate.driverId,
+        zoneId: candidate.zoneId,
+        day: candidate.day,
+        status: nextStatus,
       });
     });
 
@@ -499,13 +536,20 @@ export const reconcileDeliveryVerification = onCall(async (request) => {
     });
 
     return {
-      ok: true,
+      ok: true as const,
       status,
       matched_count: take,
       under_review_count: excess,
       shortfall_count: shortfall,
+      touches,
     };
   });
+
+  for (const touch of outcome.touches) {
+    await applyDeliveryRollup(db, touch);
+  }
+  const { touches: _touches, ...body } = outcome;
+  return body;
 });
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@ describe("rollup increment", () => {
     assert.deepEqual(statusDelta("pending", "verified"), { pending: -1, verified: 1, orders: 1 });
     assert.deepEqual(statusDelta("verified", "verified"), {});
     assert.deepEqual(statusDelta("verified", "rejected"), { verified: -1, orders: -1, rejected: 1 });
+    assert.deepEqual(statusDelta("in_transit", null), { in_transit: -1 });
   });
 
   it("counts a verified driver-day once", () => {

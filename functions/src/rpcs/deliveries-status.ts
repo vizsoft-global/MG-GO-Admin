@@ -17,6 +17,7 @@ import { type SourceCompanyConfig } from "../core/incentive";
 import { loadIncentiveContext, type IncentiveContext } from "../core/incentive-store";
 import { recalculateDriverEarningsCore } from "./earnings";
 import { applyDeliveryRollup } from "../core/rollups";
+import { stampStoredRow } from "../core/search-text";
 import {
   driverRestaurantIds,
   loadRestaurantsByPartner,
@@ -166,6 +167,7 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
             patch[FIELDS.deliveries.restaurantId] = resolved;
           }
         }
+        Object.assign(patch, stampStoredRow("deliveries", { ...raw, ...patch }));
         transaction.update(snap.ref, patch);
         updated += 1;
         const driverId = asString(raw[FIELDS.deliveries.driverId]);

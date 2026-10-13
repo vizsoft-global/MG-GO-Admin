@@ -24,10 +24,12 @@ import { IN_PROGRESS_DELIVERY_STATUSES, normalizeDeliveryStatusFilter } from "./
 import { collectExportPages } from "./export-pagination";
 import {
   DELIVERY_LIST_PREFIX_FIELDS,
+  DELIVERY_SEARCH_BACKFILL_COMPLETE,
   DELIVERY_SEARCH_CAP,
   capPrefixMatchSet,
   gpsInChunks,
   pagePrefixMatches,
+  prefixPageDecision,
   routeDeliveryList,
   type DeliveryListRoute,
   type DeliverySearchShape,
@@ -696,6 +698,7 @@ function createdAtMs(value: unknown): number {
 }
 
 async function deliveriesLowercaseIndexed(db: Firestore): Promise<boolean> {
+  if (!DELIVERY_SEARCH_BACKFILL_COMPLETE) return false;
   const now = Date.now();
   if (lowercaseProbe && now - lowercaseProbe.at < LOWERCASE_PROBE_MS) return lowercaseProbe.indexed;
   let indexed = false;
@@ -861,7 +864,13 @@ async function loadDeliverySlice(
       };
     case "prefix": {
       const prefix = await pageByPrefix(db, params, route, offset, limit);
-      if (prefix) {
+      const decision = prefixPageDecision({
+        backfillComplete: DELIVERY_SEARCH_BACKFILL_COMPLETE,
+        probeFoundField: indexed,
+        prefixRowCount: prefix ? prefix.rows.length : null,
+        capped: prefix?.capped ?? false,
+      });
+      if (decision === "prefix" && prefix) {
         if (prefix.capped) reasons.push("prefix_cap");
         return {
           rows: prefix.rows,
@@ -871,7 +880,7 @@ async function loadDeliverySlice(
           searchTruncated: prefix.capped,
         };
       }
-      reasons.push("index_not_ready");
+      reasons.push(prefix ? "prefix_unstamped" : "index_not_ready");
       break;
     }
     case "scan":

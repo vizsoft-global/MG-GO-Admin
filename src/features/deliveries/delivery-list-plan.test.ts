@@ -5,9 +5,13 @@ import {
   DELIVERY_SEARCH_CAP,
   DELIVERY_SEARCH_FIELDS,
   capPrefixMatchSet,
+  DELIVERY_SEARCH_BACKFILL_COMPLETE,
+  deliverySearchUsesPrefix,
   gpsInChunks,
   GPS_IN_CHUNK,
   pagePrefixMatches,
+  prefixPageDecision,
+  prefixPageNeedsFullScan,
   routeDeliveryList,
 } from "./delivery-list-plan";
 
@@ -106,6 +110,66 @@ describe("routeDeliveryList", () => {
     const route = routeDeliveryList({ ...open, search: "ab", searchShape: "contains" });
     assert.equal(route.kind, "scan");
     if (route.kind === "scan") assert.ok(route.reasons.includes("contains_search"));
+  });
+});
+
+describe("prefix fallback before backfill", () => {
+  it("scans when any delivery can still lack order_id_lower", () => {
+    assert.equal(DELIVERY_SEARCH_BACKFILL_COMPLETE, false);
+    assert.equal(deliverySearchUsesPrefix(true, false), false);
+    assert.equal(deliverySearchUsesPrefix(false, false), false);
+    assert.equal(deliverySearchUsesPrefix(true, true), true);
+    const routed = routeDeliveryList({
+      ...open,
+      search: "1008",
+      searchShape: "prefix",
+      indexed: deliverySearchUsesPrefix(true, DELIVERY_SEARCH_BACKFILL_COMPLETE),
+    });
+    assert.equal(routed.kind, "scan");
+    if (routed.kind === "scan") assert.ok(routed.reasons.includes("lowercase_field_absent"));
+  });
+
+  it("does not treat an empty prefix page as no results before backfill", () => {
+    assert.equal(
+      prefixPageNeedsFullScan({ backfillComplete: false, rowCount: 0, capped: false }),
+      true,
+    );
+    assert.equal(
+      prefixPageDecision({
+        backfillComplete: false,
+        probeFoundField: true,
+        prefixRowCount: 0,
+        capped: false,
+      }),
+      "scan",
+    );
+    assert.equal(
+      prefixPageDecision({
+        backfillComplete: false,
+        probeFoundField: true,
+        prefixRowCount: 4,
+        capped: false,
+      }),
+      "scan",
+    );
+    assert.equal(
+      prefixPageDecision({
+        backfillComplete: true,
+        probeFoundField: true,
+        prefixRowCount: 0,
+        capped: false,
+      }),
+      "prefix",
+    );
+    assert.equal(
+      prefixPageDecision({
+        backfillComplete: true,
+        probeFoundField: true,
+        prefixRowCount: null,
+        capped: false,
+      }),
+      "scan",
+    );
   });
 });
 

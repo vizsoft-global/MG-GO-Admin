@@ -105,6 +105,12 @@ describe("search stamps on the handler function", () => {
     assert.match(rpc("driver-deliveries.ts"), /stampStoredRow\("deliveries"/);
     assert.match(rpc("driver-deliveries.ts"), /status: "in_transit"/);
     assert.match(rpc("driver-deliveries.ts"), /touchDeliveryStatusRollup/);
+    assert.match(rpc("driver-deliveries.ts"), /status: ""/);
+    assert.match(rpc("deliveries-status.ts"), /stampStoredRow\("deliveries"/);
+    assert.match(rpc("recon-reports.ts"), /stampStoredRow\("deliveries"/);
+    assert.match(rpc("recon-reports.ts"), /applyDeliveryRollup/);
+    assert.match(rpc("misc-admin.ts"), /stampStoredRow\("deliveries"/);
+    assert.match(rpc("misc-admin.ts"), /applyDeliveryRollup/);
   });
 });
 
@@ -165,5 +171,18 @@ describe("rollup increments", () => {
     });
     assert.equal(db.dump().get(dayId)?.attendance_present, 1);
     assert.equal(db.dump().get(zoneId)?.attendance_days, 1);
+  });
+
+  it("clears the old shift day when a delivery moves to the next day", async () => {
+    const db = createMemoryFirestore();
+    const firestore = db as unknown as Firestore;
+    const oldDay = `${COLLECTIONS.rollupsDriverDay}/drv_2026-01-05`;
+    const nextDay = `${COLLECTIONS.rollupsDriverDay}/drv_2026-01-06`;
+    const base = { deliveryId: "d1", driverId: "drv", zoneId: "z" };
+    await applyDeliveryRollup(firestore, { ...base, day: "2026-01-05", status: "in_transit" });
+    await applyDeliveryRollup(firestore, { ...base, day: "2026-01-05", status: "" });
+    await applyDeliveryRollup(firestore, { ...base, day: "2026-01-06", status: "pending" });
+    assert.equal(db.dump().get(oldDay)?.in_transit ?? 0, 0);
+    assert.equal(db.dump().get(nextDay)?.pending, 1);
   });
 });

@@ -25,6 +25,24 @@ describe("phase log", () => {
     assert.equal(value, 7);
   });
 
+  it("prints extra phase keys and keeps the four legacy keys", () => {
+    const lines: string[] = [];
+    const original = console.info;
+    console.info = (line?: unknown) => {
+      lines.push(String(line));
+    };
+    try {
+      logPhases("adminPayrollRuleSnapshot", { fanoutMs: 12, reconMs: 4 });
+    } finally {
+      console.info = original;
+    }
+    const parsed = JSON.parse(lines[0] ?? "{}") as Record<string, unknown>;
+    assert.equal(parsed.fanoutMs, 12);
+    assert.equal(parsed.reconMs, 4);
+    assert.equal(parsed.driversGetAllMs, null);
+    assert.equal(parsed.requireStaffMs, null);
+  });
+
   it("swallows a logger failure", () => {
     const original = console.info;
     console.info = () => {
