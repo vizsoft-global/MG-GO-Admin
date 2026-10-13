@@ -5,7 +5,9 @@ import type { MenuNode } from "@/services/menu-config-service";
 import type { Permission } from "@/lib/auth/permissions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
+import { useSidebarEpochs } from "@/contexts/sidebar-epochs-context";
 import { useInitialMenuConfig } from "@/contexts/sidebar-menu-context";
+import { queryKeys } from "@/lib/query/query-keys";
 import { getMenuConfig } from "@/services/menu-config-service";
 import {
   buildInitialTree,
@@ -13,6 +15,11 @@ import {
   resolveForSidebar,
   type ResolvedMenuNode,
 } from "@/lib/menu/menu-merge";
+import {
+  SIDEBAR_MENU_STALE_MS,
+  sidebarMenuQueryKey,
+  type SidebarMenuEpochs,
+} from "@/lib/menu/sidebar-menu-query";
 
 const MENU_CACHE_VERSION = "v24";
 const cacheByRole = new Map<string, ResolvedMenuNode[]>();
@@ -60,10 +67,13 @@ function resolveMenuTree(
   return resolved;
 }
 
-export function useSidebarMenu() {
+export function useSidebarMenu(epochs: SidebarMenuEpochs = {}) {
   const { adminRoleSlug, can, isSuperAdmin, permissions } = useAuth();
+  const provided = useSidebarEpochs();
   const initialConfig = useInitialMenuConfig();
   const queryClient = useQueryClient();
+  const accessEpoch = epochs.accessEpoch ?? provided.access ?? 0;
+  const menuEpoch = epochs.menuEpoch ?? provided.menu ?? 0;
 
   const serverTree = useMemo(
     () => resolveMenuTree(initialConfig, can, isSuperAdmin),
@@ -71,7 +81,10 @@ export function useSidebarMenu() {
   );
 
   const { data: tree = serverTree, isLoading: loading } = useQuery({
-    queryKey: ["sidebar-menu", adminRoleSlug, isSuperAdmin],
+    queryKey: sidebarMenuQueryKey(adminRoleSlug, isSuperAdmin, {
+      accessEpoch,
+      menuEpoch,
+    }),
     queryFn: async () => {
       try {
         const cfg = await getMenuConfig(adminRoleSlug);
@@ -85,8 +98,7 @@ export function useSidebarMenu() {
       }
     },
     initialData: serverTree.length > 0 ? serverTree : undefined,
-    staleTime: 60_000,
-    refetchOnMount: "always",
+    staleTime: SIDEBAR_MENU_STALE_MS,
   });
 
   useEffect(() => {
@@ -99,7 +111,7 @@ export function useSidebarMenu() {
       if (!detail?.role || detail.role === adminRoleSlug) {
         cacheByRole.delete(adminRoleSlug);
         void queryClient.invalidateQueries({
-          queryKey: ["sidebar-menu", adminRoleSlug],
+          queryKey: queryKeys.menu.all(),
         });
       }
     };

@@ -3,6 +3,7 @@
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { getFirebaseStorage } from "@/lib/firebase/admin";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
@@ -205,6 +206,8 @@ export async function saveFuelWithdrawnOverride(input: {
   monthKey: string;
   amountKwd: number;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { ok: false, error: mutationAuth.error };
   const auth = await requireFuelEdit();
   if ("error" in auth) return { ok: false, error: auth.error ?? "not_authorized" };
   if (!UUID.test(input.driverId) || !UUID.test(input.vehicleId) || !MONTH_KEY.test(input.monthKey)) {

@@ -5,8 +5,10 @@ import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import type {
   AttendanceDailyRow,
   AttendanceExceptionRow,
@@ -15,6 +17,7 @@ import type {
   AttendanceThresholdSettings,
   ExceptionResolutionStatus,
 } from "./attendance-reporting-types";
+import { attendanceWindowTooLarge } from "./attendance-query-error";
 
 const KUWAIT_TZ = "Asia/Kuwait";
 const DEFAULT_PAGE_SIZE = 50;
@@ -137,7 +140,7 @@ function parseExceptionRow(raw: Record<string, unknown>): AttendanceExceptionRow
 
 export async function fetchAttendanceDailyList(
   filters: AttendanceListFilters = {},
-): Promise<{ rows: AttendanceDailyRow[]; totalCount: number }> {
+): Promise<{ rows: AttendanceDailyRow[]; totalCount: number; errorMessage?: string }> {
   await requireAttendanceView();
   const today = kuwaitToday();
   const from = filters.fromDate ?? today;
@@ -161,7 +164,10 @@ export async function fetchAttendanceDailyList(
     p_offset: page * pageSize,
   }));
 
-  if (error) throw error;
+  if (error && attendanceWindowTooLarge(error)) {
+    return { rows: [], totalCount: 0, errorMessage: error.message };
+  }
+  if (error) throw new Error(error.message);
 
   const payload = (data ?? {}) as { totalCount?: number; rows?: unknown[] };
   const rows = (payload.rows ?? []).map((r) =>
@@ -277,13 +283,18 @@ export async function fetchAttendanceThresholdSettings(): Promise<AttendanceThre
 export async function updateAttendanceThresholdSettings(
   input: AttendanceThresholdSettings,
 ): Promise<{ success: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error("not_authorized");
   await requireAttendanceManage();
   const db = await reportingDb();
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      { ...input, updated_at: new Date().toISOString() },
-      { merge: true },
-    );
+    await writeWithEpoch(db, "settings", ({ tx }) => {
+      tx.set(
+        db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID),
+        { ...input, updated_at: new Date().toISOString() },
+        { merge: true },
+      );
+    });
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "save_failed" };
   }
@@ -300,11 +311,13 @@ export async function updateAttendanceThresholdSettings(
 export async function exportAttendanceDailyCsv(
   filters: AttendanceListFilters = {},
 ): Promise<string> {
-  const { rows } = await fetchAttendanceDailyList({
+  const listed = await fetchAttendanceDailyList({
     ...filters,
     page: 0,
     pageSize: 10000,
   });
+  if (listed.errorMessage) throw new Error(listed.errorMessage);
+  const { rows } = listed;
   const header = [
     "Date",
     "Driver",
@@ -357,13 +370,17 @@ export async function fetchAttendanceAnalyticsSummary(
   toDate: string,
 ): Promise<{
   daily: { date: string; checked_in: number; late: number; absent: number; avg_compliance: number }[];
+  errorMessage?: string;
 }> {
   await requireAttendanceView();
   const { data, error } = await callAdminFunction("admin_attendance_analytics_daily", rpcArgs({
     p_from: fromDate,
     p_to: toDate,
   }));
-  if (error) throw error;
+  if (error && attendanceWindowTooLarge(error)) {
+    return { daily: [], errorMessage: error.message };
+  }
+  if (error) throw new Error(error.message);
 
   const payload = (data ?? {}) as { daily?: unknown[] };
   const daily = (payload.daily ?? []).map((raw) => {

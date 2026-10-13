@@ -1,5 +1,6 @@
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "../core/fs";
+import { writeWithEpoch } from "../core/epoch-write";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { parseId } from "../core/query";
@@ -759,7 +760,10 @@ export const adminUpdatePerformanceComponents = onCall(async (request) => {
     };
     if (sla !== null) patch.delivery_ontime_minutes = sla;
 
-    await settingsRef.set(patch, { merge: true });
+    // Same increment as Next writeWithEpoch("settings"). Do not cache the staff profile.
+    await writeWithEpoch(db, "settings", ({ tx }) => {
+      tx.set(settingsRef, patch, { merge: true });
+    });
   }
 
   const after = await componentsSnapshot();

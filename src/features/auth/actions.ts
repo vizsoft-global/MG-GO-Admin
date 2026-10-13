@@ -13,12 +13,12 @@ import {
   verifyStaffSessionCookie,
 } from "@/lib/firebase/session";
 import {
-  revokeStaffSessions,
   resetPasswordWithCode,
   sendStaffPasswordReset,
   setStaffPassword,
   signInStaffWithPassword,
 } from "@/lib/firebase/staff-auth";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { claimSuperAdminAtomic, syncAdminProfile } from "@/lib/auth/sync-profile";
 import { getAppOpsSettings } from "@/lib/auth/app-settings";
 import { logAdminAuthEvent } from "@/lib/audit/log-admin-activity";
@@ -174,7 +174,7 @@ export async function signUp(
 export async function claimSuperAdmin(locale: string): Promise<{ error?: string }> {
   const jar = await cookies();
   const cookie = jar.get(STAFF_SESSION_COOKIE)?.value;
-  const probe = await verifyStaffSessionCookie(cookie);
+  const probe = await verifyStaffSessionCookie(cookie, { checkRevoked: true });
 
   if (!probe.uid) {
     return { error: "not_authenticated" };
@@ -262,11 +262,14 @@ export async function updatePassword(
 
   const jar = await cookies();
   const cookie = jar.get(STAFF_SESSION_COOKIE)?.value;
-  const probe = await verifyStaffSessionCookie(cookie);
+  const probe = await verifyStaffSessionCookie(cookie, { checkRevoked: true });
 
   if (!probe.uid) {
     return { error: "update_failed" };
   }
+
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
 
   const ok = await setStaffPassword(probe.uid, password);
   if (!ok) {
@@ -277,16 +280,8 @@ export async function updatePassword(
 }
 
 export async function signOut(locale: string) {
+  // The profile document is not cached. This browser only drops its cookie.
   const jar = await cookies();
-  const cookie = jar.get(STAFF_SESSION_COOKIE)?.value;
-  const probe = await verifyStaffSessionCookie(cookie);
-
-  // Revoking refresh tokens is what makes sign-out mean something: clearing the
-  // cookie alone leaves a valid session for anyone holding a copy of it.
-  if (probe.uid) {
-    await revokeStaffSessions(probe.uid);
-  }
-
   jar.delete(STAFF_SESSION_COOKIE);
   Sentry.setUser(null);
   redirect(`/${locale}/login`);

@@ -5,6 +5,7 @@ import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { callAdminFunction, callCronFunction } from "@/lib/firebase/callable";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { buildActionPayload, buildFcmDataPayload } from "./payload-contract";
@@ -797,6 +798,8 @@ async function ensureCampaignApprovedForDispatch(
   campaignId: string,
   session: NonNullable<Awaited<ReturnType<typeof requireNotificationsSend>>>,
 ): Promise<{ ok: true } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const panel = await notificationsDb();
   const { data: campaign } = await panel
     .from("notification_campaigns")
@@ -1172,6 +1175,8 @@ export async function saveNotificationCampaign(
   input: SaveCampaignInput,
   campaignId?: string | null,
 ): Promise<{ id: string } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -1266,6 +1271,8 @@ export async function saveNotificationCampaign(
 export async function submitNotificationForApproval(
   campaignId: string,
 ): Promise<{ ok: true } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -1293,6 +1300,8 @@ export async function submitNotificationForApproval(
 export async function approveNotificationCampaign(
   campaignId: string,
 ): Promise<{ ok: true } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsApprove();
   if (!session) return { error: "not_authorized" };
 
@@ -1339,6 +1348,8 @@ export type NotificationDispatchResult = {
 export async function dispatchNotificationCampaign(
   campaignId: string,
 ): Promise<NotificationDispatchResult | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsSend();
   if (!session) return { error: "not_authorized" };
 
@@ -1685,6 +1696,8 @@ export async function sendDirectDriverNotification(input: {
   category?: NotificationCategory;
   routeName: string;
 }): Promise<NotificationDispatchResult | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsSend();
   if (!session) return { error: "not_authorized" };
 
@@ -1754,6 +1767,8 @@ export async function sendDirectDriverNotification(input: {
 export async function cloneNotificationCampaign(
   campaignId: string,
 ): Promise<{ id: string } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -1975,6 +1990,8 @@ export async function exportNotificationDispatchItemsCsv(
 export async function scheduleNotificationCampaign(
   campaignId: string,
 ): Promise<{ ok: true } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -2014,6 +2031,8 @@ export async function rejectNotificationCampaign(
   campaignId: string,
   reason?: string,
 ): Promise<{ ok: true } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsApprove();
   if (!session) return { error: "not_authorized" };
 
@@ -2042,6 +2061,8 @@ export async function rejectNotificationCampaign(
 export async function cancelNotificationCampaign(
   campaignId: string,
 ): Promise<{ ok: true } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -2197,6 +2218,8 @@ export async function listNotificationAutomationRuns(
 export async function saveNotificationTemplate(
   input: SaveTemplateInput,
 ): Promise<{ id: string } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim() || !input.titleTemplate.trim() || !input.bodyTemplate.trim()) {
@@ -2237,6 +2260,8 @@ export async function updateNotificationTemplate(
   id: string,
   input: SaveTemplateInput,
 ): Promise<{ id: string } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim() || !input.titleTemplate.trim() || !input.bodyTemplate.trim()) {
@@ -2347,6 +2372,8 @@ export async function listCampaignScreenshotEvents(
 export async function archiveNotificationTemplate(
   id: string,
 ): Promise<{ ok: true } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -2370,6 +2397,8 @@ export async function archiveNotificationTemplate(
 export async function saveNotificationAutomation(
   input: SaveAutomationInput,
 ): Promise<{ id: string } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim()) return { error: "invalid_input" };
@@ -2416,6 +2445,8 @@ export async function updateNotificationAutomation(
   id: string,
   input: SaveAutomationInput,
 ): Promise<{ id: string } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
   if (!input.name.trim()) return { error: "invalid_input" };
@@ -2463,6 +2494,8 @@ export async function setNotificationAutomationStatus(
   id: string,
   status: "active" | "paused" | "archived" | "draft",
 ): Promise<{ ok: true } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -2591,6 +2624,8 @@ export async function runNotificationWorkerNow(
   | { processed: number; failed: number; provider: string }
   | { error: NotificationActionError }
 > {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireNotificationsSend();
   if (!session) return { error: "not_authorized" };
   const result = await processDueNotificationCampaigns();
@@ -2606,6 +2641,8 @@ export async function enqueueNotificationAutomationEvent(input: {
   driverId?: string | null;
   payload?: Record<string, unknown>;
 }): Promise<{ id: string } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const service = notificationsAdminDb();
   const { data, error } = await service.rpc("enqueue_notification_automation_event", {
     p_trigger_type: input.triggerType,

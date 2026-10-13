@@ -7,6 +7,7 @@ import {
   canViewRestaurants,
   hasPermissionInSet,
 } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   mapDeliveryDbRowsToListRows,
   type DeliveryDbRowForList,
@@ -852,6 +853,8 @@ export async function saveRestaurantGeofences(
   restaurantId: string,
   geofences: RestaurantGeofenceInput[],
 ): Promise<RestaurantGeofenceMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireRestaurantsManage();
   if (auth.error) return { error: auth.error };
   if (!restaurantId) return { error: "missing_fields" };
@@ -953,6 +956,8 @@ async function restaurantNameTaken(
 }
 
 async function nextRestaurantCode(db: Firestore): Promise<string> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const ref = db.collection("counters").doc("restaurant_code_seq");
   for (let attempt = 0; attempt < 1000; attempt += 1) {
     const n = await db.runTransaction(async (tx) => {
@@ -970,6 +975,8 @@ async function nextRestaurantCode(db: Firestore): Promise<string> {
 }
 
 export async function saveRestaurant(formData: FormData): Promise<RestaurantMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireRestaurantsManage();
   if (auth.error) return { error: auth.error };
   const parsed = parseRestaurantFormData(formData);
@@ -1094,6 +1101,8 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
 }
 
 async function deleteWhere(db: Firestore, collection: string, field: string, value: string) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const snap = await db.collection(collection).where(field, "==", value).get();
   for (let i = 0; i < snap.docs.length; i += 400) {
     const batch = db.batch();
@@ -1103,6 +1112,8 @@ async function deleteWhere(db: Firestore, collection: string, field: string, val
 }
 
 async function nullWhere(db: Firestore, collection: string, field: string, value: string) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const snap = await db.collection(collection).where(field, "==", value).get();
   for (let i = 0; i < snap.docs.length; i += 400) {
     const batch = db.batch();
@@ -1112,6 +1123,8 @@ async function nullWhere(db: Firestore, collection: string, field: string, value
 }
 
 export async function deleteRestaurant(id: string): Promise<RestaurantMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireRestaurantsManage();
   if (auth.error) return { error: auth.error };
   if (!id) return { error: "missing_fields" };

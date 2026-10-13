@@ -4,6 +4,7 @@ import type { DocumentData, Firestore, QueryDocumentSnapshot } from "firebase-ad
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { staffDb } from "@/lib/firebase/staff-db";
 import {
   normalizeListColumnPreference,
@@ -103,6 +104,8 @@ export async function saveUserUiPreference(
   preferenceKey: string,
   value: ListColumnPreference,
 ): Promise<{ success?: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requirePanelUser();
   if (!session) return { error: "not_authorized" };
 
@@ -132,6 +135,8 @@ export async function saveUserUiPreference(
 export async function clearUserUiPreference(
   preferenceKey: string,
 ): Promise<{ success?: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requirePanelUser();
   if (!session) return { error: "not_authorized" };
 
@@ -184,6 +189,8 @@ export async function saveRoleUiDefault(
   preferenceKey: string,
   value: ListColumnPreference,
 ): Promise<{ success?: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireSettingsManage();
   if (!session) return { error: "not_authorized" };
 

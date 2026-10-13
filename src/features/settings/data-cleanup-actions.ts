@@ -4,6 +4,7 @@ import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { getFirebaseAuth } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firebase/db";
@@ -141,6 +142,8 @@ function expandStorageEntry(entry: string): string[] {
 }
 
 async function deleteStorageUploadDocs(keys: string[]): Promise<void> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   if (keys.length === 0) return;
   const db = await staffDb();
   if (!db) return;
@@ -155,6 +158,8 @@ async function deleteStorageUploadDocs(keys: string[]): Promise<void> {
 }
 
 async function deleteAuthUsers(userIds: Iterable<string>): Promise<void> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const auth = await getFirebaseAuth();
   if (!auth) return;
   for (const authUserId of userIds) {

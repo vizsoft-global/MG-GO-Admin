@@ -1,4 +1,5 @@
-import type { Firestore, Transaction } from "firebase-admin/firestore";
+import type { Firestore } from "firebase-admin/firestore";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
 import { canAccessAdminPanel } from "@/lib/auth/permissions";
 import { toAuthProfile, type EnrichedProfile } from "@/lib/auth/profile-auth";
 import { getAppOpsSettings } from "@/lib/auth/app-settings";
@@ -114,10 +115,13 @@ export async function claimSuperAdminAtomic(
   const settingsRef = db.collection(COLLECTIONS.appSettings).doc("1");
   const profileRef = db.collection(COLLECTIONS.profiles).doc(userId);
 
-  return db.runTransaction(async (tx: Transaction) => {
+  return writeWithEpoch(db, ["settings", "access"], async ({ tx, skipEpoch }) => {
     const settingsSnap = await tx.get(settingsRef);
     const claimed = settingsSnap.data()?.super_admin_claimed === true;
-    if (claimed) return false;
+    if (claimed) {
+      skipEpoch();
+      return false;
+    }
 
     tx.set(
       settingsRef,

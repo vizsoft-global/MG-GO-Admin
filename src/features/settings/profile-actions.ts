@@ -1,12 +1,15 @@
 "use server";
 
 import { getSessionUser } from "@/lib/auth/get-session";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 
 export async function updateProfile(
   formData: FormData,
 ): Promise<{ error?: string; success?: boolean }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const fullName = String(formData.get("fullName") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
 

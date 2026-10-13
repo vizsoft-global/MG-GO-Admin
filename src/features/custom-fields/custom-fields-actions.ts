@@ -5,6 +5,7 @@ import { staffClient } from "@/features/drivers/driver-uniqueness";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   DRIVER_ENTITY_TYPE,
   type CustomFieldDefinition,
@@ -119,6 +120,8 @@ export async function listCustomFieldDefinitions(
 export async function upsertCustomFieldDefinition(
   input: CustomFieldDefinitionInput,
 ): Promise<{ success?: boolean; error?: string; id?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireDriversManage();
   if (!session) return { error: "not_authorized" };
 
@@ -217,6 +220,8 @@ export async function setCustomFieldActive(
   id: string,
   active: boolean,
 ): Promise<{ success?: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireDriversManage();
   if (!session) return { error: "not_authorized" };
 
@@ -241,6 +246,8 @@ export async function setCustomFieldActive(
 export async function archiveCustomFieldDefinition(
   id: string,
 ): Promise<{ success?: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireDriversManage();
   if (!session) return { error: "not_authorized" };
 
@@ -268,6 +275,8 @@ export async function archiveCustomFieldDefinition(
 export async function reorderCustomFieldDefinitions(
   ids: string[],
 ): Promise<{ success?: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireDriversManage();
   if (!session) return { error: "not_authorized" };
   if (ids.length === 0) return { success: true };

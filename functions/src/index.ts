@@ -1,419 +1,61 @@
-import "./core/init";
-import { onCall, HttpsError, type CallableRequest } from "firebase-functions/v2/https";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "./core/fs";
-
-export { adminDeliveriesStatusCounts, adminDeliveriesCountsByFilters } from "./rpcs/deliveries-counts";
-export { adminBulkUpdateDeliveries } from "./rpcs/deliveries-status";
-export { adminListAttendanceDaily, adminAttendanceKpis } from "./rpcs/attendance";
-export { adminGetDriverDayRoute } from "./rpcs/day-route";
-export { adminPayrollRuleSnapshot } from "./rpcs/payroll";
-export {
-  adminIncentiveDailyReport,
-  listDriverEarningsDaily,
-  recalculateDriverEarnings,
-  recalculateEarningsForDate,
-  recalculateEarningsForRange,
-  getDriverEarningsDetail,
-  previewDriverEarnings,
-} from "./rpcs/earnings";
-export {
-  adminPurgeFilterColumns,
-  adminPurgePreviewAll,
-  adminPurgeFilteredValues,
-  adminPurgeFilteredPreview,
-  adminPurgeFilteredPage,
-} from "./rpcs/purge";
-export {
-  adminPurgeRunAll,
-  adminPurgeFilteredRun,
-  adminPreviewPurge,
-  adminPurgeDeliveries,
-  adminPurgeDrivers,
-  adminPurgeIntakes,
-  adminPurgeRestaurants,
-  adminPurgeZones,
-  adminPurgeDeliveryRules,
-  adminPurgeIncentiveRules,
-  adminPurgeAssetCatalog,
-} from "./rpcs/purge-all";
-export {
-  adminPerformanceOpsBounds,
-  adminListPerformanceTargetDpd,
-  adminUpsertPerformanceTargetDpd,
-  adminDpdLiveSnapshot,
-  adminDpdNoticeCandidates,
-  adminDpdEfficiencySnapshot,
-  adminPerformanceOpsSnapshot,
-  claimDpdShiftNotice,
-} from "./rpcs/ops";
-export {
-  adminLiveFleetSnapshot,
-  adminListFleetEvents,
-} from "./rpcs/fleet";
-export {
-  adminIngestDriverPositions,
-  adminRecordFleetEvents,
-  workerFleetRead,
-} from "./rpcs/fleet-worker-http";
-export {
-  adminListPerformanceComponents,
-  adminUpdatePerformanceComponents,
-  adminListPerformanceRatingTeams,
-  adminDeleteDriverPerformanceRating,
-  adminRunPerformanceDailyRollup,
-  adminDriverPerformanceDaily,
-} from "./rpcs/performance-extra";
-export {
-  adminListVisits,
-  adminUpdateVisitStatus,
-  adminRescheduleVisit,
-  adminSetVisitNoteToRider,
-  adminSyncBranchSlotsToWorkingDays,
-} from "./rpcs/visits";
-export {
-  adminUpsertZone,
-  adminDeleteZone,
-  adminUpsertPartner,
-  adminDeletePartner,
-  adminUpsertRestaurant,
-  adminDeleteRestaurant,
-  adminUpsertVehicleType,
-  adminUpsertVehicleUseType,
-  adminUpsertAssetCatalog,
-  adminDeleteAssetCatalog,
-  adminAdjustAssetStock,
-  adminReturnAssetAssignment,
-  adminUpsertCustomFieldDefinition,
-  adminReorderCustomFieldDefinitions,
-  adminDeleteCustomFieldDefinition,
-  adminUpsertLoanTenureOption,
-  adminDeleteLoanTenureOption,
-  adminUpsertComplaintCategory,
-  adminDeleteComplaintCategory,
-} from "./rpcs/catalogs";
-export {
-  adminInsertDeliveryRuleWithScope,
-  adminUpsertSourceCompany,
-  adminUpsertDeliveryRule,
-  adminDeleteDeliveryRule,
-  adminListDeliveryRules,
-  adminBulkUpdateDeliveryRules,
-  adminUpsertIncentiveRule,
-  adminDeleteIncentiveRule,
-  adminListIncentiveRules,
-  adminExportIncentiveRules,
-  adminUpsertExceptionAction,
-} from "./rpcs/rules";
-export {
-  adminPayrollRuleConfig,
-  adminOpenPayrollRuleMonth,
-  adminSavePayrollClient,
-  adminSavePayrollClientRules,
-  adminResetPayrollClientRules,
-  adminAddPayrollClient,
-  adminDeletePayrollClient,
-  adminListPayrollColumnConfig,
-  adminSetPayrollColumnConfig,
-} from "./rpcs/payroll-clients";
-export {
-  claimDriverImportChunk,
-  cleanupDriverLocationEvents,
-  cleanupDriverOperationEvents,
-  cleanupDriverTelemetryEvents,
-  cleanupStaleDriverLocations,
-} from "./rpcs/retention";
-export { adminPerfPing } from "./rpcs/perf-ping";
-export {
-  adminListDriversPage,
-  adminDriversFilterValues,
-  setDriverAccountStatus,
-  setDriverBlocked,
-  setDriverFrozen,
-  setDriverUnfrozen,
-  adminDriverAppInstallVersions,
-} from "./rpcs/drivers";
-export {
-  adminApproveDriver,
-  allocateDriverCode,
-  archiveDriverIntake,
-  restoreDriverIntake,
-  regenerateDriverAppPasscode,
-  intakeHasOpsAssignment,
-  adminSetDriverOffStructure,
-  adminBulkSetDriverOffStructure,
-} from "./rpcs/drivers-admin";
-export {
-  adminListDriverDevices,
-  adminDriverDeviceOverview,
-  adminDriversMultiDeviceRecent,
-  adminForceSignOutDriver,
-  adminSetDriverForceUpdate,
-  driverRecordAppVersion,
-} from "./rpcs/driver-devices";
-export {
-  driverListNotifications,
-  driverMarkNotificationsRead,
-  driverDismissNotifications,
-  notifyDriverTransactional,
-  adminExpireStalePickups,
-  driverOpsAuditHealth,
-} from "./rpcs/misc-admin";
-export { adminListFuelFills, adminSetFuelTransferType } from "./rpcs/fuel";
-export {
-  enqueueNotificationAutomationEvent,
-  recordNotificationClientEvent,
-} from "./rpcs/notifications";
-export {
-  resolveImportDriverIds,
-  estimateNotificationAudience,
-  compileNotificationAudienceIds,
-  compileNotificationAudience,
-} from "./rpcs/notification-audience";
-export {
-  adminListRequests,
-  adminGetRequest,
-  adminCreateRequest,
-  adminCountRequestsByType,
-  adminRequestsTrend,
-  adminRequestDepartmentReport,
-} from "./rpcs/requests-core";
-export {
-  adminDecideRequest,
-  adminForwardRequest,
-  adminEscalateRequest,
-  adminAddRequestComment,
-  adminSetRequestDecisionMeta,
-  adminUpsertStepTemplate,
-  adminAutoCloseRequests,
-  adminRunRequestSlaSweep,
-  adminUploadIncomingDocument,
-} from "./rpcs/requests-workflow";
-export {
-  esignEmployeeSnapshot,
-  adminExpireEsignRequests,
-  adminListEsignRequests,
-  adminCreateEsignRequest,
-  adminRemindEsignRequests,
-  adminEsignReminderState,
-  adminLinkEsignResend,
-  adminUpsertEsignTemplate,
-  adminUpsertEsignTemplateField,
-} from "./rpcs/esign-requests";
-export { esignComposeSignedDocument } from "./rpcs/esign-compose";
-export {
-  adminListEsignSigners,
-  adminEsignSignerOptions,
-  adminAddEsignSigner,
-  adminRemoveEsignSigner,
-  adminReorderEsignSigners,
-  adminListMyEsignSignatures,
-  adminSubmitEsignSignature,
-  adminDeclineEsignSignature,
-} from "./rpcs/esign-signers";
-export {
-  adminCreateEsignBatch,
-  adminEsignBatchKpis,
-  adminUpdateEsignBatchRow,
-  adminRemoveEsignBatchRow,
-  esignWorkerDrainableBatches,
-  adminEsignResolveEmployees,
-  esignWorkerResolveEmployees,
-  adminSaveEsignDraft,
-  adminListEsignDrafts,
-  adminGetEsignDraft,
-  adminDeleteEsignDraft,
-} from "./rpcs/esign-batches";
-export {
-  adminAttendanceAnalyticsDaily,
-  adminCorrectAttendance,
-  adminGetShiftAdherence,
-  adminListShiftAdherence,
-  adminListAttendanceExceptions,
-  adminRunAttendanceAutoCheckout,
-  adminRunFreezeStartCheckout,
-} from "./rpcs/attendance-ops";
-export {
-  adminApplyPayrollAdjustments,
-  adminPayrollAdjustmentAudit,
-  adminPayrollMonthSnapshot,
-  adminPayrollZoneSettings,
-  adminSavePayrollZoneSettings,
-  adminSavePayrollZoneOverride,
-  adminRecomputePayrollZoneMetrics,
-} from "./rpcs/payroll-more";
-export {
-  getEarningsOverview,
-  listEarningsGrouped,
-  generatePayoutRun,
-  approvePayoutRun,
-  markPayoutRunPaid,
-  voidPayoutRun,
-  getPayoutRunDetail,
-} from "./rpcs/payouts";
-export {
-  adminOrderComparisonSnapshot,
-  adminOrderReconCompare,
-  reconcileDeliveryVerification,
-  deliveryMatchesRules,
-  reportDeliveryOrders,
-} from "./rpcs/recon-reports";
-export {
-  adminUpsertDriverPerformanceRating,
-  adminSetDriverPerformanceRatingNote,
-  adminListDriverPerformanceRatings,
-  adminSetPerformanceTeamMember,
-  adminUpsertPerformanceRatingCriterion,
-  adminDeletePerformanceRatingCriterion,
-} from "./rpcs/performance-ratings";
-export { adminListDriverPerformance, adminPerformanceTrend } from "./rpcs/performance-list";
-
-export type StaffClaims = {
-  staff: boolean;
-  superAdmin: boolean;
-  roleId: string | null;
-};
-
 /**
- * Derives the staff claims for a uid from its Firestore profile.
+ * FUNCTION_TARGET gate.
  *
- * Claims are always derived from the stored profile, never from the caller's
- * payload — a staff member re-syncing their own claims cannot grant themselves
- * `superAdmin`, because there is no field in the request that reaches the
- * computed value.
+ * Unset (deploy analysis and local full load): every legacy callable plus
+ * adminApi, adminApiScan, and adminApiHeavy. Set: only that export, so one
+ * Cloud Run instance does not construct the other handlers.
+ *
+ * Stage D: register a new callable in `router/legacy-modules.ts` and a lane in
+ * `router/lanes.ts`. This file no longer has static `export { } from` lines.
+ * Keep `import "./core/init"` first. Do not call setGlobalOptions again.
  */
-async function resolveStaffClaims(uid: string): Promise<StaffClaims | null> {
-  const db = getFirestore();
-  const profileSnap = await db.collection("profiles").doc(uid).get();
-  if (!profileSnap.exists) return null;
+import "./core/init";
+import { createRequire } from "node:module";
+import { LEGACY_MODULES, moduleForFunction } from "./router/legacy-modules";
+import { LANE_EXPORT_NAMES, laneIdForExport } from "./router/lanes";
 
-  const profile = profileSnap.data() ?? {};
-  if (profile.role !== "staff") return null;
+export type { StaffClaims } from "./rpcs/sync-staff-claims";
 
-  const roleId = (profile.admin_role_id as string | null) ?? null;
-  let isSuperAdmin = false;
-  if (roleId) {
-    const roleSnap = await db.collection("admin_roles").doc(roleId).get();
-    isSuperAdmin = roleSnap.data()?.is_super_admin === true;
-  }
+const requireFromIndex = createRequire(__filename);
 
-  return { staff: true, superAdmin: isSuperAdmin, roleId };
+function publish(name: string, value: unknown): void {
+  const cached = requireFromIndex.cache[__filename];
+  if (!cached) throw new Error("functions index is not in require.cache");
+  Object.defineProperty(cached.exports, name, {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value,
+  });
 }
 
-/**
- * Staff custom claims, set only here.
- *
- * `uid` may be omitted (the caller syncs their own claims). Naming another uid
- * requires the caller to already be a super admin, so this doubles as the
- * role-change hook without opening a way to promote arbitrary accounts.
- */
-export const syncStaffClaims = onCall(async (request: CallableRequest<{ uid?: string }>) => {
-  const callerUid = request.auth?.uid;
-  if (!callerUid) {
-    throw new HttpsError("unauthenticated", "not_authenticated");
-  }
+function loadModule(fromIndex: string): Record<string, unknown> {
+  // FUNCTION_TARGET gate: dynamic require so one instance does not evaluate every callable.
+  return requireFromIndex(fromIndex) as Record<string, unknown>;
+}
 
-  const targetUid = request.data?.uid?.trim() || callerUid;
+const target = process.env.FUNCTION_TARGET?.trim() ?? "";
 
-  if (targetUid !== callerUid) {
-    const callerProfile = await getFirestore().collection("profiles").doc(callerUid).get();
-    const callerRoleId = callerProfile.data()?.admin_role_id as string | undefined;
-    const callerIsSuperAdmin = callerRoleId
-      ? (await getFirestore().collection("admin_roles").doc(callerRoleId).get()).data()
-          ?.is_super_admin === true
-      : false;
-    if (!callerIsSuperAdmin) {
-      throw new HttpsError("permission-denied", "not_authorized");
+if (!target) {
+  for (const [modulePath, names] of Object.entries(LEGACY_MODULES)) {
+    const loaded = loadModule(modulePath);
+    for (const name of names) {
+      if (!(name in loaded)) throw new Error(`legacy export missing: ${name} from ${modulePath}`);
+      publish(name, loaded[name]);
     }
   }
-
-  const claims = await resolveStaffClaims(targetUid);
-  if (!claims) {
-    throw new HttpsError("permission-denied", "not_staff");
+  const router = loadModule("./router/admin-api");
+  for (const name of LANE_EXPORT_NAMES) {
+    publish(name, router[name]);
   }
-
-  await getAuth().setCustomUserClaims(targetUid, claims);
-  return { uid: targetUid, claims };
-});
-
-export {
-  driverPasscodeLogin,
-  driverReleaseDeviceSession,
-  driverHeartbeat,
-} from "./rpcs/driver-auth";
-export {
-  driverGetHomeDashboard,
-  driverSetDutyState,
-} from "./rpcs/driver-home";
-export {
-  driverGetTodayShift,
-  driverSubmitDailyShift,
-} from "./rpcs/driver-shift";
-export {
-  driverGetActivePickup,
-  driverCreatePickup,
-  driverCompleteDelivery,
-  driverCancelDelivery,
-  driverGetDeliveryProximityContext,
-} from "./rpcs/driver-deliveries";
-export {
-  driverReportLocation,
-  driverClearLiveLocation,
-} from "./rpcs/driver-location";
-export {
-  driverListMyRequests,
-  driverGetRequest,
-  driverCreateRequest,
-  driverSubmitClarification,
-  driverClarifyRequest,
-  driverAcknowledgeRequest,
-  driverRespondReschedule,
-} from "./rpcs/driver-requests";
-export {
-  driverListVisitSlots,
-  driverBookVisit,
-  driverCancelVisit,
-} from "./rpcs/driver-visits";
-export {
-  driverListEsignRequests,
-  driverGetEsignRequest,
-  driverSubmitEsignature,
-  driverMarkEsignViewed,
-  driverDeclineEsignature,
-  driverListAppointments,
-  driverRespondAppointment,
-} from "./rpcs/driver-esign";
-export {
-  driverGetEarningsSummary,
-  driverGetWorkSummary,
-  driverGetExtraEarnings,
-  driverGetEarningsDetail,
-} from "./rpcs/driver-earnings";
-export {
-  driverGetAssignedVehicle,
-  driverReportFuelFill,
-} from "./rpcs/driver-vehicle";
-export { driverIngestTelemetry } from "./rpcs/driver-telemetry";
-export {
-  driverUpdateAvatar,
-  driverReportDeviceMeta,
-  driverRecordLoginVerification,
-} from "./rpcs/driver-profile";
-export { driverGetAttendance } from "./rpcs/driver-attendance-get";
-export { driverLogSecurityEvent } from "./rpcs/driver-security";
-export {
-  driverListMyDeliveries,
-  driverListEarningsDaily,
-  driverListPayouts,
-  driverListRequestTypes,
-  driverListRequestFields,
-  driverListTenureOptions,
-  driverListComplaintCategories,
-  driverGetDefaultVisitBranch,
-  driverListVisitDepartments,
-  driverListMyVisits,
-} from "./rpcs/driver-lists";
-export {
-  driverGetUploadUrl,
-  driverGetDownloadUrl,
-} from "./rpcs/driver-storage";
+} else if (laneIdForExport(target)) {
+  const router = loadModule("./router/admin-api");
+  if (router[target] == null) throw new Error(`router lane was not built: ${target}`);
+  publish(target, router[target]);
+} else {
+  const modulePath = moduleForFunction(target);
+  if (!modulePath) throw new Error(`FUNCTION_TARGET is not a known export: ${target}`);
+  const loaded = loadModule(modulePath);
+  if (!(target in loaded)) throw new Error(`FUNCTION_TARGET missing from ${modulePath}: ${target}`);
+  publish(target, loaded[target]);
+}

@@ -36,6 +36,8 @@ const EXISTING = [
 
 type EndpointFn = { __endpoint?: Record<string, unknown> };
 
+delete process.env.FUNCTION_TARGET;
+
 const require = createRequire(import.meta.url);
 const built = require("../../lib/index.js") as Record<string, EndpointFn>;
 

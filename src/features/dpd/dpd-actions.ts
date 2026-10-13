@@ -6,6 +6,7 @@ import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   applyRestaurantLogoFromForm,
   deleteRestaurantLogoFiles,
@@ -132,6 +133,8 @@ async function writeDoc(
   payload: Record<string, unknown>,
   creating: boolean,
 ): Promise<string> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const db = await dpdDb();
   const ref = creating ? db.collection(collection).doc() : db.collection(collection).doc(id);
   await ref.set(payload, { merge: !creating });
@@ -156,6 +159,8 @@ async function deleteWhere(
   field: string,
   value: string,
 ): Promise<void> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const snap = await db.collection(collection).where(field, "==", value).get();
   for (let i = 0; i < snap.docs.length; i += 400) {
     const batch = db.batch();
@@ -169,6 +174,8 @@ async function insertRows(
   collection: string,
   rows: Array<Record<string, unknown>>,
 ): Promise<void> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   for (let i = 0; i < rows.length; i += 400) {
     const batch = db.batch();
     for (const row of rows.slice(i, i + 400)) {
@@ -767,6 +774,8 @@ export async function getIncentiveRuleById(
 }
 
 export async function saveRestaurant(formData: FormData): Promise<DpdMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
   const { session } = auth;
@@ -862,6 +871,8 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
 }
 
 export async function deleteRestaurant(id: string): Promise<DpdMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
   if (!id) return { error: "missing_fields" };
@@ -886,6 +897,8 @@ export async function deleteRestaurant(id: string): Promise<DpdMutationResult> {
 }
 
 export async function saveDeliveryRule(formData: FormData): Promise<DpdMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
 
@@ -983,6 +996,8 @@ export async function saveDeliveryRule(formData: FormData): Promise<DpdMutationR
 }
 
 export async function deleteDeliveryRule(id: string): Promise<DpdMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
   if (!id) return { error: "missing_fields" };
@@ -1069,6 +1084,8 @@ function parseTiersJson(raw: string): TierInput[] | { error: DpdErrorKey } {
 }
 
 export async function saveIncentiveRule(formData: FormData): Promise<DpdMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
 
@@ -1226,6 +1243,8 @@ export async function saveIncentiveRule(formData: FormData): Promise<DpdMutation
 }
 
 export async function deleteIncentiveRule(id: string): Promise<DpdMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
   if (!id) return { error: "missing_fields" };
@@ -1361,6 +1380,8 @@ export async function applyDpdTargetImport(
 ): Promise<
   { updated: number; created: number; rejected: number } | { error: string }
 > {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
 
@@ -1468,6 +1489,8 @@ export async function previewIncentiveRuleImport(rows: IncentiveImportInputRow[]
 export async function applyIncentiveRuleImport(
   rows: IncentiveImportInputRow[],
 ): Promise<{ applied: number; replaced: number; rejected: number } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();
   if (auth.error) return { error: auth.error };
 

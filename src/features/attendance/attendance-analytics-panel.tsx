@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { CardContent } from "@/components/ui/card";
 import { useAttendanceAnalytics } from "./use-attendance-table";
+import { attendanceWindowTooLarge } from "./attendance-query-error";
 
 export function AttendanceAnalyticsPanel({
   fromDate,
@@ -15,7 +16,7 @@ export function AttendanceAnalyticsPanel({
   toDate: string;
 }) {
   const t = useTranslations("pages.attendance");
-  const { data, isLoading } = useAttendanceAnalytics(fromDate, toDate);
+  const { data, isLoading, isError, error } = useAttendanceAnalytics(fromDate, toDate);
 
   const summary = useMemo(() => {
     if (!data?.daily.length) return null;
@@ -42,6 +43,16 @@ export function AttendanceAnalyticsPanel({
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
+  }
+
+  if (attendanceWindowTooLarge(error)) {
+    return (
+      <AppEmptyState title={t("windowTooLarge")} description={t("windowTooLargeHint")} />
+    );
+  }
+
+  if (isError) {
+    return <AppEmptyState title={t("loadFailed")} description={t("emptyFiltersHint")} />;
   }
 
   if (!data?.daily.length) {

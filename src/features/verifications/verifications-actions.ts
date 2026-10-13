@@ -6,8 +6,11 @@ import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { applyDeliveryRollup } from "@/lib/search/delivery-rollup";
+import { stampedPatch } from "@/lib/search/prefix";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import type {
   ImportMappedRow,
   ImportPreviewRow,
@@ -559,6 +562,8 @@ export async function createVerification(input: {
   reportedCount: number;
   notes?: string;
 }): Promise<VerificationMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireVerificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -617,6 +622,8 @@ export async function updateVerification(input: {
   reportedCount: number;
   notes?: string;
 }): Promise<VerificationMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireVerificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -677,6 +684,8 @@ export async function reconcileVerification(
 export async function deleteVerification(
   id: string,
 ): Promise<VerificationMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireSuperAdmin();
   if (!session) return { error: "not_authorized" };
 
@@ -853,6 +862,8 @@ export async function applyImportBatch(payload: {
     }
   | { error: VerificationActionError; errorDetail?: string }
 > {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requireVerificationsManage();
   if (!session) return { error: "not_authorized" };
 
@@ -1068,6 +1079,8 @@ export async function getVerificationExportData(): Promise<VerificationExportDat
 export async function revertImportBatch(
   batchId: string,
 ): Promise<VerificationMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const session = await requireSuperAdmin();
   if (!session) return { error: "not_authorized" };
 
@@ -1099,10 +1112,25 @@ export async function revertImportBatch(
       const sameRestaurant = row.restaurant_id === v.restaurant_id;
       const partnerFallback = row.restaurant_id == null && row.partner_id === v.partner_id;
       if (!sameRestaurant && !partnerFallback) continue;
-      await delivery.ref.set(
-        { status: "pending", updated_at: new Date().toISOString() },
-        { merge: true },
-      );
+      const pendingPatch = stampedPatch("deliveries", row, {
+        status: "pending",
+        updated_at: new Date().toISOString(),
+      });
+      await delivery.ref.set(pendingPatch, { merge: true });
+      const shift = typeof row.shift_date === "string" ? row.shift_date : "";
+      const serviceDate = typeof v.service_date === "string" ? v.service_date : "";
+      const day = /^\d{4}-\d{2}-\d{2}$/.test(shift) ? shift : serviceDate;
+      const driverId = typeof row.driver_id === "string" ? row.driver_id : "";
+      const zoneId = typeof row.zone_id === "string" ? row.zone_id : null;
+      if (driverId && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+        await applyDeliveryRollup(db, {
+          deliveryId: delivery.id,
+          driverId,
+          zoneId,
+          day,
+          status: "pending",
+        });
+      }
     }
 
     if (Number(v.shortfall_count) > 0) {

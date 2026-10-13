@@ -1,9 +1,11 @@
 "use server";
 
 import { refresh, revalidatePath, updateTag } from "next/cache";
+import type { Firestore } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import type { EpochCounters } from "@/lib/auth/epoch-cache";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   ALLOWED_LOGO_EXTENSIONS,
   DEFAULT_APP_SETTINGS,
@@ -24,14 +26,21 @@ function revalidateBranding(locale: string) {
 }
 
 async function requireSettingsManager() {
-  const session = await getSessionUser();
-  if (
-    !session ||
-    !hasPermissionInSet(session.permissions, "settings.manage", session.isSuperAdmin)
-  ) {
-    return { error: "not_authorized" as const };
-  }
-  return { session };
+  const auth = await requireMutationAuth("settings.manage");
+  if ("error" in auth) return auth;
+  return { session: auth.session };
+}
+
+async function writeBrandingSettings(
+  db: Firestore,
+  patch: Record<string, unknown>,
+): Promise<EpochCounters> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
+  const written = await writeWithEpochCounters(db, "settings", ({ tx }) => {
+    tx.set(db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID), patch, { merge: true });
+  });
+  return written.epochs;
 }
 
 function brandingObjectPath(relativePath: string): string {
@@ -61,6 +70,8 @@ async function saveBrandingObject(
 }
 
 async function removeBrandingObjects(relativePaths: string[]): Promise<void> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const bucket = await brandingBucket();
   if (!bucket) return;
   await Promise.all(
@@ -73,7 +84,7 @@ async function removeBrandingObjects(relativePaths: string[]): Promise<void> {
 export async function updateBranding(
   _locale: string,
   formData: FormData,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -92,18 +103,16 @@ export async function updateBranding(
   const db = await staffDb();
   if (!db) return { error: "save_failed" };
 
+  let epochs: EpochCounters;
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      {
-        app_name: appName,
-        app_subtitle: appSubtitle,
-        driver_app_login_hint: driverAppLoginHint,
-        font_family: fontFamily,
-        updated_at: new Date(),
-        updated_by: auth.session.id,
-      },
-      { merge: true },
-    );
+    epochs = await writeBrandingSettings(db, {
+      app_name: appName,
+      app_subtitle: appSubtitle,
+      driver_app_login_hint: driverAppLoginHint,
+      font_family: fontFamily,
+      updated_at: new Date(),
+      updated_by: auth.session.id,
+    });
   } catch {
     return { error: "save_failed" };
   }
@@ -116,13 +125,13 @@ export async function updateBranding(
     routeName: "updateBranding",
     after: { app_name: appName, font_family: fontFamily },
   });
-  return { success: true };
+  return { success: true, epochs };
 }
 
 export async function uploadLogo(
   _locale: string,
   formData: FormData,
-): Promise<{ error?: string; success?: boolean; logoUrl?: string }> {
+): Promise<{ error?: string; success?: boolean; logoUrl?: string; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -152,27 +161,25 @@ export async function uploadLogo(
   const db = await staffDb();
   if (!db) return { error: "save_failed" };
 
+  let epochs: EpochCounters;
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      {
-        logo_url: logoUrl,
-        logo_type: logoType,
-        updated_at: new Date(),
-        updated_by: auth.session.id,
-      },
-      { merge: true },
-    );
+    epochs = await writeBrandingSettings(db, {
+      logo_url: logoUrl,
+      logo_type: logoType,
+      updated_at: new Date(),
+      updated_by: auth.session.id,
+    });
   } catch {
     return { error: "save_failed" };
   }
 
   revalidateBranding(_locale);
-  return { success: true, logoUrl };
+  return { success: true, logoUrl, epochs };
 }
 
 export async function resetBranding(
   locale: string,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -181,23 +188,21 @@ export async function resetBranding(
   const db = await staffDb();
   if (!db) return { error: "save_failed" };
 
+  let epochs: EpochCounters;
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      {
-        app_name: DEFAULT_APP_SETTINGS.app_name,
-        app_subtitle: DEFAULT_APP_SETTINGS.app_subtitle,
-        font_family: DEFAULT_APP_SETTINGS.font_family,
-        logo_url: null,
-        logo_type: DEFAULT_APP_SETTINGS.logo_type,
-        updated_at: new Date(),
-        updated_by: auth.session.id,
-      },
-      { merge: true },
-    );
+    epochs = await writeBrandingSettings(db, {
+      app_name: DEFAULT_APP_SETTINGS.app_name,
+      app_subtitle: DEFAULT_APP_SETTINGS.app_subtitle,
+      font_family: DEFAULT_APP_SETTINGS.font_family,
+      logo_url: null,
+      logo_type: DEFAULT_APP_SETTINGS.logo_type,
+      updated_at: new Date(),
+      updated_by: auth.session.id,
+    });
   } catch {
     return { error: "save_failed" };
   }
 
   revalidateBranding(locale);
-  return { success: true };
+  return { success: true, epochs };
 }

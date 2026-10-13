@@ -5,6 +5,7 @@ import { resolvePartnerLogoMeta } from "@/features/partners/partner-logo";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { resolveAssetImageUrl } from "@/lib/storage/asset-image-url";
@@ -377,6 +378,8 @@ async function codeTaken(db: Firestore, code: string, exceptId?: string): Promis
 export async function createAssetCatalogItem(
   formData: FormData,
 ): Promise<AssetMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireAssetsManage();
   if (auth.error) return { error: auth.error };
 
@@ -436,6 +439,8 @@ export async function createAssetCatalogItem(
 export async function updateAssetCatalogItem(
   formData: FormData,
 ): Promise<AssetMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireAssetsManage();
   if (auth.error) return { error: auth.error };
 
@@ -511,6 +516,8 @@ export async function adjustAssetStock(input: {
   delta: number;
   note?: string;
 }): Promise<AssetMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const auth = await requireAssetsManage();
   if (auth.error) return { error: auth.error };
   if (!input.id || !Number.isFinite(input.delta) || input.delta === 0) {
@@ -547,6 +554,8 @@ export async function adjustAssetStock(input: {
 export async function returnAssetAssignment(
   assignmentId: string,
 ): Promise<AssetMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const auth = await requireAssetsManage();
   if (auth.error) return { error: auth.error };
   if (!assignmentId) return { error: "missing_fields" };
@@ -652,6 +661,8 @@ export async function syncIntakeAssetAssignments(
   assignedBy: string,
   linkedDriverId?: string | null,
 ): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const uniqueIds = [...new Set(catalogItemIds.filter(Boolean))];
   let db: Firestore;
   try {

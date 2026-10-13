@@ -1,7 +1,25 @@
-import { getFirestore, type DocumentSnapshot, Timestamp } from "../core/fs";
+import { HttpsError } from "firebase-functions/v2/https";
+import {
+  getFirestore,
+  type DocumentSnapshot,
+  type Query,
+  type QueryDocumentSnapshot,
+  Timestamp,
+} from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import type { AppSettings } from "../core/settings";
+import type { PhaseMarks } from "../perf/phase-log";
+import { timedPhase } from "../perf/phase-log";
+import {
+  ATTENDANCE_PROJECTION,
+  ATTENDANCE_KEYSET_PAGE,
+  ATTENDANCE_MATERIALIZE_CAP,
+  attendanceNeedsLocation,
+  attendanceNeedsSessions,
+  dutyIsOn,
+  minutesLateOf,
+} from "./attendance-live-plan";
 
 const ATT = FIELDS.attendanceLogs;
 
@@ -13,16 +31,24 @@ const ATT = FIELDS.attendanceLogs;
 const GET_ALL_CHUNK = 300;
 
 /**
- * The scan cap.
- *
- * The SQL computed the whole `from`..`to` window to serve one page, so this cap
- * is not a functional regression — it is the same shape with a ceiling. A day is
- * ~900 rows; a month would be ~27k, and a month-wide window is not a screen this
- * page has. Exceeding the cap is refused rather than silently truncated, because
- * a quietly short attendance list is the same failure as a quietly short
- * distance total.
+ * Date-ordered pages do not use this. problems_first and the computed statuses
+ * keyset up to ATTENDANCE_MATERIALIZE_CAP. The old name stays so a caller that
+ * imported the 5000 ceiling still compiles; the live ceiling is the materialize cap.
  */
-export const ATTENDANCE_SCAN_CAP = 5000;
+export const ATTENDANCE_SCAN_CAP = ATTENDANCE_MATERIALIZE_CAP;
+
+export const ATTENDANCE_WINDOW_TOO_LARGE = "attendance_window_too_large";
+
+/** Stable code plus the sentence the panel shows when a window exceeds the scan cap. */
+export const ATTENDANCE_WINDOW_TOO_LARGE_MESSAGE =
+  "attendance_window_too_large: This date range has more attendance rows than the list can rank in one pass. Choose a shorter range.";
+
+export function rethrowAttendanceWindow(error: unknown): never {
+  if (error instanceof Error && error.message === ATTENDANCE_WINDOW_TOO_LARGE) {
+    throw new HttpsError("failed-precondition", ATTENDANCE_WINDOW_TOO_LARGE_MESSAGE);
+  }
+  throw error;
+}
 
 export type AttendanceRow = {
   driver_id: string;
@@ -107,12 +133,42 @@ export type AttendanceQuery = {
  * "Offline during shift" is a claim about *now*, and a stored copy would keep
  * claiming it after the phone came back.
  */
+async function readAttendanceKeyset(scoped: Query): Promise<QueryDocumentSnapshot[]> {
+  const out: QueryDocumentSnapshot[] = [];
+  let cursor: QueryDocumentSnapshot | null = null;
+  while (out.length <= ATTENDANCE_MATERIALIZE_CAP) {
+    let page = scoped
+      .orderBy(ATT.logDate, "desc")
+      .select(...ATTENDANCE_PROJECTION)
+      .limit(ATTENDANCE_KEYSET_PAGE);
+    if (cursor) page = page.startAfter(cursor);
+    const snap = await page.get();
+    if (snap.empty) break;
+    for (const doc of snap.docs) out.push(doc);
+    if (out.length > ATTENDANCE_MATERIALIZE_CAP) {
+      throw new Error(ATTENDANCE_WINDOW_TOO_LARGE);
+    }
+    cursor = snap.docs[snap.docs.length - 1] ?? null;
+    if (snap.size < ATTENDANCE_KEYSET_PAGE) break;
+  }
+  return out;
+}
+
+export type AttendancePage = {
+  sort: "date_asc" | "date_desc";
+  offset: number;
+  limit: number;
+  totalCount: number;
+};
+
 export async function loadAttendanceRows(
   query: AttendanceQuery,
   settings: AppSettings,
+  options?: { page?: AttendancePage | null; phases?: PhaseMarks },
 ): Promise<AttendanceRow[]> {
   const db = getFirestore();
   const coll = db.collection(COLLECTIONS.attendanceLogs);
+  const phases = options?.phases ?? {};
 
   let scoped = coll
     .where(ATT.logDate, ">=", query.from)
@@ -121,24 +177,54 @@ export async function loadAttendanceRows(
   if (query.restaurantId) scoped = scoped.where("restaurant_ids", "array-contains", query.restaurantId);
   if (query.partnerId) scoped = scoped.where("partner_match_keys", "array-contains", query.partnerId);
 
-  const snap = await scoped.orderBy(ATT.logDate, "desc").limit(ATTENDANCE_SCAN_CAP + 1).get();
-  if (snap.size > ATTENDANCE_SCAN_CAP) {
-    throw new Error("attendance_window_too_large");
+  const page = options?.page ?? null;
+  let raw;
+  if (page) {
+    const counted = await timedPhase(phases, "countMs", () => scoped.count().get());
+    page.totalCount = counted.data().count;
+    const direction = page.sort === "date_asc" ? "asc" : "desc";
+    const snap = await timedPhase(phases, "logsMs", () =>
+      scoped
+        .orderBy(ATT.logDate, direction)
+        .select(...ATTENDANCE_PROJECTION)
+        .offset(page.offset)
+        .limit(page.limit)
+        .get(),
+    );
+    raw = snap.docs;
+  } else {
+    raw = await timedPhase(phases, "logsMs", () => readAttendanceKeyset(scoped));
   }
-
-  const raw = snap.docs;
   if (!raw.length) return [];
 
   const now = new Date();
   const today = kuwaitDayString(now);
   const staleBefore = new Date(now.getTime() - settings.attendance_gps_stale_minutes * 60_000);
+  const locationIds: string[] = [];
+  let anyOnDuty = false;
+  for (const doc of raw) {
+    const data = doc.data() ?? {};
+    const checkIn = asDate(data[ATT.checkInAt]);
+    const checkOut = asDate(data[ATT.checkOutAt]);
+    const scheduledStart = asDate(data[ATT.scheduledStartAt]);
+    const logDate = asString(data[ATT.logDate]) ?? today;
+    const minutesLate = minutesLateOf(checkIn, scheduledStart, settings.attendance_late_grace_minutes);
+    if (dutyIsOn(data[ATT.isOnDuty] === true, checkIn, checkOut, logDate, today)) anyOnDuty = true;
+    if (attendanceNeedsLocation({
+      storedStatus: asString(data[ATT.status]),
+      hasScheduledStart: Boolean(scheduledStart),
+      hasCheckIn: Boolean(checkIn),
+      minutesLate,
+    })) {
+      const driverId = asString(data[ATT.driverId]);
+      if (driverId) locationIds.push(driverId);
+    }
+  }
 
-  // The two live inputs, batched: one request per 300 riders for GPS, one query
-  // for the open sessions the roster actually has.
-  const locationByDriver = await loadLocations(
-    raw.map((doc) => asString(doc.get(ATT.driverId))),
-  );
-  const openSessions = await loadOpenSessions();
+  const locationByDriver = await timedPhase(phases, "locationsMs", () => loadLocations(locationIds));
+  const openSessions = attendanceNeedsSessions(anyOnDuty)
+    ? await timedPhase(phases, "sessionsMs", () => loadOpenSessions())
+    : new Map<string, Date>();
 
   return raw.map((doc) =>
     composeRow(doc, now, today, staleBefore, settings, locationByDriver, openSessions),
@@ -197,11 +283,7 @@ function composeRow(
     : null;
   const gpsMocked = location?.["is_mocked"] === true;
 
-  const isOnDuty =
-    raw[ATT.isOnDuty] === true &&
-    Boolean(checkIn) &&
-    !checkOut &&
-    logDate === today;
+  const isOnDuty = dutyIsOn(raw[ATT.isOnDuty] === true, checkIn, checkOut, logDate, today);
 
   const openSessionAt = openSessions.get(driverId);
   const sessionLiveSeconds = openSessionAt
@@ -215,13 +297,7 @@ function composeRow(
       ? secondsBetween(checkIn, now)
       : 0;
 
-  const minutesLate = checkIn && scheduledStart
-    ? Math.max(
-        0,
-        Math.floor((checkIn.getTime() - scheduledStart.getTime()) / 60_000) -
-          settings.attendance_late_grace_minutes,
-      )
-    : 0;
+  const minutesLate = minutesLateOf(checkIn, scheduledStart, settings.attendance_late_grace_minutes);
 
   const minutesEarlyOut = checkOut && scheduledEnd && scheduledStart
     ? Math.min(

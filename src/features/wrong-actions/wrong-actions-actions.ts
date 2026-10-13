@@ -3,6 +3,7 @@
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
@@ -263,6 +264,8 @@ function parseIncident(formData: FormData) {
 export async function saveWrongAction(
   formData: FormData,
 ): Promise<{ error?: string; id?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireWrongActions("wrong_actions.manage");
   if ("error" in auth) return auth;
 
@@ -335,6 +338,8 @@ export async function saveWrongAction(
 }
 
 export async function deleteWrongAction(id: string): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireWrongActions("wrong_actions.manage");
   if ("error" in auth) return auth;
   if (!id) return { error: "missing_fields" };

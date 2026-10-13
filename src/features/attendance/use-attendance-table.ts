@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   fetchAttendanceAnalyticsSummary,
@@ -13,6 +18,7 @@ import {
   updateAttendanceThresholdSettings,
   upsertAttendanceExceptionAction,
 } from "./attendance-reporting-actions";
+import { throwIfAttendanceWindow } from "./attendance-query-error";
 import type {
   AttendanceListFilters,
   AttendanceThresholdSettings,
@@ -25,9 +31,14 @@ export function useAttendanceDailyList(
 ) {
   return useQuery({
     queryKey: queryKeys.attendance.dailyList(filters),
-    queryFn: () => fetchAttendanceDailyList(filters),
+    queryFn: async () => {
+      const result = await fetchAttendanceDailyList(filters);
+      throwIfAttendanceWindow(result);
+      return result;
+    },
     enabled: options?.enabled ?? true,
     refetchInterval: options?.refetchInterval ?? false,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -57,13 +68,18 @@ export function useAttendanceExceptionsList(
     queryKey: queryKeys.attendance.exceptions(params),
     queryFn: () => fetchAttendanceExceptionsList(params),
     enabled,
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useAttendanceAnalytics(fromDate: string, toDate: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.attendance.analytics(fromDate, toDate),
-    queryFn: () => fetchAttendanceAnalyticsSummary(fromDate, toDate),
+    queryFn: async () => {
+      const result = await fetchAttendanceAnalyticsSummary(fromDate, toDate);
+      throwIfAttendanceWindow(result);
+      return result;
+    },
     enabled,
   });
 }

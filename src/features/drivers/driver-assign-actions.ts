@@ -4,6 +4,7 @@ import { staffClient, type StaffClient } from "./driver-uniqueness";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { pickDriverAvatarKey } from "@/lib/storage/driver-avatar-key";
 import { resolveDriverAvatarUrl } from "@/lib/storage/driver-avatar-url";
 import { restaurantSyncPlan } from "./restaurant-sync-plan";
@@ -29,6 +30,8 @@ async function syncIntakeRestaurants(
   intakeId: string,
   restaurantIds: string[],
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   await db.from("driver_intake_restaurants").delete().eq("intake_id", intakeId);
   if (restaurantIds.length === 0) return;
   await db.from("driver_intake_restaurants").insert(
@@ -77,6 +80,8 @@ async function syncDriverRestaurants(
   driverId: string,
   restaurantIds: string[],
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const { data: existing } = await db
     .from("driver_restaurants")
     .select("restaurant_id")
@@ -144,6 +149,8 @@ async function logAssignmentEvent(
     contextEntityId?: string | null;
   },
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   await (
     db as unknown as {
       from: (table: string) => {
@@ -391,6 +398,8 @@ export async function assignDriverToRestaurant(input: {
   zoneId?: string | null;
   replaceAll?: boolean;
 }): Promise<DriverAssignMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManage();
   if (auth.error) return { error: auth.error };
 
@@ -503,6 +512,8 @@ export async function assignDriverToZone(input: {
   driverId: string;
   zoneId: string;
 }): Promise<DriverAssignMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManage();
   if (auth.error) return { error: auth.error };
 

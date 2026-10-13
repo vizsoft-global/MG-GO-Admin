@@ -1,3 +1,4 @@
+import { asEpochReader, getEpochCache, readEpochQuery } from "@/lib/auth/epoch-cache";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
@@ -22,12 +23,21 @@ export async function getMenuConfigServer(role: string): Promise<MenuNode[]> {
     const db = await staffDb();
     if (!db) return [];
 
-    const snap = await db.collection(COLLECTIONS.menuConfigs).where("role", "==", role).get();
-    const match = snap.docs.find((doc) => {
-      const data = doc.data();
-      return data.scope === "global" && data.site_id == null;
-    });
-    return configOf(match?.data()?.config);
+    return await readEpochQuery(
+      asEpochReader(db),
+      getEpochCache(),
+      "menu",
+      `menu:${role}`,
+      session.epochs.menu,
+      async () => {
+        const snap = await db.collection(COLLECTIONS.menuConfigs).where("role", "==", role).get();
+        const match = snap.docs.find((doc) => {
+          const data = doc.data();
+          return data.scope === "global" && data.site_id == null;
+        });
+        return configOf(match?.data()?.config);
+      },
+    );
   } catch (error) {
     if (process.env.NODE_ENV === "development") {
       console.warn("getMenuConfigServer", formatMenuConfigError(error));

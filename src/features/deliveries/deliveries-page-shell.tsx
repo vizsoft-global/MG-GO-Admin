@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { LIST_SEARCH_DEBOUNCE_MS } from "@/lib/menu/sidebar-menu-query";
 import { useTranslations } from "next-intl";
 import {
   Activity,
@@ -15,6 +16,7 @@ import {
   FileSpreadsheet,
   Loader2,
   MoreVertical,
+  TriangleAlert,
   Package,
   RefreshCw,
   Search,
@@ -214,7 +216,7 @@ function DeliveriesPageContent() {
 
   // Debounce free-text search so we don't refetch on every keystroke.
   useEffect(() => {
-    const handle = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    const handle = setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [search]);
 
@@ -225,6 +227,7 @@ function DeliveriesPageContent() {
       partnerId: partnerFilter,
       cancelReason: tabFilter === "cancelled" ? cancelReasonFilter : "all",
       search: debouncedSearch,
+      searchShape: "prefix",
       dateFrom: dateRange.from ?? undefined,
       dateTo: dateRange.to ?? undefined,
       dateToExclusive: dateRange.toExclusive,
@@ -255,6 +258,9 @@ function DeliveriesPageContent() {
   );
   const visible = deliveries;
   const totalForFilter = data?.pages[0]?.total ?? 0;
+  const searchIncomplete = data?.pages.some((page) => page.searchTruncated === true) ?? false;
+  const prefixTooShort =
+    data?.pages.some((page) => page.unindexedFilters?.includes("prefix_too_short")) ?? false;
   const verifiableVisible = useMemo(
     () => visible.filter((row) => isBulkVerifiableDeliveryStatus(row.status)),
     [visible],
@@ -404,12 +410,12 @@ function DeliveriesPageContent() {
   ]);
 
   const deliveryNavPositionLabel = useMemo(() => {
-    if (selectedDeliveryIndex < 0 || totalForFilter <= 0) return undefined;
+    if (searchIncomplete || selectedDeliveryIndex < 0 || totalForFilter <= 0) return undefined;
     return t("detailNavPosition", {
       current: selectedDeliveryIndex + 1,
       total: totalForFilter,
     });
-  }, [selectedDeliveryIndex, totalForFilter, t]);
+  }, [searchIncomplete, selectedDeliveryIndex, totalForFilter, t]);
 
   // Live refresh: re-fetch the list whenever a delivery row changes in Postgres
   // (insert/update/delete). Keeps the table in sync without a manual refresh
@@ -573,7 +579,7 @@ function DeliveriesPageContent() {
     debouncedSearch.length > 0;
 
   const showEmptySearch =
-    !isLoading && !isError && visible.length === 0 && hasFiltersOrSearch;
+    !isLoading && !isError && visible.length === 0 && hasFiltersOrSearch && !prefixTooShort;
   const showEmptyAll = !isLoading && !isError && visible.length === 0 && !hasFiltersOrSearch;
 
   const columnVisibilityOptions = useMemo(
@@ -806,7 +812,7 @@ function DeliveriesPageContent() {
               </Button>
               <ClearAllModuleButton entity="deliveries" compact />
             </div>
-            {(hasActiveFilters || search) && (
+            {(hasActiveFilters || search) && !searchIncomplete && !prefixTooShort && (
               <p className="text-sm tabular-nums text-muted-foreground">
                 {t("totalDeliveries", { count: totalForFilter })}
                 {kpiCounts && totalForFilter !== kpiCounts.total
@@ -895,6 +901,24 @@ function DeliveriesPageContent() {
           </div>
         ) : (
           <CardContent className="p-0">
+            {searchIncomplete ? (
+              <div
+                role="alert"
+                className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+              >
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <p>{t("searchIncomplete")}</p>
+              </div>
+            ) : null}
+            {prefixTooShort ? (
+              <div
+                role="alert"
+                className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+              >
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <p>{t("prefixTooShort")}</p>
+              </div>
+            ) : null}
             <AppDataTable
               columns={tableColumns}
               headerRowClassName="bg-primary/5 hover:bg-primary/5"
@@ -1039,7 +1063,9 @@ function DeliveriesPageContent() {
                 : null}
             </AppDataTable>
 
-            {!showEmptySearch && visible.length > 0 ? (
+            {!showEmptySearch &&
+            visible.length > 0 &&
+            (isFetchingNextPage || hasNextPage || !searchIncomplete) ? (
               <div
                 ref={loadMoreRef}
                 className="flex items-center justify-center py-4 text-sm text-muted-foreground"
@@ -1049,7 +1075,7 @@ function DeliveriesPageContent() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                     {t("loadingMore")}
                   </span>
-                ) : hasNextPage ? (
+                ) : searchIncomplete ? null : hasNextPage ? (
                   <span className="tabular-nums">
                     {t("showingCount", { count: visible.length, total: totalForFilter })}
                   </span>

@@ -6,6 +6,7 @@ import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import {
   describeRequestsAudit,
@@ -179,6 +180,8 @@ async function patchDoc(
   id: string,
   data: Record<string, unknown>,
 ): Promise<string | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return mutationAuth.error;
   const db = await openDb();
   if (!db) return "not_configured";
   try {
@@ -196,6 +199,8 @@ async function insertDoc(
   name: string,
   data: Record<string, unknown>,
 ): Promise<{ id?: string; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const db = await openDb();
   if (!db) return { error: "not_configured" };
   const id = crypto.randomUUID();
@@ -208,6 +213,8 @@ async function insertDoc(
 }
 
 async function deleteDoc(name: string, id: string): Promise<string | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return mutationAuth.error;
   const db = await openDb();
   if (!db) return "not_configured";
   try {
@@ -222,6 +229,8 @@ async function deleteWhere(
   name: string,
   filters: Array<[string, unknown]>,
 ): Promise<string | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return mutationAuth.error;
   const listed = await queryDocs(name, filters);
   if (listed.error) return listed.error;
   const db = await openDb();

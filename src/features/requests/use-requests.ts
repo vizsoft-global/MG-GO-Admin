@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   createRequestOnBehalf,
@@ -32,6 +37,7 @@ export function useAdminRequestsList(filters: RequestListFilters) {
   return useQuery({
     queryKey: queryKeys.requests.list(filters),
     queryFn: () => fetchAdminRequestsList(filters),
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -5,6 +5,7 @@ import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import type { Json } from "@/types/database";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
@@ -765,6 +766,8 @@ export async function resetPayrollClientRules(input: {
 export async function recomputePayrollZoneMetrics(input: {
   monthKey: string;
 }): Promise<{ error: string } | { ok: true; month: string; zones: unknown }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   await requirePayrollPermission("payroll.manage");
   const today = kuwaitToday();
   let month: string;

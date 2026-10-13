@@ -4,7 +4,14 @@ import { kuwaitDayString } from "../core/kuwait";
 import { parseId } from "../core/query";
 import { loadAppSettings } from "../core/settings";
 import { requireStaff } from "../core/staff";
-import { loadAttendanceRows, type AttendanceRow } from "./attendance-shared";
+import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
+import {
+  loadAttendanceRows,
+  rethrowAttendanceWindow,
+  type AttendancePage,
+  type AttendanceRow,
+} from "./attendance-shared";
+import { attendanceQueryCanPage } from "./attendance-live-plan";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -143,11 +150,24 @@ function sortRows(rows: AttendanceRow[], sort: string): AttendanceRow[] {
 
 /** `admin_list_attendance_daily` — same filters, same sort keys, same page shape. */
 export const adminListAttendanceDaily = measureOnCall("adminListAttendanceDaily", async (request) => {
-  await requireStaff(request, "attendance.view");
+  const phases: PhaseMarks = {};
+  try {
+  await timedPhase(phases, "requireStaffMs", () => requireStaff(request, "attendance.view"));
 
   const data = (request.data ?? {}) as Record<string, unknown>;
   const { from, to } = readRange(data);
   const settings = await loadAppSettings();
+  const today = kuwaitDayString(new Date());
+  const liveOnly = data.liveOnly === true;
+  const status = parseId(data.status);
+  const search = (parseId(data.search) ?? "").toLowerCase();
+  const sort = parseId(data.sort) ?? "problems_first";
+  const limit = Math.max(Number(data.limit ?? 50) || 50, 1);
+  const offset = Math.max(Number(data.offset ?? 0) || 0, 0);
+  const page: AttendancePage | null = attendanceQueryCanPage({ sort, status, search, liveOnly })
+    && (sort === "date_asc" || sort === "date_desc")
+    ? { sort, offset, limit, totalCount: 0 }
+    : null;
 
   const rows = await loadAttendanceRows(
     {
@@ -158,12 +178,12 @@ export const adminListAttendanceDaily = measureOnCall("adminListAttendanceDaily"
       restaurantId: parseId(data.restaurantId),
     },
     settings,
-  );
+    { page, phases },
+  ).catch(rethrowAttendanceWindow);
 
-  const today = kuwaitDayString(new Date());
-  const liveOnly = data.liveOnly === true;
-  const status = parseId(data.status);
-  const search = (parseId(data.search) ?? "").toLowerCase();
+  if (page) {
+    return { totalCount: page.totalCount, rows };
+  }
 
   const filtered = rows.filter(
     (row) =>
@@ -172,15 +192,15 @@ export const adminListAttendanceDaily = measureOnCall("adminListAttendanceDaily"
       matchesSearch(row, search),
   );
 
-  const sorted = sortRows(filtered, parseId(data.sort) ?? "problems_first");
-
-  const limit = Math.max(Number(data.limit ?? 50) || 50, 1);
-  const offset = Math.max(Number(data.offset ?? 0) || 0, 0);
+  const sorted = sortRows(filtered, sort);
 
   return {
     totalCount: sorted.length,
     rows: sorted.slice(offset, offset + limit),
   };
+  } finally {
+    logPhases("adminListAttendanceDaily", phases);
+  }
 });
 
 /** `admin_attendance_kpis` — one day, seven counters, same predicates. */
@@ -200,7 +220,7 @@ export const adminAttendanceKpis = onCall(async (request) => {
       restaurantId: parseId(data.restaurantId),
     },
     settings,
-  );
+  ).catch(rethrowAttendanceWindow);
 
   const compliance = rows
     .map((row) => row.compliance_score)

@@ -6,6 +6,11 @@ export const queryKeys = {
   app: {
     buildId: () => ["app", "build-id"] as const,
   },
+  menu: {
+    all: () => ["sidebar-menu"] as const,
+    sidebar: (role: string, isSuperAdmin: boolean, accessEpoch: number, menuEpoch: number) =>
+      ["sidebar-menu", role, isSuperAdmin, accessEpoch, menuEpoch] as const,
+  },
   drivers: {
     all: () => ["drivers"] as const,
     list: (filters: Record<string, unknown> = {}) => ["drivers", "list", filters] as const,

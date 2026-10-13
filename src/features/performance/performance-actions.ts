@@ -4,8 +4,10 @@ import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { writeWithEpoch } from "@/lib/auth/auth-epochs";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   addDays,
   kuwaitToday,
@@ -761,6 +763,8 @@ export async function updatePerformanceScoreWeights(
   weights: PerformanceScoreWeights,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const mutationAuth = await requireMutationAuth();
+    if ("error" in mutationAuth) throw new Error("not_authorized");
     const session = await requireSettingsManage();
     const next = parsePerformanceWeights(weights);
     const db = await staffDb();
@@ -773,13 +777,16 @@ export async function updatePerformanceScoreWeights(
     const previous = await getPerformanceScoreWeights().catch(() => null);
 
     try {
-      await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-        {
-          performance_score_weights: next,
-          updated_at: new Date().toISOString(),
-        },
-        { merge: true },
-      );
+      await writeWithEpoch(db, "settings", ({ tx }) => {
+        tx.set(
+          db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID),
+          {
+            performance_score_weights: next,
+            updated_at: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+      });
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : "save_failed" };
     }

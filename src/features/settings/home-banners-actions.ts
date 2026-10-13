@@ -5,6 +5,7 @@ import type { DocumentData } from "firebase-admin/firestore";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import {
   ALLOWED_SPLASH_EXTENSIONS,
   MAX_SPLASH_BYTES,
@@ -87,6 +88,8 @@ async function saveBrandingObject(
 }
 
 async function removeBrandingObject(relativePath: string): Promise<void> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const storage = await getFirebaseStorage();
   const bucket = storage?.bucket();
   if (!bucket) return;
@@ -169,6 +172,8 @@ export async function saveHomeBanner(
   locale: string,
   formData: FormData,
 ): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
@@ -306,6 +311,8 @@ export async function deleteHomeBanner(
   locale: string,
   id: string,
 ): Promise<{ error?: string; errorDetail?: string; success?: boolean }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 

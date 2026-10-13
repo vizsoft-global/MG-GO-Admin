@@ -166,3 +166,89 @@ export function catalogPrefixQueries(term: string): { field: string; term: strin
     { field: "merchant_id_lower", term: text },
   ];
 }
+
+export function deliverySearchStamp(input: {
+  orderId?: unknown;
+  externalOrderId?: unknown;
+  riderName?: unknown;
+  driverName?: unknown;
+  driverCode?: unknown;
+  employeeId?: unknown;
+}): Record<string, string> {
+  const out: Record<string, string> = {};
+  const order = lowerText(input.externalOrderId) || lowerText(input.orderId);
+  const rider = lowerText(input.riderName) || lowerText(input.driverName);
+  const code = lowerText(input.driverCode);
+  const employee = lowerText(input.employeeId);
+  put(out, "order_id_lower", order);
+  put(out, "rider_name_lower", rider);
+  put(out, "driver_name_lower", rider);
+  put(out, "driver_code_lower", code);
+  put(out, "employee_id_lower", employee);
+  const identity = [order, rider, code, employee].filter(Boolean);
+  if (identity.length > 0) out.search_name = identity.join(" ");
+  return out;
+}
+
+export const DELIVERY_PREFIX_FIELDS = [
+  "order_id_lower",
+  "rider_name_lower",
+  "driver_name_lower",
+  "driver_code_lower",
+  "employee_id_lower",
+  "search_name",
+] as const;
+
+export type SearchEntity =
+  | "drivers"
+  | "driver_intakes"
+  | "requests"
+  | "restaurants"
+  | "delivery_rules"
+  | "incentive_rules"
+  | "deliveries";
+
+/** Same stamp the admin and rider write handlers spread onto the stored row. */
+export function stampStoredRow(entity: SearchEntity, row: Record<string, unknown>): Record<string, string> {
+  switch (entity) {
+    case "drivers":
+    case "driver_intakes":
+      return driverSearchStamp({
+        fullName: row.full_name,
+        name: row.name,
+        driverCode: row.driver_code,
+        employeeId: row.employee_id,
+        phone: row.phone,
+        clientId: row.client_id,
+        clientName: row.client_name,
+        zoneName: row.zone_name,
+        partnerName: row.partner_name,
+        companyName: row.company_name,
+      });
+    case "requests":
+      return requestSearchStamp({
+        requestCode: row.request_code,
+        driverName: row.driver_name,
+        driverCode: row.driver_code,
+        employeeId: row.employee_id,
+      });
+    case "restaurants":
+      return catalogNameStamp(row.name, row.external_merchant_id);
+    case "delivery_rules":
+    case "incentive_rules":
+      return catalogNameStamp(row.name);
+    case "deliveries":
+      return deliverySearchStamp({
+        externalOrderId: row.external_order_id,
+        orderId: row.order_id,
+        riderName: row.rider_name,
+        driverName: row.driver_name,
+        driverCode: row.driver_code,
+        employeeId: row.employee_id,
+      });
+    default: {
+      const unreachable: never = entity;
+      throw new Error(`unknown_search_entity:${String(unreachable)}`);
+    }
+  }
+}

@@ -4,8 +4,8 @@ import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { parseId } from "../core/query";
 import { requireStaff } from "../core/staff";
-import { catalogNameStamp, catalogPrefixQueries } from "../core/search-text";
-import { lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
+import { catalogPrefixQueries, stampStoredRow } from "../core/search-text";
+import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
 
 const DELIVERY_RULES = COLLECTIONS.deliveryRules;
 const DELIVERY_RULE_SCOPES = COLLECTIONS.deliveryRuleScopes;
@@ -40,7 +40,7 @@ async function catalogDocs(collection: string, search: unknown): Promise<Firebas
   const term = typeof search === "string" ? search.trim() : "";
   if (!term) return (await db.collection(collection).get()).docs;
   const indexed = await lowercaseFieldIndexed(db, collection, "name_lower");
-  if (!indexed) return (await db.collection(collection).get()).docs;
+  if (fullScanFallback(indexed, term)) return (await db.collection(collection).get()).docs;
   const ids = await prefixMatchIds(db, collection, catalogPrefixQueries(term));
   const docs: FirebaseFirestore.DocumentSnapshot[] = [];
   for (let index = 0; index < ids.length; index += 300) {
@@ -292,7 +292,7 @@ export const adminInsertDeliveryRuleWithScope = onCall(async (request) => {
     dpd_period: period,
     created_at: FieldValue.serverTimestamp(),
     updated_at: FieldValue.serverTimestamp(),
-    ...catalogNameStamp(name),
+    ...stampStoredRow("delivery_rules", { name }),
   });
   const scopeRef = db.collection(DELIVERY_RULE_SCOPES).doc();
   batch.set(scopeRef, {
@@ -460,7 +460,7 @@ export const adminUpsertDeliveryRule = onCall(async (request) => {
     dpd_target: dpdTarget !== null && dpdTarget > 0 ? dpdTarget : null,
     dpd_period: period,
     updated_at: FieldValue.serverTimestamp(),
-    ...catalogNameStamp(name),
+    ...stampStoredRow("delivery_rules", { name }),
   };
 
   const db = dbs();
@@ -644,7 +644,7 @@ export const adminBulkUpdateDeliveryRules = onCall(async (request) => {
       dpd_period: period,
       created_at: FieldValue.serverTimestamp(),
       updated_at: FieldValue.serverTimestamp(),
-      ...catalogNameStamp(name),
+      ...stampStoredRow("delivery_rules", { name }),
     });
     batch.set(db.collection(DELIVERY_RULE_SCOPES).doc(), {
       delivery_rule_id: ruleRef.id,
@@ -792,7 +792,7 @@ export const adminUpsertIncentiveRule = onCall(async (request) => {
     reward_kwd: targetMode === "single" && rewardMode === "fixed" ? rewardKwd : 0,
     reward_per_delivery_kwd:
       targetMode === "single" && rewardMode === "per_delivery" ? rewardPerDeliveryKwd : null,
-    ...catalogNameStamp(name),
+    ...stampStoredRow("incentive_rules", { name }),
     payout_mode: payoutMode,
     overrides_others: overridesOthers,
     start_date: startDate,

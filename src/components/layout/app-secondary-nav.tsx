@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 import { LayoutDashboard } from "lucide-react";
 import { useSidebarMenu } from "@/hooks/use-sidebar-menu";
+import type { SidebarMenuEpochs } from "@/lib/menu/sidebar-menu-query";
 import {
   findActiveLeafId,
   findInlineGroupForPath,
@@ -43,9 +44,12 @@ function useItemLabel() {
   };
 }
 
-export function AppSecondaryNav() {
+export function AppSecondaryNav({
+  accessEpoch,
+  menuEpoch,
+}: SidebarMenuEpochs = {}) {
   const pathname = usePathname();
-  const { tree } = useSidebarMenu();
+  const { tree } = useSidebarMenu({ accessEpoch, menuEpoch });
   const tItemLabel = useItemLabel();
 
   const group = findInlineGroupForPath(tree, pathname);

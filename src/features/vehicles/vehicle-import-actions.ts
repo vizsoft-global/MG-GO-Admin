@@ -3,6 +3,7 @@
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import type { Json } from "@/types/database";
@@ -215,6 +216,8 @@ export async function applyVehicleImport(input: {
   headers: string[];
   rows: string[][];
 }): Promise<{ error?: string; applied?: number; failed?: number }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireCreate();
   if ("error" in auth) return { error: auth.error };
   if (input.rows.length > MAX_ROWS) return { error: "too_many_rows" };
@@ -365,6 +368,8 @@ export async function redoVehicleImport(): Promise<{ error?: string; changed?: n
 }
 
 async function replay(direction: "undo" | "redo"): Promise<{ error?: string; changed?: number }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireCreate();
   if ("error" in auth) return { error: auth.error };
   let db: Firestore;

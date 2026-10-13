@@ -6,6 +6,7 @@ import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { sendPushBatch } from "@/lib/firebase/fcm-provider";
 import { buildActionPayload, buildFcmDataPayload } from "@/features/notifications/payload-contract";
 import { pickLatestPushTokenByDriver } from "@/features/notifications/push-token-select";
@@ -135,6 +136,8 @@ async function patchDoc(
   id: string,
   data: Record<string, unknown>,
 ): Promise<string | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return mutationAuth.error;
   const db = await openDb();
   if (!db) return "not_configured";
   try {
@@ -152,6 +155,8 @@ async function insertDoc(
   name: string,
   data: Record<string, unknown>,
 ): Promise<{ id?: string; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const db = await openDb();
   if (!db) return { error: "not_configured" };
   const id = crypto.randomUUID();
@@ -167,6 +172,8 @@ async function insertMany(
   name: string,
   rows: Record<string, unknown>[],
 ): Promise<string | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return mutationAuth.error;
   const db = await openDb();
   if (!db) return "not_configured";
   try {
@@ -185,6 +192,8 @@ async function insertMany(
 }
 
 async function deleteDoc(name: string, id: string): Promise<string | null> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return mutationAuth.error;
   const db = await openDb();
   if (!db) return "not_configured";
   try {

@@ -3,6 +3,7 @@
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import {
@@ -167,6 +168,8 @@ export async function fetchPartnersForAdmin(): Promise<PartnerRow[]> {
 }
 
 export async function createPartner(formData: FormData): Promise<PartnerMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requirePartnersManager("create");
   if ("error" in auth) return auth;
 
@@ -221,6 +224,8 @@ export async function createPartner(formData: FormData): Promise<PartnerMutation
 }
 
 export async function updatePartner(formData: FormData): Promise<PartnerMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requirePartnersManager("edit");
   if ("error" in auth) return auth;
 
@@ -289,6 +294,8 @@ export async function updatePartner(formData: FormData): Promise<PartnerMutation
 }
 
 export async function deletePartner(id: string): Promise<PartnerMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requirePartnersManager("delete");
   if ("error" in auth) return auth;
 

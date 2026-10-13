@@ -3,6 +3,7 @@
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
@@ -261,6 +262,8 @@ export async function assignVehicleAsset(input: {
   catalogItemId: string;
   quantity: number;
 }): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const session = await getSessionUser();
   if (
     !session ||
@@ -501,12 +504,16 @@ export async function listVehicleAssignedAssets(driverId: string | null): Promis
 }
 
 async function insertRow(collection: string, data: Record<string, unknown>) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const db = await openDb();
   const id = crypto.randomUUID();
   await db.collection(collection).doc(id).set({ id, ...data, created_at: new Date() });
 }
 
 export async function createVehicleHandover(formData: FormData): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
   const vehicleId = empty(formData.get("vehicleId"));
@@ -547,6 +554,8 @@ export async function createVehicleHandover(formData: FormData): Promise<{ error
 }
 
 export async function createVehicleAccident(formData: FormData): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
   const vehicleId = empty(formData.get("vehicleId"));
@@ -588,6 +597,8 @@ export async function createVehicleAccident(formData: FormData): Promise<{ error
 }
 
 export async function createVehicleDocument(formData: FormData): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
   const vehicleId = empty(formData.get("vehicleId"));
@@ -626,6 +637,8 @@ export async function createVehicleDocument(formData: FormData): Promise<{ error
 }
 
 export async function createVehicleService(formData: FormData): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
   const vehicleId = empty(formData.get("vehicleId"));

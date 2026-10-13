@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { logDriverChange } from "@/features/drivers/driver-change-log";
 import { requireDriversManagerApi } from "@/lib/auth/require-drivers-manager";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { validateDocumentFile } from "@/features/drivers/driver-form-validation";
 import {
   DOCUMENT_TYPES,
@@ -29,6 +30,8 @@ function linkedProfileId(value: unknown): string | null {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return NextResponse.json({ error: mutationAuth.error }, { status: mutationAuth.error === "not_configured" ? 503 : 401 });
   const auth = await requireDriversManagerApi();
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: 403 });

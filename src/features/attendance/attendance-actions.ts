@@ -6,6 +6,7 @@ import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import type {
   AttendanceActionError,
@@ -364,6 +365,8 @@ function addDays(isoDate: string, days: number): string {
 export async function correctAttendanceLog(
   input: AttendanceCorrectionInput,
 ): Promise<{ error?: AttendanceActionError; success?: boolean; id?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const session = await requireAttendanceManage();
   if (!session) return { error: "not_authorized" };
 

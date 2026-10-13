@@ -7,6 +7,7 @@ import {
 } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { hasOpsAssignment } from "./driver-assignment";
@@ -199,6 +200,8 @@ async function syncIntakeRestaurants(
   intakeId: string,
   restaurantIds: string[],
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   await db.from("driver_intake_restaurants").delete().eq("intake_id", intakeId);
   if (restaurantIds.length === 0) return;
   await db.from("driver_intake_restaurants").insert(
@@ -211,6 +214,8 @@ async function syncDriverRestaurants(
   driverId: string,
   restaurantIds: string[],
 ) {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) throw new Error(mutationAuth.error);
   const { data: existing } = await db
     .from("driver_restaurants")
     .select("restaurant_id")
@@ -330,6 +335,8 @@ async function uploadIntakeDocument(
 export async function createDriverIntake(
   formData: FormData,
 ): Promise<DriverMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
 
@@ -952,6 +959,8 @@ export async function archiveDriverIntake(
 export async function restoreDriverIntake(
   intakeId: string,
 ): Promise<DriverMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
   if (!intakeId) return { error: "missing_fields" };
@@ -1015,6 +1024,8 @@ export async function updateDriverWorkflowStatus(
   intakeId: string,
   workflowStatus: DriverWorkflowStatus,
 ): Promise<DriverMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 
@@ -1064,6 +1075,8 @@ async function updateDriverIntakeInner(
   formData: FormData,
   actorId: string,
 ): Promise<DriverMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const intakeId = String(formData.get("intakeId") ?? "").trim();
   const fullName = String(formData.get("fullName") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
@@ -1794,6 +1807,8 @@ export async function setDriverScreenshotsAllowed(
   driverId: string,
   allowed: boolean,
 ): Promise<{ success: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 
@@ -1826,6 +1841,8 @@ export async function setDriverLoginVerificationExempt(
   driverId: string,
   exempt: boolean,
 ): Promise<{ success: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 
@@ -2086,6 +2103,8 @@ export async function setDriverUnfrozen(
 export async function regenerateDriverPasscode(
   driverId: string,
 ): Promise<RegeneratePasscodeResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 
@@ -2188,6 +2207,8 @@ export type ForceSignOutDriverResult =
 export async function forceSignOutDriver(
   driverId: string,
 ): Promise<ForceSignOutDriverResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 
