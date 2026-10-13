@@ -1,9 +1,11 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   REQUEST_FIELD_KINDS,
   REQUEST_FIELD_OPTION_SOURCES,
@@ -17,6 +19,129 @@ import {
   type RequestTypeDefinitionRow,
   type RequestTypeInput,
 } from "./settings-types";
+
+type DocRow = Record<string, unknown> & { id: string };
+
+function cell(value: unknown): unknown {
+  if (value == null) return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  if (Array.isArray(value)) return value.map(cell);
+  return value;
+}
+
+function docRow(id: string, data: DocumentData | undefined): DocRow | null {
+  if (!data) return null;
+  const row: DocRow = { id };
+  for (const [key, value] of Object.entries(data)) row[key] = cell(value);
+  return row;
+}
+
+async function openDb(): Promise<Firestore | null> {
+  return staffDb();
+}
+
+async function listDocs(name: string): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    const snap = await db.collection(name).get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function queryDocs(
+  name: string,
+  filters: Array<[string, unknown]>,
+): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    let q: Query = db.collection(name);
+    for (const [field, value] of filters) q = q.where(field, "==", value);
+    const snap = await q.get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function countDocs(
+  name: string,
+  filters: Array<[string, unknown]>,
+): Promise<{ count: number; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { count: 0, error: "not_configured" };
+  try {
+    let q: Query = db.collection(name);
+    for (const [field, value] of filters) q = q.where(field, "==", value);
+    const snap = await q.count().get();
+    return { count: snap.data().count, error: null };
+  } catch (e) {
+    return { count: 0, error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function findTypeDef(key: string): Promise<{ row: DocRow | null; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { row: null, error: "not_configured" };
+  try {
+    const direct = await db.collection(COLLECTIONS.requestTypeDefinitions).doc(key).get();
+    if (direct.exists) return { row: docRow(direct.id, direct.data()), error: null };
+    const listed = await queryDocs(COLLECTIONS.requestTypeDefinitions, [["key", key]]);
+    if (listed.error) return { row: null, error: listed.error };
+    return { row: listed.rows[0] ?? null, error: null };
+  } catch (e) {
+    return { row: null, error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function removeWhere(
+  name: string,
+  filters: Array<[string, unknown]>,
+): Promise<{ error: string | null }> {
+  const found = await queryDocs(name, filters);
+  if (found.error) return { error: found.error };
+  const db = await openDb();
+  if (!db) return { error: "not_configured" };
+  try {
+    const writer = db.bulkWriter();
+    for (const row of found.rows) writer.delete(db.collection(name).doc(row.id));
+    await writer.close();
+    return { error: null };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "write_failed" };
+  }
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  const as = String(a);
+  const bs = String(b);
+  return as < bs ? -1 : as > bs ? 1 : 0;
+}
+
+function sortRows(rows: DocRow[], keys: Array<[string, "asc" | "desc"]>): DocRow[] {
+  return [...rows].sort((left, right) => {
+    for (const [key, dir] of keys) {
+      const c = compareValues(left[key], right[key]);
+      if (c !== 0) return dir === "asc" ? c : -c;
+    }
+    return 0;
+  });
+}
 
 async function requireRequestsManage() {
   const session = await getSessionUser();
@@ -65,35 +190,34 @@ export async function fetchRequestTypeDefinitions(): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
 
   const [defs, fields, steps, requests] = await Promise.all([
-    (supabase as any).from("request_type_definitions").select("*").order("sort_order"),
-    (supabase as any).from("request_field_definitions").select("type_key"),
-    supabase.from("request_approval_step_templates").select("request_type"),
-    supabase.from("requests").select("request_type"),
+    listDocs(COLLECTIONS.requestTypeDefinitions),
+    listDocs(COLLECTIONS.requestFieldDefinitions),
+    listDocs(COLLECTIONS.requestApprovalStepTemplates),
+    listDocs(COLLECTIONS.requests),
   ]);
 
-  if (defs.error) return { rows: [], error: defs.error.message };
+  if (defs.error) return { rows: [], error: defs.error };
 
-  const count = (rows: unknown, key: string) => {
+  const count = (rows: DocRow[], key: string) => {
     const map: Record<string, number> = {};
-    for (const row of (rows as Record<string, unknown>[] | null) ?? []) {
+    for (const row of rows) {
       const k = String(row[key] ?? "");
       map[k] = (map[k] ?? 0) + 1;
     }
     return map;
   };
 
-  const fieldCounts = count(fields.data, "type_key");
-  const stepCounts = count(steps.data, "request_type");
-  const requestCounts = count(requests.data, "request_type");
+  const fieldCounts = count(fields.rows, "type_key");
+  const stepCounts = count(steps.rows, "request_type");
+  const requestCounts = count(requests.rows, "request_type");
 
   await logAdminRead("requests", "requests.settings.types.list");
 
   return {
-    rows: ((defs.data as Record<string, unknown>[] | null) ?? []).map((row) => {
-      const key = String(row.key ?? "");
+    rows: sortRows(defs.rows, [["sort_order", "asc"]]).map((row) => {
+      const key = String(row.key ?? row.id);
       return {
         key,
         label_en: String(row.label_en ?? ""),
@@ -122,17 +246,11 @@ export async function fetchRequestFieldDefinitions(typeKey: string): Promise<{
   error?: string;
 }> {
   await requireRequestsManage();
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any)
-    .from("request_field_definitions")
-    .select(
-      "id, field_key, label_en, label_ar, kind, target, is_required, is_server_required, sort_order, options_source, options, help_en",
-    )
-    .eq("type_key", typeKey)
-    .order("sort_order");
-
-  if (error) return { rows: [], error: error.message };
-  return { rows: ((data as Record<string, unknown>[] | null) ?? []).map(coerceRow) };
+  const listed = await queryDocs(COLLECTIONS.requestFieldDefinitions, [["type_key", typeKey]]);
+  if (listed.error) return { rows: [], error: listed.error };
+  return {
+    rows: sortRows(listed.rows, [["sort_order", "asc"]]).map(coerceRow),
+  };
 }
 
 function validateType(input: RequestTypeInput): string | null {
@@ -154,26 +272,30 @@ export async function createRequestType(
   const invalid = validateType(input);
   if (invalid) return { ok: false, error: invalid };
 
-  const supabase = await createClient();
-  const { error } = await (supabase as any).from("request_type_definitions").insert({
-    key: input.key,
-    label_en: input.label_en.trim(),
-    label_ar: input.label_ar?.trim() || null,
-    icon_key: input.icon_key?.trim() || null,
-    is_active: input.is_active,
-    sort_order: input.sort_order,
-    screenshot_restricted: input.screenshot_restricted,
-    terminal_status_on_approve: input.terminal_status_on_approve,
-    requires_driver_ack_on_approve: input.requires_driver_ack_on_approve,
-    date_range_required: input.date_range_required,
-    min_attachments: input.min_attachments,
-  });
+  const existing = await findTypeDef(input.key);
+  if (existing.error) return { ok: false, error: existing.error };
+  if (existing.row) return { ok: false, error: "key_exists" };
 
-  if (error) {
-    return {
-      ok: false,
-      error: error.code === "23505" ? "key_exists" : error.message,
-    };
+  const db = await openDb();
+  if (!db) return { ok: false, error: "not_configured" };
+  try {
+    await db.collection(COLLECTIONS.requestTypeDefinitions).doc(input.key).set({
+      id: input.key,
+      key: input.key,
+      label_en: input.label_en.trim(),
+      label_ar: input.label_ar?.trim() || null,
+      icon_key: input.icon_key?.trim() || null,
+      is_active: input.is_active,
+      sort_order: input.sort_order,
+      screenshot_restricted: input.screenshot_restricted,
+      terminal_status_on_approve: input.terminal_status_on_approve,
+      requires_driver_ack_on_approve: input.requires_driver_ack_on_approve,
+      date_range_required: input.date_range_required,
+      min_attachments: input.min_attachments,
+      is_system: false,
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "write_failed" };
   }
 
   await logAdminMutation({
@@ -201,13 +323,20 @@ export async function updateRequestType(
     return { ok: false, error: "invalid_terminal_status" };
   }
 
-  const supabase = await createClient();
-  const { error } = await (supabase as any)
-    .from("request_type_definitions")
-    .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq("key", key);
+  const existing = await findTypeDef(key);
+  if (existing.error) return { ok: false, error: existing.error };
+  if (!existing.row) return { ok: true };
 
-  if (error) return { ok: false, error: error.message };
+  const db = await openDb();
+  if (!db) return { ok: false, error: "not_configured" };
+  try {
+    await db.collection(COLLECTIONS.requestTypeDefinitions).doc(existing.row.id).set(
+      { ...patch, updated_at: new Date() },
+      { merge: true },
+    );
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "write_failed" };
+  }
 
   await logAdminMutation({
     action: "update",
@@ -223,28 +352,22 @@ export async function deleteRequestType(
   key: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsManage();
-  const supabase = await createClient();
 
-  // The FK from `requests` would reject this anyway, but a Postgres FK message is
-  // not something to put in front of an operator.
-  const { count } = await supabase
-    .from("requests")
-    .select("id", { count: "exact", head: true })
-    .eq("request_type", key);
-  if ((count ?? 0) > 0) return { ok: false, error: "type_in_use" };
+  const existing = await findTypeDef(key);
+  if (existing.error) return { ok: false, error: existing.error };
+  if (existing.row?.is_system === true) return { ok: false, error: "system_type_undeletable" };
 
-  const { error } = await (supabase as any)
-    .from("request_type_definitions")
-    .delete()
-    .eq("key", key);
+  const used = await countDocs(COLLECTIONS.requests, [["request_type", key]]);
+  if (used.error) return { ok: false, error: used.error };
+  if (used.count > 0) return { ok: false, error: "type_in_use" };
 
-  if (error) {
-    return {
-      ok: false,
-      error: error.message.includes("system_type_undeletable")
-        ? "system_type_undeletable"
-        : error.message,
-    };
+  if (!existing.row) return { ok: true };
+  const db = await openDb();
+  if (!db) return { ok: false, error: "not_configured" };
+  try {
+    await db.collection(COLLECTIONS.requestTypeDefinitions).doc(existing.row.id).delete();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "write_failed" };
   }
 
   await logAdminMutation({
@@ -283,7 +406,6 @@ export async function saveRequestFieldDefinitions(
     ) {
       return { ok: false, error: "invalid_options_source" };
     }
-    // A choice field with nothing to choose from renders as a dead control.
     if (
       (field.kind === "select" || field.kind === "multiselect") &&
       field.options_source === "static" &&
@@ -293,41 +415,40 @@ export async function saveRequestFieldDefinitions(
     }
   }
 
-  const supabase = await createClient();
+  const typeDef = await findTypeDef(typeKey);
+  if (typeDef.error) return { ok: false, error: typeDef.error };
+  if (typeDef.row?.is_system === true) return { ok: false, error: "system_type_fields_locked" };
 
-  const { error: deleteError } = await (supabase as any)
-    .from("request_field_definitions")
-    .delete()
-    .eq("type_key", typeKey);
-  if (deleteError) {
-    return {
-      ok: false,
-      error: deleteError.message.includes("system_type_fields_locked")
-        ? "system_type_fields_locked"
-        : deleteError.message,
-    };
-  }
+  const removed = await removeWhere(COLLECTIONS.requestFieldDefinitions, [["type_key", typeKey]]);
+  if (removed.error) return { ok: false, error: removed.error };
 
   if (fields.length > 0) {
-    const { error } = await (supabase as any).from("request_field_definitions").insert(
-      fields.map((field, index) => ({
-        type_key: typeKey,
-        field_key: field.field_key,
-        label_en: field.label_en.trim(),
-        label_ar: field.label_ar?.trim() || null,
-        kind: field.kind,
-        target: field.target,
-        is_required: field.is_required,
-        // A server gate on a field the form does not mark required would reject
-        // submissions the rider had no way to satisfy.
-        is_server_required: field.is_required && field.is_server_required,
-        sort_order: index + 1,
-        options_source: field.options_source,
-        options: normalizeOptions(field.options),
-        help_en: field.help_en?.trim() || null,
-      })),
-    );
-    if (error) return { ok: false, error: error.message };
+    const db = await openDb();
+    if (!db) return { ok: false, error: "not_configured" };
+    try {
+      const writer = db.bulkWriter();
+      fields.forEach((field, index) => {
+        const id = crypto.randomUUID();
+        writer.set(db.collection(COLLECTIONS.requestFieldDefinitions).doc(id), {
+          id,
+          type_key: typeKey,
+          field_key: field.field_key,
+          label_en: field.label_en.trim(),
+          label_ar: field.label_ar?.trim() || null,
+          kind: field.kind,
+          target: field.target,
+          is_required: field.is_required,
+          is_server_required: field.is_required && field.is_server_required,
+          sort_order: index + 1,
+          options_source: field.options_source,
+          options: normalizeOptions(field.options),
+          help_en: field.help_en?.trim() || null,
+        });
+      });
+      await writer.close();
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "write_failed" };
+    }
   }
 
   await logAdminMutation({

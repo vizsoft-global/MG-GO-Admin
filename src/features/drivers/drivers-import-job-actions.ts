@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { staffClient, type StaffClient } from "./driver-uniqueness";
 import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import type { Json } from "@/types/database";
@@ -63,10 +63,10 @@ function mapSummary(row: {
 }
 
 async function pauseStaleJobs(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: StaffClient,
 ) {
   const staleBefore = new Date(Date.now() - IMPORT_JOB_STALE_MS).toISOString();
-  await supabase
+  await db
     .from("driver_import_batches")
     .update({ status: "paused" })
     .eq("status", "running")
@@ -78,9 +78,9 @@ export async function listDriverImportJobs(): Promise<
 > {
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
-  const supabase = await createClient();
-  await pauseStaleJobs(supabase);
-  const { data, error } = await supabase
+  const db = await staffClient();
+  await pauseStaleJobs(db);
+  const { data, error } = await db
     .from("driver_import_batches")
     .select(
       "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately",
@@ -97,9 +97,9 @@ export async function getDriverImportJob(
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
   if (!jobId) return { error: "missing_fields" };
-  const supabase = await createClient();
-  await pauseStaleJobs(supabase);
-  const { data, error } = await supabase
+  const db = await staffClient();
+  await pauseStaleJobs(db);
+  const { data, error } = await db
     .from("driver_import_batches")
     .select(
       "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately, events, credentials, failures, remaining_rows",
@@ -129,10 +129,10 @@ export async function startDriverImportJob(payload: {
   const auth = await requireDriversManager("create");
   if (auth.error) return { error: auth.error };
 
-  const supabase = await createClient();
-  await pauseStaleJobs(supabase);
+  const db = await staffClient();
+  await pauseStaleJobs(db);
 
-  const { data: blocking } = await supabase
+  const { data: blocking } = await db
     .from("driver_import_batches")
     .select("id")
     .eq("status", "running")
@@ -142,7 +142,7 @@ export async function startDriverImportJob(payload: {
 
   const ready = payload.rows;
   const now = new Date().toISOString();
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("driver_import_batches")
     .insert({
       file_name: payload.fileName,
@@ -196,8 +196,8 @@ export async function processDriverImportChunk(
   if (auth.error) return { error: auth.error };
   if (!jobId) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data: batch, error: loadError } = await supabase
+  const db = await staffClient();
+  const { data: batch, error: loadError } = await db
     .from("driver_import_batches")
     .select(
       "id, status, remaining_count, ready_count, approve_immediately, duplicate_strategy, applied_count, skipped_count, approved_count, failed_count, events, credentials, failures, file_name",
@@ -224,7 +224,7 @@ export async function processDriverImportChunk(
     batch.approve_immediately,
   );
 
-  const { data: claimed, error: claimError } = await supabase.rpc(
+  const { data: claimed, error: claimError } = await db.rpc(
     "claim_driver_import_chunk",
     { p_id: jobId, p_size: size },
   );
@@ -245,7 +245,7 @@ export async function processDriverImportChunk(
   if (rows.length === 0) {
     const applied = batch.applied_count;
     const nextStatus = applied > 0 ? "applied" : "failed";
-    await supabase
+    await db
       .from("driver_import_batches")
       .update({ status: nextStatus, remaining_count: 0, remaining_rows: [] })
       .eq("id", jobId);
@@ -281,7 +281,7 @@ export async function processDriverImportChunk(
 
   for (const row of rows) {
     const result = await applyOneImportRow(row, {
-      supabase,
+      db,
       duplicateStrategy: batch.duplicate_strategy === "skip" ? "skip" : "update",
       approveImmediately: batch.approve_immediately,
       customFieldDefs,
@@ -303,7 +303,7 @@ export async function processDriverImportChunk(
     (batch.failures as Array<{ rowIndex: number; reason: string }> | null) ?? [];
   const nextEvents = [...priorEvents, ...events].slice(-MAX_EVENTS);
 
-  const { data: afterClaim } = await supabase
+  const { data: afterClaim } = await db
     .from("driver_import_batches")
     .select("remaining_count, status")
     .eq("id", jobId)
@@ -318,7 +318,7 @@ export async function processDriverImportChunk(
       : "failed"
     : undefined;
 
-  await supabase
+  await db
     .from("driver_import_batches")
     .update({
       applied_count: batch.applied_count + applied,
@@ -369,9 +369,9 @@ export async function setDriverImportJobStatus(
     return { error: "save_failed" };
   }
 
-  const supabase = await createClient();
-  await pauseStaleJobs(supabase);
-  const { data: batch, error } = await supabase
+  const db = await staffClient();
+  await pauseStaleJobs(db);
+  const { data: batch, error } = await db
     .from("driver_import_batches")
     .select(
       "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately",
@@ -384,7 +384,7 @@ export async function setDriverImportJobStatus(
   if (!next) return { error: "import_job_locked" };
 
   if (action === "resume") {
-    const { data: blocking } = await supabase
+    const { data: blocking } = await db
       .from("driver_import_batches")
       .select("id")
       .eq("status", "running")
@@ -394,7 +394,7 @@ export async function setDriverImportJobStatus(
     if (blocking) return { error: "import_already_running" };
   }
 
-  const { data: updated, error: updError } = await supabase
+  const { data: updated, error: updError } = await db
     .from("driver_import_batches")
     .update({
       status: next,

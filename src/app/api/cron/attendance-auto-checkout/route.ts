@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { callCronFunction } from "@/lib/firebase/callable";
 
 export async function GET(request: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET?.trim();
@@ -17,10 +17,9 @@ export async function GET(request: Request): Promise<Response> {
     "attendance-auto-checkout",
     async () => {
       try {
-        const supabase = createAdminClient();
-        const { data, error } = await supabase.rpc("admin_run_attendance_auto_checkout");
+        const { data, error } = await callCronFunction("admin_run_attendance_auto_checkout");
         if (error) throw error;
-        const freeze = await supabase.rpc("admin_run_freeze_start_checkout");
+        const freeze = await callCronFunction("admin_run_freeze_start_checkout");
         return NextResponse.json({
           ok: true,
           checkedOut: data ?? 0,

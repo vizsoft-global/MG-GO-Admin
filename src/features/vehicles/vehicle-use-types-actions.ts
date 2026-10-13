@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { logAdminActivity } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import {
   USE_TYPE_KEY_RE,
   type VehicleUseType,
@@ -27,6 +30,47 @@ const KNOWN = new Set<string>([
   "vehicle_use_type_system_locked",
 ]);
 
+type Row = Record<string, unknown> & { id: string };
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function mapUseType(row: Row): VehicleUseType {
+  return {
+    key: str(row.key) || row.id,
+    label_en: str(row.label_en),
+    label_ar: str(row.label_ar),
+    is_active: row.is_active !== false,
+    is_system: row.is_system === true,
+    sort_order: Number(row.sort_order ?? 0),
+  };
+}
+
 async function requireSlug(slug: Permission) {
   const session = await getSessionUser();
   if (!session || !hasPermissionInSet(session.permissions, slug, session.isSuperAdmin)) {
@@ -34,30 +78,31 @@ async function requireSlug(slug: Permission) {
   }
 }
 
+async function requireStaff() {
+  const session = await getSessionUser();
+  if (!session) throw new Error("not_authorized");
+}
+
 export async function listVehicleUseTypes(): Promise<VehicleUseType[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vehicle_use_types")
-    .select("key, label_en, label_ar, is_active, is_system, sort_order")
-    .order("sort_order", { ascending: true })
-    .order("key", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as VehicleUseType[];
+  await requireStaff();
+  const db = await openDb();
+  const snap = await db.collection(COLLECTIONS.vehicleUseTypes).get();
+  return snap.docs
+    .map((doc) => mapUseType(asRow(doc.id, doc.data())))
+    .sort((a, b) => a.sort_order - b.sort_order || a.key.localeCompare(b.key));
 }
 
 export async function listVehicleUseTypesWithUsage(): Promise<VehicleUseTypeWithUsage[]> {
-  // OperationsHub owns this list and gates it on `vehicles.manage`; `settings.*`
-  // would hand an operations user a card that opens a permission error.
   await requireSlug("vehicles.manage");
-  const supabase = await createClient();
-  const [types, { data: vehicles, error }] = await Promise.all([
+  const db = await openDb();
+  const [types, vehiclesSnap] = await Promise.all([
     listVehicleUseTypes(),
-    supabase.from("vehicles").select("type_of_use"),
+    db.collection(COLLECTIONS.vehicles).select("type_of_use").get(),
   ]);
-  if (error) throw new Error(error.message);
   const counts = new Map<string, number>();
-  for (const row of vehicles ?? []) {
-    if (row.type_of_use) counts.set(row.type_of_use, (counts.get(row.type_of_use) ?? 0) + 1);
+  for (const doc of vehiclesSnap.docs) {
+    const typeOfUse = str(doc.data().type_of_use);
+    if (typeOfUse) counts.set(typeOfUse, (counts.get(typeOfUse) ?? 0) + 1);
   }
   return types.map((item) => ({ ...item, vehicle_count: counts.get(item.key) ?? 0 }));
 }
@@ -80,15 +125,35 @@ export async function upsertVehicleUseType(input: {
   if (!USE_TYPE_KEY_RE.test(key)) return { error: "invalid_use_type_key" };
   if (!labelEn || labelEn.length > 80) return { error: "invalid_use_type_label" };
 
-  const supabase = await createClient();
-  const { data: before } = await supabase
-    .from("vehicle_use_types")
-    .select("key, label_en, label_ar, is_active")
-    .eq("key", key)
-    .maybeSingle();
+  const db = await openDb();
+  const beforeSnap = await db.collection(COLLECTIONS.vehicleUseTypes).doc(key).get();
+  let before = beforeSnap.exists
+    ? {
+        key,
+        label_en: str(beforeSnap.data()?.label_en),
+        label_ar: str(beforeSnap.data()?.label_ar),
+        is_active: beforeSnap.data()?.is_active !== false,
+      }
+    : null;
+  if (!before) {
+    const byField = await db
+      .collection(COLLECTIONS.vehicleUseTypes)
+      .where("key", "==", key)
+      .limit(1)
+      .get();
+    const data = byField.docs[0]?.data();
+    if (data) {
+      before = {
+        key,
+        label_en: str(data.label_en),
+        label_ar: str(data.label_ar),
+        is_active: data.is_active !== false,
+      };
+    }
+  }
   if (input.isNew && before) return { error: "invalid_use_type_key" };
 
-  const { error } = await supabase.rpc("admin_upsert_vehicle_use_type", {
+  const { error } = await callAdminFunction("admin_upsert_vehicle_use_type", {
     p_key: key,
     p_label_en: labelEn,
     p_label_ar: labelAr,

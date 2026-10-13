@@ -1,4 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import type { AdminRoleDoc, PermissionArrayDoc } from "@/lib/firebase/types";
 
 export type AdminRoleRow = {
   id: string;
@@ -11,39 +13,43 @@ export type AdminRoleRow = {
 
 async function fetchAllRoles(): Promise<AdminRoleRow[]> {
   try {
-    const supabase = await createClient();
-    const { data: roles, error } = await supabase
-      .from("admin_roles")
-      .select("id, slug, name, is_system, is_super_admin")
-      .order("name");
+    const db = await getFirebaseFirestore();
+    if (!db) return [];
 
-    if (error || !roles) return [];
+    const rolesSnap = await db.collection(COLLECTIONS.adminRoles).orderBy("name").get();
+    if (rolesSnap.empty) return [];
 
-    const { data: perms } = await supabase
-      .from("admin_role_permissions")
-      .select("role_id, permission_slug");
+    // One array doc per role, so this is one read per role rather than one read
+    // per (role, slug) pair.
+    const permSnaps = await Promise.all(
+      rolesSnap.docs.map((doc) =>
+        db.collection(COLLECTIONS.adminRolePermissions).doc(doc.id).get(),
+      ),
+    );
 
     const byRole = new Map<string, string[]>();
-    for (const row of perms ?? []) {
-      const list = byRole.get(row.role_id) ?? [];
-      list.push(row.permission_slug);
-      byRole.set(row.role_id, list);
-    }
+    permSnaps.forEach((snap, index) => {
+      const slugs = (snap.data() as PermissionArrayDoc | undefined)?.permission_slugs ?? [];
+      byRole.set(rolesSnap.docs[index].id, slugs);
+    });
 
-    return roles.map((r) => ({
-      id: r.id,
-      slug: r.slug,
-      name: r.name,
-      isSystem: r.is_system,
-      isSuperAdmin: r.is_super_admin,
-      permissions: byRole.get(r.id) ?? [],
-    }));
+    return rolesSnap.docs.map((doc) => {
+      const role = { id: doc.id, ...(doc.data() ?? {}) } as AdminRoleDoc;
+      return {
+        id: doc.id,
+        slug: role.slug,
+        name: role.name,
+        isSystem: role.is_system,
+        isSuperAdmin: role.is_super_admin,
+        permissions: byRole.get(doc.id) ?? [],
+      };
+    });
   } catch {
     return [];
   }
 }
 
-/** Loaded per request with the caller's session (not globally cached — RLS needs auth). */
+/** Loaded per request with the caller's session (not globally cached — rules need auth). */
 export async function getAllAdminRoles(): Promise<AdminRoleRow[]> {
   return fetchAllRoles();
 }

@@ -1,9 +1,11 @@
 "use server";
 
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import { isDriverProjectKey } from "@/features/fleet/fleet-labels";
 import { fetchAssetsCatalog } from "./assets-actions";
 import {
@@ -41,6 +43,58 @@ function isAssignmentKind(value: string): value is AssetAssignmentAttachmentKind
   return (ASSET_ASSIGNMENT_ATTACHMENT_KINDS as readonly string[]).includes(value);
 }
 
+type Row = Record<string, unknown> & { id: string };
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+async function rowsByIds(db: Firestore, collection: string, ids: string[]): Promise<Row[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const rows: Row[] = [];
+  for (let i = 0; i < unique.length; i += 100) {
+    const refs = unique.slice(i, i + 100).map((id) => db.collection(collection).doc(id));
+    if (refs.length === 0) continue;
+    const snaps = await db.getAll(...refs);
+    for (const snap of snaps) {
+      if (snap.exists) rows.push(asRow(snap.id, snap.data()));
+    }
+  }
+  return rows;
+}
+
+async function whereIn(db: Firestore, collection: string, field: string, ids: string[]): Promise<Row[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const rows: Row[] = [];
+  for (let i = 0; i < unique.length; i += 30) {
+    const chunk = unique.slice(i, i + 30);
+    if (chunk.length === 0) continue;
+    const snap = await db.collection(collection).where(field, "in", chunk).get();
+    rows.push(...snap.docs.map((doc) => asRow(doc.id, doc.data())));
+  }
+  return rows;
+}
+
 async function requireAssetsView() {
   const session = await getSessionUser();
   if (!session || !hasPermissionInSet(session.permissions, "assets.view", session.isSuperAdmin)) {
@@ -69,82 +123,103 @@ export async function listFleetAssetAssignments(): Promise<{
   await requireAssetsView();
   void logAdminRead("assets", "listFleetAssetAssignments");
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("asset_assignments")
-    .select(
-      "id, asset_code, catalog_item_id, quantity, status, driver_id, intake_id, received_at_place, received_by_name, assigned_at, returned_at, returned_by_name, return_reason, asset_catalog(name, code)",
-    )
-    .order("assigned_at", { ascending: false })
-    .limit(500);
-  if (error) return { rows: [], error: error.message };
+  let db: Firestore;
+  try {
+    db = await openDb();
+  } catch (error) {
+    return { rows: [], error: error instanceof Error ? error.message : "not_configured" };
+  }
 
-  const rows = (data ?? []).map((row) => asRecord(row));
+  let assignmentRows: Row[];
+  try {
+    const snap = await db
+      .collection(COLLECTIONS.assetAssignments)
+      .orderBy("assigned_at", "desc")
+      .limit(500)
+      .get();
+    assignmentRows = snap.docs.map((doc) => asRow(doc.id, doc.data()));
+  } catch (error) {
+    return { rows: [], error: error instanceof Error ? error.message : "save_failed" };
+  }
+
+  const catalog = await rowsByIds(
+    db,
+    COLLECTIONS.assetCatalog,
+    assignmentRows.map((row) => asId(row.catalog_item_id)).filter((id): id is string => Boolean(id)),
+  );
+  const catalogById = new Map(catalog.map((row) => [row.id, row]));
+  const rows: Array<Row & { asset_catalog: { name: unknown; code: unknown } | null }> = assignmentRows.map(
+    (row) => {
+      const item = catalogById.get(asId(row.catalog_item_id) ?? "");
+      return {
+        ...row,
+        asset_catalog: item ? { name: item.name, code: item.code } : null,
+      };
+    },
+  );
   const driverIds = [...new Set(rows.map((row) => asId(row.driver_id)).filter(Boolean))] as string[];
   const assignmentIds = rows.map((row) => asId(row.id)).filter(Boolean) as string[];
 
-  const [driversResult, attachmentsResult] = await Promise.all([
-    driverIds.length === 0
-      ? Promise.resolve({ data: [] as Record<string, unknown>[], error: null })
-      : supabase
-          .from("drivers")
-          .select(
-            "id, employee_id, project_key, partner_id, vehicle_id, zone_id, zones(name), profiles!drivers_id_fkey(full_name, phone)",
-          )
-          .in("id", driverIds),
-    assignmentIds.length === 0
-      ? Promise.resolve({ data: [] as Record<string, unknown>[], error: null })
-      : supabase
-          .from("asset_assignment_attachments")
-          .select("id, assignment_id, kind, title, file_name, storage_key, captured_at, source")
-          .in("assignment_id", assignmentIds),
-  ]);
-  if (driversResult.error) return { rows: [], error: driversResult.error.message };
-  if (attachmentsResult.error) return { rows: [], error: attachmentsResult.error.message };
+  let drivers: Row[];
+  let attachments: Row[];
+  try {
+    [drivers, attachments] = await Promise.all([
+      rowsByIds(db, COLLECTIONS.drivers, driverIds),
+      whereIn(db, "asset_assignment_attachments", "assignment_id", assignmentIds),
+    ]);
+  } catch (error) {
+    return { rows: [], error: error instanceof Error ? error.message : "save_failed" };
+  }
+
+  const profiles = await rowsByIds(db, COLLECTIONS.profiles, driverIds);
+  const profileById = new Map(profiles.map((row) => [row.id, row]));
+  const zoneIds = drivers.map((row) => asId(row.zone_id)).filter((id): id is string => Boolean(id));
+  const zoneRows = await rowsByIds(db, COLLECTIONS.zones, zoneIds);
+  const zoneById = new Map(zoneRows.map((row) => [row.id, row]));
 
   const driverById = new Map<string, Record<string, unknown>>();
   const vehicleIds = new Set<string>();
   const partnerIds = new Set<string>();
-  for (const raw of driversResult.data ?? []) {
-    const row = asRecord(raw);
-    const id = asId(row.id);
-    if (!id) continue;
-    driverById.set(id, row);
+  for (const row of drivers) {
+    const zone = zoneById.get(asId(row.zone_id) ?? "");
+    const profile = profileById.get(row.id);
+    driverById.set(row.id, {
+      ...row,
+      profiles: { full_name: profile?.full_name ?? null, phone: profile?.phone ?? null },
+      zones: zone ? { name: zone.name } : null,
+    });
     const vehicleId = asId(row.vehicle_id);
     if (vehicleId) vehicleIds.add(vehicleId);
     const partnerId = asId(row.partner_id);
     if (partnerId) partnerIds.add(partnerId);
   }
 
-  const vehiclesResult =
-    vehicleIds.size === 0
-      ? { data: [] as Record<string, unknown>[], error: null }
-      : await supabase
-          .from("vehicles")
-          .select("id, reg_number, model, make, owner_partner_id")
-          .in("id", [...vehicleIds]);
-  if (vehiclesResult.error) return { rows: [], error: vehiclesResult.error.message };
+  let vehicleRows: Row[];
+  try {
+    vehicleRows = await rowsByIds(db, COLLECTIONS.vehicles, [...vehicleIds]);
+  } catch (error) {
+    return { rows: [], error: error instanceof Error ? error.message : "save_failed" };
+  }
 
   const vehicleById = new Map<string, Record<string, unknown>>();
-  for (const raw of vehiclesResult.data ?? []) {
-    const row = asRecord(raw);
-    const id = asId(row.id);
-    if (id) vehicleById.set(id, row);
+  for (const row of vehicleRows) {
+    vehicleById.set(row.id, row);
     const ownerId = asId(row.owner_partner_id);
     if (ownerId) partnerIds.add(ownerId);
   }
 
-  const partnersResult =
-    partnerIds.size === 0
-      ? { data: [] as Array<{ id: string; name: string }>, error: null }
-      : await supabase.from("partners").select("id, name").in("id", [...partnerIds]);
-  if (partnersResult.error) return { rows: [], error: partnersResult.error.message };
+  let partnerRows: Row[];
+  try {
+    partnerRows = await rowsByIds(db, COLLECTIONS.partners, [...partnerIds]);
+  } catch (error) {
+    return { rows: [], error: error instanceof Error ? error.message : "save_failed" };
+  }
   const partnerNameById = new Map(
-    ((partnersResult.data ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]),
+    partnerRows.map((row) => [row.id, typeof row.name === "string" ? row.name : ""]),
   );
 
   const attachmentsByAssignment = new Map<string, FleetAssetAssignmentAttachment[]>();
-  for (const raw of attachmentsResult.data ?? []) {
+  for (const raw of attachments) {
     const row = asRecord(raw);
     const assignmentId = asId(row.assignment_id);
     const kind = typeof row.kind === "string" && isAssignmentKind(row.kind) ? row.kind : null;

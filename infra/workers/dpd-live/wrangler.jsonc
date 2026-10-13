@@ -28,7 +28,9 @@
     "POSITION_FRAME_HZ": "4",
     "POSTGRES_FLUSH_MS": "10000",
     "BROADCAST_MIRROR_MS": "1000",
-    "TICK_MS": "2000"
+    "TICK_MS": "2000",
+    "FIREBASE_PROJECT_ID": "musallam-delivery-prod",
+    "FIREBASE_FUNCTIONS_BASE_URL": "https://me-central1-musallam-delivery-prod.cloudfunctions.net"
   },
   "env": {
     "testing": {
@@ -46,7 +48,9 @@
         "POSITION_FRAME_HZ": "4",
         "POSTGRES_FLUSH_MS": "10000",
         "BROADCAST_MIRROR_MS": "1000",
-        "TICK_MS": "2000"
+        "TICK_MS": "2000",
+        "FIREBASE_PROJECT_ID": "musallam-delivery-prod",
+        "FIREBASE_FUNCTIONS_BASE_URL": "https://me-central1-musallam-delivery-prod.cloudfunctions.net"
       }
     }
   }

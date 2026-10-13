@@ -2,18 +2,26 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { FileClock, Loader2 } from "lucide-react";
+import { Building2, ChevronLeft, FileClock, FileText, Loader2, PencilLine } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
-import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
-import { Link, useRouter } from "@/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { driverSearchOptions } from "@/lib/search-options";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { EsignDocumentPreview } from "@/features/employeedesk/esign/document-preview";
 import { isEsignDueDateAllowed } from "./esign-due-date";
 import { addEsignSigner } from "./esign-signer-actions";
 import { EsignSignersEditor, type EsignDraftStaffSigner } from "./esign-signers-editor";
@@ -25,8 +33,104 @@ import {
   useEsignTemplate,
   useEsignTemplates,
 } from "./use-esign";
-import type { EsignEmployeeSnapshot } from "./render/esign-placeholders";
-import type { EsignLocale } from "./types";
+import { maskBankNumber } from "./render/esign-document-layout";
+import {
+  snapshotValues,
+  type EsignEmployeeSnapshot,
+} from "./render/esign-placeholders";
+import type { EsignTemplateFieldRow } from "./types";
+
+const SNAPSHOT_FIELD_KEYS = new Set([
+  "company_name",
+  "employee_name",
+  "employee_id",
+  "civil_id",
+  "position",
+  "sponsor",
+  "pay_through",
+  "bank_number",
+]);
+
+function shown(value: string | null | undefined): string {
+  const trimmed = value?.trim() ?? "";
+  return trimmed || "—";
+}
+
+function isSheetInput(field: EsignTemplateFieldRow): boolean {
+  if (SNAPSHOT_FIELD_KEYS.has(field.field_key)) return false;
+  switch (field.source_kind) {
+    case "system":
+    case "signature":
+      return false;
+    case "entry":
+    case "fixed":
+      return true;
+    default: {
+      const exhaustive: never = field.source_kind;
+      return exhaustive;
+    }
+  }
+}
+
+const PAYSLIP_PERIOD_ORDER = [
+  "slip_month",
+  "period_from",
+  "period_to",
+  "computed_on",
+  "fixed_working_days",
+  "actual_working_days",
+] as const;
+
+const PAYSLIP_MONEY_CODES: Record<string, string> = {
+  basic_salary_kwd: "BASIC",
+  net_salary_kwd: "NET",
+  extra_input_kwd: "All",
+  deduction_amount_kwd: "Ded",
+};
+
+const PAYSLIP_KD_KEYS = new Set([
+  "admin_deduction",
+  "extra_input",
+  "basic_salary",
+  "net_salary",
+  "basic_salary_kwd",
+  "net_salary_kwd",
+  "extra_input_kwd",
+  "deduction_amount_kwd",
+]);
+
+function partitionPayslipFields(fields: EsignTemplateFieldRow[]) {
+  const periodKeys = new Set<string>(PAYSLIP_PERIOD_ORDER);
+  const moneyKeys = new Set(Object.keys(PAYSLIP_MONEY_CODES));
+  const byKey = new Map(fields.map((field) => [field.field_key, field]));
+  const period: EsignTemplateFieldRow[] = [];
+  for (const key of PAYSLIP_PERIOD_ORDER) {
+    const field = byKey.get(key);
+    if (field) period.push(field);
+  }
+  const money: EsignTemplateFieldRow[] = [];
+  const rest: EsignTemplateFieldRow[] = [];
+  for (const field of fields) {
+    if (periodKeys.has(field.field_key)) continue;
+    if (moneyKeys.has(field.field_key)) money.push(field);
+    else rest.push(field);
+  }
+  return { period, money, rest };
+}
+
+function previewFieldValues(
+  fields: EsignTemplateFieldRow[],
+  values: Record<string, string>,
+  snapshot: EsignEmployeeSnapshot | null,
+) {
+  const next = snapshot ? snapshotValues(snapshot) : {};
+  for (const field of fields) {
+    const typed = values[field.field_key]?.trim();
+    if (typed) next[field.field_key] = typed;
+    else if (field.preview_value?.trim()) next[field.field_key] = field.preview_value;
+  }
+  return next;
+}
 
 export function EsignSendShell({
   /**
@@ -58,7 +162,11 @@ export function EsignSendShell({
 }) {
   const t = useTranslations("pages.requests.esign.send");
   const tHub = useTranslations("pages.requests.esign.hub");
+  const tRcm = useTranslations("pages.rcmV2");
+  const tBuilder = useTranslations("pages.employeedesk.esign.templateBuilder");
   const router = useRouter();
+  const pathname = usePathname();
+  const isV2 = pathname.includes("/employeedesk");
   const { data: templatesData } = useEsignTemplates();
   const { data: driversData } = useEsignDriverOptions();
   const create = useCreateEsignFromTemplate();
@@ -83,10 +191,11 @@ export function EsignSendShell({
   const [driverId, setDriverId] = useState<string | null>(initialDriverId ?? null);
   const [snapshot, setSnapshot] = useState<EsignEmployeeSnapshot | null>(null);
   const [title, setTitle] = useState("");
-  const [locale, setLocale] = useState<EsignLocale>("en");
   const [dueAt, setDueAt] = useState("");
   const [description, setDescription] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
+  const [sentResult, setSentResult] = useState<{ id: string; code: string } | null>(null);
+  const [fullOpen, setFullOpen] = useState(false);
 
   /**
    * The draft this composer is editing, if any. Held as state rather than read
@@ -104,6 +213,37 @@ export function EsignSendShell({
    * protect. Same reason the template default effect below defers to it.
    */
   const draftAppliedRef = useRef(false);
+
+  const isPayslip = template?.document_kind === "payslip";
+  const payslipGroups = useMemo(
+    () => (template ? partitionPayslipFields(template.fields) : null),
+    [template],
+  );
+  const previewValues = useMemo(
+    () => (template ? previewFieldValues(template.fields, values, snapshot) : {}),
+    [template, values, snapshot],
+  );
+  const sheetFields = useMemo(() => {
+    if (!template) return [];
+    const ordered = payslipGroups
+      ? [...payslipGroups.period, ...payslipGroups.money, ...payslipGroups.rest]
+      : template.fields;
+    return ordered.filter(isSheetInput);
+  }, [payslipGroups, template]);
+
+  const hubHref = isV2 ? "/employeedesk" : "/requests/esign";
+  const templatesHref = isV2 ? "/employeedesk/esign/templates" : "/requests/esign/templates";
+  const bulkHref = templateId
+    ? `${isV2 ? "/employeedesk/esign/bulk" : "/requests/esign/bulk"}?template=${templateId}`
+    : isV2
+      ? "/employeedesk/esign/bulk"
+      : "/requests/esign/bulk";
+  const editHref = templateId
+    ? isV2
+      ? `/employeedesk/esign/templates/${templateId}/edit`
+      : `/requests/esign/templates/${templateId}`
+    : templatesHref;
+  const draftsHref = isV2 ? "/requests/esign/drafts" : "/requests/esign/drafts";
 
   const driverItems = useMemo(
     () =>
@@ -133,7 +273,6 @@ export function EsignSendShell({
     if (!draft || draftAppliedRef.current) return;
     draftAppliedRef.current = true;
     if (draft.template_id) setTemplateId(draft.template_id);
-    setLocale(draft.language);
     if (draft.title) setTitle(draft.title);
     if (draft.due_at) setDueAt(draft.due_at.slice(0, 10));
     if (draft.description) setDescription(draft.description);
@@ -148,8 +287,10 @@ export function EsignSendShell({
     // what the operator last saw, and re-seeding them from the template would
     // quietly replace that with the template's own defaults.
     if (draftAppliedRef.current) return;
-    setTitle((prev) => prev || template.name_en);
-    setLocale(template.default_language);
+    setTitle((prev) => {
+      if (isV2) return template.name_en;
+      return prev || template.name_en;
+    });
     setValues((prev) => {
       const next = { ...prev };
       for (const field of template.fields) {
@@ -157,7 +298,7 @@ export function EsignSendShell({
       }
       return next;
     });
-  }, [template]);
+  }, [isV2, template]);
 
   useEffect(() => {
     if (!driverId) {
@@ -182,7 +323,7 @@ export function EsignSendShell({
       driver_id: driverId,
       template_id: templateId,
       title: title.trim(),
-      locale,
+      locale: "en",
       due_at: dueAt || null,
       description: description.trim() || null,
       field_values: values,
@@ -203,12 +344,16 @@ export function EsignSendShell({
         if (!added.ok) toast.error(added.error ?? t("errors.createFailed"));
       }
     }
-    toast.success(t("created", { code: result.request_code ?? "" }));
     if (draftId) {
       const consumed = await deleteEsignDraft(draftId);
       if (!consumed.ok) toast.error(consumed.error ?? t("errors.draftFailed"));
     }
-    if (result.id) router.push(`/requests/esign/${result.id}`);
+    if (result.id) {
+      toast.success(t("sentToast", { count: 1 }));
+      setSentResult({ id: result.id, code: result.request_code ?? "" });
+      return;
+    }
+    router.push(isV2 ? "/employeedesk" : "/requests/esign");
   }
 
   /**
@@ -232,7 +377,7 @@ export function EsignSendShell({
       kind: "single",
       template_id: templateId,
       template_version: template?.version ?? null,
-      language: locale,
+      language: "en",
       title: title.trim() || template?.name_en || null,
       due_at: dueAt || null,
       description: description.trim() || null,
@@ -255,172 +400,363 @@ export function EsignSendShell({
     toast.success(t("draftSaved"));
   }
 
-  return (
-    <AppPage>
-      <AppPageHeader
-        title={t("title")}
-        description={t("subtitle")}
-        breadcrumbs={[
-          { label: tHub("requests"), href: "/requests" },
-          { label: tHub("title"), href: "/requests/esign" },
-          { label: t("title") },
-        ]}
-        actions={
-          <Button variant="outline" size="sm" className="h-9" render={<Link href="/requests/esign" />}>
-            {t("back")}
-          </Button>
-        }
-      />
+  function renderField(field: EsignTemplateFieldRow, code?: string) {
+    return (
+      <div key={field.id} className="space-y-1">
+        <Label className="flex items-center gap-1.5">
+          <span>
+            {field.label_en}
+            {isPayslip && PAYSLIP_KD_KEYS.has(field.field_key) && !field.label_en.includes("(KD)")
+              ? " (KD)"
+              : ""}
+            {field.is_required ? <span className="text-destructive"> *</span> : null}
+          </span>
+          {code ? (
+            <span className="rounded border border-border bg-muted/50 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {code}
+            </span>
+          ) : null}
+        </Label>
+        {field.field_type === "textarea" ? (
+          <Textarea
+            className="min-h-16"
+            value={values[field.field_key] ?? ""}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, [field.field_key]: e.target.value }))
+            }
+          />
+        ) : (
+          <Input
+            className="h-9"
+            type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"}
+            value={values[field.field_key] ?? ""}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, [field.field_key]: e.target.value }))
+            }
+          />
+        )}
+      </div>
+    );
+  }
 
-      <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
-        <AppListCard className="h-full space-y-3 p-4">
-          <div className="space-y-1">
-            <Label>
-              {t("fieldTemplate")} <span className="text-destructive">*</span>
-            </Label>
-            <SearchSelect
-              items={templateItems}
-              value={templateId}
-              onChange={setTemplateId}
-              placeholder={t("fieldTemplatePlaceholder")}
-              searchPlaceholder={t("fieldTemplateSearch")}
-              recentsKey="esign-send-template"
-              className="w-full"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>
-              {t("fieldDriver")} <span className="text-destructive">*</span>
-            </Label>
-            <SearchSelect
-              items={driverItems}
-              value={driverId}
-              onChange={setDriverId}
-              placeholder={t("fieldDriverPlaceholder")}
-              searchPlaceholder={t("fieldDriverSearch")}
-              recentsKey="esign-send-driver"
-              className="w-full"
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-xs">
-            <div className="rounded-md border border-border bg-muted/30 px-2 py-1.5">
-              <div className="text-[10px] text-muted-foreground">{t("company")}</div>
-              {snapshot?.company_name || "—"}
-            </div>
-            <div className="rounded-md border border-border bg-muted/30 px-2 py-1.5">
-              <div className="text-[10px] text-muted-foreground">{t("employeeName")}</div>
-              {snapshot?.employee_name || "—"}
-            </div>
-            <div className="rounded-md border border-border bg-muted/30 px-2 py-1.5">
-              <div className="text-[10px] text-muted-foreground">{t("employeeId")}</div>
-              {snapshot?.employee_id || "—"}
-            </div>
+  const breadcrumbs = isV2
+    ? [
+        { label: tRcm("outgoing"), href: "/employeedesk" },
+        { label: t("title") },
+      ]
+    : [
+        { label: tHub("requests"), href: "/requests" },
+        { label: tHub("title"), href: "/requests/esign" },
+        { label: t("title") },
+      ];
+
+  if (sentResult) {
+    const sentDate = kuwaitTodayYmd();
+    const batchHref = isV2 ? "/employeedesk/esign/batches" : "/requests/esign/batches";
+    const requestHref = `/requests/esign/${sentResult.id}`;
+    return (
+      <AppPage>
+        <AppPageHeader
+          title={title || template?.name_en || t("title")}
+          description={
+            <span>
+              {tRcm("batchEmployees", { count: 1, date: sentDate })}
+              {template?.name_en ? ` · ${template.name_en}` : ""}
+              {sentResult.code ? ` · ${sentResult.code}` : ""}
+            </span>
+          }
+          breadcrumbs={breadcrumbs}
+          actions={
+            <span className="inline-flex items-center rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              {tRcm("youSend")}
+            </span>
+          }
+        />
+        <AppListCard className="space-y-3 p-4">
+          <p className="text-sm font-semibold">{t("successBody", { count: 1 })}</p>
+          <p className="text-xs text-muted-foreground">{t("successFooter")}</p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button className="h-9" render={<Link href={requestHref} />}>
+              {tRcm("sentForSignature")}
+            </Button>
+            <Button variant="outline" className="h-9" render={<Link href={batchHref} />}>
+              {tRcm("batches")}
+            </Button>
+            <Button variant="outline" className="h-9" render={<Link href={hubHref} />}>
+              {t("back")}
+            </Button>
           </div>
         </AppListCard>
+      </AppPage>
+    );
+  }
 
-        <AppListCard className="h-full space-y-3 p-4">
-          <div className="space-y-1">
-            <Label>
-              {t("fieldTitle")} <span className="text-destructive">*</span>
-            </Label>
-            <Input className="h-9" value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label>{t("fieldLocale")}</Label>
-              <div className="flex gap-1">
-                <ToggleChip selected={locale === "en"} onClick={() => setLocale("en")}>
-                  EN
-                </ToggleChip>
-                <ToggleChip selected={locale === "ar"} onClick={() => setLocale("ar")}>
-                  AR
-                </ToggleChip>
+  const preview = template ? (
+    <EsignDocumentPreview
+      templateName={title || template.name_en}
+      nameAr={template.name_ar}
+      company={snapshot?.company_name || tBuilder("previewCompany")}
+      body={template.body_en}
+      bodyAr={template.body_ar}
+      declaration={template.declaration_en}
+      declarationAr={template.declaration_ar}
+      fields={template.fields}
+      values={previewValues}
+      documentKind={template.document_kind}
+      signers={{
+        employeeLabel: tBuilder("previewEmployeeSignature"),
+        staffLabel: tBuilder("previewStaffSignature"),
+      }}
+    />
+  ) : null;
+
+  return (
+    <AppPage>
+      {isV2 ? (
+        <div className="space-y-2">
+          <Link
+            href={hubHref}
+            className="inline-flex h-9 items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+            {t("backToOutgoing")}
+          </Link>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-2">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-[#FEC84B] bg-[#FFFAEB] text-[#B54708]">
+                <FileText className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <h1 className="text-base font-semibold">{t("createTitle")}</h1>
+                <p className="text-xs text-muted-foreground">{t("createSubtitle")}</p>
               </div>
             </div>
+            <span className="shrink-0 rounded-md bg-[#FFFAEB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B54708]">
+              {tRcm("youSend")}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <AppPageHeader
+          title={title.trim() || t("title")}
+          description={t("subtitle")}
+          breadcrumbs={breadcrumbs}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              {templateId ? (
+                <Button variant="outline" className="h-9" render={<Link href={editHref} />}>
+                  <PencilLine className="size-4" />
+                  {tBuilder("editTemplate")}
+                </Button>
+              ) : null}
+              <Button variant="outline" className="h-9" render={<Link href={hubHref} />}>
+                {t("back")}
+              </Button>
+            </div>
+          }
+        />
+      )}
+
+      <div className="grid gap-2 lg:grid-cols-2 lg:items-start">
+        <AppListCard className="space-y-3 p-4">
+          <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label>{t("fieldDue")}</Label>
-              <Input
-                type="date"
-                className="h-9"
-                min={kuwaitTodayYmd()}
-                value={dueAt}
-                onChange={(e) => setDueAt(e.target.value)}
+              <Label>
+                {t("fieldTemplate")}
+                {isV2 ? null : <span className="text-destructive"> *</span>}
+              </Label>
+              <SearchSelect
+                items={templateItems}
+                value={templateId}
+                onChange={setTemplateId}
+                placeholder={t("fieldTemplatePlaceholder")}
+                searchPlaceholder={t("fieldTemplateSearch")}
+                recentsKey="esign-send-template"
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>
+                {t("fieldEmployeeId")}
+                {isV2 ? null : <span className="text-destructive"> *</span>}
+              </Label>
+              <SearchSelect
+                items={driverItems}
+                value={driverId}
+                onChange={setDriverId}
+                placeholder={t("fieldDriverPlaceholder")}
+                searchPlaceholder={t("fieldDriverSearch")}
+                recentsKey="esign-send-driver"
+                className="w-full"
               />
             </div>
           </div>
-          <div className="space-y-1">
-            <Label>{t("fieldDescription")}</Label>
-            <Textarea className="min-h-16" value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
-        </AppListCard>
-      </div>
 
-      {template && template.fields.length > 0 ? (
-        <AppListCard className="space-y-3 p-4">
-          <p className="text-xs font-semibold">{t("categoryFields")}</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {template.fields.map((field) => (
-              <div key={field.id} className="space-y-1">
-                <Label>
-                  {field.label_en}
-                  {field.is_required ? <span className="text-destructive"> *</span> : null}
-                </Label>
-                {field.field_type === "textarea" ? (
-                  <Textarea
-                    className="min-h-16"
-                    value={values[field.field_key] ?? ""}
-                    onChange={(e) =>
-                      setValues((prev) => ({ ...prev, [field.field_key]: e.target.value }))
-                    }
-                  />
-                ) : (
+          <div className="space-y-3 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-3">
+            <p className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#1D4ED8]">
+              {isV2 ? <Building2 className="size-3" aria-hidden /> : null}
+              {t("fromTheSystem")}
+            </p>
+            <div className="grid grid-cols-3 gap-x-3 gap-y-2">
+              <SystemFact label={t("company")} value={shown(snapshot?.company_name)} />
+              <SystemFact label={t("employeeName")} value={shown(snapshot?.employee_name)} />
+              <SystemFact label={t("fieldPosition")} value={shown(snapshot?.position)} />
+              <SystemFact label={t("fieldCivilId")} value={shown(snapshot?.civil_id)} />
+              <SystemFact label={t("fieldSponsor")} value={shown(snapshot?.sponsor)} />
+              <SystemFact label={t("fieldPayThrough")} value={shown(snapshot?.pay_through)} />
+              <SystemFact
+                label={t("fieldBank")}
+                value={maskBankNumber(snapshot?.bank_number)}
+              />
+              {isV2 ? null : (
+                <SystemFact label={t("employeeId")} value={shown(snapshot?.employee_id)} />
+              )}
+            </div>
+          </div>
+
+          {isV2 ? null : (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label>
+                    {t("fieldTitle")} <span className="text-destructive">*</span>
+                  </Label>
+                  <Input className="h-9" value={title} onChange={(e) => setTitle(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label>{t("fieldDue")}</Label>
                   <Input
+                    type="date"
                     className="h-9"
-                    type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"}
-                    value={values[field.field_key] ?? ""}
-                    onChange={(e) =>
-                      setValues((prev) => ({ ...prev, [field.field_key]: e.target.value }))
-                    }
+                    min={kuwaitTodayYmd()}
+                    value={dueAt}
+                    onChange={(e) => setDueAt(e.target.value)}
                   />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>{t("fieldDescription")}</Label>
+                <Textarea
+                  className="min-h-16"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+
+          {sheetFields.length > 0 ? (
+            <div className="space-y-2">
+              {isV2 ? null : <p className="text-xs font-semibold">{t("sheetInputs")}</p>}
+              <div className="grid gap-2 sm:grid-cols-2">
+                {sheetFields.map((field) =>
+                  renderField(field, isPayslip ? PAYSLIP_MONEY_CODES[field.field_key] : undefined),
                 )}
               </div>
-            ))}
+            </div>
+          ) : null}
+
+          {isV2 ? null : (
+            <EsignSignersEditor draft={staffSigners} onDraftChange={setStaffSigners} />
+          )}
+
+          <div className="flex flex-col gap-2">
+            <Button
+              className="h-9 w-full bg-[#0A0A0A] text-white hover:bg-[#262626]"
+              disabled={create.isPending || !driverId || !templateId || !title.trim()}
+              onClick={() => void submit()}
+            >
+              {create.isPending ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              {t("sendForSignature")}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-9 w-full cursor-pointer"
+              disabled={savingDraft || !templateId || !title.trim()}
+              onClick={() => void saveDraft()}
+            >
+              {savingDraft ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              {draftId ? t("updateDraft") : t("saveDraft")}
+            </Button>
+            {isV2 ? null : (
+              <Button
+                variant="ghost"
+                className="h-9 cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground"
+                render={<Link href={draftsHref} />}
+              >
+                <FileClock className="me-1.5 h-3.5 w-3.5" />
+                {t("draftsLink")}
+              </Button>
+            )}
           </div>
         </AppListCard>
-      ) : null}
 
-      <EsignSignersEditor draft={staffSigners} onDraftChange={setStaffSigners} />
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-9 cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground"
-          render={<Link href="/requests/esign/drafts" />}
-        >
-          <FileClock className="me-1.5 h-3.5 w-3.5" />
-          {t("draftsLink")}
-        </Button>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            className="h-9 cursor-pointer"
-            disabled={savingDraft || !templateId || !title.trim()}
-            onClick={() => void saveDraft()}
-          >
-            {savingDraft ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-            {draftId ? t("updateDraft") : t("saveDraft")}
-          </Button>
-          <Button
-            className="h-9"
-            disabled={create.isPending || !driverId || !templateId || !title.trim()}
-            onClick={() => void submit()}
-          >
-            {create.isPending ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-            {t("send")}
-          </Button>
-        </div>
+        <AppListCard className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="text-sm font-semibold">{t("documentPreview")}</p>
+            <button
+              type="button"
+              className={`text-xs font-semibold disabled:text-muted-foreground ${
+                isV2 ? "text-[#EA580C]" : "text-primary"
+              }`}
+              disabled={!template}
+              onClick={() => setFullOpen(true)}
+            >
+              {t("seeFullDocument")}
+            </button>
+            <Link
+              href={bulkHref}
+              className={`text-xs font-semibold ${isV2 ? "text-[#EA580C]" : "text-[#B54708]"}`}
+            >
+              {t("manyEmployees")}
+            </Link>
+          </div>
+          <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+            <LegendDot color="bg-[#2563EB]" label={t("sourceSystem")} />
+            <LegendDot color="bg-[#16A34A]" label={t("sourceEntry")} />
+            <LegendDot color="bg-[#0A0A0A]" label={t("sourceFixed")} />
+            <LegendDot color={isV2 ? "bg-[#7C3AED]" : "bg-[#EA580C]"} label={t("sourceSigned")} />
+          </div>
+          {preview}
+        </AppListCard>
       </div>
+
+      <Dialog open={fullOpen} onOpenChange={setFullOpen}>
+        <DialogContent className="w-[min(1200px,96vw)] max-w-none" showCloseButton>
+          <DialogHeader className="border-b border-border px-5 py-3 pe-12">
+            <DialogTitle>{title || template?.name_en || t("documentPreview")}</DialogTitle>
+            {template?.name_ar ? (
+              <DialogDescription dir="rtl">{template.name_ar}</DialogDescription>
+            ) : (
+              <DialogDescription>{t("seeFullDocument")}</DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="max-h-[min(70vh,640px)] overflow-y-auto px-5 py-4">{preview}</div>
+          <DialogFooter className="border-t border-border px-5 py-3">
+            <Button type="button" variant="outline" className="h-9" onClick={() => setFullOpen(false)}>
+              {t("back")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppPage>
+  );
+}
+
+function SystemFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] text-[#1D4ED8]">{label}</div>
+      <div className="truncate text-xs font-medium text-[#0A0A0A]">{value}</div>
+    </div>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`size-1.5 rounded-full ${color}`} aria-hidden />
+      {label}
+    </span>
   );
 }

@@ -27,14 +27,28 @@ export function LoginForm() {
   const [isPending, startTransition] = useTransition();
 
   const urlError = searchParams.get("error");
-  const errorMessage =
-    error === "invalid_credentials"
-      ? t("invalidCredentials")
-      : error === "not_authorized" || urlError === "not_authorized"
-        ? t("notAuthorized")
-        : urlError
-          ? t("allowlistRequired")
-          : null;
+  const errorMessage = (() => {
+    const code = error ?? urlError;
+    if (!code) return null;
+    switch (code) {
+      case "invalid_credentials":
+        return t("invalidCredentials");
+      case "not_authorized":
+        return t("notAuthorized");
+      case "not_configured":
+        return t("firebaseNotConfigured");
+      case "unavailable":
+        return t("unavailable");
+      case "missing_fields":
+        return t("missingFields");
+      case "rate_limited":
+        return t("rateLimited");
+      case "invalid_email":
+        return t("invalidEmail");
+      default:
+        return urlError ? t("allowlistRequired") : t("invalidCredentials");
+    }
+  })();
 
   return (
     <div className="flex w-full max-w-md flex-col items-center gap-6">

@@ -14,6 +14,8 @@ describe("launcher modules", () => {
     const items = launcherRegistryItems();
     assert.equal(items.find((item) => item.id === "drivers")?.defaultLabel, "Employees");
     assert.equal(items.find((item) => item.id === "employeedesk")?.defaultLabel, "EmployeeDesk");
+    assert.equal(items.find((item) => item.id === "vehicles")?.defaultLabel, "Fleet Hub");
+    assert.equal(items.some((item) => item.id === "assets"), false);
   });
 
   it("does not duplicate tile ids", () => {
@@ -33,7 +35,7 @@ describe("launcher modules", () => {
     const tiles = visibleLauncherTiles(new Set(), true);
     assert.ok(tiles.some((item) => item.id === "profile"));
     assert.ok(tiles.some((item) => item.id === "operations-hub"));
-    for (const id of ["restaurants", "roles", "document-expiry", "driver-app"]) {
+    for (const id of ["restaurants", "roles", "document-expiry", "driver-app", "assets"]) {
       assert.ok(!tiles.some((item) => item.id === id), id);
     }
   });

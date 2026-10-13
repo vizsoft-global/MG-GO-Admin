@@ -1,6 +1,8 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/auth/get-session";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 
 export async function updateProfile(
   formData: FormData,
@@ -12,25 +14,24 @@ export async function updateProfile(
     return { error: "missing_name" };
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const session = await getSessionUser();
+  if (!session) {
     return { error: "not_authenticated" };
   }
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      full_name: fullName,
-      phone: phone || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", user.id);
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  if (error) {
+  try {
+    await db.collection(COLLECTIONS.profiles).doc(session.id).set(
+      {
+        full_name: fullName,
+        phone: phone || null,
+        updated_at: new Date(),
+      },
+      { merge: true },
+    );
+  } catch {
     return { error: "save_failed" };
   }
 

@@ -47,10 +47,12 @@ export function VehicleDetailPageShell({
   vehicle,
   types,
   editOpen,
+  initialTab,
 }: {
   vehicle: VehicleListRow;
   types: VehicleTypeRow[];
   editOpen: boolean;
+  initialTab?: string;
 }) {
   const t = useTranslations("pages.vehicles");
   const tDetail = useTranslations("pages.vehicleDetail");
@@ -59,7 +61,7 @@ export function VehicleDetailPageShell({
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: vehicles = [] } = useVehiclesList();
-  const [tab, setTab] = useState<DetailTab>("handover");
+  const [tab, setTab] = useState<DetailTab>(() => parseTab(initialTab));
   const [pending, startTransition] = useTransition();
   const plate = vehicle.reg_number || vehicle.bike_id;
   const KindIcon = vehicle.vehicle_type_key === "car" ? Car : Bike;
@@ -192,7 +194,14 @@ export function VehicleDetailPageShell({
       <div className="space-y-3">
         <TabBar
           activeId={tab}
-          onSelect={(id) => setTab(parseTab(id))}
+          onSelect={(id) => {
+            const next = parseTab(id);
+            setTab(next);
+            const params = new URLSearchParams();
+            params.set("tab", next);
+            if (editOpen) params.set("edit", "1");
+            router.replace(`/vehicles/${vehicle.id}?${params.toString()}`);
+          }}
           items={[
             { id: "handover", label: tDetail("tabHandover") },
             { id: "accident", label: tDetail("tabAccident") },

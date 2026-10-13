@@ -342,4 +342,30 @@ describe("trackerFilterOptions", () => {
     const options = trackerFilterOptions(buildEsignTracker([batch()], []));
     assert.deepEqual(options.senders, []);
   });
+
+  it("lists a named sender once and omits a uid with no name", () => {
+    const options = trackerFilterOptions(
+      buildEsignTracker(
+        [
+          batch({
+            id: "b1",
+            created_by_id: "staff-1",
+            created_by_name: "Nora Ali",
+          }),
+          batch({
+            id: "b2",
+            created_by_id: "staff-1",
+            created_by_name: "Nora Ali",
+          }),
+          batch({
+            id: "b3",
+            created_by_id: "staff-2",
+            created_by_name: null,
+          }),
+        ],
+        [],
+      ),
+    );
+    assert.deepEqual(options.senders, [{ value: "staff-1", label: "Nora Ali" }]);
+  });
 });

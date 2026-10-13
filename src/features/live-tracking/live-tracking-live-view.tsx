@@ -141,10 +141,9 @@ export function LiveTrackingLiveView({
     queryFn: fetchZones,
   });
 
-  // Live driver positions arrive via useDriverLocationsRealtime above. The
-  // driver meta (names, zone/partner assignments) and the zone overlays come
-  // from regular Supabase queries, so subscribe to their tables here so the
-  // map auto-updates when a driver/intake is approved or a zone is edited.
+  // Live driver positions arrive via useDriverLocationsRealtime above. Driver
+  // meta and zone overlays are query-backed, so this poll invalidates those
+  // keys when another session approves a rider or edits a zone.
   useRealtimeInvalidator({
     channel: "admin-live-tracking-meta",
     tables: [

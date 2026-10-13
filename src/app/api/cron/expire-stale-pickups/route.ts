@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { callCronFunction } from "@/lib/firebase/callable";
 
 export async function GET(request: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET?.trim();
@@ -17,8 +17,7 @@ export async function GET(request: Request): Promise<Response> {
     "expire-stale-pickups",
     async () => {
       try {
-        const supabase = createAdminClient();
-        const { data, error } = await supabase.rpc("admin_expire_stale_pickups");
+        const { data, error } = await callCronFunction("admin_expire_stale_pickups");
         if (error) throw error;
         return NextResponse.json({ ok: true, expired: data ?? 0 });
       } catch (e) {

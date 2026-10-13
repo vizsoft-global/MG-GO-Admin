@@ -19,10 +19,10 @@ import { Pause, Play, Route as RouteIcon, Unlink, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { createClient } from "@/lib/supabase/client";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 
+import { fetchDriverDayRoute } from "./fleet-server-actions";
 import { fleetEventTone } from "./fleet-status";
 import { FLEET_TONE_DOT } from "./fleet-tone";
 import { splitRouteGeometry, type FleetRouteGeometry } from "./fleet-route";
@@ -136,11 +136,7 @@ export function DriverDayRoute({
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.liveTrackingV2.dayRoute(driverId, date),
     queryFn: async (): Promise<DayRoute> => {
-      const supabase = createClient();
-      const { data: result, error } = await supabase.rpc("admin_get_driver_day_route", {
-        p_driver_id: driverId,
-        p_date: date,
-      });
+      const { data: result, error } = await fetchDriverDayRoute(driverId, date);
       if (error) throw new Error(error.message);
       return result as unknown as DayRoute;
     },

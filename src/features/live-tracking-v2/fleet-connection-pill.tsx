@@ -5,12 +5,12 @@
  *
  * This is not decoration. "The map is ten seconds behind" and "the map is broken" are
  * different incidents with different responses, and the operator cannot tell them apart
- * from pin movement alone — a mirror-rail page looks identical to a live one until you
+ * from pin movement alone — a poll-rail page looks identical to a live one until you
  * time it.
  */
 
 import { useTranslations } from "next-intl";
-import { Radio, Rss, RefreshCw, WifiOff } from "lucide-react";
+import { Radio, RefreshCw, WifiOff } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,6 @@ import type { FleetRail } from "./fleet-types";
 
 const RAIL_ICON = {
   edge: Radio,
-  mirror: Rss,
   poll: RefreshCw,
   offline: WifiOff,
 } as const satisfies Record<FleetRail, unknown>;

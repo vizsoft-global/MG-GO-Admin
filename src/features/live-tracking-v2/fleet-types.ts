@@ -20,7 +20,7 @@ import type { DriverMeta, HeadingSource } from "./fleet-wire";
  * "the map is 10 seconds behind" and "the map is broken" are different problems and
  * they must be able to tell which one they are looking at.
  */
-export type FleetRail = "edge" | "mirror" | "poll" | "offline";
+export type FleetRail = "edge" | "poll" | "offline";
 
 export type FleetConnectionState = {
   rail: FleetRail;

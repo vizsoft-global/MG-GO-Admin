@@ -9,9 +9,10 @@
  * wire decoder between the assertion and the thing under test.
  */
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { FleetRoom } from "./fleet-room";
+import { setResolveUserFromTokenForTests } from "./supabase";
 import type { FleetStatus } from "../../../../src/features/live-tracking-v2/fleet-status";
 
 const DRIVER = "11111111-1111-4111-8111-111111111111";
@@ -108,18 +109,25 @@ function makeHarness(): Harness {
         headers: { "content-type": "application/json" },
       });
 
-    if (path.startsWith("/auth/v1/user")) return body({ id: DRIVER });
-    if (path.startsWith("/rest/v1/rpc/admin_live_fleet_snapshot")) {
-      return body({ settings: null, drivers: [holder.row] });
+    const payload = init?.body ? (JSON.parse(String(init.body)) as { op?: string }) : {};
+    if (path.startsWith("/workerFleetRead")) {
+      if (payload.op === "ops") return body({ events: [], cursor: null });
+      return body({ settings: null, drivers: [holder.row], zones: [] });
     }
-    if (path.startsWith("/rest/v1/rpc/")) return body({});
-    return body([]);
+    if (path.startsWith("/adminIngestDriverPositions")) return body({ ok: true, skipped: [] });
+    if (path.startsWith("/adminRecordFleetEvents")) return body({ ok: true });
+    return body({ ok: false, error: `unstubbed ${path}` }, 500);
   }) as typeof fetch;
+
+  setResolveUserFromTokenForTests(async () => ({ kind: "ok", user: { id: DRIVER } }));
 
   const room = new FleetRoom(state as never, {
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY: "test-service-role",
     SUPABASE_ANON_KEY: "test-anon",
+    FIREBASE_FUNCTIONS_BASE_URL: SUPABASE_URL,
+    WORKER_SHARED_SECRET: "test-worker-secret",
+    FIREBASE_PROJECT_ID: "musallam-delivery-prod",
     ADMIN_WS_TOKEN_SECRET: "test-secret",
     POSITION_FRAME_HZ: "4",
     TICK_MS: "2000",
@@ -158,6 +166,10 @@ function makeHarness(): Harness {
     },
   };
 }
+
+afterEach(() => {
+  setResolveUserFromTokenForTests(null);
+});
 
 function fix(overrides: Record<string, unknown> = {}) {
   return {

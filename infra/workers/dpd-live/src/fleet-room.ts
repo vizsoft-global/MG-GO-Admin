@@ -9,7 +9,7 @@
  * Deliberately not persisted to DO storage: positions. A position is worthless five
  * seconds after it was taken, and at 500 drivers × 4Hz a persisted position would be
  * ~170k storage writes per hour to protect data that regenerates in one cadence. If
- * the room is evicted, the roster reloads from `admin_live_fleet_snapshot` and pins
+ * the room is evicted, the roster reloads from `workerFleetRead` and pins
  * repopulate on the next report.
  */
 
@@ -32,13 +32,7 @@ import {
   type RuleState,
 } from "./fleet-rules";
 import { hashToken, verifyAdminToken } from "./auth";
-import {
-  broadcast,
-  callRpc,
-  resolveUserFromToken,
-  selectRows,
-  type SupabaseConfig,
-} from "./supabase";
+import { callWorkerFunction, resolveUserFromToken } from "./supabase";
 import {
   emptyView,
   encodePosition,
@@ -75,9 +69,9 @@ import {
 const ROSTER_TTL_MS = 60_000;
 const TOKEN_CACHE_TTL_MS = 10 * 60_000;
 /**
- * How long a token GoTrue refused stays refused without asking again. Long enough to
- * absorb a zombie foreground service's 2s cadence, short enough that a token that was
- * refused for a transient GoTrue outage is retried within the shift.
+ * How long a token Firebase refused stays refused without asking again. Long enough to
+ * absorb a zombie foreground service's 2s cadence, short enough that a token refused
+ * during a JWKS blip is retried within the shift (`unavailable` is never cached).
  */
 export const TOKEN_NEGATIVE_CACHE_TTL_MS = 5 * 60_000;
 /** Points held per driver between durable flushes. 10s at a 1Hz cadence is 10. */
@@ -263,14 +257,13 @@ export class FleetRoom implements DurableObject {
 
   private seq = 0;
   private lastFrameAt = 0;
-  private lastMirrorAt = 0;
   private lastFlushAt = 0;
   private lastIngestAt = 0;
   private flushSoon = false;
   private alarmSetFor = 0;
 
   private pendingFleetEvents: Array<FleetEventDraft & { driverId: string }> = [];
-  private opsCursor: number | null = null;
+  private opsCursor: { at: string; id: string } | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -289,14 +282,6 @@ export class FleetRoom implements DurableObject {
         trailSeen: new Set(),
       });
     }
-  }
-
-  private get supabase(): SupabaseConfig {
-    return {
-      url: this.env.SUPABASE_URL,
-      serviceRoleKey: this.env.SUPABASE_SERVICE_ROLE_KEY,
-      anonKey: this.env.SUPABASE_ANON_KEY,
-    };
   }
 
   private get frameIntervalMs(): number {
@@ -364,21 +349,19 @@ export class FleetRoom implements DurableObject {
   private async loadRoster(force: boolean): Promise<void> {
     if (!force && Date.now() - this.rosterLoadedAt < ROSTER_TTL_MS) return;
 
-    const [snapshot, zoneRows] = await Promise.all([
-      callRpc<{
-        generated_at: string;
-        settings: Record<string, number> | null;
-        drivers: SnapshotDriver[];
-      }>(this.supabase, "admin_live_fleet_snapshot", { p_seen_within_minutes: 30 }),
-      selectRows<{
+    const snapshot = await callWorkerFunction<{
+      settings: Record<string, number> | null;
+      drivers: SnapshotDriver[];
+      zones?: Array<{
         id: string;
         name: string | null;
         color: string | null;
         zone_type: string | null;
         geometry: unknown;
-      }>(this.supabase, "zones?select=id,name,color,zone_type,geometry"),
-    ]);
+      }>;
+    }>(this.env, "workerFleetRead", { op: "snapshot", seen_within_minutes: 30 });
 
+    const zoneRows = snapshot.zones ?? [];
     this.zones = zoneRows
       .map((row) => parseZone(row))
       .filter((zone): zone is WorkerZone => zone !== null);
@@ -579,9 +562,12 @@ export class FleetRoom implements DurableObject {
     const cached = this.tokenCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.driverId;
 
-    const resolved = await resolveUserFromToken(this.supabase, token);
+    const resolved = await resolveUserFromToken(
+      { projectId: this.env.FIREBASE_PROJECT_ID },
+      token,
+    );
     if (resolved.kind === "unavailable") {
-      // GoTrue itself failed; nothing is learned about the token, so nothing is cached.
+      // JWKS / network failed; nothing is learned about the token, so nothing is cached.
       this.tokenCache.delete(key);
       return null;
     }
@@ -743,10 +729,10 @@ export class FleetRoom implements DurableObject {
   }
 
   private async loadSingleDriver(driverId: string): Promise<Entity | null> {
-    const snapshot = await callRpc<{
+    const snapshot = await callWorkerFunction<{
       drivers: SnapshotDriver[];
       settings: Record<string, number> | null;
-    }>(this.supabase, "admin_live_fleet_snapshot", { p_seen_within_minutes: 1440 });
+    }>(this.env, "workerFleetRead", { op: "snapshot", seen_within_minutes: 1440 });
 
     const row = (snapshot.drivers ?? []).find((d) => d.driver_id === driverId);
     if (!row) return null;
@@ -1172,12 +1158,6 @@ export class FleetRoom implements DurableObject {
       this.state.waitUntil(this.writeFleetEvents(frames));
     }
 
-    const mirrorMs = Math.max(500, Number(this.env.BROADCAST_MIRROR_MS) || 1000);
-    if (this.sockets.size >= 0 && nowMs - this.lastMirrorAt >= mirrorMs) {
-      this.lastMirrorAt = nowMs;
-      this.state.waitUntil(this.mirror(nowMs));
-    }
-
     const flushMs = Math.max(1000, Number(this.env.POSTGRES_FLUSH_MS) || 10_000);
     if (this.flushSoon || nowMs - this.lastFlushAt >= flushMs) {
       this.lastFlushAt = nowMs;
@@ -1190,7 +1170,7 @@ export class FleetRoom implements DurableObject {
 
   private async writeFleetEvents(frames: FleetEventFrame[]): Promise<void> {
     try {
-      await callRpc(this.supabase, "admin_record_fleet_events", {
+      await callWorkerFunction(this.env, "adminRecordFleetEvents", {
         p_events: frames.map((frame) => ({
           driver_id: frame.driverId,
           event_key: frame.eventKey,
@@ -1242,10 +1222,10 @@ export class FleetRoom implements DurableObject {
     if (events.length === 0) return;
 
     try {
-      const result = await callRpc<{
+      const result = await callWorkerFunction<{
         ok: boolean;
         skipped?: Array<{ driver_id: string; reason: string }>;
-      }>(this.supabase, "admin_ingest_driver_positions", { p_events: events });
+      }>(this.env, "adminIngestDriverPositions", { p_events: events });
 
       // The database is authoritative about duty state. A driver who clocked out
       // between the last snapshot and this flush is rejected there, and that is how
@@ -1266,99 +1246,45 @@ export class FleetRoom implements DurableObject {
     }
   }
 
-  private async mirror(nowMs: number): Promise<void> {
-    const drivers: Array<Record<string, unknown>> = [];
-    for (const entity of this.entities.values()) {
-      if (entity.lat == null || entity.lng == null) continue;
-      drivers.push({
-        id: entity.driverId,
-        name: entity.meta.driverName,
-        code: entity.meta.driverCode,
-        lat: Math.round(entity.lat * 1e5) / 1e5,
-        lng: Math.round(entity.lng * 1e5) / 1e5,
-        sp: entity.speedMps == null ? null : Math.round(entity.speedMps * 10) / 10,
-        hd: entity.headingDeg,
-        hs: entity.headingSource,
-        st: entity.status,
-        fl: Object.entries(entity.flags)
-          .filter(([, on]) => on)
-          .map(([flag]) => flag),
-        age: entity.lastFixAtMs == null ? null : Math.round((nowMs - entity.lastFixAtMs) / 1000),
-      });
-    }
-
-    try {
-      await broadcast(this.supabase, `fleet:${this.env.FLEET_ROOM}`, "positions", {
-        seq: this.seq,
-        ts: nowMs,
-        drivers,
-      });
-    } catch (error) {
-      console.error("mirror_failed", String(error));
-    }
-  }
-
   /**
    * Class A relay. Polled rather than subscribed because a hibernating Durable
-   * Object cannot keep a Realtime WebSocket open, and the alternative — never
-   * hibernating — costs more than a keyset read every couple of seconds.
+   * Object cannot keep an outbound socket open. The admin snapshot poll is the
+   * other rail; this one only carries operation events.
    */
   private async relayOps(): Promise<void> {
     if (this.sockets.size === 0) return;
     try {
-      if (this.opsCursor == null) {
-        const seed = await selectRows<{
-          id: number;
-          driver_id: string;
+      const seeding = this.opsCursor == null;
+      const page = await callWorkerFunction<{
+        events: Array<{
+          id: string;
+          driver_id: string | null;
           category: string;
           operation_key: string;
           success: boolean;
           error_code: string | null;
           context: Record<string, unknown> | null;
           occurred_at: string;
-        }>(
-          this.supabase,
-          `driver_operation_events?select=id,driver_id,category,operation_key,success,error_code,context,occurred_at&order=id.desc&limit=${OPS_POLL_LIMIT}`,
-        );
-        this.opsCursor = seed[0]?.id ?? 0;
-        if (seed.length > 0) {
-          this.fanoutOps(
-            [...seed].reverse().map((row) => ({
-              id: String(row.id),
-              driverId: row.driver_id,
-              category: row.category,
-              operationKey: row.operation_key,
-              success: row.success,
-              errorCode: row.error_code,
-              context: row.context ?? {},
-              occurredAt: row.occurred_at,
-            })),
-          );
-        }
-        return;
+        }>;
+        cursor: { occurred_at: string; id: string } | null;
+      }>(this.env, "workerFleetRead", {
+        op: "ops",
+        after_occurred_at: this.opsCursor?.at ?? null,
+        after_id: this.opsCursor?.id ?? null,
+        limit: OPS_POLL_LIMIT,
+      });
+      const rows = page.events ?? [];
+      if (page.cursor?.occurred_at) {
+        this.opsCursor = { at: page.cursor.occurred_at, id: page.cursor.id ?? "" };
+      } else if (seeding) {
+        this.opsCursor = { at: new Date().toISOString(), id: "" };
       }
-
-      const rows = await selectRows<{
-        id: number;
-        driver_id: string;
-        category: string;
-        operation_key: string;
-        success: boolean;
-        error_code: string | null;
-        context: Record<string, unknown> | null;
-        occurred_at: string;
-      }>(
-        this.supabase,
-        `driver_operation_events?select=id,driver_id,category,operation_key,success,error_code,context,occurred_at&id=gt.${this.opsCursor}&order=id.asc&limit=${OPS_POLL_LIMIT}`,
-      );
-
       if (rows.length === 0) return;
-      this.opsCursor = rows[rows.length - 1]!.id;
 
       this.fanoutOps(
         rows.map((row) => ({
           id: String(row.id),
-          driverId: row.driver_id,
+          driverId: row.driver_id ?? "",
           category: row.category,
           operationKey: row.operation_key,
           success: row.success,
@@ -1368,15 +1294,15 @@ export class FleetRoom implements DurableObject {
         })),
       );
 
+      if (seeding) return;
+
       /*
        * Duty transitions authored elsewhere (clock in/out, admin block, auto checkout)
        * are the reason this relay exists at all: without them a clocked-out driver would
        * keep their live pin until the next roster refresh.
        *
-       * Delivery operations join them because the open delivery is now a roster fact read
-       * from `deliveries.status`. Waiting up to a minute for the next scheduled refresh
-       * would mean logging a pickup and watching the rider stay Idle — which is the
-       * symptom the phone-supplied id was supposed to avoid and never did.
+       * Delivery operations join them because the open delivery is a roster fact read
+       * from deliveries still in transit.
        */
       if (
         rows.some(

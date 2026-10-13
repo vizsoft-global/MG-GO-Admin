@@ -8,8 +8,10 @@ import {
 } from "@/features/requests/request-status-utils";
 import { fetchRestaurantAssignedDrivers } from "@/features/restaurants/restaurants-actions";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { assistantModuleAllowed, requireAssistantModule } from "./assistant-gates";
+import { ASSISTANT_SCAN_CAP, loadDocs, rowsWhere } from "./assistant-lookups";
 import { ASSISTANT_LIST_CAP, ENTITY_MODULE_PERMISSION, type AssistantEntityType } from "./assistant-entity";
 import { sectionDenied } from "./assistant-strip";
 import { stripDeliveryHead, stripRequestRow, stripVehicleRow } from "./assistant-strip";
@@ -37,85 +39,68 @@ export function relatedPayload(count: number, head: unknown[]) {
   return { count, head };
 }
 
+function asText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+async function profileNames(ids: string[]): Promise<Map<string, string | null>> {
+  const db = await staffDb();
+  const names = new Map<string, string | null>();
+  if (!db || ids.length === 0) return names;
+  const profiles = await loadDocs(db, COLLECTIONS.profiles, ids);
+  for (const id of ids) names.set(id, asText(profiles.get(id)?.full_name));
+  return names;
+}
+
 async function restaurantsInZone(zoneId: string, limit: number) {
-  const supabase = await createClient();
-  const countRes = await supabase
-    .from("restaurants")
-    .select("id", { count: "exact", head: true })
-    .eq("zone_id", zoneId);
-  const { data } = await supabase
-    .from("restaurants")
-    .select("id, name, status")
-    .eq("zone_id", zoneId)
-    .order("name")
-    .limit(limit);
-  return relatedPayload(countRes.count ?? 0, data ?? []);
+  const rows = (await rowsWhere(COLLECTIONS.restaurants, "zone_id", zoneId, ASSISTANT_SCAN_CAP))
+    .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+  return relatedPayload(
+    rows.length,
+    rows.slice(0, limit).map((row) => ({ id: row.id, name: row.name ?? null, status: row.status ?? null })),
+  );
 }
 
 async function driversInZone(zoneId: string, limit: number) {
-  const supabase = await createClient();
-  const countRes = await supabase
-    .from("drivers")
-    .select("id", { count: "exact", head: true })
-    .eq("zone_id", zoneId)
-    .is("archived_at", null);
-  const { data } = await supabase
-    .from("drivers")
-    .select("id, driver_code, profiles!drivers_id_fkey(full_name)")
-    .eq("zone_id", zoneId)
-    .is("archived_at", null)
-    .limit(limit);
+  const rows = (await rowsWhere(COLLECTIONS.drivers, "zone_id", zoneId, ASSISTANT_SCAN_CAP)).filter(
+    (row) => row.archived_at == null,
+  );
+  const head = rows.slice(0, limit);
+  const names = await profileNames(head.map((row) => String(row.id)));
   return relatedPayload(
-    countRes.count ?? 0,
-    (data ?? []).map((row) => {
-      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-      return { id: row.id, driver_code: row.driver_code, name: (profile as { full_name?: string } | null)?.full_name ?? null };
-    }),
+    rows.length,
+    head.map((row) => ({
+      id: row.id,
+      driver_code: row.driver_code,
+      name: names.get(String(row.id)) ?? null,
+    })),
   );
 }
 
 async function fleetDrivers(limit: number) {
-  const supabase = await createClient();
-  const countRes = await supabase
-    .from("drivers")
-    .select("id", { count: "exact", head: true })
-    .eq("is_on_duty", true)
-    .not("vehicle_id", "is", null)
-    .is("archived_at", null);
-  const { data } = await supabase
-    .from("drivers")
-    .select("id, driver_code, vehicle_id, profiles!drivers_id_fkey(full_name)")
-    .eq("is_on_duty", true)
-    .not("vehicle_id", "is", null)
-    .is("archived_at", null)
-    .limit(limit);
+  const rows = (await rowsWhere(COLLECTIONS.drivers, "is_on_duty", true, ASSISTANT_SCAN_CAP)).filter(
+    (row) => row.archived_at == null && row.vehicle_id != null,
+  );
+  const head = rows.slice(0, limit);
+  const names = await profileNames(head.map((row) => String(row.id)));
   return relatedPayload(
-    countRes.count ?? 0,
-    (data ?? []).map((row) => {
-      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-      return {
-        id: row.id,
-        driver_code: row.driver_code,
-        vehicle_id: row.vehicle_id,
-        name: (profile as { full_name?: string } | null)?.full_name ?? null,
-      };
-    }),
+    rows.length,
+    head.map((row) => ({
+      id: row.id,
+      driver_code: row.driver_code,
+      vehicle_id: row.vehicle_id,
+      name: names.get(String(row.id)) ?? null,
+    })),
   );
 }
 
 async function vehicleForDriver(driverId: string) {
-  const supabase = await createClient();
-  const { data: driver } = await supabase
-    .from("drivers")
-    .select("vehicle_id, driver_code")
-    .eq("id", driverId)
-    .maybeSingle();
-  if (!driver?.vehicle_id) return relatedPayload(0, []);
-  const { data: vehicle } = await supabase
-    .from("vehicles")
-    .select("id, bike_id, reg_number, status, vehicle_type_key, condition")
-    .eq("id", driver.vehicle_id)
-    .maybeSingle();
+  const db = await staffDb();
+  if (!db) return relatedPayload(0, []);
+  const driver = (await loadDocs(db, COLLECTIONS.drivers, [driverId])).get(driverId);
+  const vehicleId = asText(driver?.vehicle_id);
+  if (!vehicleId) return relatedPayload(0, []);
+  const vehicle = (await loadDocs(db, COLLECTIONS.vehicles, [vehicleId])).get(vehicleId);
   return relatedPayload(vehicle ? 1 : 0, vehicle ? [stripVehicleRow(vehicle)] : []);
 }
 

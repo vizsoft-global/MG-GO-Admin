@@ -1,36 +1,28 @@
 "use server";
 
+import { sendDpdCongratsFor } from "@/features/notifications/dpd-shift-notices";
+import { fetchLocationEventByDeliveryId, fetchLocationEventsForDelivery } from "@/features/locations/locations-actions";
+import type { DriverLocationEvent } from "@/features/locations/types";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { fetchLocationEventByDeliveryId, fetchLocationEventsForDelivery } from "@/features/locations/locations-actions";
-import { trailPathFromEvents } from "./delivery-gps-audit";
-import { mergeProofKeys } from "./delivery-proof-keys";
-import type { DriverLocationEvent } from "@/features/locations/types";
-import { resolveOrderProofUrl } from "@/lib/storage/order-proof-url";
-import { earningsRecalcDateFromDeliveredAt } from "./delivery-earn-date";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { deleteObject } from "@/lib/storage/r2-client";
 import { isR2ObjectKey } from "@/lib/storage/r2-keys";
-import type {
-  DeliveryActionError,
-  DeliveryListRow,
-  DeliveryStatus,
-  ReviewableDeliveryStatus,
-} from "./types";
-import { enrichDeliveryListRows } from "./resolve-delivery-restaurant";
-import {
-  mapDeliveryDbRowsToListRows,
-  type DeliveryDbRowForList,
-} from "./map-delivery-list-row";
-import { CANCEL_REASON_CODES } from "./parse-cancel-reason";
-import {
-  listTotalFromStatusCounts,
-  parseDeliveriesStatusCounts,
-} from "./delivery-kpi-counts";
-import { sendDpdCongratsFor } from "@/features/notifications/dpd-shift-notices";
+import { resolveOrderProofUrl } from "@/lib/storage/order-proof-resolve";
+import type { DocumentData, Firestore, Query, QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { earningsRecalcDateFromDeliveredAt } from "./delivery-earn-date";
+import { trailPathFromEvents } from "./delivery-gps-audit";
+import { listTotalFromStatusCounts, parseDeliveriesStatusCounts } from "./delivery-kpi-counts";
+import { mergeProofKeys } from "./delivery-proof-keys";
+import { IN_PROGRESS_DELIVERY_STATUSES, normalizeDeliveryStatusFilter } from "./delivery-status-filter";
 import { collectExportPages } from "./export-pagination";
+import { mapDeliveryDbRowsToListRows, type DeliveryDbRowForList } from "./map-delivery-list-row";
+import { CANCEL_REASON_CODES } from "./parse-cancel-reason";
+import { enrichDeliveryListRows } from "./resolve-delivery-restaurant";
+import type { DeliveryActionError, DeliveryListRow, DeliveryStatus, ReviewableDeliveryStatus } from "./types";
 
 type DeliveryMutationResult =
   | { ok: true }
@@ -42,6 +34,63 @@ type PgLikeError = {
   details?: string | null;
   hint?: string | null;
 };
+
+type Row = Record<string, unknown> & { id: string };
+
+const DELIVERIES_PAGE_SIZE = 50;
+const AUTO_TAG = "[auto:delivery-approval]";
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function strOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numOrNull(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+async function rowsByIds(db: Firestore, collection: string, ids: string[]): Promise<Map<string, Row>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const map = new Map<string, Row>();
+  for (let i = 0; i < unique.length; i += 100) {
+    const refs = unique.slice(i, i + 100).map((id) => db.collection(collection).doc(id));
+    if (refs.length === 0) continue;
+    const snaps = await db.getAll(...refs);
+    for (const snap of snaps) {
+      if (snap.exists) map.set(snap.id, asRow(snap.id, snap.data()));
+    }
+  }
+  return map;
+}
 
 function formatPgErrorDetail(error: PgLikeError | null | undefined): string | undefined {
   if (!error) return undefined;
@@ -81,83 +130,46 @@ async function requireSuperAdmin() {
   return session;
 }
 
-async function resolveDeliveryRestaurantId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  input: {
-    driver_id: string;
-    partner_id: string | null;
-    restaurant_id: string | null;
-  },
-): Promise<string | null> {
+async function resolveDeliveryRestaurantId(input: {
+  driver_id: string;
+  partner_id: string | null;
+  restaurant_id: string | null;
+}): Promise<string | null> {
   if (input.restaurant_id) return input.restaurant_id;
+  const db = await openDb();
+  const assigned = await db
+    .collection(COLLECTIONS.driverRestaurants)
+    .where("driver_id", "==", input.driver_id)
+    .get();
+  const assignedIds = assigned.docs
+    .map((doc) => str(doc.data().restaurant_id))
+    .filter(Boolean);
 
-  const { data: assigned } = await supabase
-    .from("driver_restaurants")
-    .select("restaurant_id")
-    .eq("driver_id", input.driver_id)
-    .limit(5);
-
-  const assignedIds = (assigned ?? [])
-    .map((row) => row.restaurant_id)
-    .filter((id): id is string => Boolean(id));
-
-  if (assignedIds.length === 1 && !input.partner_id) {
-    return assignedIds[0];
-  }
+  if (assignedIds.length === 1 && !input.partner_id) return assignedIds[0] ?? null;
 
   if (assignedIds.length > 0 && input.partner_id) {
-    const { data: matchedAssigned } = await supabase
-      .from("restaurants")
-      .select("id")
-      .in("id", assignedIds)
-      .eq("partner_id", input.partner_id)
-      .limit(2);
-    if ((matchedAssigned ?? []).length === 1) {
-      return matchedAssigned![0]!.id;
-    }
+    const restaurants = await rowsByIds(db, COLLECTIONS.restaurants, assignedIds);
+    const matched = [...restaurants.values()].filter((row) => str(row.partner_id) === input.partner_id);
+    if (matched.length === 1) return matched[0]?.id ?? null;
   }
 
   if (!input.partner_id) return null;
-
-  const { data: partnerRestaurants } = await supabase
-    .from("restaurants")
-    .select("id")
-    .eq("partner_id", input.partner_id)
-    .order("created_at", { ascending: true })
-    .limit(2);
-  if ((partnerRestaurants ?? []).length === 1) {
-    return partnerRestaurants![0]!.id;
-  }
-
+  const partnerRestaurants = await db
+    .collection(COLLECTIONS.restaurants)
+    .where("partner_id", "==", input.partner_id)
+    .limit(2)
+    .get();
+  if (partnerRestaurants.size === 1) return partnerRestaurants.docs[0]?.id ?? null;
   return null;
 }
 
 function earnDateFromDeliveredAt(deliveredAt: string): string {
   const earnDate = earningsRecalcDateFromDeliveredAt(deliveredAt);
-  if (!earnDate) {
-    throw new Error("delivered_at required for earnings recalc");
-  }
+  if (!earnDate) throw new Error("delivered_at required for earnings recalc");
   return earnDate;
 }
 
-/**
- * Keep DPD verification in sync after a delivery's status changes.
- *
- * When an admin approves (or moves out of) a delivery on the deliveries page
- * we want the DPD verification page to immediately reflect that admin's
- * decision instead of waiting for the restaurant to file a report. We:
- *
- *  1. Count the deliveries on the same Kuwait service-date for the same
- *     driver+restaurant (or driver+partner if the delivery has no restaurant
- *     attached) that are eligible to be matched (i.e. not rejected).
- *  2. Upsert a delivery_verifications row with `reported_count` set to that
- *     count so the trigger reconciles statuses on its own.
- *
- * Auto-created rows are tagged in `notes` so we never overwrite a
- * restaurant-reported figure once a human has entered one.
- */
 async function syncVerificationForDelivery(
-  supabase: Awaited<ReturnType<typeof createClient>>,
   delivery: {
     id: string;
     driver_id: string;
@@ -167,87 +179,59 @@ async function syncVerificationForDelivery(
   },
   actorId: string,
 ): Promise<void> {
-  // We need at least a partner to scope the verification (verifications.partner_id
-  // is NOT NULL). If the delivery has no partner, skip — there's nothing to
-  // reconcile against.
   if (!delivery.partner_id) return;
-
   const serviceDate = earnDateFromDeliveredAt(delivery.delivered_at);
-
-  // Resolve the restaurant we'll attach the verification to. If the delivery
-  // has its own restaurant, use that; otherwise, fall back to a single
-  // restaurant on the partner so we still have one to write to.
-  const restaurantId = await resolveDeliveryRestaurantId(supabase, {
+  const restaurantId = await resolveDeliveryRestaurantId({
     driver_id: delivery.driver_id,
     partner_id: delivery.partner_id,
     restaurant_id: delivery.restaurant_id,
   });
   if (!restaurantId) return;
 
-  // Count eligible deliveries for this driver+restaurant_or_partner+date.
-  const startIso = `${serviceDate}T00:00:00+03:00`;
-  const endIso = `${serviceDate}T23:59:59.999+03:00`;
-
-  const { data: dayRows, error: countError } = await supabase
-    .from("deliveries")
-    .select("id, status, restaurant_id, partner_id")
-    .eq("driver_id", delivery.driver_id)
-    .gte("delivered_at", startIso)
-    .lte("delivered_at", endIso);
-  if (countError) {
-    console.error("[syncVerificationForDelivery] count failed", countError);
+  const db = await openDb();
+  const start = new Date(`${serviceDate}T00:00:00+03:00`);
+  const end = new Date(`${serviceDate}T23:59:59.999+03:00`);
+  let dayRows: Row[] = [];
+  try {
+    const snap = await db
+      .collection(COLLECTIONS.deliveries)
+      .where("driver_id", "==", delivery.driver_id)
+      .where("delivered_at", ">=", start)
+      .where("delivered_at", "<=", end)
+      .get();
+    dayRows = snap.docs.map((doc) => asRow(doc.id, doc.data()));
+  } catch (error) {
+    console.error("[syncVerificationForDelivery] count failed", error);
     return;
   }
 
-  const eligible = (dayRows ?? []).filter(
-    (d) =>
-      d.status !== "rejected" &&
-      (d.restaurant_id === restaurantId ||
-        (d.restaurant_id == null && d.partner_id === delivery.partner_id)),
+  const eligible = dayRows.filter(
+    (row) =>
+      row.status !== "rejected" &&
+      (str(row.restaurant_id) === restaurantId ||
+        (row.restaurant_id == null && str(row.partner_id) === delivery.partner_id)),
   );
   const reported = eligible.length;
-
-  // Look up an existing verification for the same key.
-  const { data: existing } = await supabase
-    .from("delivery_verifications")
-    .select("id, source, reported_count, notes")
-    .eq("driver_id", delivery.driver_id)
-    .eq("restaurant_id", restaurantId)
-    .eq("service_date", serviceDate)
-    .maybeSingle();
-
-  const AUTO_TAG = "[auto:delivery-approval]";
+  const key = `${delivery.driver_id}_${restaurantId}_${serviceDate}`;
+  const existingSnap = await db.collection(COLLECTIONS.deliveryVerifications).doc(key).get();
+  const existing = existingSnap.exists ? asRow(existingSnap.id, existingSnap.data()) : null;
 
   if (existing) {
-    const isAuto = (existing.notes ?? "").includes(AUTO_TAG);
-    // Don't clobber a real restaurant report; just trigger a reconcile by
-    // touching the row so the trigger re-runs.
+    const isAuto = str(existing.notes).includes(AUTO_TAG);
     if (!isAuto) {
-      await supabase
-        .from("delivery_verifications")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
+      await existingSnap.ref.set({ updated_at: new Date() }, { merge: true });
       return;
     }
-    if (existing.reported_count !== reported) {
-      await supabase
-        .from("delivery_verifications")
-        .update({
-          reported_count: reported,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
+    if (Number(existing.reported_count ?? 0) !== reported) {
+      await existingSnap.ref.set({ reported_count: reported, updated_at: new Date() }, { merge: true });
     }
     return;
   }
 
-  // No verification exists yet — create one tagged so future syncs know it's
-  // safe to update the count.
   if (reported === 0) return;
-
-  const { error: insertError } = await supabase
-    .from("delivery_verifications")
-    .insert({
+  try {
+    await db.collection(COLLECTIONS.deliveryVerifications).doc(key).create({
+      id: key,
       driver_id: delivery.driver_id,
       restaurant_id: restaurantId,
       partner_id: delivery.partner_id,
@@ -256,20 +240,21 @@ async function syncVerificationForDelivery(
       notes: AUTO_TAG,
       source: "manual",
       created_by: actorId,
+      created_at: new Date(),
+      updated_at: new Date(),
     });
-  if (insertError && insertError.code !== "23505") {
-    console.error("[syncVerificationForDelivery] insert failed", insertError);
+  } catch (error) {
+    const code = (error as { code?: number | string }).code;
+    if (code !== 6 && code !== "already-exists" && code !== "23505") {
+      console.error("[syncVerificationForDelivery] insert failed", error);
+    }
   }
 }
 
-async function recalcEarningsForDelivery(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  driverId: string,
-  deliveredAt: string,
-) {
+async function recalcEarningsForDelivery(driverId: string, deliveredAt: string) {
   const earnDate = earningsRecalcDateFromDeliveredAt(deliveredAt);
   if (!earnDate) return;
-  await supabase.rpc("recalculate_driver_earnings", {
+  await callAdminFunction("recalculate_driver_earnings", {
     p_driver_id: driverId,
     p_earn_date: earnDate,
   });
@@ -279,91 +264,22 @@ function shortId(uuid: string): string {
   return uuid.slice(0, 8).toUpperCase();
 }
 
-function relName<T extends { name: string }>(
-  rel: T | T[] | null | undefined,
-): string {
+function relName(rel: { name: string } | { name: string }[] | null | undefined): string {
   if (!rel) return "—";
   const row = Array.isArray(rel) ? rel[0] : rel;
   return row?.name ?? "—";
 }
 
-/**
- * Shared column projection for delivery list/table rows (joins driver, partner,
- * restaurant, and zone names). Used by the paginated list, export, and the
- * dashboard feed so the shape stays in sync.
- */
-const DELIVERY_LIST_SELECT = `
-  id,
-  driver_id,
-  partner_id,
-  restaurant_id,
-  zone_id,
-  external_order_id,
-  order_proof_url,
-  order_proof_urls,
-  status,
-  rejection_reason,
-  delivered_at,
-  delivered_lat,
-  delivered_lng,
-  pickup_at,
-  pickup_lat,
-  pickup_lng,
-  pickup_proof_url,
-  pickup_proof_urls,
-  cancelled_at,
-  cancel_lat,
-  cancel_lng,
-  cancel_reason,
-  cancel_proof_url,
-  cancel_proof_urls,
-  created_at,
-  drivers (driver_code, employee_id, profiles!drivers_id_fkey (full_name, phone)),
-  partners (name, logo_url),
-  restaurants (id, name),
-  zones (name)
-`;
-
-/** Page size for the deliveries infinite-scroll list. */
-const DELIVERIES_PAGE_SIZE = 50;
-
 export type DeliveriesQueryFilter = {
-  /**
-   * Tab/status filter: "all" | "in_progress" (in_transit + pending +
-   * under_review) | "active" (in_transit) | a concrete status.
-   */
   status?: string;
   zoneId?: string;
   partnerId?: string;
-  /** Cancel-reason code (only meaningful for the cancelled tab) or "all". */
   cancelReason?: string;
   search?: string;
-  /**
-   * Inclusive ISO bound on `deliveries.delivered_at` (start of the window).
-   *
-   * The date filters bound on `delivered_at`, not `created_at`: the list is
-   * reconciled against the client's daily order-count sheet, and an order
-   * picked up at 23:40 on Sep 30 but completed at 00:10 on Oct 1 belongs to the
-   * Sep 30 operational day. `delivered_at` is the single source of truth for
-   * "when was this order completed", and rows without one (pending, in transit,
-   * cancelled) drop out on their own -- which is why a past operational day
-   * legitimately shows an empty Pending tab.
-   */
   dateFrom?: string;
-  /** Inclusive ISO bound on `delivered_at` (end of the window). */
   dateTo?: string;
-  /**
-   * When true, `dateTo` is exclusive: the instant it names opens the next
-   * window. A custom 06:00 -> 06:00 range is one operational day, so 06:00:00
-   * must belong to the day that starts, not the one that ends.
-   */
   dateToExclusive?: boolean;
 };
-
-import {
-  IN_PROGRESS_DELIVERY_STATUSES,
-  normalizeDeliveryStatusFilter,
-} from "./delivery-status-filter";
 
 export type DeliveriesPage = {
   rows: DeliveryListRow[];
@@ -401,81 +317,205 @@ export type DeliveryExportRow = Pick<
   | "cancel_reason"
 >;
 
-/** Resolve driver_ids whose code or rider name matches the search term. */
-async function resolveSearchDriverIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  search: string,
-): Promise<string[]> {
-  const cleaned = search.replace(/[%,()]/g, " ").trim();
+async function resolveSearchDriverIds(search: string): Promise<string[]> {
+  const cleaned = search.replace(/[%,()]/g, " ").trim().toLowerCase();
   if (!cleaned) return [];
-  const like = `%${cleaned}%`;
-  const [{ data: byCode }, { data: byName }] = await Promise.all([
-    supabase.from("drivers").select("id").ilike("driver_code", like).limit(300),
-    supabase.from("profiles").select("id").ilike("full_name", like).limit(300),
+  const db = await openDb();
+  const [drivers, profiles] = await Promise.all([
+    db.collection(COLLECTIONS.drivers).select("driver_code").get(),
+    db.collection(COLLECTIONS.profiles).select("full_name").get(),
   ]);
   const ids = new Set<string>();
-  for (const r of byCode ?? []) ids.add((r as { id: string }).id);
-  for (const r of byName ?? []) ids.add((r as { id: string }).id);
-  // Cap to keep the generated PostgREST URL within reasonable length.
+  for (const doc of drivers.docs) {
+    if (str(doc.data().driver_code).toLowerCase().includes(cleaned)) ids.add(doc.id);
+  }
+  for (const doc of profiles.docs) {
+    if (str(doc.data().full_name).toLowerCase().includes(cleaned)) ids.add(doc.id);
+  }
   return [...ids].slice(0, 300);
 }
 
-/** Build a PostgREST `.or()` group for the free-text search. */
-function buildSearchOrFilter(search: string, driverIds: string[]): string {
-  const cleaned = search.replace(/[,()*"\\%]/g, " ").trim();
-  const parts: string[] = [];
-  if (cleaned) parts.push(`external_order_id.ilike.*${cleaned}*`);
-  if (driverIds.length > 0) parts.push(`driver_id.in.(${driverIds.join(",")})`);
+function matchesSearch(row: Row, search: string, driverIds: string[]): boolean {
+  const cleaned = search.replace(/[,()*"\\%]/g, " ").trim().toLowerCase();
+  const parts: boolean[] = [];
+  if (cleaned) parts.push(str(row.external_order_id).toLowerCase().includes(cleaned));
+  if (driverIds.length > 0) parts.push(driverIds.includes(str(row.driver_id)));
   const hex = search.trim().toLowerCase();
-  if (/^[0-9a-f]{1,8}$/.test(hex)) {
-    const lo = `${hex.padEnd(8, "0")}-0000-0000-0000-000000000000`;
-    const hi = `${hex.padEnd(8, "f")}-ffff-ffff-ffff-ffffffffffff`;
-    parts.push(`and(id.gte.${lo},id.lte.${hi})`);
-  }
-  if (parts.length === 0) {
-    // No resolvable predicate — force an empty result rather than match all.
-    parts.push("id.eq.00000000-0000-0000-0000-000000000000");
-  }
-  return parts.join(",");
+  if (/^[0-9a-f]{1,8}$/.test(hex)) parts.push(row.id.toLowerCase().startsWith(hex));
+  if (parts.length === 0) return false;
+  return parts.some(Boolean);
 }
 
-/** Build a PostgREST `.or()` group for the cancel-reason sub-filter. */
-function buildCancelReasonOrFilter(code: string): string {
-  const concrete = CANCEL_REASON_CODES.filter((c) => c !== "other");
+function matchesCancel(row: Row, code: string): boolean {
+  const reason = row.cancel_reason == null ? null : str(row.cancel_reason);
+  const concrete = CANCEL_REASON_CODES.filter((item) => item !== "other");
   if (code === "other") {
-    const conds = ["cancel_reason.not.is.null"];
-    for (const c of concrete) conds.push(`cancel_reason.not.like.${c}*`);
-    return `and(${conds.join(",")})`;
+    if (reason == null || reason === "") return false;
+    return !concrete.some((item) => reason.startsWith(item));
   }
-  // Stored as `code` or `code|note` — prefix match covers both.
-  return `cancel_reason.like.${code}*`;
+  return (reason ?? "").startsWith(code);
 }
 
-async function fetchGpsMockFlagsByDeliveryIds(
-  deliveryIds: string[],
-): Promise<Map<string, boolean>> {
+function needsMemoryFilter(params: DeliveriesQueryFilter): boolean {
+  return Boolean(params.search?.trim() || (params.cancelReason && params.cancelReason !== "all"));
+}
+
+function indexedQuery(db: Firestore, params: DeliveriesQueryFilter): Query {
+  let query: Query = db.collection(COLLECTIONS.deliveries);
+  const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
+  if (params.status && params.status !== "all") {
+    if (params.status === "in_progress") {
+      query = query.where("status", "in", [...IN_PROGRESS_DELIVERY_STATUSES]);
+    } else {
+      query = query.where("status", "==", normalizeDeliveryStatusFilter(params.status));
+    }
+  }
+  if (params.zoneId && params.zoneId !== "all") query = query.where("zone_id", "==", params.zoneId);
+  if (params.partnerId && params.partnerId !== "all") {
+    query = query.where("partner_id", "==", params.partnerId);
+  }
+  if (params.dateFrom) query = query.where("delivered_at", ">=", new Date(params.dateFrom));
+  if (params.dateTo) {
+    query = query.where(
+      "delivered_at",
+      params.dateToExclusive ? "<" : "<=",
+      new Date(params.dateTo),
+    );
+  }
+  return hasDateWindow
+    ? query.orderBy("delivered_at", "desc")
+    : query.orderBy("created_at", "desc");
+}
+
+function rowMatches(row: Row, params: DeliveriesQueryFilter, driverIds: string[]): boolean {
+  if (params.search?.trim() && !matchesSearch(row, params.search, driverIds)) return false;
+  if (params.cancelReason && params.cancelReason !== "all" && !matchesCancel(row, params.cancelReason)) {
+    return false;
+  }
+  return true;
+}
+
+async function pageDeliveryRows(
+  db: Firestore,
+  params: DeliveriesQueryFilter,
+  driverIds: string[],
+  offset: number,
+  limit: number,
+): Promise<Row[]> {
+  const query = indexedQuery(db, params);
+  if (!needsMemoryFilter(params)) {
+    const snap = await query.offset(offset).limit(limit).get();
+    return snap.docs.map((doc) => asRow(doc.id, doc.data()));
+  }
+  const matches: Row[] = [];
+  let skipped = 0;
+  let cursor: QueryDocumentSnapshot | undefined;
+  let scanned = 0;
+  while (matches.length < limit && scanned < 20_000) {
+    let page = query.limit(400);
+    if (cursor) page = page.startAfter(cursor);
+    const snap = await page.get();
+    if (snap.empty) break;
+    for (const doc of snap.docs) {
+      scanned += 1;
+      const row = asRow(doc.id, doc.data());
+      if (!rowMatches(row, params, driverIds)) continue;
+      if (skipped < offset) {
+        skipped += 1;
+        continue;
+      }
+      matches.push(row);
+      if (matches.length >= limit) break;
+    }
+    cursor = snap.docs[snap.docs.length - 1];
+    if (snap.size < 400) break;
+  }
+  return matches;
+}
+
+async function hydrateListRows(db: Firestore, rows: Row[]): Promise<DeliveryDbRowForList[]> {
+  const driverIds = rows.map((row) => str(row.driver_id)).filter(Boolean);
+  const [drivers, profiles, partners, restaurants, zones] = await Promise.all([
+    rowsByIds(db, COLLECTIONS.drivers, driverIds),
+    rowsByIds(db, COLLECTIONS.profiles, driverIds),
+    rowsByIds(db, COLLECTIONS.partners, rows.map((row) => str(row.partner_id)).filter(Boolean)),
+    rowsByIds(db, COLLECTIONS.restaurants, rows.map((row) => str(row.restaurant_id)).filter(Boolean)),
+    rowsByIds(db, COLLECTIONS.zones, rows.map((row) => str(row.zone_id)).filter(Boolean)),
+  ]);
+  return rows.map((row) => {
+    const driver = drivers.get(str(row.driver_id));
+    const profile = profiles.get(str(row.driver_id));
+    const partner = partners.get(str(row.partner_id));
+    const restaurant = restaurants.get(str(row.restaurant_id));
+    const zone = zones.get(str(row.zone_id));
+    return {
+      id: row.id,
+      driver_id: str(row.driver_id),
+      partner_id: strOrNull(row.partner_id),
+      restaurant_id: strOrNull(row.restaurant_id),
+      zone_id: strOrNull(row.zone_id),
+      external_order_id: strOrNull(row.external_order_id),
+      order_proof_url: strOrNull(row.order_proof_url),
+      order_proof_urls: Array.isArray(row.order_proof_urls) ? (row.order_proof_urls as string[]) : null,
+      status: row.status as DeliveryStatus,
+      rejection_reason: strOrNull(row.rejection_reason),
+      delivered_at: strOrNull(row.delivered_at),
+      delivered_lat: numOrNull(row.delivered_lat),
+      delivered_lng: numOrNull(row.delivered_lng),
+      pickup_at: strOrNull(row.pickup_at),
+      pickup_lat: numOrNull(row.pickup_lat),
+      pickup_lng: numOrNull(row.pickup_lng),
+      pickup_proof_url: strOrNull(row.pickup_proof_url),
+      pickup_proof_urls: Array.isArray(row.pickup_proof_urls) ? (row.pickup_proof_urls as string[]) : null,
+      cancelled_at: strOrNull(row.cancelled_at),
+      cancel_lat: numOrNull(row.cancel_lat),
+      cancel_lng: numOrNull(row.cancel_lng),
+      cancel_reason: strOrNull(row.cancel_reason),
+      cancel_proof_url: strOrNull(row.cancel_proof_url),
+      cancel_proof_urls: Array.isArray(row.cancel_proof_urls) ? (row.cancel_proof_urls as string[]) : null,
+      created_at: str(row.created_at),
+      drivers: driver
+        ? {
+            driver_code: str(driver.driver_code),
+            employee_id: strOrNull(driver.employee_id),
+            profiles: profile
+              ? { full_name: strOrNull(profile.full_name), phone: strOrNull(profile.phone) }
+              : null,
+          }
+        : null,
+      partners: partner ? { name: str(partner.name), logo_url: strOrNull(partner.logo_url) } : null,
+      restaurants: restaurant ? { id: restaurant.id, name: str(restaurant.name) } : null,
+      zones: zone ? { name: str(zone.name) } : null,
+    };
+  });
+}
+
+async function fetchGpsMockFlagsByDeliveryIds(deliveryIds: string[]): Promise<Map<string, boolean>> {
   const result = new Map<string, boolean>();
   if (deliveryIds.length === 0) return result;
-
-  try {
-    const admin = createAdminClient({ timeoutMs: 2500 });
-    const { data, error } = await admin
-      .from("driver_location_events")
-      .select("delivery_id")
-      .in("delivery_id", deliveryIds)
-      .eq("is_mocked", true)
-      .limit(deliveryIds.length);
-    if (error) {
-      console.error("[fetchDeliveriesPage] gps mock lookup failed", error);
-    } else {
-      for (const row of data ?? []) {
-        if (row.delivery_id) result.set(row.delivery_id, true);
+  const work = (async () => {
+    const db = await staffDb();
+    if (!db) return;
+    for (let i = 0; i < deliveryIds.length; i += 30) {
+      const chunk = deliveryIds.slice(i, i + 30);
+      const snap = await db
+        .collection(COLLECTIONS.driverLocationEvents)
+        .where("delivery_id", "in", chunk)
+        .get();
+      for (const doc of snap.docs) {
+        const data = doc.data();
+        if (data.is_mocked === true && typeof data.delivery_id === "string") {
+          result.set(data.delivery_id, true);
+        }
       }
     }
-  } catch (error) {
+  })().catch((error: unknown) => {
     console.error("[fetchDeliveriesPage] gps mock lookup failed", error);
-  }
-
+  });
+  await Promise.race([
+    work,
+    new Promise((resolve) => setTimeout(resolve, 2500)),
+  ]);
   for (const id of deliveryIds) {
     if (!result.has(id)) result.set(id, false);
   }
@@ -510,10 +550,7 @@ export async function resolveDeliveryProofForDisplay(
   const key = objectKey?.trim();
   if (!key) return { url: null, contentType: null };
   const resolved = await resolveOrderProofUrl(key);
-  return {
-    url: resolved?.url ?? null,
-    contentType: resolved?.contentType ?? null,
-  };
+  return { url: resolved?.url ?? null, contentType: resolved?.contentType ?? null };
 }
 
 export type ResolvedDeliveryProof = {
@@ -521,50 +558,29 @@ export type ResolvedDeliveryProof = {
   contentType: string | null;
 };
 
-/** Presigned proof URLs for the detail modal. Fast path — no DB lookups. */
 export async function fetchDeliveryDetailExtras(params: {
   deliveryId: string;
   proofKeys: string[];
-}): Promise<{
-  proofs: Record<string, ResolvedDeliveryProof>;
-}> {
+}): Promise<{ proofs: Record<string, ResolvedDeliveryProof> }> {
   await requireDeliveriesView();
-  void logAdminRead("deliveries", "fetchDeliveryDetailExtras", {
-    deliveryId: params.deliveryId,
-  });
-
-  const uniqueKeys = [
-    ...new Set(params.proofKeys.map((k) => k.trim()).filter(Boolean)),
-  ];
-
+  void logAdminRead("deliveries", "fetchDeliveryDetailExtras", { deliveryId: params.deliveryId });
+  const uniqueKeys = [...new Set(params.proofKeys.map((key) => key.trim()).filter(Boolean))];
   const proofEntries = await Promise.all(
     uniqueKeys.map(async (key) => {
       const resolved = await resolveOrderProofUrl(key);
-      return {
-        key,
-        url: resolved?.url ?? null,
-        contentType: resolved?.contentType ?? null,
-      };
+      return { key, url: resolved?.url ?? null, contentType: resolved?.contentType ?? null };
     }),
   );
-
   const proofs: Record<string, ResolvedDeliveryProof> = {};
-  for (const entry of proofEntries) {
-    proofs[entry.key] = { url: entry.url, contentType: entry.contentType };
-  }
-
+  for (const entry of proofEntries) proofs[entry.key] = { url: entry.url, contentType: entry.contentType };
   return { proofs };
 }
 
-/** GPS audit event for the detail modal. Loaded independently from proofs. */
-export async function fetchDeliveryGpsAudit(
-  deliveryId: string,
-): Promise<{
+export async function fetchDeliveryGpsAudit(deliveryId: string): Promise<{
   gpsEvent: DriverLocationEvent | null;
   trail: Array<{ lat: number; lng: number }>;
 }> {
   await requireDeliveriesView();
-
   let gpsEvent: DriverLocationEvent | null = null;
   let trail: Array<{ lat: number; lng: number }> = [];
   try {
@@ -577,17 +593,9 @@ export async function fetchDeliveryGpsAudit(
   } catch (err) {
     console.error("[fetchDeliveryGpsAudit] gps event lookup failed", err);
   }
-
   return { gpsEvent, trail };
 }
 
-/**
- * Minimal delivery projection for the dashboard feed + metrics.
- *
- * The dashboard reads only the activity timestamp, the status, the identity and
- * the order id — never proof URLs, coordinates, partner logos or restaurant
- * names — so it gets its own narrow row type instead of the full list row.
- */
 export type DashboardDeliveryRow = {
   id: string;
   short_id: string;
@@ -601,84 +609,39 @@ export type DashboardDeliveryRow = {
   cancelled_at: string | null;
 };
 
-type DashboardDeliveryDbRow = {
-  id: string;
-  driver_id: string;
-  status: DeliveryStatus;
-  external_order_id: string | null;
-  created_at: string;
-  pickup_at: string | null;
-  delivered_at: string | null;
-  cancelled_at: string | null;
-  drivers:
-    | { profiles: { full_name: string | null } | { full_name: string | null }[] | null }
-    | { profiles: { full_name: string | null } | { full_name: string | null }[] | null }[]
-    | null;
-};
-
-/**
- * Deliveries whose activity could fall inside the dashboard's week window.
- *
- * The dashboard buckets by `deliveryActivityAt` = COALESCE(cancelled_at,
- * delivered_at, pickup_at, created_at) and keeps everything at or after the
- * week start. That coalesce can only be at or after the bound if at least one
- * of the four timestamps is, so an OR over the four is a strict SUPERSET of the
- * set the caller's own filter keeps — the filter still runs, unchanged, on the
- * returned rows, so the numbers are identical.
- *
- * This is the only bound on the query. It used to fetch the whole table
- * (184,353 rows / 201.9 ms measured) for two in-memory filters; the bounded
- * shape returns the ~7 days the logic can actually use (49,664 rows measured,
- * 3.7x less JSON) and selects ten columns instead of the thirty-plus join
- * select, so no proof signing or restaurant resolution happens either.
- */
-export async function fetchDashboardDeliveryRows(
-  activityFrom: string,
-): Promise<DashboardDeliveryRow[]> {
+export async function fetchDashboardDeliveryRows(activityFrom: string): Promise<DashboardDeliveryRow[]> {
   await requireDeliveriesView();
   void logAdminRead("deliveries", "fetchDashboardDeliveryRows", { activityFrom });
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("deliveries")
-    .select(
-      "id, driver_id, status, external_order_id, created_at, pickup_at, delivered_at, cancelled_at, drivers (profiles!drivers_id_fkey (full_name))",
-    )
-    .or(
-      [
-        `cancelled_at.gte.${activityFrom}`,
-        `delivered_at.gte.${activityFrom}`,
-        `pickup_at.gte.${activityFrom}`,
-        `created_at.gte.${activityFrom}`,
-      ].join(","),
-    );
-
-  if (error) throw error;
-
-  return ((data ?? []) as unknown as DashboardDeliveryDbRow[]).map((row) => {
-    const driverRel = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
-    const profileRel = driverRel?.profiles;
-    const profile = Array.isArray(profileRel) ? profileRel[0] : profileRel;
-    return {
-      id: row.id,
-      short_id: row.id.slice(0, 8).toUpperCase(),
-      driver_id: row.driver_id,
-      driver_name: profile?.full_name ?? "—",
-      status: row.status,
-      external_order_id: row.external_order_id,
-      created_at: row.created_at,
-      pickup_at: row.pickup_at,
-      delivered_at: row.delivered_at,
-      cancelled_at: row.cancelled_at,
-    };
-  });
+  const db = await openDb();
+  const from = new Date(activityFrom);
+  const fields = ["cancelled_at", "delivered_at", "pickup_at", "created_at"] as const;
+  const snaps = await Promise.all(
+    fields.map((field) => db.collection(COLLECTIONS.deliveries).where(field, ">=", from).get()),
+  );
+  const byId = new Map<string, Row>();
+  for (const snap of snaps) {
+    for (const doc of snap.docs) byId.set(doc.id, asRow(doc.id, doc.data()));
+  }
+  const rows = [...byId.values()];
+  const profiles = await rowsByIds(
+    db,
+    COLLECTIONS.profiles,
+    rows.map((row) => str(row.driver_id)).filter(Boolean),
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    short_id: row.id.slice(0, 8).toUpperCase(),
+    driver_id: str(row.driver_id),
+    driver_name: str(profiles.get(str(row.driver_id))?.full_name) || "—",
+    status: row.status as DeliveryStatus,
+    external_order_id: strOrNull(row.external_order_id),
+    created_at: str(row.created_at),
+    pickup_at: strOrNull(row.pickup_at),
+    delivered_at: strOrNull(row.delivered_at),
+    cancelled_at: strOrNull(row.cancelled_at),
+  }));
 }
 
-/**
- * Turn an exclusive end instant into the last instant an inclusive `<=` bound
- * may use. Only needed for the count RPC and other inclusive contracts; the
- * list itself sends `lt` and passes the instant through untouched.
- */
 function inclusiveUpperBound(to: string, exclusive?: boolean): string {
   if (!exclusive) return to;
   const ms = Date.parse(to);
@@ -686,136 +649,48 @@ function inclusiveUpperBound(to: string, exclusive?: boolean): string {
   return new Date(ms - 1).toISOString();
 }
 
-/**
- * Fetch one page of deliveries for the infinite-scroll list. Filters, search,
- * ordering, and pagination all run in Postgres; only the current page's rows
- * are mapped, and GPS-mock badges are resolved for just those rows.
- */
 export async function fetchDeliveriesPage(
   params: DeliveriesQueryFilter & { offset?: number },
 ): Promise<DeliveriesPage> {
   await requireDeliveriesView();
   void logAdminRead("deliveries", "fetchDeliveriesPage");
-  const supabase = await createClient();
-
+  const db = await openDb();
   const offset = Math.max(0, params.offset ?? 0);
   const limit = DELIVERIES_PAGE_SIZE;
-
   const search = params.search?.trim() ?? "";
-  const searchDriverIds = search ? await resolveSearchDriverIds(supabase, search) : [];
+  const searchDriverIds = search ? await resolveSearchDriverIds(search) : [];
   const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
+  const rows = await pageDeliveryRows(db, params, searchDriverIds, offset, limit);
 
-  const applyListFilters = <T extends {
-    eq: Function;
-    in: Function;
-    or: Function;
-    gte: Function;
-    lte: Function;
-    lt: Function;
-  }>(query: T): T => {
-    let next = query;
-    if (params.status && params.status !== "all") {
-      if (params.status === "in_progress") {
-        next = next.in("status", [...IN_PROGRESS_DELIVERY_STATUSES]) as T;
-      } else {
-        next = next.eq(
-          "status",
-          normalizeDeliveryStatusFilter(params.status) as DeliveryStatus,
-        ) as T;
-      }
-    }
-    if (params.zoneId && params.zoneId !== "all") {
-      next = next.eq("zone_id", params.zoneId) as T;
-    }
-    if (params.partnerId && params.partnerId !== "all") {
-      next = next.eq("partner_id", params.partnerId) as T;
-    }
-    if (params.cancelReason && params.cancelReason !== "all") {
-      next = next.or(buildCancelReasonOrFilter(params.cancelReason)) as T;
-    }
-    // `delivered_at` is NOT NULL-checked implicitly: a null delivered_at fails
-    // both bounds, so pending / in-transit / cancelled rows leave the window.
-    if (params.dateFrom) next = next.gte("delivered_at", params.dateFrom) as T;
-    if (params.dateTo) {
-      next = (
-        params.dateToExclusive
-          ? next.lt("delivered_at", params.dateTo)
-          : next.lte("delivered_at", params.dateTo)
-      ) as T;
-    }
-    if (search) {
-      next = next.or(buildSearchOrFilter(search, searchDriverIds)) as T;
-    }
-    return next;
-  };
-
-  let query = applyListFilters(supabase.from("deliveries").select(DELIVERY_LIST_SELECT));
-
-  // With a date window the list is chronological by completion time; without
-  // one it keeps the all-time `created_at` order so the unfiltered view does
-  // not change. Both are served by their matching `..._id_idx`.
-  const ordered = hasDateWindow
-    ? query.order("delivered_at", { ascending: false })
-    : query.order("created_at", { ascending: false });
-
-  const { data, error } = await ordered
-    .order("id", { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (error) throw error;
-
-  const rows = (data ?? []) as unknown as DeliveryDbRowForList[];
-  const needsFilteredCount = Boolean(
-    search || (params.cancelReason && params.cancelReason !== "all"),
-  );
   let total = 0;
-  if (needsFilteredCount) {
-    const countQuery = applyListFilters(
-      supabase.from("deliveries").select("id", { count: "exact", head: true }),
-    );
-    const { count, error: countError } = await countQuery;
-    total = countError ? offset + rows.length : (count ?? 0);
+  if (needsMemoryFilter(params)) {
+    total = offset + rows.length;
+    if (rows.length === limit) {
+      const extra = await pageDeliveryRows(db, params, searchDriverIds, offset + limit, 1);
+      if (extra.length > 0) total = offset + limit + 1;
+    }
   } else {
-    const { data: rawCounts, error: countError } = await supabase.rpc(
+    const { data: rawCounts, error: countError } = await callAdminFunction(
       "admin_deliveries_status_counts",
       {
         p_from: params.dateFrom ?? undefined,
-        p_to: params.dateTo
-          ? inclusiveUpperBound(params.dateTo, params.dateToExclusive)
-          : undefined,
-        p_zone_id:
-          params.zoneId && params.zoneId !== "all" ? params.zoneId : undefined,
-        p_partner_id:
-          params.partnerId && params.partnerId !== "all"
-            ? params.partnerId
-            : undefined,
-        // A window means the KPIs must count the same completed rows the list
-        // shows; with no window the legacy `created_at` basis is preserved.
+        p_to: params.dateTo ? inclusiveUpperBound(params.dateTo, params.dateToExclusive) : undefined,
+        p_zone_id: params.zoneId && params.zoneId !== "all" ? params.zoneId : undefined,
+        p_partner_id: params.partnerId && params.partnerId !== "all" ? params.partnerId : undefined,
         p_date_basis: hasDateWindow ? "delivered" : undefined,
       },
     );
-    // The status-counts RPC is a KPI optimisation, never the source of the
-    // rows themselves. When it times out (`57014`) or fails, the page must
-    // still render the rows it already fetched instead of replacing the whole
-    // list with "Could not load deliveries" — the same tolerance the
-    // filtered-count branch above already applies.
     if (countError) {
       total = offset + rows.length;
     } else {
-      total = listTotalFromStatusCounts(
-        parseDeliveriesStatusCounts(rawCounts),
-        params.status,
-      );
+      total = listTotalFromStatusCounts(parseDeliveriesStatusCounts(rawCounts), params.status);
     }
   }
 
-  const gpsFlags = await fetchGpsMockFlagsByDeliveryIds(rows.map((r) => r.id));
-  const mapped = await mapDeliveryDbRowsToListRows(rows, gpsFlags, {
-    resolveAssets: false,
-  });
-  // Keep the server order (delivered_at or created_at desc) — re-sorting breaks paging.
-  const enriched = await enrichDeliveryListRows(supabase, mapped);
-
+  const hydrated = await hydrateListRows(db, rows);
+  const gpsFlags = await fetchGpsMockFlagsByDeliveryIds(hydrated.map((row) => row.id));
+  const mapped = await mapDeliveryDbRowsToListRows(hydrated, gpsFlags, { resolveAssets: false });
+  const enriched = await enrichDeliveryListRows(mapped);
   return {
     rows: enriched,
     nextOffset: rows.length === limit ? offset + limit : null,
@@ -841,11 +716,6 @@ export type DeliveryCountsByFilters = {
   };
 };
 
-/**
- * Same WHERE as fetchDeliveriesPage (delivered_at when a window is given, zone,
- * partner) but count/head only — never select order rows. Used by Staff
- * Assistant v1 (B), so its numbers match the list's `Showing X of Y`.
- */
 export async function countDeliveriesByFilters(params: {
   dateFrom?: string;
   dateTo?: string;
@@ -864,35 +734,22 @@ export async function countDeliveriesByFilters(params: {
     driverId: params.driverId,
     restaurantId: params.restaurantId,
   });
-  const supabase = await createClient();
   const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
-
-  // One DEFINER scan for all seven numbers. The previous shape issued seven
-  // parallel `count: exact` requests, each of which ran the deliveries RLS
-  // policies per scanned row (measured on production: 2,796 ms / 567,831
-  // buffers for a single `status = 'verified'` count). The RPC keeps the exact
-  // same WHERE semantics — inclusive bounds, absent filter = no filter.
-  const { data, error } = await supabase.rpc("admin_deliveries_counts_by_filters", {
+  const { data, error } = await callAdminFunction("admin_deliveries_counts_by_filters", {
     p_from: params.dateFrom ?? undefined,
-    p_to: params.dateTo
-      ? inclusiveUpperBound(params.dateTo, params.dateToExclusive)
-      : undefined,
+    p_to: params.dateTo ? inclusiveUpperBound(params.dateTo, params.dateToExclusive) : undefined,
     p_zone_id: params.zoneId && params.zoneId !== "all" ? params.zoneId : undefined,
-    p_partner_id:
-      params.partnerId && params.partnerId !== "all" ? params.partnerId : undefined,
+    p_partner_id: params.partnerId && params.partnerId !== "all" ? params.partnerId : undefined,
     p_driver_id: params.driverId ?? undefined,
     p_restaurant_id: params.restaurantId ?? undefined,
     p_date_basis: hasDateWindow ? "delivered" : undefined,
   });
-
-  if (error) throw error;
-
+  if (error) throw new Error(error.message);
   const counts = (data ?? {}) as Record<string, unknown>;
   const read = (key: string): number => {
     const value = Number(counts[key] ?? 0);
     return Number.isFinite(value) ? value : 0;
   };
-
   return {
     total: read("total"),
     verified: read("verified"),
@@ -912,12 +769,10 @@ export async function countDeliveriesByFilters(params: {
   };
 }
 
-/** Global status counts for the KPI strip (independent of list filters). */
 export async function fetchDeliveriesKpis(): Promise<DeliveriesKpiCounts> {
   await requireDeliveriesView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_deliveries_status_counts");
-  if (error) throw error;
+  const { data, error } = await callAdminFunction("admin_deliveries_status_counts");
+  if (error) throw new Error(error.message);
   const counts = parseDeliveriesStatusCounts(data);
   return {
     total: counts.total,
@@ -929,136 +784,58 @@ export async function fetchDeliveriesKpis(): Promise<DeliveriesKpiCounts> {
   };
 }
 
-/** Zone + partner options for the list filters. */
 export async function fetchDeliveryFilterOptions(): Promise<DeliveryFilterOptions> {
   await requireDeliveriesView();
-  const supabase = await createClient();
-
-  const [{ data: zones }, { data: partners }] = await Promise.all([
-    supabase.from("zones").select("id, name").order("name", { ascending: true }),
-    supabase.from("partners").select("id, name").order("name", { ascending: true }),
+  const db = await openDb();
+  const [zones, partners] = await Promise.all([
+    db.collection(COLLECTIONS.zones).get(),
+    db.collection(COLLECTIONS.partners).get(),
   ]);
-
   return {
-    zones: (zones ?? []).map((z) => ({ id: (z as { id: string }).id, name: (z as { name: string }).name })),
-    partners: (partners ?? []).map((p) => ({
-      id: (p as { id: string }).id,
-      name: (p as { name: string }).name,
-    })),
+    zones: zones.docs
+      .map((doc) => ({ id: doc.id, name: str(doc.data().name) }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    partners: partners.docs
+      .map((doc) => ({ id: doc.id, name: str(doc.data().name) }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
-/**
- * Fetch all matching rows (lightweight) for CSV export, honoring filters.
- *
- * Pages in 1,000-row windows because PostgREST caps every response there; the
- * ceiling and the walk live in `export-pagination.ts` so `DELIVERIES_EXPORT_MAX_ROWS`
- * stays the single number the page shell compares its result against.
- */
-export async function fetchDeliveriesForExport(
-  params: DeliveriesQueryFilter,
-): Promise<DeliveryExportRow[]> {
+export async function fetchDeliveriesForExport(params: DeliveriesQueryFilter): Promise<DeliveryExportRow[]> {
   await requireDeliveriesView();
   void logAdminRead("deliveries", "fetchDeliveriesForExport");
-  const supabase = await createClient();
-
+  const db = await openDb();
   const search = params.search?.trim() ?? "";
-  const searchDriverIds = search ? await resolveSearchDriverIds(supabase, search) : [];
-  const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
-
-  const buildQuery = () => {
-    let query = supabase
-      .from("deliveries")
-      .select(
-        `
-      id,
-      status,
-      external_order_id,
-      pickup_at,
-      delivered_at,
-      cancelled_at,
-      cancel_reason,
-      drivers (driver_code, employee_id, profiles!drivers_id_fkey (full_name)),
-      restaurants (name),
-      zones (name)
-    `,
-      );
-
-    if (params.status && params.status !== "all") {
-      if (params.status === "in_progress") {
-        query = query.in("status", [...IN_PROGRESS_DELIVERY_STATUSES]);
-      } else {
-        const statusValue = normalizeDeliveryStatusFilter(
-          params.status,
-        ) as DeliveryStatus;
-        query = query.eq("status", statusValue);
-      }
-    }
-    if (params.zoneId && params.zoneId !== "all") query = query.eq("zone_id", params.zoneId);
-    if (params.partnerId && params.partnerId !== "all") {
-      query = query.eq("partner_id", params.partnerId);
-    }
-    if (params.cancelReason && params.cancelReason !== "all") {
-      query = query.or(buildCancelReasonOrFilter(params.cancelReason));
-    }
-    // Same date basis as the list, so the file and the screen agree.
-    if (params.dateFrom) query = query.gte("delivered_at", params.dateFrom);
-    if (params.dateTo) {
-      query = params.dateToExclusive
-        ? query.lt("delivered_at", params.dateTo)
-        : query.lte("delivered_at", params.dateTo);
-    }
-    if (search) {
-      query = query.or(buildSearchOrFilter(search, searchDriverIds));
-    }
-    return hasDateWindow
-      ? query.order("delivered_at", { ascending: false })
-      : query.order("created_at", { ascending: false });
-  };
-
-  type ExportDbRow = {
-    id: string;
-    status: DeliveryStatus;
-    external_order_id: string | null;
-    pickup_at: string | null;
-    delivered_at: string | null;
-    cancelled_at: string | null;
-    cancel_reason: string | null;
-    drivers:
-      | { driver_code: string; employee_id: string | null; profiles: { full_name: string | null } | { full_name: string | null }[] | null }
-      | { driver_code: string; employee_id: string | null; profiles: { full_name: string | null } | { full_name: string | null }[] | null }[]
-      | null;
-    restaurants: { name: string } | { name: string }[] | null;
-    zones: { name: string } | { name: string }[] | null;
-  };
-
-  // `id` is the tiebreaker so the pages cannot overlap or skip a row when many
-  // deliveries share the same second.
-  const collected = await collectExportPages<ExportDbRow>(async (offset, limit) => {
-    const { data, error } = await buildQuery()
-      .order("id", { ascending: false })
-      .range(offset, offset + limit - 1);
-    if (error) throw error;
-    return (data ?? []) as unknown as ExportDbRow[];
-  });
-
+  const searchDriverIds = search ? await resolveSearchDriverIds(search) : [];
+  const collected = await collectExportPages<Row>(async (offset, limit) =>
+    pageDeliveryRows(db, params, searchDriverIds, offset, limit),
+  );
+  const driverIds = collected.map((row) => str(row.driver_id)).filter(Boolean);
+  const [drivers, profiles, restaurants, zones] = await Promise.all([
+    rowsByIds(db, COLLECTIONS.drivers, driverIds),
+    rowsByIds(db, COLLECTIONS.profiles, driverIds),
+    rowsByIds(db, COLLECTIONS.restaurants, collected.map((row) => str(row.restaurant_id)).filter(Boolean)),
+    rowsByIds(db, COLLECTIONS.zones, collected.map((row) => str(row.zone_id)).filter(Boolean)),
+  ]);
   return collected.map((row) => {
-    const driverRel = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
-    const profileRel = driverRel?.profiles;
-    const profile = Array.isArray(profileRel) ? profileRel[0] : profileRel;
+    const driver = drivers.get(str(row.driver_id));
+    const profile = profiles.get(str(row.driver_id));
+    const restaurant = restaurants.get(str(row.restaurant_id));
+    const zone = zones.get(str(row.zone_id));
+    const restaurantName = restaurant ? str(restaurant.name) : "—";
     return {
       short_id: shortId(row.id),
-      driver_name: profile?.full_name ?? "—",
-      driver_code: driverRel?.driver_code ?? "—",
-      driver_employee_id: driverRel?.employee_id ?? "—",
-      restaurant_name: relName(row.restaurants) === "—" ? null : relName(row.restaurants),
-      zone_name: relName(row.zones),
-      status: row.status,
-      external_order_id: row.external_order_id,
-      pickup_at: row.pickup_at,
-      delivered_at: row.delivered_at,
-      cancelled_at: row.cancelled_at,
-      cancel_reason: row.cancel_reason,
+      driver_name: str(profile?.full_name) || "—",
+      driver_code: str(driver?.driver_code) || "—",
+      driver_employee_id: str(driver?.employee_id) || "—",
+      restaurant_name: restaurantName === "—" ? null : restaurantName,
+      zone_name: zone ? str(zone.name) : "—",
+      status: row.status as DeliveryStatus,
+      external_order_id: strOrNull(row.external_order_id),
+      pickup_at: strOrNull(row.pickup_at),
+      delivered_at: strOrNull(row.delivered_at),
+      cancelled_at: strOrNull(row.cancelled_at),
+      cancel_reason: strOrNull(row.cancel_reason),
     };
   });
 }
@@ -1069,43 +846,43 @@ export async function fetchRecentDeliveriesForDriver(
 ): Promise<RecentDeliveryForDriver[]> {
   await requireDeliveriesView();
   void logAdminRead("deliveries", "fetchRecentDeliveriesForDriver");
-
   if (!driverId) return [];
-
-  const supabase = await createClient();
+  const db = await openDb();
   const safeLimit = Math.max(1, Math.min(limit, 10));
-  const { data, error } = await supabase
-    .from("deliveries")
-    .select(
-      `
-      id,
-      driver_id,
-      status,
-      delivered_at,
-      created_at,
-      external_order_id,
-      partners (name)
-    `,
-    )
-    .eq("driver_id", driverId)
-    .order("created_at", { ascending: false })
-    .limit(safeLimit);
-
-  if (error) throw error;
-
-  const rows = (data ?? []) as unknown as Array<
-    RecentDeliveryDbRow & { created_at: string; external_order_id: string | null }
-  >;
-  return rows.map((row) => ({
-    id: row.id,
-    driver_id: row.driver_id,
-    short_id: shortId(row.id),
-    status: row.status,
-    partner_name: relName(row.partners),
-    delivered_at: row.delivered_at,
-    created_at: row.created_at,
-    external_order_id: row.external_order_id,
-  }));
+  const snap = await db
+    .collection(COLLECTIONS.deliveries)
+    .where("driver_id", "==", driverId)
+    .orderBy("created_at", "desc")
+    .limit(safeLimit)
+    .get();
+  const rows = snap.docs.map((doc) => asRow(doc.id, doc.data()));
+  const partners = await rowsByIds(
+    db,
+    COLLECTIONS.partners,
+    rows.map((row) => str(row.partner_id)).filter(Boolean),
+  );
+  return rows.map((row) => {
+    const partner = partners.get(str(row.partner_id));
+    const shaped: RecentDeliveryDbRow = {
+      id: row.id,
+      driver_id: str(row.driver_id),
+      status: row.status as DeliveryStatus,
+      delivered_at: strOrNull(row.delivered_at),
+      created_at: str(row.created_at),
+      external_order_id: strOrNull(row.external_order_id),
+      partners: partner ? { name: str(partner.name) } : null,
+    };
+    return {
+      id: shaped.id,
+      driver_id: shaped.driver_id,
+      short_id: shortId(shaped.id),
+      status: shaped.status,
+      partner_name: relName(shaped.partners),
+      delivered_at: shaped.delivered_at,
+      created_at: shaped.created_at ?? "",
+      external_order_id: shaped.external_order_id ?? null,
+    };
+  });
 }
 
 export async function updateDeliveryStatus(
@@ -1115,65 +892,42 @@ export async function updateDeliveryStatus(
 ): Promise<DeliveryMutationResult> {
   const session = await requireDeliveriesManage();
   if (!session) return { error: "not_authorized" };
-
   if (status === "rejected") {
     const trimmed = rejectionReason?.trim() ?? "";
     if (!trimmed) return { error: "reason_required" };
   }
 
-  const supabase = await createClient();
-  const { data: existing, error: fetchError } = await supabase
-    .from("deliveries")
-    .select("id, driver_id, delivered_at, status, partner_id, restaurant_id")
-    .eq("id", deliveryId)
-    .maybeSingle();
-
-  if (fetchError || !existing) {
-    return {
-      error: "update_failed",
-      errorDetail: formatPgErrorDetail(fetchError),
-    };
-  }
-
-  if (
-    (existing.status as DeliveryStatus) === "in_transit" ||
-    (existing.status as DeliveryStatus) === "cancelled"
-  ) {
+  const db = await openDb();
+  const existingSnap = await db.collection(COLLECTIONS.deliveries).doc(deliveryId).get();
+  if (!existingSnap.exists) return { error: "update_failed" };
+  const existing = asRow(existingSnap.id, existingSnap.data());
+  if (existing.status === "in_transit" || existing.status === "cancelled") {
     return { error: "invalid_status" };
   }
 
-  const updatePayload =
+  const updatePayload: Record<string, unknown> =
     status === "rejected"
-      ? {
-          status: "rejected" as const,
-          rejection_reason: rejectionReason!.trim(),
-        }
-      : {
-          status,
-          rejection_reason: null,
-        };
+      ? { status: "rejected", rejection_reason: rejectionReason!.trim() }
+      : { status, rejection_reason: null };
 
   const resolvedRestaurantId =
     status === "verified"
-      ? await resolveDeliveryRestaurantId(supabase, {
-          driver_id: existing.driver_id,
-          partner_id: (existing as { partner_id: string | null }).partner_id ?? null,
-          restaurant_id: (existing as { restaurant_id: string | null }).restaurant_id ?? null,
+      ? await resolveDeliveryRestaurantId({
+          driver_id: str(existing.driver_id),
+          partner_id: strOrNull(existing.partner_id),
+          restaurant_id: strOrNull(existing.restaurant_id),
         })
       : null;
   if (resolvedRestaurantId && status !== "rejected") {
-    (updatePayload as Record<string, unknown>).restaurant_id = resolvedRestaurantId;
+    updatePayload.restaurant_id = resolvedRestaurantId;
   }
 
-  const { error } = await supabase
-    .from("deliveries")
-    .update(updatePayload)
-    .eq("id", deliveryId);
-
-  if (error) {
+  try {
+    await existingSnap.ref.set(updatePayload, { merge: true });
+  } catch (error) {
     return {
       error: "update_failed",
-      errorDetail: formatPgErrorDetail(error),
+      errorDetail: formatPgErrorDetail({ message: error instanceof Error ? error.message : "save_failed" }),
     };
   }
 
@@ -1190,56 +944,30 @@ export async function updateDeliveryStatus(
     context: { driver_id: existing.driver_id, delivered_at: existing.delivered_at },
   });
 
-  // Everything below is a *consequence* of a write that has already committed.
-  // A failure here used to throw out of the action, so React Query never saw
-  // `{ ok: true }`, `onSuccess` never ran, the optimistic patch was rolled back
-  // and the operator was shown a failure for a status that was in fact saved.
-  // The row is the source of truth; a recalc, a verification mirror or a push
-  // must never be able to contradict it.
   try {
-    const affectsEarnings =
-      existing.status === "verified" ||
-      status === "verified";
-    if (affectsEarnings && existing.delivered_at) {
-      await recalcEarningsForDelivery(
-        supabase,
-        existing.driver_id,
-        existing.delivered_at,
-      );
+    const affectsEarnings = existing.status === "verified" || status === "verified";
+    if (affectsEarnings && str(existing.delivered_at)) {
+      await recalcEarningsForDelivery(str(existing.driver_id), str(existing.delivered_at));
     }
-
-    // Mirror the admin's decision into DPD verifications so the verification
-    // page stays in sync without a manual entry.
     await syncVerificationForDelivery(
-      supabase,
       {
         id: existing.id,
-        driver_id: existing.driver_id,
-        delivered_at: existing.delivered_at ?? new Date().toISOString(),
-        partner_id: (existing as { partner_id: string | null }).partner_id ?? null,
-        restaurant_id:
-          resolvedRestaurantId ??
-          ((existing as { restaurant_id: string | null }).restaurant_id ?? null),
+        driver_id: str(existing.driver_id),
+        delivered_at: str(existing.delivered_at) || new Date().toISOString(),
+        partner_id: strOrNull(existing.partner_id),
+        restaurant_id: resolvedRestaurantId ?? strOrNull(existing.restaurant_id),
       },
       session.id,
     );
-
-    if (status === "verified") {
-      await sendDpdCongratsFor([existing.driver_id]);
-    }
+    if (status === "verified") await sendDpdCongratsFor([str(existing.driver_id)]);
   } catch (sideEffectError) {
-    console.error(
-      "[updateDeliveryStatus] post-update side effect failed",
-      sideEffectError,
-    );
+    console.error("[updateDeliveryStatus] post-update side effect failed", sideEffectError);
   }
 
   return { ok: true };
 }
 
-export async function verifyDelivery(
-  deliveryId: string,
-): Promise<DeliveryMutationResult> {
+export async function verifyDelivery(deliveryId: string): Promise<DeliveryMutationResult> {
   return updateDeliveryStatus(deliveryId, "verified");
 }
 
@@ -1272,36 +1000,21 @@ export async function bulkUpdateDeliveries(
 ): Promise<BulkUpdateDeliveriesResult> {
   const session = await requireDeliveriesManage();
   if (!session) return { error: "not_authorized" };
-
   const ids = [...new Set(deliveryIds.filter(Boolean))];
-  if (ids.length === 0) {
-    return { ok: true, updated: 0, skipped: 0, failed: 0 };
-  }
+  if (ids.length === 0) return { ok: true, updated: 0, skipped: 0, failed: 0 };
   if (ids.length > BULK_UPDATE_MAX) return { error: "too_many" };
+  if (status === "rejected" && !rejectionReason?.trim()) return { error: "reason_required" };
 
-  if (status === "rejected" && !rejectionReason?.trim()) {
-    return { error: "reason_required" };
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_bulk_update_deliveries", {
+  const { data, error } = await callAdminFunction("admin_bulk_update_deliveries", {
     p_ids: ids,
     p_status: status,
     p_reason: rejectionReason?.trim() ?? "",
   });
-
   if (error) {
-    return {
-      error: bulkUpdateErrorFromMessage(error.message),
-      errorDetail: formatPgErrorDetail(error),
-    };
+    return { error: bulkUpdateErrorFromMessage(error.message), errorDetail: formatPgErrorDetail(error) };
   }
 
-  const payload = (data ?? {}) as {
-    updated?: number;
-    skipped?: number;
-    failed?: number;
-  };
+  const payload = (data ?? {}) as { updated?: number; skipped?: number; failed?: number };
   const updated = Number(payload.updated ?? 0);
   const skipped = Number(payload.skipped ?? 0);
   const failed = Number(payload.failed ?? 0);
@@ -1310,60 +1023,37 @@ export async function bulkUpdateDeliveries(
     action: "update",
     entityType: "delivery",
     routeName: "bulkUpdateDeliveries",
-    context: {
-      status,
-      requested: ids.length,
-      updated,
-      skipped,
-      failed,
-    },
+    context: { status, requested: ids.length, updated, skipped, failed },
   });
 
   if (status === "verified" && updated > 0) {
-    // The RPC has already committed. A push failure must not be reported as a
-    // failed bulk update, or the list would keep showing the old statuses.
     try {
-      const { data: rows } = await supabase
-        .from("deliveries")
-        .select("driver_id")
-        .in("id", ids)
-        .eq("status", "verified");
-      await sendDpdCongratsFor((rows ?? []).map((r) => r.driver_id));
+      const db = await openDb();
+      const rows = await rowsByIds(db, COLLECTIONS.deliveries, ids);
+      const driverIds = [...rows.values()]
+        .filter((row) => row.status === "verified")
+        .map((row) => str(row.driver_id))
+        .filter(Boolean);
+      await sendDpdCongratsFor(driverIds);
     } catch (sideEffectError) {
-      console.error(
-        "[bulkUpdateDeliveries] congrats push failed",
-        sideEffectError,
-      );
+      console.error("[bulkUpdateDeliveries] congrats push failed", sideEffectError);
     }
   }
 
   return { ok: true, updated, skipped, failed };
 }
 
-export async function deleteDelivery(
-  deliveryId: string,
-): Promise<DeliveryMutationResult> {
+export async function deleteDelivery(deliveryId: string): Promise<DeliveryMutationResult> {
   const session = await requireSuperAdmin();
   if (!session) return { error: "not_authorized" };
-
-  const supabase = await createClient();
-  const { data: row, error: fetchError } = await supabase
-    .from("deliveries")
-    .select("id, driver_id, delivered_at, order_proof_url, order_proof_urls, pickup_proof_url, pickup_proof_urls, cancel_proof_url, cancel_proof_urls, status")
-    .eq("id", deliveryId)
-    .maybeSingle();
-
-  if (fetchError || !row) {
-    return {
-      error: "delete_failed",
-      errorDetail: formatPgErrorDetail(fetchError),
-    };
-  }
-
+  const db = await openDb();
+  const snap = await db.collection(COLLECTIONS.deliveries).doc(deliveryId).get();
+  if (!snap.exists) return { error: "delete_failed" };
+  const row = asRow(snap.id, snap.data());
   const proofKeys = [
-    ...mergeProofKeys(row.order_proof_url, row.order_proof_urls),
-    ...mergeProofKeys(row.pickup_proof_url, row.pickup_proof_urls),
-    ...mergeProofKeys(row.cancel_proof_url, row.cancel_proof_urls),
+    ...mergeProofKeys(strOrNull(row.order_proof_url), Array.isArray(row.order_proof_urls) ? row.order_proof_urls as string[] : null),
+    ...mergeProofKeys(strOrNull(row.pickup_proof_url), Array.isArray(row.pickup_proof_urls) ? row.pickup_proof_urls as string[] : null),
+    ...mergeProofKeys(strOrNull(row.cancel_proof_url), Array.isArray(row.cancel_proof_urls) ? row.cancel_proof_urls as string[] : null),
   ];
 
   for (const proofKey of proofKeys) {
@@ -1374,22 +1064,19 @@ export async function deleteDelivery(
       /* best-effort R2 cleanup */
     }
     try {
-      const admin = createAdminClient();
-      await admin.from("storage_uploads").delete().eq("object_key", proofKey);
+      const uploads = await db.collection("storage_uploads").where("object_key", "==", proofKey).get();
+      await Promise.all(uploads.docs.map((doc) => doc.ref.delete()));
     } catch {
       /* best-effort audit cleanup */
     }
   }
 
-  const { error: deleteError } = await supabase
-    .from("deliveries")
-    .delete()
-    .eq("id", deliveryId);
-
-  if (deleteError) {
+  try {
+    await snap.ref.delete();
+  } catch (error) {
     return {
       error: "delete_failed",
-      errorDetail: formatPgErrorDetail(deleteError),
+      errorDetail: formatPgErrorDetail({ message: error instanceof Error ? error.message : "save_failed" }),
     };
   }
 
@@ -1398,23 +1085,16 @@ export async function deleteDelivery(
     entityType: "delivery",
     entityId: deliveryId,
     routeName: "deleteDelivery",
-    before: {
-      status: row.status,
-      driver_id: row.driver_id,
-      delivered_at: row.delivered_at,
-    },
+    before: { status: row.status, driver_id: row.driver_id, delivered_at: row.delivered_at },
   });
 
-  if (row.status === "verified" && row.delivered_at) {
-    // The row is already gone; a recalc failure cannot un-delete it, so it must
-    // not be reported as a failed delete.
+  if (row.status === "verified" && str(row.delivered_at)) {
     try {
-      await recalcEarningsForDelivery(supabase, row.driver_id, row.delivered_at);
+      await recalcEarningsForDelivery(str(row.driver_id), str(row.delivered_at));
     } catch (sideEffectError) {
       console.error("[deleteDelivery] earnings recalc failed", sideEffectError);
     }
   }
-
   return { ok: true };
 }
 
@@ -1432,52 +1112,19 @@ export async function fetchLiveDriverLocationForDelivery(
 ): Promise<LiveDriverLocationForDelivery | null> {
   await requireDeliveriesView();
   if (!deliveryId || !driverId) return null;
-
-  const supabase = createAdminClient() as unknown as {
-    from: (table: string) => {
-      select: (columns: string) => Record<string, unknown>;
-    };
-  };
-
-  const liveQuery = supabase
-    .from("driver_locations")
-    .select(
-      "latitude, longitude, last_seen_at, is_mocked, heading_deg, active_delivery_id",
-    ) as {
-    eq: (
-      column: string,
-      value: string,
-    ) => {
-      maybeSingle: () => Promise<{
-        data: Record<string, unknown> | null;
-        error: { message: string } | null;
-      }>;
-    };
-  };
-
-  const { data, error } = await liveQuery.eq("driver_id", driverId).maybeSingle();
-
-  if (error) throw error;
-  if (!data) return null;
-
-  const row = data as unknown as {
-    latitude: number | string;
-    longitude: number | string;
-    last_seen_at: string;
-    is_mocked: boolean | null;
-    heading_deg: number | string | null;
-    active_delivery_id: string | null;
-  };
-
-  if (row.active_delivery_id && row.active_delivery_id !== deliveryId) {
-    return null;
-  }
-
+  const db = await openDb();
+  const direct = await db.collection(COLLECTIONS.driverLocations).doc(driverId).get();
+  const snap = direct.exists
+    ? direct
+    : (await db.collection(COLLECTIONS.driverLocations).where("driver_id", "==", driverId).limit(1).get()).docs[0];
+  if (!snap?.exists) return null;
+  const row = asRow(snap.id, snap.data());
+  if (str(row.active_delivery_id) && str(row.active_delivery_id) !== deliveryId) return null;
   return {
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
-    lastSeenAt: row.last_seen_at,
-    isMocked: row.is_mocked,
-    headingDeg: row.heading_deg != null ? Number(row.heading_deg) : null,
+    lastSeenAt: str(row.last_seen_at),
+    isMocked: row.is_mocked == null ? null : row.is_mocked === true,
+    headingDeg: row.heading_deg == null ? null : Number(row.heading_deg),
   };
 }

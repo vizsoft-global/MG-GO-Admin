@@ -2,47 +2,45 @@
 
 import { useEffect, useRef } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { createClient } from "@/lib/supabase/client";
 
 /**
- * Subscribes to Supabase Realtime `postgres_changes` for one or more tables and
- * invalidates the given TanStack Query keys whenever a change is received.
+ * Polls on a fixed interval and invalidates the given TanStack Query keys.
  *
- * Used to make admin views (deliveries, zones, live tracking) auto-refresh when
- * a row is inserted/updated/deleted by another session — without polling.
- *
- * The referenced tables must be part of the `supabase_realtime` publication;
- * if a table is missing, the channel still subscribes but no events arrive.
+ * There is no live row stream. The same keys a change listener used to refresh
+ * are invalidated every 20s instead, so list pages still pick up inserts and
+ * edits from another session. `onChange` fires on every tick so a paused feed
+ * can count new rows without waiting for the visible query to refetch.
  */
 export type RealtimeTableSubscription = {
-  /** Postgres table name (without schema prefix). */
+  /** Collection name (former table, without schema prefix). */
   table: string;
-  /** Postgres schema (defaults to `public`). */
+  /** Kept so existing call sites compile; unused by the poller. */
   schema?: string;
-  /** Optional `column=eq.value` filter passed to Supabase Realtime. */
+  /** Kept so existing call sites compile; unused by the poller. */
   filter?: string;
-  /** Event type — defaults to all changes. */
+  /** Event type — defaults to all changes. Unused by the poller. */
   event?: "*" | "INSERT" | "UPDATE" | "DELETE";
 };
 
 export type UseRealtimeInvalidatorOptions = {
   /** Stable channel name. Make it unique per page so multiple subscribers don't collide. */
   channel: string;
-  /** Tables to watch. */
+  /** Tables that used to be watched. Shape is kept for call-site compatibility. */
   tables: RealtimeTableSubscription[];
   /** Query keys to invalidate on any matched change. */
   invalidateKeys: QueryKey[];
   /** Set to false to pause the subscription (e.g. while a tab is hidden). */
   enabled?: boolean;
-  /** Optional debounce window (ms) — coalesces rapid bursts of changes. */
+  /** Optional debounce window (ms) — unused by the poller; kept for call sites. */
   debounceMs?: number;
   /**
-   * Fires once per received change, undebounced. Debouncing is a refetch
-   * concern; a caller counting events (e.g. an "N new events" pill) must see
-   * every one of them.
+   * Fires once per poll tick. Debouncing is a refetch concern; a caller
+   * counting events (e.g. an "N new events" pill) must see every tick.
    */
   onChange?: () => void;
 };
+
+const POLL_MS = 20_000;
 
 export function useRealtimeInvalidator({
   channel,
@@ -64,57 +62,26 @@ export function useRealtimeInvalidator({
     onChangeRef.current = onChange;
   }, [onChange]);
 
-  // Serialize tables config so the effect re-runs only on shape changes,
-  // not on every render that creates a new array literal.
   const tablesKey = JSON.stringify(tables);
 
   useEffect(() => {
     if (!enabled) return;
     if (typeof window === "undefined") return;
 
-    const subscriptions = JSON.parse(tablesKey) as RealtimeTableSubscription[];
-    const supabase = createClient();
-    const realtimeChannel = supabase.channel(channel);
+    void channel;
+    void debounceMs;
+    void tablesKey;
 
-    let debounceHandle: ReturnType<typeof setTimeout> | null = null;
-    const triggerInvalidate = () => {
-      if (debounceHandle) clearTimeout(debounceHandle);
-      debounceHandle = setTimeout(() => {
-        for (const key of keysRef.current) {
-          void queryClient.invalidateQueries({ queryKey: key });
-        }
-      }, debounceMs);
+    const tick = () => {
+      for (const key of keysRef.current) {
+        void queryClient.invalidateQueries({ queryKey: key });
+      }
+      onChangeRef.current?.();
     };
 
-    for (const sub of subscriptions) {
-      realtimeChannel.on(
-        "postgres_changes",
-        {
-          event: sub.event ?? "*",
-          schema: sub.schema ?? "public",
-          table: sub.table,
-          ...(sub.filter ? { filter: sub.filter } : {}),
-        },
-        () => {
-          onChangeRef.current?.();
-          triggerInvalidate();
-        },
-      );
-    }
-
-    realtimeChannel.subscribe((status) => {
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        // Surface the failure once so we know if a table is missing from the
-        // publication; do not throw — the page still works with manual refresh.
-        if (typeof console !== "undefined") {
-          console.warn(`[realtime] channel ${channel} status: ${status}`);
-        }
-      }
-    });
-
+    const handle = setInterval(tick, POLL_MS);
     return () => {
-      if (debounceHandle) clearTimeout(debounceHandle);
-      void supabase.removeChannel(realtimeChannel);
+      clearInterval(handle);
     };
   }, [channel, tablesKey, enabled, debounceMs, queryClient]);
 }

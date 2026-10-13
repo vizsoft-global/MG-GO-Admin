@@ -1,8 +1,10 @@
 "use server";
 
+import type { DocumentData, Firestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   normalizeListColumnPreference,
   resolveUiPreference,
@@ -11,8 +13,9 @@ import {
   type EffectiveUiPreference,
   type ListColumnPreference,
 } from "@/lib/ui-preferences/types";
-import { createClient } from "@/lib/supabase/server";
-import type { Json } from "@/types/database";
+
+const USER_PREFS = "admin_ui_preferences";
+const ROLE_DEFAULTS = "admin_role_ui_defaults";
 
 async function requirePanelUser() {
   const session = await getSessionUser();
@@ -34,6 +37,21 @@ async function requireSettingsManage() {
   return session;
 }
 
+async function findPref(
+  db: Firestore,
+  collection: string,
+  ownerField: string,
+  ownerId: string,
+  preferenceKey: string,
+): Promise<QueryDocumentSnapshot | null> {
+  const snap = await db.collection(collection).where(ownerField, "==", ownerId).get();
+  return snap.docs.find((doc) => doc.data().preference_key === preferenceKey) ?? null;
+}
+
+function prefDocId(ownerId: string, preferenceKey: string): string {
+  return `${ownerId}_${encodeURIComponent(preferenceKey)}`;
+}
+
 export async function getEffectiveUiPreference(
   preferenceKey: string,
   knownIds: string[],
@@ -48,31 +66,30 @@ export async function getEffectiveUiPreference(
     });
   }
 
-  const supabase = await createClient();
-  const roleId = session.profile.admin_role_id;
+  const db = await staffDb();
+  if (!db) {
+    return resolveUiPreference({
+      system: systemDefault,
+      role: null,
+      user: null,
+    });
+  }
 
-  const [userRes, roleRes] = await Promise.all([
-    supabase
-      .from("admin_ui_preferences")
-      .select("value")
-      .eq("user_id", session.id)
-      .eq("preference_key", preferenceKey)
-      .maybeSingle(),
+  const roleId = session.profile.admin_role_id;
+  const [userDoc, roleDoc] = await Promise.all([
+    findPref(db, USER_PREFS, "user_id", session.id, preferenceKey),
     roleId
-      ? supabase
-          .from("admin_role_ui_defaults")
-          .select("value")
-          .eq("role_id", roleId)
-          .eq("preference_key", preferenceKey)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+      ? findPref(db, ROLE_DEFAULTS, "role_id", roleId, preferenceKey)
+      : Promise.resolve(null),
   ]);
 
-  const roleNorm = roleRes.data?.value
-    ? normalizeListColumnPreference(roleRes.data.value, knownIds, systemDefault)
+  const roleValue = roleDoc?.data()?.value;
+  const userValue = userDoc?.data()?.value;
+  const roleNorm = roleValue
+    ? normalizeListColumnPreference(roleValue, knownIds, systemDefault)
     : null;
-  const userNorm = userRes.data?.value
-    ? normalizeListColumnPreference(userRes.data.value, knownIds, systemDefault)
+  const userNorm = userValue
+    ? normalizeListColumnPreference(userValue, knownIds, systemDefault)
     : null;
 
   return resolveUiPreference({
@@ -89,17 +106,26 @@ export async function saveUserUiPreference(
   const session = await requirePanelUser();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("admin_ui_preferences").upsert(
-    {
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
+
+  try {
+    const existing = await findPref(db, USER_PREFS, "user_id", session.id, preferenceKey);
+    const payload = {
       user_id: session.id,
       preference_key: preferenceKey,
-      value: value as unknown as Json,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,preference_key" },
-  );
-  if (error) return { error: "save_failed" };
+      value,
+      updated_at: new Date(),
+    };
+    if (existing) {
+      await existing.ref.set(payload, { merge: true });
+    } else {
+      const id = prefDocId(session.id, preferenceKey);
+      await db.collection(USER_PREFS).doc(id).set({ id, ...payload });
+    }
+  } catch {
+    return { error: "save_failed" };
+  }
   return { success: true };
 }
 
@@ -109,14 +135,34 @@ export async function clearUserUiPreference(
   const session = await requirePanelUser();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("admin_ui_preferences")
-    .delete()
-    .eq("user_id", session.id)
-    .eq("preference_key", preferenceKey);
-  if (error) return { error: "save_failed" };
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
+
+  try {
+    const existing = await findPref(db, USER_PREFS, "user_id", session.id, preferenceKey);
+    if (existing) await existing.ref.delete();
+  } catch {
+    return { error: "save_failed" };
+  }
   return { success: true };
+}
+
+function preferenceFromValue(value: unknown): ListColumnPreference | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as DocumentData;
+  if (!Array.isArray(record.order) || !Array.isArray(record.visible)) return null;
+  const sort = record.sort;
+  return {
+    order: record.order.map(String),
+    visible: record.visible.map(String),
+    sort:
+      sort && typeof sort === "object" && !Array.isArray(sort)
+        ? {
+            id: String((sort as { id?: unknown }).id ?? ""),
+            dir: (sort as { dir?: string }).dir === "desc" ? "desc" : "asc",
+          }
+        : null,
+  };
 }
 
 export async function getRoleUiDefault(
@@ -126,27 +172,11 @@ export async function getRoleUiDefault(
   const session = await requireSettingsManage();
   if (!session) return null;
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("admin_role_ui_defaults")
-    .select("value")
-    .eq("role_id", roleId)
-    .eq("preference_key", preferenceKey)
-    .maybeSingle();
-  if (!data?.value || typeof data.value !== "object") return null;
-  const v = data.value as Record<string, unknown>;
-  if (!Array.isArray(v.order) || !Array.isArray(v.visible)) return null;
-  return {
-    order: v.order.map(String),
-    visible: v.visible.map(String),
-    sort:
-      v.sort && typeof v.sort === "object" && !Array.isArray(v.sort)
-        ? {
-            id: String((v.sort as { id?: unknown }).id ?? ""),
-            dir: (v.sort as { dir?: string }).dir === "desc" ? "desc" : "asc",
-          }
-        : null,
-  };
+  const db = await staffDb();
+  if (!db) return null;
+
+  const existing = await findPref(db, ROLE_DEFAULTS, "role_id", roleId, preferenceKey);
+  return preferenceFromValue(existing?.data()?.value);
 }
 
 export async function saveRoleUiDefault(
@@ -157,18 +187,27 @@ export async function saveRoleUiDefault(
   const session = await requireSettingsManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("admin_role_ui_defaults").upsert(
-    {
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
+
+  try {
+    const existing = await findPref(db, ROLE_DEFAULTS, "role_id", roleId, preferenceKey);
+    const payload = {
       role_id: roleId,
       preference_key: preferenceKey,
-      value: value as unknown as Json,
-      updated_at: new Date().toISOString(),
+      value,
+      updated_at: new Date(),
       updated_by: session.id,
-    },
-    { onConflict: "role_id,preference_key" },
-  );
-  if (error) return { error: "save_failed" };
+    };
+    if (existing) {
+      await existing.ref.set(payload, { merge: true });
+    } else {
+      const id = prefDocId(roleId, preferenceKey);
+      await db.collection(ROLE_DEFAULTS).doc(id).set({ id, ...payload });
+    }
+  } catch {
+    return { error: "save_failed" };
+  }
 
   void logAdminMutation({
     action: "update",

@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { callCronFunction } from "@/lib/firebase/callable";
 
 export type DriverOpsAuditHealth = {
   configured: boolean;
@@ -25,27 +25,25 @@ export async function runDriverOpsRetention(options?: {
   locationKeep?: string;
   batch?: number;
 }): Promise<DriverOpsRetentionResult> {
-  const supabase = createAdminClient();
-
   const [ops, locations, health] = await Promise.all([
-    supabase.rpc("cleanup_driver_operation_events", {
+    callCronFunction<number>("cleanup_driver_operation_events", {
       p_keep: options?.operationKeep ?? undefined,
       p_batch: options?.batch ?? undefined,
     }),
-    supabase.rpc("cleanup_driver_location_events", {
+    callCronFunction<number>("cleanup_driver_location_events", {
       p_keep: options?.locationKeep ?? undefined,
       p_batch: options?.batch ?? undefined,
     }),
-    supabase.rpc("driver_ops_audit_health"),
+    callCronFunction<DriverOpsAuditHealth>("driver_ops_audit_health"),
   ]);
 
-  if (ops.error) throw ops.error;
-  if (locations.error) throw locations.error;
-  if (health.error) throw health.error;
+  if (ops.error) throw new Error(ops.error.message);
+  if (locations.error) throw new Error(locations.error.message);
+  if (health.error) throw new Error(health.error.message);
 
   return {
     operationEventsDeleted: typeof ops.data === "number" ? ops.data : 0,
     locationEventsDeleted: typeof locations.data === "number" ? locations.data : 0,
-    auditHealth: health.data as unknown as DriverOpsAuditHealth,
+    auditHealth: health.data as DriverOpsAuditHealth,
   };
 }

@@ -155,6 +155,8 @@ export const queryKeys = {
     imports: () => ["vehicles", "imports"] as const,
     useTypes: () => ["vehicles", "use-types"] as const,
     tabs: (id: string, tab: string) => ["vehicles", "tabs", id, tab] as const,
+    fleetLedger: (kind: "service" | "handover" | "accident") =>
+      ["vehicles", "fleet-ledger", kind] as const,
   },
   fuel: {
     all: () => ["fuel"] as const,
@@ -171,6 +173,7 @@ export const queryKeys = {
     all: () => ["requests"] as const,
     list: (filters: Record<string, unknown> = {}) => ["requests", "list", filters] as const,
     detail: (id: string) => ["requests", "detail", id] as const,
+    queueFacts: (ids: string[]) => ["requests", "queueFacts", ids] as const,
     typeCounts: () => ["requests", "typeCounts"] as const,
     /**
      * Department workload (EmployeeDesk → Reports). Its own key rather than a

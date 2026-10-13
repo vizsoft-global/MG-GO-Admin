@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { callCronFunction } from "@/lib/firebase/callable";
 
 export type DriverTelemetryRetentionResult = {
   telemetryEventsDeleted: number;
@@ -16,14 +16,12 @@ export async function runDriverTelemetryRetention(options?: {
   keep?: string;
   batch?: number;
 }): Promise<DriverTelemetryRetentionResult> {
-  const supabase = createAdminClient();
-
-  const { data, error } = await supabase.rpc("cleanup_driver_telemetry_events", {
+  const { data, error } = await callCronFunction<number>("cleanup_driver_telemetry_events", {
     p_keep: options?.keep ?? undefined,
     p_batch: options?.batch ?? undefined,
   });
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
 
   return {
     telemetryEventsDeleted: typeof data === "number" ? data : 0,

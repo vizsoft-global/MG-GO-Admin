@@ -1,7 +1,9 @@
 "use server";
 
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import {
@@ -61,6 +63,29 @@ import type {
   OpsTrendPoint,
   TargetDpdRow,
 } from "./performance-ops-types";
+
+function isoOf(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  const ts = value as { toDate?: () => Date };
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  return null;
+}
+
+function rpcArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...args };
+  for (const [key, value] of Object.entries(args)) {
+    if (!key.startsWith("p_")) continue;
+    const camel = key.slice(2).replace(/_([a-z0-9])/g, (_match, ch: string) => ch.toUpperCase());
+    if (out[camel] === undefined) out[camel] = value;
+  }
+  return out;
+}
+
+function callRpc<T>(name: string, args?: Record<string, unknown>) {
+  return callAdminFunction<T>(name, args ? rpcArgs(args) : {});
+}
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -282,33 +307,48 @@ function parseKpis(raw: unknown): PerformanceKpis {
   };
 }
 
-async function loadDriverRestaurantNames(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  driverIds: string[],
-): Promise<Map<string, string>> {
+async function loadDriverRestaurantNames(driverIds: string[]): Promise<Map<string, string>> {
   const names = new Map<string, string>();
   if (driverIds.length === 0) return names;
-  const { data } = await supabase
-    .from("driver_restaurants")
-    .select("driver_id, restaurants(name)")
-    .in("driver_id", driverIds);
+  const db = await staffDb();
+  if (!db) return names;
+  const wanted = new Set(driverIds);
+  const links: Array<{ driver_id: string; restaurant_id: string }> = [];
+  const ids = [...wanted];
+  for (let i = 0; i < ids.length; i += 30) {
+    const chunk = ids.slice(i, i + 30);
+    const snap = await db
+      .collection(COLLECTIONS.driverRestaurants)
+      .where("driver_id", "in", chunk)
+      .get();
+    for (const doc of snap.docs) {
+      const row = doc.data();
+      const driverId = String(row.driver_id ?? "");
+      const restaurantId = String(row.restaurant_id ?? "");
+      if (wanted.has(driverId) && restaurantId) links.push({ driver_id: driverId, restaurant_id: restaurantId });
+    }
+  }
+  const restaurantIds = [...new Set(links.map((link) => link.restaurant_id))];
+  const restaurantNames = new Map<string, string>();
+  for (let i = 0; i < restaurantIds.length; i += 100) {
+    const chunk = restaurantIds.slice(i, i + 100);
+    const docs = await db.getAll(
+      ...chunk.map((id) => db.collection(COLLECTIONS.restaurants).doc(id)),
+    );
+    for (const doc of docs) {
+      const name = String(doc.data()?.name ?? "").trim();
+      if (name) restaurantNames.set(doc.id, name);
+    }
+  }
   const buckets = new Map<string, string[]>();
-  for (const row of data ?? []) {
-    const restaurant = Array.isArray(row.restaurants)
-      ? row.restaurants[0]
-      : row.restaurants;
-    const name =
-      restaurant && typeof restaurant === "object" && "name" in restaurant
-        ? String((restaurant as { name?: string }).name ?? "").trim()
-        : "";
+  for (const link of links) {
+    const name = restaurantNames.get(link.restaurant_id);
     if (!name) continue;
-    const list = buckets.get(row.driver_id) ?? [];
+    const list = buckets.get(link.driver_id) ?? [];
     if (!list.includes(name)) list.push(name);
-    buckets.set(row.driver_id, list);
+    buckets.set(link.driver_id, list);
   }
-  for (const [id, list] of buckets) {
-    names.set(id, list.join(", "));
-  }
+  for (const [id, list] of buckets) names.set(id, list.join(", "));
   return names;
 }
 
@@ -322,10 +362,9 @@ async function runPerformanceList(
   const page = filters.page ?? 0;
   const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
 
-  const supabase = await createClient();
   // RPC present in prod; regenerate database.ts when CLI types catch up.
-  const { data, error } = await supabase.rpc(
-    "admin_list_driver_performance" as never,
+  const { data, error } = await callRpc(
+    "admin_list_driver_performance",
     {
       p_from: from,
       p_to: to,
@@ -341,7 +380,7 @@ async function runPerformanceList(
       p_sort: filters.sort ?? "overall_desc",
       p_limit: pageSize,
       p_offset: page * pageSize,
-    } as never,
+    },
   );
 
   if (error) {
@@ -352,10 +391,7 @@ async function runPerformanceList(
     data && typeof data === "object" ? (data as Record<string, unknown>) : {};
   const rowsRaw = Array.isArray(payload.rows) ? payload.rows : [];
   const rows = rowsRaw.map((r) => parseRow(r as Record<string, unknown>));
-  const restaurantNames = await loadDriverRestaurantNames(
-    supabase,
-    rows.map((r) => r.driver_id),
-  );
+  const restaurantNames = await loadDriverRestaurantNames(rows.map((r) => r.driver_id));
 
   return {
     rows: rows.map((row) => ({
@@ -461,16 +497,15 @@ export async function fetchDpdEfficiencySnapshot(input: {
     throw new Error("invalid_date_range");
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc(
-    "admin_dpd_efficiency_snapshot" as never,
+  const { data, error } = await callRpc(
+    "admin_dpd_efficiency_snapshot",
     {
       p_from: from,
       p_to: to,
       p_restaurant_id: input.restaurantId || undefined,
       p_zone_id: input.zoneId || undefined,
       p_partner_id: input.partnerId || undefined,
-    } as never,
+    },
   );
   if (error) throw new Error(error.message);
 
@@ -572,9 +607,8 @@ async function reportComponents(
 async function loadPerformanceComponentCatalog(): Promise<
   PerformanceComponent[]
 > {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc(
-    "admin_list_performance_components" as never,
+  const { data, error } = await callRpc(
+    "admin_list_performance_components",
   );
   if (error) return [];
   const payload =
@@ -643,8 +677,7 @@ export async function fetchDpdLiveSnapshot(
 ): Promise<DpdLiveSnapshot> {
   await requirePerformanceView();
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_dpd_live_snapshot", {
+  const { data, error } = await callRpc("admin_dpd_live_snapshot", {
     p_date: date ?? undefined,
   });
 
@@ -717,19 +750,10 @@ export async function getPerformanceScoreWeights(): Promise<PerformanceScoreWeig
   ) {
     throw new Error("not_authorized");
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("app_settings")
-    .select("*")
-    .eq("id", 1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const weights = (data as { performance_score_weights?: unknown } | null)
-    ?.performance_score_weights;
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  const snap = await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).get();
+  const weights = snap.data()?.performance_score_weights;
   return parsePerformanceWeights(weights ?? DEFAULT_PERFORMANCE_WEIGHTS);
 }
 
@@ -739,7 +763,8 @@ export async function updatePerformanceScoreWeights(
   try {
     const session = await requireSettingsManage();
     const next = parsePerformanceWeights(weights);
-    const supabase = await createClient();
+    const db = await staffDb();
+    if (!db) return { success: false, error: "not_configured" };
 
     // One save re-scores the whole fleet, so the entry has to say what it was
     // before. A read here can race a concurrent save; that is acceptable for
@@ -747,16 +772,16 @@ export async function updatePerformanceScoreWeights(
     // alternative is another RPC for a field the panel already owns.
     const previous = await getPerformanceScoreWeights().catch(() => null);
 
-    const { error } = await supabase
-      .from("app_settings")
-      .update({
-        performance_score_weights: next,
-        updated_at: new Date().toISOString(),
-      } as never)
-      .eq("id", 1);
-
-    if (error) {
-      return { success: false, error: error.message };
+    try {
+      await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
+        {
+          performance_score_weights: next,
+          updated_at: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : "save_failed" };
     }
 
     void session;
@@ -851,10 +876,9 @@ export async function fetchDriverPerformanceDaily(
     throw new Error("not_authorized");
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc(
-    "admin_driver_performance_daily" as never,
-    { p_driver_id: driverId, p_from: from, p_to: to } as never,
+  const { data, error } = await callRpc(
+    "admin_driver_performance_daily",
+    { p_driver_id: driverId, p_from: from, p_to: to },
   );
 
   if (error) {
@@ -921,16 +945,15 @@ export async function fetchPerformanceTrend(input: {
     throw new Error("not_authorized");
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc(
-    "admin_performance_trend" as never,
+  const { data, error } = await callRpc(
+    "admin_performance_trend",
     {
       p_from: input.fromDate,
       p_to: input.toDate,
       p_bucket: input.bucket ?? "day",
       p_zone_id: input.zoneId || null,
       p_partner_id: input.partnerId || null,
-    } as never,
+    },
   );
 
   if (error) {
@@ -1063,10 +1086,9 @@ export async function fetchPerformanceComponents(): Promise<{
   settings: PerformanceComponentSettings;
 }> {
   await requirePerformanceView();
-  const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc(
-    "admin_list_performance_components" as never,
+  const { data, error } = await callRpc(
+    "admin_list_performance_components",
   );
 
   if (error) {
@@ -1099,13 +1121,12 @@ export async function updatePerformanceComponents(input: {
   try {
     await requireSettingsManage();
 
-    const supabase = await createClient();
-    const { data, error } = await supabase.rpc(
-      "admin_update_performance_components" as never,
+    const { data, error } = await callRpc(
+      "admin_update_performance_components",
       {
         p_components: input.components,
         p_settings: input.settings ?? null,
-      } as never,
+      },
     );
 
     if (error) {
@@ -1195,9 +1216,8 @@ export async function fetchDriverPerformanceRatings(
   periodMonth?: string,
 ): Promise<PerformanceRatingPanel> {
   await requirePerformanceView();
-  const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc(
+  const { data, error } = await callRpc(
     "admin_list_driver_performance_ratings",
     {
       p_driver_id: driverId,
@@ -1245,8 +1265,7 @@ export async function saveDriverPerformanceRating(input: {
   try {
     await requireRatePermission();
 
-    const supabase = await createClient();
-    const { error } = await supabase.rpc(
+    const { error } = await callRpc(
       "admin_upsert_driver_performance_rating",
       {
         p_driver_id: input.driverId,
@@ -1286,8 +1305,7 @@ export async function clearDriverPerformanceRating(input: {
   try {
     await requireRatePermission();
 
-    const supabase = await createClient();
-    const { error } = await supabase.rpc(
+    const { error } = await callRpc(
       "admin_delete_driver_performance_rating",
       {
         p_driver_id: input.driverId,
@@ -1330,8 +1348,7 @@ export async function saveDriverPerformanceRatingNote(input: {
   try {
     await requireRatePermission();
 
-    const supabase = await createClient();
-    const { error } = await supabase.rpc(
+    const { error } = await callRpc(
       "admin_set_driver_performance_rating_note",
       {
         p_driver_id: input.driverId,
@@ -1366,9 +1383,8 @@ export async function fetchPerformanceRatingTeams(): Promise<
   PerformanceRatingTeamConfig[]
 > {
   await requirePerformanceView();
-  const supabase = await createClient();
 
-  const { data, error } = await supabase.rpc(
+  const { data, error } = await callRpc(
     "admin_list_performance_rating_teams",
   );
 
@@ -1445,8 +1461,7 @@ export async function savePerformanceRatingCriterion(input: {
   try {
     await requireManageTeams();
 
-    const supabase = await createClient();
-    const { error } = await supabase.rpc(
+    const { error } = await callRpc(
       "admin_upsert_performance_rating_criterion",
       {
         // Null, not omitted: a null p_id is what tells the RPC this is an
@@ -1459,7 +1474,7 @@ export async function savePerformanceRatingCriterion(input: {
         p_weight: input.weight,
         p_sort_order: input.sortOrder,
         p_is_active: input.isActive,
-      } as never,
+      },
     );
 
     if (error) {
@@ -1496,8 +1511,7 @@ export async function deletePerformanceRatingCriterion(
   try {
     await requireManageTeams();
 
-    const supabase = await createClient();
-    const { error } = await supabase.rpc(
+    const { error } = await callRpc(
       "admin_delete_performance_rating_criterion",
       { p_id: id },
     );
@@ -1540,8 +1554,7 @@ export async function setPerformanceTeamMember(input: {
       throw new Error("not_authorized");
     }
 
-    const supabase = await createClient();
-    const { error } = await supabase.rpc("admin_set_performance_team_member", {
+    const { error } = await callRpc("admin_set_performance_team_member", {
       p_team_key: input.teamKey,
       p_profile_id: input.profileId,
       p_member: input.member,
@@ -1573,76 +1586,93 @@ export async function fetchRatingEligibleStaff(): Promise<
   { id: string; full_name: string; email: string | null }[]
 > {
   await requirePerformanceView();
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, email")
-    .eq("role", "staff")
-    .eq("approval_status", "approved")
-    .not("admin_role_id", "is", null)
-    .is("archived_at", null)
-    .order("full_name");
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((row) => ({
-    id: String(row.id),
-    full_name: String(row.full_name ?? "—"),
-    email: row.email != null ? String(row.email) : null,
-  }));
+  const snap = await db.collection(COLLECTIONS.profiles).where("role", "==", "staff").get();
+  return snap.docs
+    .map((doc) => {
+      const row = doc.data();
+      return {
+        id: doc.id,
+        full_name: String(row.full_name ?? "—"),
+        email: row.email != null ? String(row.email) : null,
+        approval_status: String(row.approval_status ?? ""),
+        admin_role_id: row.admin_role_id == null ? null : String(row.admin_role_id),
+        archived_at: row.archived_at ?? null,
+      };
+    })
+    .filter(
+      (row) =>
+        row.approval_status === "approved" &&
+        row.admin_role_id != null &&
+        row.archived_at == null,
+    )
+    .sort((a, b) => a.full_name.localeCompare(b.full_name))
+    .map((row) => ({ id: row.id, full_name: row.full_name, email: row.email }));
 }
 
 export async function fetchRecentDeliveriesFeed(
   limit = 30,
 ): Promise<RecentDeliveryFeedItem[]> {
   await requirePerformanceView();
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  const capped = Math.min(Math.max(limit, 1), 100);
 
-  const { data, error } = await supabase
-    .from("deliveries")
-    .select(
-      `
-      id,
-      driver_id,
-      status,
-      delivered_at,
-      created_at,
-      drivers (driver_code, profiles!drivers_id_fkey (full_name)),
-      partners (name),
-      zones (name)
-    `,
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const snap = await db
+    .collection(COLLECTIONS.deliveries)
+    .orderBy("created_at", "desc")
+    .limit(capped)
+    .get();
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((r) => {
-    const driver = Array.isArray(r.drivers) ? r.drivers[0] : r.drivers;
-    const profile = driver
-      ? Array.isArray(driver.profiles)
-        ? driver.profiles[0]
-        : driver.profiles
-      : null;
-    const partner = Array.isArray(r.partners) ? r.partners[0] : r.partners;
-    const zone = Array.isArray(r.zones) ? r.zones[0] : r.zones;
+  const rows = snap.docs.map((doc) => {
+    const row = doc.data();
     return {
-      id: String(r.id),
-      driver_id: r.driver_id != null ? String(r.driver_id) : null,
-      driver_name: String(profile?.full_name ?? "—"),
-      driver_code: String(driver?.driver_code ?? ""),
-      status: String(r.status),
-      partner_name: partner?.name != null ? String(partner.name) : null,
-      zone_name: zone?.name != null ? String(zone.name) : null,
-      delivered_at: r.delivered_at != null ? String(r.delivered_at) : null,
-      created_at: String(r.created_at),
+      id: doc.id,
+      driver_id: row.driver_id != null ? String(row.driver_id) : null,
+      partner_id: row.partner_id != null ? String(row.partner_id) : null,
+      zone_id: row.zone_id != null ? String(row.zone_id) : null,
+      status: String(row.status ?? ""),
+      delivered_at: isoOf(row.delivered_at),
+      created_at: isoOf(row.created_at) ?? "",
     };
   });
+
+  const driverIds = [...new Set(rows.map((row) => row.driver_id).filter((id): id is string => Boolean(id)))];
+  const partnerIds = [...new Set(rows.map((row) => row.partner_id).filter((id): id is string => Boolean(id)))];
+  const zoneIds = [...new Set(rows.map((row) => row.zone_id).filter((id): id is string => Boolean(id)))];
+
+  async function loadMap(collection: string, ids: string[]) {
+    const out = new Map<string, FirebaseFirestore.DocumentData>();
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100);
+      const docs = await db!.getAll(...chunk.map((id) => db!.collection(collection).doc(id)));
+      for (const doc of docs) {
+        if (doc.exists) out.set(doc.id, doc.data() ?? {});
+      }
+    }
+    return out;
+  }
+
+  const [drivers, profiles, partners, zones] = await Promise.all([
+    loadMap(COLLECTIONS.drivers, driverIds),
+    loadMap(COLLECTIONS.profiles, driverIds),
+    loadMap(COLLECTIONS.partners, partnerIds),
+    loadMap(COLLECTIONS.zones, zoneIds),
+  ]);
+
+  return rows.map((row) => ({
+    id: row.id,
+    driver_id: row.driver_id,
+    driver_name: String(profiles.get(row.driver_id ?? "")?.full_name ?? "—"),
+    driver_code: String(drivers.get(row.driver_id ?? "")?.driver_code ?? ""),
+    status: row.status,
+    partner_name: row.partner_id ? String(partners.get(row.partner_id)?.name ?? "") || null : null,
+    zone_name: row.zone_id ? String(zones.get(row.zone_id)?.name ?? "") || null : null,
+    delivered_at: row.delivered_at,
+    created_at: row.created_at,
+  }));
 }
 
 function emptyToUndef<T>(arr: T[] | undefined): T[] | undefined {
@@ -1806,8 +1836,7 @@ function parseOpsSnapshot(raw: unknown): OpsSnapshot {
 
 export async function fetchPerformanceOpsBounds(): Promise<OpsBounds> {
   await requirePerformanceView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_performance_ops_bounds");
+  const { data, error } = await callRpc("admin_performance_ops_bounds");
   if (error) throw new Error(rpcErrorCode(error));
   const o = (data ?? {}) as Record<string, unknown>;
   return {
@@ -1822,9 +1851,8 @@ export async function fetchPerformanceOpsSnapshot(
   input: OpsQueryInput,
 ): Promise<OpsSnapshot> {
   await requirePerformanceView();
-  const supabase = await createClient();
   const { slicers } = input;
-  const { data, error } = await supabase.rpc("admin_performance_ops_snapshot", {
+  const { data, error } = await callRpc("admin_performance_ops_snapshot", {
     p_from: input.from,
     p_to: input.to,
     p_project_keys: emptyToUndef(slicers.projectKeys),
@@ -1846,8 +1874,7 @@ export async function fetchPerformanceOpsSnapshot(
 
 export async function fetchPerformanceTargetDpd(): Promise<TargetDpdRow[]> {
   await requireSettingsManage();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_list_performance_target_dpd");
+  const { data, error } = await callRpc("admin_list_performance_target_dpd");
   if (error) throw new Error(rpcErrorCode(error));
   if (!Array.isArray(data)) return [];
   return data.map((row) => {
@@ -1866,9 +1893,8 @@ export async function savePerformanceTargetDpd(input: {
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const session = await requireSettingsManage();
-    const supabase = await createClient();
     const previous = await fetchPerformanceTargetDpd().catch(() => []);
-    const { data, error } = await supabase.rpc(
+    const { data, error } = await callRpc(
       "admin_upsert_performance_target_dpd",
       { p_month: input.month, p_target: input.target },
     );

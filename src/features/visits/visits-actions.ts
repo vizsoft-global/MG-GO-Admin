@@ -1,10 +1,11 @@
 "use server";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
+import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushBatch } from "@/lib/firebase/fcm-provider";
 import { buildActionPayload, buildFcmDataPayload } from "@/features/notifications/payload-contract";
 import { pickLatestPushTokenByDriver } from "@/features/notifications/push-token-select";
@@ -15,14 +16,195 @@ import {
   type RecurringVisitSlot,
 } from "./visit-slot-copy";
 
-/**
- * Columns added by 20260827110000_visit_slot_availability_config.sql and the
- * visit_blocked_dates table are not in the generated `Database` types yet
- * (src/types/database.ts is owned elsewhere), so those reads/writes go through
- * an untyped client.
- */
-async function createUntypedClient(): Promise<SupabaseClient> {
-  return (await createClient()) as unknown as SupabaseClient;
+const DRIVER_PUSH_TOKENS = "driver_push_tokens";
+
+type DocRow = Record<string, unknown> & { id: string };
+
+function cell(value: unknown): unknown {
+  if (value == null) return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  if (Array.isArray(value)) return value.map(cell);
+  return value;
+}
+
+function docRow(id: string, data: DocumentData | undefined): DocRow | null {
+  if (!data) return null;
+  const row: DocRow = { id };
+  for (const [key, value] of Object.entries(data)) row[key] = cell(value);
+  return row;
+}
+
+async function openDb(): Promise<Firestore | null> {
+  return staffDb();
+}
+
+async function getDoc(
+  name: string,
+  id: string,
+): Promise<{ row: DocRow | null; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { row: null, error: "not_configured" };
+  try {
+    const snap = await db.collection(name).doc(id).get();
+    if (!snap.exists) return { row: null, error: null };
+    return { row: docRow(snap.id, snap.data()), error: null };
+  } catch (e) {
+    return { row: null, error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function listDocs(name: string): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    const snap = await db.collection(name).get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch (e) {
+    return { rows: [], error: e instanceof Error ? e.message : "read_failed" };
+  }
+}
+
+async function queryDocs(
+  name: string,
+  filters: Array<[string, unknown]>,
+): Promise<{ rows: DocRow[]; error: string | null }> {
+  const db = await openDb();
+  if (!db) return { rows: [], error: "not_configured" };
+  try {
+    let q: Query = db.collection(name);
+    for (const [field, value] of filters) q = q.where(field, "==", value);
+    const snap = await q.get();
+    return { rows: snap.docs.map((doc) => docRow(doc.id, doc.data())!), error: null };
+  } catch {
+    const all = await listDocs(name);
+    if (all.error) return all;
+    return {
+      rows: all.rows.filter((row) => filters.every(([field, value]) => row[field] === value)),
+      error: null,
+    };
+  }
+}
+
+async function docsByIds(name: string, ids: string[]): Promise<DocRow[]> {
+  const db = await openDb();
+  if (!db) return [];
+  const unique = [...new Set(ids.filter((id) => id.length > 0))];
+  const out: DocRow[] = [];
+  for (let i = 0; i < unique.length; i += 30) {
+    const chunk = unique.slice(i, i + 30);
+    const snaps = await db.getAll(...chunk.map((id) => db.collection(name).doc(id)));
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      const row = docRow(snap.id, snap.data());
+      if (row) out.push(row);
+    }
+  }
+  return out;
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  const as = String(a);
+  const bs = String(b);
+  return as < bs ? -1 : as > bs ? 1 : 0;
+}
+
+function sortRows(rows: DocRow[], keys: Array<[string, "asc" | "desc"]>): DocRow[] {
+  return [...rows].sort((left, right) => {
+    for (const [key, dir] of keys) {
+      const c = compareValues(left[key], right[key]);
+      if (c !== 0) return dir === "asc" ? c : -c;
+    }
+    return 0;
+  });
+}
+
+async function patchDoc(
+  name: string,
+  id: string,
+  data: Record<string, unknown>,
+): Promise<string | null> {
+  const db = await openDb();
+  if (!db) return "not_configured";
+  try {
+    const ref = db.collection(name).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    await ref.set(data, { merge: true });
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "write_failed";
+  }
+}
+
+async function insertDoc(
+  name: string,
+  data: Record<string, unknown>,
+): Promise<{ id?: string; error?: string }> {
+  const db = await openDb();
+  if (!db) return { error: "not_configured" };
+  const id = crypto.randomUUID();
+  try {
+    await db.collection(name).doc(id).set({ ...data, id });
+    return { id };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "write_failed" };
+  }
+}
+
+async function insertMany(
+  name: string,
+  rows: Record<string, unknown>[],
+): Promise<string | null> {
+  const db = await openDb();
+  if (!db) return "not_configured";
+  try {
+    for (let i = 0; i < rows.length; i += 400) {
+      const batch = db.batch();
+      for (const data of rows.slice(i, i + 400)) {
+        const id = crypto.randomUUID();
+        batch.set(db.collection(name).doc(id), { ...data, id });
+      }
+      await batch.commit();
+    }
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "write_failed";
+  }
+}
+
+async function deleteDoc(name: string, id: string): Promise<string | null> {
+  const db = await openDb();
+  if (!db) return "not_configured";
+  try {
+    await db.collection(name).doc(id).delete();
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : "delete_failed";
+  }
+}
+
+function text(value: unknown): string {
+  return value == null ? "" : String(value);
+}
+
+function textOrNull(value: unknown): string | null {
+  return value == null ? null : String(value);
+}
+
+function numberList(value: unknown): number[] {
+  return Array.isArray(value) ? value.map((item) => Number(item)).filter((item) => Number.isInteger(item)) : [];
 }
 
 export type VisitListRow = {
@@ -165,8 +347,7 @@ export async function fetchAdminVisitsList(input?: {
   offset?: number;
 }): Promise<{ rows: VisitListRow[]; kpi: VisitKpis; error?: string }> {
   await requireVisitsView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_list_visits", {
+  const { data, error } = await callAdminFunction("admin_list_visits", {
     p_date_from: input?.dateFrom || undefined,
     p_date_to: input?.dateTo || undefined,
     p_status: input?.status || undefined,
@@ -233,55 +414,48 @@ export async function fetchAdminVisitDetail(
   bookingId: string,
 ): Promise<{ visit: VisitDetailRow | null; error?: string }> {
   await requireVisitsView();
-  const supabase = await createClient();
-
-  const { data: booking, error } = await supabase
-    .from("visit_bookings")
-    .select("*")
-    .eq("id", bookingId)
-    .maybeSingle();
-
-  if (error) return { visit: null, error: error.message };
+  const loaded = await getDoc(COLLECTIONS.visitBookings, bookingId);
+  if (loaded.error) return { visit: null, error: loaded.error };
+  const booking = loaded.row;
   if (!booking) return { visit: null };
 
-  const [driverRes, profileRes, deptRes, branchRes, slotRes] = await Promise.all([
-    supabase.from("drivers").select("driver_code").eq("id", booking.driver_id).maybeSingle(),
-    supabase.from("profiles").select("full_name, phone").eq("id", booking.driver_id).maybeSingle(),
-    supabase
-      .from("visit_departments")
-      .select("label_en")
-      .eq("key", booking.department_key)
-      .maybeSingle(),
-    booking.branch_id
-      ? supabase.from("visit_branches").select("name").eq("id", booking.branch_id).maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    supabase.from("visit_slots").select("start_time, end_time").eq("id", booking.slot_id).maybeSingle(),
+  const driverId = text(booking.driver_id);
+  const departmentKey = text(booking.department_key);
+  const branchId = textOrNull(booking.branch_id);
+  const slotId = text(booking.slot_id);
+  const [driver, profile, departments, branch, slot] = await Promise.all([
+    getDoc(COLLECTIONS.drivers, driverId),
+    getDoc(COLLECTIONS.profiles, driverId),
+    queryDocs(COLLECTIONS.visitDepartments, [["key", departmentKey]]),
+    branchId ? getDoc(COLLECTIONS.visitBranches, branchId) : Promise.resolve({ row: null, error: null }),
+    slotId ? getDoc(COLLECTIONS.visitSlots, slotId) : Promise.resolve({ row: null, error: null }),
   ]);
+  const department = departments.rows[0];
 
   return {
     visit: {
       id: booking.id,
-      booking_code: booking.booking_code,
-      driver_id: booking.driver_id,
-      driver_name: profileRes.data?.full_name ?? "—",
-      driver_phone: profileRes.data?.phone ?? null,
-      driver_code: driverRes.data?.driver_code ?? "",
-      department_key: booking.department_key,
-      department_label: deptRes.data?.label_en ?? booking.department_key,
-      scheduled_date: booking.scheduled_date,
-      status: booking.status,
-      note: booking.note,
-      created_at: booking.created_at,
-      branch_id: booking.branch_id,
-      branch_name: branchRes.data?.name ?? null,
-      slot_id: booking.slot_id,
-      slot_start: slotRes.data?.start_time ?? null,
-      slot_end: slotRes.data?.end_time ?? null,
-      checked_in_at: booking.checked_in_at,
-      completed_at: booking.completed_at,
-      cancelled_at: booking.cancelled_at,
-      updated_at: booking.updated_at,
-      note_to_rider: booking.note_to_rider,
+      booking_code: text(booking.booking_code),
+      driver_id: driverId,
+      driver_name: text(profile.row?.full_name) || "—",
+      driver_phone: textOrNull(profile.row?.phone),
+      driver_code: text(driver.row?.driver_code),
+      department_key: departmentKey,
+      department_label: text(department?.label_en) || departmentKey,
+      scheduled_date: text(booking.scheduled_date),
+      status: text(booking.status),
+      note: textOrNull(booking.note),
+      created_at: text(booking.created_at),
+      branch_id: branchId,
+      branch_name: textOrNull(branch.row?.name),
+      slot_id: slotId,
+      slot_start: textOrNull(slot.row?.start_time),
+      slot_end: textOrNull(slot.row?.end_time),
+      checked_in_at: textOrNull(booking.checked_in_at),
+      completed_at: textOrNull(booking.completed_at),
+      cancelled_at: textOrNull(booking.cancelled_at),
+      updated_at: text(booking.updated_at),
+      note_to_rider: textOrNull(booking.note_to_rider),
     },
   };
 }
@@ -290,36 +464,21 @@ export async function fetchVisitBookingNotes(
   bookingId: string,
 ): Promise<{ rows: VisitBookingNoteRow[]; error?: string }> {
   await requireVisitsView();
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("visit_booking_notes")
-    .select("id, body, created_at, author_id")
-    .eq("booking_id", bookingId)
-    .order("created_at", { ascending: false });
-
-  if (error) return { rows: [], error: error.message };
-
-  const authorIds = [
-    ...new Set(
-      (data ?? [])
-        .map((n) => n.author_id)
-        .filter((id): id is string => typeof id === "string"),
-    ),
-  ];
-
-  const { data: authors } = authorIds.length
-    ? await supabase.from("profiles").select("id, full_name").in("id", authorIds)
-    : { data: [] };
-
-  const nameById = new Map((authors ?? []).map((a) => [a.id, a.full_name]));
+  const listed = await queryDocs(COLLECTIONS.visitBookingNotes, [["booking_id", bookingId]]);
+  if (listed.error) return { rows: [], error: listed.error };
+  const notes = sortRows(listed.rows, [["created_at", "desc"]]);
+  const authors = await docsByIds(
+    COLLECTIONS.profiles,
+    notes.map((note) => text(note.author_id)),
+  );
+  const nameById = new Map(authors.map((author) => [author.id, textOrNull(author.full_name)]));
 
   return {
-    rows: (data ?? []).map((n) => ({
-      id: n.id,
-      body: n.body,
-      created_at: n.created_at,
-      author_name: n.author_id ? (nameById.get(n.author_id) ?? null) : null,
+    rows: notes.map((note) => ({
+      id: note.id,
+      body: text(note.body),
+      created_at: text(note.created_at),
+      author_name: note.author_id ? (nameById.get(text(note.author_id)) ?? null) : null,
     })),
   };
 }
@@ -332,14 +491,13 @@ export async function addVisitBookingNote(input: {
   const body = input.body.trim();
   if (!body) return { ok: false, error: "note_required" };
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("visit_booking_notes").insert({
+  const inserted = await insertDoc(COLLECTIONS.visitBookingNotes, {
     booking_id: input.bookingId,
     author_id: session.id,
     body,
+    created_at: new Date(),
   });
-
-  if (error) return { ok: false, error: error.message };
+  if (inserted.error) return { ok: false, error: inserted.error };
   return { ok: true };
 }
 
@@ -348,8 +506,7 @@ export async function updateVisitNoteToRider(input: {
   note: string;
 }): Promise<{ ok: boolean; error?: string }> {
   await requireVisitsOperate();
-  const supabase = await createUntypedClient();
-  const { data, error } = await supabase.rpc("admin_set_visit_note_to_rider", {
+  const { data, error } = await callAdminFunction("admin_set_visit_note_to_rider", {
     p_booking_id: input.bookingId,
     p_note: input.note,
   });
@@ -383,19 +540,17 @@ async function sendVisitNotePush(input: {
 }): Promise<void> {
   if (!input.note || !input.campaignId) return;
   try {
-    const admin = createAdminClient({ timeoutMs: 5000 });
-    const { data: tokens } = await admin
-      .from("driver_push_tokens")
-      .select("id, driver_id, token, last_seen_at")
-      .eq("driver_id", input.driverId)
-      .eq("is_active", true);
+    const listed = await queryDocs(DRIVER_PUSH_TOKENS, [
+      ["driver_id", input.driverId],
+      ["is_active", true],
+    ]);
     const token = pickLatestPushTokenByDriver(
-      (tokens ?? []) as Array<{
-        id: string;
-        driver_id: string;
-        token: string;
-        last_seen_at: string | null;
-      }>,
+      listed.rows.map((row) => ({
+        id: row.id,
+        driver_id: text(row.driver_id),
+        token: text(row.token),
+        last_seen_at: textOrNull(row.last_seen_at),
+      })),
     ).get(input.driverId);
     if (!token) return;
     const action = buildActionPayload({
@@ -442,8 +597,7 @@ export async function rescheduleAdminVisit(input: {
     return { ok: false, error: "not_authorized" };
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_reschedule_visit", {
+  const { data, error } = await callAdminFunction("admin_reschedule_visit", {
     p_booking_id: input.bookingId,
     p_new_date: input.scheduledDate,
     p_new_slot_id: input.slotId,
@@ -480,8 +634,7 @@ export async function updateAdminVisitStatus(input: {
   ) {
     return { ok: false, error: "not_authorized" };
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_update_visit_status", {
+  const { data, error } = await callAdminFunction("admin_update_visit_status", {
     p_booking_id: input.bookingId,
     p_status: input.status,
   });
@@ -516,12 +669,11 @@ export async function updateAdminVisitStatusBulk(input: {
     return { ok: false, succeeded: [], failed: [], error: "no_bookings" };
   }
 
-  const supabase = await createClient();
   const succeeded: string[] = [];
   const failed: Array<{ bookingId: string; error: string }> = [];
 
   for (const bookingId of input.bookingIds) {
-    const { data, error } = await supabase.rpc("admin_update_visit_status", {
+    const { data, error } = await callAdminFunction("admin_update_visit_status", {
       p_booking_id: bookingId,
       p_status: input.status,
     });
@@ -543,16 +695,26 @@ export async function fetchVisitDepartments(): Promise<{
   error?: string;
 }> {
   await requireVisitsView();
-  const supabase = await createUntypedClient();
-  const { data, error } = await supabase
-    .from("visit_departments")
-    .select(
-      "id, key, label_en, label_ar, is_active, sort_order, desk_location, assigned_staff_name, avg_handling_minutes, desks_count, branch_id",
-    )
-    .order("sort_order");
-
-  if (error) return { rows: [], error: error.message };
-  return { rows: (data ?? []) as VisitDepartmentRow[] };
+  const listed = await listDocs(COLLECTIONS.visitDepartments);
+  if (listed.error) return { rows: [], error: listed.error };
+  return {
+    rows: sortRows(listed.rows, [["sort_order", "asc"]]).map(
+      (row): VisitDepartmentRow => ({
+        id: row.id,
+        key: text(row.key),
+        label_en: text(row.label_en),
+        label_ar: textOrNull(row.label_ar),
+        is_active: row.is_active === true,
+        sort_order: Number(row.sort_order ?? 0),
+        desk_location: textOrNull(row.desk_location),
+        assigned_staff_name: textOrNull(row.assigned_staff_name),
+        avg_handling_minutes:
+          row.avg_handling_minutes == null ? null : Number(row.avg_handling_minutes),
+        desks_count: Number(row.desks_count ?? 0),
+        branch_id: textOrNull(row.branch_id),
+      }),
+    ),
+  };
 }
 
 export async function updateVisitDepartmentDesks(input: {
@@ -563,13 +725,11 @@ export async function updateVisitDepartmentDesks(input: {
   if (!Number.isInteger(input.desks_count) || input.desks_count < 0) {
     return { ok: false, error: "invalid_desks_count" };
   }
-  const supabase = await createUntypedClient();
-  const { error } = await supabase
-    .from("visit_departments")
-    .update({ desks_count: input.desks_count, updated_at: new Date().toISOString() })
-    .eq("id", input.id);
-
-  if (error) return { ok: false, error: error.message };
+  const error = await patchDoc(COLLECTIONS.visitDepartments, input.id, {
+    desks_count: input.desks_count,
+    updated_at: new Date(),
+  });
+  if (error) return { ok: false, error };
   return { ok: true };
 }
 
@@ -593,25 +753,21 @@ export async function createVisitDepartment(input: {
   ) {
     return { ok: false, error: "invalid_desks_count" };
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("visit_departments")
-    .insert({
-      key: input.key.trim(),
-      label_en: input.label_en.trim(),
-      label_ar: input.label_ar ?? null,
-      desk_location: input.desk_location ?? null,
-      assigned_staff_name: input.assigned_staff_name ?? null,
-      avg_handling_minutes: input.avg_handling_minutes ?? null,
-      desks_count: input.desks_count ?? 1,
-      branch_id: input.branch_id ?? null,
-      is_active: true,
-    })
-    .select("id")
-    .single();
-
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, id: data.id };
+  const inserted = await insertDoc(COLLECTIONS.visitDepartments, {
+    key: input.key.trim(),
+    label_en: input.label_en.trim(),
+    label_ar: input.label_ar ?? null,
+    desk_location: input.desk_location ?? null,
+    assigned_staff_name: input.assigned_staff_name ?? null,
+    avg_handling_minutes: input.avg_handling_minutes ?? null,
+    desks_count: input.desks_count ?? 1,
+    branch_id: input.branch_id ?? null,
+    is_active: true,
+    created_at: new Date(),
+    updated_at: new Date(),
+  });
+  if (inserted.error || !inserted.id) return { ok: false, error: inserted.error ?? "write_failed" };
+  return { ok: true, id: inserted.id };
 }
 
 export async function updateVisitDepartment(input: {
@@ -630,9 +786,8 @@ export async function updateVisitDepartment(input: {
   ) {
     return { ok: false, error: "invalid_desks_count" };
   }
-  const supabase = await createClient();
   const patch = {
-    updated_at: new Date().toISOString(),
+    updated_at: new Date(),
     ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
     ...(input.desk_location !== undefined ? { desk_location: input.desk_location } : {}),
     ...(input.assigned_staff_name !== undefined
@@ -644,9 +799,8 @@ export async function updateVisitDepartment(input: {
     ...(input.desks_count !== undefined ? { desks_count: input.desks_count } : {}),
     ...(input.branch_id !== undefined ? { branch_id: input.branch_id } : {}),
   };
-  const { error } = await supabase.from("visit_departments").update(patch).eq("id", input.id);
-
-  if (error) return { ok: false, error: error.message };
+  const error = await patchDoc(COLLECTIONS.visitDepartments, input.id, patch);
+  if (error) return { ok: false, error };
   return { ok: true };
 }
 
@@ -655,16 +809,27 @@ export async function fetchVisitBranches(): Promise<{
   error?: string;
 }> {
   await requireVisitsView();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("visit_branches")
-    .select(
-      "id, key, name, address, city, working_days, working_dows, opening_time, closing_time, desks_count, is_default, is_active, sort_order",
-    )
-    .order("sort_order");
-
-  if (error) return { rows: [], error: error.message };
-  return { rows: (data ?? []) as unknown as VisitBranchRow[] };
+  const listed = await listDocs(COLLECTIONS.visitBranches);
+  if (listed.error) return { rows: [], error: listed.error };
+  return {
+    rows: sortRows(listed.rows, [["sort_order", "asc"]]).map(
+      (row): VisitBranchRow => ({
+        id: row.id,
+        key: text(row.key),
+        name: text(row.name),
+        address: textOrNull(row.address),
+        city: textOrNull(row.city),
+        working_days: textOrNull(row.working_days),
+        working_dows: numberList(row.working_dows),
+        opening_time: textOrNull(row.opening_time),
+        closing_time: textOrNull(row.closing_time),
+        desks_count: Number(row.desks_count ?? 0),
+        is_default: row.is_default === true,
+        is_active: row.is_active === true,
+        sort_order: Number(row.sort_order ?? 0),
+      }),
+    ),
+  };
 }
 
 export async function createVisitBranch(input: {
@@ -684,25 +849,22 @@ export async function createVisitBranch(input: {
   if (visitHoursInvalid(input.opening_time, input.closing_time)) {
     return { ok: false, error: "invalid_hours" };
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("visit_branches")
-    .insert({
-      key: input.key.trim(),
-      name: input.name.trim(),
-      address: input.address ?? null,
-      city: input.city ?? null,
-      working_days: input.working_days ?? null,
-      opening_time: input.opening_time ?? null,
-      closing_time: input.closing_time ?? null,
-      desks_count: input.desks_count ?? 1,
-      is_active: true,
-    })
-    .select("id")
-    .single();
-
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, id: data.id };
+  const inserted = await insertDoc(COLLECTIONS.visitBranches, {
+    key: input.key.trim(),
+    name: input.name.trim(),
+    address: input.address ?? null,
+    city: input.city ?? null,
+    working_days: input.working_days ?? null,
+    opening_time: input.opening_time ?? null,
+    closing_time: input.closing_time ?? null,
+    desks_count: input.desks_count ?? 1,
+    is_active: true,
+    is_default: false,
+    created_at: new Date(),
+    updated_at: new Date(),
+  });
+  if (inserted.error || !inserted.id) return { ok: false, error: inserted.error ?? "write_failed" };
+  return { ok: true, id: inserted.id };
 }
 
 export async function updateVisitBranch(input: {
@@ -720,9 +882,8 @@ export async function updateVisitBranch(input: {
   if (visitHoursInvalid(input.opening_time, input.closing_time)) {
     return { ok: false, error: "invalid_hours" };
   }
-  const supabase = await createClient();
   const patch = {
-    updated_at: new Date().toISOString(),
+    updated_at: new Date(),
     ...(input.name !== undefined ? { name: input.name } : {}),
     ...(input.address !== undefined ? { address: input.address } : {}),
     ...(input.city !== undefined ? { city: input.city } : {}),
@@ -733,8 +894,8 @@ export async function updateVisitBranch(input: {
     ...(input.is_active !== undefined ? { is_active: input.is_active } : {}),
   };
 
-  const { error } = await supabase.from("visit_branches").update(patch).eq("id", input.id);
-  if (error) return { ok: false, error: error.message };
+  const error = await patchDoc(COLLECTIONS.visitBranches, input.id, patch);
+  if (error) return { ok: false, error };
   return { ok: true };
 }
 
@@ -746,36 +907,41 @@ export async function setVisitBranchDefault(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireVisitsManageCatalog();
-  const supabase = await createClient();
-  const { data: branches, error: loadError } = await supabase
-    .from("visit_branches")
-    .select("id, is_default, is_active");
-  if (loadError) return { ok: false, error: loadError.message };
+  const listed = await listDocs(COLLECTIONS.visitBranches);
+  if (listed.error) return { ok: false, error: listed.error };
 
-  const plan = nextDefaultBranchUpdates(branches ?? [], id);
+  const plan = nextDefaultBranchUpdates(
+    listed.rows.map((row) => ({
+      id: row.id,
+      is_default: row.is_default === true,
+      is_active: row.is_active === true,
+    })),
+    id,
+  );
   if (!plan.ok) return { ok: false, error: plan.error };
   if (plan.already) return { ok: true };
 
-  if (plan.clearIds.length > 0) {
-    const { error: clearError } = await supabase
-      .from("visit_branches")
-      .update({ is_default: false, updated_at: new Date().toISOString() })
-      .in("id", plan.clearIds);
-    if (clearError) return { ok: false, error: clearError.message };
+  const now = new Date();
+  for (const clearId of plan.clearIds) {
+    const clearError = await patchDoc(COLLECTIONS.visitBranches, clearId, {
+      is_default: false,
+      updated_at: now,
+    });
+    if (clearError) return { ok: false, error: clearError };
   }
 
-  const { error: setError } = await supabase
-    .from("visit_branches")
-    .update({ is_default: true, updated_at: new Date().toISOString() })
-    .eq("id", id);
+  const setError = await patchDoc(COLLECTIONS.visitBranches, id, {
+    is_default: true,
+    updated_at: now,
+  });
   if (setError) {
     if (plan.clearIds.length > 0) {
-      await supabase
-        .from("visit_branches")
-        .update({ is_default: true, updated_at: new Date().toISOString() })
-        .eq("id", plan.clearIds[0]);
+      await patchDoc(COLLECTIONS.visitBranches, plan.clearIds[0], {
+        is_default: true,
+        updated_at: new Date(),
+      });
     }
-    return { ok: false, error: setError.message };
+    return { ok: false, error: setError };
   }
   return { ok: true };
 }
@@ -792,40 +958,54 @@ export async function copyVisitWeekdaySlotsToAllBranches(): Promise<{
   error?: string;
 }> {
   await requireVisitsManageCatalog();
-  const supabase = await createClient();
-
   const [branchesRes, slotsRes] = await Promise.all([
-    supabase.from("visit_branches").select("id, is_default, is_active, working_dows"),
-    supabase
-      .from("visit_slots")
-      .select(
-        "id, branch_id, department_key, slot_date, day_of_week, start_time, end_time, capacity, is_active",
-      )
-      .is("slot_date", null),
+    listDocs(COLLECTIONS.visitBranches),
+    listDocs(COLLECTIONS.visitSlots),
   ]);
-
   if (branchesRes.error) {
-    return { ok: false, inserted: 0, sourceBranchId: null, error: branchesRes.error.message };
+    return { ok: false, inserted: 0, sourceBranchId: null, error: branchesRes.error };
   }
   if (slotsRes.error) {
-    return { ok: false, inserted: 0, sourceBranchId: null, error: slotsRes.error.message };
+    return { ok: false, inserted: 0, sourceBranchId: null, error: slotsRes.error };
   }
 
   const planned = planVisitWeekdaySlotCopy(
-    branchesRes.data ?? [],
-    (slotsRes.data ?? []) as RecurringVisitSlot[],
+    branchesRes.rows.map((row) => ({
+      id: row.id,
+      is_default: row.is_default === true,
+      is_active: row.is_active === true,
+      working_dows: numberList(row.working_dows),
+    })),
+    slotsRes.rows
+      .filter((row) => row.slot_date == null)
+      .map(
+        (row): RecurringVisitSlot => ({
+          id: row.id,
+          branch_id: textOrNull(row.branch_id),
+          department_key: text(row.department_key),
+          slot_date: null,
+          day_of_week: row.day_of_week == null ? null : Number(row.day_of_week),
+          start_time: text(row.start_time),
+          end_time: text(row.end_time),
+          capacity: Number(row.capacity ?? 0),
+          is_active: row.is_active === true,
+        }),
+      ),
   );
   if (planned.inserts.length === 0) {
     return { ok: true, inserted: 0, sourceBranchId: planned.sourceBranchId };
   }
 
-  const { error: insertError } = await supabase.from("visit_slots").insert(planned.inserts);
+  const insertError = await insertMany(
+    COLLECTIONS.visitSlots,
+    planned.inserts.map((row) => ({ ...row, created_at: new Date() })),
+  );
   if (insertError) {
     return {
       ok: false,
       inserted: 0,
       sourceBranchId: planned.sourceBranchId,
-      error: insertError.message,
+      error: insertError,
     };
   }
   return {
@@ -856,9 +1036,6 @@ export type VisitBlockedDateRow = {
   reason: string | null;
 };
 
-const BOOKING_CONFIG_COLUMNS =
-  "id, name, working_dows, opening_time, closing_time, lunch_start, lunch_end, slot_length_minutes, slot_buffer_minutes, default_slot_capacity, booking_window_days";
-
 function mapBookingConfig(raw: Record<string, unknown>): VisitBookingConfigRow {
   const dows = Array.isArray(raw.working_dows) ? raw.working_dows : [];
   return {
@@ -881,15 +1058,10 @@ export async function fetchVisitBookingConfigs(): Promise<{
   error?: string;
 }> {
   await requireVisitsView();
-  const supabase = await createUntypedClient();
-  const { data, error } = await supabase
-    .from("visit_branches")
-    .select(BOOKING_CONFIG_COLUMNS)
-    .order("sort_order");
-
-  if (error) return { rows: [], error: error.message };
+  const listed = await listDocs(COLLECTIONS.visitBranches);
+  if (listed.error) return { rows: [], error: listed.error };
   return {
-    rows: ((data ?? []) as Record<string, unknown>[]).map(mapBookingConfig),
+    rows: sortRows(listed.rows, [["sort_order", "asc"]]).map(mapBookingConfig),
   };
 }
 
@@ -925,30 +1097,25 @@ export async function saveVisitBookingConfig(input: {
   if (input.default_slot_capacity <= 0) return { ok: false, error: "invalid_capacity" };
   if (input.booking_window_days <= 0) return { ok: false, error: "invalid_booking_window" };
 
-  const supabase = await createUntypedClient();
-  const { error } = await supabase
-    .from("visit_branches")
-    .update({
-      working_dows: [...new Set(input.working_dows)].sort((a, b) => a - b),
-      opening_time: input.opening_time,
-      closing_time: input.closing_time,
-      lunch_start: input.lunch_start,
-      lunch_end: input.lunch_end,
-      slot_length_minutes: input.slot_length_minutes,
-      slot_buffer_minutes: input.slot_buffer_minutes,
-      default_slot_capacity: input.default_slot_capacity,
-      booking_window_days: input.booking_window_days,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", input.branch_id);
-
-  if (error) return { ok: false, error: error.message };
+  const error = await patchDoc(COLLECTIONS.visitBranches, input.branch_id, {
+    working_dows: [...new Set(input.working_dows)].sort((a, b) => a - b),
+    opening_time: input.opening_time,
+    closing_time: input.closing_time,
+    lunch_start: input.lunch_start,
+    lunch_end: input.lunch_end,
+    slot_length_minutes: input.slot_length_minutes,
+    slot_buffer_minutes: input.slot_buffer_minutes,
+    default_slot_capacity: input.default_slot_capacity,
+    booking_window_days: input.booking_window_days,
+    updated_at: new Date(),
+  });
+  if (error) return { ok: false, error };
 
   // The weekday toggles are the branch's opening days, so they have to become
   // real slots or the setting is decorative. Add-only and idempotent; a failure
   // here must not lose the settings that were just saved, so it reports rather
   // than rolls back.
-  const { data: syncData, error: syncError } = await supabase.rpc(
+  const { data: syncData, error: syncError } = await callAdminFunction(
     "admin_sync_branch_slots_to_working_days",
     { p_branch_id: input.branch_id },
   );
@@ -963,14 +1130,18 @@ export async function fetchVisitBlockedDates(): Promise<{
   error?: string;
 }> {
   await requireVisitsView();
-  const supabase = await createUntypedClient();
-  const { data, error } = await supabase
-    .from("visit_blocked_dates")
-    .select("id, branch_id, blocked_date, reason")
-    .order("blocked_date");
-
-  if (error) return { rows: [], error: error.message };
-  return { rows: (data ?? []) as VisitBlockedDateRow[] };
+  const listed = await listDocs(COLLECTIONS.visitBlockedDates);
+  if (listed.error) return { rows: [], error: listed.error };
+  return {
+    rows: sortRows(listed.rows, [["blocked_date", "asc"]]).map(
+      (row): VisitBlockedDateRow => ({
+        id: row.id,
+        branch_id: textOrNull(row.branch_id),
+        blocked_date: text(row.blocked_date),
+        reason: textOrNull(row.reason),
+      }),
+    ),
+  };
 }
 
 export async function addVisitBlockedDate(input: {
@@ -981,15 +1152,14 @@ export async function addVisitBlockedDate(input: {
   const session = await requireVisitsManageCatalog();
   if (!input.blocked_date) return { ok: false, error: "date_required" };
 
-  const supabase = await createUntypedClient();
-  const { error } = await supabase.from("visit_blocked_dates").insert({
+  const inserted = await insertDoc(COLLECTIONS.visitBlockedDates, {
     branch_id: input.branch_id,
     blocked_date: input.blocked_date,
     reason: input.reason?.trim() || null,
     created_by: session.id,
+    created_at: new Date(),
   });
-
-  if (error) return { ok: false, error: error.message };
+  if (inserted.error) return { ok: false, error: inserted.error };
   return { ok: true };
 }
 
@@ -997,9 +1167,8 @@ export async function removeVisitBlockedDate(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requireVisitsManageCatalog();
-  const supabase = await createUntypedClient();
-  const { error } = await supabase.from("visit_blocked_dates").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  const error = await deleteDoc(COLLECTIONS.visitBlockedDates, id);
+  if (error) return { ok: false, error };
   return { ok: true };
 }
 
@@ -1008,60 +1177,44 @@ export async function fetchVisitSlots(): Promise<{
   error?: string;
 }> {
   await requireVisitsView();
-  const supabase = await createClient();
-
-  const { data: slots, error } = await supabase
-    .from("visit_slots")
-    .select(
-      "id, branch_id, department_key, slot_date, day_of_week, start_time, end_time, capacity, is_active",
-    )
-    .order("department_key")
-    .order("day_of_week", { nullsFirst: false })
-    .order("slot_date", { nullsFirst: false })
-    .order("start_time");
-
-  if (error) return { rows: [], error: error.message };
-
-  const deptKeys = [
-    ...new Set(
-      (slots ?? [])
-        .map((s) => s.department_key)
-        .filter((k): k is string => typeof k === "string" && k.length > 0),
-    ),
-  ];
-  const branchIds = [
-    ...new Set(
-      (slots ?? [])
-        .map((s) => s.branch_id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0),
-    ),
-  ];
-
-  const [deptsRes, branchesRes] = await Promise.all([
-    deptKeys.length
-      ? supabase.from("visit_departments").select("key, label_en").in("key", deptKeys)
-      : Promise.resolve({ data: [], error: null }),
-    branchIds.length
-      ? supabase.from("visit_branches").select("id, name").in("id", branchIds)
-      : Promise.resolve({ data: [], error: null }),
+  const listed = await listDocs(COLLECTIONS.visitSlots);
+  if (listed.error) return { rows: [], error: listed.error };
+  const slots = sortRows(listed.rows, [
+    ["department_key", "asc"],
+    ["day_of_week", "asc"],
+    ["slot_date", "asc"],
+    ["start_time", "asc"],
   ]);
+  const deptKeys = new Set(slots.map((slot) => text(slot.department_key)).filter((key) => key.length > 0));
+  const departments = await listDocs(COLLECTIONS.visitDepartments);
+  const branches = await docsByIds(
+    COLLECTIONS.visitBranches,
+    slots.map((slot) => text(slot.branch_id)),
+  );
+  const deptMap = new Map(
+    departments.rows
+      .filter((row) => deptKeys.has(text(row.key)))
+      .map((row) => [text(row.key), text(row.label_en)]),
+  );
+  const branchMap = new Map(branches.map((row) => [row.id, text(row.name)]));
 
-  const deptMap = new Map((deptsRes.data ?? []).map((d) => [d.key, d.label_en]));
-  const branchMap = new Map((branchesRes.data ?? []).map((b) => [b.id, b.name]));
-
-  const rows: VisitSlotRow[] = (slots ?? []).map((s) => ({
-    id: s.id,
-    branch_id: s.branch_id,
-    branch_name: s.branch_id ? (branchMap.get(s.branch_id) ?? null) : null,
-    department_key: s.department_key ?? "",
-    department_label: deptMap.get(s.department_key ?? "") ?? s.department_key ?? "",
-    slot_date: s.slot_date,
-    day_of_week: s.day_of_week,
-    start_time: s.start_time,
-    end_time: s.end_time,
-    capacity: s.capacity,
-    is_active: s.is_active,
-  }));
+  const rows: VisitSlotRow[] = slots.map((slot) => {
+    const branchId = textOrNull(slot.branch_id);
+    const departmentKey = text(slot.department_key);
+    return {
+      id: slot.id,
+      branch_id: branchId,
+      branch_name: branchId ? (branchMap.get(branchId) ?? null) : null,
+      department_key: departmentKey,
+      department_label: deptMap.get(departmentKey) ?? departmentKey,
+      slot_date: textOrNull(slot.slot_date),
+      day_of_week: slot.day_of_week == null ? null : Number(slot.day_of_week),
+      start_time: text(slot.start_time),
+      end_time: text(slot.end_time),
+      capacity: Number(slot.capacity ?? 0),
+      is_active: slot.is_active === true,
+    };
+  });
 
   return { rows };
 }

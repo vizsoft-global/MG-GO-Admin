@@ -1,7 +1,16 @@
-import { searchActiveDrivers } from "@/features/drivers/search-active-drivers";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { requireAssistantModule } from "./assistant-gates";
+import {
+  docById,
+  ilike,
+  loadDocs,
+  rowsWhere,
+  scanCollection,
+  searchLiveDrivers,
+  ASSISTANT_SCAN_CAP,
+} from "./assistant-lookups";
 import {
   ASSISTANT_CANDIDATE_CAP,
   ENTITY_MODULE_PERMISSION,
@@ -73,158 +82,144 @@ export function finalizeResolve(
   };
 }
 
-function profileName(profiles: unknown): string | undefined {
-  const row = Array.isArray(profiles) ? profiles[0] : profiles;
-  return (row as { full_name?: string } | null)?.full_name ?? undefined;
+function asText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function phoneMatches(value: unknown, raw: string, digits: string, last8: string): boolean {
+  const phone = asText(value);
+  return phone === raw || phone === digits || (last8.length > 0 && phone.endsWith(last8));
+}
+
+async function namedDrivers(ids: string[]): Promise<AssistantCandidate[]> {
+  const db = await staffDb();
+  if (!db || ids.length === 0) return [];
+  const drivers = await loadDocs(db, COLLECTIONS.drivers, ids);
+  const profiles = await loadDocs(db, COLLECTIONS.profiles, ids);
+  const hits: AssistantCandidate[] = [];
+  for (const id of ids) {
+    const row = drivers.get(id);
+    if (!row || row.archived_at != null) continue;
+    const profile = profiles.get(id);
+    hits.push(
+      candidate(id, labelOf(asText(row.driver_code), asText(profile?.full_name), id), asText(row.driver_code) || undefined),
+    );
+    if (hits.length === 6) break;
+  }
+  return hits;
 }
 
 async function findDrivers(query: string): Promise<AssistantCandidate[]> {
-  const supabase = await createClient();
   const raw = query.trim();
   const kind = classifyQueryKind(raw);
-  const hits: AssistantCandidate[] = [];
 
   if (kind === "id") {
-    const { data } = await supabase
-      .from("drivers")
-      .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name)")
-      .eq("id", raw)
-      .is("archived_at", null)
-      .maybeSingle();
-    if (data) {
-      hits.push(
-        candidate(
-          data.id,
-          labelOf(data.driver_code, profileName(data.profiles), data.id),
-          data.driver_code,
-        ),
-      );
-    }
-    return hits;
+    const row = await docById(COLLECTIONS.drivers, raw);
+    if (!row || row.archived_at != null) return [];
+    const named = await namedDrivers([String(row.id)]);
+    return named;
   }
 
   if (kind === "phone") {
     const digits = raw.replace(/\D/g, "");
     const last8 = digits.slice(-8);
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .or(`phone.eq.${raw},phone.eq.${digits},phone.like.%${last8}`)
-      .limit(6);
-    const ids = (profiles ?? []).map((p) => p.id);
-    if (ids.length > 0) {
-      const { data: drivers } = await supabase
-        .from("drivers")
-        .select("id, driver_code, profiles!drivers_id_fkey(full_name)")
-        .in("id", ids)
-        .is("archived_at", null)
-        .limit(6);
-      for (const row of drivers ?? []) {
-        hits.push(candidate(row.id, labelOf(row.driver_code, profileName(row.profiles), row.id), row.driver_code));
-      }
+    const profiles = await scanCollection(COLLECTIONS.profiles);
+    const ids: string[] = [];
+    for (const row of profiles) {
+      if (!phoneMatches(row.phone, raw, digits, last8)) continue;
+      ids.push(String(row.id));
+      if (ids.length === 6) break;
     }
-    const { data: intakes } = await supabase
-      .from("driver_intakes")
-      .select("linked_profile_id, driver_code, full_name")
-      .or(`phone.eq.${raw},phone.eq.${digits},phone.like.%${last8}`)
-      .is("archived_at", null)
-      .limit(6);
-    for (const row of intakes ?? []) {
-      if (!row.linked_profile_id) continue;
-      if (hits.some((h) => h.id === row.linked_profile_id)) continue;
+    const hits = await namedDrivers(ids);
+    const intakes = (await rowsWhere(COLLECTIONS.driverIntakes, "archived_at", null, ASSISTANT_SCAN_CAP)).filter((row) =>
+      phoneMatches(row.phone, raw, digits, last8),
+    );
+    for (const row of intakes.slice(0, 6)) {
+      const linked = asText(row.linked_profile_id);
+      if (!linked || hits.some((hit) => hit.id === linked)) continue;
       hits.push(
-        candidate(
-          row.linked_profile_id,
-          labelOf(row.driver_code, row.full_name, row.linked_profile_id),
-          row.driver_code ?? undefined,
-        ),
+        candidate(linked, labelOf(asText(row.driver_code), asText(row.full_name), linked), asText(row.driver_code) || undefined),
       );
     }
-    return hits;
+    return hits.slice(0, 6);
   }
 
   if (kind === "email") {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .ilike("email", raw)
-      .limit(6);
-    const ids = (profiles ?? []).map((p) => p.id);
+    const profiles = await scanCollection(COLLECTIONS.profiles);
+    const ids: string[] = [];
+    for (const row of profiles) {
+      if (!ilike(row.email, raw)) continue;
+      ids.push(String(row.id));
+      if (ids.length === 6) break;
+    }
     if (ids.length === 0) return [];
-    const { data: drivers } = await supabase
-      .from("drivers")
-      .select("id, driver_code, profiles!drivers_id_fkey(full_name)")
-      .in("id", ids)
-      .is("archived_at", null)
-      .limit(6);
-    return (drivers ?? []).map((row) =>
-      candidate(row.id, labelOf(row.driver_code, profileName(row.profiles), row.id), row.driver_code),
-    );
+    return namedDrivers(ids);
   }
 
   if (kind === "code") {
     const digits = raw.replace(/\s+/g, "");
-    const { data } = await supabase
-      .from("drivers")
-      .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name)")
-      .or(`driver_code.eq.${digits},employee_id.eq.${digits}`)
-      .is("archived_at", null)
-      .limit(6);
-    return (data ?? []).map((row) =>
-      candidate(row.id, labelOf(row.driver_code, profileName(row.profiles), row.id), row.driver_code),
-    );
+    const [byCode, byEmployee] = await Promise.all([
+      rowsWhere(COLLECTIONS.drivers, "driver_code", digits, 6),
+      rowsWhere(COLLECTIONS.drivers, "employee_id", digits, 6),
+    ]);
+    const ids: string[] = [];
+    for (const row of [...byCode, ...byEmployee]) {
+      if (row.archived_at != null) continue;
+      if (!ids.includes(String(row.id))) ids.push(String(row.id));
+    }
+    return namedDrivers(ids.slice(0, 6));
   }
 
-  const searched = await searchActiveDrivers(supabase, raw, 6);
+  const searched = await searchLiveDrivers(raw, 6);
   return searched.map((row) => candidate(row.id, labelOf(row.driver_code, row.full_name, row.id), row.driver_code));
 }
 
+const NAMED_COLLECTIONS = {
+  zones: COLLECTIONS.zones,
+  partners: COLLECTIONS.partners,
+  restaurants: COLLECTIONS.restaurants,
+} as const;
+
+function namedHit(row: Record<string, unknown>, key?: string): AssistantCandidate {
+  const id = String(row.id);
+  return candidate(id, asText(row.name) || id, key);
+}
+
 async function findNamed(
-  table: "zones" | "partners" | "restaurants",
+  table: keyof typeof NAMED_COLLECTIONS,
   query: string,
   extraExact?: { column: string; value: string }[],
 ): Promise<AssistantCandidate[]> {
-  const supabase = await createClient();
+  const collection = NAMED_COLLECTIONS[table];
   const raw = query.trim();
   if (UUID_RE.test(raw)) {
-    const { data } = await supabase.from(table).select("id, name").eq("id", raw).maybeSingle();
-    if (data) return [candidate(data.id, data.name ?? data.id)];
+    const row = await docById(collection, raw);
+    if (row) return [namedHit(row)];
   }
   for (const extra of extraExact ?? []) {
-    const { data } = await supabase
-      .from(table)
-      .select("id, name")
-      .eq(extra.column, extra.value)
-      .limit(6);
-    if ((data ?? []).length > 0) {
-      return (data ?? []).map((row) => candidate(row.id, row.name ?? row.id, extra.value));
-    }
+    const rows = await rowsWhere(collection, extra.column, extra.value, 6);
+    if (rows.length > 0) return rows.map((row) => namedHit(row, extra.value));
   }
-  const exact = await supabase.from(table).select("id, name").ilike("name", raw).limit(6);
-  if ((exact.data ?? []).length > 0) {
-    return (exact.data ?? []).map((row) => candidate(row.id, row.name ?? row.id));
-  }
-  const fuzzy = await supabase.from(table).select("id, name").ilike("name", `%${raw}%`).limit(6);
-  return (fuzzy.data ?? []).map((row) => candidate(row.id, row.name ?? row.id));
+  const scanned = await scanCollection(collection);
+  const exact = scanned.filter((row) => ilike(row.name, raw)).slice(0, 6);
+  if (exact.length > 0) return exact.map((row) => namedHit(row));
+  return scanned.filter((row) => ilike(row.name, `%${raw}%`)).slice(0, 6).map((row) => namedHit(row));
 }
 
 async function findZones(query: string): Promise<AssistantCandidate[]> {
-  const supabase = await createClient();
   const raw = query.trim();
+  const zoneHit = (row: Record<string, unknown>) =>
+    candidate(String(row.id), labelOf(asText(row.code), asText(row.name), String(row.id)), asText(row.code) || undefined);
   if (UUID_RE.test(raw)) {
-    const { data } = await supabase.from("zones").select("id, name, code").eq("id", raw).maybeSingle();
-    if (data) return [candidate(data.id, labelOf(data.code, data.name, data.id), data.code)];
+    const row = await docById(COLLECTIONS.zones, raw);
+    if (row) return [zoneHit(row)];
   }
-  const byCode = await supabase.from("zones").select("id, name, code").eq("code", raw).limit(6);
-  if ((byCode.data ?? []).length > 0) {
-    return (byCode.data ?? []).map((row) => candidate(row.id, labelOf(row.code, row.name, row.id), row.code));
-  }
-  const exact = await supabase.from("zones").select("id, name, code").ilike("name", raw).limit(6);
-  if ((exact.data ?? []).length > 0) {
-    return (exact.data ?? []).map((row) => candidate(row.id, labelOf(row.code, row.name, row.id), row.code));
-  }
-  const fuzzy = await supabase.from("zones").select("id, name, code").ilike("name", `%${raw}%`).limit(6);
-  return (fuzzy.data ?? []).map((row) => candidate(row.id, labelOf(row.code, row.name, row.id), row.code));
+  const byCode = await rowsWhere(COLLECTIONS.zones, "code", raw, 6);
+  if (byCode.length > 0) return byCode.map(zoneHit);
+  const scanned = await scanCollection(COLLECTIONS.zones);
+  const exact = scanned.filter((row) => ilike(row.name, raw)).slice(0, 6);
+  if (exact.length > 0) return exact.map(zoneHit);
+  return scanned.filter((row) => ilike(row.name, `%${raw}%`)).slice(0, 6).map(zoneHit);
 }
 
 async function findRestaurants(query: string): Promise<AssistantCandidate[]> {
@@ -234,115 +229,114 @@ async function findRestaurants(query: string): Promise<AssistantCandidate[]> {
   ]);
 }
 
-async function findVehicles(query: string): Promise<AssistantCandidate[]> {
-  const supabase = await createClient();
-  const raw = query.trim();
-  const select = "id, bike_id, reg_number";
-  if (UUID_RE.test(raw)) {
-    const { data } = await supabase.from("vehicles").select(select).eq("id", raw).maybeSingle();
-    if (data) return [candidate(data.id, labelOf(data.bike_id, data.reg_number, data.id), data.bike_id)];
-  }
-  const byBike = await supabase.from("vehicles").select(select).eq("bike_id", raw).limit(6);
-  if ((byBike.data ?? []).length > 0) {
-    return (byBike.data ?? []).map((row) => candidate(row.id, labelOf(row.bike_id, row.reg_number, row.id), row.bike_id));
-  }
-  const byPlate = await supabase.from("vehicles").select(select).ilike("reg_number", raw).limit(6);
-  if ((byPlate.data ?? []).length > 0) {
-    return (byPlate.data ?? []).map((row) => candidate(row.id, labelOf(row.bike_id, row.reg_number, row.id), row.bike_id));
-  }
-  const fuzzy = await supabase.from("vehicles").select(select).ilike("reg_number", `%${raw}%`).limit(6);
-  return (fuzzy.data ?? []).map((row) => candidate(row.id, labelOf(row.bike_id, row.reg_number, row.id), row.bike_id));
-}
-
-async function findRequests(query: string, complaintOnly: boolean): Promise<AssistantCandidate[]> {
-  const supabase = await createClient();
-  const raw = query.trim();
-  let q = supabase.from("requests").select("id, request_code, request_type, status");
-  if (complaintOnly) q = q.eq("request_type", "complaint");
-  if (UUID_RE.test(raw)) {
-    const { data } = await q.eq("id", raw).maybeSingle();
-    if (data) return [candidate(data.id, labelOf(data.request_code, data.request_type, data.id), data.request_code)];
-    return [];
-  }
-  const byCode = await q.eq("request_code", raw).limit(6);
-  if ((byCode.data ?? []).length > 0) {
-    return (byCode.data ?? []).map((row) =>
-      candidate(row.id, labelOf(row.request_code, row.request_type, row.id), row.request_code),
-    );
-  }
-  const fuzzy = await supabase
-    .from("requests")
-    .select("id, request_code, request_type")
-    .ilike("request_code", `%${raw}%`)
-    .limit(6);
-  const rows = complaintOnly
-    ? (fuzzy.data ?? []).filter((row) => row.request_type === "complaint")
-    : (fuzzy.data ?? []);
-  return rows.map((row) => candidate(row.id, labelOf(row.request_code, row.request_type, row.id), row.request_code));
-}
-
-async function findDeliveries(query: string): Promise<AssistantCandidate[]> {
-  const supabase = await createClient();
-  const raw = query.trim();
-  const select = "id, external_order_id, status";
-  if (UUID_RE.test(raw)) {
-    const { data } = await supabase.from("deliveries").select(select).eq("id", raw).maybeSingle();
-    if (data) return [candidate(data.id, labelOf(data.external_order_id, data.status, data.id), data.external_order_id ?? undefined)];
-    return [];
-  }
-  const byOrder = await supabase.from("deliveries").select(select).eq("external_order_id", raw).limit(6);
-  return (byOrder.data ?? []).map((row) =>
-    candidate(row.id, labelOf(row.external_order_id, row.status, row.id), row.external_order_id ?? undefined),
+function vehicleHit(row: Record<string, unknown>): AssistantCandidate {
+  return candidate(
+    String(row.id),
+    labelOf(asText(row.bike_id), asText(row.reg_number), String(row.id)),
+    asText(row.bike_id) || undefined,
   );
 }
 
-async function findGroups(query: string): Promise<AssistantCandidate[]> {
-  const supabase = await createClient();
+async function findVehicles(query: string): Promise<AssistantCandidate[]> {
   const raw = query.trim();
   if (UUID_RE.test(raw)) {
-    const { data } = await supabase.from("driver_groups").select("id, name").eq("id", raw).maybeSingle();
-    if (data) return [candidate(data.id, data.name ?? data.id)];
+    const row = await docById(COLLECTIONS.vehicles, raw);
+    if (row) return [vehicleHit(row)];
   }
-  const exact = await supabase.from("driver_groups").select("id, name").ilike("name", raw).limit(6);
-  if ((exact.data ?? []).length > 0) {
-    return (exact.data ?? []).map((row) => candidate(row.id, row.name ?? row.id));
+  const byBike = await rowsWhere(COLLECTIONS.vehicles, "bike_id", raw, 6);
+  if (byBike.length > 0) return byBike.map(vehicleHit);
+  const scanned = await scanCollection(COLLECTIONS.vehicles);
+  const byPlate = scanned.filter((row) => ilike(row.reg_number, raw)).slice(0, 6);
+  if (byPlate.length > 0) return byPlate.map(vehicleHit);
+  return scanned.filter((row) => ilike(row.reg_number, `%${raw}%`)).slice(0, 6).map(vehicleHit);
+}
+
+function requestHit(row: Record<string, unknown>): AssistantCandidate {
+  return candidate(
+    String(row.id),
+    labelOf(asText(row.request_code), asText(row.request_type), String(row.id)),
+    asText(row.request_code) || undefined,
+  );
+}
+
+async function findRequests(query: string, complaintOnly: boolean): Promise<AssistantCandidate[]> {
+  const raw = query.trim();
+  const keep = (row: Record<string, unknown>) => !complaintOnly || row.request_type === "complaint";
+  if (UUID_RE.test(raw)) {
+    const row = await docById(COLLECTIONS.requests, raw);
+    if (row && keep(row)) return [requestHit(row)];
+    return [];
   }
-  const fuzzy = await supabase.from("driver_groups").select("id, name").ilike("name", `%${raw}%`).limit(6);
-  return (fuzzy.data ?? []).map((row) => candidate(row.id, row.name ?? row.id));
+  const byCode = (await rowsWhere(COLLECTIONS.requests, "request_code", raw, 6)).filter(keep);
+  if (byCode.length > 0) return byCode.map(requestHit);
+  const fuzzy = (await scanCollection(COLLECTIONS.requests))
+    .filter((row) => keep(row) && ilike(row.request_code, `%${raw}%`))
+    .slice(0, 6);
+  return fuzzy.map(requestHit);
+}
+
+async function findDeliveries(query: string): Promise<AssistantCandidate[]> {
+  const raw = query.trim();
+  const deliveryHit = (row: Record<string, unknown>) =>
+    candidate(
+      String(row.id),
+      labelOf(asText(row.external_order_id), asText(row.status), String(row.id)),
+      asText(row.external_order_id) || undefined,
+    );
+  if (UUID_RE.test(raw)) {
+    const row = await docById(COLLECTIONS.deliveries, raw);
+    if (row) return [deliveryHit(row)];
+    return [];
+  }
+  const byOrder = await rowsWhere(COLLECTIONS.deliveries, "external_order_id", raw, 6);
+  return byOrder.map(deliveryHit);
+}
+
+async function findGroups(query: string): Promise<AssistantCandidate[]> {
+  const raw = query.trim();
+  if (UUID_RE.test(raw)) {
+    const row = await docById(COLLECTIONS.driverGroups, raw);
+    if (row) return [namedHit(row)];
+  }
+  const scanned = await scanCollection(COLLECTIONS.driverGroups);
+  const exact = scanned.filter((row) => ilike(row.name, raw)).slice(0, 6);
+  if (exact.length > 0) return exact.map((row) => namedHit(row));
+  return scanned.filter((row) => ilike(row.name, `%${raw}%`)).slice(0, 6).map((row) => namedHit(row));
+}
+
+function assetHit(row: Record<string, unknown>): AssistantCandidate {
+  return candidate(
+    String(row.id),
+    labelOf(asText(row.code), asText(row.name), String(row.id)),
+    asText(row.code) || undefined,
+  );
 }
 
 async function findAssets(query: string): Promise<AssistantCandidate[]> {
-  const supabase = await createClient();
   const raw = query.trim();
   if (UUID_RE.test(raw)) {
-    const { data } = await supabase.from("asset_catalog").select("id, name, code").eq("id", raw).maybeSingle();
-    if (data) return [candidate(data.id, labelOf(data.code, data.name, data.id), data.code)];
+    const row = await docById(COLLECTIONS.assetCatalog, raw);
+    if (row) return [assetHit(row)];
   }
-  const byCode = await supabase.from("asset_catalog").select("id, name, code").eq("code", raw).limit(6);
-  if ((byCode.data ?? []).length > 0) {
-    return (byCode.data ?? []).map((row) => candidate(row.id, labelOf(row.code, row.name, row.id), row.code));
-  }
-  const exact = await supabase.from("asset_catalog").select("id, name, code").ilike("name", raw).limit(6);
-  if ((exact.data ?? []).length > 0) {
-    return (exact.data ?? []).map((row) => candidate(row.id, labelOf(row.code, row.name, row.id), row.code));
-  }
-  const fuzzy = await supabase.from("asset_catalog").select("id, name, code").ilike("name", `%${raw}%`).limit(6);
-  return (fuzzy.data ?? []).map((row) => candidate(row.id, labelOf(row.code, row.name, row.id), row.code));
+  const byCode = await rowsWhere(COLLECTIONS.assetCatalog, "code", raw, 6);
+  if (byCode.length > 0) return byCode.map(assetHit);
+  const scanned = await scanCollection(COLLECTIONS.assetCatalog);
+  const exact = scanned.filter((row) => ilike(row.name, raw)).slice(0, 6);
+  if (exact.length > 0) return exact.map(assetHit);
+  return scanned.filter((row) => ilike(row.name, `%${raw}%`)).slice(0, 6).map(assetHit);
 }
 
 async function findNotifications(query: string): Promise<AssistantCandidate[]> {
-  const supabase = await createClient();
   const raw = query.trim();
+  const hit = (row: Record<string, unknown>) => candidate(String(row.id), asText(row.title) || String(row.id));
   if (UUID_RE.test(raw)) {
-    const { data } = await supabase.from("notification_campaigns").select("id, title").eq("id", raw).maybeSingle();
-    if (data) return [candidate(data.id, data.title ?? data.id)];
+    const row = await docById(COLLECTIONS.notificationCampaigns, raw);
+    if (row) return [hit(row)];
   }
-  const exact = await supabase.from("notification_campaigns").select("id, title").ilike("title", raw).limit(6);
-  if ((exact.data ?? []).length > 0) {
-    return (exact.data ?? []).map((row) => candidate(row.id, row.title ?? row.id));
-  }
-  const fuzzy = await supabase.from("notification_campaigns").select("id, title").ilike("title", `%${raw}%`).limit(6);
-  return (fuzzy.data ?? []).map((row) => candidate(row.id, row.title ?? row.id));
+  const scanned = await scanCollection(COLLECTIONS.notificationCampaigns);
+  const exact = scanned.filter((row) => ilike(row.title, raw)).slice(0, 6);
+  if (exact.length > 0) return exact.map(hit);
+  return scanned.filter((row) => ilike(row.title, `%${raw}%`)).slice(0, 6).map(hit);
 }
 
 async function hitsForType(type: AssistantEntityType, query: string): Promise<AssistantCandidate[]> {
@@ -385,8 +379,10 @@ async function hitsForType(type: AssistantEntityType, query: string): Promise<As
       if (/^\d{4}-\d{2}$/.test(raw)) return [candidate(raw, raw)];
       return findDrivers(raw);
     }
-    default:
-      return [];
+    default: {
+      const unreachable: never = type;
+      return unreachable;
+    }
   }
 }
 

@@ -1,21 +1,55 @@
 import { NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { withCors } from "@/lib/http/cors";
-import { createBearerSupabaseClient } from "@/lib/supabase/bearer-client";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
 import { requireDriverFromRequest } from "@/lib/storage/driver-upload-auth";
-import { APP_RELEASE_CHANNEL } from "@/lib/app-version/channel";
 
 /**
  * Driver app version adoption ping only.
  * In-app APK / sideload OTA was removed for Play Store policy — never returns apk_url.
- * Any legacy `channel` query param is ignored; adoption is stored under
- * APP_RELEASE_CHANNEL ("production") as a DB label only — not a product update channel.
+ * Any legacy `channel` query param is ignored. The installed build is written on the
+ * driver document (`app_version_code` / `app_version_name`); a build at or above
+ * `force_app_update_min_code` clears that demand.
  */
 function readBearerToken(request: Request): string | null {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7).trim();
   return token || null;
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+async function recordDriverAppVersion(
+  driverId: string,
+  versionCode: number,
+  versionName: string | null,
+): Promise<void> {
+  const db = await getFirebaseFirestore();
+  if (!db) return;
+  const ref = db.collection(COLLECTIONS.drivers).doc(driverId);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+
+  const name = versionName?.trim() ? versionName.trim() : null;
+  const patch: Record<string, unknown> = {
+    app_version_code: versionCode || null,
+    app_version_name: name,
+  };
+  const minCode = asNumber(snap.get("force_app_update_min_code"));
+  if (minCode !== null && versionCode >= minCode) {
+    patch.force_app_update_at = null;
+    patch.force_app_update_min_code = null;
+    patch.force_app_update_by = null;
+  }
+  await ref.set(patch, { merge: true });
 }
 
 async function handler(request: Request): Promise<Response> {
@@ -34,7 +68,6 @@ async function handler(request: Request): Promise<Response> {
   }
 
   const { searchParams } = new URL(request.url);
-  const platform = (searchParams.get("platform") ?? "android").toLowerCase();
   const versionCodeRaw = searchParams.get("versionCode");
   const versionName = searchParams.get("versionName");
   const versionCode =
@@ -42,21 +75,17 @@ async function handler(request: Request): Promise<Response> {
       ? Number.parseInt(versionCodeRaw, 10)
       : NaN;
 
-  // Best-effort adoption: record installed version if the driver app still calls this.
   if (Number.isFinite(versionCode) && versionCode > 0) {
-    const driverDb = createBearerSupabaseClient(token) as unknown as SupabaseClient;
-    const { error: recordError } = await driverDb.rpc("driver_record_app_version", {
-      p_platform: platform,
-      p_channel: APP_RELEASE_CHANNEL,
-      p_version_name: versionName,
-      p_version_code: versionCode,
-    });
-    if (recordError && process.env.NODE_ENV === "development") {
-      console.warn("driver_record_app_version", recordError.message);
+    try {
+      await recordDriverAppVersion(auth.driverId, versionCode, versionName);
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        const message = error instanceof Error ? error.message : "driver_record_app_version";
+        console.warn("driver_record_app_version", message);
+      }
     }
   }
 
-  // Always no active sideload release (Play Store only).
   return NextResponse.json(null);
 }
 

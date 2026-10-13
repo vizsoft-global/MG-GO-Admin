@@ -1,10 +1,15 @@
 "use server";
 
+import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
+
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { callCronFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
+import { vehicleTypeFromDriverJoin } from "@/features/vehicles/vehicle-type";
+
 import { resolveLocationSubmitAction } from "./location-event-display";
 import {
   enrichLiveLocation,
@@ -12,8 +17,9 @@ import {
   parseTrackingStatus,
   parseZoneStatus,
 } from "./location-status";
-import { vehicleTypeFromDriverJoin } from "@/features/vehicles/vehicle-type";
 import type { DriverLiveLocation, DriverLocationEvent } from "./types";
+
+type Loose = Record<string, unknown>;
 
 async function requireDriversView() {
   const session = await getSessionUser();
@@ -24,6 +30,67 @@ async function requireDriversView() {
     throw new Error("not_authorized");
   }
   return session;
+}
+
+async function requireDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+function fromValue(value: unknown): unknown {
+  if (value == null) return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(fromValue);
+  if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    const out: Loose = {};
+    for (const [key, inner] of Object.entries(value as Loose)) out[key] = fromValue(inner);
+    return out;
+  }
+  return value;
+}
+
+function fromDoc(id: string, data: DocumentData | undefined): Loose {
+  const out: Loose = { id };
+  for (const [key, value] of Object.entries(data ?? {})) out[key] = fromValue(value);
+  if (data?.id != null) out.id = fromValue(data.id) as string;
+  return out;
+}
+
+async function loadByIds(db: Firestore, collection: string, ids: string[]): Promise<Map<string, Loose>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const map = new Map<string, Loose>();
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    if (chunk.length === 0) continue;
+    const snaps = await db.getAll(...chunk.map((id) => db.collection(collection).doc(id)));
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      map.set(snap.id, fromDoc(snap.id, snap.data()));
+    }
+  }
+  return map;
+}
+
+async function readQuery(build: (withOrder: boolean) => Query): Promise<Loose[]> {
+  try {
+    const snap = await build(true).get();
+    return snap.docs.map((doc) => fromDoc(doc.id, doc.data()));
+  } catch (error) {
+    try {
+      const snap = await build(false).get();
+      return snap.docs.map((doc) => fromDoc(doc.id, doc.data()));
+    } catch {
+      throw new Error(error instanceof Error ? error.message : "query_failed");
+    }
+  }
 }
 
 function restaurantFromDriver(
@@ -102,49 +169,85 @@ function mapLiveRow(row: {
 
 export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> {
   await requireDriversView();
-  const supabase = await createClient();
+  const db = await requireDb();
+  const rows = await readQuery((withOrder) => {
+    let query: Query = db.collection(COLLECTIONS.driverLocations);
+    if (withOrder) query = query.orderBy("last_seen_at", "desc");
+    return query;
+  });
+  rows.sort((a, b) => String(b.last_seen_at ?? "").localeCompare(String(a.last_seen_at ?? "")));
 
-  const { data, error } = await supabase
-    .from("driver_locations")
-    .select(
-      `
-      driver_id,
-      latitude,
-      longitude,
-      speed_mps,
-      distance_today_meters,
-      accuracy_meters,
-      battery_pct,
-      heading_deg,
-      active_delivery_id,
-      tracking_status,
-      zone_status,
-      last_seen_at,
-      last_report_at,
-      updated_at,
-      drivers (
-        driver_code,
-        employee_id,
-        is_on_duty,
-        is_blocked,
-        vehicle_type_key,
-        vehicles ( vehicle_type_key ),
-        profiles!drivers_id_fkey ( full_name ),
-        driver_restaurants (
-          restaurants ( name )
-        )
-      )
-    `,
-    )
-    .order("last_seen_at", { ascending: false });
+  const driverIds = rows.map((row) => String(row.driver_id ?? "")).filter(Boolean);
+  const drivers = await loadByIds(db, COLLECTIONS.drivers, driverIds);
+  const profiles = await loadByIds(db, COLLECTIONS.profiles, driverIds);
+  const vehicleIds = [...drivers.values()]
+    .map((driver) => String(driver.vehicle_id ?? ""))
+    .filter(Boolean);
+  const vehicles = await loadByIds(db, COLLECTIONS.vehicles, vehicleIds);
 
-  if (error) {
-    throw new Error(error.message);
+  const restaurantByDriver = new Map<string, string>();
+  for (let i = 0; i < driverIds.length; i += 30) {
+    const chunk = [...new Set(driverIds.slice(i, i + 30))];
+    if (chunk.length === 0) continue;
+    const snap = await db
+      .collection(COLLECTIONS.driverRestaurants)
+      .where("driver_id", "in", chunk)
+      .get();
+    for (const doc of snap.docs) {
+      const link = fromDoc(doc.id, doc.data());
+      const driverId = String(link.driver_id ?? "");
+      const restaurantId = String(link.restaurant_id ?? "");
+      if (driverId && restaurantId && !restaurantByDriver.has(driverId)) {
+        restaurantByDriver.set(driverId, restaurantId);
+      }
+    }
   }
+  const restaurants = await loadByIds(db, COLLECTIONS.restaurants, [...restaurantByDriver.values()]);
 
   void logAdminRead("driver_locations", "locations.fetchLive");
 
-  return (data ?? []).map((row) => mapLiveRow(row as Parameters<typeof mapLiveRow>[0]));
+  return rows.map((row) => {
+    const driverId = String(row.driver_id ?? "");
+    const driver = drivers.get(driverId);
+    const profile = profiles.get(driverId);
+    const vehicle = driver ? vehicles.get(String(driver.vehicle_id ?? "")) : undefined;
+    const restaurant = restaurants.get(restaurantByDriver.get(driverId) ?? "");
+    return mapLiveRow({
+      driver_id: driverId,
+      latitude: Number(row.latitude),
+      longitude: Number(row.longitude),
+      speed_mps: row.speed_mps != null ? Number(row.speed_mps) : null,
+      distance_today_meters:
+        row.distance_today_meters != null ? Number(row.distance_today_meters) : null,
+      accuracy_meters: row.accuracy_meters != null ? Number(row.accuracy_meters) : null,
+      battery_pct: row.battery_pct != null ? Number(row.battery_pct) : null,
+      heading_deg: row.heading_deg != null ? Number(row.heading_deg) : null,
+      active_delivery_id: (row.active_delivery_id as string | null) ?? null,
+      tracking_status: String(row.tracking_status ?? "idle"),
+      zone_status: (row.zone_status as string | null) ?? null,
+      last_seen_at: String(row.last_seen_at ?? ""),
+      last_report_at: (row.last_report_at as string | null) ?? null,
+      updated_at: String(row.updated_at ?? row.last_seen_at ?? ""),
+      drivers: driver
+        ? {
+            driver_code: String(driver.driver_code ?? ""),
+            employee_id: (driver.employee_id as string | null) ?? null,
+            is_on_duty: driver.is_on_duty === true,
+            is_blocked: driver.is_blocked === true,
+            vehicle_type_key: (driver.vehicle_type_key as string | null) ?? null,
+            vehicles: vehicle
+              ? { vehicle_type_key: (vehicle.vehicle_type_key as string | null) ?? null }
+              : null,
+            profiles: profile
+              ? { full_name: (profile.full_name as string | null) ?? null }
+              : { full_name: null },
+            driver_restaurants: restaurant
+              ? [{ restaurants: { name: String(restaurant.name ?? "") } }]
+              : [],
+          }
+        : null,
+    });
+  });
 }
 
 export async function fetchDriverLocationHistory(
@@ -153,77 +256,61 @@ export async function fetchDriverLocationHistory(
   toIso: string,
 ): Promise<DriverLocationEvent[]> {
   await requireDriversView();
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("driver_location_events")
-    .select(
-      "id, driver_id, latitude, longitude, speed_mps, accuracy_meters, battery_pct, tracking_status, zone_status, delivery_id, recorded_at",
-    )
-    .eq("driver_id", driverId)
-    .gte("recorded_at", fromIso)
-    .lte("recorded_at", toIso)
-    .order("recorded_at", { ascending: true });
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  const db = await requireDb();
+  const rows = await readQuery((withOrder) => {
+    let query: Query = db
+      .collection(COLLECTIONS.driverLocationEvents)
+      .where("driver_id", "==", driverId)
+      .where("recorded_at", ">=", new Date(fromIso))
+      .where("recorded_at", "<=", new Date(toIso));
+    if (withOrder) query = query.orderBy("recorded_at", "asc");
+    return query;
+  });
+  rows.sort((a, b) => String(a.recorded_at ?? "").localeCompare(String(b.recorded_at ?? "")));
 
   await logAdminRead("driver_location_events", "locations.fetchHistory", { driverId });
 
-  const events = (data ?? []).map((row) => ({
-    id: row.id,
-    driverId: row.driver_id,
+  const events: DriverLocationEvent[] = rows.map((row) => ({
+    id: String(row.id),
+    driverId: String(row.driver_id ?? driverId),
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
     speedMps: row.speed_mps != null ? Number(row.speed_mps) : null,
     accuracyMeters: row.accuracy_meters != null ? Number(row.accuracy_meters) : null,
-    batteryPct: row.battery_pct,
-    trackingStatus: parseTrackingStatus(row.tracking_status),
-    zoneStatus: parseZoneStatus(row.zone_status),
-    deliveryId: row.delivery_id,
-    recordedAt: row.recorded_at,
+    batteryPct: row.battery_pct != null ? Number(row.battery_pct) : null,
+    trackingStatus: parseTrackingStatus(String(row.tracking_status ?? "idle")),
+    zoneStatus: parseZoneStatus((row.zone_status as string | null) ?? null),
+    deliveryId: (row.delivery_id as string | null) ?? null,
+    recordedAt: String(row.recorded_at ?? ""),
     submitAction: null,
   }));
 
   const deliveryIds = [
     ...new Set(
       events
-        .filter((e) => e.trackingStatus === "delivery_submit" && e.deliveryId)
-        .map((e) => e.deliveryId as string),
+        .filter((event) => event.trackingStatus === "delivery_submit" && event.deliveryId)
+        .map((event) => event.deliveryId as string),
     ),
   ];
-
   if (deliveryIds.length === 0) return events;
 
-  const { data: deliveries, error: deliveryError } = await supabase
-    .from("deliveries")
-    .select("id, pickup_at, delivered_at, cancelled_at")
-    .in("id", deliveryIds);
-
-  if (deliveryError) {
-    console.error("[fetchDriverLocationHistory] delivery lookup failed", deliveryError);
+  try {
+    const deliveries = await loadByIds(db, COLLECTIONS.deliveries, deliveryIds);
+    return events.map((event) => {
+      if (event.trackingStatus !== "delivery_submit" || !event.deliveryId) return event;
+      const delivery = deliveries.get(event.deliveryId);
+      if (!delivery) return event;
+      const submitAction = resolveLocationSubmitAction(event.recordedAt, {
+        pickup_at: (delivery.pickup_at as string | null) ?? null,
+        delivered_at: (delivery.delivered_at as string | null) ?? null,
+        cancelled_at: (delivery.cancelled_at as string | null) ?? null,
+      });
+      return submitAction ? { ...event, submitAction } : event;
+    });
+  } catch (error) {
+    console.error("[fetchDriverLocationHistory] delivery lookup failed", error);
     return events;
   }
-
-  const deliveryById = new Map(
-    (deliveries ?? []).map((d) => [
-      (d as { id: string }).id,
-      d as {
-        id: string;
-        pickup_at: string | null;
-        delivered_at: string | null;
-        cancelled_at: string | null;
-      },
-    ]),
-  );
-
-  return events.map((event) => {
-    if (event.trackingStatus !== "delivery_submit" || !event.deliveryId) return event;
-    const delivery = deliveryById.get(event.deliveryId);
-    const submitAction = resolveLocationSubmitAction(event.recordedAt, delivery);
-    return submitAction ? { ...event, submitAction } : event;
-  });
 }
 
 const KUWAIT_TZ = "Asia/Kuwait";
@@ -249,161 +336,26 @@ export async function fetchDriverHistoryActiveDates(
   yearMonth: string,
 ): Promise<string[]> {
   await requireDriversView();
-  const supabase = await createClient();
+  const db = await requireDb();
   const { from, to } = monthIsoBounds(yearMonth);
-
-  const { data, error } = await supabase
-    .from("driver_location_events")
-    .select("recorded_at")
-    .eq("driver_id", driverId)
-    .gte("recorded_at", from)
-    .lte("recorded_at", to);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  const rows = await readQuery((withOrder) => {
+    let query: Query = db
+      .collection(COLLECTIONS.driverLocationEvents)
+      .where("driver_id", "==", driverId)
+      .where("recorded_at", ">=", new Date(from))
+      .where("recorded_at", "<=", new Date(to));
+    if (withOrder) query = query.orderBy("recorded_at", "asc");
+    return query;
+  });
 
   await logAdminRead("driver_location_events", "locations.fetchHistoryDates", { driverId });
 
   const dates = new Set<string>();
-  for (const row of data ?? []) {
-    dates.add(kuwaitDateFromIso(row.recorded_at));
+  for (const row of rows) {
+    const recorded = String(row.recorded_at ?? "");
+    if (recorded) dates.add(kuwaitDateFromIso(recorded));
   }
   return Array.from(dates).sort();
-}
-
-export async function fetchLocationEventByDeliveryId(
-  deliveryId: string,
-): Promise<DriverLocationEvent | null> {
-  const session = await getSessionUser();
-  if (
-    !session ||
-    !hasPermissionInSet(session.permissions, "deliveries.view", session.isSuperAdmin)
-  ) {
-    throw new Error("not_authorized");
-  }
-
-  const admin = createAdminClient() as unknown as {
-    from: (table: string) => {
-      select: (columns: string) => Record<string, unknown>;
-    };
-  };
-
-  const selectColumns =
-    "id, driver_id, latitude, longitude, speed_mps, accuracy_meters, battery_pct, heading_deg, altitude_m, network_type, charging_state, is_mocked, location_provider, active_delivery_id, tracking_status, zone_status, delivery_id, recorded_at";
-
-  type SingleEventQuery = {
-    eq: (
-      column: string,
-      value: string,
-    ) => {
-      order: (
-        column: string,
-        options: { ascending: boolean },
-      ) => {
-        limit: (count: number) => {
-          maybeSingle: () => Promise<{
-            data: Record<string, unknown> | null;
-            error: { message: string } | null;
-          }>;
-        };
-      };
-    };
-  };
-
-  const fetchLatest = async (column: "delivery_id" | "active_delivery_id") => {
-    const q = admin.from("driver_location_events").select(selectColumns) as SingleEventQuery;
-    return q
-      .eq(column, deliveryId)
-      .order("recorded_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-  };
-
-  const [{ data: byDelivery, error: err1 }, { data: byActive, error: err2 }] =
-    await Promise.all([fetchLatest("delivery_id"), fetchLatest("active_delivery_id")]);
-
-  if (err1) throw new Error(err1.message);
-  if (err2) throw new Error(err2.message);
-
-  const events: DriverLocationEvent[] = [];
-  if (byDelivery) {
-    events.push(
-      mapLocationEventRow(byDelivery as unknown as Parameters<typeof mapLocationEventRow>[0]),
-    );
-  }
-  if (byActive) {
-    events.push(
-      mapLocationEventRow(byActive as unknown as Parameters<typeof mapLocationEventRow>[0]),
-    );
-  }
-
-  if (events.length === 0) return null;
-
-  events.sort(
-    (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
-  );
-  return events[0] ?? null;
-}
-
-export async function fetchLocationEventsForDelivery(
-  deliveryId: string,
-): Promise<DriverLocationEvent[]> {
-  const session = await getSessionUser();
-  if (
-    !session ||
-    !hasPermissionInSet(session.permissions, "deliveries.view", session.isSuperAdmin)
-  ) {
-    throw new Error("not_authorized");
-  }
-
-  const admin = createAdminClient() as unknown as {
-    from: (table: string) => {
-      select: (columns: string) => Record<string, unknown>;
-    };
-  };
-
-  const selectColumns =
-    "id, driver_id, latitude, longitude, speed_mps, accuracy_meters, battery_pct, heading_deg, altitude_m, network_type, charging_state, is_mocked, location_provider, active_delivery_id, tracking_status, zone_status, delivery_id, recorded_at";
-
-  type ListEventQuery = {
-    eq: (
-      column: string,
-      value: string,
-    ) => {
-      order: (
-        column: string,
-        options: { ascending: boolean },
-      ) => {
-        limit: (count: number) => Promise<{
-          data: Array<Record<string, unknown>> | null;
-          error: { message: string } | null;
-        }>;
-      };
-    };
-  };
-
-  const fetchAll = async (column: "delivery_id" | "active_delivery_id") => {
-    const q = admin.from("driver_location_events").select(selectColumns) as ListEventQuery;
-    return q.eq(column, deliveryId).order("recorded_at", { ascending: true }).limit(500);
-  };
-
-  const [{ data: byDelivery, error: err1 }, { data: byActive, error: err2 }] =
-    await Promise.all([fetchAll("delivery_id"), fetchAll("active_delivery_id")]);
-
-  if (err1) throw new Error(err1.message);
-  if (err2) throw new Error(err2.message);
-
-  const byId = new Map<string, DriverLocationEvent>();
-  for (const row of [...(byDelivery ?? []), ...(byActive ?? [])]) {
-    const mapped = mapLocationEventRow(
-      row as unknown as Parameters<typeof mapLocationEventRow>[0],
-    );
-    byId.set(mapped.id, mapped);
-  }
-  return [...byId.values()].sort(
-    (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
-  );
 }
 
 function mapLocationEventRow(data: {
@@ -448,15 +400,99 @@ function mapLocationEventRow(data: {
   };
 }
 
+function asEventRow(row: Loose): Parameters<typeof mapLocationEventRow>[0] {
+  return {
+    id: String(row.id),
+    driver_id: String(row.driver_id ?? ""),
+    latitude: row.latitude as number | string,
+    longitude: row.longitude as number | string,
+    speed_mps: (row.speed_mps as number | string | null) ?? null,
+    accuracy_meters: (row.accuracy_meters as number | string | null) ?? null,
+    battery_pct: row.battery_pct != null ? Number(row.battery_pct) : null,
+    heading_deg: (row.heading_deg as number | string | null) ?? null,
+    altitude_m: (row.altitude_m as number | string | null) ?? null,
+    network_type: (row.network_type as string | null) ?? null,
+    charging_state: (row.charging_state as string | null) ?? null,
+    is_mocked: (row.is_mocked as boolean | null) ?? null,
+    location_provider: (row.location_provider as string | null) ?? null,
+    active_delivery_id: (row.active_delivery_id as string | null) ?? null,
+    tracking_status: (row.tracking_status as string | null) ?? null,
+    zone_status: (row.zone_status as string | null) ?? null,
+    delivery_id: (row.delivery_id as string | null) ?? null,
+    recorded_at: String(row.recorded_at ?? ""),
+  };
+}
+
+async function eventsForColumn(
+  db: Firestore,
+  column: "delivery_id" | "active_delivery_id",
+  deliveryId: string,
+  limit: number,
+  direction: "asc" | "desc",
+): Promise<Loose[]> {
+  const rows = await readQuery((withOrder) => {
+    let query: Query = db
+      .collection(COLLECTIONS.driverLocationEvents)
+      .where(column, "==", deliveryId);
+    if (withOrder) query = query.orderBy("recorded_at", direction);
+    return query.limit(limit);
+  });
+  rows.sort((a, b) => {
+    const delta = String(a.recorded_at ?? "").localeCompare(String(b.recorded_at ?? ""));
+    return direction === "asc" ? delta : -delta;
+  });
+  return rows.slice(0, limit);
+}
+
+async function requireDeliveriesView() {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(session.permissions, "deliveries.view", session.isSuperAdmin)
+  ) {
+    throw new Error("not_authorized");
+  }
+}
+
+export async function fetchLocationEventByDeliveryId(
+  deliveryId: string,
+): Promise<DriverLocationEvent | null> {
+  await requireDeliveriesView();
+  const db = await requireDb();
+  const [byDelivery, byActive] = await Promise.all([
+    eventsForColumn(db, "delivery_id", deliveryId, 1, "desc"),
+    eventsForColumn(db, "active_delivery_id", deliveryId, 1, "desc"),
+  ]);
+  const events = [...byDelivery, ...byActive].map((row) => mapLocationEventRow(asEventRow(row)));
+  if (events.length === 0) return null;
+  events.sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime());
+  return events[0] ?? null;
+}
+
+export async function fetchLocationEventsForDelivery(
+  deliveryId: string,
+): Promise<DriverLocationEvent[]> {
+  await requireDeliveriesView();
+  const db = await requireDb();
+  const [byDelivery, byActive] = await Promise.all([
+    eventsForColumn(db, "delivery_id", deliveryId, 500, "asc"),
+    eventsForColumn(db, "active_delivery_id", deliveryId, 500, "asc"),
+  ]);
+  const byId = new Map<string, DriverLocationEvent>();
+  for (const row of [...byDelivery, ...byActive]) {
+    const mapped = mapLocationEventRow(asEventRow(row));
+    byId.set(mapped.id, mapped);
+  }
+  return [...byId.values()].sort(
+    (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+  );
+}
+
 export async function fetchTrackedDriverCount(): Promise<number> {
   await requireDriversView();
-  const supabase = await createClient();
-  const { count, error } = await supabase
-    .from("driver_locations")
-    .select("driver_id", { count: "exact", head: true });
-
-  if (error) throw new Error(error.message);
-  return count ?? 0;
+  const db = await requireDb();
+  const snap = await db.collection(COLLECTIONS.driverLocations).count().get();
+  return snap.data().count;
 }
 
 export async function fetchDriverAssignedRestaurantPins(
@@ -472,65 +508,48 @@ export async function fetchDriverAssignedRestaurantPins(
 > {
   await requireDriversView();
   if (!driverId) return [];
-
-  const supabase = await createClient();
-  const { data: links, error: linkErr } = await supabase
-    .from("driver_restaurants")
-    .select("restaurant_id")
-    .eq("driver_id", driverId);
-  if (linkErr) throw new Error(linkErr.message);
-
-  const ids = [...new Set((links ?? []).map((l) => l.restaurant_id).filter(Boolean))];
+  const db = await requireDb();
+  const links = await readQuery(() =>
+    db.collection(COLLECTIONS.driverRestaurants).where("driver_id", "==", driverId),
+  );
+  const ids = [...new Set(links.map((link) => String(link.restaurant_id ?? "")).filter(Boolean))];
   if (ids.length === 0) return [];
 
-  // Prefer published + active; fall back to any active with coordinates so
-  // Live Tracking still shows the assigned pin when ops data is partial.
-  const baseSelect = "id, name, latitude, longitude, map_link, status, is_active";
-
-  const { data: preferred, error } = await supabase
-    .from("restaurants")
-    .select(baseSelect)
-    .in("id", ids)
-    .eq("status", "published")
-    .eq("is_active", true);
-  if (error) throw new Error(error.message);
-
-  let restaurants = preferred ?? [];
+  const loaded = await loadByIds(db, COLLECTIONS.restaurants, ids);
+  const all = [...loaded.values()];
+  const usable = (row: Loose) => {
+    const latitude = Number(row.latitude);
+    const longitude = Number(row.longitude);
+    return (
+      row.latitude != null &&
+      row.longitude != null &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      Math.abs(latitude) <= 90 &&
+      Math.abs(longitude) <= 180
+    );
+  };
+  let restaurants = all.filter(
+    (row) => row.status === "published" && row.is_active === true && usable(row),
+  );
   if (restaurants.length === 0) {
-    const { data: fallback, error: fbErr } = await supabase
-      .from("restaurants")
-      .select(baseSelect)
-      .in("id", ids)
-      .eq("is_active", true);
-    if (fbErr) throw new Error(fbErr.message);
-    restaurants = fallback ?? [];
+    restaurants = all.filter((row) => row.is_active === true && usable(row));
   }
 
-  return restaurants
-    .filter(
-      (r) =>
-        r.latitude != null &&
-        r.longitude != null &&
-        Number.isFinite(Number(r.latitude)) &&
-        Number.isFinite(Number(r.longitude)) &&
-        Math.abs(Number(r.latitude)) <= 90 &&
-        Math.abs(Number(r.longitude)) <= 180,
-    )
-    .map((r) => ({
-      id: r.id,
-      name: r.name,
-      latitude: Number(r.latitude),
-      longitude: Number(r.longitude),
-      map_link: r.map_link,
-    }));
+  return restaurants.map((row) => ({
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    map_link: (row.map_link as string | null) ?? null,
+  }));
 }
 
 /** Cron: delete off-duty GPS rows older than 10 minutes. On-duty last-known stays. */
 export async function cleanupStaleDriverLocations(): Promise<number> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase.rpc("cleanup_stale_driver_locations", {
+  const { data, error } = await callCronFunction<number>("cleanup_stale_driver_locations", {
     p_max_age: "10 minutes",
   });
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return typeof data === "number" ? data : 0;
 }

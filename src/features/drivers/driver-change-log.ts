@@ -1,6 +1,6 @@
+import { staffClient } from "./driver-uniqueness";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database";
 import {
   diffDriverChange,
@@ -33,7 +33,7 @@ type QueryClient = {
 };
 
 export async function loadChangeLabels(
-  supabase: QueryClient,
+  db: QueryClient,
   input: {
     zoneId?: string | null;
     partnerId?: string | null;
@@ -49,20 +49,20 @@ export async function loadChangeLabels(
   const restaurantIds = (input.restaurantIds ?? []).filter(Boolean);
   const [zone, partner, vehicle, restaurants] = await Promise.all([
     input.zoneId
-      ? supabase.from("zones").select("name").eq("id", input.zoneId).maybeSingle()
+      ? db.from("zones").select("name").eq("id", input.zoneId).maybeSingle()
       : Promise.resolve({ data: null }),
     input.partnerId
-      ? supabase.from("partners").select("name").eq("id", input.partnerId).maybeSingle()
+      ? db.from("partners").select("name").eq("id", input.partnerId).maybeSingle()
       : Promise.resolve({ data: null }),
     input.vehicleId
-      ? supabase
+      ? db
           .from("vehicles")
           .select("bike_id, reg_number")
           .eq("id", input.vehicleId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     restaurantIds.length > 0
-      ? supabase.from("restaurants").select("id, name").in("id", restaurantIds)
+      ? db.from("restaurants").select("id, name").in("id", restaurantIds)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ]);
 
@@ -90,10 +90,10 @@ export async function loadChangeLabels(
 }
 
 export async function loadIntakeProfileSnapshot(
-  supabase: QueryClient,
+  db: QueryClient,
   intakeId: string,
 ): Promise<{ snapshot: DriverChangeSnapshot; driverId: string | null } | null> {
-  const { data: intake } = await supabase
+  const { data: intake } = await db
     .from("driver_intakes")
     .select(
       "id, full_name, phone, civil_id, employee_id, driver_code, partner_id, zone_id, vehicle_id, nationality, rider_category, client_id, client_name, source_company, project_key, workflow_status, linked_profile_id, custom_fields",
@@ -102,7 +102,7 @@ export async function loadIntakeProfileSnapshot(
     .maybeSingle();
   if (!intake) return null;
 
-  const { data: restaurantRows } = await supabase
+  const { data: restaurantRows } = await db
     .from("driver_intake_restaurants")
     .select("restaurant_id")
     .eq("intake_id", intakeId);
@@ -110,7 +110,7 @@ export async function loadIntakeProfileSnapshot(
 
   let accountStatus: string | null = null;
   if (intake.linked_profile_id) {
-    const { data: driver } = await supabase
+    const { data: driver } = await db
       .from("drivers")
       .select("status")
       .eq("id", intake.linked_profile_id)
@@ -118,7 +118,7 @@ export async function loadIntakeProfileSnapshot(
     accountStatus = displayChangeValue(driver?.status);
   }
 
-  const labels = await loadChangeLabels(supabase, {
+  const labels = await loadChangeLabels(db, {
     zoneId: intake.zone_id,
     partnerId: intake.partner_id,
     vehicleId: intake.vehicle_id,
@@ -156,10 +156,10 @@ export async function loadIntakeProfileSnapshot(
 }
 
 export async function resolveIntakeIdForDriver(
-  supabase: QueryClient,
+  db: QueryClient,
   driverId: string,
 ): Promise<string | null> {
-  const { data } = await supabase
+  const { data } = await db
     .from("driver_intakes")
     .select("id, linked_profile_id")
     .eq("linked_profile_id", driverId)
@@ -199,7 +199,7 @@ export async function logDriverChange(input: {
         input.source === "passcode" ? "passcode replaced" : input.source;
     }
 
-    const admin = createAdminClient();
+    const admin = await staffClient();
     const { error } = await admin.from("driver_change_events").insert({
       intake_id: input.intakeId,
       driver_id: input.driverId ?? null,

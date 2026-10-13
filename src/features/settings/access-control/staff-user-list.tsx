@@ -126,7 +126,12 @@ export function StaffUserList({
                           .filter(Boolean)
                           .join(" · ")}
                       </span>
-                      <span className="mt-0.5 flex items-center gap-1 text-[10.5px] font-medium text-[#B54708]">
+                      <span
+                        className={cn(
+                          "mt-0.5 flex items-center gap-1 text-[10.5px] font-medium",
+                          selected ? "text-[#B54708]" : "text-[#6B7280]",
+                        )}
+                      >
                         <Circle className="size-[9px] shrink-0 stroke-[2.5]" aria-hidden />
                         {t("modulesSelected", { count: row.modulesSelected })}
                       </span>

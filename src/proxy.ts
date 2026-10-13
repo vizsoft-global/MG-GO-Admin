@@ -1,13 +1,16 @@
 import createIntlMiddleware from "next-intl/middleware";
 import { type NextRequest, NextResponse } from "next/server";
 import { routing } from "@/i18n/routing";
-import { updateSession } from "@/lib/supabase/middleware";
-import { guardedRead, MIDDLEWARE_QUERY_BUDGET_MS } from "@/lib/supabase/deadline";
+import {
+  readProxyOpsSettings,
+  readProxyProfile,
+  updateStaffSession,
+  type ProxyOpsSettings,
+} from "@/lib/firebase/middleware";
 import {
   cacheOpsSettings,
   readCachedOpsSettings,
-  type ProxyOpsSettings,
-} from "@/lib/supabase/ops-settings-cache";
+} from "@/lib/firebase/ops-settings-cache";
 
 const intlMiddleware = createIntlMiddleware(routing);
 
@@ -45,17 +48,6 @@ const publicAuthPaths = new Set([
   "/unauthorized",
 ]);
 
-const PROFILE_SELECT =
-  "approval_status, admin_role_id, archived_at, role, admin_roles(is_super_admin)";
-
-type ProfileRow = {
-  approval_status?: string;
-  admin_role_id?: string | null;
-  archived_at?: string | null;
-  role?: string;
-  admin_roles?: { is_super_admin: boolean } | null;
-} | null;
-
 function pathWithoutLocale(pathname: string): string {
   return pathname.replace(/^\/(en|ar)/, "") || "/";
 }
@@ -74,16 +66,12 @@ function isProtectedPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const intlResponse = intlMiddleware(request);
-  const { response, supabase, probe } = await updateSession(request, intlResponse);
+  const { response, probe } = await updateStaffSession(request, intlResponse);
   const { pathname } = request.nextUrl;
   const locale = getLocale(pathname);
   const path = pathWithoutLocale(pathname);
 
   if (path.startsWith("/api/")) {
-    return response;
-  }
-
-  if (!supabase) {
     return response;
   }
 
@@ -94,10 +82,10 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  const { user } = probe;
+  const uid = probe.uid;
   const protectedPath = isProtectedPath(pathname);
 
-  if (!user) {
+  if (!uid) {
     if (protectedPath) {
       const loginUrl = new URL(`/${locale}/login`, request.url);
       loginUrl.searchParams.set("next", pathname);
@@ -112,33 +100,23 @@ export async function proxy(request: NextRequest) {
   const [opsResult, profileResult] = await Promise.all([
     cachedOps
       ? Promise.resolve({ data: cachedOps, failed: false as const })
-      : guardedRead<ProxyOpsSettings>(
-          supabase
-            .from("app_settings")
-            .select("super_admin_claimed, maintenance_mode")
-            .eq("id", 1)
-            .maybeSingle(),
-          MIDDLEWARE_QUERY_BUDGET_MS,
-        ),
+      : readProxyOpsSettings(),
     wantsProfile
-      ? guardedRead<NonNullable<ProfileRow>>(
-          supabase.from("profiles").select(PROFILE_SELECT).eq("id", user.id).maybeSingle(),
-          MIDDLEWARE_QUERY_BUDGET_MS,
-        )
+      ? readProxyProfile(uid)
       : Promise.resolve({ data: null, failed: false as const }),
   ]);
 
   if (!cachedOps && !opsResult.failed) {
-    cacheOpsSettings(opsResult.data);
+    cacheOpsSettings(opsResult.data as ProxyOpsSettings | null);
   }
 
-  const opsSettings = opsResult.data;
-  const profileRow = profileResult.data as ProfileRow;
+  const opsSettings = opsResult.data as ProxyOpsSettings | null;
+  const profileRow = profileResult.data;
 
   // A read that failed proves nothing about the caller. Every branch below is
   // skipped in that case so the request falls through to the page, which runs
-  // its own auth gate against a fresh client — the same reasoning the probe
-  // above uses, applied to the profile it could not load.
+  // its own auth gate against a fresh read — the same reasoning the probe above
+  // uses, applied to the profile it could not load.
   const profileUnknown = profileResult.failed;
   const superAdminClaimed = opsSettings?.super_admin_claimed ?? true;
 
@@ -183,7 +161,9 @@ export async function proxy(request: NextRequest) {
       );
     }
 
-    const isSuperAdmin = profileRow.admin_roles?.is_super_admin === true;
+    // `is_super_admin` rides the custom claims, so the proxy no longer joins
+    // admin_roles on every navigation.
+    const isSuperAdmin = probe.claims?.superAdmin === true;
 
     if (opsSettings?.maintenance_mode && !isSuperAdmin) {
       return NextResponse.redirect(

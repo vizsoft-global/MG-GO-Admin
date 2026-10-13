@@ -1,20 +1,18 @@
 /**
  * Zone geometry for the WebGL layer.
  *
- * The Worker sends zones in `hello`, so this loader only runs on the polling and
- * mirror rails — but it must produce the identical `FleetZone` shape, or the map
- * would draw different polygons depending on which rail happens to be live.
+ * The Worker sends zones in `hello`. The poll rail loads the same rows through
+ * `fetchFleetZones` in `fleet-server-actions.ts` and must produce the identical
+ * `FleetZone` shape, or the map would draw different polygons depending on which
+ * rail happens to be live.
  *
- * `zones` has no `is_active` column (V1 `fetchZones` never filtered on one). A
- * `.eq("is_active", true)` here returned an error and an empty dropdown.
+ * `zones` has no `is_active` field (V1 `fetchZones` never filtered on one).
  *
  * Coordinates stay [lng, lat] throughout: that is GeoJSON order, what the database
  * stores, and what deck.gl expects. The existing Leaflet helpers in
  * `@/lib/geo/zone-geometry` flip to [lat, lng] for Leaflet's benefit, which is
  * exactly why they are not reused here.
  */
-
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { FleetZone } from "./fleet-types";
 
@@ -66,19 +64,6 @@ export function toFleetZone(row: ZoneRow): FleetZone | null {
     radiusMeters: 0,
     blockSize: feature?.properties?.blockSize ?? null,
   };
-}
-
-export async function loadFleetZones(
-  supabase: SupabaseClient,
-): Promise<FleetZone[]> {
-  const { data, error } = await supabase
-    .from("zones")
-    .select("id,name,color,zone_type,geometry");
-
-  if (error || !data) return [];
-  return (data as ZoneRow[])
-    .map((row) => toFleetZone(row))
-    .filter((zone): zone is FleetZone => zone !== null);
 }
 
 /** Circle approximated as a ring, so one PolygonLayer can draw both zone kinds. */

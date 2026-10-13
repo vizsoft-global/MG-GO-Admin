@@ -3,8 +3,7 @@ import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
 import { logAdminPageView } from "@/lib/audit/log-admin-activity";
 import { getAllAdminRoles } from "@/lib/auth/get-role-permissions";
 import { syncAdminPermissionsFromCatalog } from "@/lib/auth/sync-admin-permissions";
-import { createClient } from "@/lib/supabase/server";
-import { getRoleUsageCounts } from "@/features/settings/roles-actions";
+import { redirect } from "@/i18n/navigation";
 import {
   listRequestTypeOptions,
   listStaffAccess,
@@ -24,28 +23,29 @@ export default async function RolesPermissionsPage({
   await requireSuperAdmin(locale);
   void logAdminPageView("/settings/roles", "RolesPermissionsPage");
 
+  if (query.tab === "roles") {
+    redirect({
+      href: query.user ? `/settings/roles?user=${query.user}` : "/settings/roles",
+      locale,
+    });
+  }
+
   await syncAdminPermissionsFromCatalog();
 
-  const supabase = await createClient();
-  const [allRoles, usageCounts, listed, requestTypes, permissionsResult] = await Promise.all([
+  const [allRoles, listed, requestTypes] = await Promise.all([
     getAllAdminRoles(),
-    getRoleUsageCounts(),
     listStaffAccess(),
     listRequestTypeOptions(),
-    supabase.from("admin_permissions").select("slug, label, category").order("category").order("label"),
   ]);
 
   return (
     <div className="w-full min-w-0 max-w-none">
       <RolesAccessPage
-        tab={query.tab === "roles" ? "roles" : "staff"}
         userId={query.user ?? null}
         rows={listed.rows ?? []}
         loadError={listed.error}
         roles={allRoles}
         requestTypes={requestTypes.rows ?? []}
-        permissions={permissionsResult.data ?? []}
-        usageCounts={usageCounts}
       />
     </div>
   );

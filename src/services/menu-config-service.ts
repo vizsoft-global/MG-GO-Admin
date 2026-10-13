@@ -1,5 +1,9 @@
-import { createClient } from "@/lib/supabase/client";
-import type { Json } from "@/types/database";
+"use server";
+
+import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { getSessionUser } from "@/lib/auth/get-session";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 
 function formatMenuConfigError(error: unknown): string {
   if (!error || typeof error !== "object") return String(error);
@@ -19,73 +23,68 @@ export interface MenuNode {
   children?: MenuNode[];
 }
 
+function configOf(value: unknown): MenuNode[] {
+  return Array.isArray(value) ? (value as MenuNode[]) : [];
+}
+
+async function menuDocsForRole(role: string) {
+  const db = await staffDb();
+  if (!db) return { db: null, docs: [] as QueryDocumentSnapshot[] };
+  const snap = await db.collection(COLLECTIONS.menuConfigs).where("role", "==", role).get();
+  const docs = snap.docs.filter((doc) => {
+    const data = doc.data();
+    return data.scope === "global" && data.site_id == null;
+  });
+  return { db, docs };
+}
+
 export async function getMenuConfig(role: string): Promise<MenuNode[]> {
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const session = await getSessionUser();
+  if (!session) return [];
 
-  if (!session) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from("menu_configs")
-    .select("config")
-    .eq("role", role)
-    .eq("scope", "global")
-    .is("site_id", null)
-    .maybeSingle();
-
-  if (error) {
+  try {
+    const { docs } = await menuDocsForRole(role);
+    return configOf(docs[0]?.data()?.config);
+  } catch (error) {
     if (process.env.NODE_ENV === "development") {
       console.warn("getMenuConfig", formatMenuConfigError(error));
     }
     return [];
   }
-  const cfg = data?.config as unknown;
-  return Array.isArray(cfg) ? (cfg as MenuNode[]) : [];
 }
 
 export async function saveMenuConfig(role: string, config: MenuNode[]): Promise<void> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await getSessionUser();
+  if (!session) throw new Error("not_authenticated");
 
-  const { data: existing } = await supabase
-    .from("menu_configs")
-    .select("id")
-    .eq("role", role)
-    .eq("scope", "global")
-    .is("site_id", null)
-    .maybeSingle();
+  const { db, docs } = await menuDocsForRole(role);
+  if (!db) throw new Error("not_configured");
 
   const payload = {
     role,
-    scope: "global" as const,
+    scope: "global",
     site_id: null,
-    config: config as unknown as Json,
-    updated_at: new Date().toISOString(),
-    updated_by: user?.id ?? null,
+    config,
+    updated_at: new Date(),
+    updated_by: session.id,
   };
 
-  const { error } = existing
-    ? await supabase.from("menu_configs").update(payload).eq("id", existing.id)
-    : await supabase.from("menu_configs").insert(payload);
+  if (docs[0]) {
+    await docs[0].ref.set(payload, { merge: true });
+    return;
+  }
 
-  if (error) throw error;
+  const id = crypto.randomUUID();
+  await db.collection(COLLECTIONS.menuConfigs).doc(id).set({ id, ...payload });
 }
 
 export async function resetMenuConfig(role: string): Promise<void> {
-  const supabase = createClient();
-  const { error } = await supabase
-    .from("menu_configs")
-    .delete()
-    .eq("role", role)
-    .eq("scope", "global")
-    .is("site_id", null);
-  if (error) throw error;
+  const session = await getSessionUser();
+  if (!session) throw new Error("not_authenticated");
+
+  const { db, docs } = await menuDocsForRole(role);
+  if (!db) throw new Error("not_configured");
+  await Promise.all(docs.map((doc) => doc.ref.delete()));
 }
 
 /** Copy saved menu config from one role to another (overwrites target). */

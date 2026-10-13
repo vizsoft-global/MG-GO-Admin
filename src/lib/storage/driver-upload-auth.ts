@@ -1,4 +1,5 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { getFirebaseAuth, getFirebaseFirestore } from "@/lib/firebase/admin";
 
 export type DriverAuthContext = {
   authUid: string;
@@ -18,36 +19,31 @@ export async function requireDriverFromRequest(
     return { error: "missing_token", status: 401 };
   }
 
-  const admin = createAdminClient();
-  const { data: userData, error: userError } = await admin.auth.getUser(token);
+  const auth = await getFirebaseAuth();
+  const db = await getFirebaseFirestore();
+  if (!auth || !db) {
+    return { error: "not_configured", status: 503 };
+  }
 
-  if (userError || !userData.user) {
+  let authUid: string;
+  try {
+    const decoded = await auth.verifyIdToken(token);
+    authUid = decoded.uid;
+  } catch {
     return { error: "invalid_token", status: 401 };
   }
 
-  const authUid = userData.user.id;
-
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role")
-    .eq("id", authUid)
-    .maybeSingle();
-
-  if (profile?.role !== "rider") {
+  const profile = await db.collection(COLLECTIONS.profiles).doc(authUid).get();
+  if (profile.data()?.role !== "rider") {
     return { error: "not_a_driver", status: 403 };
   }
 
-  const { data: driver } = await admin
-    .from("drivers")
-    .select("id, archived_at")
-    .eq("id", authUid)
-    .maybeSingle();
-
-  if (!driver) {
+  const driver = await db.collection(COLLECTIONS.drivers).doc(authUid).get();
+  if (!driver.exists) {
     return { error: "driver_not_found", status: 403 };
   }
 
-  if (driver.archived_at) {
+  if (driver.data()?.archived_at != null) {
     return { error: "driver_archived", status: 403 };
   }
 

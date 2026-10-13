@@ -1,9 +1,12 @@
 "use server";
 
+import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
+
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 
 export type DriverTelemetryEvent = {
   id: string;
@@ -52,42 +55,20 @@ const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
 const EXPORT_MAX_ROWS = 5000;
 const COUNT_WINDOW_ROWS = 10000;
+const TIME_FIELD = "client_ts";
+
+type Loose = Record<string, unknown>;
 
 async function requireTelemetryView() {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(
-      session.permissions,
-      "driver_telemetry.view",
-      session.isSuperAdmin,
-    )
+    !hasPermissionInSet(session.permissions, "driver_telemetry.view", session.isSuperAdmin)
   ) {
     throw new Error("not_authorized");
   }
   return session;
 }
-
-const SELECT_COLUMNS = `
-  id,
-  driver_id,
-  event_name,
-  category,
-  severity,
-  client_ts,
-  server_received_at,
-  clock_skew_ms,
-  session_id,
-  correlation_id,
-  platform,
-  app_version_name,
-  app_version_code,
-  device_id,
-  network_state,
-  context,
-  context_stripped_keys,
-  drivers ( driver_code, profiles!drivers_id_fkey ( full_name ) )
-`;
 
 type RawTelemetryRow = {
   id: number | string;
@@ -147,6 +128,201 @@ function mapRow(row: RawTelemetryRow): DriverTelemetryEvent {
   };
 }
 
+function fromValue(value: unknown): unknown {
+  if (value == null) return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(fromValue);
+  if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    const out: Loose = {};
+    for (const [key, inner] of Object.entries(value as Loose)) out[key] = fromValue(inner);
+    return out;
+  }
+  return value;
+}
+
+function fromDoc(id: string, data: DocumentData | undefined): Loose {
+  const out: Loose = { id };
+  for (const [key, value] of Object.entries(data ?? {})) out[key] = fromValue(value);
+  if (data?.id != null) out.id = fromValue(data.id) as string;
+  return out;
+}
+
+function millisOf(value: unknown): number | null {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string" && value.includes("T")) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function idLess(rowId: unknown, cursorId: string): boolean {
+  const text = String(rowId ?? "");
+  if (/^-?\d+$/.test(text) && /^-?\d+$/.test(cursorId)) return Number(text) < Number(cursorId);
+  return text < cursorId;
+}
+
+function beforeCursor(row: Loose, cursor: { time: string; id: string }): boolean {
+  const rowMs = millisOf(row[TIME_FIELD]);
+  const cursorMs = millisOf(cursor.time);
+  if (rowMs == null || cursorMs == null) return String(row[TIME_FIELD] ?? "") < cursor.time;
+  if (rowMs < cursorMs) return true;
+  if (rowMs > cursorMs) return false;
+  return idLess(row.id, cursor.id);
+}
+
+async function requireDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+async function loadByIds(db: Firestore, collection: string, ids: string[]): Promise<Map<string, Loose>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const map = new Map<string, Loose>();
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    const snaps = await db.getAll(...chunk.map((id) => db.collection(collection).doc(id)));
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      map.set(snap.id, fromDoc(snap.id, snap.data()));
+    }
+  }
+  return map;
+}
+
+type EventSpec = {
+  take: number;
+  hardCap: number;
+  driverId?: string | null;
+  categories?: string[] | null;
+  errorsOnly?: boolean;
+  from?: string | null;
+  to?: string | null;
+  cursor?: TelemetryFeedCursor | null;
+};
+
+async function readGroup(
+  db: Firestore,
+  spec: EventSpec,
+  category: string | null,
+  fetchCap: number,
+): Promise<Loose[]> {
+  const build = (withRange: boolean): Query => {
+    let query: Query = db.collection(COLLECTIONS.driverTelemetryEvents);
+    if (spec.driverId) query = query.where("driver_id", "==", spec.driverId);
+    if (category) query = query.where("category", "==", category);
+    if (spec.errorsOnly) query = query.where("severity", "==", "error");
+    if (withRange) {
+      if (spec.from) query = query.where(TIME_FIELD, ">=", new Date(spec.from));
+      const upper = spec.cursor?.clientTs ?? spec.to;
+      if (upper) query = query.where(TIME_FIELD, "<=", new Date(upper));
+      query = query.orderBy(TIME_FIELD, "desc");
+    }
+    return query.limit(fetchCap);
+  };
+
+  try {
+    const snap = await build(true).get();
+    return snap.docs.map((doc) => fromDoc(doc.id, doc.data()));
+  } catch {
+    try {
+      const snap = await build(false).get();
+      return snap.docs.map((doc) => fromDoc(doc.id, doc.data()));
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : "query_failed");
+    }
+  }
+}
+
+async function queryEvents(db: Firestore, spec: EventSpec): Promise<Loose[]> {
+  const categories = (spec.categories ?? []).filter(Boolean);
+  const groups = categories.length > 0 && categories.length <= 10 ? categories : [null];
+  const fetchCap = Math.min(Math.max(spec.take + 120, 200), spec.hardCap);
+  const merged: Loose[] = [];
+  for (const category of groups) {
+    merged.push(...(await readGroup(db, spec, category, fetchCap)));
+  }
+
+  const filtered = merged.filter((row) => {
+    if (spec.driverId && row.driver_id !== spec.driverId) return false;
+    if (categories.length > 0 && !categories.includes(String(row.category ?? ""))) return false;
+    if (spec.errorsOnly && row.severity !== "error") return false;
+    if (spec.from) {
+      const rowMs = millisOf(row[TIME_FIELD]);
+      const fromMs = millisOf(spec.from);
+      if (rowMs != null && fromMs != null ? rowMs < fromMs : String(row[TIME_FIELD] ?? "") < spec.from) {
+        return false;
+      }
+    }
+    if (spec.to) {
+      const rowMs = millisOf(row[TIME_FIELD]);
+      const toMs = millisOf(spec.to);
+      if (rowMs != null && toMs != null ? rowMs > toMs : String(row[TIME_FIELD] ?? "") > spec.to) {
+        return false;
+      }
+    }
+    if (spec.cursor && !beforeCursor(row, { time: spec.cursor.clientTs, id: spec.cursor.id })) {
+      return false;
+    }
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    const delta = (millisOf(b[TIME_FIELD]) ?? 0) - (millisOf(a[TIME_FIELD]) ?? 0);
+    if (delta !== 0) return delta;
+    if (idLess(a.id, String(b.id ?? ""))) return 1;
+    if (idLess(b.id, String(a.id ?? ""))) return -1;
+    return 0;
+  });
+
+  const seen = new Set<string>();
+  const unique: Loose[] = [];
+  for (const row of filtered) {
+    const id = String(row.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    unique.push(row);
+    if (unique.length >= spec.take) break;
+  }
+  return unique;
+}
+
+async function withDrivers(db: Firestore, rows: Loose[]): Promise<RawTelemetryRow[]> {
+  const ids = rows.map((row) => String(row.driver_id ?? "")).filter(Boolean);
+  const [drivers, profiles] = await Promise.all([
+    loadByIds(db, COLLECTIONS.drivers, ids),
+    loadByIds(db, COLLECTIONS.profiles, ids),
+  ]);
+  return rows.map((row) => {
+    const driverId = String(row.driver_id ?? "");
+    const driver = drivers.get(driverId);
+    const profile = profiles.get(driverId);
+    return {
+      ...(row as unknown as RawTelemetryRow),
+      id: row.id as string | number,
+      driver_id: driverId,
+      client_ts: String(row.client_ts ?? ""),
+      server_received_at: String(row.server_received_at ?? ""),
+      drivers: driver
+        ? {
+            driver_code: (driver.driver_code as string | null) ?? null,
+            profiles: profile
+              ? { full_name: (profile.full_name as string | null) ?? null }
+              : null,
+          }
+        : null,
+    };
+  });
+}
+
 /**
  * Ordered by `client_ts`, not `server_received_at`: the point of the diagnostics
  * timeline is when things happened on the phone. A batch that was queued offline
@@ -156,36 +332,12 @@ export async function fetchTelemetryFeed(
   filters: TelemetryFeedFilters = {},
 ): Promise<TelemetryFeedPage> {
   await requireTelemetryView();
-  const supabase = await createClient();
-
+  const db = await requireDb();
   const limit = Math.min(Math.max(filters.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-
-  let query = supabase
-    .from("driver_telemetry_events")
-    .select(SELECT_COLUMNS)
-    .order("client_ts", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(limit + 1);
-
-  if (filters.driverId) query = query.eq("driver_id", filters.driverId);
-  if (filters.categories?.length) query = query.in("category", filters.categories);
-  if (filters.errorsOnly) query = query.eq("severity", "error");
-  if (filters.from) query = query.gte("client_ts", filters.from);
-  if (filters.to) query = query.lte("client_ts", filters.to);
-
-  if (filters.cursor) {
-    // Same quoting rule as the operations feed: the timestamp carries a space
-    // and a `+` offset, which PostgREST would otherwise read as filter syntax.
-    const clientTs = `"${filters.cursor.clientTs.replace(/"/g, "")}"`;
-    query = query.or(
-      `client_ts.lt.${clientTs},and(client_ts.eq.${clientTs},id.lt.${filters.cursor.id})`,
-    );
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const rows = (data ?? []) as unknown as RawTelemetryRow[];
+  const rows = await withDrivers(
+    db,
+    await queryEvents(db, { ...filters, take: limit + 1, hardCap: 2000 }),
+  );
   const hasMore = rows.length > limit;
   const events = rows.slice(0, limit).map(mapRow);
   const last = events.at(-1);
@@ -219,8 +371,7 @@ export type TelemetrySummary = {
 
 /**
  * KPI tiles. Counted client-side over a capped window for the same reason as the
- * operations feed: PostgREST cannot aggregate, and the tiles only summarise the
- * slice the feed is already showing.
+ * operations feed: the tiles only summarise the slice the feed is already showing.
  */
 export async function fetchTelemetrySummary(range: {
   from: string;
@@ -228,27 +379,14 @@ export async function fetchTelemetrySummary(range: {
   driverId?: string | null;
 }): Promise<TelemetrySummary> {
   await requireTelemetryView();
-  const supabase = await createClient();
-
-  let query = supabase
-    .from("driver_telemetry_events")
-    .select("category, severity, event_name, clock_skew_ms")
-    .gte("client_ts", range.from)
-    .order("client_ts", { ascending: false })
-    .limit(COUNT_WINDOW_ROWS);
-
-  if (range.to) query = query.lte("client_ts", range.to);
-  if (range.driverId) query = query.eq("driver_id", range.driverId);
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const rows = (data ?? []) as Array<{
-    category: string;
-    severity: string;
-    event_name: string;
-    clock_skew_ms: number | null;
-  }>;
+  const db = await requireDb();
+  const rows = await queryEvents(db, {
+    driverId: range.driverId,
+    from: range.from,
+    to: range.to,
+    take: COUNT_WINDOW_ROWS,
+    hardCap: COUNT_WINDOW_ROWS,
+  });
 
   const byCategory = new Map<string, TelemetryCategoryCount>();
   let total = 0;
@@ -257,20 +395,16 @@ export async function fetchTelemetrySummary(range: {
   let offlineTransitions = 0;
 
   for (const row of rows) {
-    const entry = byCategory.get(row.category) ?? {
-      category: row.category,
-      total: 0,
-      errors: 0,
-    };
+    const category = String(row.category ?? "");
+    const entry = byCategory.get(category) ?? { category, total: 0, errors: 0 };
     entry.total += 1;
     total += 1;
     if (row.severity === "error") {
       entry.errors += 1;
       errors += 1;
     }
-    byCategory.set(row.category, entry);
-
-    const skew = Math.abs(row.clock_skew_ms ?? 0);
+    byCategory.set(category, entry);
+    const skew = Math.abs(typeof row.clock_skew_ms === "number" ? row.clock_skew_ms : 0);
     if (skew > maxClockSkewMs) maxClockSkewMs = skew;
     if (row.event_name === "network.offline") offlineTransitions += 1;
   }
@@ -299,33 +433,17 @@ export async function exportTelemetryEvents(filters: {
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(
-      session.permissions,
-      "driver_telemetry.export",
-      session.isSuperAdmin,
-    )
+    !hasPermissionInSet(session.permissions, "driver_telemetry.export", session.isSuperAdmin)
   ) {
     throw new Error("not_authorized");
   }
 
-  const supabase = await createClient();
-  let query = supabase
-    .from("driver_telemetry_events")
-    .select(SELECT_COLUMNS)
-    .order("client_ts", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(EXPORT_MAX_ROWS);
-
-  if (filters.driverId) query = query.eq("driver_id", filters.driverId);
-  if (filters.categories?.length) query = query.in("category", filters.categories);
-  if (filters.errorsOnly) query = query.eq("severity", "error");
-  if (filters.from) query = query.gte("client_ts", filters.from);
-  if (filters.to) query = query.lte("client_ts", filters.to);
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  const events = ((data ?? []) as unknown as RawTelemetryRow[]).map(mapRow);
+  const db = await requireDb();
+  const rows = await withDrivers(
+    db,
+    await queryEvents(db, { ...filters, take: EXPORT_MAX_ROWS, hardCap: EXPORT_MAX_ROWS }),
+  );
+  const events = rows.map(mapRow);
 
   void logAdminMutation({
     action: "export",

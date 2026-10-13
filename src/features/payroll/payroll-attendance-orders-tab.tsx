@@ -44,6 +44,11 @@ import {
 import { PayrollColumnsMenu, PayrollHeadingLabel, stickyIdentityOffset, stickyIdentityStyle } from "./payroll-heading";
 import { cellParticular } from "./payroll-particulars";
 import { fillTargetCells, tilePasteOntoSelection, visibleFillTargets } from "./payroll-snapshot";
+import {
+  layoutFromSampleCell,
+  startGridEdgeScroll,
+  type GridEdgeScrollLayout,
+} from "./grid-edge-scroll";
 import type { PayrollRiderRow } from "./payroll-types";
 import { usePayrollAdjustSession } from "./use-payroll-adjust";
 import { usePayrollColumnConfig } from "./use-payroll";
@@ -77,6 +82,7 @@ export function PayrollAttendanceOrdersTab({
   const [rect, setRect] = useState<CellRect | null>(null);
   const [fillPreview, setFillPreview] = useState<CellRect | null>(null);
   const [menu, setMenu] = useState<PayrollCellMenuState | null>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{
     mode: "select" | "fill";
     r0: number;
@@ -86,6 +92,10 @@ export function PayrollAttendanceOrdersTab({
     rowIds: readonly string[];
   } | null>(null);
   const rectRef = useRef<CellRect | null>(null);
+  const layoutRef = useRef<GridEdgeScrollLayout | null>(null);
+  const dragStopRef = useRef<(() => void) | null>(null);
+  const endDragRef = useRef<() => void>(() => undefined);
+  const gridMetricsRef = useRef({ rowCount: 0, colCount: 0 });
   const session = usePayrollAdjustSession();
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
@@ -254,16 +264,81 @@ export function PayrollAttendanceOrdersTab({
     openFor(inputs, moved ? "select" : "click", t("adjust.nothingSelected"), first);
   }, [visibleRows, dates, openFor, t]);
 
+  endDragRef.current = endDrag;
+  gridMetricsRef.current = { rowCount: visibleRows.length, colCount: dates.length };
+
+  const applyHoverCell = useCallback((row: number, columnIndex: number) => {
+    const active = drag.current;
+    if (!active) return;
+    setRect((current) =>
+      current
+        ? { ...current, r1: row, c1: columnIndex }
+        : { r0: active.r0, c0: active.c0, r1: row, c1: columnIndex },
+    );
+    if (active.mode === "fill") {
+      setFillPreview({
+        r0: Math.min(active.r0, row),
+        c0: Math.min(active.c0, columnIndex),
+        r1: Math.max(active.r1, row),
+        c1: Math.max(active.c1, columnIndex),
+      });
+    }
+  }, []);
+
+  const beginEdgeDrag = useCallback(
+    (cellEl: HTMLElement, selectableCol: number, clientX: number, clientY: number) => {
+      const container = parentRef.current;
+      if (!container) return;
+      const crect = container.getBoundingClientRect();
+      const thead = container.querySelector("thead");
+      const next = cellEl.nextElementSibling instanceof HTMLElement ? cellEl.nextElementSibling : null;
+      const metrics = gridMetricsRef.current;
+      layoutRef.current = layoutFromSampleCell({
+        containerLeft: crect.left,
+        containerTop: crect.top,
+        scrollLeft: container.scrollLeft,
+        scrollTop: container.scrollTop,
+        headerHeight: thead?.getBoundingClientRect().height ?? 0,
+        cellLeft: cellEl.getBoundingClientRect().left,
+        cellWidth: cellEl.offsetWidth,
+        cellHeight: cellEl.offsetHeight,
+        cellCol: selectableCol,
+        rowCount: metrics.rowCount,
+        colCount: metrics.colCount,
+        colStride: next ? cellEl.offsetWidth + next.offsetWidth : undefined,
+      });
+      dragStopRef.current?.();
+      dragStopRef.current = startGridEdgeScroll({
+        getContainer: () => parentRef.current,
+        getLayout: () => {
+          const current = layoutRef.current;
+          if (!current) return null;
+          const nextMetrics = gridMetricsRef.current;
+          return { ...current, rowCount: nextMetrics.rowCount, colCount: nextMetrics.colCount };
+        },
+        onHover: applyHoverCell,
+        onEnd: () => {
+          dragStopRef.current = null;
+          endDragRef.current();
+        },
+        clientX,
+        clientY,
+      });
+    },
+    [applyHoverCell],
+  );
+
   useEffect(() => {
     rectRef.current = rect;
   }, [rect]);
 
-  useEffect(() => {
-    if (!editable) return;
-    const onUp = () => endDrag();
-    document.addEventListener("mouseup", onUp);
-    return () => document.removeEventListener("mouseup", onUp);
-  }, [editable, endDrag]);
+  useEffect(
+    () => () => {
+      dragStopRef.current?.();
+      dragStopRef.current = null;
+    },
+    [],
+  );
 
   const bounds = rect ? normalizeRect(rect) : null;
   const fillBounds = fillPreview ? normalizeRect(fillPreview) : null;
@@ -410,6 +485,7 @@ export function PayrollAttendanceOrdersTab({
           </div>
         ) : null}
         <div
+          ref={parentRef}
           tabIndex={editable ? 0 : undefined}
           onKeyDown={onKeyDown}
           className={cn(
@@ -537,6 +613,8 @@ export function PayrollAttendanceOrdersTab({
                       return (
                         <Fragment key={`${row.driverId}-${date}`}>
                           <td
+                            data-r={rowIndex}
+                            data-c={i}
                             className={cn(
                               "relative border-s border-border/60 px-1 py-1 text-center select-none",
                               selected && "ring-2 ring-inset ring-primary/60",
@@ -565,27 +643,14 @@ export function PayrollAttendanceOrdersTab({
                                     };
                                     setRect(next);
                                     setFillPreview(null);
+                                    beginEdgeDrag(event.currentTarget, i, event.clientX, event.clientY);
                                   }
                                 : undefined
                             }
                             onMouseEnter={
                               editable
                                 ? () => {
-                                    const active = drag.current;
-                                    if (!active) return;
-                                    setRect((current) =>
-                                      current
-                                        ? { ...current, r1: rowIndex, c1: i }
-                                        : { r0: active.r0, c0: active.c0, r1: rowIndex, c1: i },
-                                    );
-                                    if (active.mode === "fill") {
-                                      setFillPreview({
-                                        r0: Math.min(active.r0, rowIndex),
-                                        c0: Math.min(active.c0, i),
-                                        r1: Math.max(active.r1, rowIndex),
-                                        c1: Math.max(active.c1, i),
-                                      });
-                                    }
+                                    applyHoverCell(rowIndex, i);
                                   }
                                 : undefined
                             }
@@ -617,6 +682,8 @@ export function PayrollAttendanceOrdersTab({
                                     c1: bounds.right,
                                     rowIds: visibleRows.map((item) => item.driverId),
                                   };
+                                  const cell = event.currentTarget.closest("td");
+                                  if (cell) beginEdgeDrag(cell, bounds.right, event.clientX, event.clientY);
                                 }}
                               />
                             ) : null}

@@ -1,10 +1,32 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import type { Firestore } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { enqueueNotificationAutomationEvent } from "@/features/notifications/notifications-actions";
 import type { PayoutRunDetail, PayoutRunRow } from "./types";
+
+type FsRow = Record<string, unknown> & { id: string };
+
+function isoOf(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  const ts = value as { toDate?: () => Date };
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  return value;
+}
+
+function asRow(id: string, data: FirebaseFirestore.DocumentData | undefined): FsRow | null {
+  if (!data) return null;
+  const out: FsRow = { id };
+  for (const [key, value] of Object.entries(data)) {
+    out[key] = isoOf(value);
+  }
+  return out;
+}
 
 async function requireEarningsView() {
   const session = await getSessionUser();
@@ -28,6 +50,10 @@ async function requireEarningsManage() {
   return session;
 }
 
+async function payoutDb(): Promise<Firestore | null> {
+  return staffDb();
+}
+
 export async function listPayoutRuns(
   startDate: string,
   endDate: string,
@@ -35,17 +61,23 @@ export async function listPayoutRuns(
   const session = await requireEarningsView();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await createClient();
-  const query = (supabase as any)
-    .from("payout_runs")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const db = await payoutDb();
+  if (!db) return { error: "not_configured" };
+
+  const snap = await db.collection(COLLECTIONS.payoutRuns).get();
+  let rows = snap.docs
+    .map((doc) => asRow(doc.id, doc.data()))
+    .filter((row): row is FsRow => row !== null)
+    .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+
   if (startDate && endDate) {
-    query.gte("period_start", startDate).lte("period_end", endDate);
+    rows = rows.filter(
+      (row) =>
+        String(row.period_start ?? "") >= startDate && String(row.period_end ?? "") <= endDate,
+    );
   }
-  const { data, error } = await query;
-  if (error) return { error: error.message ?? "load_failed" };
-  return { rows: (data ?? []) as PayoutRunRow[] };
+
+  return { rows: rows as PayoutRunRow[] };
 }
 
 export async function generatePayoutRun(input: {
@@ -56,8 +88,7 @@ export async function generatePayoutRun(input: {
 }): Promise<{ error: string } | { id: string }> {
   const session = await requireEarningsManage();
   if (!session) return { error: "not_authorized" };
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("generate_payout_run", {
+  const { data, error } = await callAdminFunction("generate_payout_run", {
     p_period_start: input.periodStart,
     p_period_end: input.periodEnd,
     p_driver_ids: input.driverIds ?? undefined,
@@ -70,8 +101,7 @@ export async function generatePayoutRun(input: {
 export async function approvePayoutRun(id: string): Promise<{ ok: true } | { error: string }> {
   const session = await requireEarningsManage();
   if (!session) return { error: "not_authorized" };
-  const supabase = await createClient();
-  const { error } = await (supabase as any).rpc("approve_payout_run", { p_run_id: id });
+  const { error } = await callAdminFunction("approve_payout_run", { p_run_id: id });
   if (error) return { error: error.message ?? "save_failed" };
   return { ok: true };
 }
@@ -82,23 +112,24 @@ export async function markPayoutRunPaid(
 ): Promise<{ ok: true } | { error: string }> {
   const session = await requireEarningsManage();
   if (!session) return { error: "not_authorized" };
-  const supabase = await createClient();
-  const { error } = await (supabase as any).rpc("mark_payout_run_paid", {
+  const { error } = await callAdminFunction("mark_payout_run_paid", {
     p_run_id: id,
     p_reference: reference ?? null,
   });
   if (error) return { error: error.message ?? "save_failed" };
 
-  const { data: payoutLines } = await (supabase as any)
-    .from("driver_payouts")
-    .select("driver_id")
-    .eq("run_id", id);
-  for (const line of payoutLines ?? []) {
-    void enqueueNotificationAutomationEvent({
-      triggerType: "salary_processed",
-      driverId: line.driver_id as string,
-      payload: { run_id: id },
-    });
+  const db = await payoutDb();
+  if (db) {
+    const lines = await db.collection(COLLECTIONS.driverPayouts).where("run_id", "==", id).get();
+    for (const line of lines.docs) {
+      const driverId = line.data().driver_id;
+      if (typeof driverId !== "string" || !driverId) continue;
+      void enqueueNotificationAutomationEvent({
+        triggerType: "salary_processed",
+        driverId,
+        payload: { run_id: id },
+      });
+    }
   }
 
   return { ok: true };
@@ -110,8 +141,7 @@ export async function voidPayoutRun(
 ): Promise<{ ok: true } | { error: string }> {
   const session = await requireEarningsManage();
   if (!session) return { error: "not_authorized" };
-  const supabase = await createClient();
-  const { error } = await (supabase as any).rpc("void_payout_run", {
+  const { error } = await callAdminFunction("void_payout_run", {
     p_run_id: id,
     p_reason: reason ?? null,
   });
@@ -124,8 +154,7 @@ export async function getPayoutRunDetail(
 ): Promise<{ error: string } | PayoutRunDetail> {
   const session = await requireEarningsView();
   if (!session) return { error: "not_authorized" };
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("get_payout_run_detail", {
+  const { data, error } = await callAdminFunction("get_payout_run_detail", {
     p_run_id: id,
   });
   if (error) return { error: error.message ?? "load_failed" };

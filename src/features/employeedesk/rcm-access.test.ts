@@ -37,8 +37,12 @@ describe("rcm access chips", () => {
         "/employeedesk/reports",
         "/settings/logs?module=requests",
         "/employeedesk/settings",
-        "/employeedesk/visits/calendar",
+        "/employeedesk/visits",
       ],
+    );
+    assert.equal(
+      RCM_ADMIN_CHIPS.some((chip) => chip.id === "visits"),
+      true,
     );
   });
 

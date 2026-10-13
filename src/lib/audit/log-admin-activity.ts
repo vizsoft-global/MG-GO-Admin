@@ -1,7 +1,8 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { headers } from "next/headers";
-import type { Json } from "@/types/database";
-import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 
 const READ_THROTTLE_MS = 60_000;
 /**
@@ -49,6 +50,15 @@ export type LogAdminActivityInput = {
   adminRoleSlug?: string;
 };
 
+function jsonSafe<T>(value: T): T {
+  if (value == null) return value;
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return value;
+  }
+}
+
 function computeChangedFields(
   before: Record<string, unknown> | null | undefined,
   after: Record<string, unknown> | null | undefined,
@@ -88,9 +98,12 @@ export async function logAdminActivity(input: LogAdminActivityInput): Promise<vo
 
     const { ipAddress, userAgent } = await readRequestMeta();
     const changedFields = computeChangedFields(input.before, input.after);
+    const db = await staffDb();
+    if (!db) return;
 
-    const supabase = await createClient();
-    await supabase.from("admin_activity_logs").insert({
+    const id = crypto.randomUUID();
+    await db.collection(COLLECTIONS.adminActivityLogs).doc(id).set({
+      id,
       admin_user_id: adminUserId,
       admin_role_slug: adminRoleSlug,
       action: input.action,
@@ -100,12 +113,13 @@ export async function logAdminActivity(input: LogAdminActivityInput): Promise<vo
       route_name: input.routeName ?? null,
       success: input.success ?? true,
       error_message: input.errorMessage ?? null,
-      context: (input.context ?? {}) as Json,
-      before_state: (input.before ?? null) as Json,
-      after_state: (input.after ?? null) as Json,
+      context: jsonSafe(input.context ?? {}),
+      before_state: jsonSafe(input.before ?? null),
+      after_state: jsonSafe(input.after ?? null),
       changed_fields: changedFields,
       ip_address: ipAddress,
       user_agent: userAgent,
+      created_at: FieldValue.serverTimestamp(),
     });
   } catch {
     /* best-effort audit — never block main action */
@@ -154,18 +168,24 @@ export async function logAdminRead(
   if (requestId && routeName === "requests.detail") {
     const session = await getSessionUser();
     if (session?.id) {
-      const supabase = await createClient();
-      const since = new Date(Date.now() - REQUEST_READ_AFTER_UPDATE_MS).toISOString();
-      const { data } = await supabase
-        .from("admin_activity_logs")
-        .select("id")
-        .eq("admin_user_id", session.id)
-        .eq("entity_type", "requests")
-        .eq("entity_id", requestId)
-        .eq("action", "update")
-        .gte("created_at", since)
-        .limit(1);
-      if ((data?.length ?? 0) > 0) return;
+      try {
+        const db = await staffDb();
+        if (db) {
+          const since = new Date(Date.now() - REQUEST_READ_AFTER_UPDATE_MS);
+          const recent = await db
+            .collection(COLLECTIONS.adminActivityLogs)
+            .where("admin_user_id", "==", session.id)
+            .where("entity_type", "==", "requests")
+            .where("entity_id", "==", requestId)
+            .where("action", "==", "update")
+            .where("created_at", ">=", since)
+            .limit(1)
+            .get();
+          if (!recent.empty) return;
+        }
+      } catch {
+        // Missing index must not hide the read that would otherwise be written.
+      }
     }
   }
   await logAdminActivity({

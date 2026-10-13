@@ -2,6 +2,7 @@
 
 | File | Scope |
 |------|--------|
+| [`KA.mdc`](./KA.mdc) | **Always applied (mandatory)** — reply to the user in Kannada; keep code, paths, commands, identifiers and error messages in English |
 | [`project-architecture.mdc`](./project-architecture.mdc) | **Always applied** — admin panel architecture, schema, modules, synergy rules |
 | [`ui-system.mdc`](./ui-system.mdc) | **Always applied (mandatory)** — density, semantic color, footer-first modals, navigation patterns. Complete pre-ship checklist before finishing UI work. |
 

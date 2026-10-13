@@ -1,6 +1,9 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import type { Firestore } from "firebase-admin/firestore";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
@@ -34,6 +37,10 @@ export {
   runValidateDelivery,
 };
 
+async function earningsDb(): Promise<Firestore | null> {
+  return staffDb();
+}
+
 export async function runGetEarningsOverview(
   startDate: string,
   endDate: string,
@@ -48,8 +55,7 @@ export async function runGetEarningsOverview(
   if (!session) return { error: "not_authorized" };
   if (!startDate || !endDate) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("get_earnings_overview", {
+  const { data, error } = await callAdminFunction("get_earnings_overview", {
     p_start_date: startDate,
     p_end_date: endDate,
     p_filters: filters ?? {},
@@ -74,8 +80,7 @@ export async function runListEarningsGrouped(
   if (!session) return { error: "not_authorized" };
   if (!startDate || !endDate) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { data, error } = await (supabase as any).rpc("list_earnings_grouped", {
+  const { data, error } = await callAdminFunction("list_earnings_grouped", {
     p_start_date: startDate,
     p_end_date: endDate,
     p_group_by: groupBy,
@@ -83,7 +88,8 @@ export async function runListEarningsGrouped(
   });
 
   if (error) return { error: error.message ?? "load_failed" };
-  return { rows: Array.isArray((data as any)?.rows) ? (data as any).rows : [] };
+  const payload = data as { rows?: unknown } | null;
+  return { rows: Array.isArray(payload?.rows) ? (payload.rows as Record<string, unknown>[]) : [] };
 }
 
 export async function fetchIncentiveDailyReport(input: {
@@ -98,8 +104,7 @@ export async function fetchIncentiveDailyReport(input: {
   const to = input.to.slice(0, 10);
   if (!from || !to || to < from) throw new Error("invalid_date_range");
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_incentive_daily_report", {
+  const { data, error } = await callAdminFunction("admin_incentive_daily_report", {
     p_from: from,
     p_to: to,
     p_driver_id: input.driverId || undefined,
@@ -123,24 +128,44 @@ export async function fetchIncentiveDailyDrivers(): Promise<
   const session = await requireEarningsView();
   if (!session) throw new Error("not_authorized");
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("drivers")
-    .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name)")
-    .is("archived_at", null)
-    .order("driver_code")
-    .limit(2000);
-  if (error) throw new Error(error.message);
+  const db = await earningsDb();
+  if (!db) throw new Error("not_configured");
+
+  const snap = await db
+    .collection(COLLECTIONS.drivers)
+    .where("archived_at", "==", null)
+    .limit(2000)
+    .get();
+
+  const drivers = snap.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        driver_code: String(data.driver_code ?? ""),
+        employee_id: data.employee_id == null ? "" : String(data.employee_id),
+      };
+    })
+    .sort((a, b) => a.driver_code.localeCompare(b.driver_code));
+
+  const names = new Map<string, string>();
+  for (let i = 0; i < drivers.length; i += 100) {
+    const chunk = drivers.slice(i, i + 100);
+    const profiles = await db.getAll(
+      ...chunk.map((driver) => db.collection(COLLECTIONS.profiles).doc(driver.id)),
+    );
+    for (const profile of profiles) {
+      const fullName = profile.data()?.full_name;
+      if (typeof fullName === "string" && fullName.trim()) names.set(profile.id, fullName.trim());
+    }
+  }
 
   void logAdminRead("drivers", "fetchIncentiveDailyDrivers");
 
-  return (data ?? []).map((d) => {
-    const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
-    return {
-      id: d.id,
-      driver_code: d.driver_code,
-      employee_id: d.employee_id ?? "",
-      full_name: profile?.full_name?.trim() || "Driver",
-    };
-  });
+  return drivers.map((driver) => ({
+    id: driver.id,
+    driver_code: driver.driver_code,
+    employee_id: driver.employee_id,
+    full_name: names.get(driver.id) || "Driver",
+  }));
 }

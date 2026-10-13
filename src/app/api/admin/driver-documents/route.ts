@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { logDriverChange } from "@/features/drivers/driver-change-log";
 import { requireDriversManagerApi } from "@/lib/auth/require-drivers-manager";
 import {
   DOCUMENT_TYPES,
   type DriverDocumentType,
 } from "@/features/drivers/types";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { allDocumentKeysForType } from "@/lib/storage/driver-documents";
 import { deleteDocumentTracking } from "@/lib/storage/document-tracking";
 import { deleteObjects } from "@/lib/storage/r2-client";
+
+function linkedProfileId(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
 
 export async function DELETE(request: Request): Promise<Response> {
   const auth = await requireDriversManagerApi();
@@ -32,18 +38,17 @@ export async function DELETE(request: Request): Promise<Response> {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
-  const supabase = await createClient();
-  const { data: intake } = await supabase
-    .from("driver_intakes")
-    .select("id, linked_profile_id")
-    .eq("id", intakeId)
-    .maybeSingle();
+  const db = await staffDb();
+  if (!db) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
 
-  if (!intake) {
+  const intake = await db.collection(COLLECTIONS.driverIntakes).doc(intakeId).get();
+  if (!intake.exists) {
     return NextResponse.json({ error: "save_failed" }, { status: 404 });
   }
 
-  const linkedId = intake.linked_profile_id;
+  const linkedId = linkedProfileId(intake.get("linked_profile_id"));
   if (driverProfileId && linkedId && driverProfileId !== linkedId) {
     return NextResponse.json({ error: "not_authorized" }, { status: 403 });
   }
@@ -59,11 +64,16 @@ export async function DELETE(request: Request): Promise<Response> {
   }
 
   if (targetDriverId) {
-    await supabase
-      .from("driver_documents")
-      .delete()
-      .eq("driver_id", targetDriverId)
-      .eq("doc_type", docType);
+    const docs = await db
+      .collection(COLLECTIONS.driverDocuments)
+      .where("driver_id", "==", targetDriverId)
+      .get();
+    const matches = docs.docs.filter((doc) => doc.get("doc_type") === docType);
+    for (let index = 0; index < matches.length; index += 400) {
+      const batch = db.batch();
+      for (const doc of matches.slice(index, index + 400)) batch.delete(doc.ref);
+      await batch.commit();
+    }
   }
 
   await deleteDocumentTracking({
@@ -72,7 +82,6 @@ export async function DELETE(request: Request): Promise<Response> {
     docType,
   });
 
-  const { logDriverChange } = await import("@/features/drivers/driver-change-log");
   void logDriverChange({
     intakeId,
     driverId: targetDriverId,

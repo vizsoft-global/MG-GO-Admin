@@ -53,6 +53,7 @@ export type RequestListRow = {
   department_key: string | null;
   department_label: string | null;
   is_confidential: boolean;
+  sla_due_at: string | null;
 };
 
 export type RequestKpis = {
@@ -110,6 +111,7 @@ export type RequestDriverOption = {
   driver_code: string;
   employee_id: string | null;
   phone: string | null;
+  zone_name?: string | null;
 };
 
 /**

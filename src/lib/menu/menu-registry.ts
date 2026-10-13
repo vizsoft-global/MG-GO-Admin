@@ -1,5 +1,7 @@
 import {
   AlertTriangle,
+  ArrowLeftRight,
+  BarChart3,
   Bell,
   Bike,
   Banknote,
@@ -9,6 +11,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Folder,
+  FileText,
   Fuel,
   Handshake,
   UtensilsCrossed,
@@ -19,6 +22,7 @@ import {
   LayoutGrid,
   LifeBuoy,
   PenLine,
+  Scale,
   Send,
   Building2,
   Cog,
@@ -47,6 +51,7 @@ import {
   Satellite,
   Timer,
   Trash2,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import type { Permission } from "@/lib/auth/permissions";
@@ -70,6 +75,8 @@ export type MenuRegistryItem = {
   permissionAnyOf?: readonly Permission[];
   superAdminOnly?: boolean;
   footer?: boolean;
+  /** Omitted from the sidebar even if a saved menu still lists the item. */
+  hidden?: boolean;
 };
 
 export const ICON_MAP: Record<string, LucideIcon> = {
@@ -84,6 +91,7 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
+  FileText,
   Fuel,
   Inbox,
   KeyRound,
@@ -117,10 +125,14 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   GitCompareArrows,
   LayoutGrid,
   PenLine,
+  Scale,
   Send,
   Building2,
   Cog,
   AppWindow,
+  ArrowLeftRight,
+  BarChart3,
+  Wrench,
 };
 
 export const ICON_NAMES = Object.keys(ICON_MAP);
@@ -156,14 +168,11 @@ export const DEFAULT_GROUPS = [
   "Overview",
   "EmployeeDesk",
   "OperationsHub",
-  "Fleet",
   "Operations",
-  "Payroll",
   "Settings",
   "System",
   "WIP",
   "Unorganised",
-  "Apps",
 ];
 
 export const DEFAULT_GROUP_META: Record<
@@ -173,14 +182,11 @@ export const DEFAULT_GROUP_META: Record<
   Overview: { icon: "Folder" },
   EmployeeDesk: { icon: "Inbox", displayMode: "panel" },
   OperationsHub: { icon: "Building2", displayMode: "panel" },
-  Fleet: { icon: "Car", displayMode: "panel" },
   Operations: { icon: "Folder", displayMode: "panel" },
-  Payroll: { icon: "CalendarClock", displayMode: "panel" },
   Settings: { icon: "Settings", displayMode: "inline" },
   System: { icon: "Cog", displayMode: "inline" },
   WIP: { icon: "AlertTriangle", displayMode: "panel" },
   Unorganised: { icon: "Folder" },
-  Apps: { icon: "AppWindow", displayMode: "panel" },
 };
 
 export const MENU_REGISTRY: MenuRegistryItem[] = [
@@ -265,6 +271,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "EmployeeDesk",
     defaultOrder: 6,
     permission: "visits.view",
+    hidden: true,
   },
   {
     id: "employeedesk-reports",
@@ -316,8 +323,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Driver devices",
     defaultIcon: "Smartphone",
     href: "/driver-devices",
-    defaultGroup: "Operations",
-    defaultOrder: 0.7,
+    defaultGroup: "Settings",
+    defaultOrder: 7,
     permission: "driver_devices.view",
   },
   {
@@ -349,9 +356,9 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   },
   {
     id: "vehicles",
-    defaultLabel: "Vehicles",
-    defaultIcon: "Bike",
-    href: "/vehicles",
+    defaultLabel: "Fleet Hub",
+    defaultIcon: "Car",
+    href: "/fleet",
     defaultGroup: "Fleet",
     defaultOrder: 1,
     permission: "vehicles.view",
@@ -364,6 +371,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Fleet",
     defaultOrder: 2,
     permission: "fuel.view",
+    hidden: true,
   },
   {
     id: "fuel-requests",
@@ -373,6 +381,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Fleet",
     defaultOrder: 3,
     permission: "fuel_requests.view",
+    hidden: true,
   },
   {
     id: "fuel-refunds",
@@ -382,15 +391,17 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Fleet",
     defaultOrder: 4,
     permission: "fuel_refunds.view",
+    hidden: true,
   },
   {
     id: "assets",
-    defaultLabel: "Fleet Assets",
+    defaultLabel: "Assets inventory",
     defaultIcon: "Package",
     href: "/assets",
     defaultGroup: "Fleet",
-    defaultOrder: 5,
+    defaultOrder: 3.5,
     permission: "assets.view",
+    hidden: true,
   },
   {
     id: "asset-requests",
@@ -400,6 +411,47 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Fleet",
     defaultOrder: 6,
     permission: "asset_requests.view",
+    hidden: true,
+  },
+  {
+    id: "fleet-service",
+    defaultLabel: "Service",
+    defaultIcon: "Wrench",
+    href: "/fleet/service",
+    defaultGroup: "Fleet",
+    defaultOrder: 4,
+    permission: "vehicles.view",
+    hidden: true,
+  },
+  {
+    id: "fleet-handover",
+    defaultLabel: "Handover",
+    defaultIcon: "ArrowLeftRight",
+    href: "/fleet/handover",
+    defaultGroup: "Fleet",
+    defaultOrder: 5,
+    permission: "vehicles.view",
+    hidden: true,
+  },
+  {
+    id: "fleet-accident",
+    defaultLabel: "Accident",
+    defaultIcon: "AlertTriangle",
+    href: "/fleet/accident",
+    defaultGroup: "Fleet",
+    defaultOrder: 6,
+    permission: "vehicles.view",
+    hidden: true,
+  },
+  {
+    id: "fleet-rj",
+    defaultLabel: "RJ",
+    defaultIcon: "FileText",
+    href: "/fleet/rj",
+    defaultGroup: "Fleet",
+    defaultOrder: 7,
+    permission: "vehicles.view",
+    hidden: true,
   },
   {
     id: "restaurants",
@@ -422,9 +474,10 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   {
     id: "order-reconciliation",
     defaultLabel: "Order reconciliation",
-    defaultIcon: "GitCompareArrows",
+    defaultIcon: "Scale",
     href: "/deliveries/reconciliation",
     defaultGroup: "Operations",
+    // TODO: group move is blocked until confirmed — keep Operations.
     defaultOrder: 4.5,
     permission: "order_recon.view",
   },
@@ -449,9 +502,10 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   {
     id: "performance",
     defaultLabel: "Performance",
-    defaultIcon: "Gauge",
+    defaultIcon: "BarChart3",
     href: "/performance",
     defaultGroup: "Operations",
+    // TODO: group move is blocked until confirmed — keep Operations.
     defaultOrder: 8,
     permission: "performance.view",
   },
@@ -466,7 +520,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   },
   {
     id: "payroll",
-    defaultLabel: "Payroll & Requests",
+    defaultLabel: "Payroll",
     defaultIcon: "CalendarClock",
     href: "/payroll",
     defaultGroup: "Operations",
@@ -481,14 +535,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "WIP",
     defaultOrder: 6,
     permission: "requests.view",
+    hidden: true,
   },
   {
     id: "visit-bookings",
     defaultLabel: "Visit Bookings",
     defaultIcon: "CalendarCheck",
     href: "/visit-bookings",
-    defaultGroup: "WIP",
-    defaultOrder: 6.5,
+    defaultGroup: "Visit Bookings",
+    defaultOrder: 0,
     permission: "visits.view",
   },
   {
@@ -595,18 +650,20 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Vehicle types",
     defaultIcon: "Car",
     href: "/settings/vehicle-types",
-    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultGroup: "Fleet",
     defaultOrder: 8,
     permission: "vehicles.manage",
+    hidden: true,
   },
   {
     id: "vehicle-uses",
     defaultLabel: "Vehicle uses",
     defaultIcon: "Car",
     href: "/settings/vehicle-uses",
-    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultGroup: "Fleet",
     defaultOrder: 9,
     permission: "vehicles.manage",
+    hidden: true,
   },
   {
     id: "source-companies",
@@ -712,8 +769,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Document expiry",
     defaultIcon: "CalendarClock",
     href: "/document-expiry",
-    defaultGroup: "Operations",
-    defaultOrder: 6.5,
+    defaultGroup: "System",
+    defaultOrder: 0.5,
     permission: "documents.view",
   },
   {
@@ -731,6 +788,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
 export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   "group-overview": "overview",
   "group-employeedesk": "employeedesk",
+  "group-visit bookings": "visitBookings",
   "group-operationshub": "operationsHub",
   "group-fleet": "fleet",
   "group-operations": "operations",
@@ -769,6 +827,10 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   fuel: "fuel",
   "fuel-requests": "fuelRequests",
   "fuel-refunds": "fuelRefunds",
+  "fleet-service": "fleetService",
+  "fleet-handover": "fleetHandover",
+  "fleet-accident": "fleetAccident",
+  "fleet-rj": "fleetRj",
   attendance: "attendance",
   performance: "performance",
   assistant: "assistant",
@@ -787,6 +849,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   profile: "profile",
   branding: "branding",
   "driver-app": "driverApp",
+  "vehicle-types": "vehicleTypes",
   "vehicle-uses": "vehicleUses",
   "source-companies": "sourceCompanies",
   storage: "storage",

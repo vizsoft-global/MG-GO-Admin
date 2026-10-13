@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { callCronFunction } from "@/lib/firebase/callable";
 import { authorizeEsignBatchDrain } from "@/features/esign/esign-batch-drain-auth";
 import { runEsignBatchChunk } from "@/features/esign/esign-sender-actions";
 
@@ -15,8 +15,7 @@ export async function GET(request: Request): Promise<Response> {
     "esign-batch-drain",
     async () => {
       try {
-        const supabase = createAdminClient() as any;
-        const listed = await supabase.rpc("esign_worker_drainable_batches", {
+        const listed = await callCronFunction("esign_worker_drainable_batches", {
           p_limit: BATCH_CAP,
         });
         if (listed.error) throw listed.error;
@@ -38,7 +37,6 @@ export async function GET(request: Request): Promise<Response> {
         const results = [];
         for (const batch of batches) {
           const chunk = await runEsignBatchChunk({
-            supabase,
             batchId: batch.batchId,
             mode: "pending",
             asWorker: true,

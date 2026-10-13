@@ -1,7 +1,10 @@
 "use server";
 
+import type { Firestore } from "firebase-admin/firestore";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import type {
@@ -16,9 +19,19 @@ import type { ShiftAdherence } from "@/features/driver-tracking/shift-adherence"
 import { parseShiftAdherence } from "@/features/driver-tracking/shift-adherence";
 
 const KUWAIT_TZ = "Asia/Kuwait";
+const DRIVER_ATTENDANCE = "driver_attendance";
 
 function kuwaitToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: KUWAIT_TZ }).format(new Date());
+}
+
+function isoOf(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  const ts = value as { toDate?: () => Date };
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  return null;
 }
 
 function relProfileName(
@@ -154,34 +167,66 @@ function computeKpis(rows: AttendanceListRow[]): AttendanceKpis {
   };
 }
 
-async function fetchActiveDrivers(): Promise<DriverRow[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("drivers")
-    .select("id, driver_code, is_on_duty, status, archived_at")
-    .eq("status", "active")
-    .is("archived_at", null)
-    .order("driver_code", { ascending: true });
+async function attendanceDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
 
-  if (error) throw error;
-  const drivers = (data ?? []) as Omit<DriverRow, "profiles">[];
+function logFromDoc(id: string, data: FirebaseFirestore.DocumentData): AttendanceLogRow {
+  const zone = data.zone_compliance;
+  return {
+    id,
+    driver_id: String(data.driver_id ?? ""),
+    log_date: String(data.log_date ?? ""),
+    check_in_at: isoOf(data.check_in_at),
+    check_out_at: isoOf(data.check_out_at),
+    distance_meters: data.distance_meters == null ? null : Number(data.distance_meters),
+    status: String(data.status ?? "absent") as AttendanceStatus,
+    zone_compliance: zone === "inside" || zone === "outside" ? zone : null,
+    admin_note: data.admin_note == null ? null : String(data.admin_note),
+  };
+}
+
+async function fetchActiveDrivers(): Promise<DriverRow[]> {
+  const db = await attendanceDb();
+  const snap = await db.collection(COLLECTIONS.drivers).where("status", "==", "active").get();
+
+  const drivers = snap.docs
+    .filter((doc) => doc.data().archived_at == null)
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        driver_code: String(data.driver_code ?? ""),
+        is_on_duty: Boolean(data.is_on_duty),
+        status: String(data.status ?? ""),
+        archived_at: isoOf(data.archived_at),
+      };
+    })
+    .sort((a, b) => a.driver_code.localeCompare(b.driver_code));
+
   if (drivers.length === 0) return [];
 
-  const ids = drivers.map((d) => d.id);
-  const { data: profiles, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, full_name, phone")
-    .in("id", ids);
+  const profileById = new Map<string, { full_name: string | null; phone: string | null }>();
+  for (let i = 0; i < drivers.length; i += 100) {
+    const chunk = drivers.slice(i, i + 100);
+    const profiles = await db.getAll(
+      ...chunk.map((driver) => db.collection(COLLECTIONS.profiles).doc(driver.id)),
+    );
+    for (const profile of profiles) {
+      const data = profile.data();
+      if (!data) continue;
+      profileById.set(profile.id, {
+        full_name: data.full_name == null ? null : String(data.full_name),
+        phone: data.phone == null ? null : String(data.phone),
+      });
+    }
+  }
 
-  if (profileError) throw profileError;
-
-  const profileById = new Map(
-    (profiles ?? []).map((p) => [p.id, { full_name: p.full_name, phone: p.phone }]),
-  );
-
-  return drivers.map((d) => ({
-    ...d,
-    profiles: profileById.get(d.id) ?? null,
+  return drivers.map((driver) => ({
+    ...driver,
+    profiles: profileById.get(driver.id) ?? null,
   }));
 }
 
@@ -189,18 +234,16 @@ async function fetchLogsForDateRange(
   fromDate: string,
   toDate: string,
 ): Promise<AttendanceLogRow[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("attendance_logs")
-    .select(
-      "id, driver_id, log_date, check_in_at, check_out_at, distance_meters, status, zone_compliance, admin_note",
-    )
-    .gte("log_date", fromDate)
-    .lte("log_date", toDate)
-    .order("log_date", { ascending: false });
+  const db = await attendanceDb();
+  const snap = await db
+    .collection(COLLECTIONS.attendanceLogs)
+    .where("log_date", ">=", fromDate)
+    .where("log_date", "<=", toDate)
+    .get();
 
-  if (error) throw error;
-  return (data ?? []) as AttendanceLogRow[];
+  return snap.docs
+    .map((doc) => logFromDoc(doc.id, doc.data()))
+    .sort((a, b) => b.log_date.localeCompare(a.log_date));
 }
 
 async function fetchLogsForDate(logDate: string): Promise<AttendanceLogRow[]> {
@@ -214,27 +257,26 @@ export async function fetchAttendanceLive(): Promise<{
   await requireAttendanceView();
   void logAdminRead("attendance", "fetchAttendanceLive");
   const today = kuwaitToday();
-  const supabase = await createClient();
+  const db = await attendanceDb();
   const [drivers, logs] = await Promise.all([
     fetchActiveDrivers(),
     fetchLogsForDate(today),
   ]);
 
-  const { data: appRows } = await supabase
-    .from("driver_attendance")
-    .select("driver_id, status, online_seconds, last_online_at")
-    .eq("attendance_date", today);
+  const appSnap = await db
+    .collection(DRIVER_ATTENDANCE)
+    .where("attendance_date", "==", today)
+    .get();
 
   const driverIds = drivers.map((d) => d.id);
-  const { data: adherenceRows, error: adherenceError } = await supabase.rpc(
-    "admin_list_shift_adherence",
-    {
-      p_from: today,
-      p_to: today,
-      p_driver_ids: driverIds.length > 0 ? driverIds : undefined,
-    },
-  );
-  if (adherenceError) throw adherenceError;
+  const { data: adherenceRows, error: adherenceError } = await callAdminFunction<
+    Array<{ driver_id: string; shift_adherence: unknown }>
+  >("admin_list_shift_adherence", {
+    p_from: today,
+    p_to: today,
+    p_driver_ids: driverIds.length > 0 ? driverIds : undefined,
+  });
+  if (adherenceError) throw new Error(adherenceError.message);
 
   const adherenceByDriver = new Map<string, ShiftAdherence>();
   for (const row of adherenceRows ?? []) {
@@ -243,10 +285,14 @@ export async function fetchAttendanceLive(): Promise<{
   }
 
   const appByDriver = new Map(
-    (appRows ?? []).map((a) => [
-      a.driver_id,
-      { status: a.status, online_seconds: a.online_seconds ?? 0 },
-    ]),
+    appSnap.docs.map((doc) => {
+      const data = doc.data();
+      const driverId = String(data.driver_id ?? "");
+      return [
+        driverId,
+        { status: String(data.status ?? ""), online_seconds: Number(data.online_seconds ?? 0) },
+      ] as const;
+    }),
   );
 
   const logByDriver = new Map(logs.map((l) => [l.driver_id, l]));
@@ -324,27 +370,29 @@ export async function correctAttendanceLog(
   const note = input.note.trim();
   if (!note) return { error: "note_required" };
 
-  const supabase = await createClient();
+  const db = await attendanceDb();
 
   let before: Record<string, unknown> | null = null;
   if (input.log_id) {
-    const { data: existing } = await supabase
-      .from("attendance_logs")
-      .select("*")
-      .eq("id", input.log_id)
-      .maybeSingle();
-    before = existing as Record<string, unknown> | null;
+    const existing = await db.collection(COLLECTIONS.attendanceLogs).doc(input.log_id).get();
+    if (existing.exists) {
+      const row = logFromDoc(existing.id, existing.data() ?? {});
+      before = { ...row };
+    }
   }
 
-  const { data, error } = await supabase.rpc("admin_correct_attendance", {
-    p_log_id: input.log_id ?? undefined,
-    p_driver_id: input.driver_id,
-    p_log_date: input.log_date,
-    p_check_in_at: input.check_in_at ?? undefined,
-    p_check_out_at: input.check_out_at ?? undefined,
-    p_status: input.status,
-    p_note: note,
-  });
+  const { data, error } = await callAdminFunction<Record<string, unknown>>(
+    "admin_correct_attendance",
+    {
+      p_log_id: input.log_id ?? undefined,
+      p_driver_id: input.driver_id,
+      p_log_date: input.log_date,
+      p_check_in_at: input.check_in_at ?? undefined,
+      p_check_out_at: input.check_out_at ?? undefined,
+      p_status: input.status,
+      p_note: note,
+    },
+  );
 
   if (error) {
     const msg = error.message ?? "";
@@ -358,7 +406,7 @@ export async function correctAttendanceLog(
     return { error: "save_failed" };
   }
 
-  const after = data as Record<string, unknown> | null;
+  const after = data;
   const entityId = String(after?.id ?? input.log_id ?? input.driver_id);
 
   await logAdminMutation({

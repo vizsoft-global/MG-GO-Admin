@@ -1,8 +1,11 @@
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
 import { getR2BucketName, getR2Client } from "@/lib/storage/r2-client";
+import { STORAGE_UPLOADS } from "@/lib/storage/storage-upload-audit";
 
 const MAX_PAGES = 20;
+const RECENT_SCAN = 400;
 
 export type ExtensionBreakdown = {
   ext: string;
@@ -108,61 +111,109 @@ export type RecentUploadRow = {
   uploadedAt: string;
 };
 
-export async function getRecentUploads(
-  limit = 25,
-  filter?: "all" | "admin" | "driver",
-): Promise<RecentUploadRow[]> {
-  const admin = createAdminClient();
+type ViaFilter = "all" | "admin" | "driver";
 
-  let query = admin
-    .from("storage_uploads")
-    .select(
-      "id, object_key, size_bytes, content_type, entity_type, entity_id, uploaded_via, status, uploaded_by, uploaded_at",
-    )
-    .eq("status", "completed")
-    .order("uploaded_at", { ascending: false })
-    .limit(limit);
-
-  if (filter === "admin") {
-    query = query.eq("uploaded_via", "admin");
-  } else if (filter === "driver") {
-    query = query.in("uploaded_via", ["driver_presigned", "driver_proxy"]);
-  }
-
-  const { data, error } = await query;
-  if (error || !data?.length) return [];
-
-  const userIds = [
-    ...new Set(data.map((r) => r.uploaded_by).filter(Boolean)),
-  ] as string[];
-
-  const profileMap = new Map<string, string>();
-  if (userIds.length > 0) {
-    const { data: profiles } = await admin
-      .from("profiles")
-      .select("id, email, full_name")
-      .in("id", userIds);
-
-    for (const p of profiles ?? []) {
-      profileMap.set(
-        p.id,
-        p.full_name?.trim() || p.email?.trim() || p.id.slice(0, 8),
-      );
+function viaMatches(via: string, filter: ViaFilter): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "admin":
+      return via === "admin";
+    case "driver":
+      return via === "driver_presigned" || via === "driver_proxy";
+    default: {
+      const unreachable: never = filter;
+      return unreachable;
     }
   }
+}
 
-  return data.map((row) => ({
-    id: row.id,
-    objectKey: row.object_key,
-    sizeBytes: row.size_bytes,
-    contentType: row.content_type,
-    entityType: row.entity_type,
-    entityId: row.entity_id,
-    uploadedVia: row.uploaded_via,
-    status: row.status,
-    uploaderLabel: row.uploaded_by
-      ? (profileMap.get(row.uploaded_by) ?? row.uploaded_by.slice(0, 8))
-      : null,
-    uploadedAt: row.uploaded_at,
-  }));
+function millis(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const date = (value as { toDate: () => Date }).toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date.getTime() : 0;
+  }
+  return 0;
+}
+
+function iso(value: unknown): string {
+  const at = millis(value);
+  return at > 0 ? new Date(at).toISOString() : "";
+}
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+export async function getRecentUploads(
+  limit = 25,
+  filter?: ViaFilter,
+): Promise<RecentUploadRow[]> {
+  const db = await getFirebaseFirestore();
+  if (!db) return [];
+
+  try {
+    const snap = await db
+      .collection(STORAGE_UPLOADS)
+      .orderBy("uploaded_at", "desc")
+      .limit(RECENT_SCAN)
+      .get();
+    const via = filter ?? "all";
+    const rows = snap.docs
+      .filter((doc) => doc.get("status") === "completed" && viaMatches(String(doc.get("uploaded_via") ?? ""), via))
+      .slice(0, limit);
+    if (rows.length === 0) return [];
+
+    const userIds = [
+      ...new Set(
+        rows
+          .map((row) => row.get("uploaded_by"))
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    ];
+    const profileMap = new Map<string, string>();
+    for (let index = 0; index < userIds.length; index += 30) {
+      const refs = userIds
+        .slice(index, index + 30)
+        .map((id) => db.collection(COLLECTIONS.profiles).doc(id));
+      const profiles = await db.getAll(...refs);
+      for (const profile of profiles) {
+        if (!profile.exists) continue;
+        const data = profile.data() ?? {};
+        const fullName = typeof data.full_name === "string" ? data.full_name.trim() : "";
+        const email = typeof data.email === "string" ? data.email.trim() : "";
+        profileMap.set(profile.id, fullName || email || profile.id.slice(0, 8));
+      }
+    }
+
+    return rows.map((row) => {
+      const uploadedBy = text(row.get("uploaded_by"));
+      return {
+        id: typeof row.get("id") === "string" ? row.get("id") : row.id,
+        objectKey: String(row.get("object_key") ?? ""),
+        sizeBytes: typeof row.get("size_bytes") === "number" ? row.get("size_bytes") : null,
+        contentType: text(row.get("content_type")),
+        entityType: text(row.get("entity_type")),
+        entityId: text(row.get("entity_id")),
+        uploadedVia: String(row.get("uploaded_via") ?? ""),
+        status: String(row.get("status") ?? ""),
+        uploaderLabel: uploadedBy
+          ? (profileMap.get(uploadedBy) ?? uploadedBy.slice(0, 8))
+          : null,
+        uploadedAt: iso(row.get("uploaded_at")),
+      };
+    });
+  } catch {
+    return [];
+  }
 }

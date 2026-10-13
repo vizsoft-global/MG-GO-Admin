@@ -216,14 +216,16 @@ export type DepartmentRow = {
 
 export type DepartmentRoleTitle = "agent" | "manager";
 
-/** Meta counts shown under each tile on the Settings hub (Figma 12-Settings-Home). */
+/** Meta counts shown under each tile on the Settings hub (Figma S0 `5926:6246`). */
 export type SettingsHubCounts = {
   workflows: number;
   types: number;
   assets: number;
   departments: number;
+  /** Role cards on the Roles screen: Sender, Receiver · view, Receiver · decide. */
   roles: number;
   esignCategories: number;
+  templates: number;
 };
 
 /** Appointments summary card on the Reports page (Figma 09-Reports). */

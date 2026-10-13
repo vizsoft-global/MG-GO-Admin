@@ -1,22 +1,52 @@
 "use server";
 
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   suggestZoneCode,
   validateZoneGeometry,
   type ZoneGeoFeature,
   type ZoneGeometryType,
 } from "@/lib/geo/zone-geometry";
-import type { Json } from "@/types/database";
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import { DEFAULT_GEOFENCE_SETTINGS } from "./geofence-defaults";
 import { mapZoneDbError } from "./zone-errors";
 import { normalizeZoneColor } from "./zone-colors";
 import type { ZoneGeofenceSettings } from "./types";
 
 export type ZoneGeofenceInput = ZoneGeofenceSettings;
+
+const SETTINGS_COLLECTION = "zone_geofence_settings";
+const GEOFENCE_EVENTS = "geofence_events";
+
+type Row = Record<string, unknown> & { id: string };
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
 
 function geofenceSettingsPayload(settings: ZoneGeofenceInput) {
   return {
@@ -37,18 +67,19 @@ function geofenceSettingsPayload(settings: ZoneGeofenceInput) {
 }
 
 async function upsertZoneGeofenceSettings(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Firestore,
   zoneId: string,
   settings: ZoneGeofenceInput,
 ) {
-  const { error } = await supabase.from("zone_geofence_settings").upsert(
-    {
-      zone_id: zoneId,
-      ...geofenceSettingsPayload(settings),
-    },
-    { onConflict: "zone_id" },
-  );
-  if (error) throw error;
+  await db
+    .collection(SETTINGS_COLLECTION)
+    .doc(zoneId)
+    .set({ zone_id: zoneId, ...geofenceSettingsPayload(settings) }, { merge: true });
+}
+
+async function zoneCodeTaken(db: Firestore, code: string, exceptId?: string): Promise<boolean> {
+  const snap = await db.collection(COLLECTIONS.zones).where("code", "==", code).get();
+  return snap.docs.some((doc) => doc.id !== exceptId);
 }
 
 async function requireZonesManager(verb: "create" | "edit" | "delete" = "edit") {
@@ -82,21 +113,22 @@ export async function createZone(input: {
   const geometryError = validateZoneGeometry(input.zone_type, input.geometry);
   if (geometryError) return { error: geometryError };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("zones")
-    .insert({
+  const db = await openDb();
+  if (await zoneCodeTaken(db, code)) return { error: mapZoneDbError({ code: "23505" }) };
+
+  const id = crypto.randomUUID();
+  try {
+    await db.collection(COLLECTIONS.zones).doc(id).set({
+      id,
       name,
       code,
       color: normalizeZoneColor(input.color),
       zone_type: input.zone_type,
-      geometry: input.geometry as unknown as Json,
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    return { error: mapZoneDbError(error) };
+      geometry: input.geometry,
+      created_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    return { error: mapZoneDbError(error as { message: string }) };
   }
 
   const geofence: ZoneGeofenceInput = {
@@ -105,16 +137,16 @@ export async function createZone(input: {
   };
 
   try {
-    await upsertZoneGeofenceSettings(supabase, data.id, geofence);
+    await upsertZoneGeofenceSettings(db, id, geofence);
   } catch (settingsError) {
-    await supabase.from("zones").delete().eq("id", data.id);
+    await db.collection(COLLECTIONS.zones).doc(id).delete();
     return { error: mapZoneDbError(settingsError as { message: string }) };
   }
 
   void logAdminMutation({
     action: "create",
     entityType: "zone",
-    entityId: data.id,
+    entityId: id,
     routeName: "createZone",
     after: {
       name,
@@ -125,7 +157,7 @@ export async function createZone(input: {
     },
   });
 
-  return { success: true, id: data.id };
+  return { success: true, id };
 }
 
 export async function updateZone(input: {
@@ -147,32 +179,29 @@ export async function updateZone(input: {
   const geometryError = validateZoneGeometry(input.zone_type, input.geometry);
   if (geometryError) return { error: geometryError };
 
-  const supabase = await createClient();
-
-  const { data: existing, error: existingError } = await supabase
-    .from("zones")
-    .select("name, code, color, zone_type, geometry")
-    .eq("id", input.id)
-    .single();
-
-  if (existingError || !existing) {
-    return { error: mapZoneDbError(existingError ?? { message: "not_found" }) };
+  const db = await openDb();
+  const existingSnap = await db.collection(COLLECTIONS.zones).doc(input.id).get();
+  if (!existingSnap.exists) {
+    return { error: mapZoneDbError({ message: "not_found" }) };
+  }
+  const existing = asRow(existingSnap.id, existingSnap.data());
+  if (await zoneCodeTaken(db, code, input.id)) {
+    return { error: mapZoneDbError({ code: "23505" }) };
   }
 
-  const { error } = await supabase
-    .from("zones")
-    .update({
-      name,
-      code,
-      color: normalizeZoneColor(input.color),
-      zone_type: input.zone_type,
-      geometry: input.geometry as unknown as Json,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", input.id);
+  const next = {
+    name,
+    code,
+    color: normalizeZoneColor(input.color),
+    zone_type: input.zone_type,
+    geometry: input.geometry,
+    updated_at: new Date().toISOString(),
+  };
 
-  if (error) {
-    return { error: mapZoneDbError(error) };
+  try {
+    await db.collection(COLLECTIONS.zones).doc(input.id).set(next, { merge: true });
+  } catch (error) {
+    return { error: mapZoneDbError(error as { message: string }) };
   }
 
   const geofence: ZoneGeofenceInput = {
@@ -181,19 +210,19 @@ export async function updateZone(input: {
   };
 
   try {
-    await upsertZoneGeofenceSettings(supabase, input.id, geofence);
+    await upsertZoneGeofenceSettings(db, input.id, geofence);
   } catch (settingsError) {
-    await supabase
-      .from("zones")
-      .update({
+    await db.collection(COLLECTIONS.zones).doc(input.id).set(
+      {
         name: existing.name,
         code: existing.code,
         color: existing.color,
         zone_type: existing.zone_type,
         geometry: existing.geometry,
         updated_at: new Date().toISOString(),
-      })
-      .eq("id", input.id);
+      },
+      { merge: true },
+    );
     return { error: mapZoneDbError(settingsError as { message: string }) };
   }
 
@@ -213,31 +242,73 @@ export async function updateZone(input: {
   return { success: true, id: input.id };
 }
 
+async function clearZoneLinks(db: Firestore, zoneId: string) {
+  const drivers = await db.collection(COLLECTIONS.drivers).where("zone_id", "==", zoneId).get();
+  let batch = db.batch();
+  let pending = 0;
+  for (const doc of drivers.docs) {
+    batch.update(doc.ref, { zone_id: null });
+    pending += 1;
+    if (pending >= 400) {
+      await batch.commit();
+      batch = db.batch();
+      pending = 0;
+    }
+  }
+  if (pending > 0) await batch.commit();
+
+  const events = await db.collection(GEOFENCE_EVENTS).where("zone_id", "==", zoneId).get();
+  let eventBatch = db.batch();
+  let eventPending = 0;
+  for (const doc of events.docs) {
+    eventBatch.delete(doc.ref);
+    eventPending += 1;
+    if (eventPending >= 400) {
+      await eventBatch.commit();
+      eventBatch = db.batch();
+      eventPending = 0;
+    }
+  }
+  if (eventPending > 0) await eventBatch.commit();
+  await db.collection(SETTINGS_COLLECTION).doc(zoneId).delete();
+}
+
 export async function deleteZone(id: string, force = false): Promise<ZoneMutationResult> {
   const auth = await requireZonesManager("delete");
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
+  const db = await openDb();
+  const countSnap = await db.collection(COLLECTIONS.drivers).where("zone_id", "==", id).count().get();
+  const count = countSnap.data().count;
 
-  const { count, error: countError } = await supabase
-    .from("drivers")
-    .select("id", { count: "exact", head: true })
-    .eq("zone_id", id);
+  if (!force && count > 0) return { error: "has_drivers" };
 
-  if (countError) return { error: mapZoneDbError(countError) };
-
-  if (!force && (count ?? 0) > 0) return { error: "has_drivers" };
-
-  if (force && (count ?? 0) > 0) {
-    const { error: unassignError } = await supabase
-      .from("drivers")
-      .update({ zone_id: null })
-      .eq("zone_id", id);
-    if (unassignError) return { error: mapZoneDbError(unassignError) };
+  if (force && count > 0) {
+    try {
+      const drivers = await db.collection(COLLECTIONS.drivers).where("zone_id", "==", id).get();
+      let batch = db.batch();
+      let pending = 0;
+      for (const doc of drivers.docs) {
+        batch.update(doc.ref, { zone_id: null });
+        pending += 1;
+        if (pending >= 400) {
+          await batch.commit();
+          batch = db.batch();
+          pending = 0;
+        }
+      }
+      if (pending > 0) await batch.commit();
+    } catch (error) {
+      return { error: mapZoneDbError(error as { message: string }) };
+    }
   }
 
-  const { error } = await supabase.from("zones").delete().eq("id", id);
-  if (error) return { error: mapZoneDbError(error) };
+  try {
+    await clearZoneLinks(db, id);
+    await db.collection(COLLECTIONS.zones).doc(id).delete();
+  } catch (error) {
+    return { error: mapZoneDbError(error as { message: string }) };
+  }
 
   void logAdminMutation({
     action: "delete",

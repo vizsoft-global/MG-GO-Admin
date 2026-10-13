@@ -1,37 +1,8 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import {
-  AlertCircle,
-  ArrowRight,
-  Briefcase,
-  CalendarDays,
-  ChevronDown,
-  CircleDollarSign,
-  Cross,
-  Download,
-  FileText,
-  Folder,
-  Fuel,
-  Lock,
-  Package,
-  Plus,
-  Search,
-  Shield,
-  UserCheck,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -58,80 +29,110 @@ import { useAuth } from "@/contexts/auth-context";
 
 const NO_BATCHES: EsignBatchRow[] = [];
 
-const OUTGOING_PARENTS: Array<{
-  key: string;
-  label: string;
-  icon: LucideIcon;
-  color: string;
-}> = [
-  { key: "loan", label: "Loan", icon: CircleDollarSign, color: "bg-[#7460F1]" },
-  { key: "payslip", label: "Payslip", icon: FileText, color: "bg-[#539EFF]" },
-  { key: "asset", label: "Asset", icon: Package, color: "bg-[#4CC57D]" },
-  { key: "leave", label: "Leave", icon: CalendarDays, color: "bg-[#EF6053]" },
-  { key: "penalty", label: "Penalty", icon: Shield, color: "bg-[#E6C45F]" },
-  { key: "investigation", label: "Investigation", icon: Search, color: "bg-[#898989]" },
-  { key: "accident", label: "Accident", icon: Cross, color: "bg-[#E09B44]" },
-  { key: "general_doc", label: "General Doc", icon: FileText, color: "bg-[#4498D1]" },
-];
+const OUTGOING_PARENTS = [
+  { key: "loan", label: "Loan", glyph: "/hub/out-loan.svg", color: "#7460F1" },
+  { key: "payslip", label: "Payslip", glyph: "/hub/out-payslip.svg", color: "#539EFF" },
+  { key: "asset", label: "Asset", glyph: "/hub/asset.svg", color: "#4CC57D" },
+  { key: "leave", label: "Leave", glyph: "/hub/out-leave.svg", color: "#EF6053" },
+  { key: "penalty", label: "Penalty", glyph: "/hub/out-penalty.svg", color: "#E6C45F" },
+  { key: "investigation", label: "Investigation", glyph: "/hub/out-investigation.svg", color: "#898989" },
+  { key: "accident", label: "Accident", glyph: "/hub/out-accident.svg", color: "#E09B44" },
+  { key: "general_doc", label: "General Doc", glyph: "/hub/out-general-doc.svg", color: "#4498D1" },
+] as const;
 
 const FALLBACK_PENALTIES = [
   { key: "late_attendance", label: "Late attendance" },
   { key: "unauthorised_absence", label: "Unauthorised absence" },
   { key: "written_warning", label: "Written warning" },
   { key: "damage_to_property", label: "Damage to company property" },
-  { key: "other", label: "Other" },
+  { key: "other", label: "Others" },
 ];
 
 const INCOMING_TYPES: Array<{
   type: (typeof INCOMING_TYPE_KEYS)[number];
-  icon: LucideIcon;
+  glyph: string;
+  glyphSize: number;
   color: string;
   dot: string;
+  wrapLabel?: boolean;
 }> = [
-  { type: "leave", icon: FileText, color: "bg-[#0F9D8A]", dot: "bg-[#0F9D8A]" },
-  { type: "asset", icon: Package, color: "bg-[#7C3AED]", dot: "bg-[#7C3AED]" },
-  { type: "fuel", icon: Fuel, color: "bg-[#EA580C]", dot: "bg-[#EA580C]" },
-  { type: "fuel_refund", icon: FileText, color: "bg-[#EDA23A]", dot: "bg-[#EDA23A]" },
-  { type: "loan", icon: CircleDollarSign, color: "bg-[#2563EB]", dot: "bg-[#2563EB]" },
-  { type: "complaint", icon: AlertCircle, color: "bg-[#DB2777]", dot: "bg-[#DB2777]" },
-  { type: "document", icon: Folder, color: "bg-[#4F46E5]", dot: "bg-[#4F46E5]" },
-  { type: "salary_justification", icon: Briefcase, color: "bg-[#D25335]", dot: "bg-[#D25335]" },
-  { type: "sick_leave", icon: Cross, color: "bg-[#D25335]", dot: "bg-[#D25335]" },
+  { type: "leave", glyph: "/hub/leave.svg", glyphSize: 30, color: "#0F9D8A", dot: "bg-[#0F9D8A]" },
+  { type: "asset", glyph: "/hub/asset.svg", glyphSize: 30, color: "#7C3AED", dot: "bg-[#7C3AED]" },
+  { type: "fuel", glyph: "/hub/fuel.svg", glyphSize: 30, color: "#EA580C", dot: "bg-[#EA580C]" },
+  { type: "fuel_refund", glyph: "/hub/fuel-refund.svg", glyphSize: 40, color: "#EDA23A", dot: "bg-[#EDA23A]" },
+  { type: "loan", glyph: "/hub/loan.svg", glyphSize: 30, color: "#2563EB", dot: "bg-[#2563EB]" },
+  { type: "complaint", glyph: "/hub/complaint.svg", glyphSize: 30, color: "#DB2777", dot: "bg-[#DB2777]" },
+  { type: "document", glyph: "/hub/documents.svg", glyphSize: 30, color: "#4F46E5", dot: "bg-[#4F46E5]" },
+  {
+    type: "salary_justification",
+    glyph: "/hub/salary.svg",
+    glyphSize: 30,
+    color: "#D25335",
+    dot: "bg-[#D25335]",
+    wrapLabel: true,
+  },
+  {
+    type: "sick_leave",
+    glyph: "/hub/sick.svg",
+    glyphSize: 30,
+    color: "#D25335",
+    dot: "bg-[#D25335]",
+    wrapLabel: true,
+  },
 ];
+
+function Glyph({ src, size }: { src: string; size: number }) {
+  return <img alt="" src={src} width={size} height={size} className="pointer-events-none" />;
+}
 
 function HubTile({
   href,
-  icon: Icon,
+  glyph,
+  glyphSize = 29,
   color,
   label,
   count,
+  wrapLabel,
   onClick,
+  trailing,
 }: {
   href?: string;
-  icon: LucideIcon;
+  glyph: string;
+  glyphSize?: number;
   color: string;
   label: string;
   count?: number;
+  wrapLabel?: boolean;
   onClick?: () => void;
+  trailing?: ReactNode;
 }) {
   const body = (
     <>
-      <span className={cn("relative grid size-20 place-items-center rounded-[17.45px]", color)}>
-        <Icon className="size-[29px] text-white" aria-hidden />
-        {count != null && count > 0 ? (
-          <span className="absolute -end-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[#F6E5C3] bg-[#FFFAEB] px-1 text-[10px] font-bold tabular-nums text-[#B54708]">
-            {count > 999 ? "999+" : count}
-          </span>
-        ) : null}
+      <span
+        className="grid size-20 place-items-center rounded-[17.455px]"
+        style={{ backgroundColor: color }}
+      >
+        <Glyph src={glyph} size={glyphSize} />
       </span>
-      <span className="w-full text-center text-[12px] font-medium leading-tight text-[#0A0A0A]">
+      <span
+        className={cn(
+          "text-center text-[14px] font-medium leading-normal text-[#18181b]",
+          wrapLabel ? "max-w-[100px]" : "whitespace-nowrap",
+        )}
+      >
         {label}
+        {trailing}
       </span>
+      {count != null && count > 0 ? (
+        <span className="absolute -end-2 -top-[5px] inline-flex items-center justify-center rounded-full border border-[#f6e5c3] bg-[#fffaeb] px-[7px] py-[2px] text-[12px] font-semibold tabular-nums text-[#b54708]">
+          {count > 999 ? "999+" : count}
+        </span>
+      ) : null}
     </>
   );
 
   const className =
-    "relative flex flex-col items-center gap-2 transition-opacity duration-150 hover:opacity-90 active:scale-[0.97]";
+    "relative flex flex-col items-center gap-2.5 transition-opacity duration-150 hover:opacity-90 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100";
 
   if (onClick || !href) {
     return (
@@ -162,14 +163,22 @@ function FilterChip({
       aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        "inline-flex h-8 items-center gap-1 rounded-full px-3 text-[12px] font-medium",
+        "inline-flex items-center rounded-md px-2 py-1 text-[11.5px] transition-colors duration-150",
         selected
-          ? "bg-[#0A0A0A] text-white"
-          : "border border-[#E5E5E5] bg-white text-[#525252] hover:bg-[#F5F5F5]",
+          ? "bg-[#18181b] font-semibold text-white"
+          : "border border-[#e4e4e7] bg-[#f4f4f5] font-medium text-[#71717a] hover:bg-[#ececee]",
       )}
     >
       {children}
     </button>
+  );
+}
+
+function YouBadge({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded bg-[#fffaeb] px-2 py-[3px] text-[10px] font-bold text-[#b54708]">
+      {children}
+    </span>
   );
 }
 
@@ -205,16 +214,12 @@ function downloadGenericExampleSheet() {
   URL.revokeObjectURL(url);
 }
 
-function incomingFromLine(
-  row: RequestListRow,
-  t: (key: string, values?: { name: string; department?: string }) => string,
-): string {
-  if (row.is_confidential) return t("confidentialLine");
-  const name = maskedListSender(false, row.driver_name, t("confidentialSender"));
-  if (row.department_label) {
-    return t("fromEmployeeDept", { name, department: row.department_label });
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    rows.push(items.slice(index, index + size));
   }
-  return t("fromEmployee", { name });
+  return rows;
 }
 
 export function RcmV2HubShell() {
@@ -231,8 +236,23 @@ export function RcmV2HubShell() {
   const recipientsQuery = useEsignTrackerRecipients();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [penaltyOpen, setPenaltyOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [incomingFilter, setIncomingFilter] = useState<IncomingHubFilter>("all");
   const [sort, setSort] = useState<"oldest" | "newest">("oldest");
+  const penaltyRef = useRef<HTMLDivElement>(null);
+  const sortRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!penaltyOpen && !sortOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (penaltyRef.current && !penaltyRef.current.contains(target)) setPenaltyOpen(false);
+      if (sortRef.current && !sortRef.current.contains(target)) setSortOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [penaltyOpen, sortOpen]);
 
   const parents = useMemo(
     () =>
@@ -250,7 +270,10 @@ export function RcmV2HubShell() {
       (row) => row.is_active && row.parent_key === "penalty",
     );
     if (live.length > 0) {
-      return live.map((row) => ({ key: row.key, label: row.label_en }));
+      return live.map((row) => ({
+        key: row.key,
+        label: row.label_en,
+      }));
     }
     return FALLBACK_PENALTIES;
   }, [categories?.rows]);
@@ -289,197 +312,215 @@ export function RcmV2HubShell() {
     tab === "incoming"
       ? RCM_ADMIN_CHIPS.filter((chip) => chip.id !== "templates")
       : RCM_ADMIN_CHIPS;
+  const sortLabel = sort === "oldest" ? t("oldestFirst") : t("newestFirst");
 
   return (
-    <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-10">
-      <header className="grid grid-cols-1 items-center gap-3 lg:grid-cols-[1fr_auto_1fr]">
-        <div className="flex items-center gap-3">
-          <p className="text-[13px] font-semibold text-[#0A0A0A]">{t("breadcrumb")}</p>
-        </div>
-        <div className="flex items-stretch justify-center rounded-md bg-[#F5F5F5] p-1">
+    <div className="-m-3 flex min-h-svh flex-col bg-[#fafafa] text-[#18181b]">
+      <p className="px-6 pt-4 text-[13px] font-normal text-[#71717a]">{t("hubTitle")}</p>
+      <div className="flex items-center justify-between gap-3 border-b border-[#ececee] px-6 py-2.5">
+        <div className="inline-flex items-start rounded-lg border-[0.5px] border-black/15 bg-[#f4f4f5] p-[3px]">
           <button
             type="button"
             onClick={() => router.replace("/employeedesk?tab=outgoing")}
             className={cn(
-              "flex h-[42px] min-w-[180px] flex-col items-center justify-center rounded-md px-4",
-              tab === "outgoing" ? "bg-white shadow-sm" : "",
+              "flex flex-col items-start gap-[5px] rounded-md px-4 py-1.5 text-start",
+              tab === "outgoing" &&
+                "border-[0.5px] border-black/10 bg-white shadow-[0_1px_1px_rgba(0,0,0,0.04)]",
             )}
           >
             <span
               className={cn(
-                "text-[14px] font-medium",
-                tab === "outgoing" ? "text-[#0A0A0A]" : "text-[#737373]",
+                "w-[180px] text-[13px]",
+                tab === "outgoing" ? "font-semibold text-[#18181b]" : "font-normal text-[#71717a]",
               )}
             >
-              {t("outgoing")}
+              {t("outgoingShort")}
             </span>
-            <span
-              className={cn(
-                "text-[10px]",
-                tab === "outgoing" ? "text-[#737373]" : "text-[#8A8A8A]",
-              )}
-            >
-              {t("outgoingHint")}
-            </span>
+            <span className="text-[10px] font-normal text-[#787887]">{t("outgoingHint")}</span>
           </button>
           <button
             type="button"
             onClick={() => router.replace("/employeedesk?tab=incoming")}
             className={cn(
-              "flex h-[42px] min-w-[180px] flex-col items-center justify-center rounded-md px-4",
-              tab === "incoming" ? "bg-white shadow-sm" : "",
+              "flex flex-col items-start gap-[5px] rounded-md px-4 py-1.5 text-start",
+              tab === "incoming" &&
+                "border-[0.5px] border-black/10 bg-white shadow-[0_1px_1px_rgba(0,0,0,0.04)]",
             )}
           >
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 text-[14px] font-medium",
-                tab === "incoming" ? "text-[#0A0A0A]" : "text-[#737373]",
-              )}
-            >
-              {t("incoming")}
-              {incomingCount > 0 ? (
-                <span className="inline-flex h-4 items-center rounded-full bg-[#E5E5E5] px-1.5 text-[10px] font-medium tabular-nums text-[#737373]">
-                  {incomingCount}
-                </span>
-              ) : null}
+            <span className="flex w-[180px] items-center justify-between gap-2">
+              <span
+                className={cn(
+                  "text-[13px]",
+                  tab === "incoming" ? "font-semibold text-[#18181b]" : "font-normal text-[#71717a]",
+                )}
+              >
+                {t("incomingShort")}
+              </span>
+              <span
+                className={cn(
+                  "rounded-[10px] bg-[#e4e4e7] px-1.5 py-px text-[10px] font-semibold tabular-nums",
+                  tab === "incoming" ? "text-[#18181b]" : "text-[#71717a]",
+                )}
+              >
+                {incomingCount}
+              </span>
             </span>
-            <span
-              className={cn(
-                "text-[10px]",
-                tab === "incoming" ? "text-[#737373]" : "text-[#8A8A8A]",
-              )}
-            >
-              {t("incomingHint")}
-            </span>
+            <span className="text-[10px] font-normal text-[#787887]">{t("incomingHint")}</span>
           </button>
         </div>
-        <div className="flex items-center justify-end gap-1.5">
-          <span className="inline-flex items-center gap-2 rounded-md border border-[#E5E5E5] bg-card px-2 py-1">
-            <span className="text-[12px] text-[#525252]">{t("yourAccess")}</span>
+        {access.sender || access.receiver ? (
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-normal text-[#71717a]">{t("yourAccess")}</span>
             {access.sender ? (
-              <span className="inline-flex items-center gap-1 rounded-md border border-[#E5E5E5] bg-white px-2 py-0.5 text-[12px] font-medium text-[#0A0A0A]">
-                <UserCheck className="size-3" aria-hidden />
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-[#18181b]",
+                  tab === "incoming"
+                    ? "border border-[#e4e4e7] bg-[#f4f4f5]"
+                    : "bg-[#efeff0]",
+                )}
+              >
+                <span className="grid size-3 place-items-center">
+                  <Glyph src="/hub/access-user.svg" size={8} />
+                </span>
                 {t("access.sender")}
               </span>
             ) : null}
             {access.receiver ? (
-              <span className="inline-flex items-center gap-1 rounded-md border border-[#E5E5E5] bg-white px-2 py-0.5 text-[12px] font-medium text-[#0A0A0A]">
-                <Users className="size-3" aria-hidden />
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-[#18181b]",
+                  tab === "incoming"
+                    ? "border border-[#e4e4e7] bg-[#f4f4f5]"
+                    : "bg-[#efeff0]",
+                )}
+              >
+                <span className="grid size-3 place-items-center">
+                  <Glyph src="/hub/access-receiver.svg" size={8} />
+                </span>
                 {t("access.receiver")}
               </span>
             ) : null}
-          </span>
-        </div>
-      </header>
+          </div>
+        ) : null}
+      </div>
 
       {tab === "outgoing" ? (
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,513px)_minmax(0,1fr)] lg:items-start xl:gap-16">
-          <section className="rounded-xl border border-[#E5E5E5] bg-card p-8">
-            <div className="mb-1 flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-[16px] font-semibold">{t("createFromTemplate")}</h2>
-                  <span className="rounded-md bg-[#FFFAEB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B54708]">
-                    {t("youSend")}
-                  </span>
-                </div>
-                <p className="mt-1 text-[12px] text-[#737373]">{t("templateHint")}</p>
+        <div className="flex flex-1 flex-col items-start gap-4 px-6 pb-6 pt-2 lg:flex-row">
+          <section className="relative z-10 flex w-full shrink-0 flex-col gap-[25px] rounded-xl border border-[#e4e4e7] bg-white p-5 lg:w-[513px] lg:max-w-[710px]">
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-[16px] font-semibold text-[#18181b]">{t("createFromTemplate")}</h2>
+                <YouBadge>{t("youSend")}</YouBadge>
               </div>
-              <Link
-                href="/employeedesk/esign/templates"
-                className="shrink-0 text-[12px] font-medium text-[#B54708] underline underline-offset-2 hover:opacity-80"
-              >
-                {t("seeAllTemplates")}
-              </Link>
+              <p className="flex flex-wrap items-center gap-1 text-[13px] leading-normal">
+                <span className="font-normal text-[#71717a]">{t("templateHint")}</span>
+                <Link
+                  href="/employeedesk/esign/templates"
+                  className="font-medium text-[#b54708] underline decoration-solid underline-offset-2"
+                >
+                  {t("seeAllTemplates")}
+                </Link>
+              </p>
             </div>
-            <div className="mt-5 grid grid-cols-4 justify-between gap-y-6">
-              {parents.map((tile) =>
-                tile.key === "penalty" ? (
-                  <div key={tile.key} className="relative">
-                    <button
-                      type="button"
-                      className="relative flex flex-col items-center gap-2 transition-opacity duration-150 hover:opacity-90 active:scale-[0.97]"
-                      onClick={() => setPenaltyOpen((open) => !open)}
-                      aria-expanded={penaltyOpen}
-                      aria-label={t("penaltyMore")}
-                    >
-                      <span className={cn("relative grid size-20 place-items-center rounded-[17.45px]", tile.color)}>
-                        <tile.icon className="size-[29px] text-white" aria-hidden />
-                      </span>
-                      <span className="inline-flex items-center gap-0.5 text-[12px] font-medium leading-tight text-[#0A0A0A]">
-                        {tile.label}
-                        <ChevronDown className="size-3.5 text-muted-foreground" />
-                      </span>
-                    </button>
-                    {penaltyOpen ? (
-                      <div className="absolute start-0 top-full z-10 mt-2 w-56 rounded-lg border border-[#E5E5E5] bg-white p-2 shadow-sm">
-                        <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                          {t("penaltyCategory")}
-                        </p>
-                        {penaltyChildren.map((child) => (
-                          <Link
-                            key={child.key}
-                            href={`/employeedesk/esign/send?category=${FALLBACK_PENALTIES.some((item) => item.key === child.key) ? "penalty" : child.key}`}
-                            className="block rounded-lg px-2 py-1.5 text-start text-[12px] hover:bg-muted"
-                          >
-                            {child.label}
-                          </Link>
-                        ))}
+            <div className="flex flex-col gap-[30px]">
+              {chunk(parents, 4).map((row) => (
+                <div key={row[0]?.key} className="flex w-full items-start justify-between gap-2">
+                  {row.map((tile) =>
+                    tile.key === "penalty" ? (
+                      <div key={tile.key} ref={penaltyRef} className="relative">
+                        <HubTile
+                          glyph={tile.glyph}
+                          color={tile.color}
+                          label={tile.label}
+                          wrapLabel={locale === "ar"}
+                          onClick={() => setPenaltyOpen((open) => !open)}
+                          trailing={
+                            <img
+                              alt=""
+                              src="/hub/chevron-down.svg"
+                              width={14}
+                              height={14}
+                              className={cn(
+                                "ms-[5px] inline-block align-[-2px]",
+                                penaltyOpen && "-scale-y-100",
+                              )}
+                            />
+                          }
+                        />
+                        {penaltyOpen ? (
+                          <div className="absolute start-0 top-full z-20 mt-2 flex w-[224px] flex-col gap-2.5 rounded-lg border border-[#e4e4e7] bg-white p-2.5 shadow-[0_4px_6px_rgba(0,0,0,0.08)]">
+                            <p className="text-[10px] font-normal tracking-[0.5px] text-[#a1a1aa] uppercase">
+                              {t("penaltyCategory")}
+                            </p>
+                            <div className="flex flex-col gap-1">
+                              {penaltyChildren.map((child) => (
+                                <Link
+                                  key={child.key}
+                                  href={`/employeedesk/esign/send?category=${FALLBACK_PENALTIES.some((item) => item.key === child.key) ? "penalty" : child.key}`}
+                                  className="flex h-[31px] w-[204px] items-center rounded p-2 text-[12.5px] font-normal text-[#18181b] hover:bg-[#f4f4f5]"
+                                  onClick={() => setPenaltyOpen(false)}
+                                >
+                                  {child.label}
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <HubTile
-                    key={tile.key}
-                    href={`/employeedesk/esign/send?category=${tile.key}`}
-                    icon={tile.icon}
-                    color={tile.color}
-                    label={tile.label}
-                  />
-                ),
-              )}
+                    ) : (
+                      <HubTile
+                        key={tile.key}
+                        href={`/employeedesk/esign/send?category=${tile.key}`}
+                        glyph={tile.glyph}
+                        color={tile.color}
+                        label={tile.label}
+                        wrapLabel={locale === "ar"}
+                      />
+                    ),
+                  )}
+                </div>
+              ))}
             </div>
           </section>
 
-          <div className="flex flex-col gap-8">
-            <section className="rounded-xl border border-[#E5E5E5] bg-card p-6">
-              <h2 className="text-[16px] font-semibold">{t("sendToMany")}</h2>
-              <p className="mt-1 text-[12px] leading-5 text-[#737373]">{t("sendToManyHint")}</p>
-              <div className="mt-4 flex flex-wrap items-center gap-3">
-                <Button
-                  className="h-9 rounded-md bg-[#0A0A0A] px-4 text-[13px] font-medium text-white hover:bg-[#262626]"
-                  render={<Link href="/employeedesk/esign/bulk" />}
+          <div className="flex min-w-0 w-full flex-1 flex-col gap-4">
+            <section className="flex flex-col gap-4 rounded-xl border border-[#e4e4e7] bg-white p-5">
+              <h2 className="text-[16px] font-semibold text-[#18181b]">{t("sendToMany")}</h2>
+              <p className="text-[13px] font-normal leading-[18px] text-[#71717a]">{t("sendToManyHint")}</p>
+              <div className="flex flex-col gap-2">
+                <Link
+                  href="/employeedesk/esign/bulk"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#18181b] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-[#27272a] active:scale-[0.97] motion-reduce:active:scale-100"
                 >
-                  <Plus className="size-3.5" />
+                  <Glyph src="/hub/plus.svg" size={14} />
                   {t("importExcel")}
-                </Button>
+                </Link>
                 <button
                   type="button"
-                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#E5E5E5] bg-white px-4 text-[13px] font-medium text-[#0A0A0A] hover:bg-[#F5F5F5]"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#e4e4e7] bg-white px-4 py-2.5 text-[13px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
                   onClick={() => downloadGenericExampleSheet()}
                 >
-                  <Download className="size-3.5" aria-hidden />
+                  <Glyph src="/hub/download.svg" size={14} />
                   {t("downloadExample")}
                 </button>
               </div>
             </section>
 
-            <section className="rounded-xl border border-[#E5E5E5] bg-card p-6">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h2 className="text-[16px] font-semibold">{t("sentForSignature")}</h2>
+            <section className="flex flex-col gap-[14px] rounded-xl border border-[#e4e4e7] bg-white p-5">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-[16px] font-semibold text-[#18181b]">{t("sentForSignature")}</h2>
                 <Link
-                  href="/requests/esign/batches"
-                  className="text-[12px] font-semibold text-primary hover:bg-primary/10"
+                  href="/employeedesk/esign/batches"
+                  className="text-[13px] font-medium text-[#b54708] underline decoration-solid underline-offset-2"
                 >
                   {t("viewAll")}
                 </Link>
               </div>
               {recentBatches.length === 0 ? (
-                <p className="py-8 text-center text-[12px] text-muted-foreground">
-                  {t("emptyBatches")}
-                </p>
+                <p className="py-8 text-center text-[12px] text-[#71717a]">{t("emptyBatches")}</p>
               ) : (
-                <div>
+                <div className="flex flex-col gap-3">
                   {recentBatches.map((row, index) => {
                     const done = row.stage === "completed";
                     const total = row.progress.total || row.batch.total_count;
@@ -491,51 +532,47 @@ export function RcmV2HubShell() {
                       <div
                         key={row.batch.id}
                         className={cn(
-                          "flex items-center gap-3 py-3",
-                          index < recentBatches.length - 1 && "border-b border-[#F5F5F5]",
+                          "flex flex-col gap-2",
+                          index < recentBatches.length - 1 && "border-b border-[#e4e4e7] pb-3",
                         )}
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-semibold">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="min-w-0 truncate text-[13.5px] font-semibold text-[#18181b]">
                             {row.batch.title || row.batch.template_name || row.batch.batch_code}
                           </p>
-                          <p className="mt-0.5 text-[11px] text-[#737373]">
-                            {bulk
-                              ? t("batchEmployeesBulk", { count: total, date: sent })
-                              : t("batchEmployees", { count: total, date: sent })}
-                          </p>
-                          <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#F5F5F5]">
+                          <span
+                            className={cn(
+                              "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
+                              done
+                                ? "border-[#d3f3df] bg-[#ecfdf3] text-[#067647]"
+                                : "border-[#f6e5c3] bg-[#fffaeb] text-[#b54708]",
+                            )}
+                          >
+                            <span className="size-1 rounded-full bg-current" />
+                            {done ? t("completed") : t("inProgress")}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-normal text-[#71717a]">
+                          {bulk
+                            ? t("batchEmployeesBulk", { count: total, date: sent })
+                            : t("batchEmployees", { count: total, date: sent })}
+                        </p>
+                        <div className="flex items-center gap-3">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#f4f4f5]">
                             <div
-                              className="h-full rounded-full bg-emerald-500"
+                              className={cn("h-full rounded-full", done ? "bg-[#067647]" : "bg-[#b54708]")}
                               style={{ width: `${Math.min(100, percent)}%` }}
                             />
                           </div>
-                        </div>
-                        <div className="flex shrink-0 flex-col items-end gap-1.5">
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                              done
-                                ? "bg-[#ECFDF3] text-[#067647]"
-                                : "bg-[#FFFAEB] text-[#B54708]",
-                            )}
-                          >
-                            {done ? t("completed") : t("inProgress")}
+                          <span className="shrink-0 text-[11.5px] font-medium tabular-nums text-[#71717a]">
+                            {t("signedOf", { signed, total, percent })}
                           </span>
-                          {done ? null : (
-                            <>
-                              <span className="text-[11px] tabular-nums text-[#737373]">
-                                {t("signedOf", { signed, total, percent })}
-                              </span>
-                              <Link
-                                href={`/requests/esign/batches/${row.batch.id}`}
-                                className="inline-flex h-7 items-center gap-1 rounded-md border border-[#E5E5E5] px-2 text-[11px] font-semibold text-[#0A0A0A] hover:bg-[#F5F5F5]"
-                              >
-                                {t("track")}
-                                <ArrowRight className="size-3" aria-hidden />
-                              </Link>
-                            </>
-                          )}
+                          <Link
+                            href={`/employeedesk/esign/batches/${row.batch.id}`}
+                            className="inline-flex shrink-0 items-center rounded border border-[#e4e4e7] px-2 py-1 text-[11px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa]"
+                          >
+                            {t("track")}
+                          </Link>
                         </div>
                       </div>
                     );
@@ -546,40 +583,45 @@ export function RcmV2HubShell() {
           </div>
         </div>
       ) : (
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,431px)_minmax(0,1fr)] lg:items-start">
-          <section className="rounded-xl border border-[#E5E5E5] bg-card p-8">
-            <div className="mb-5 flex items-center gap-2">
-              <h2 className="text-[16px] font-semibold">{t("queuesWaiting")}</h2>
-              <span className="rounded-md bg-[#FFFAEB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B54708]">
-                {t("youReceive")}
-              </span>
+        <div className="flex flex-1 flex-col items-start gap-4 px-6 pb-6 pt-2 lg:flex-row">
+          <section className="flex w-full shrink-0 flex-col gap-[25px] rounded-xl border border-[#e4e4e7] bg-white p-5 lg:w-[431px] lg:max-w-[510px]">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[16px] font-semibold text-[#18181b]">{t("queuesWaiting")}</h2>
+              <YouBadge>{t("youReceive")}</YouBadge>
             </div>
-            <div className="grid grid-cols-3 gap-x-3 gap-y-6">
-              {INCOMING_TYPES.map((tile) => (
-                <HubTile
-                  key={tile.type}
-                  href={`/employeedesk/all?type=${tile.type}&preset=all`}
-                  icon={tile.icon}
-                  color={tile.color}
-                  label={t(`types.${tile.type}` as "types.leave")}
-                  count={counts[tile.type]?.pending}
-                />
+            <div className="flex flex-col gap-[25px]">
+              {chunk(INCOMING_TYPES, 3).map((row) => (
+                <div key={row[0]?.type} className="flex w-full items-start justify-between gap-2">
+                  {row.map((tile) => (
+                    <HubTile
+                      key={tile.type}
+                      href={`/employeedesk/all?type=${tile.type}&preset=all`}
+                      glyph={tile.glyph}
+                      glyphSize={tile.glyphSize}
+                      color={tile.color}
+                      wrapLabel={tile.wrapLabel || locale === "ar"}
+                      label={t(`types.${tile.type}` as "types.leave")}
+                      count={counts[tile.type]?.pending}
+                    />
+                  ))}
+                </div>
               ))}
             </div>
           </section>
 
-          <section className="rounded-xl border border-[#E5E5E5] bg-card p-6">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="text-[16px] font-semibold">{t("needsAction")}</h2>
-              <Button
-                className="h-9 rounded-md bg-[#0A0A0A] px-4 text-[13px] font-medium text-white hover:bg-[#262626]"
+          <section className="flex min-w-0 w-full flex-1 flex-col gap-[14px] rounded-xl border border-[#e4e4e7] bg-white p-5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-[16px] font-semibold text-[#18181b]">{t("needsAction")}</h2>
+              <button
+                type="button"
+                className="rounded-md bg-[#18181b] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-[#27272a] active:scale-[0.97] motion-reduce:active:scale-100"
                 onClick={() => setUploadOpen(true)}
               >
                 {t("uploadDocument")}
-              </Button>
+              </button>
             </div>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+              <div className="flex flex-wrap items-center gap-2">
                 <FilterChip selected={incomingFilter === "all"} onClick={() => setIncomingFilter("all")}>
                   {t("filterAll", { count: incomingCount })}
                 </FilterChip>
@@ -593,91 +635,113 @@ export function RcmV2HubShell() {
                   {t("forwardedToMe")}
                 </FilterChip>
               </div>
-              <Select
-                items={[
-                  { value: "oldest", label: t("oldestFirst") },
-                  { value: "newest", label: t("newestFirst") },
-                ]}
-                value={sort}
-                onValueChange={(value) => {
-                  if (value === "oldest" || value === "newest") setSort(value);
-                }}
-              >
-                <SelectTrigger className="h-8 w-[140px] rounded-full border border-[#E5E5E5] bg-white px-3 text-[12px] shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="oldest" label={t("oldestFirst")}>
-                    {t("oldestFirst")}
-                  </SelectItem>
-                  <SelectItem value="newest" label={t("newestFirst")}>
-                    {t("newestFirst")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <div ref={sortRef} className="relative">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-[11.5px] font-normal text-[#71717a]"
+                  aria-expanded={sortOpen}
+                  onClick={() => setSortOpen((open) => !open)}
+                >
+                  {sortLabel}
+                  <Glyph src="/hub/sort-chevron.svg" size={10} />
+                </button>
+                {sortOpen ? (
+                  <div className="absolute end-0 top-full z-20 mt-1 min-w-[140px] rounded-lg border border-[#e4e4e7] bg-white p-1 shadow-[0_4px_6px_rgba(0,0,0,0.08)]">
+                    {(["oldest", "newest"] as const).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={cn(
+                          "flex h-[31px] w-full items-center rounded px-2 text-start text-[12.5px] text-[#18181b] hover:bg-[#f4f4f5]",
+                          sort === value && "bg-[#f4f4f5]",
+                        )}
+                        onClick={() => {
+                          setSort(value);
+                          setSortOpen(false);
+                        }}
+                      >
+                        {value === "oldest" ? t("oldestFirst") : t("newestFirst")}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
             {actionRows.length === 0 ? (
-              <p className="py-10 text-center text-[12px] text-muted-foreground">
-                {t("emptyAction")}
-              </p>
+              <p className="py-10 text-center text-[12px] text-[#71717a]">{t("emptyAction")}</p>
             ) : (
-              <div>
-                {actionRows.map((row, index) => {
-                  const typeMeta = INCOMING_TYPES.find((item) => item.type === row.request_type);
-                  return (
-                    <div
-                      key={row.id}
-                      className={cn(
-                        "flex items-center gap-3 py-3",
-                        index < actionRows.length - 1 && "border-b border-[#F5F5F5]",
-                      )}
-                    >
-                      <span className={cn("size-2 shrink-0 rounded-full", typeMeta?.dot ?? "bg-slate-400")} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-semibold">
-                          {t(`types.${row.request_type}` as "types.leave")}
-                        </p>
-                        <p className="flex items-center gap-1 text-[11px] text-[#737373]">
-                          {row.is_confidential ? (
-                            <Lock className="size-3 shrink-0" aria-hidden />
-                          ) : null}
-                          <span className="truncate">{incomingFromLine(row, t)}</span>
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-[11px] text-[#737373]">
-                        {formatAge(row.created_at, t)}
-                      </span>
-                      <Link
-                        href={`/employeedesk/${row.id}`}
-                        className="inline-flex h-7 shrink-0 items-center rounded-md border border-[#E5E5E5] px-3 text-[11px] font-semibold text-[#0A0A0A] hover:bg-[#F5F5F5]"
-                      >
-                        {t("review")}
-                      </Link>
-                    </div>
-                  );
-                })}
+              <div className="flex flex-col">
+                {actionRows.map((row) => (
+                  <ActionRow key={row.id} row={row} />
+                ))}
               </div>
             )}
-            <p className="mt-4 text-[11px] text-[#737373]">{t("incomingFootnote")}</p>
+            <p className="text-[11px] font-normal leading-[15px] text-[#a1a1aa]">{t("incomingFootnote")}</p>
           </section>
         </div>
       )}
 
-      <footer className="mt-2 flex flex-wrap items-center gap-3 border-t border-[#E5E5E5] pt-5">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-[#737373]">
-          {t("adminOnly")}
-        </span>
-        {adminChips.map((chip) => (
-          <Link
-            key={chip.id}
-            href={chip.href}
-            className="inline-flex h-7 items-center rounded-full border border-[#E5E5E5] bg-white px-3 text-[11px] font-medium text-[#0A0A0A] hover:bg-[#F5F5F5]"
-          >
-            {t(`admin.${chip.id}` as "admin.templates")}
-          </Link>
-        ))}
+      <footer className="mt-auto flex flex-col gap-3 border-t border-[#e4e4e7] bg-white px-6 pt-4 pb-6">
+        <p className="text-[10px] font-semibold tracking-[0.5px] text-[#a1a1aa]">{t("adminOnly")}</p>
+        <div className="flex flex-wrap items-start gap-2.5">
+          {adminChips.map((chip) => (
+            <Link
+              key={chip.id}
+              href={chip.href}
+              className={cn(
+                "inline-flex items-center rounded-md border border-[#e4e4e7] bg-white px-3 py-1.5 font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa]",
+                tab === "incoming" ? "text-[13px]" : "text-[12px]",
+              )}
+            >
+              {t(`admin.${chip.id}` as "admin.templates")}
+            </Link>
+          ))}
+        </div>
       </footer>
       <IncomingUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+    </div>
+  );
+}
+
+function ActionRow({ row }: { row: RequestListRow }) {
+  const t = useTranslations("pages.rcmV2");
+  const typeMeta = INCOMING_TYPES.find((item) => item.type === row.request_type);
+  const name = maskedListSender(false, row.driver_name, t("confidentialSender"));
+
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-[#e4e4e7] px-4 py-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <span className={cn("size-2 shrink-0 rounded-full", typeMeta?.dot ?? "bg-[#a1a1aa]")} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13.5px] font-semibold text-[#18181b]">
+            {t(`types.${row.request_type}` as "types.leave")}
+          </p>
+          {row.is_confidential ? (
+            <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-normal text-[#71717a]">
+              <Glyph src="/hub/lock.svg" size={11} />
+              <span className="truncate">{t("confidentialLine")}</span>
+            </p>
+          ) : (
+            <p className="mt-0.5 truncate text-[11px] font-normal leading-normal text-[#71717a]">
+              {t("fromPrefix")}
+              <span className="font-medium text-[#18181b]">
+                {row.department_label
+                  ? t("fromEmployeeDept", { name, department: row.department_label })
+                  : name}
+              </span>
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-4">
+        <span className="text-[12px] font-normal text-[#71717a]">{formatAge(row.created_at, t)}</span>
+        <Link
+          href={`/employeedesk/${row.id}`}
+          className="inline-flex items-center rounded-md border border-[#e4e4e7] bg-white px-3 py-1.5 text-[12px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa]"
+        >
+          {t("review")}
+        </Link>
+      </div>
     </div>
   );
 }

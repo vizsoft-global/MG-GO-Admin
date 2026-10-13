@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { Download, FileClock, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
-import { ToggleChip } from "@/components/app/toggle-chip";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -30,6 +29,8 @@ import {
 } from "./esign-sender-actions";
 import { useEsignDraft, useEsignTemplate, useEsignTemplates } from "./use-esign";
 import type { EsignLocale, EsignResolveRow } from "./types";
+
+const BATCH_LANGUAGE: EsignLocale = "en";
 
 function statusVariant(status: string): "success" | "warning" | "danger" | "neutral" {
   if (status === "ok") return "success";
@@ -67,7 +68,6 @@ export function EsignBulkShell({
   const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null);
   const { data: templateData } = useEsignTemplate(templateId ?? "");
   const template = templateData?.template;
-  const [locale, setLocale] = useState<EsignLocale>("en");
   const [dueAt, setDueAt] = useState("");
   const [title, setTitle] = useState("");
   const [fileName, setFileName] = useState("");
@@ -106,7 +106,6 @@ export function EsignBulkShell({
     if (!draft || draftAppliedRef.current) return;
     draftAppliedRef.current = true;
     if (draft.template_id) setTemplateId(draft.template_id);
-    setLocale(draft.language);
     if (draft.title) setTitle(draft.title);
     if (draft.due_at) setDueAt(draft.due_at.slice(0, 10));
     if (draft.source_filename) setFileName(draft.source_filename);
@@ -194,7 +193,7 @@ export function EsignBulkShell({
       kind: "bulk",
       template_id: templateId,
       template_version: template?.version ?? null,
-      language: locale,
+      language: BATCH_LANGUAGE,
       title: title.trim() || template?.name_en || null,
       due_at: dueAt || null,
       field_values: {},
@@ -226,7 +225,7 @@ export function EsignBulkShell({
     const created = await createEsignBatch({
       template_id: templateId,
       title: title.trim() || template.name_en,
-      language: locale,
+      language: BATCH_LANGUAGE,
       due_at: dueAt || null,
       source_filename: fileName || null,
       rows: usable.map((p) => ({
@@ -252,7 +251,7 @@ export function EsignBulkShell({
       if (chunk.processed === 0) break;
     }
     setBusy(false);
-    toast.success(t("queued", { code: created.batch_code ?? "" }));
+    toast.success(t("sentToast", { count: usable.length }));
     if (draftId) {
       const consumed = await deleteEsignDraft(draftId);
       if (!consumed.ok) toast.error(consumed.error ?? t("errors.draftFailed"));
@@ -279,7 +278,7 @@ export function EsignBulkShell({
 
       <AppListCard className="space-y-3 p-4">
         <div className="grid gap-2 lg:grid-cols-4">
-          <div className="space-y-1 lg:col-span-2">
+          <div className="space-y-1 lg:col-span-3">
             <Label>
               {t("fieldTemplate")} <span className="text-destructive">*</span>
             </Label>
@@ -296,17 +295,6 @@ export function EsignBulkShell({
               recentsKey="esign-bulk-template"
               className="w-full"
             />
-          </div>
-          <div className="space-y-1">
-            <Label>{t("fieldLocale")}</Label>
-            <div className="flex gap-1">
-              <ToggleChip selected={locale === "en"} onClick={() => setLocale("en")}>
-                EN
-              </ToggleChip>
-              <ToggleChip selected={locale === "ar"} onClick={() => setLocale("ar")}>
-                AR
-              </ToggleChip>
-            </div>
           </div>
           <div className="space-y-1">
             <Label>{t("fieldDue")}</Label>

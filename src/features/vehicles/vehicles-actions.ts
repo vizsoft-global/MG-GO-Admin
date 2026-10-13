@@ -3,7 +3,8 @@
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createClient } from "@/lib/supabase/server";
+import { COLLECTIONS, UNIQ_COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import {
   carTypeToProjectType,
   defaultFuelMonthlyLimit,
@@ -23,6 +24,7 @@ import { assignedDriverProjectWrite } from "./vehicles-list-utils";
 import { validateVehicleForm } from "./vehicle-form-validation";
 import { plateToBikeId } from "./plate-id";
 import { vehicleAssignedOnDuty, vehicleShiftLabel } from "./vehicle-on-duty";
+import type { DocumentData, DocumentReference, Firestore } from "firebase-admin/firestore";
 import type {
   VehicleCarType,
   VehicleCondition,
@@ -36,6 +38,47 @@ import type {
   VehicleStatus,
   VehicleTypeRow,
 } from "./types";
+
+type Row = Record<string, unknown> & { id: string };
+
+function plainValue(value: unknown): unknown {
+  if (value == null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if ("toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(plainValue);
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = plainValue(child);
+  }
+  return out;
+}
+
+function asRow(id: string, data: DocumentData | undefined): Row {
+  return { id, ...((plainValue(data ?? {}) as Record<string, unknown>) ?? {}) };
+}
+
+async function openDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+async function allRows(db: Firestore, collection: string): Promise<Row[]> {
+  const snap = await db.collection(collection).get();
+  return snap.docs.map((doc) => asRow(doc.id, doc.data()));
+}
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function numOrNull(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
 function formatError(error: { code?: string | null; message?: string | null } | null | undefined) {
   if (!error?.message) return "save_failed";
@@ -55,6 +98,11 @@ async function requireVehicles(permission: "vehicles.view" | "vehicles.manage") 
   return { session };
 }
 
+async function requireStaff() {
+  const session = await getSessionUser();
+  if (!session) throw new Error("not_authorized");
+}
+
 function emptyText(value: FormDataEntryValue | null): string {
   return String(value ?? "").trim();
 }
@@ -64,23 +112,63 @@ function optionalText(value: FormDataEntryValue | null): string | null {
   return text || null;
 }
 
+async function identityTaken(
+  db: Firestore,
+  regNumber: string,
+  bikeId: string,
+  exceptId?: string,
+): Promise<"duplicate_plate" | "duplicate_bike_id" | null> {
+  const [plates, bikes] = await Promise.all([
+    db.collection(COLLECTIONS.vehicles).where("reg_number", "==", regNumber).get(),
+    db.collection(COLLECTIONS.vehicles).where("bike_id", "==", bikeId).get(),
+  ]);
+  if (plates.docs.some((doc) => doc.id !== exceptId)) return "duplicate_plate";
+  if (bikes.docs.some((doc) => doc.id !== exceptId)) return "duplicate_bike_id";
+  return null;
+}
+
+async function claimPlate(db: Firestore, plate: string, ownerId: string): Promise<boolean> {
+  const ref = db.collection(UNIQ_COLLECTIONS.plate).doc(encodeURIComponent(plate));
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const owner = snap.exists ? str(snap.data()?.owner_id) : "";
+    if (snap.exists && owner && owner !== ownerId) return false;
+    tx.set(ref, { owner_id: ownerId });
+    return true;
+  });
+}
+
+async function releasePlate(db: Firestore, plate: string, ownerId: string) {
+  const ref = db.collection(UNIQ_COLLECTIONS.plate).doc(encodeURIComponent(plate));
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (snap.exists && str(snap.data()?.owner_id) === ownerId) tx.delete(ref);
+  });
+}
+
 export async function listVehicleTypes(): Promise<VehicleTypeRow[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("vehicle_types")
-    .select("key, label_en, label_ar, sort_order, is_active")
-    .order("sort_order");
-  if (error) throw new Error(error.message);
-  return (data ?? []) as VehicleTypeRow[];
+  await requireStaff();
+  const db = await openDb();
+  const rows = await allRows(db, COLLECTIONS.vehicleTypes);
+  return rows
+    .map((row) => ({
+      key: str(row.key) || row.id,
+      label_en: str(row.label_en),
+      label_ar: str(row.label_ar),
+      sort_order: Number(row.sort_order ?? 0),
+      is_active: row.is_active !== false,
+    }))
+    .sort((a, b) => a.sort_order - b.sort_order);
 }
 
 export async function listVehiclePartners(): Promise<VehiclePartnerOption[]> {
   const auth = await requireVehicles("vehicles.view");
   if ("error" in auth) throw new Error(auth.error);
-  const supabase = await createClient();
-  const { data, error } = await supabase.from("partners").select("id, name").order("name");
-  if (error) throw new Error(error.message);
-  return (data ?? []) as VehiclePartnerOption[];
+  const db = await openDb();
+  const rows = await allRows(db, COLLECTIONS.partners);
+  return rows
+    .map((row) => ({ id: row.id, name: str(row.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 type VehicleDbRow = {
@@ -108,64 +196,65 @@ type VehicleDbRow = {
   created_at: string;
 };
 
+function mapVehicle(row: Row): VehicleDbRow {
+  return {
+    id: row.id,
+    bike_id: str(row.bike_id),
+    reg_number: str(row.reg_number) || null,
+    chassis_no: str(row.chassis_no) || null,
+    make: str(row.make) || null,
+    model: str(row.model) || null,
+    model_year: numOrNull(row.model_year),
+    project_type: row.project_type as VehicleProjectType,
+    status: row.status as VehicleStatus,
+    vehicle_type_key: str(row.vehicle_type_key),
+    location_text: str(row.location_text) || null,
+    condition: str(row.condition) || null,
+    car_type: str(row.car_type) || null,
+    type_of_use: str(row.type_of_use) || null,
+    fuel_type: str(row.fuel_type) || null,
+    fuel_company: str(row.fuel_company) || null,
+    chip_no: str(row.chip_no) || null,
+    fuel_monthly_limit_kwd: numOrNull(row.fuel_monthly_limit_kwd),
+    owner_partner_id: str(row.owner_partner_id) || null,
+    replaces_vehicle_id: str(row.replaces_vehicle_id) || null,
+    replacement_started_at: str(row.replacement_started_at) || null,
+    created_at: str(row.created_at),
+  };
+}
+
 export async function listVehicles(): Promise<VehicleListRow[]> {
   const auth = await requireVehicles("vehicles.view");
   if ("error" in auth) throw new Error(auth.error);
 
-  const supabase = await createClient();
+  const db = await openDb();
   const today = kuwaitTodayYmd();
-  // An overnight shift is logged on yesterday's Kuwait date, so both windows below are
-  // [today, yesterday] rather than today alone.
   const yesterday = addKuwaitDays(today, -1);
-  const [vehiclesRes, typesRes, driversRes, partnersRes, zonesRes, useTypesRes, logsRes, shiftsRes] =
+  const [vehicles, types, drivers, profiles, partners, zones, useTypes, logs, shifts] =
     await Promise.all([
-    supabase
-      .from("vehicles")
-      .select(
-        "id, bike_id, reg_number, chassis_no, make, model, model_year, project_type, status, vehicle_type_key, location_text, condition, car_type, type_of_use, fuel_type, fuel_company, chip_no, fuel_monthly_limit_kwd, owner_partner_id, replaces_vehicle_id, replacement_started_at, created_at",
-      )
-      .order("reg_number"),
-    supabase.from("vehicle_types").select("key, label_en, label_ar"),
-    supabase
-      .from("drivers")
-      .select(
-        "id, driver_code, employee_id, vehicle_id, partner_id, zone_id, project_key, accommodation, profiles!drivers_id_fkey(full_name, phone)",
-      )
-      .not("vehicle_id", "is", null)
-      .is("archived_at", null),
-    supabase.from("partners").select("id, name"),
-    supabase.from("zones").select("id, name"),
-    supabase.from("vehicle_use_types").select("key, label_en, label_ar"),
-    supabase
-      .from("attendance_logs")
-      .select("driver_id")
-      // On Duty is the open attendance row itself: `check_out_at IS NULL`, not "checked in
-      // today". A shift that began 22:00 yesterday is logged on yesterday's date, and the
-      // auto-checkout cron closes anything genuinely stale.
-      .gte("log_date", yesterday)
-      .not("check_in_at", "is", null)
-      .is("check_out_at", null),
-    supabase
-      .from("driver_daily_shifts")
-      .select(
-        "driver_id, shift_date, shift_type, session1_start, session1_end, session1_end_day_offset, session2_start, session2_end, session2_start_day_offset, session2_end_day_offset",
-      )
-      .in("shift_date", [today, yesterday]),
-  ]);
+      allRows(db, COLLECTIONS.vehicles),
+      allRows(db, COLLECTIONS.vehicleTypes),
+      allRows(db, COLLECTIONS.drivers),
+      allRows(db, COLLECTIONS.profiles),
+      allRows(db, COLLECTIONS.partners),
+      allRows(db, COLLECTIONS.zones),
+      allRows(db, COLLECTIONS.vehicleUseTypes),
+      db.collection(COLLECTIONS.attendanceLogs).where("log_date", ">=", yesterday).get(),
+      db.collection(COLLECTIONS.driverDailyShifts).where("shift_date", "in", [today, yesterday]).get(),
+    ]);
 
-  if (vehiclesRes.error) throw new Error(vehiclesRes.error.message);
-
+  const vehicleRows = vehicles
+    .map(mapVehicle)
+    .sort((a, b) => (a.reg_number ?? "").localeCompare(b.reg_number ?? ""));
   const typeLabels = new Map(
-    ((typesRes.data ?? []) as Array<{ key: string; label_en: string; label_ar: string }>).map(
-      (row) => [row.key, row],
-    ),
+    types.map((row) => [
+      str(row.key) || row.id,
+      { label_en: str(row.label_en), label_ar: str(row.label_ar) },
+    ]),
   );
-  const partnerNames = new Map(
-    ((partnersRes.data ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]),
-  );
-  const zoneNames = new Map(
-    ((zonesRes.data ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]),
-  );
+  const partnerNames = new Map(partners.map((row) => [row.id, str(row.name)]));
+  const zoneNames = new Map(zones.map((row) => [row.id, str(row.name)]));
+  const profileById = new Map(profiles.map((row) => [row.id, row]));
   const assigned = new Map<
     string,
     {
@@ -180,48 +269,38 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       zone_name: string | null;
     }
   >();
-  for (const row of (driversRes.data ?? []) as Array<{
-    id: string;
-    driver_code: string;
-    employee_id: string;
-    vehicle_id: string | null;
-    partner_id: string | null;
-    zone_id: string | null;
-    project_key: string | null;
-    accommodation: string | null;
-    profiles: { full_name: string | null; phone: string | null } | { full_name: string | null; phone: string | null }[] | null;
-  }>) {
-    if (!row.vehicle_id) continue;
-    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-    assigned.set(row.vehicle_id, {
+  for (const row of drivers) {
+    if (row.archived_at) continue;
+    const vehicleId = str(row.vehicle_id);
+    if (!vehicleId) continue;
+    const profile = profileById.get(row.id);
+    assigned.set(vehicleId, {
       id: row.id,
-      driver_code: row.driver_code,
-      employee_id: row.employee_id,
-      name: profile?.full_name ?? null,
-      phone: profile?.phone ?? null,
-      project_key: row.project_key,
-      accommodation: row.accommodation,
-      partner_name: row.partner_id ? partnerNames.get(row.partner_id) ?? null : null,
-      zone_name: row.zone_id ? zoneNames.get(row.zone_id) ?? null : null,
+      driver_code: str(row.driver_code),
+      employee_id: str(row.employee_id),
+      name: str(profile?.full_name) || null,
+      phone: str(profile?.phone) || null,
+      project_key: str(row.project_key) || null,
+      accommodation: str(row.accommodation) || null,
+      partner_name: str(row.partner_id) ? partnerNames.get(str(row.partner_id)) ?? null : null,
+      zone_name: str(row.zone_id) ? zoneNames.get(str(row.zone_id)) ?? null : null,
     });
   }
 
-  const plateById = new Map(
-    ((vehiclesRes.data ?? []) as VehicleDbRow[]).map((row) => [row.id, row.reg_number]),
-  );
+  const plateById = new Map(vehicleRows.map((row) => [row.id, row.reg_number]));
   const useTypeLabels = new Map(
-    ((useTypesRes.data ?? []) as Array<{ key: string; label_en: string; label_ar: string }>).map(
-      (row) => [row.key, row.label_en],
-    ),
+    useTypes.map((row) => [str(row.key) || row.id, str(row.label_en)]),
   );
   const openAttendance = new Set(
-    ((logsRes.data ?? []) as Array<{ driver_id: string }>).map((row) => row.driver_id),
+    logs.docs
+      .map((doc) => asRow(doc.id, doc.data()))
+      .filter((row) => row.check_in_at != null && row.check_out_at == null)
+      .map((row) => str(row.driver_id))
+      .filter(Boolean),
   );
-  // One row per driver per Kuwait day, so a driver can legitimately hold two here across
-  // the two-day window; `findActiveShiftRow` picks the one still current (today's, or
-  // yesterday's overnight).
   const shiftRowsByDriver = new Map<string, ShiftRow[]>();
-  for (const row of (shiftsRes.data ?? []) as ShiftRow[]) {
+  for (const doc of shifts.docs) {
+    const row = asRow(doc.id, doc.data()) as unknown as ShiftRow;
     const list = shiftRowsByDriver.get(row.driver_id);
     if (list) list.push(row);
     else shiftRowsByDriver.set(row.driver_id, [row]);
@@ -234,7 +313,7 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
 
   void logAdminRead("vehicles", "/vehicles");
 
-  return ((vehiclesRes.data ?? []) as VehicleDbRow[]).map((row) => {
+  return vehicleRows.map((row) => {
     const driver = assigned.get(row.id);
     const type = typeLabels.get(row.vehicle_type_key);
     const useKey = row.type_of_use?.trim() || null;
@@ -288,6 +367,30 @@ export async function getVehicle(id: string): Promise<VehicleListRow | null> {
   return rows.find((row) => row.id === id) ?? null;
 }
 
+async function updateLinkedIntakes(
+  db: Firestore,
+  driverId: string,
+  patch: Record<string, unknown>,
+) {
+  const snap = await db
+    .collection(COLLECTIONS.driverIntakes)
+    .where("linked_profile_id", "==", driverId)
+    .where("archived_at", "==", null)
+    .get();
+  let batch = db.batch();
+  let pending = 0;
+  for (const doc of snap.docs) {
+    batch.set(doc.ref, patch, { merge: true });
+    pending += 1;
+    if (pending >= 400) {
+      await batch.commit();
+      batch = db.batch();
+      pending = 0;
+    }
+  }
+  if (pending > 0) await batch.commit();
+}
+
 export async function saveVehicle(
   formData: FormData,
 ): Promise<{ error?: string; id?: string }> {
@@ -333,20 +436,23 @@ export async function saveVehicle(
     ? fuelCompanyRaw
     : null;
   const typeOfUse = typeOfUseRaw || null;
-
   const modelYear = modelYearRaw ? Number(modelYearRaw) : null;
-
-  const fuelMonthlyLimit = limitRaw
-    ? Number(limitRaw)
-    : defaultFuelMonthlyLimit(vehicleTypeKey);
-
+  const fuelMonthlyLimit = limitRaw ? Number(limitRaw) : defaultFuelMonthlyLimit(vehicleTypeKey);
   if (replacesVehicleId && replacesVehicleId === id) return { error: "invalid_replacement" };
-
   const replacementStartedAt = replacesVehicleId
     ? kuwaitYmdToIso(replacementStartedRaw) ?? new Date().toISOString()
     : null;
 
-  const supabase = await createClient();
+  const db = await openDb();
+  const vehicleId = id || crypto.randomUUID();
+  const taken = await identityTaken(db, regNumber, bikeId, id || undefined);
+  if (taken) return { error: taken };
+  const claimed = await claimPlate(db, regNumber, vehicleId);
+  if (!claimed) return { error: formatError({ code: "23505", message: "reg_number" }) };
+
+  const existingSnap = id ? await db.collection(COLLECTIONS.vehicles).doc(id).get() : null;
+  const previousPlate = existingSnap?.exists ? str(existingSnap.data()?.reg_number) : "";
+
   const payload = {
     bike_id: bikeId,
     reg_number: regNumber,
@@ -368,59 +474,66 @@ export async function saveVehicle(
     owner_partner_id: optionalText(formData.get("ownerPartnerId")),
     replaces_vehicle_id: replacesVehicleId,
     replacement_started_at: replacementStartedAt,
-    updated_at: new Date().toISOString(),
+    updated_at: new Date(),
   };
 
+  try {
+    if (id) {
+      await db.collection(COLLECTIONS.vehicles).doc(id).set(payload, { merge: true });
+    } else {
+      await db.collection(COLLECTIONS.vehicles).doc(vehicleId).set({
+        id: vehicleId,
+        ...payload,
+        created_by: auth.session.id,
+        created_at: new Date(),
+      });
+    }
+  } catch (error) {
+    if (!id) await releasePlate(db, regNumber, vehicleId).catch(() => undefined);
+    return { error: formatError(error as { message?: string }) };
+  }
+
+  if (previousPlate && previousPlate !== regNumber) {
+    await releasePlate(db, previousPlate, vehicleId).catch(() => undefined);
+  }
+
   if (id) {
-    const { error } = await supabase.from("vehicles").update(payload).eq("id", id);
-    if (error) return { error: formatError(error) };
     const projectWrite = assignedDriverProjectWrite(
       emptyText(formData.get("assignedDriverId")),
       formData.get("projectKey"),
     );
     if (projectWrite) {
-      const { error: driverError } = await supabase
-        .from("drivers")
-        .update({
+      try {
+        await db.collection(COLLECTIONS.drivers).doc(projectWrite.driverId).set(
+          { project_key: projectWrite.project_key, updated_at: new Date() },
+          { merge: true },
+        );
+        await updateLinkedIntakes(db, projectWrite.driverId, {
           project_key: projectWrite.project_key,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", projectWrite.driverId);
-      if (driverError) return { error: formatError(driverError) };
-      const { error: intakeError } = await supabase
-        .from("driver_intakes")
-        .update({
-          project_key: projectWrite.project_key,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("linked_profile_id", projectWrite.driverId)
-        .is("archived_at", null);
-      if (intakeError) return { error: formatError(intakeError) };
+          updated_at: new Date(),
+        });
+      } catch (error) {
+        return { error: formatError(error as { message?: string }) };
+      }
     }
     void logAdminMutation({
       action: "update",
       entityType: "vehicle",
       entityId: id,
       routeName: "/vehicles",
-      after: payload,
+      after: { ...payload, updated_at: new Date().toISOString() },
     });
     return { id };
   }
 
-  const { data, error } = await supabase
-    .from("vehicles")
-    .insert({ ...payload, created_by: auth.session.id })
-    .select("id")
-    .single();
-  if (error) return { error: formatError(error) };
   void logAdminMutation({
     action: "create",
     entityType: "vehicle",
-    entityId: data.id,
+    entityId: vehicleId,
     routeName: "/vehicles",
-    after: payload,
+    after: { ...payload, updated_at: new Date().toISOString() },
   });
-    return { id: data.id };
+  return { id: vehicleId };
 }
 
 export async function assignVehicleDriver(
@@ -432,52 +545,46 @@ export async function assignVehicleDriver(
   const id = vehicleId.trim();
   if (!id) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const now = new Date().toISOString();
+  const db = await openDb();
+  const now = new Date();
   const nextDriverId = driverId?.trim() || null;
+  const previousSnap = await db
+    .collection(COLLECTIONS.drivers)
+    .where("vehicle_id", "==", id)
+    .where("archived_at", "==", null)
+    .get();
+  const previousIds = previousSnap.docs.map((doc) => doc.id);
 
-  const { data: previous, error: previousError } = await supabase
-    .from("drivers")
-    .select("id")
-    .eq("vehicle_id", id)
-    .is("archived_at", null);
-  if (previousError) return { error: formatError(previousError) };
+  try {
+    const assignedDrivers = await db.collection(COLLECTIONS.drivers).where("vehicle_id", "==", id).get();
+    let batch = db.batch();
+    let pending = 0;
+    const queue = (ref: DocumentReference, patch: Record<string, unknown>) => {
+      batch.set(ref, patch, { merge: true });
+      pending += 1;
+    };
+    for (const doc of assignedDrivers.docs) queue(doc.ref, { vehicle_id: null, updated_at: now });
+    const assignedIntakes = await db
+      .collection(COLLECTIONS.driverIntakes)
+      .where("vehicle_id", "==", id)
+      .where("archived_at", "==", null)
+      .get();
+    for (const doc of assignedIntakes.docs) queue(doc.ref, { vehicle_id: null, updated_at: now });
+    if (pending > 0) await batch.commit();
 
-  const { error: clearDriversError } = await supabase
-    .from("drivers")
-    .update({ vehicle_id: null, updated_at: now })
-    .eq("vehicle_id", id);
-  if (clearDriversError) return { error: formatError(clearDriversError) };
-
-  const { error: clearIntakesError } = await supabase
-    .from("driver_intakes")
-    .update({ vehicle_id: null, updated_at: now })
-    .eq("vehicle_id", id)
-    .is("archived_at", null);
-  if (clearIntakesError) return { error: formatError(clearIntakesError) };
-
-  if (nextDriverId) {
-    const { data: driver, error: driverError } = await supabase
-      .from("drivers")
-      .select("id")
-      .eq("id", nextDriverId)
-      .is("archived_at", null)
-      .maybeSingle();
-    if (driverError) return { error: formatError(driverError) };
-    if (!driver) return { error: "missing_fields" };
-
-    const { error: setDriverError } = await supabase
-      .from("drivers")
-      .update({ vehicle_id: id, updated_at: now })
-      .eq("id", nextDriverId);
-    if (setDriverError) return { error: formatError(setDriverError) };
-
-    const { error: setIntakeError } = await supabase
-      .from("driver_intakes")
-      .update({ vehicle_id: id, updated_at: now })
-      .eq("linked_profile_id", nextDriverId)
-      .is("archived_at", null);
-    if (setIntakeError) return { error: formatError(setIntakeError) };
+    if (nextDriverId) {
+      const driverSnap = await db.collection(COLLECTIONS.drivers).doc(nextDriverId).get();
+      if (!driverSnap.exists || driverSnap.data()?.archived_at != null) {
+        return { error: "missing_fields" };
+      }
+      await db.collection(COLLECTIONS.drivers).doc(nextDriverId).set(
+        { vehicle_id: id, updated_at: now },
+        { merge: true },
+      );
+      await updateLinkedIntakes(db, nextDriverId, { vehicle_id: id, updated_at: now });
+    }
+  } catch (error) {
+    return { error: formatError(error as { message?: string }) };
   }
 
   void logAdminMutation({
@@ -487,7 +594,7 @@ export async function assignVehicleDriver(
     routeName: "/vehicles",
     after: {
       assigned_driver_id: nextDriverId,
-      previous_driver_ids: (previous ?? []).map((row) => row.id),
+      previous_driver_ids: previousIds,
     },
   });
   return {};
@@ -525,10 +632,10 @@ export async function bulkUpdateVehicles(
   if (unique.length === 0) return { error: "missing_fields" };
 
   const payload: {
-    updated_at: string;
+    updated_at: Date;
     status?: VehicleStatus;
     owner_partner_id?: string | null;
-  } = { updated_at: new Date().toISOString() };
+  } = { updated_at: new Date() };
   if (patch.status === "active" || patch.status === "suspended" || patch.status === "maintenance") {
     payload.status = patch.status;
   }
@@ -539,15 +646,32 @@ export async function bulkUpdateVehicles(
     return { error: "missing_fields" };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("vehicles").update(payload).in("id", unique);
-  if (error) return { error: formatError(error) };
+  const db = await openDb();
+  try {
+    const refs = unique.map((id) => db.collection(COLLECTIONS.vehicles).doc(id));
+    const snaps = await db.getAll(...refs);
+    let batch = db.batch();
+    let pending = 0;
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      batch.set(snap.ref, payload, { merge: true });
+      pending += 1;
+      if (pending >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) await batch.commit();
+  } catch (error) {
+    return { error: formatError(error as { message?: string }) };
+  }
   void logAdminMutation({
     action: "update",
     entityType: "vehicle",
     entityId: unique[0] ?? "bulk",
     routeName: "/vehicles",
-    after: { ids: unique, ...payload },
+    after: { ids: unique, ...payload, updated_at: payload.updated_at.toISOString() },
   });
   return { updated: unique.length };
 }
@@ -561,12 +685,21 @@ export async function updateVehicleTypeLabel(formData: FormData): Promise<{ erro
   const labelAr = emptyText(formData.get("labelAr"));
   if (!key || !labelEn || !labelAr) return { error: "missing_fields" };
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("vehicle_types")
-    .update({ label_en: labelEn, label_ar: labelAr })
-    .eq("key", key);
-  if (error) return { error: formatError(error) };
+  const db = await openDb();
+  try {
+    const byId = db.collection(COLLECTIONS.vehicleTypes).doc(key);
+    const snap = await byId.get();
+    if (snap.exists) {
+      await byId.set({ label_en: labelEn, label_ar: labelAr }, { merge: true });
+    } else {
+      const found = await db.collection(COLLECTIONS.vehicleTypes).where("key", "==", key).limit(1).get();
+      const doc = found.docs[0];
+      if (!doc) return { error: "save_failed" };
+      await doc.ref.set({ label_en: labelEn, label_ar: labelAr }, { merge: true });
+    }
+  } catch (error) {
+    return { error: formatError(error as { message?: string }) };
+  }
 
   void logAdminMutation({
     action: "update",

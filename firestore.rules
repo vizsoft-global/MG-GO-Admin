@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// Firestore rules for musallam-delivery-prod.
+//
+// Posture, per the migration plan: the client SDK is never the staff write path.
+// Staff reads and every staff write go through the Admin SDK on the server
+// (Next server actions / Cloud Functions) after the permission check in
+// src/lib/auth/permissions.ts. Only two things are reachable from a client:
+//
+//   1. The single public app_settings doc (branding, maintenance, force-update)
+//      which the rider app reads before login. Read-only, no auth required.
+//   2. A rider's own driver document, matched by uid.
+//
+// Everything else denies by default. The catch-all is deliberate — a collection
+// added by the data load is locked until someone writes an explicit rule.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /app_settings/{document} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /drivers/{driverId} {
+      allow read: if request.auth != null && request.auth.uid == driverId;
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

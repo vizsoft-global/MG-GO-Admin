@@ -9,7 +9,7 @@ export default async function VehicleDetailPage({
   searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
-  searchParams: Promise<{ edit?: string }>;
+  searchParams: Promise<{ edit?: string; tab?: string }>;
 }) {
   const { locale, id } = await params;
   const query = await searchParams;
@@ -19,5 +19,12 @@ export default async function VehicleDetailPage({
   const [vehicle, types] = await Promise.all([getVehicle(id), listVehicleTypes()]);
   if (!vehicle) notFound();
 
-  return <VehicleDetailPageShell vehicle={vehicle} types={types} editOpen={query.edit === "1"} />;
+  return (
+    <VehicleDetailPageShell
+      vehicle={vehicle}
+      types={types}
+      editOpen={query.edit === "1"}
+      initialTab={query.tab}
+    />
+  );
 }

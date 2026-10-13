@@ -1,9 +1,9 @@
 "use server";
 
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import {
   DEFAULT_ORDERS_REPORT_FROM_TIME,
   DEFAULT_ORDERS_REPORT_TO_TIME,
@@ -57,26 +57,30 @@ export async function fetchDeliveryOrdersReport(input: {
   );
   assertDeliveryOrdersReportRange(from, to, fromTime, toTime);
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("report_delivery_orders", {
-    p_from: from,
-    p_to: to,
-    p_from_time: `${fromTime}:00`,
-    p_to_time: `${toTime}:00`,
-  });
+  const { data, error } = await callAdminFunction<Record<string, unknown>[]>(
+    "report_delivery_orders",
+    {
+      p_from: from,
+      p_to: to,
+      p_from_time: `${fromTime}:00`,
+      p_to_time: `${toTime}:00`,
+    },
+  );
 
   if (error) {
     throw new Error(error.message);
   }
+
+  const rows = Array.isArray(data) ? data : [];
 
   void logAdminRead("delivery_orders_report", "/deliveries", {
     from,
     to,
     fromTime,
     toTime,
-    rowCount: data?.length ?? 0,
+    rowCount: rows.length,
   });
 
-  const rpcRows = ((data ?? []) as Record<string, unknown>[]).map(parseRpcRow);
+  const rpcRows = rows.map(parseRpcRow);
   return pivotDeliveryOrdersReport(from, to, rpcRows, fromTime, toTime);
 }

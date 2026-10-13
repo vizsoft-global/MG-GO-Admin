@@ -1,9 +1,11 @@
 "use server";
 
+import type { Firestore } from "firebase-admin/firestore";
 import type { Database } from "@/types/database";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import type {
@@ -120,122 +122,185 @@ function sanitizeSearchTerm(term: string): string {
   return term.trim().replace(/[%_,]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function ilikePattern(term: string): string {
-  return `%${term}%`;
+function isoOf(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  const ts = value as { toDate?: () => Date };
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  return null;
 }
 
+function pgFail(err: unknown): PgLikeError {
+  const error = err as { code?: string; message?: string };
+  const code = error?.code === "already-exists" ? "23505" : error?.code;
+  return { code: code ?? null, message: error?.message ?? String(err) };
+}
+
+async function verifyDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
+}
+
+function includesCi(value: unknown, term: string): boolean {
+  return String(value ?? "").toLowerCase().includes(term.toLowerCase());
+}
+
+type SearchHits = { driverIds: Set<string>; restaurantIds: Set<string>; partnerIds: Set<string> };
+
 async function buildVerificationSearchOrFilter(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  db: Firestore,
   search: string | undefined,
-): Promise<"empty" | string | null> {
+): Promise<"empty" | SearchHits | null> {
   const term = sanitizeSearchTerm(search ?? "");
   if (!term) return null;
-
-  const pattern = ilikePattern(term);
   const driverIds = new Set<string>();
   const restaurantIds = new Set<string>();
   const partnerIds = new Set<string>();
-
-  const [{ data: drivers }, { data: restaurants }, { data: partners }, { data: profiles }] =
-    await Promise.all([
-      supabase
-        .from("drivers")
-        .select("id")
-        .or(`driver_code.ilike.${pattern},employee_id.ilike.${pattern}`)
-        .limit(200),
-      supabase.from("restaurants").select("id").ilike("name", pattern).limit(200),
-      supabase.from("partners").select("id").ilike("name", pattern).limit(100),
-      supabase.from("profiles").select("id").ilike("full_name", pattern).limit(200),
-    ]);
-
-  for (const row of drivers ?? []) driverIds.add(row.id);
-  for (const row of profiles ?? []) driverIds.add(row.id);
-  for (const row of restaurants ?? []) restaurantIds.add(row.id);
-  for (const row of partners ?? []) partnerIds.add(row.id);
-
-  if (driverIds.size === 0 && restaurantIds.size === 0 && partnerIds.size === 0) {
-    return "empty";
-  }
-
-  const parts: string[] = [];
-  if (driverIds.size > 0) {
-    parts.push(`driver_id.in.(${[...driverIds].join(",")})`);
-  }
-  if (restaurantIds.size > 0) {
-    parts.push(`restaurant_id.in.(${[...restaurantIds].join(",")})`);
-  }
-  if (partnerIds.size > 0) {
-    parts.push(`partner_id.in.(${[...partnerIds].join(",")})`);
-  }
-  return parts.join(",");
-}
-
-function applyVerificationListFilters<
-  T extends {
-    eq: (col: string, val: string) => T;
-    gte: (col: string, val: string) => T;
-    lte: (col: string, val: string) => T;
-    in: (col: string, vals: string[]) => T;
-    or: (filter: string) => T;
-  },
->(query: T, filters: VerificationListFilters): T {
-  if (filters.status && filters.status !== "all") {
-    query = query.eq("status", filters.status);
-  } else if (filters.tab && filters.tab !== "all") {
-    if (filters.tab === "needs_action") {
-      query = query.in("status", ["pending", "deficit", "conflict", "surplus"]);
-    } else if (filters.tab === "matched") {
-      query = query.eq("status", "matched");
-    } else if (filters.tab === "deficit") {
-      query = query.eq("status", "deficit");
-    } else if (filters.tab === "pending") {
-      query = query.eq("status", "pending");
+  const [drivers, restaurants, partners, profiles] = await Promise.all([
+    db.collection(COLLECTIONS.drivers).limit(2000).get(),
+    db.collection(COLLECTIONS.restaurants).limit(2000).get(),
+    db.collection(COLLECTIONS.partners).limit(500).get(),
+    db.collection(COLLECTIONS.profiles).limit(2000).get(),
+  ]);
+  for (const doc of drivers.docs) {
+    const row = doc.data();
+    if (includesCi(row.driver_code, term) || includesCi(row.employee_id, term)) {
+      if (driverIds.size < 200) driverIds.add(doc.id);
     }
   }
+  for (const doc of profiles.docs) {
+    if (includesCi(doc.data().full_name, term) && driverIds.size < 200) driverIds.add(doc.id);
+  }
+  for (const doc of restaurants.docs) {
+    if (includesCi(doc.data().name, term) && restaurantIds.size < 200) restaurantIds.add(doc.id);
+  }
+  for (const doc of partners.docs) {
+    if (includesCi(doc.data().name, term) && partnerIds.size < 100) partnerIds.add(doc.id);
+  }
+  if (driverIds.size === 0 && restaurantIds.size === 0 && partnerIds.size === 0) return "empty";
+  return { driverIds, restaurantIds, partnerIds };
+}
 
-  if (filters.dateFrom) {
-    query = query.gte("service_date", filters.dateFrom);
-  }
-  if (filters.dateTo) {
-    query = query.lte("service_date", filters.dateTo);
-  }
-  if (filters.driverId) {
-    query = query.eq("driver_id", filters.driverId);
-  }
-  if (filters.restaurantId) {
-    query = query.eq("restaurant_id", filters.restaurantId);
-  }
-  if (filters.partnerId) {
-    query = query.eq("partner_id", filters.partnerId);
-  }
-  if (filters.source && filters.source !== "all") {
-    query = query.eq("source", filters.source);
-  }
+type VerificationDoc = {
+  id: string;
+  driver_id: string;
+  restaurant_id: string;
+  partner_id: string;
+  service_date: string;
+  reported_count: number;
+  matched_count: number;
+  under_review_count: number;
+  shortfall_count: number;
+  status: string;
+  source: string;
+  notes: string | null;
+  reconciled_at: string | null;
+  created_at: string;
+  import_batch_id?: string | null;
+};
 
-  return query;
+function verificationFromDoc(id: string, row: Record<string, unknown>): VerificationDoc {
+  return {
+    id,
+    driver_id: String(row.driver_id ?? ""),
+    restaurant_id: String(row.restaurant_id ?? ""),
+    partner_id: String(row.partner_id ?? ""),
+    service_date: String(row.service_date ?? ""),
+    reported_count: Number(row.reported_count ?? 0),
+    matched_count: Number(row.matched_count ?? 0),
+    under_review_count: Number(row.under_review_count ?? 0),
+    shortfall_count: Number(row.shortfall_count ?? 0),
+    status: String(row.status ?? ""),
+    source: String(row.source ?? ""),
+    notes: (row.notes as string | null) ?? null,
+    reconciled_at: isoOf(row.reconciled_at),
+    created_at: isoOf(row.created_at) ?? "",
+    import_batch_id: (row.import_batch_id as string | null) ?? null,
+  };
+}
+
+function matchesVerificationFilters(row: VerificationDoc, filters: VerificationListFilters): boolean {
+  if (filters.status && filters.status !== "all" && row.status !== filters.status) return false;
+  if ((!filters.status || filters.status === "all") && filters.tab && filters.tab !== "all") {
+    if (filters.tab === "needs_action" && !["pending", "deficit", "conflict", "surplus"].includes(row.status)) {
+      return false;
+    }
+    if (filters.tab === "matched" && row.status !== "matched") return false;
+    if (filters.tab === "deficit" && row.status !== "deficit") return false;
+    if (filters.tab === "pending" && row.status !== "pending") return false;
+  }
+  if (filters.dateFrom && row.service_date < filters.dateFrom) return false;
+  if (filters.dateTo && row.service_date > filters.dateTo) return false;
+  if (filters.driverId && row.driver_id !== filters.driverId) return false;
+  if (filters.restaurantId && row.restaurant_id !== filters.restaurantId) return false;
+  if (filters.partnerId && row.partner_id !== filters.partnerId) return false;
+  if (filters.source && filters.source !== "all" && row.source !== filters.source) return false;
+  return true;
+}
+
+async function namesById(db: Firestore, collection: string, ids: string[], field: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 100) {
+    const refs = ids.slice(i, i + 100).map((id) => db.collection(collection).doc(id));
+    const found = refs.length ? await db.getAll(...refs) : [];
+    for (const doc of found) {
+      if (!doc.exists) continue;
+      out.set(doc.id, String(doc.data()?.[field] ?? ""));
+    }
+  }
+  return out;
+}
+
+async function hydrateVerificationRows(db: Firestore, docs: VerificationDoc[]): Promise<VerificationListRow[]> {
+  const driverIds = [...new Set(docs.map((row) => row.driver_id).filter(Boolean))];
+  const restaurantIds = [...new Set(docs.map((row) => row.restaurant_id).filter(Boolean))];
+  const partnerIds = [...new Set(docs.map((row) => row.partner_id).filter(Boolean))];
+  const [codes, employees, names, restaurants, partners] = await Promise.all([
+    namesById(db, COLLECTIONS.drivers, driverIds, "driver_code"),
+    namesById(db, COLLECTIONS.drivers, driverIds, "employee_id"),
+    namesById(db, COLLECTIONS.profiles, driverIds, "full_name"),
+    namesById(db, COLLECTIONS.restaurants, restaurantIds, "name"),
+    namesById(db, COLLECTIONS.partners, partnerIds, "name"),
+  ]);
+  return docs.map((row) =>
+    mapVerificationRow({
+      ...row,
+      drivers: {
+        driver_code: codes.get(row.driver_id) ?? "—",
+        employee_id: employees.get(row.driver_id) ?? null,
+        profiles: { full_name: names.get(row.driver_id) ?? null },
+      },
+      restaurants: { name: restaurants.get(row.restaurant_id) ?? "—" },
+      partners: { name: partners.get(row.partner_id) ?? "—" },
+    }),
+  );
+}
+
+async function loadVerificationDocs(db: Firestore): Promise<VerificationDoc[]> {
+  const snap = await db.collection(COLLECTIONS.deliveryVerifications).get();
+  return snap.docs.map((doc) => verificationFromDoc(doc.id, doc.data()));
 }
 
 export async function fetchVerificationListStats(
   filters: Pick<VerificationListFilters, "dateFrom" | "dateTo" | "partnerId"> = {},
 ): Promise<VerificationListStats> {
   await requireVerificationsView();
-  const supabase = await createClient();
+  const db = await verifyDb();
 
   type VerificationStatusValue = NonNullable<
     Database["public"]["Tables"]["delivery_verifications"]["Row"]["status"]
   >;
-  const countFor = async (status?: VerificationStatusValue) => {
-    let q = supabase
-      .from("delivery_verifications")
-      .select("*", { count: "exact", head: true });
-    if (filters.dateFrom) q = q.gte("service_date", filters.dateFrom);
-    if (filters.dateTo) q = q.lte("service_date", filters.dateTo);
-    if (filters.partnerId) q = q.eq("partner_id", filters.partnerId);
-    if (status) q = q.eq("status", status);
-    const { count, error } = await q;
-    if (error) throw error;
-    return count ?? 0;
-  };
+  const rows = await loadVerificationDocs(db);
+  const countFor = async (status?: VerificationStatusValue) =>
+    rows.filter((row) => {
+      if (filters.dateFrom && row.service_date < filters.dateFrom) return false;
+      if (filters.dateTo && row.service_date > filters.dateTo) return false;
+      if (filters.partnerId && row.partner_id !== filters.partnerId) return false;
+      if (status && row.status !== status) return false;
+      return true;
+    }).length;
 
   const [total, matched, deficit, pending, conflict, surplus] = await Promise.all([
     countFor(),
@@ -297,14 +362,13 @@ export async function listVerifications(params: {
   void logAdminRead("delivery_verifications", "listVerifications", {
     filters: params.filters ?? {},
   });
-  const supabase = await createClient();
+  const db = await verifyDb();
   const filters = params.filters ?? {};
   const limit = params.limit ?? PAGE_SIZE;
   const page = params.page ?? 0;
   const from = page * limit;
-  const to = from + limit - 1;
 
-  const searchFilter = await buildVerificationSearchOrFilter(supabase, filters.search);
+  const searchFilter = await buildVerificationSearchOrFilter(db, filters.search);
   if (searchFilter === "empty") {
     return { rows: [], totalCount: 0, hasMore: false };
   }
@@ -312,51 +376,25 @@ export async function listVerifications(params: {
   const sortBy = filters.sortBy ?? "service_date";
   const sortDir = filters.sortDir ?? "desc";
   const ascending = sortDir === "asc";
-
-  let query = supabase
-    .from("delivery_verifications")
-    .select(
-      `
-      id,
-      driver_id,
-      restaurant_id,
-      partner_id,
-      service_date,
-      reported_count,
-      matched_count,
-      under_review_count,
-      shortfall_count,
-      status,
-      source,
-      notes,
-      reconciled_at,
-      created_at,
-      drivers (
-        driver_code,
-        employee_id,
-        profiles!drivers_id_fkey (full_name)
-      ),
-      restaurants (name),
-      partners (name)
-    `,
-      { count: "exact" },
-    )
-    .order(sortBy, { ascending })
-    .order("id", { ascending: false });
-
-  query = applyVerificationListFilters(query, filters);
-
-  if (searchFilter) {
-    query = query.or(searchFilter);
-  }
-
-  query = query.range(from, to);
-
-  const { data, error, count } = await query;
-  if (error) throw error;
-
-  const rows = (data ?? []).map((r) => mapVerificationRow(r as Record<string, unknown>));
-  const totalCount = count ?? 0;
+  const matched = (await loadVerificationDocs(db)).filter((row) => {
+    if (!matchesVerificationFilters(row, filters)) return false;
+    if (!searchFilter) return true;
+    return (
+      searchFilter.driverIds.has(row.driver_id) ||
+      searchFilter.restaurantIds.has(row.restaurant_id) ||
+      searchFilter.partnerIds.has(row.partner_id)
+    );
+  });
+  matched.sort((a, b) => {
+    const av = String((a as Record<string, unknown>)[sortBy] ?? "");
+    const bv = String((b as Record<string, unknown>)[sortBy] ?? "");
+    const cmp = av.localeCompare(bv);
+    if (cmp !== 0) return ascending ? cmp : -cmp;
+    return b.id.localeCompare(a.id);
+  });
+  const pageRows = matched.slice(from, from + limit);
+  const rows = await hydrateVerificationRows(db, pageRows);
+  const totalCount = matched.length;
   const hasMore = from + rows.length < totalCount;
 
   return { rows, totalCount, hasMore };
@@ -366,64 +404,45 @@ export async function fetchVerificationDetail(
   id: string,
 ): Promise<VerificationDetailModel | null> {
   await requireVerificationsView();
-  const supabase = await createClient();
+  const db = await verifyDb();
+  const doc = await db.collection(COLLECTIONS.deliveryVerifications).doc(id).get();
+  if (!doc.exists) return null;
+  const [base] = await hydrateVerificationRows(db, [verificationFromDoc(doc.id, doc.data() ?? {})]);
+  if (!base) return null;
 
-  const { data: row, error } = await supabase
-    .from("delivery_verifications")
-    .select(
-      `
-      id,
-      driver_id,
-      restaurant_id,
-      partner_id,
-      service_date,
-      reported_count,
-      matched_count,
-      under_review_count,
-      shortfall_count,
-      status,
-      source,
-      notes,
-      reconciled_at,
-      created_at,
-      drivers (
-        driver_code,
-        employee_id,
-        profiles!drivers_id_fkey (full_name)
-      ),
-      restaurants (name),
-      partners (name)
-    `,
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const balanceSnap = await db
+    .collection("verification_balances")
+    .where("driver_id", "==", base.driver_id)
+    .get();
+  const balance = balanceSnap.docs
+    .map((item) => item.data())
+    .find((row) => String(row.restaurant_id ?? "") === base.restaurant_id);
 
-  if (error || !row) return null;
+  const startIso = `${base.service_date}T00:00:00+03:00`;
+  const endIso = `${base.service_date}T23:59:59.999+03:00`;
+  const deliverySnap = await db
+    .collection(COLLECTIONS.deliveries)
+    .where("driver_id", "==", base.driver_id)
+    .get();
+  const deliveries = deliverySnap.docs
+    .map((item) => {
+      const row = item.data();
+      return {
+        id: item.id,
+        status: row.status as string | undefined,
+        delivered_at: row.delivered_at as unknown,
+        external_order_id: (row.external_order_id as string | null) ?? null,
+        restaurant_id: (row.restaurant_id as string | null) ?? null,
+        partner_id: (row.partner_id as string | null) ?? null,
+      };
+    })
+    .filter((row) => {
+      const at = isoOf(row.delivered_at);
+      return at != null && at >= startIso && at <= endIso;
+    })
+    .sort((a, b) => (isoOf(a.delivered_at) ?? "").localeCompare(isoOf(b.delivered_at) ?? ""));
 
-  const base = mapVerificationRow(row as Record<string, unknown>);
-
-  const { data: balance } = await supabase
-    .from("verification_balances")
-    .select("balance_count")
-    .eq("driver_id", base.driver_id)
-    .eq("restaurant_id", base.restaurant_id)
-    .maybeSingle();
-
-  const { data: deliveries } = await supabase
-    .from("deliveries")
-    .select("id, status, delivered_at, external_order_id, restaurant_id, partner_id")
-    .eq("driver_id", base.driver_id)
-    .gte(
-      "delivered_at",
-      `${base.service_date}T00:00:00+03:00`,
-    )
-    .lte(
-      "delivered_at",
-      `${base.service_date}T23:59:59.999+03:00`,
-    )
-    .order("delivered_at", { ascending: true });
-
-  const scoped = (deliveries ?? []).filter(
+  const scoped = deliveries.filter(
     (d) =>
       d.restaurant_id === base.restaurant_id ||
       (d.restaurant_id == null && d.partner_id === base.partner_id),
@@ -431,13 +450,13 @@ export async function fetchVerificationDetail(
 
   return {
     ...base,
-    balance_count: balance?.balance_count ?? 0,
+    balance_count: Number(balance?.balance_count ?? 0),
     deliveries: scoped.map((d) => ({
       id: d.id,
       short_id: shortId(d.id),
-      status: d.status,
-      delivered_at: d.delivered_at,
-      external_order_id: d.external_order_id,
+      status: String(d.status ?? ""),
+      delivered_at: isoOf(d.delivered_at),
+      external_order_id: (d.external_order_id as string | null) ?? null,
     })),
   };
 }
@@ -446,52 +465,32 @@ export async function fetchVerificationDriverOptions(
   search?: string,
 ): Promise<VerificationDriverOption[]> {
   await requireVerificationsView();
-  const supabase = await createClient();
+  const db = await verifyDb();
   const term = sanitizeSearchTerm(search ?? "");
-  const pattern = ilikePattern(term);
-
-  let query = supabase
-    .from("drivers")
-    .select(
-      `
-      id,
-      driver_code,
-      employee_id,
-      partner_id,
-      profiles!drivers_id_fkey (full_name)
-    `,
-    )
-    .order("driver_code")
-    .limit(term ? 100 : 100);
-
-  if (term) {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id")
-      .ilike("full_name", pattern)
-      .limit(100);
-
-    const profileIds = (profiles ?? []).map((p) => p.id);
-    const orParts = [`driver_code.ilike.${pattern}`, `employee_id.ilike.${pattern}`];
-    if (profileIds.length > 0) {
-      orParts.push(`id.in.(${profileIds.join(",")})`);
-    }
-    query = query.or(orParts.join(","));
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  return (data ?? []).map((d) => {
-    const prof = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
-    return {
-      id: d.id,
-      driver_code: d.driver_code,
-      employee_id: d.employee_id ?? null,
-      full_name: prof?.full_name ?? "—",
-      partner_id: d.partner_id,
-    };
-  });
+  const snap = await db.collection(COLLECTIONS.drivers).limit(2000).get();
+  const nameIds = snap.docs.map((doc) => doc.id);
+  const names = await namesById(db, COLLECTIONS.profiles, nameIds.slice(0, 500), "full_name");
+  return snap.docs
+    .map((doc) => {
+      const row = doc.data();
+      return {
+        id: doc.id,
+        driver_code: String(row.driver_code ?? ""),
+        employee_id: (row.employee_id as string | null) ?? null,
+        full_name: names.get(doc.id) || "—",
+        partner_id: (row.partner_id as string | null) ?? null,
+      };
+    })
+    .filter((row) => {
+      if (!term) return true;
+      return (
+        includesCi(row.driver_code, term) ||
+        includesCi(row.employee_id, term) ||
+        includesCi(row.full_name, term)
+      );
+    })
+    .sort((a, b) => a.driver_code.localeCompare(b.driver_code))
+    .slice(0, 100);
 }
 
 export type DriverAssignedRestaurant = {
@@ -508,73 +507,45 @@ export async function fetchDriverAssignedRestaurants(
   await requireVerificationsView();
   if (!driverId) return [];
 
-  const supabase = await createClient();
-
-  // Pull the driver's directly-assigned restaurants (driver_restaurants junction)
-  // and also any restaurants assigned via the intake table for legacy support.
-  const [{ data: directRows }, { data: driver }] = await Promise.all([
-    supabase
-      .from("driver_restaurants")
-      .select("restaurant_id")
-      .eq("driver_id", driverId),
-    supabase.from("drivers").select("partner_id").eq("id", driverId).maybeSingle(),
+  const db = await verifyDb();
+  const [directSnap, driverDoc] = await Promise.all([
+    db.collection(COLLECTIONS.driverRestaurants).where("driver_id", "==", driverId).get(),
+    db.collection(COLLECTIONS.drivers).doc(driverId).get(),
   ]);
-
-  const directIds = new Set<string>(
-    (directRows ?? []).map((r) => r.restaurant_id as string),
+  const directIds = new Set(directSnap.docs.map((doc) => String(doc.data().restaurant_id ?? "")));
+  const partnerId = (driverDoc.data()?.partner_id as string | null) ?? null;
+  const intakeSnap = await db.collection("driver_intakes").where("linked_profile_id", "==", driverId).get();
+  const intake = intakeSnap.docs
+    .filter((doc) => doc.data().archived_at == null)
+    .sort((a, b) => (isoOf(b.data().created_at) ?? "").localeCompare(isoOf(a.data().created_at) ?? ""))[0];
+  if (intake) {
+    const intakeRows = await db.collection("driver_intake_restaurants").where("intake_id", "==", intake.id).get();
+    for (const row of intakeRows.docs) directIds.add(String(row.data().restaurant_id ?? ""));
+  }
+  if (directIds.size === 0 && !partnerId) return [];
+  const restaurantSnap = await db.collection(COLLECTIONS.restaurants).get();
+  const chosen = restaurantSnap.docs.filter((doc) =>
+    directIds.size > 0 ? directIds.has(doc.id) : doc.data().partner_id === partnerId,
   );
-
-  // Look up the linked intake (if any) for additional restaurant assignments.
-  // driver_intakes.linked_profile_id matches drivers.id (both are the profile id).
-  const { data: intakes } = await supabase
-    .from("driver_intakes")
-    .select("id")
-    .eq("linked_profile_id", driverId)
-    .is("archived_at", null)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  const intakeId = intakes?.[0]?.id;
-  if (intakeId) {
-    const { data: intakeRows } = await supabase
-      .from("driver_intake_restaurants")
-      .select("restaurant_id")
-      .eq("intake_id", intakeId);
-    for (const row of intakeRows ?? []) directIds.add(row.restaurant_id as string);
-  }
-
-  if (directIds.size === 0 && !driver?.partner_id) return [];
-
-  const ids = Array.from(directIds);
-
-  // Hydrate restaurant rows. If the driver has no direct assignments, fall back
-  // to all restaurants on the driver's partner so the UI still shows chips.
-  let query = supabase
-    .from("restaurants")
-    .select(
-      "id, name, status, partner_id, partners (name)",
-    )
-    .order("name");
-
-  if (ids.length > 0) {
-    query = query.in("id", ids);
-  } else if (driver?.partner_id) {
-    query = query.eq("partner_id", driver.partner_id);
-  }
-
-  const { data: restaurants } = await query;
-  if (!restaurants) return [];
-
-  return restaurants.map((r) => {
-    const partnerRel = r.partners as { name: string } | { name: string }[] | null;
-    return {
-      id: r.id as string,
-      name: (r.name as string) ?? "—",
-      partner_id: (r.partner_id as string | null) ?? null,
-      partner_name: relName(partnerRel),
-      status: (r.status as string) ?? "draft",
-    };
-  });
+  const partnerNames = await namesById(
+    db,
+    COLLECTIONS.partners,
+    [...new Set(chosen.map((doc) => String(doc.data().partner_id ?? "")).filter(Boolean))],
+    "name",
+  );
+  return chosen
+    .map((doc) => {
+      const row = doc.data();
+      const pid = (row.partner_id as string | null) ?? null;
+      return {
+        id: doc.id,
+        name: String(row.name ?? "—"),
+        partner_id: pid,
+        partner_name: pid ? partnerNames.get(pid) ?? "—" : "—",
+        status: String(row.status ?? "draft"),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export type VerificationMutationResult =
@@ -599,29 +570,23 @@ export async function createVerification(input: {
     return { error: "invalid_count" };
   }
 
-  const supabase = await createClient();
-  const { data: restaurant, error: restaurantError } = await supabase
-    .from("restaurants")
-    .select("id, partner_id")
-    .eq("id", restaurantId)
-    .maybeSingle();
-
-  if (restaurantError) {
-    console.error("[createVerification] restaurant lookup failed", restaurantError);
-    return {
-      error: "save_failed",
-      errorDetail: formatPgErrorDetail(restaurantError),
-    };
-  }
-  if (!restaurant) return { error: "restaurant_not_found" };
+  const db = await verifyDb();
+  const restaurantDoc = await db.collection(COLLECTIONS.restaurants).doc(restaurantId).get();
+  const restaurant = restaurantDoc.data();
+  if (!restaurantDoc.exists || !restaurant) return { error: "restaurant_not_found" };
   if (!restaurant.partner_id) return { error: "restaurant_not_found" };
-
-  // Fall back to admin client if RLS prevents the staff role from inserting; the
-  // session.id is captured so we still attribute the row to the acting admin.
-  const writer = supabase;
-  const { data, error } = await writer
-    .from("delivery_verifications")
-    .insert({
+  const existing = await db
+    .collection(COLLECTIONS.deliveryVerifications)
+    .where("driver_id", "==", driverId)
+    .get();
+  const duplicate = existing.docs.some((doc) => {
+    const row = doc.data();
+    return row.restaurant_id === restaurantId && String(row.service_date) === serviceDate;
+  });
+  if (duplicate) return { error: "duplicate" };
+  const created = db.collection(COLLECTIONS.deliveryVerifications).doc();
+  try {
+    await created.set({
       driver_id: driverId,
       restaurant_id: restaurantId,
       partner_id: restaurant.partner_id,
@@ -630,71 +595,21 @@ export async function createVerification(input: {
       notes: notes?.trim() || null,
       source: "manual",
       created_by: session.id,
-    })
-    .select("id")
-    .single();
-
-  if (error) {
+      created_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    const error = pgFail(err);
     if (error.code === "23505") return { error: "duplicate" };
-    console.error("[createVerification] insert failed", {
-      code: error.code,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-    });
-    // Retry with the service-role client so we surface the underlying issue
-    // instead of letting RLS quietly hide a permission gap.
-    const admin = createAdminClient();
-    const retry = await admin
-      .from("delivery_verifications")
-      .insert({
-        driver_id: driverId,
-        restaurant_id: restaurantId,
-        partner_id: restaurant.partner_id,
-        service_date: serviceDate,
-        reported_count: reportedCount,
-        notes: notes?.trim() || null,
-        source: "manual",
-        created_by: session.id,
-      })
-      .select("id")
-      .single();
-    if (retry.error) {
-      console.error("[createVerification] admin retry failed", {
-        code: retry.error.code,
-        message: retry.error.message,
-        details: retry.error.details,
-        hint: retry.error.hint,
-      });
-      if (retry.error.code === "23505") return { error: "duplicate" };
-      return {
-        error: "save_failed",
-        errorDetail: formatPgErrorDetail(retry.error),
-      };
-    }
-    void logAdminMutation({
-      action: "create",
-      entityType: "delivery_verification",
-      entityId: retry.data.id,
-      routeName: "createVerification",
-      after: {
-        driver_id: driverId,
-        restaurant_id: restaurantId,
-        service_date: serviceDate,
-      },
-    });
-    return { success: true, id: retry.data.id };
+    return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
   }
-
   void logAdminMutation({
     action: "create",
     entityType: "delivery_verification",
-    entityId: data.id,
+    entityId: created.id,
     routeName: "createVerification",
     after: { driver_id: driverId, restaurant_id: restaurantId, service_date: serviceDate },
   });
-
-  return { success: true, id: data.id };
+  return { success: true, id: created.id };
 }
 
 export async function updateVerification(input: {
@@ -709,21 +624,18 @@ export async function updateVerification(input: {
     return { error: "invalid_count" };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("delivery_verifications")
-    .update({
-      reported_count: input.reportedCount,
-      notes: input.notes?.trim() || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", input.id);
-
-  if (error) {
-    return {
-      error: "save_failed",
-      errorDetail: formatPgErrorDetail(error),
-    };
+  const db = await verifyDb();
+  try {
+    await db.collection(COLLECTIONS.deliveryVerifications).doc(input.id).set(
+      {
+        reported_count: input.reportedCount,
+        notes: input.notes?.trim() || null,
+        updated_at: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+  } catch (err) {
+    return { error: "save_failed", errorDetail: formatPgErrorDetail(pgFail(err)) };
   }
   void logAdminMutation({
     action: "update",
@@ -741,15 +653,15 @@ export async function reconcileVerification(
   const session = await requireVerificationsManage();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("reconcile_delivery_verification", {
+  const { error } = await callAdminFunction("reconcile_delivery_verification", {
     p_verification_id: id,
+    verificationId: id,
   });
 
   if (error) {
     return {
       error: "reconcile_failed",
-      errorDetail: formatPgErrorDetail(error),
+      errorDetail: formatPgErrorDetail(pgFail(error)),
     };
   }
   void logAdminMutation({
@@ -768,17 +680,11 @@ export async function deleteVerification(
   const session = await requireSuperAdmin();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await createAdminClient();
-  const { error } = await supabase
-    .from("delivery_verifications")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    return {
-      error: "delete_failed",
-      errorDetail: formatPgErrorDetail(error),
-    };
+  const db = await verifyDb();
+  try {
+    await db.collection(COLLECTIONS.deliveryVerifications).doc(id).delete();
+  } catch (err) {
+    return { error: "delete_failed", errorDetail: formatPgErrorDetail(pgFail(err)) };
   }
   void logAdminMutation({
     action: "delete",
@@ -793,14 +699,44 @@ export async function resolveImportPreview(
   rows: ImportMappedRow[],
 ): Promise<ImportPreviewRow[]> {
   await requireVerificationsManage();
-  const supabase = await createClient();
-
-  const [{ data: drivers }, { data: restaurants }] = await Promise.all([
-    supabase
-      .from("drivers")
-      .select("id, driver_code, employee_id, partner_id, profiles!drivers_id_fkey(full_name)"),
-    supabase.from("restaurants").select("id, name, partner_id, external_merchant_id, partners(name)"),
+  const db = await verifyDb();
+  const [driverSnap, restaurantSnap] = await Promise.all([
+    db.collection(COLLECTIONS.drivers).get(),
+    db.collection(COLLECTIONS.restaurants).get(),
   ]);
+  const profileNames = await namesById(
+    db,
+    COLLECTIONS.profiles,
+    driverSnap.docs.map((doc) => doc.id),
+    "full_name",
+  );
+  const partnerNames = await namesById(
+    db,
+    COLLECTIONS.partners,
+    [...new Set(restaurantSnap.docs.map((doc) => String(doc.data().partner_id ?? "")).filter(Boolean))],
+    "name",
+  );
+  const drivers = driverSnap.docs.map((doc) => {
+    const row = doc.data();
+    return {
+      id: doc.id,
+      driver_code: String(row.driver_code ?? ""),
+      employee_id: (row.employee_id as string | null) ?? null,
+      partner_id: (row.partner_id as string | null) ?? null,
+      profiles: { full_name: profileNames.get(doc.id) ?? null },
+    };
+  });
+  const restaurants = restaurantSnap.docs.map((doc) => {
+    const row = doc.data();
+    const pid = (row.partner_id as string | null) ?? null;
+    return {
+      id: doc.id,
+      name: String(row.name ?? ""),
+      partner_id: pid,
+      external_merchant_id: (row.external_merchant_id as string | null) ?? null,
+      partners: { name: pid ? partnerNames.get(pid) ?? "—" : "—" },
+    };
+  });
 
   type DriverLookup = {
     id: string;
@@ -925,10 +861,10 @@ export async function applyImportBatch(payload: {
   );
   const preCheckSkipped = payload.rows.length - ready.length;
 
-  const supabase = await createClient();
-  const { data: batch, error: batchError } = await supabase
-    .from("verification_import_batches")
-    .insert({
+  const db = await verifyDb();
+  const batchRef = db.collection("verification_import_batches").doc();
+  try {
+    await batchRef.set({
       file_name: payload.fileName,
       mapping: payload.mapping,
       row_count: payload.rows.length,
@@ -936,30 +872,22 @@ export async function applyImportBatch(payload: {
       skipped_count: preCheckSkipped,
       status: "applied",
       uploaded_by: session.id,
-    })
-    .select("id")
-    .single();
-
-  if (batchError || !batch) {
+      uploaded_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    const batchError = pgFail(err);
     logPgError("applyImportBatch.batchInsert", batchError);
     return { error: "save_failed", errorDetail: formatPgErrorDetail(batchError) };
   }
+  const batch = { id: batchRef.id };
 
   let applied = 0;
   const failures: Array<{ rowIndex: number; reason: string }> = [];
   for (const row of ready) {
-    const { data: restaurant, error: restaurantError } = await supabase
-      .from("restaurants")
-      .select("partner_id")
-      .eq("id", row.restaurant_id!)
-      .single();
-
-    if (restaurantError) {
-      logPgError("applyImportBatch.restaurantLookup", restaurantError);
-      failures.push({
-        rowIndex: row.rowIndex,
-        reason: formatPgErrorDetail(restaurantError) ?? "restaurant lookup failed",
-      });
+    const restaurantDoc = await db.collection(COLLECTIONS.restaurants).doc(row.restaurant_id!).get();
+    const restaurant = restaurantDoc.data();
+    if (!restaurantDoc.exists) {
+      failures.push({ rowIndex: row.rowIndex, reason: "restaurant lookup failed" });
       continue;
     }
 
@@ -983,42 +911,42 @@ export async function applyImportBatch(payload: {
       created_by: session.id,
     };
 
-    if (payload.duplicateStrategy === "replace") {
-      const { error } = await supabase
-        .from("delivery_verifications")
-        .upsert(record, { onConflict: "driver_id,restaurant_id,service_date" });
-      if (!error) {
+    const existingSnap = await db
+      .collection(COLLECTIONS.deliveryVerifications)
+      .where("driver_id", "==", record.driver_id)
+      .get();
+    const existing = existingSnap.docs.find((doc) => {
+      const stored = doc.data();
+      return stored.restaurant_id === record.restaurant_id && String(stored.service_date) === record.service_date;
+    });
+    try {
+      if (payload.duplicateStrategy === "replace") {
+        const ref = existing?.ref ?? db.collection(COLLECTIONS.deliveryVerifications).doc();
+        await ref.set(record, { merge: Boolean(existing) });
         applied += 1;
-      } else {
-        logPgError("applyImportBatch.upsert", error);
-        failures.push({
-          rowIndex: row.rowIndex,
-          reason: formatPgErrorDetail(error) ?? error.message,
-        });
-      }
-    } else {
-      const { error } = await supabase.from("delivery_verifications").insert(record);
-      if (!error) {
-        applied += 1;
-      } else if (error.code === "23505") {
+      } else if (existing) {
         failures.push({ rowIndex: row.rowIndex, reason: "Duplicate (skip strategy)" });
       } else {
-        logPgError("applyImportBatch.insert", error);
-        failures.push({
-          rowIndex: row.rowIndex,
-          reason: formatPgErrorDetail(error) ?? error.message,
-        });
+        await db.collection(COLLECTIONS.deliveryVerifications).doc().set(record);
+        applied += 1;
       }
+    } catch (err) {
+      const error = pgFail(err);
+      logPgError("applyImportBatch.write", error);
+      failures.push({
+        rowIndex: row.rowIndex,
+        reason: formatPgErrorDetail(error) ?? error.message ?? "save_failed",
+      });
     }
   }
 
-  await supabase
-    .from("verification_import_batches")
-    .update({
+  await batchRef.set(
+    {
       applied_count: applied,
       skipped_count: preCheckSkipped + (ready.length - applied),
-    })
-    .eq("id", batch.id);
+    },
+    { merge: true },
+  );
 
   return {
     success: true,
@@ -1031,53 +959,58 @@ export async function applyImportBatch(payload: {
 
 export async function listImportBatches(): Promise<VerificationImportBatchRow[]> {
   await requireVerificationsView();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("verification_import_batches")
-    .select(
-      "id, file_name, row_count, applied_count, skipped_count, status, uploaded_at, reverted_at",
-    )
-    .order("uploaded_at", { ascending: false })
-    .limit(100);
-
-  if (error) throw error;
-  return (data ?? []) as VerificationImportBatchRow[];
+  const db = await verifyDb();
+  const snap = await db.collection("verification_import_batches").get();
+  return snap.docs
+    .map((doc) => {
+      const row = doc.data();
+      return {
+        id: doc.id,
+        file_name: String(row.file_name ?? ""),
+        row_count: Number(row.row_count ?? 0),
+        applied_count: Number(row.applied_count ?? 0),
+        skipped_count: Number(row.skipped_count ?? 0),
+        status: String(row.status ?? ""),
+        uploaded_at: isoOf(row.uploaded_at) ?? "",
+        reverted_at: isoOf(row.reverted_at),
+      } as VerificationImportBatchRow;
+    })
+    .sort((a, b) => String(b.uploaded_at ?? "").localeCompare(String(a.uploaded_at ?? "")))
+    .slice(0, 100);
 }
 
 export async function getVerificationExportData(): Promise<VerificationExportData> {
   await requireVerificationsView();
-  const supabase = await createClient();
+  const db = await verifyDb();
+  const snap = await db.collection(COLLECTIONS.restaurants).get();
+  const partnerNames = await namesById(
+    db,
+    COLLECTIONS.partners,
+    [...new Set(snap.docs.map((doc) => String(doc.data().partner_id ?? "")).filter(Boolean))],
+    "name",
+  );
+  const zoneIds = [...new Set(snap.docs.map((doc) => String(doc.data().zone_id ?? "")).filter(Boolean))];
+  const zoneNames = await namesById(db, COLLECTIONS.zones, zoneIds, "name");
+  const zoneCodes = await namesById(db, COLLECTIONS.zones, zoneIds, "code");
 
-  const { data: rows, error } = await supabase
-    .from("restaurants")
-    .select(
-      `
-      id,
-      name,
-      external_merchant_id,
-      status,
-      partner_id,
-      zone_id,
-      partners (name),
-      zones (name, code)
-    `,
-    )
-    .order("name", { ascending: true });
-
-  if (error) throw error;
-
-  const restaurants = (rows ?? []).map((row) => {
-    const partnerRel = Array.isArray(row.partners) ? row.partners[0] : row.partners;
-    const zoneRel = Array.isArray(row.zones) ? row.zones[0] : row.zones;
+  const restaurants = snap.docs.map((doc) => {
+    const row = doc.data();
+    const partnerId = (row.partner_id as string | null) ?? null;
+    const zoneId = (row.zone_id as string | null) ?? null;
+    const partnerRel = { name: partnerId ? partnerNames.get(partnerId) ?? "—" : "—" };
+    const zoneRel = {
+      name: zoneId ? zoneNames.get(zoneId) ?? "—" : "—",
+      code: zoneId ? zoneCodes.get(zoneId) ?? "" : "",
+    };
     return {
-      restaurant_id: row.id,
-      restaurant_name: row.name,
-      restaurant_external_id: row.external_merchant_id ?? null,
-      partner_id: row.partner_id ?? null,
+      restaurant_id: doc.id,
+      restaurant_name: String(row.name ?? ""),
+      restaurant_external_id: (row.external_merchant_id as string | null) ?? null,
+      partner_id: partnerId,
       partner_name: partnerRel?.name ?? "—",
-      zone_id: row.zone_id ?? null,
+      zone_id: zoneId,
       zone_name: zoneRel?.name ?? "—",
-      status: row.status ?? "draft",
+      status: String(row.status ?? "draft"),
       zone_code: zoneRel?.code ?? "",
     };
   });
@@ -1138,70 +1071,62 @@ export async function revertImportBatch(
   const session = await requireSuperAdmin();
   if (!session) return { error: "not_authorized" };
 
-  const supabase = await createAdminClient();
-  const { data: batch } = await supabase
-    .from("verification_import_batches")
-    .select("id, status")
-    .eq("id", batchId)
-    .maybeSingle();
-
-  if (!batch) return { error: "batch_not_found" };
+  const db = await verifyDb();
+  const batchDoc = await db.collection("verification_import_batches").doc(batchId).get();
+  const batch = batchDoc.data();
+  if (!batchDoc.exists || !batch) return { error: "batch_not_found" };
   if (batch.status === "reverted") return { error: "batch_already_reverted" };
 
-  const { data: verifications } = await supabase
-    .from("delivery_verifications")
-    .select(
-      "id, driver_id, restaurant_id, partner_id, service_date, shortfall_count",
-    )
-    .eq("import_batch_id", batchId);
+  const verificationSnap = await db
+    .collection(COLLECTIONS.deliveryVerifications)
+    .where("import_batch_id", "==", batchId)
+    .get();
 
-  for (const v of verifications ?? []) {
-    await supabase
-      .from("deliveries")
-      .update({ status: "pending", updated_at: new Date().toISOString() })
-      .eq("driver_id", v.driver_id)
-      .in("status", ["verified", "under_review"])
-      .gte("delivered_at", `${v.service_date}T00:00:00+03:00`)
-      .lte("delivered_at", `${v.service_date}T23:59:59.999+03:00`)
-      .or(
-        `restaurant_id.eq.${v.restaurant_id},and(restaurant_id.is.null,partner_id.eq.${v.partner_id})`,
+  for (const doc of verificationSnap.docs) {
+    const v = doc.data();
+    const startIso = `${String(v.service_date)}T00:00:00+03:00`;
+    const endIso = `${String(v.service_date)}T23:59:59.999+03:00`;
+    const deliverySnap = await db
+      .collection(COLLECTIONS.deliveries)
+      .where("driver_id", "==", v.driver_id)
+      .get();
+    for (const delivery of deliverySnap.docs) {
+      const row = delivery.data();
+      const at = isoOf(row.delivered_at);
+      const status = String(row.status ?? "");
+      if (!at || at < startIso || at > endIso) continue;
+      if (status !== "verified" && status !== "under_review") continue;
+      const sameRestaurant = row.restaurant_id === v.restaurant_id;
+      const partnerFallback = row.restaurant_id == null && row.partner_id === v.partner_id;
+      if (!sameRestaurant && !partnerFallback) continue;
+      await delivery.ref.set(
+        { status: "pending", updated_at: new Date().toISOString() },
+        { merge: true },
       );
+    }
 
-    if (v.shortfall_count > 0) {
-      const { data: bal } = await supabase
-        .from("verification_balances")
-        .select("balance_count")
-        .eq("driver_id", v.driver_id)
-        .eq("restaurant_id", v.restaurant_id)
-        .maybeSingle();
-
-      const next = Math.max(0, (bal?.balance_count ?? 0) - v.shortfall_count);
-      if (next === 0) {
-        await supabase
-          .from("verification_balances")
-          .delete()
-          .eq("driver_id", v.driver_id)
-          .eq("restaurant_id", v.restaurant_id);
+    if (Number(v.shortfall_count) > 0) {
+      const balSnap = await db.collection("verification_balances").where("driver_id", "==", v.driver_id).get();
+      const bal = balSnap.docs.find((item) => item.data().restaurant_id === v.restaurant_id);
+      const next = Math.max(0, Number(bal?.data().balance_count ?? 0) - Number(v.shortfall_count));
+      if (!bal || next === 0) {
+        if (bal) await bal.ref.delete();
       } else {
-        await supabase
-          .from("verification_balances")
-          .update({ balance_count: next, updated_at: new Date().toISOString() })
-          .eq("driver_id", v.driver_id)
-          .eq("restaurant_id", v.restaurant_id);
+        await bal.ref.set({ balance_count: next, updated_at: new Date().toISOString() }, { merge: true });
       }
     }
 
-    await supabase.from("delivery_verifications").delete().eq("id", v.id);
+    await doc.ref.delete();
   }
 
-  await supabase
-    .from("verification_import_batches")
-    .update({
+  await batchDoc.ref.set(
+    {
       status: "reverted",
       reverted_at: new Date().toISOString(),
       reverted_by: session.id,
-    })
-    .eq("id", batchId);
+    },
+    { merge: true },
+  );
 
   return { success: true, id: batchId };
 }

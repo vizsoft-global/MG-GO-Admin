@@ -1,12 +1,39 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { updateTag } from "next/cache";
 import * as Sentry from "@sentry/nextjs";
-import { createClient } from "@/lib/supabase/server";
-import { syncAdminProfile } from "@/lib/auth/sync-profile";
+import { getFirebaseAuth, getFirebaseFirestore } from "@/lib/firebase/admin";
+import {
+  SESSION_COOKIE_OPTIONS,
+  SESSION_DURATION_MS,
+  STAFF_SESSION_COOKIE,
+  createStaffSessionCookie,
+  verifyStaffSessionCookie,
+} from "@/lib/firebase/session";
+import {
+  revokeStaffSessions,
+  resetPasswordWithCode,
+  sendStaffPasswordReset,
+  setStaffPassword,
+  signInStaffWithPassword,
+} from "@/lib/firebase/staff-auth";
+import { claimSuperAdminAtomic, syncAdminProfile } from "@/lib/auth/sync-profile";
 import { getAppOpsSettings } from "@/lib/auth/app-settings";
 import { logAdminAuthEvent } from "@/lib/audit/log-admin-activity";
+
+/** Mints the session cookie from a fresh ID token. */
+async function establishSession(idToken: string): Promise<boolean> {
+  const cookie = await createStaffSessionCookie(idToken, SESSION_DURATION_MS);
+  if (!cookie) return false;
+  const jar = await cookies();
+  jar.set(STAFF_SESSION_COOKIE, cookie, {
+    ...SESSION_COOKIE_OPTIONS,
+    maxAge: Math.floor(SESSION_DURATION_MS / 1000),
+  });
+  return true;
+}
 
 export async function signInWithEmail(
   locale: string,
@@ -19,32 +46,42 @@ export async function signInWithEmail(
     return { error: "missing_fields" };
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const result = await signInStaffWithPassword(email, password);
 
-  if (error) {
+  if (!result.ok) {
     void logAdminAuthEvent({
       action: "auth",
       routeName: "signInWithEmail",
       success: false,
       context: { email },
-      errorMessage: error.message,
+      errorMessage: result.error,
     });
+    return { error: result.error };
+  }
+
+  const db = await getFirebaseFirestore();
+  if (!db) {
     return { error: "invalid_credentials" };
   }
 
-  const sync = await syncAdminProfile(supabase, data.user, locale);
+  const sync = await syncAdminProfile(db, { id: result.uid, email }, locale);
 
   if (!sync.ok) {
-    await supabase.auth.signOut();
     void logAdminAuthEvent({
       action: "auth",
       routeName: "signInWithEmail",
       success: false,
       context: { email, reason: sync.reason },
-      adminUserId: data.user.id,
+      adminUserId: result.uid,
     });
     return { error: sync.reason === "not_authorized" ? "not_authorized" : "invalid_credentials" };
+  }
+
+  // Only mint the cookie once the profile says this account may enter. Ordering
+  // it the other way would hand a session to a rejected account and let the
+  // proxy do the refusing.
+  if (!(await establishSession(result.idToken))) {
+    return { error: "invalid_credentials" };
   }
 
   void logAdminAuthEvent({
@@ -52,7 +89,7 @@ export async function signInWithEmail(
     routeName: "signInWithEmail",
     success: true,
     context: { email, approvalStatus: sync.approvalStatus },
-    adminUserId: data.user.id,
+    adminUserId: result.uid,
   });
 
   const ops = await getAppOpsSettings();
@@ -80,77 +117,88 @@ export async function signUp(
     return { error: "missing_fields" };
   }
 
-  const supabase = await createClient();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${appUrl}/auth/callback?locale=${locale}`,
-      data: {
-        full_name: fullName,
-        locale,
-        signup_source: "admin_panel",
-      },
-    },
-  });
+  const auth = await getFirebaseAuth();
+  if (!auth) return { error: "signup_failed" };
 
-  if (error) {
-    const message = error.message.toLowerCase();
-    if (message.includes("invalid") && message.includes("email")) {
-      return { error: "invalid_email" };
-    }
-    if (message.includes("password") && (message.includes("at least") || message.includes("weak"))) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  let uid: string;
+  try {
+    const user = await auth.createUser({
+      email,
+      password,
+      displayName: fullName,
+      emailVerified: false,
+    });
+    uid = user.uid;
+  } catch (error) {
+    const code = (error as { code?: string })?.code ?? "";
+    if (code.includes("email-already-exists")) return { error: "email_exists" };
+    if (code.includes("invalid-email")) return { error: "invalid_email" };
+    if (code.includes("invalid-password") || code.includes("weak-password")) {
       return { error: "weak_password" };
     }
-    if (message.includes("already registered") || message.includes("already exists")) {
-      return { error: "email_exists" };
-    }
     return { error: "signup_failed" };
   }
 
-  if (!data.user) {
-    return { error: "signup_failed" };
-  }
+  const db = await getFirebaseFirestore();
+  if (!db) return { error: "signup_failed" };
 
-  // With email confirmation enabled (production), signUp returns no session.
-  // The pending staff profile is created by the on_auth_user_created_admin
-  // DB trigger; syncAdminProfile runs in /auth/callback once the user confirms.
-  if (!data.session) {
-    return { needsConfirmation: true };
-  }
+  // The pending staff profile is written here, which is what the Postgres
+  // on_auth_user_created trigger used to do.
+  await db.collection("profiles").doc(uid).set(
+    {
+      id: uid,
+      email,
+      full_name: fullName,
+      role: "staff",
+      locale,
+      approval_status: "pending",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    { merge: true },
+  );
 
-  const sync = await syncAdminProfile(supabase, data.user, locale, fullName);
+  void logAdminAuthEvent({
+    action: "auth",
+    routeName: "signUp",
+    success: true,
+    context: { email, appUrl },
+    adminUserId: uid,
+  });
 
-  if (!sync.ok) {
-    return { error: "signup_failed" };
-  }
-
-  const ops = await getAppOpsSettings();
-
-  if (!ops.superAdminClaimed) {
-    redirect(`/${locale}/setup/claim-super-admin`);
-  }
-
-  redirect(`/${locale}/pending-approval`);
+  return { needsConfirmation: true };
 }
 
 export async function claimSuperAdmin(locale: string): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const jar = await cookies();
+  const cookie = jar.get(STAFF_SESSION_COOKIE)?.value;
+  const probe = await verifyStaffSessionCookie(cookie);
 
-  if (!user) {
+  if (!probe.uid) {
     return { error: "not_authenticated" };
   }
 
-  const { data, error } = await supabase.rpc("claim_super_admin", {
-    p_user_id: user.id,
-  });
-
-  if (error || !data) {
+  const db = await getFirebaseFirestore();
+  if (!db) {
     return { error: "claim_failed" };
+  }
+
+  const claimed = await claimSuperAdminAtomic(db, probe.uid);
+  if (!claimed) {
+    return { error: "claim_failed" };
+  }
+
+  // Claims are what the proxy and the session read, so they move in the same
+  // step as the Firestore write — a claim the panel cannot see is not a claim.
+  const auth = await getFirebaseAuth();
+  if (auth) {
+    await auth.setCustomUserClaims(probe.uid, {
+      staff: true,
+      superAdmin: true,
+      roleId: null,
+    });
   }
 
   updateTag("app-settings");
@@ -169,20 +217,27 @@ export async function requestPasswordReset(
     return { error: "missing_fields" };
   }
 
-  const supabase = await createClient();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${appUrl}/auth/callback?next=/${locale}/reset-password`,
-  });
-
-  if (error) {
+  const sent = await sendStaffPasswordReset(
+    email,
+    `${appUrl}/${locale}/reset-password`,
+  );
+  if (!sent.ok) {
     return { error: "reset_failed" };
   }
 
   return { success: true };
 }
 
+/**
+ * Sets a password either from an emailed `oobCode` or from an existing session.
+ *
+ * Both paths end in a minted session cookie, so a completed reset signs the
+ * admin in rather than bouncing them to a login form to re-enter the password
+ * they just chose.
+ */
 export async function updatePassword(
+  locale: string,
   formData: FormData,
 ): Promise<{ error?: string; success?: boolean }> {
   const password = String(formData.get("password") ?? "");
@@ -190,10 +245,31 @@ export async function updatePassword(
     return { error: "weak_password" };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({ password });
+  const oobCode = String(formData.get("oobCode") ?? "").trim();
 
-  if (error) {
+  if (oobCode) {
+    const result = await resetPasswordWithCode(oobCode, password);
+    if (!result.ok) {
+      return { error: result.error };
+    }
+
+    if (!(await establishSession(result.idToken))) {
+      return { error: "update_failed" };
+    }
+
+    redirect(`/${locale}/dashboard`);
+  }
+
+  const jar = await cookies();
+  const cookie = jar.get(STAFF_SESSION_COOKIE)?.value;
+  const probe = await verifyStaffSessionCookie(cookie);
+
+  if (!probe.uid) {
+    return { error: "update_failed" };
+  }
+
+  const ok = await setStaffPassword(probe.uid, password);
+  if (!ok) {
     return { error: "update_failed" };
   }
 
@@ -201,8 +277,17 @@ export async function updatePassword(
 }
 
 export async function signOut(locale: string) {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  const jar = await cookies();
+  const cookie = jar.get(STAFF_SESSION_COOKIE)?.value;
+  const probe = await verifyStaffSessionCookie(cookie);
+
+  // Revoking refresh tokens is what makes sign-out mean something: clearing the
+  // cookie alone leaves a valid session for anyone holding a copy of it.
+  if (probe.uid) {
+    await revokeStaffSessions(probe.uid);
+  }
+
+  jar.delete(STAFF_SESSION_COOKIE);
   Sentry.setUser(null);
   redirect(`/${locale}/login`);
 }

@@ -21,16 +21,36 @@ export function RequesterHeader({
   driverId,
   requestId,
   requester,
+  variant = "card",
 }: {
   driverId: string;
   requestId?: string;
   requester: RequestRequester | null;
+  variant?: "card" | "inline";
 }) {
   const t = useTranslations("pages.requests");
   const name = requester?.name || "—";
   const profileHref = requestId
     ? `/drivers/${driverId}?from=requests&requestId=${requestId}`
     : `/drivers/${driverId}`;
+
+  switch (variant) {
+    case "inline":
+      return (
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{name}</p>
+          <Link href={profileHref} className="text-[12px] font-medium text-orange-700 hover:underline">
+            {t("detail.viewProfile")}
+          </Link>
+        </div>
+      );
+    case "card":
+      break;
+    default: {
+      const unreachable: never = variant;
+      return unreachable;
+    }
+  }
 
   return (
     <div className="flex min-w-0 items-center justify-between gap-2">

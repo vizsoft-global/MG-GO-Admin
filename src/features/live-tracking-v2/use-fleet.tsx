@@ -20,12 +20,16 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { createClient } from "@/lib/supabase/client";
 import { useVisibleInterval } from "@/lib/browser/use-visible-interval";
 
+import {
+  fetchFleetEventSeed,
+  fetchFleetOpsSeed,
+  fetchFleetZones,
+  fetchLiveFleetSnapshot,
+} from "./fleet-server-actions";
 import { FleetStore } from "./fleet-store";
 import { FleetTransport } from "./fleet-transport";
-import { loadFleetZones } from "./fleet-zones";
 import type { FleetDriver, FleetSnapshot } from "./fleet-types";
 
 type FleetContextValue = {
@@ -44,13 +48,14 @@ export function FleetProvider({ children }: { children: React.ReactNode }) {
    */
   const [value] = useState<FleetContextValue>(() => {
     const store = new FleetStore();
-    const supabase = createClient();
     return {
       store,
       transport: new FleetTransport({
         store,
-        supabase,
-        zonesLoader: () => loadFleetZones(supabase),
+        snapshotLoader: fetchLiveFleetSnapshot,
+        zonesLoader: fetchFleetZones,
+        eventSeedLoader: fetchFleetEventSeed,
+        opsSeedLoader: fetchFleetOpsSeed,
       }),
     };
   });

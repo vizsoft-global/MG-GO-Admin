@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { withCors } from "@/lib/http/cors";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
 import { requireDriverFromRequest } from "@/lib/storage/driver-upload-auth";
 import { headObject } from "@/lib/storage/r2-client";
-import { confirmPendingUpload } from "@/lib/storage/storage-upload-audit";
+import { confirmPendingUpload, STORAGE_UPLOADS } from "@/lib/storage/storage-upload-audit";
 
 async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") {
@@ -26,17 +27,17 @@ async function handler(request: Request): Promise<Response> {
     return NextResponse.json({ error: "missing_upload_id" }, { status: 400 });
   }
 
-  const { createAdminClient } = await import("@/lib/supabase/admin");
-  const admin = createAdminClient();
-  const { data: row } = await admin
-    .from("storage_uploads")
-    .select("object_key, uploaded_by, status")
-    .eq("id", uploadId)
-    .maybeSingle();
+  const db = await getFirebaseFirestore();
+  if (!db) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
 
-  if (!row) {
+  const snap = await db.collection(STORAGE_UPLOADS).doc(uploadId).get();
+  if (!snap.exists) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  const row = snap.data() ?? {};
+  const objectKey = typeof row.object_key === "string" ? row.object_key : "";
   if (row.uploaded_by !== auth.authUid) {
     return NextResponse.json({ error: "not_authorized" }, { status: 403 });
   }
@@ -44,7 +45,7 @@ async function handler(request: Request): Promise<Response> {
     return NextResponse.json({ error: "invalid_status" }, { status: 400 });
   }
 
-  const head = await headObject(row.object_key);
+  const head = await headObject(objectKey);
   if (!head.exists || head.size == null) {
     return NextResponse.json({ error: "object_not_found" }, { status: 400 });
   }

@@ -1,3 +1,8 @@
+import type { DocumentData, Firestore } from "firebase-admin/firestore";
+
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
+
 export type ActiveDriverHit = {
   id: string;
   driver_code: string;
@@ -25,71 +30,114 @@ export function parseSearchTerm(query: string): { name: string; id: string } {
   return { name: cleaned, id: "" };
 }
 
+type ProfileHit = { full_name: string; phone: string };
+
+function asText(value: unknown): string {
+  return value == null ? "" : String(value);
+}
+
+function contains(haystack: string, needle: string): boolean {
+  return haystack.toLowerCase().includes(needle.toLowerCase());
+}
+
+async function loadProfiles(
+  db: Firestore,
+  ids: string[],
+): Promise<Map<string, ProfileHit>> {
+  const out = new Map<string, ProfileHit>();
+  for (let i = 0; i < ids.length; i += 30) {
+    const chunk = ids.slice(i, i + 30);
+    const refs = chunk.map((id) => db.collection(COLLECTIONS.profiles).doc(id));
+    const docs = await db.getAll(...refs);
+    for (const doc of docs) {
+      if (!doc.exists) continue;
+      const data = doc.data() ?? {};
+      out.set(doc.id, {
+        full_name: asText(data.full_name),
+        phone: asText(data.phone),
+      });
+    }
+  }
+  return out;
+}
+
+function isArchived(data: DocumentData): boolean {
+  return data.archived_at != null;
+}
+
 /**
- * Search live drivers by employee ID, driver code, or profile name.
- * Name is resolved on `profiles` first — PostgREST cannot `.or()` a nested
- * column — with approved intakes as a second source for a rider who is not
- * linked to a driver row yet.
+ * Search live drivers by name, driver code, employee id, or phone.
+ * Active and non-archived only. Name also resolves through approved intakes
+ * that already carry a linked profile.
  */
 export async function searchActiveDrivers(
-  supabase: { from: (table: string) => any },
   query: string,
   limit = 30,
 ): Promise<ActiveDriverHit[]> {
   const { name, id } = parseSearchTerm(query);
   if (!name && !id) return [];
 
-  const orParts: string[] = [];
-  if (id) {
-    orParts.push(`employee_id.ilike.%${id}%`, `driver_code.ilike.%${id}%`);
+  const db = await staffDb();
+  if (!db) return [];
+
+  const [driverSnap, intakeSnap] = await Promise.all([
+    db.collection(COLLECTIONS.drivers).get(),
+    name ? db.collection(COLLECTIONS.driverIntakes).get() : Promise.resolve(null),
+  ]);
+
+  const nameIds = new Set<string>();
+  if (name && intakeSnap) {
+    for (const doc of intakeSnap.docs) {
+      const data = doc.data();
+      if (isArchived(data)) continue;
+      if (!contains(asText(data.full_name), name)) continue;
+      if (data.linked_profile_id) nameIds.add(String(data.linked_profile_id));
+    }
   }
+
+  const candidates: Array<{ id: string; data: DocumentData }> = [];
+  for (const doc of driverSnap.docs) {
+    const data = doc.data();
+    if (isArchived(data)) continue;
+    if (data.status !== "active") continue;
+    candidates.push({ id: doc.id, data });
+  }
+
+  const profiles = await loadProfiles(
+    db,
+    candidates.map((row) => row.id),
+  );
 
   if (name) {
-    const like = `%${name}%`;
-    const { data: nameRows } = await supabase
-      .from("profiles")
-      .select("id")
-      .ilike("full_name", like)
-      .limit(limit);
-
-    const nameIds = new Set<string>((nameRows ?? []).map((r: { id: string }) => r.id));
-
-    // Approved intakes that have not been linked to `drivers` yet still carry
-    // the name the operator typed. PostgREST cannot `.or()` a nested column,
-    // so these are resolved separately and folded into the id set.
-    const { data: intakeRows } = await supabase
-      .from("driver_intakes")
-      .select("linked_profile_id")
-      .ilike("full_name", like)
-      .is("archived_at", null)
-      .limit(limit);
-    for (const row of intakeRows ?? []) {
-      if (row.linked_profile_id) nameIds.add(String(row.linked_profile_id));
-    }
-
-    if (nameIds.size > 0) {
-      orParts.push(`id.in.(${[...nameIds].join(",")})`);
+    for (const [profileId, profile] of profiles) {
+      if (contains(profile.full_name, name)) nameIds.add(profileId);
     }
   }
 
-  if (orParts.length === 0) return [];
+  const hits: ActiveDriverHit[] = [];
+  for (const row of candidates) {
+    const profile = profiles.get(row.id);
+    const fullName = profile?.full_name.trim() || asText(row.data.full_name).trim() || "Driver";
+    const employeeId = asText(row.data.employee_id);
+    const driverCode = asText(row.data.driver_code);
+    const phone = profile?.phone || asText(row.data.phone);
 
-  const { data, error } = await supabase
-    .from("drivers")
-    .select("id, driver_code, employee_id, profiles!drivers_id_fkey(full_name)")
-    .is("archived_at", null)
-    .or(orParts.join(","))
-    .limit(limit);
+    const idHit =
+      !!id &&
+      (contains(employeeId, id) || contains(driverCode, id) || contains(phone, id));
+    const nameHit =
+      !!name &&
+      (nameIds.has(row.id) || contains(fullName, name) || contains(phone, name));
+    if (!idHit && !nameHit) continue;
 
-  if (error) throw new Error(error.message);
+    hits.push({
+      id: row.id,
+      driver_code: driverCode,
+      employee_id: employeeId,
+      full_name: fullName,
+    });
+    if (hits.length >= limit) break;
+  }
 
-  return (data ?? []).map((d: any) => {
-    const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
-    return {
-      id: d.id,
-      driver_code: d.driver_code,
-      employee_id: d.employee_id ?? "",
-      full_name: profile?.full_name?.trim() || "Driver",
-    };
-  });
+  return hits;
 }

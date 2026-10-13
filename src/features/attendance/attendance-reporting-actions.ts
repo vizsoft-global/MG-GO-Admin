@@ -1,7 +1,10 @@
 "use server";
 
+import type { Firestore } from "firebase-admin/firestore";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import type {
@@ -18,6 +21,32 @@ const DEFAULT_PAGE_SIZE = 50;
 
 function kuwaitToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: KUWAIT_TZ }).format(new Date());
+}
+
+function isoOf(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  const ts = value as { toDate?: () => Date };
+  if (typeof ts.toDate === "function") return ts.toDate().toISOString();
+  return null;
+}
+
+/** Callables accept `p_*` and camelCase. Send both so either reader matches. */
+function rpcArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...args };
+  for (const [key, value] of Object.entries(args)) {
+    if (!key.startsWith("p_")) continue;
+    const camel = key.slice(2).replace(/_([a-z0-9])/g, (_match, ch: string) => ch.toUpperCase());
+    if (out[camel] === undefined) out[camel] = value;
+  }
+  return out;
+}
+
+async function reportingDb(): Promise<Firestore> {
+  const db = await staffDb();
+  if (!db) throw new Error("not_configured");
+  return db;
 }
 
 async function requireAttendanceView() {
@@ -118,8 +147,7 @@ export async function fetchAttendanceDailyList(
 
   void logAdminRead("attendance", "fetchAttendanceDailyList", { from, to, filters });
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_list_attendance_daily", {
+  const { data, error } = await callAdminFunction("admin_list_attendance_daily", rpcArgs({
     p_from: from,
     p_to: to,
     p_search: filters.search?.trim() || undefined,
@@ -131,7 +159,7 @@ export async function fetchAttendanceDailyList(
     p_sort: filters.sort ?? "problems_first",
     p_limit: pageSize,
     p_offset: page * pageSize,
-  });
+  }));
 
   if (error) throw error;
 
@@ -150,13 +178,12 @@ export async function fetchAttendanceReportingKpis(
   > = {},
 ): Promise<AttendanceReportingKpis> {
   await requireAttendanceView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_attendance_kpis", {
+  const { data, error } = await callAdminFunction("admin_attendance_kpis", rpcArgs({
     p_date: date,
     p_partner_id: filters.partnerId || undefined,
     p_zone_id: filters.zoneId || undefined,
     p_restaurant_id: filters.restaurantId || undefined,
-  });
+  }));
   if (error) throw error;
   const p = (data ?? {}) as Record<string, unknown>;
   return {
@@ -180,14 +207,13 @@ export async function fetchAttendanceExceptionsList(params: {
   await requireAttendanceView();
   const page = params.page ?? 0;
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_list_attendance_exceptions", {
+  const { data, error } = await callAdminFunction("admin_list_attendance_exceptions", rpcArgs({
     p_date: params.date ?? kuwaitToday(),
     p_search: params.search?.trim() || undefined,
     p_unresolved_only: params.unresolvedOnly ?? true,
     p_limit: pageSize,
     p_offset: page * pageSize,
-  });
+  }));
   if (error) throw error;
   const payload = (data ?? {}) as { totalCount?: number; rows?: unknown[] };
   return {
@@ -208,8 +234,7 @@ export async function upsertAttendanceExceptionAction(input: {
   note?: string;
 }): Promise<{ success: boolean; error?: string }> {
   await requireAttendanceManage();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_upsert_exception_action", {
+  const { data, error } = await callAdminFunction("admin_upsert_exception_action", rpcArgs({
     p_exception_key: input.exceptionKey,
     p_driver_id: input.driverId,
     p_exception_type: input.exceptionType,
@@ -217,7 +242,7 @@ export async function upsertAttendanceExceptionAction(input: {
     p_resolution_status: input.resolutionStatus,
     p_action: input.action ?? undefined,
     p_note: input.note ?? undefined,
-  });
+  }));
   if (error) return { success: false, error: error.message };
   void logAdminMutation({
     action: "update",
@@ -229,27 +254,23 @@ export async function upsertAttendanceExceptionAction(input: {
   return { success: true };
 }
 
+function numSetting(data: FirebaseFirestore.DocumentData | undefined, key: string, fallback: number): number {
+  const value = data?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
 export async function fetchAttendanceThresholdSettings(): Promise<AttendanceThresholdSettings> {
   await requireAttendanceManage();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("app_settings")
-    .select(
-      "attendance_late_grace_minutes, attendance_early_out_grace_minutes, attendance_offline_alert_minutes, attendance_auto_checkout_minutes, attendance_gps_stale_minutes, attendance_gps_min_accuracy_meters",
-    )
-    .eq("id", 1)
-    .maybeSingle();
-  if (error) throw error;
+  const db = await reportingDb();
+  const snap = await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).get();
+  const data = snap.data();
   return {
-    attendance_late_grace_minutes: data?.attendance_late_grace_minutes ?? 10,
-    attendance_early_out_grace_minutes:
-      data?.attendance_early_out_grace_minutes ?? 5,
-    attendance_offline_alert_minutes: data?.attendance_offline_alert_minutes ?? 5,
-    attendance_auto_checkout_minutes:
-      data?.attendance_auto_checkout_minutes ?? 45,
-    attendance_gps_stale_minutes: data?.attendance_gps_stale_minutes ?? 10,
-    attendance_gps_min_accuracy_meters:
-      data?.attendance_gps_min_accuracy_meters ?? 100,
+    attendance_late_grace_minutes: numSetting(data, "attendance_late_grace_minutes", 10),
+    attendance_early_out_grace_minutes: numSetting(data, "attendance_early_out_grace_minutes", 5),
+    attendance_offline_alert_minutes: numSetting(data, "attendance_offline_alert_minutes", 5),
+    attendance_auto_checkout_minutes: numSetting(data, "attendance_auto_checkout_minutes", 45),
+    attendance_gps_stale_minutes: numSetting(data, "attendance_gps_stale_minutes", 10),
+    attendance_gps_min_accuracy_meters: numSetting(data, "attendance_gps_min_accuracy_meters", 100),
   };
 }
 
@@ -257,15 +278,15 @@ export async function updateAttendanceThresholdSettings(
   input: AttendanceThresholdSettings,
 ): Promise<{ success: boolean; error?: string }> {
   await requireAttendanceManage();
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("app_settings")
-    .update({
-      ...input,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", 1);
-  if (error) return { success: false, error: error.message };
+  const db = await reportingDb();
+  try {
+    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
+      { ...input, updated_at: new Date().toISOString() },
+      { merge: true },
+    );
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "save_failed" };
+  }
   void logAdminMutation({
     action: "update",
     entityType: "app_settings",
@@ -338,11 +359,10 @@ export async function fetchAttendanceAnalyticsSummary(
   daily: { date: string; checked_in: number; late: number; absent: number; avg_compliance: number }[];
 }> {
   await requireAttendanceView();
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("admin_attendance_analytics_daily", {
+  const { data, error } = await callAdminFunction("admin_attendance_analytics_daily", rpcArgs({
     p_from: fromDate,
     p_to: toDate,
-  });
+  }));
   if (error) throw error;
 
   const payload = (data ?? {}) as { daily?: unknown[] };
@@ -360,21 +380,48 @@ export async function fetchAttendanceAnalyticsSummary(
   return { daily };
 }
 
+async function attendanceDailyRowsForDriver(
+  driverId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<Record<string, unknown>[]> {
+  const pageSize = 1000;
+  const matched: Record<string, unknown>[] = [];
+  let offset = 0;
+  let total = Number.POSITIVE_INFINITY;
+  while (offset < total && offset < 50_000) {
+    const { data, error } = await callAdminFunction<{ totalCount?: number; rows?: unknown[] }>(
+      "admin_list_attendance_daily",
+      rpcArgs({
+        p_from: fromDate,
+        p_to: toDate,
+        p_limit: pageSize,
+        p_offset: offset,
+        p_sort: "date_desc",
+      }),
+    );
+    if (error) throw new Error(error.message);
+    const rows = data?.rows ?? [];
+    total = Number(data?.totalCount ?? 0);
+    for (const raw of rows) {
+      const row = raw as Record<string, unknown>;
+      if (String(row.driver_id) === driverId) matched.push(row);
+    }
+    if (rows.length === 0) break;
+    offset += rows.length;
+  }
+  return matched;
+}
+
 export async function fetchDriverAttendanceDetail(
   driverId: string,
   date: string,
 ): Promise<AttendanceDailyRow | null> {
   await requireAttendanceView();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("v_attendance_daily")
-    .select("*")
-    .eq("driver_id", driverId)
-    .eq("log_date", date)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return parseDailyRow(data as Record<string, unknown>);
+  const rows = await attendanceDailyRowsForDriver(driverId, date, date);
+  const row = rows[0];
+  if (!row) return null;
+  return parseDailyRow(row);
 }
 
 export async function fetchDriverAttendanceRange(
@@ -383,16 +430,10 @@ export async function fetchDriverAttendanceRange(
   toDate: string,
 ): Promise<AttendanceDailyRow[]> {
   await requireAttendanceView();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("v_attendance_daily")
-    .select("*")
-    .eq("driver_id", driverId)
-    .gte("log_date", fromDate)
-    .lte("log_date", toDate)
-    .order("log_date", { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map((r) => parseDailyRow(r as Record<string, unknown>));
+  const rows = await attendanceDailyRowsForDriver(driverId, fromDate, toDate);
+  return rows
+    .map((row) => parseDailyRow(row))
+    .sort((a, b) => b.log_date.localeCompare(a.log_date));
 }
 
 export async function fetchDriverAttendanceTimeline(
@@ -406,45 +447,53 @@ export async function fetchDriverAttendanceTimeline(
   }[]
 > {
   await requireAttendanceView();
-  const supabase = await createClient();
+  const db = await reportingDb();
   const events: { at: string; kind: string; label: string }[] = [];
 
-  const { data: log } = await supabase
-    .from("attendance_logs")
-    .select("check_in_at, check_out_at")
-    .eq("driver_id", driverId)
-    .eq("log_date", date)
-    .maybeSingle();
+  const logSnap = await db
+    .collection(COLLECTIONS.attendanceLogs)
+    .where("driver_id", "==", driverId)
+    .get();
+  const log = logSnap.docs
+    .map((doc) => doc.data())
+    .find((row) => String(row.log_date ?? "") === date);
 
-  if (log?.check_in_at) {
-    events.push({ at: log.check_in_at, kind: "check_in", label: "Check in" });
-  }
-  if (log?.check_out_at) {
-    events.push({ at: log.check_out_at, kind: "check_out", label: "Check out" });
-  }
+  const checkIn = isoOf(log?.check_in_at);
+  const checkOut = isoOf(log?.check_out_at);
+  if (checkIn) events.push({ at: checkIn, kind: "check_in", label: "Check in" });
+  if (checkOut) events.push({ at: checkOut, kind: "check_out", label: "Check out" });
 
-  const dayStart = `${date}T00:00:00+03:00`;
-  const dayEnd = `${date}T23:59:59+03:00`;
+  const dayStart = Date.parse(`${date}T00:00:00+03:00`);
+  const dayEnd = Date.parse(`${date}T23:59:59+03:00`);
 
-  const { data: sessions } = await supabase
-    .from("driver_sessions")
-    .select("went_online_at, went_offline_at, is_online")
-    .eq("driver_id", driverId)
-    .gte("went_online_at", dayStart)
-    .lte("went_online_at", dayEnd)
-    .order("went_online_at", { ascending: true });
+  const sessionSnap = await db
+    .collection(COLLECTIONS.driverSessions)
+    .where("driver_id", "==", driverId)
+    .get();
 
-  for (const s of sessions ?? []) {
-    if (s.went_online_at) {
+  const sessions = sessionSnap.docs
+    .map((doc) => doc.data())
+    .filter((row) => {
+      const at = isoOf(row.went_online_at);
+      if (!at) return false;
+      const ms = Date.parse(at);
+      return Number.isFinite(ms) && ms >= dayStart && ms <= dayEnd;
+    })
+    .sort((a, b) => (isoOf(a.went_online_at) ?? "").localeCompare(isoOf(b.went_online_at) ?? ""));
+
+  for (const s of sessions) {
+    const onlineAt = isoOf(s.went_online_at);
+    const offlineAt = isoOf(s.went_offline_at);
+    if (onlineAt) {
       events.push({
-        at: s.went_online_at,
+        at: onlineAt,
         kind: "online",
         label: "Went online",
       });
     }
-    if (s.went_offline_at) {
+    if (offlineAt) {
       events.push({
-        at: s.went_offline_at,
+        at: offlineAt,
         kind: "offline",
         label: "Went offline",
       });

@@ -61,15 +61,17 @@ export function AccessPreviewPane({
             MG
           </span>
           <div className="min-w-0">
-            <p className="truncate text-[10.5px] font-semibold text-white">{name}</p>
-            <p className="truncate text-[8.5px]" style={{ color: LAUNCHER_BRAND.muted }}>
+            <p className="truncate text-[10.5px] font-semibold" style={{ color: LAUNCHER_BRAND.text }}>
+              {name}
+            </p>
+            <p className="truncate text-[8.5px]" style={{ color: LAUNCHER_BRAND.subText }}>
               {t("previewRole")}
             </p>
           </div>
         </div>
 
         {apps.length === 0 ? (
-          <p className="px-1 py-2 text-[10px]" style={{ color: LAUNCHER_BRAND.muted }}>
+          <p className="px-1 py-2 text-[10px]" style={{ color: LAUNCHER_BRAND.subText }}>
             {t("previewEmpty")}
           </p>
         ) : (
@@ -83,8 +85,10 @@ export function AccessPreviewPane({
                   {createElement(resolveIcon(app.iconName), { className: "size-3.5 text-white" })}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[10px] font-medium text-[#E4E4E7]">{app.label}</p>
-                  <p className="truncate text-[8.5px]" style={{ color: LAUNCHER_BRAND.muted }}>
+                  <p className="truncate text-[10px] font-medium" style={{ color: LAUNCHER_BRAND.tileLabel }}>
+                    {app.label}
+                  </p>
+                  <p className="truncate text-[8.5px]" style={{ color: LAUNCHER_BRAND.subText }}>
                     {app.subViewLabels.map((view) => `✓ ${view}`).join("  ")}
                   </p>
                 </div>

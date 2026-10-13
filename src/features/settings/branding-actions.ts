@@ -2,7 +2,6 @@
 
 import { refresh, revalidatePath, updateTag } from "next/cache";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import {
@@ -12,6 +11,9 @@ import {
   isFontFamilyId,
   resolveLogoUploadMeta,
 } from "@/lib/branding/constants";
+import { getFirebaseStorage } from "@/lib/firebase/admin";
+import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 
 function revalidateBranding(locale: string) {
   updateTag("app-settings");
@@ -30,6 +32,42 @@ async function requireSettingsManager() {
     return { error: "not_authorized" as const };
   }
   return { session };
+}
+
+function brandingObjectPath(relativePath: string): string {
+  const trimmed = relativePath.replace(/^\/+/, "");
+  return trimmed.startsWith("branding/") ? trimmed : `branding/${trimmed}`;
+}
+
+async function brandingBucket() {
+  const storage = await getFirebaseStorage();
+  return storage?.bucket() ?? null;
+}
+
+async function saveBrandingObject(
+  relativePath: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<string | null> {
+  const bucket = await brandingBucket();
+  if (!bucket) return null;
+  const objectPath = brandingObjectPath(relativePath);
+  const token = crypto.randomUUID();
+  await bucket.file(objectPath).save(buffer, {
+    contentType,
+    metadata: { metadata: { firebaseStorageDownloadTokens: token } },
+  });
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+}
+
+async function removeBrandingObjects(relativePaths: string[]): Promise<void> {
+  const bucket = await brandingBucket();
+  if (!bucket) return;
+  await Promise.all(
+    relativePaths.map((relativePath) =>
+      bucket.file(brandingObjectPath(relativePath)).delete({ ignoreNotFound: true }),
+    ),
+  );
 }
 
 export async function updateBranding(
@@ -51,20 +89,22 @@ export async function updateBranding(
     return { error: "invalid_font" };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("app_settings")
-    .update({
-      app_name: appName,
-      app_subtitle: appSubtitle,
-      driver_app_login_hint: driverAppLoginHint,
-      font_family: fontFamily,
-      updated_at: new Date().toISOString(),
-      updated_by: auth.session.id,
-    })
-    .eq("id", 1);
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  if (error) {
+  try {
+    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
+      {
+        app_name: appName,
+        app_subtitle: appSubtitle,
+        driver_app_login_hint: driverAppLoginHint,
+        font_family: fontFamily,
+        updated_at: new Date(),
+        updated_by: auth.session.id,
+      },
+      { merge: true },
+    );
+  } catch {
     return { error: "save_failed" };
   }
 
@@ -100,42 +140,29 @@ export async function uploadLogo(
   }
 
   const { ext, logoType, contentType } = meta;
-  const supabase = await createClient();
   const path = `logo.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await supabase.storage
-    .from("branding")
-    .remove(ALLOWED_LOGO_EXTENSIONS.map((e) => `logo.${e}`));
+  await removeBrandingObjects(ALLOWED_LOGO_EXTENSIONS.map((e) => `logo.${e}`));
 
-  const { error: uploadError } = await supabase.storage
-    .from("branding")
-    .upload(path, buffer, {
-      contentType,
-      upsert: true,
-    });
+  const publicUrl = await saveBrandingObject(path, buffer, contentType);
+  if (!publicUrl) return { error: "upload_failed" };
 
-  if (uploadError) {
-    return { error: "upload_failed" };
-  }
+  const logoUrl = `${publicUrl}&v=${Date.now()}`;
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from("branding").getPublicUrl(path);
-
-  const logoUrl = `${publicUrl}?v=${Date.now()}`;
-
-  const { error: updateError } = await supabase
-    .from("app_settings")
-    .update({
-      logo_url: logoUrl,
-      logo_type: logoType,
-      updated_at: new Date().toISOString(),
-      updated_by: auth.session.id,
-    })
-    .eq("id", 1);
-
-  if (updateError) {
+  try {
+    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
+      {
+        logo_url: logoUrl,
+        logo_type: logoType,
+        updated_at: new Date(),
+        updated_by: auth.session.id,
+      },
+      { merge: true },
+    );
+  } catch {
     return { error: "save_failed" };
   }
 
@@ -149,24 +176,25 @@ export async function resetBranding(
   const auth = await requireSettingsManager();
   if ("error" in auth) return auth;
 
-  const supabase = await createClient();
+  await removeBrandingObjects(["logo.png", "logo.jpg", "logo.jpeg", "logo.webp", "logo.svg"]);
 
-  await supabase.storage.from("branding").remove(["logo.png", "logo.jpg", "logo.jpeg", "logo.webp", "logo.svg"]);
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
 
-  const { error } = await supabase
-    .from("app_settings")
-    .update({
-      app_name: DEFAULT_APP_SETTINGS.app_name,
-      app_subtitle: DEFAULT_APP_SETTINGS.app_subtitle,
-      font_family: DEFAULT_APP_SETTINGS.font_family,
-      logo_url: null,
-      logo_type: DEFAULT_APP_SETTINGS.logo_type,
-      updated_at: new Date().toISOString(),
-      updated_by: auth.session.id,
-    })
-    .eq("id", 1);
-
-  if (error) {
+  try {
+    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
+      {
+        app_name: DEFAULT_APP_SETTINGS.app_name,
+        app_subtitle: DEFAULT_APP_SETTINGS.app_subtitle,
+        font_family: DEFAULT_APP_SETTINGS.font_family,
+        logo_url: null,
+        logo_type: DEFAULT_APP_SETTINGS.logo_type,
+        updated_at: new Date(),
+        updated_by: auth.session.id,
+      },
+      { merge: true },
+    );
+  } catch {
     return { error: "save_failed" };
   }
 

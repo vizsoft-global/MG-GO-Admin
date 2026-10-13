@@ -272,12 +272,16 @@ export function trackerFilterOptions(rows: EsignTrackerBatch[]): {
       templates.set(id, row.batch.template_name?.trim() || row.batch.title);
     }
   }
+  const senders = new Map<string, string>();
+  for (const row of rows) {
+    const name = row.batch.created_by_name?.trim() ?? "";
+    const id = row.batch.created_by_id?.trim() ?? "";
+    if (!name || !id) continue;
+    if (!senders.has(id)) senders.set(id, name);
+  }
   return {
     templates: [...templates].map(([value, label]) => ({ value, label })),
-    // `esign_batches` records no sender column yet, so the list is honestly
-    // empty rather than offering a filter that cannot narrow anything. The
-    // dropdown hides itself when this is empty.
-    senders: [],
+    senders: [...senders].map(([value, label]) => ({ value, label })),
   };
 }
 

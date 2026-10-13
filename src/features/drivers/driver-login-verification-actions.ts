@@ -1,8 +1,8 @@
 "use server";
 
+import { staffClient } from "./driver-uniqueness";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getPresignedGetUrl } from "@/lib/storage/r2-client";
 
 const DEFAULT_PAGE_SIZE = 24;
@@ -58,7 +58,7 @@ export async function listDriverLoginVerifications(params: {
   );
 
   try {
-    const admin = createAdminClient();
+    const admin = await staffClient();
     let query = admin
       .from("driver_login_verifications")
       .select("id, object_key, captured_at, created_at, liveness_passed, liveness_method")

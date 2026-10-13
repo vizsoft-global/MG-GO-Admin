@@ -1,8 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import type { AdminActivityAction } from "./log-admin-activity";
 import { logAdminMutation } from "./log-admin-activity";
 
@@ -38,6 +40,125 @@ export type AdminActivityLogFilters = {
   offset?: number;
 };
 
+const ACTIONS = new Set<AdminActivityAction>([
+  "create",
+  "update",
+  "delete",
+  "view",
+  "read",
+  "auth",
+  "export",
+  "recalculate",
+]);
+
+function iso(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  return "";
+}
+
+function text(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asAction(value: unknown): AdminActivityAction {
+  return typeof value === "string" && ACTIONS.has(value as AdminActivityAction)
+    ? (value as AdminActivityAction)
+    : "view";
+}
+
+function rowFromDoc(id: string, data: DocumentData): AdminActivityLogRow {
+  const changed = Array.isArray(data.changed_fields)
+    ? data.changed_fields.filter((field): field is string => typeof field === "string")
+    : [];
+  return {
+    id: text(data.id) ?? id,
+    admin_user_id: text(data.admin_user_id),
+    admin_role_slug: text(data.admin_role_slug),
+    admin_name: null,
+    action: asAction(data.action),
+    entity_type: text(data.entity_type),
+    entity_id: text(data.entity_id),
+    page_path: text(data.page_path),
+    route_name: text(data.route_name),
+    success: data.success !== false,
+    error_message: text(data.error_message),
+    context: record(data.context) ?? {},
+    before_state: record(data.before_state),
+    after_state: record(data.after_state),
+    changed_fields: changed,
+    ip_address: text(data.ip_address),
+    user_agent: text(data.user_agent),
+    created_at: iso(data.created_at),
+  };
+}
+
+function includesFold(value: string | null, needle: string): boolean {
+  return (value ?? "").toLowerCase().includes(needle);
+}
+
+function matchesFilters(row: AdminActivityLogRow, filters: AdminActivityLogFilters, needle: string): boolean {
+  if (filters.action && row.action !== filters.action) return false;
+  if (filters.entityType && row.entity_type !== filters.entityType) return false;
+  if (filters.adminUserId && row.admin_user_id !== filters.adminUserId) return false;
+  if (filters.startDate && row.created_at < `${filters.startDate}T00:00:00.000Z`) return false;
+  if (filters.endDate && row.created_at > `${filters.endDate}T23:59:59.999Z`) return false;
+  if (
+    needle &&
+    !includesFold(row.entity_type, needle) &&
+    !includesFold(row.entity_id, needle) &&
+    !includesFold(row.route_name, needle) &&
+    !includesFold(row.page_path, needle)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+async function attachNames(db: Firestore, rows: AdminActivityLogRow[]): Promise<void> {
+  const userIds = [...new Set(rows.map((row) => row.admin_user_id).filter((id): id is string => Boolean(id)))];
+  if (userIds.length === 0) return;
+  const nameById = new Map<string, string>();
+  for (let i = 0; i < userIds.length; i += 100) {
+    const refs = userIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.profiles).doc(id));
+    const snaps = await db.getAll(...refs);
+    for (const snap of snaps) {
+      const name = text(snap.data()?.full_name);
+      if (name) nameById.set(snap.id, name);
+    }
+  }
+  for (const row of rows) {
+    row.admin_name = row.admin_user_id ? (nameById.get(row.admin_user_id) ?? null) : null;
+  }
+}
+
+function filteredQuery(db: Firestore, filters: AdminActivityLogFilters): Query {
+  let query: Query = db.collection(COLLECTIONS.adminActivityLogs);
+  if (filters.action) query = query.where("action", "==", filters.action);
+  if (filters.entityType) query = query.where("entity_type", "==", filters.entityType);
+  if (filters.adminUserId) query = query.where("admin_user_id", "==", filters.adminUserId);
+  if (filters.startDate) {
+    query = query.where("created_at", ">=", new Date(`${filters.startDate}T00:00:00.000Z`));
+  }
+  if (filters.endDate) {
+    query = query.where("created_at", "<=", new Date(`${filters.endDate}T23:59:59.999Z`));
+  }
+  return query.orderBy("created_at", "desc");
+}
+
 async function requireAuditView() {
   const session = await getSessionUser();
   if (
@@ -55,78 +176,57 @@ export async function listAdminActivityLogs(
   const auth = await requireAuditView();
   if ("error" in auth) return { error: "not_authorized" };
 
-  const supabase = await createClient();
+  const db = await staffDb();
+  if (!db) return { error: "fetch_failed" };
+
   const limit = Math.min(filters.limit ?? 50, 200);
   const offset = filters.offset ?? 0;
+  const needle = filters.search?.trim().toLowerCase() ?? "";
 
-  let query = supabase
-    .from("admin_activity_logs")
-    .select(
-      "id, admin_user_id, admin_role_slug, action, entity_type, entity_id, page_path, route_name, success, error_message, context, before_state, after_state, changed_fields, ip_address, user_agent, created_at",
-      { count: "exact" },
-    )
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+  try {
+    let rows: AdminActivityLogRow[] = [];
+    let total = 0;
 
-  if (filters.startDate) {
-    query = query.gte("created_at", `${filters.startDate}T00:00:00.000Z`);
-  }
-  if (filters.endDate) {
-    query = query.lte("created_at", `${filters.endDate}T23:59:59.999Z`);
-  }
-  if (filters.action) {
-    query = query.eq("action", filters.action);
-  }
-  if (filters.entityType) {
-    query = query.eq("entity_type", filters.entityType);
-  }
-  if (filters.adminUserId) {
-    query = query.eq("admin_user_id", filters.adminUserId);
-  }
-  if (filters.search?.trim()) {
-    const term = `%${filters.search.trim()}%`;
-    query = query.or(
-      `entity_type.ilike.${term},entity_id.ilike.${term},route_name.ilike.${term},page_path.ilike.${term}`,
-    );
-  }
+    if (needle) {
+      const snap = await db
+        .collection(COLLECTIONS.adminActivityLogs)
+        .orderBy("created_at", "desc")
+        .limit(2000)
+        .get();
+      const matched = snap.docs
+        .map((doc) => rowFromDoc(doc.id, doc.data()))
+        .filter((row) => matchesFilters(row, filters, needle));
+      total = matched.length;
+      rows = matched.slice(offset, offset + limit);
+    } else {
+      const query = filteredQuery(db, filters);
+      const [countSnap, page] = await Promise.all([
+        query.count().get(),
+        query.offset(offset).limit(limit).get(),
+      ]);
+      total = countSnap.data().count;
+      rows = page.docs.map((doc) => rowFromDoc(doc.id, doc.data()));
+    }
 
-  const { data, error, count } = await query;
-  if (error) return { error: "fetch_failed" };
-
-  const userIds = [...new Set((data ?? []).map((r) => r.admin_user_id).filter(Boolean))] as string[];
-  const nameById = new Map<string, string>();
-  if (userIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", userIds);
-    for (const p of profiles ?? []) {
-      if (p.full_name) nameById.set(p.id, p.full_name);
+    await attachNames(db, rows);
+    return { rows, total };
+  } catch {
+    try {
+      const snap = await db
+        .collection(COLLECTIONS.adminActivityLogs)
+        .orderBy("created_at", "desc")
+        .limit(2000)
+        .get();
+      const matched = snap.docs
+        .map((doc) => rowFromDoc(doc.id, doc.data()))
+        .filter((row) => matchesFilters(row, filters, needle));
+      const rows = matched.slice(offset, offset + limit);
+      await attachNames(db, rows);
+      return { rows, total: matched.length };
+    } catch {
+      return { error: "fetch_failed" };
     }
   }
-
-  const rows: AdminActivityLogRow[] = (data ?? []).map((row) => ({
-    id: row.id,
-    admin_user_id: row.admin_user_id,
-    admin_role_slug: row.admin_role_slug,
-    admin_name: row.admin_user_id ? nameById.get(row.admin_user_id) ?? null : null,
-    action: row.action as AdminActivityAction,
-    entity_type: row.entity_type,
-    entity_id: row.entity_id,
-    page_path: row.page_path,
-    route_name: row.route_name,
-    success: row.success,
-    error_message: row.error_message,
-    context: (row.context as Record<string, unknown>) ?? {},
-    before_state: row.before_state as Record<string, unknown> | null,
-    after_state: row.after_state as Record<string, unknown> | null,
-    changed_fields: row.changed_fields ?? [],
-    ip_address: row.ip_address,
-    user_agent: row.user_agent,
-    created_at: row.created_at,
-  }));
-
-  return { rows, total: count ?? rows.length };
 }
 
 async function requireAuditExport() {

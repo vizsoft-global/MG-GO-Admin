@@ -1,7 +1,6 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
   Building2,
-  Car,
   ClipboardCheck,
   FormInput,
   Handshake,
@@ -49,8 +48,6 @@ const CARDS: ReadonlyArray<{
     icon: ClipboardCheck,
     permission: "attendance.manage",
   },
-  { key: "vehicleTypes", href: "/settings/vehicle-types", icon: Car, permission: "vehicles.manage" },
-  { key: "vehicleUses", href: "/settings/vehicle-uses", icon: Car, permission: "vehicles.manage" },
   {
     key: "sourceCompanies",
     href: "/settings/source-companies",

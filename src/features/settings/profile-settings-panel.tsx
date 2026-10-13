@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { updateProfile } from "@/features/settings/profile-actions";
 import { updatePassword } from "@/features/auth/actions";
@@ -22,6 +22,7 @@ export type ProfileData = {
 
 export function ProfileSettingsPanel({ profile }: { profile: ProfileData }) {
   const t = useTranslations("pages.settings");
+  const locale = useLocale();
   const router = useRouter();
   const [isSaving, startSaving] = useTransition();
   const [isChangingPw, startChangingPw] = useTransition();
@@ -102,7 +103,7 @@ export function ProfileSettingsPanel({ profile }: { profile: ProfileData }) {
                   toast.error(t("profile.errors.passwordMismatch"));
                   return;
                 }
-                const result = await updatePassword(formData);
+                const result = await updatePassword(locale, formData);
                 if (result.error) {
                   toast.error(
                     result.error === "weak_password"
