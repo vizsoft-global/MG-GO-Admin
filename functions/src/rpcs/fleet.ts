@@ -5,6 +5,7 @@ import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { parseId, parseIdList, parseInstant } from "../core/query";
 import { requireStaff } from "../core/staff";
+import { createFleetBaseCache, projectFleetSnapshot } from "./fleet-snapshot-cache";
 
 const FLEET_EVENT_ID_CEILING = 9223372036854775807;
 
@@ -113,13 +114,18 @@ export type LiveFleetZone = {
   geometry: unknown;
 };
 
-export async function buildLiveFleetSnapshot(seenWithinMinutes: number) {
+export async function buildLiveFleetSnapshot(
+  seenWithinMinutes: number,
+  options?: { unscoped?: boolean },
+) {
   const seenWithin = Math.max(Math.trunc(seenWithinMinutes || 30), 1);
   const now = new Date();
   const day = kuwaitDayString(now);
   const dayStart = kuwaitDayStart(day);
   const dayEnd = kuwaitDayEnd(day);
-  const cutoff = new Date(now.getTime() - seenWithin * 60 * 1000);
+  const cutoff = options?.unscoped
+    ? new Date(0)
+    : new Date(now.getTime() - seenWithin * 60 * 1000);
 
   const db = getFirestore();
 
@@ -325,11 +331,38 @@ export function snapshotForStaff<T extends { zones: readonly LiveFleetZone[] }>(
   return snapshot;
 }
 
+const fleetBaseCache = createFleetBaseCache<Awaited<ReturnType<typeof buildLiveFleetSnapshot>>>({
+  now: () => Date.now(),
+});
+
+function canSeeFleetContact(staff: {
+  isSuperAdmin: boolean;
+  isManager: boolean;
+  permissionSlugs: ReadonlySet<string>;
+}): boolean {
+  return (
+    staff.isSuperAdmin ||
+    staff.isManager ||
+    staff.permissionSlugs.has("drivers.view") ||
+    staff.permissionSlugs.has("drivers.manage")
+  );
+}
+
 export const adminLiveFleetSnapshot = measureOnCall("adminLiveFleetSnapshot", async (request) => {
-  await requireStaff(request);
+  const staff = await requireStaff(request);
   const data = (request.data ?? {}) as Dict;
   const seenWithin = num(data.seenWithinMinutes ?? data.p_seen_within_minutes) ?? 30;
-  return snapshotForStaff(await buildLiveFleetSnapshot(seenWithin));
+  const zoneIds = parseIdList(data.zoneIds ?? data.p_zone_ids);
+  const partnerIds = parseIdList(data.partnerIds ?? data.p_partner_ids);
+  const base = await fleetBaseCache.get(() => buildLiveFleetSnapshot(seenWithin, { unscoped: true }));
+  const projected = projectFleetSnapshot(base, {
+    zoneIds,
+    partnerIds,
+    seenWithinMinutes: seenWithin,
+    nowMs: Date.now(),
+    canSeeContact: canSeeFleetContact(staff),
+  });
+  return snapshotForStaff({ ...base, drivers: projected.drivers });
 });
 
 export const adminListFleetEvents = onCall(async (request) => {

@@ -2905,6 +2905,158 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "order_id_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "rider_name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "driver_name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "driver_code_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "employee_id_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "search_name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "zone_id", "order": "ASCENDING" },
+        { "fieldPath": "order_id_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "zone_id", "order": "ASCENDING" },
+        { "fieldPath": "rider_name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "zone_id", "order": "ASCENDING" },
+        { "fieldPath": "driver_name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "zone_id", "order": "ASCENDING" },
+        { "fieldPath": "driver_code_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "zone_id", "order": "ASCENDING" },
+        { "fieldPath": "employee_id_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "zone_id", "order": "ASCENDING" },
+        { "fieldPath": "search_name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partner_id", "order": "ASCENDING" },
+        { "fieldPath": "order_id_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partner_id", "order": "ASCENDING" },
+        { "fieldPath": "rider_name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partner_id", "order": "ASCENDING" },
+        { "fieldPath": "driver_name_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partner_id", "order": "ASCENDING" },
+        { "fieldPath": "driver_code_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partner_id", "order": "ASCENDING" },
+        { "fieldPath": "employee_id_lower", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "partner_id", "order": "ASCENDING" },
+        { "fieldPath": "search_name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "rollups_driver_day",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "driver_id", "order": "ASCENDING" },
+        { "fieldPath": "day", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
