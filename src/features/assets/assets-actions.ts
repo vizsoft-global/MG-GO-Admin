@@ -516,6 +516,8 @@ export async function adjustAssetStock(input: {
   delta: number;
   note?: string;
 }): Promise<AssetMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const auth = await requireAssetsManage();
   if (auth.error) return { error: auth.error };
   if (!input.id || !Number.isFinite(input.delta) || input.delta === 0) {
@@ -552,6 +554,8 @@ export async function adjustAssetStock(input: {
 export async function returnAssetAssignment(
   assignmentId: string,
 ): Promise<AssetMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const auth = await requireAssetsManage();
   if (auth.error) return { error: auth.error };
   if (!assignmentId) return { error: "missing_fields" };

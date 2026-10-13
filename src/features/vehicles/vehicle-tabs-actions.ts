@@ -223,6 +223,8 @@ export async function assignVehicleAsset(input: {
   catalogItemId: string;
   quantity: number;
 }): Promise<{ error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const session = await getSessionUser();
   if (
     !session ||

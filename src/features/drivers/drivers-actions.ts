@@ -959,6 +959,8 @@ export async function archiveDriverIntake(
 export async function restoreDriverIntake(
   intakeId: string,
 ): Promise<DriverMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
   if (!intakeId) return { error: "missing_fields" };
@@ -2101,6 +2103,8 @@ export async function setDriverUnfrozen(
 export async function regenerateDriverPasscode(
   driverId: string,
 ): Promise<RegeneratePasscodeResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 
@@ -2203,6 +2207,8 @@ export type ForceSignOutDriverResult =
 export async function forceSignOutDriver(
   driverId: string,
 ): Promise<ForceSignOutDriverResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
 

@@ -1,3 +1,5 @@
+import { isMutatingAdminRpc } from "../firebase/mutating-rpc";
+
 export type ScannedFn = {
   name: string;
   start: number;
@@ -491,8 +493,19 @@ function hasAssignedDocWrite(maskedBody: string): boolean {
   return false;
 }
 
+export function bodyCallsMutatingRpc(source: string): boolean {
+  const pattern = /(?:callAdminFunction|callRpc|\.rpc)[\s\S]{0,240}?["'`]([^"'`]+)["'`]/g;
+  let match = pattern.exec(source);
+  while (match) {
+    if (isMutatingAdminRpc(match[1] ?? "")) return true;
+    match = pattern.exec(source);
+  }
+  return false;
+}
+
 export function functionHasWrite(maskedBody: string): boolean {
   if (DIRECT_WRITE.test(maskedBody)) return true;
+  if (/\.ref\s*\.\s*(?:set|update|delete|create)\s*\(/.test(maskedBody)) return true;
   if (hasChainedWrite(maskedBody)) return true;
   if (hasCollectionDocWrite(maskedBody)) return true;
   if (hasFromWrite(maskedBody)) return true;

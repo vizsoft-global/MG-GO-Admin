@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { mutationAuthAllowReason } from "./mutation-auth-allowlist";
 import {
+  bodyCallsMutatingRpc,
   functionHasWrite,
   functionIsGated,
   splitTopLevelFunctions,
@@ -216,6 +217,32 @@ export function ungatedWriteFunctions(root = ROOT): string[] {
   }
   return misses;
 }
+
+test("the eleven revoked-session writes call requireMutationAuth in the action", () => {
+  const cases = [
+    ["src/features/attendance/attendance-actions.ts", "correctAttendanceLog"],
+    ["src/features/drivers/drivers-actions.ts", "restoreDriverIntake"],
+    ["src/features/drivers/drivers-actions.ts", "regenerateDriverPasscode"],
+    ["src/features/drivers/drivers-actions.ts", "forceSignOutDriver"],
+    ["src/features/payroll/payroll-actions.ts", "recomputePayrollZoneMetrics"],
+    ["src/features/notifications/notifications-actions.ts", "enqueueNotificationAutomationEvent"],
+    ["src/features/assets/assets-actions.ts", "adjustAssetStock"],
+    ["src/features/assets/assets-actions.ts", "returnAssetAssignment"],
+    ["src/features/settings/ui-preferences-actions.ts", "clearUserUiPreference"],
+    ["src/features/vehicles/vehicle-tabs-actions.ts", "assignVehicleAsset"],
+    ["src/features/verifications/verifications-actions.ts", "revertImportBatch"],
+  ] as const;
+  for (const [rel, name] of cases) {
+    const source = fs.readFileSync(path.join(ROOT, rel), "utf8");
+    const fns = splitTopLevelFunctions(source);
+    const fn = fns.find((item) => item.name === name);
+    assert.ok(fn, name);
+    assert.equal(fn.body.includes("requireMutationAuth"), true, name);
+    const byName = new Map(fns.map((item) => [item.name, item]));
+    assert.equal(functionIsGated(fn, byName), true, name);
+    assert.equal(functionHasWrite(fn.maskedBody) || bodyCallsMutatingRpc(fn.body), true, name);
+  }
+});
 
 test("every in-scope write calls requireMutationAuth or is allowlisted", () => {
   const misses = ungatedWriteFunctions();

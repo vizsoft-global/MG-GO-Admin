@@ -240,6 +240,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-13` — **Eleven staff writes now check the session before they write.** `correctAttendanceLog`, `restoreDriverIntake`, `regenerateDriverPasscode`, `forceSignOutDriver`, `recomputePayrollZoneMetrics`, `enqueueNotificationAutomationEvent`, `adjustAssetStock`, `returnAssetAssignment`, `clearUserUiPreference`, `assignVehicleAsset`, and `revertImportBatch` call `requireMutationAuth` (`checkRevoked: true`) before their existing permission check. The deliveries search box uses prefix shape, so fewer than 4 characters shows `prefixTooShort` and a capped page shows `searchIncomplete`. No function deploy in this commit.
+
 - `[admin only] 2026-10-13` — **Stage D epoch caches sit on the Stage G lane.** Settings, role, tick, and menu writers use `writeWithEpoch`. Mutations use `requireMutationAuth` (`checkRevoked: true`). Sign-out clears only this browser's cookie. Epoch cache TTL stays 5 minutes. No function deploy in this commit.
 
 - `[admin only] 2026-10-12` — **Stage D prep is local only. Not deployed.** Every in-scope staff write action calls `requireMutationAuth` (checkRevoked, fresh profile). Cron, driver-app, sign-in, and cookie-only sign-out stay allowlisted. Mutating `callAdminFunction` names call that gate before minting a token; `callCronFunction` does not. Settings, branding, menu, role, and tick writers go through `writeWithEpoch` or `writeWithEpochCounters` in the same transaction. Deliveries prefix search shorter than 4 characters does not run a range query. A capped search sets `searchTruncated` and the deliveries list shows that the page is incomplete. No production write from this branch.

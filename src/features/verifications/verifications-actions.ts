@@ -1077,6 +1077,8 @@ export async function getVerificationExportData(): Promise<VerificationExportDat
 export async function revertImportBatch(
   batchId: string,
 ): Promise<VerificationMutationResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const session = await requireSuperAdmin();
   if (!session) return { error: "not_authorized" };
 

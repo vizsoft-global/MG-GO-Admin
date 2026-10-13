@@ -2641,6 +2641,8 @@ export async function enqueueNotificationAutomationEvent(input: {
   driverId?: string | null;
   payload?: Record<string, unknown>;
 }): Promise<{ id: string } | { error: NotificationActionError }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: "not_authorized" };
   const service = notificationsAdminDb();
   const { data, error } = await service.rpc("enqueue_notification_automation_event", {
     p_trigger_type: input.triggerType,

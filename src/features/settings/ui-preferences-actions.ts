@@ -135,6 +135,8 @@ export async function saveUserUiPreference(
 export async function clearUserUiPreference(
   preferenceKey: string,
 ): Promise<{ success?: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
   const session = await requirePanelUser();
   if (!session) return { error: "not_authorized" };
 

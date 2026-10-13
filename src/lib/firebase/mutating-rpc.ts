@@ -55,6 +55,12 @@ const WRITE_VERBS = new Set([
   "recalculate",
   "reconcile",
   "void",
+  "correct",
+  "restore",
+  "regenerate",
+  "force",
+  "recompute",
+  "enqueue",
 ]);
 
 const READ_VERBS = new Set([
