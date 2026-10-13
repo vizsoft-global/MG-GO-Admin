@@ -88,6 +88,7 @@ import {
   AttendanceTableShell,
 } from "./attendance-table-shell";
 import { isAutoCheckoutReason } from "./auto-checkout-rules";
+import { attendanceWindowTooLarge } from "./attendance-query-error";
 import { exportAttendanceDailyCsv } from "./attendance-reporting-actions";
 import type {
   AttendanceDailyRow,
@@ -211,11 +212,16 @@ function AttendancePageContent() {
   );
 
   const dailyEnabled = tab === "today" || tab === "history";
-  const { data: dailyData, isLoading: dailyLoading, refetch: refetchDaily } =
-    useAttendanceDailyList(dailyFilters, {
-      enabled: dailyEnabled,
-      refetchInterval: tab === "today" ? 30_000 : false,
-    });
+  const {
+    data: dailyData,
+    isLoading: dailyLoading,
+    isError: dailyFailed,
+    error: dailyError,
+    refetch: refetchDaily,
+  } = useAttendanceDailyList(dailyFilters, {
+    enabled: dailyEnabled,
+    refetchInterval: tab === "today" ? 30_000 : false,
+  });
 
   const { data: kpis, refetch: refetchKpis } = useAttendanceReportingKpis(
     today,
@@ -595,7 +601,9 @@ function AttendancePageContent() {
       : (dailyData?.totalCount ?? 0);
 
   const isLoading = tab === "problems" ? exceptionsLoading : dailyLoading;
-  const isEmpty = !isLoading && totalCount === 0;
+  const rangeTooLarge = tab !== "problems" && attendanceWindowTooLarge(dailyError);
+  const listFailed = tab !== "problems" && dailyFailed;
+  const isEmpty = !isLoading && (listFailed || totalCount === 0);
 
   return (
     <AppPage>
@@ -782,13 +790,17 @@ function AttendancePageContent() {
             empty={
               <AppEmptyState
                 title={
-                  tab === "today"
-                    ? t("emptyToday")
-                    : tab === "history"
-                      ? t("emptyHistory")
-                      : t("emptyProblems")
+                  rangeTooLarge
+                    ? t("windowTooLarge")
+                    : listFailed
+                      ? t("loadFailed")
+                      : tab === "today"
+                        ? t("emptyToday")
+                        : tab === "history"
+                          ? t("emptyHistory")
+                          : t("emptyProblems")
                 }
-                description={t("emptyFiltersHint")}
+                description={rangeTooLarge ? t("windowTooLargeHint") : t("emptyFiltersHint")}
               />
             }
             footer={

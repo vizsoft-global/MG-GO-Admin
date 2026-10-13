@@ -10,7 +10,25 @@ import { assertProd, loadEnv, loadServiceAccount } from "./perf-env.mjs";
 
 const PAGE = { tab: "all", limit: 25, offset: 0 };
 const SAMPLES = 10;
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 120_000;
+
+function kuwaitDay() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuwait" }).format(new Date());
+}
+
+function scanCases() {
+  const today = kuwaitDay();
+  const month = today.slice(0, 7);
+  const monthStart = `${month}-01`;
+  return [
+    { name: "adminPerformanceOpsSnapshot", lane: "adminApiScan", data: { from: monthStart, to: today, bucket: "day" } },
+    { name: "adminLiveFleetSnapshot", lane: "adminApiScan", data: { seenWithinMinutes: 30 } },
+    { name: "adminPayrollRuleSnapshot", lane: "adminApiScan", data: { month } },
+    { name: "adminListAttendanceDaily", lane: "adminApiScan", data: { from: monthStart, to: today, limit: 50, offset: 0 } },
+    { name: "adminDriversFilterValues", lane: "adminApiScan", data: { column: "zone", tab: "all" } },
+    { name: "adminListRequests", lane: "adminApiScan", data: { limit: 25, offset: 0 } },
+  ];
+}
 
 const env = loadEnv();
 const account = loadServiceAccount(env);
@@ -67,45 +85,116 @@ async function callOnce(url, body) {
   if (!response) return { ms, status: "unavailable" };
   const payload = await response.json().catch(() => null);
   const failed = !response.ok || payload?.error;
-  const status = failed ? String(payload?.error?.status ?? payload?.error?.message ?? response.status).slice(0, 80) : "ok";
+  const status = failed
+    ? String(payload?.error?.message ?? payload?.error?.status ?? response.status).slice(0, 80)
+    : "ok";
   return { ms, status };
 }
 
-const targets = [
-  {
-    name: "adminApiScan",
-    url: `${base}/adminApiScan`,
-    body: { data: { fn: "adminListDriversPage", data: PAGE } },
-  },
-  {
-    name: "adminListDriversPage",
-    url: `${base}/adminListDriversPage`,
-    body: { data: PAGE },
-  },
-];
-
-const samples = {
-  adminApiScan: [],
-  adminListDriversPage: [],
-};
-
-for (let i = 0; i < SAMPLES; i += 1) {
-  for (const target of targets) {
-    const result = await callOnce(target.url, target.body);
-    samples[target.name].push(result);
-    console.log(JSON.stringify({ name: target.name, i, ms: result.ms, status: result.status }));
-  }
+function shiftDay(ymd, days) {
+  const date = new Date(`${ymd}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
-for (const target of targets) {
-  const ok = samples[target.name].filter((sample) => sample.status === "ok").map((sample) => sample.ms).sort((a, b) => a - b);
-  console.log(
-    JSON.stringify({
-      name: target.name,
-      n: samples[target.name].length,
-      ok: ok.length,
-      p50: percentile(ok, 50),
-      p95: percentile(ok, 95),
-    }),
-  );
+function groupCases(which) {
+  const today = kuwaitDay();
+  const month = today.slice(0, 7);
+  const day = shiftDay(today, -1);
+  const weekFrom = shiftDay(today, -6);
+  const light = [
+    { name: "adminListRequests", lane: "adminApi", data: { limit: 25, offset: 0 } },
+    { name: "adminPerfPing", lane: "adminApi", data: {} },
+  ];
+  const scan = [
+    { name: "adminListDriversPage", lane: "adminApiScan", data: PAGE },
+    { name: "adminDriversFilterValues", lane: "adminApiScan", data: { column: "zone", tab: "all" } },
+    { name: "adminDeliveriesStatusCounts", lane: "adminApiScan", data: {} },
+    { name: "adminDeliveriesCountsByFilters", lane: "adminApiScan", data: {} },
+    { name: "adminLiveFleetSnapshot", lane: "adminApiScan", data: { seenWithinMinutes: 30 } },
+    { name: "adminPerformanceOpsSnapshot", lane: "adminApiScan", data: { from: day, to: day, bucket: "day" } },
+    {
+      name: "adminListAttendanceDaily",
+      lane: "adminApiScan",
+      data: { from: weekFrom, to: today, limit: 50, offset: 0 },
+    },
+    { name: "adminPayrollRuleSnapshot", lane: "adminApiScan", data: { month } },
+  ];
+  const heavy = [{ name: "adminPurgeFilterColumns", lane: "adminApiHeavy", data: { entity: "drivers" } }];
+  if (which === "light") return light;
+  if (which === "scan") return scan;
+  if (which === "heavy") return heavy;
+  return [...light, ...scan, ...heavy];
+}
+
+const mode = process.argv[2] ?? "drivers";
+const today = kuwaitDay();
+const cases =
+  mode === "scan"
+    ? scanCases()
+    : mode === "attendance"
+      ? [
+          {
+            name: "adminListAttendanceDaily",
+            lane: "adminApiScan",
+            data: { from: shiftDay(today, -6), to: today, limit: 50, offset: 0 },
+          },
+        ]
+      : mode === "light"
+        ? [
+            { name: "adminListRequests", lane: "adminApi", data: { limit: 25, offset: 0 } },
+            {
+              name: "adminListAttendanceDaily",
+              lane: "adminApi",
+              data: { from: shiftDay(today, -6), to: today, limit: 50, offset: 0 },
+            },
+            { name: "adminDriversFilterValues", lane: "adminApi", data: { column: "zone", tab: "all" } },
+          ]
+        : mode === "group-light"
+          ? groupCases("light")
+          : mode === "group-scan"
+            ? groupCases("scan")
+            : mode === "group-heavy"
+              ? groupCases("heavy")
+              : [{ name: "adminListDriversPage", lane: "adminApiScan", data: PAGE }];
+
+for (const item of cases) {
+  const targets = [
+    {
+      name: item.lane,
+      url: `${base}/${item.lane}`,
+      body: { data: { fn: item.name, data: item.data } },
+    },
+    {
+      name: item.name,
+      url: `${base}/${item.name}`,
+      body: { data: item.data },
+    },
+  ];
+  const samples = { [item.lane]: [], [item.name]: [] };
+  for (let i = 0; i < SAMPLES; i += 1) {
+    for (const target of targets) {
+      const result = await callOnce(target.url, target.body);
+      samples[target.name].push(result);
+      console.log(JSON.stringify({ fn: item.name, name: target.name, i, ms: result.ms, status: result.status }));
+    }
+  }
+  for (const target of targets) {
+    const ok = samples[target.name]
+      .filter((sample) => sample.status === "ok")
+      .map((sample) => sample.ms)
+      .sort((a, b) => a - b);
+    const fails = samples[target.name].filter((sample) => sample.status !== "ok").map((sample) => sample.status);
+    console.log(
+      JSON.stringify({
+        fn: item.name,
+        name: target.name,
+        n: samples[target.name].length,
+        ok: ok.length,
+        p50: percentile(ok, 50),
+        p95: percentile(ok, 95),
+        fail: fails[0] ?? null,
+      }),
+    );
+  }
 }

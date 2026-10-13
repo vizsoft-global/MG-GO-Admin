@@ -3074,7 +3074,7 @@
       "callableTrigger": {},
       "enforceAppCheck": null,
       "cors": null,
-      "minInstances": 1,
+      "minInstances": 0,
       "invoker": null,
       "vpc": null,
       "ingressSettings": null

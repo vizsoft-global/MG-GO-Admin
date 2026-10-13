@@ -97,7 +97,7 @@ describe("lane options superset", () => {
     assert.equal(light.availableMemoryMb, 2048);
     assert.equal(light.concurrency, 8);
     assert.equal(light.maxInstances, 8);
-    assert.equal(light.minInstances, 1);
+    assert.equal(light.minInstances, 0);
     assert.equal(light.timeoutSeconds, null);
 
     const scan = endpointOf("adminApiScan");

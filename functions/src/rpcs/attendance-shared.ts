@@ -1,3 +1,4 @@
+import { HttpsError } from "firebase-functions/v2/https";
 import { getFirestore, type DocumentSnapshot, Timestamp } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
@@ -23,6 +24,19 @@ const GET_ALL_CHUNK = 300;
  * distance total.
  */
 export const ATTENDANCE_SCAN_CAP = 5000;
+
+export const ATTENDANCE_WINDOW_TOO_LARGE = "attendance_window_too_large";
+
+/** Stable code plus the sentence the panel shows when a window exceeds the scan cap. */
+export const ATTENDANCE_WINDOW_TOO_LARGE_MESSAGE =
+  "attendance_window_too_large: This date range has more than 5000 attendance rows. Choose a shorter range.";
+
+export function rethrowAttendanceWindow(error: unknown): never {
+  if (error instanceof Error && error.message === ATTENDANCE_WINDOW_TOO_LARGE) {
+    throw new HttpsError("failed-precondition", ATTENDANCE_WINDOW_TOO_LARGE_MESSAGE);
+  }
+  throw error;
+}
 
 export type AttendanceRow = {
   driver_id: string;

@@ -30,7 +30,11 @@ import {
   pickTriBool,
   type Dict,
 } from "./_shared";
-import { loadAttendanceRows, type AttendanceRow } from "./attendance-shared";
+import {
+  loadAttendanceRows,
+  rethrowAttendanceWindow,
+  type AttendanceRow,
+} from "./attendance-shared";
 import { applyAttendanceRollup } from "../core/rollups";
 
 const ATT = FIELDS.attendanceLogs;
@@ -97,10 +101,7 @@ function shiftEndAt(shift: Dict, day: string): Date | null {
 }
 
 function rethrowWindow(error: unknown): never {
-  if (error instanceof Error && error.message === "attendance_window_too_large") {
-    throw new HttpsError("out-of-range", "attendance_window_too_large");
-  }
-  throw error;
+  rethrowAttendanceWindow(error);
 }
 
 async function inParallel<T, R>(items: readonly T[], fn: (item: T) => Promise<R>): Promise<R[]> {

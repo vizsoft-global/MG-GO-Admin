@@ -4,7 +4,11 @@ import { kuwaitDayString } from "../core/kuwait";
 import { parseId } from "../core/query";
 import { loadAppSettings } from "../core/settings";
 import { requireStaff } from "../core/staff";
-import { loadAttendanceRows, type AttendanceRow } from "./attendance-shared";
+import {
+  loadAttendanceRows,
+  rethrowAttendanceWindow,
+  type AttendanceRow,
+} from "./attendance-shared";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -158,7 +162,7 @@ export const adminListAttendanceDaily = measureOnCall("adminListAttendanceDaily"
       restaurantId: parseId(data.restaurantId),
     },
     settings,
-  );
+  ).catch(rethrowAttendanceWindow);
 
   const today = kuwaitDayString(new Date());
   const liveOnly = data.liveOnly === true;
@@ -200,7 +204,7 @@ export const adminAttendanceKpis = onCall(async (request) => {
       restaurantId: parseId(data.restaurantId),
     },
     settings,
-  );
+  ).catch(rethrowAttendanceWindow);
 
   const compliance = rows
     .map((row) => row.compliance_score)

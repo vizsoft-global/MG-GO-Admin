@@ -307,7 +307,9 @@ export async function runAnalyticsQuery(input: DateInput & {
   void logAdminRead("assistant", "assistant.tool", { tool: "analytics_query", kind, window: range });
 
   if (kind === "attendance_kpis" || kind === "attendance_trend") {
-    const { daily } = await fetchAttendanceAnalyticsSummary(range.from, range.to);
+    const summary = await fetchAttendanceAnalyticsSummary(range.from, range.to);
+    if (summary.errorMessage) throw new Error(summary.errorMessage);
+    const { daily } = summary;
     const totals = daily.reduce(
       (acc, day) => ({
         checked_in: acc.checked_in + day.checked_in,

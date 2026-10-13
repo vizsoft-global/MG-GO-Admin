@@ -15,6 +15,7 @@ import type {
   AttendanceThresholdSettings,
   ExceptionResolutionStatus,
 } from "./attendance-reporting-types";
+import { attendanceWindowTooLarge } from "./attendance-query-error";
 
 const KUWAIT_TZ = "Asia/Kuwait";
 const DEFAULT_PAGE_SIZE = 50;
@@ -137,7 +138,7 @@ function parseExceptionRow(raw: Record<string, unknown>): AttendanceExceptionRow
 
 export async function fetchAttendanceDailyList(
   filters: AttendanceListFilters = {},
-): Promise<{ rows: AttendanceDailyRow[]; totalCount: number }> {
+): Promise<{ rows: AttendanceDailyRow[]; totalCount: number; errorMessage?: string }> {
   await requireAttendanceView();
   const today = kuwaitToday();
   const from = filters.fromDate ?? today;
@@ -161,7 +162,10 @@ export async function fetchAttendanceDailyList(
     p_offset: page * pageSize,
   }));
 
-  if (error) throw error;
+  if (error && attendanceWindowTooLarge(error)) {
+    return { rows: [], totalCount: 0, errorMessage: error.message };
+  }
+  if (error) throw new Error(error.message);
 
   const payload = (data ?? {}) as { totalCount?: number; rows?: unknown[] };
   const rows = (payload.rows ?? []).map((r) =>
@@ -300,11 +304,13 @@ export async function updateAttendanceThresholdSettings(
 export async function exportAttendanceDailyCsv(
   filters: AttendanceListFilters = {},
 ): Promise<string> {
-  const { rows } = await fetchAttendanceDailyList({
+  const listed = await fetchAttendanceDailyList({
     ...filters,
     page: 0,
     pageSize: 10000,
   });
+  if (listed.errorMessage) throw new Error(listed.errorMessage);
+  const { rows } = listed;
   const header = [
     "Date",
     "Driver",
@@ -357,13 +363,17 @@ export async function fetchAttendanceAnalyticsSummary(
   toDate: string,
 ): Promise<{
   daily: { date: string; checked_in: number; late: number; absent: number; avg_compliance: number }[];
+  errorMessage?: string;
 }> {
   await requireAttendanceView();
   const { data, error } = await callAdminFunction("admin_attendance_analytics_daily", rpcArgs({
     p_from: fromDate,
     p_to: toDate,
   }));
-  if (error) throw error;
+  if (error && attendanceWindowTooLarge(error)) {
+    return { daily: [], errorMessage: error.message };
+  }
+  if (error) throw new Error(error.message);
 
   const payload = (data ?? {}) as { daily?: unknown[] };
   const daily = (payload.daily ?? []).map((raw) => {

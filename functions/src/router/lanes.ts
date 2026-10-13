@@ -149,7 +149,7 @@ export function callableOptionsForLane(lane: LaneId): LaneRuntimeOptions {
         cpu: 1,
         memory: "2GiB",
         concurrency: 8,
-        minInstances: 1,
+        minInstances: 0,
         maxInstances: 8,
       };
     case "scan":
