@@ -419,17 +419,18 @@ async function pageDeliveryRows(
   driverIds: string[],
   offset: number,
   limit: number,
-): Promise<Row[]> {
+): Promise<{ rows: Row[]; hitCap: boolean }> {
   const query = indexedQuery(db, params);
   if (!needsMemoryFilter(params)) {
     const snap = await query.offset(offset).limit(limit).get();
-    return snap.docs.map((doc) => asRow(doc.id, doc.data()));
+    return { rows: snap.docs.map((doc) => asRow(doc.id, doc.data())), hitCap: false };
   }
   const matches: Row[] = [];
   let skipped = 0;
   let cursor: QueryDocumentSnapshot | undefined;
   let scanned = 0;
-  while (matches.length < limit && scanned < 20_000) {
+  let hitCap = false;
+  while (matches.length < limit && scanned < DELIVERY_SEARCH_CAP) {
     let page = query.limit(400);
     if (cursor) page = page.startAfter(cursor);
     const snap = await page.get();
@@ -447,8 +448,13 @@ async function pageDeliveryRows(
     }
     cursor = snap.docs[snap.docs.length - 1];
     if (snap.size < 400) break;
+    if (scanned >= DELIVERY_SEARCH_CAP) {
+      hitCap = true;
+      break;
+    }
   }
-  return matches;
+  if (scanned >= DELIVERY_SEARCH_CAP && matches.length < limit) hitCap = true;
+  return { rows: matches, hitCap };
 }
 
 async function hydrateListRows(db: Firestore, rows: Row[]): Promise<DeliveryDbRowForList[]> {
@@ -892,48 +898,29 @@ export async function fetchDeliveriesPage(
   params: DeliveriesQueryFilter & { offset?: number },
 ): Promise<DeliveriesPage> {
   await requireDeliveriesView();
-  void logAdminRead("deliveries", "fetchDeliveriesPage");
   const db = await openDb();
   const offset = Math.max(0, params.offset ?? 0);
   const limit = DELIVERIES_PAGE_SIZE;
-  const search = params.search?.trim() ?? "";
-  const searchDriverIds = search ? await resolveSearchDriverIds(search) : [];
-  const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
-  const rows = await pageDeliveryRows(db, params, searchDriverIds, offset, limit);
+  const loaded = await loadDeliverySlice(db, params, offset, limit, null);
+  void logAdminRead("deliveries", "fetchDeliveriesPage", { unindexedFilters: loaded.reasons });
 
-  let total = 0;
-  if (needsMemoryFilter(params)) {
-    total = offset + rows.length;
-    if (rows.length === limit) {
-      const extra = await pageDeliveryRows(db, params, searchDriverIds, offset + limit, 1);
-      if (extra.length > 0) total = offset + limit + 1;
-    }
-  } else {
-    const { data: rawCounts, error: countError } = await callAdminFunction(
-      "admin_deliveries_status_counts",
-      {
-        p_from: params.dateFrom ?? undefined,
-        p_to: params.dateTo ? inclusiveUpperBound(params.dateTo, params.dateToExclusive) : undefined,
-        p_zone_id: params.zoneId && params.zoneId !== "all" ? params.zoneId : undefined,
-        p_partner_id: params.partnerId && params.partnerId !== "all" ? params.partnerId : undefined,
-        p_date_basis: hasDateWindow ? "delivered" : undefined,
-      },
-    );
-    if (countError) {
-      total = offset + rows.length;
-    } else {
-      total = listTotalFromStatusCounts(parseDeliveriesStatusCounts(rawCounts), params.status);
-    }
+  let total = loaded.total ?? offset + loaded.rows.length;
+  if (loaded.total == null && loaded.rows.length === limit && !loaded.searchTruncated) {
+    const extra = await pageDeliveryRows(db, params, loaded.resolvedDriverIds ?? [], offset + limit, 1);
+    if (extra.hitCap) loaded.searchTruncated = true;
+    if (extra.rows.length > 0) total = offset + limit + 1;
   }
 
-  const hydrated = await hydrateListRows(db, rows);
+  const hydrated = await hydrateListRows(db, loaded.rows);
   const gpsFlags = await fetchGpsMockFlagsByDeliveryIds(hydrated.map((row) => row.id));
   const mapped = await mapDeliveryDbRowsToListRows(hydrated, gpsFlags, { resolveAssets: false });
   const enriched = await enrichDeliveryListRows(mapped);
   return {
     rows: enriched,
-    nextOffset: rows.length === limit ? offset + limit : null,
+    nextOffset: loaded.rows.length === limit ? offset + limit : null,
     total,
+    unindexedFilters: loaded.reasons,
+    searchTruncated: loaded.searchTruncated,
   };
 }
 
@@ -1046,9 +1033,10 @@ export async function fetchDeliveriesForExport(params: DeliveriesQueryFilter): P
   const db = await openDb();
   const search = params.search?.trim() ?? "";
   const searchDriverIds = search ? await resolveSearchDriverIds(search) : [];
-  const collected = await collectExportPages<Row>(async (offset, limit) =>
-    pageDeliveryRows(db, params, searchDriverIds, offset, limit),
-  );
+  const collected = await collectExportPages<Row>(async (offset, limit) => {
+    const page = await pageDeliveryRows(db, params, searchDriverIds, offset, limit);
+    return page.rows;
+  });
   const driverIds = collected.map((row) => str(row.driver_id)).filter(Boolean);
   const [drivers, profiles, restaurants, zones] = await Promise.all([
     rowsByIds(db, COLLECTIONS.drivers, driverIds),
