@@ -593,8 +593,8 @@ function SidebarUserMenu() {
 }
 
 export function AppSidebar({
-  accessEpoch = 0,
-  menuEpoch = 0,
+  accessEpoch,
+  menuEpoch,
 }: SidebarMenuEpochs = {}) {
   const { tree } = useSidebarMenu({ accessEpoch, menuEpoch });
 

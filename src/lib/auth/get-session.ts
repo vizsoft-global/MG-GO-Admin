@@ -1,6 +1,5 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
-import type { Firestore } from "firebase-admin/firestore";
 import { getFirebaseFirestore } from "@/lib/firebase/admin";
 import {
   MIDDLEWARE_SESSION_BUDGET_MS,
@@ -9,14 +8,11 @@ import {
 } from "@/lib/firebase/session";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { withDeadline } from "@/lib/async/deadline";
-import type { AdminRoleDoc, ProfileDoc } from "@/lib/firebase/types";
-import { canAccessAdminPanel, type AdminApprovalStatus } from "@/lib/auth/permissions";
-import {
-  enrichSessionPermissions,
-  toAuthProfile,
-  type EnrichedProfile,
-} from "@/lib/auth/profile-auth";
-import { parseStaffAccessKind, type StaffAccessKind } from "@/lib/auth/staff-access";
+import type { EnrichedProfile } from "@/lib/auth/profile-auth";
+import type { AdminApprovalStatus } from "@/lib/auth/permissions";
+import { asEpochReader, getEpochCache, type EpochCounters } from "@/lib/auth/epoch-cache";
+import { loadReadSession } from "@/lib/auth/epoch-session";
+import type { StaffAccessKind } from "@/lib/auth/staff-access";
 
 export type SessionUser = {
   id: string;
@@ -27,12 +23,15 @@ export type SessionUser = {
   isManager: boolean;
   accessKind: StaffAccessKind | null;
   adminRoleSlug: string;
+  epochs: EpochCounters;
 };
 
 export type SessionOutcome = {
   session: SessionUser | null;
   /** The auth backend could not be reached — treat as unknown, not signed out. */
   unavailable: boolean;
+  /** Profile exists but this account may not enter the panel. */
+  notAuthorized: boolean;
 };
 
 const SESSION_BUDGET_MS = 8_000;
@@ -41,7 +40,7 @@ async function loadSessionOutcome(): Promise<SessionOutcome> {
   try {
     return await loadSessionOutcomeUnsafe();
   } catch {
-    return { session: null, unavailable: true };
+    return { session: null, unavailable: true, notAuthorized: false };
   }
 }
 
@@ -51,72 +50,26 @@ async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
 
   const probe = await verifyStaffSessionCookie(cookie, {
     timeoutMs: MIDDLEWARE_SESSION_BUDGET_MS,
+    checkRevoked: false,
   });
 
   // The verifier did not answer, so the session is unproven rather than absent.
   // Throwing would be a logout caused by a backend blip.
   if (!probe.uid) {
-    return { session: null, unavailable: probe.unavailable };
+    return { session: null, unavailable: probe.unavailable, notAuthorized: false };
   }
 
   const db = await getFirebaseFirestore();
   if (!db) {
-    return { session: null, unavailable: true };
+    return { session: null, unavailable: true, notAuthorized: false };
   }
 
-  const profileSnap = await db.collection(COLLECTIONS.profiles).doc(probe.uid).get();
-
-  if (!profileSnap.exists) {
-    return { session: null, unavailable: false };
-  }
-
-  const profileRow = { id: probe.uid, ...(profileSnap.data() ?? {}) } as ProfileDoc;
-  const enriched: EnrichedProfile = profileRow;
-
-  const isSuperAdmin = probe.claims?.superAdmin === true;
-  const accessKind = parseStaffAccessKind(profileRow.access_kind);
-  const isManager = isSuperAdmin || accessKind === "manager";
-  const authProfile = toAuthProfile(enriched, isSuperAdmin);
-
-  if (!canAccessAdminPanel(authProfile) && enriched.approval_status !== "pending") {
-    if (enriched.approval_status === "rejected") {
-      return { session: null, unavailable: false };
-    }
-  }
-
-  const [permissions, roleSlug] = await Promise.all([
-    enrichSessionPermissions(
-      db,
-      enriched.admin_role_id,
-      isSuperAdmin,
-      accessKind,
-      probe.uid,
-    ),
-    loadRoleSlug(db, enriched.admin_role_id),
-  ]);
-
+  const loaded = await loadReadSession(asEpochReader(db), getEpochCache(), probe);
   return {
-    session: {
-      id: probe.uid,
-      email: enriched.email,
-      profile: enriched,
-      permissions,
-      isSuperAdmin,
-      isManager,
-      accessKind,
-      adminRoleSlug: roleSlug ?? "operator",
-    },
-    unavailable: false,
+    session: loaded.session,
+    unavailable: loaded.unavailable,
+    notAuthorized: loaded.notAuthorized,
   };
-}
-
-async function loadRoleSlug(
-  db: Firestore,
-  roleId: string | null,
-): Promise<string | null> {
-  if (!roleId) return null;
-  const snap = await db.collection(COLLECTIONS.adminRoles).doc(roleId).get();
-  return (snap.data() as AdminRoleDoc | undefined)?.slug ?? null;
 }
 
 /**

@@ -45,8 +45,8 @@ function useItemLabel() {
 }
 
 export function AppSecondaryNav({
-  accessEpoch = 0,
-  menuEpoch = 0,
+  accessEpoch,
+  menuEpoch,
 }: SidebarMenuEpochs = {}) {
   const pathname = usePathname();
   const { tree } = useSidebarMenu({ accessEpoch, menuEpoch });

@@ -27,6 +27,8 @@ export type ProfileDoc = {
   approved_at: string | null;
   approved_by: string | null;
   archived_at: string | null;
+  /** Set by revokeStaffAccess. Compared with the session cookie auth_time. */
+  sessions_revoked_at?: unknown;
   staff_department: string | null;
   company_id: string | null;
   zone_id: string | null;

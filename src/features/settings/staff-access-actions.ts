@@ -1,8 +1,12 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import type { DocumentData, Firestore } from "firebase-admin/firestore";
+import type { DocumentData, Firestore, QueryDocumentSnapshot, Transaction } from "firebase-admin/firestore";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import type { EpochCounters } from "@/lib/auth/epoch-cache";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { callAdminFunction } from "@/lib/firebase/callable";
+import { revokeStaffAccess } from "@/lib/firebase/staff-auth";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { CATALOG_SLUG_SET } from "@/lib/auth/permission-catalog";
 import {
@@ -95,6 +99,15 @@ async function requireSuperAdmin() {
     return { error: "not_authorized" as const };
   }
   return { session };
+}
+
+async function requireStaffMutation() {
+  const auth = await requireMutationAuth();
+  if ("error" in auth) return auth;
+  if (!auth.session.isSuperAdmin) {
+    return { error: "not_authorized" as const };
+  }
+  return { session: auth.session };
 }
 
 function matrixSlugs(slugs: string[]): string[] {
@@ -355,8 +368,8 @@ export async function saveStaffAccess(input: {
   slugs: string[];
   department?: StaffDepartment | null;
   requestTypes?: RequestTypeGrant[];
-}): Promise<{ error?: string; success?: boolean }> {
-  const auth = await requireSuperAdmin();
+}): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
+  const auth = await requireStaffMutation();
   if ("error" in auth) return auth;
 
   const kind = parseStaffAccessKind(input.accessKind);
@@ -392,40 +405,55 @@ export async function saveStaffAccess(input: {
     profilePatch.staff_department = input.department;
   }
 
-  try {
-    await profileSnap.ref.set(profilePatch, { merge: true });
-    await db.collection(COLLECTIONS.adminUserPermissions).doc(input.userId).set(
+  const previousKind = parseStaffAccessKind(profile.access_kind);
+  const demoted =
+    (previousKind === "manager" && kind === "user") ||
+    (kind === "user" && previousTicks.some((tick) => !slugs.includes(tick)));
+
+  let requestDocs: QueryDocumentSnapshot[] = [];
+  const requestRows = (input.requestTypes ?? []).filter(
+    (row) => row.accessLevel === "view_only" || row.accessLevel === "approver",
+  );
+  if (input.requestTypes) {
+    const existing = await db
+      .collection(COLLECTIONS.requestStaffAccess)
+      .where("profile_id", "==", input.userId)
+      .get();
+    requestDocs = existing.docs;
+  }
+
+  const writeRows = (tx: Transaction) => {
+    tx.set(db.collection(COLLECTIONS.profiles).doc(input.userId), profilePatch, { merge: true });
+    tx.set(
+      db.collection(COLLECTIONS.adminUserPermissions).doc(input.userId),
       { permission_slugs: slugs },
       { merge: true },
     );
+    if (!input.requestTypes) return;
+    for (const doc of requestDocs) tx.delete(doc.ref);
+    for (const row of requestRows) {
+      const id = `${input.userId}_${row.requestType}`;
+      tx.set(db.collection(COLLECTIONS.requestStaffAccess).doc(id), {
+        id,
+        profile_id: input.userId,
+        request_type: row.requestType,
+        access_level: row.accessLevel,
+      });
+    }
+  };
+
+  let epochs: EpochCounters;
+  try {
+    if (demoted) {
+      epochs = await revokeStaffAccess(input.userId, "demotion", writeRows);
+    } else {
+      const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
+        writeRows(tx);
+      });
+      epochs = written.epochs;
+    }
   } catch (error) {
     return { error: error instanceof Error ? error.message : "save_failed" };
-  }
-
-  if (input.requestTypes) {
-    try {
-      const existing = await db
-        .collection(COLLECTIONS.requestStaffAccess)
-        .where("profile_id", "==", input.userId)
-        .get();
-      const batch = db.batch();
-      for (const doc of existing.docs) batch.delete(doc.ref);
-      const rows = input.requestTypes.filter(
-        (row) => row.accessLevel === "view_only" || row.accessLevel === "approver",
-      );
-      for (const row of rows) {
-        const id = `${input.userId}_${row.requestType}`;
-        batch.set(db.collection(COLLECTIONS.requestStaffAccess).doc(id), {
-          id,
-          profile_id: input.userId,
-          request_type: row.requestType,
-          access_level: row.accessLevel,
-        });
-      }
-      await batch.commit();
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : "save_failed" };
-    }
   }
 
   try {
@@ -454,7 +482,7 @@ export async function saveStaffAccess(input: {
   });
 
   updateTag("admin-roles");
-  return { success: true };
+  return { success: true, epochs };
 }
 
 export async function copyRoleTemplateTicks(roleId: string): Promise<{
@@ -490,4 +518,28 @@ export async function getUserTicksForCopy(sourceUserId: string): Promise<{
     accessKind: loaded.detail.accessKind,
     requestTypes: loaded.detail.requestTypes,
   };
+}
+
+export async function archiveStaff(userId: string): Promise<{ error?: string; success?: boolean }> {
+  const auth = await requireStaffMutation();
+  if ("error" in auth) return auth;
+  try {
+    await revokeStaffAccess(userId, "staff_archive");
+  } catch {
+    return { error: "save_failed" };
+  }
+  updateTag("admin-roles");
+  return { success: true };
+}
+
+export async function removeStaffRole(userId: string): Promise<{ error?: string; success?: boolean }> {
+  const auth = await requireStaffMutation();
+  if ("error" in auth) return auth;
+  try {
+    await revokeStaffAccess(userId, "role_removed");
+  } catch {
+    return { error: "save_failed" };
+  }
+  updateTag("admin-roles");
+  return { success: true };
 }

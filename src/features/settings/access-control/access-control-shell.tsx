@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { SearchField } from "@/components/app";
@@ -41,6 +42,8 @@ import {
   type StaffLastChanged,
 } from "@/features/settings/staff-access-actions";
 import { useRouter } from "@/i18n/navigation";
+import { useApplySidebarEpochs } from "@/contexts/sidebar-epochs-context";
+import { queryKeys } from "@/lib/query/query-keys";
 import { StaffUserList } from "./staff-user-list";
 import { UserAccessHeader } from "./user-access-header";
 import { AppAccessCard, appCardMatchesQuery, appHasAccess } from "./app-access-card";
@@ -206,6 +209,8 @@ function StaffAccessWorkspace({
   const tNav = useTranslations();
   const locale = useLocale();
   const router = useRouter();
+  const applyEpochs = useApplySidebarEpochs();
+  const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
 
   const [appFilter, setAppFilter] = useState<AppFilter>("all");
@@ -326,6 +331,8 @@ function StaffAccessWorkspace({
         return;
       }
       toast.success(t("saved"));
+      applyEpochs(result.epochs);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.menu.all() });
       setBaseline({ kind, access, department, grants });
       router.refresh();
     });

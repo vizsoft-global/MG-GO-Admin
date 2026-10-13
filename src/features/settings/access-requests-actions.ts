@@ -1,8 +1,11 @@
 "use server";
 
 import { updateTag } from "next/cache";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import type { EpochCounters } from "@/lib/auth/epoch-cache";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { callAdminFunction } from "@/lib/firebase/callable";
-import { getSessionUser } from "@/lib/auth/get-session";
+import { revokeStaffAccess } from "@/lib/firebase/staff-auth";
 import { isAdminAccessRequestProfile } from "./access-request-eligibility";
 import {
   expandRoleSlugsToUserTicks,
@@ -35,18 +38,19 @@ function iso(value: unknown): string | null {
 }
 
 async function requireSuperAdmin() {
-  const session = await getSessionUser();
-  if (!session?.isSuperAdmin) {
+  const auth = await requireMutationAuth();
+  if ("error" in auth) return auth;
+  if (!auth.session.isSuperAdmin) {
     return { error: "not_authorized" as const };
   }
-  return { session };
+  return { session: auth.session };
 }
 
 export async function approveUser(
   userId: string,
   roleId: string,
   accessKind: StaffAccessKind = "user",
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
@@ -78,39 +82,46 @@ export async function approveUser(
   const kind = parseStaffAccessKind(accessKind) ?? "user";
   const approvedAt = new Date();
 
-  try {
-    await profileSnap.ref.set(
-      {
-        admin_role_id: roleId,
-        approval_status: "approved",
-        role: "staff",
-        access_kind: kind,
-        approved_at: approvedAt,
-        approved_by: auth.session.id,
-        updated_at: approvedAt,
-      },
-      { merge: true },
-    );
-  } catch {
-    return { error: "save_failed" };
-  }
-
-  const permRef = db.collection(COLLECTIONS.adminUserPermissions).doc(userId);
+  let ticks: string[] = [];
   if (kind === "user") {
     const rolePerms = await db.collection(COLLECTIONS.adminRolePermissions).doc(roleId).get();
     const raw = rolePerms.data()?.permission_slugs;
     const source = Array.isArray(raw) ? raw.filter((slug): slug is string => typeof slug === "string") : [];
-    const ticks = [...expandRoleSlugsToUserTicks(source)].filter(isStaffMatrixSlug);
-    await permRef.set({ permission_slugs: ticks }, { merge: true });
-  } else {
-    await permRef.set({ permission_slugs: [] }, { merge: true });
+    ticks = [...expandRoleSlugsToUserTicks(source)].filter(isStaffMatrixSlug);
   }
-
   const allowEmail = email.toLowerCase();
-  await db.collection(COLLECTIONS.adminAllowlist).doc(encodeURIComponent(allowEmail)).set(
-    { email: allowEmail, role: "staff" },
-    { merge: true },
-  );
+
+  let epochs: EpochCounters;
+  try {
+    const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
+      tx.set(
+        db.collection(COLLECTIONS.profiles).doc(userId),
+        {
+          admin_role_id: roleId,
+          approval_status: "approved",
+          role: "staff",
+          access_kind: kind,
+          approved_at: approvedAt,
+          approved_by: auth.session.id,
+          updated_at: approvedAt,
+        },
+        { merge: true },
+      );
+      tx.set(
+        db.collection(COLLECTIONS.adminUserPermissions).doc(userId),
+        { permission_slugs: ticks },
+        { merge: true },
+      );
+      tx.set(
+        db.collection(COLLECTIONS.adminAllowlist).doc(encodeURIComponent(allowEmail)),
+        { email: allowEmail, role: "staff" },
+        { merge: true },
+      );
+    });
+    epochs = written.epochs;
+  } catch {
+    return { error: "save_failed" };
+  }
 
   try {
     await callAdminFunction("syncStaffClaims", { uid: userId });
@@ -118,10 +129,10 @@ export async function approveUser(
     // Approval is already saved; claims refresh must not report it as failed.
   }
   updateTag("admin-roles");
-  return { success: true };
+  return { success: true, epochs };
 }
 
-export async function rejectUser(userId: string): Promise<{ error?: string; success?: boolean }> {
+export async function rejectUser(userId: string): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
@@ -143,19 +154,14 @@ export async function rejectUser(userId: string): Promise<{ error?: string; succ
     return { error: "user_not_found" };
   }
 
+  let epochs: EpochCounters;
   try {
-    await profileSnap.ref.set(
-      {
-        approval_status: "rejected",
-        updated_at: new Date(),
-      },
-      { merge: true },
-    );
+    epochs = await revokeStaffAccess(userId, "access_request_rejected");
   } catch {
     return { error: "save_failed" };
   }
 
-  return { success: true };
+  return { success: true, epochs };
 }
 
 export async function listPendingStaffAccessRequests(limit?: number): Promise<
@@ -201,27 +207,32 @@ export async function listPendingStaffAccessRequests(limit?: number): Promise<
 
 export async function setMaintenanceMode(
   enabled: boolean,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
 
   const db = await staffDb();
   if (!db) return { error: "save_failed" };
 
+  let epochs: EpochCounters;
   try {
-    await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).set(
-      {
-        maintenance_mode: enabled,
-        updated_at: new Date(),
-        updated_by: auth.session.id,
-      },
-      { merge: true },
-    );
+    const written = await writeWithEpochCounters(db, "settings", ({ tx }) => {
+      tx.set(
+        db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID),
+        {
+          maintenance_mode: enabled,
+          updated_at: new Date(),
+          updated_by: auth.session.id,
+        },
+        { merge: true },
+      );
+    });
+    epochs = written.epochs;
   } catch {
     return { error: "save_failed" };
   }
 
   updateTag("app-settings");
   updateTag("app-ops-settings");
-  return { success: true };
+  return { success: true, epochs };
 }

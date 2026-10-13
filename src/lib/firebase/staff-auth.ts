@@ -1,4 +1,9 @@
-import { getFirebaseAuth } from "./admin";
+import { FieldValue, type Transaction } from "firebase-admin/firestore";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import { emptyEpochs, type EpochCounters } from "@/lib/auth/epoch-cache";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { clearMintedIdToken } from "@/lib/firebase/callable";
+import { getFirebaseAuth, getFirebaseFirestore } from "./admin";
 
 /**
  * Staff email/password sign-in against Identity Toolkit, server-side.
@@ -143,9 +148,64 @@ export async function setStaffPassword(uid: string, password: string): Promise<b
   return true;
 }
 
-/** Ends every refresh token for the user — used on sign-out and staff revoke. */
-export async function revokeStaffSessions(uid: string): Promise<void> {
+export type StaffRevokeReason =
+  | "access_request_rejected"
+  | "staff_archive"
+  | "role_removed"
+  | "demotion";
+
+function removalFields(reason: StaffRevokeReason): Record<string, unknown> {
+  switch (reason) {
+    case "demotion":
+      return {};
+    case "access_request_rejected":
+      return { approval_status: "rejected" };
+    case "staff_archive":
+      return { archived_at: new Date().toISOString() };
+    case "role_removed":
+      return { admin_role_id: null };
+    default: {
+      const neverReason: never = reason;
+      return neverReason;
+    }
+  }
+}
+
+/**
+ * Ends this staff member's access on every device.
+ *
+ * revokeRefreshTokens signs the user out on every device; sign-out of one
+ * browser must not use it. Call this only for access removal: demotion, role
+ * removal, archive, and access-request rejection. The profile write and the
+ * access-epoch bump are one transaction.
+ */
+export async function revokeStaffAccess(
+  uid: string,
+  reason: StaffRevokeReason,
+  extra?: (tx: Transaction) => void,
+): Promise<EpochCounters> {
   const auth = await getFirebaseAuth();
-  if (!auth) return;
-  await auth.revokeRefreshTokens(uid);
+  if (auth) {
+    // revokeRefreshTokens signs the user out on every device; sign-out of one
+    // browser must not use it.
+    await auth.revokeRefreshTokens(uid);
+  }
+  const db = await getFirebaseFirestore();
+  let epochs = emptyEpochs();
+  if (db) {
+    const written = await writeWithEpochCounters(db, "access", ({ tx }) => {
+      tx.set(
+        db.collection(COLLECTIONS.profiles).doc(uid),
+        {
+          sessions_revoked_at: FieldValue.serverTimestamp(),
+          ...removalFields(reason),
+        },
+        { merge: true },
+      );
+      extra?.(tx);
+    });
+    epochs = written.epochs;
+  }
+  clearMintedIdToken(uid);
+  return epochs;
 }

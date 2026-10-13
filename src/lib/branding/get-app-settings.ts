@@ -1,6 +1,8 @@
 import { cache } from "react";
 import type { DocumentData } from "firebase-admin/firestore";
 import { withDeadline } from "@/lib/async/deadline";
+import { asEpochReader, getEpochCache, readEpochSettings } from "@/lib/auth/epoch-cache";
+import { getSessionUser } from "@/lib/auth/get-session";
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_DRIVER_APP_SETTINGS,
@@ -180,9 +182,10 @@ async function loadAppSettingsRow(): Promise<SettingsRow | null> {
   try {
     const db = await staffDb();
     if (!db) return null;
-    const snap = await db.collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).get();
-    if (!snap.exists) return null;
-    return rowFromDoc(snap.data() ?? {});
+    const session = await getSessionUser();
+    const row = await readEpochSettings(asEpochReader(db), getEpochCache(), session ? session.epochs.settings : null);
+    if (!row) return null;
+    return rowFromDoc(row);
   } catch {
     return null;
   }

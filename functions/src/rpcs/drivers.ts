@@ -19,7 +19,7 @@ import { getFirestore, Timestamp, type Firestore } from "../core/fs";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
-import { lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
+import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
 import { driverPrefixQueries, tokenPrefixMatch } from "../core/search-text";
 import {
   logDriverOperation,
@@ -633,7 +633,7 @@ async function loadDriversForList(
   if (!term) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
   const db = getFirestore();
   const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.driverIntakes, "name_lower");
-  if (!indexed) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
+  if (fullScanFallback(indexed, term)) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
   const ids = await prefixMatchIds(db, COLLECTIONS.driverIntakes, driverPrefixQueries(term));
   const rows = await loadDriverRows(archived, new Set(ids), phases);
   try {

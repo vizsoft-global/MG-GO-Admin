@@ -49,8 +49,7 @@ export default async function LocaleLayout({
   }
 
   setRequestLocale(locale);
-  const messages = await getMessages();
-  const branding = await getAppSettings();
+  const [messages, branding] = await Promise.all([getMessages(), getAppSettings()]);
   const customThemeCss = !branding.theme.isPreset
     ? buildCustomThemeCss(
         branding.theme.themeId,

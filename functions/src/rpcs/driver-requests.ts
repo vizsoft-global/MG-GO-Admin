@@ -13,7 +13,7 @@ import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireRider, riderError, type RiderContext } from "../core/rider";
-import { requestSearchStamp } from "../core/search-text";
+import { stampStoredRow } from "../core/search-text";
 import {
   dataOf,
   isoTimestamp,
@@ -282,11 +282,11 @@ export const driverCreateRequest = onCall(async (request) => {
     driver_name: textOrNull(ctx.profile.full_name) ?? textOrNull(ctx.driver.name),
     driver_code: textOrNull(ctx.driver.driver_code),
     employee_id: textOrNull(ctx.driver.employee_id),
-    ...requestSearchStamp({
-      requestCode: code,
-      driverName: textOrNull(ctx.profile.full_name) ?? textOrNull(ctx.driver.name),
-      driverCode: textOrNull(ctx.driver.driver_code),
-      employeeId: textOrNull(ctx.driver.employee_id),
+    ...stampStoredRow("requests", {
+      request_code: code,
+      driver_name: textOrNull(ctx.profile.full_name) ?? textOrNull(ctx.driver.name),
+      driver_code: textOrNull(ctx.driver.driver_code),
+      employee_id: textOrNull(ctx.driver.employee_id),
     }),
     created_day: kuwaitDayString(now),
     created_at: nowTs,

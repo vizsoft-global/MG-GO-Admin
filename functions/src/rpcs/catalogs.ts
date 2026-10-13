@@ -3,7 +3,7 @@ import { FieldValue, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { parseId } from "../core/query";
 import { requireStaff } from "../core/staff";
-import { catalogNameStamp } from "../core/search-text";
+import { stampStoredRow } from "../core/search-text";
 
 const ZONES = COLLECTIONS.zones;
 const ZONE_GEOFENCE_SETTINGS = "zone_geofence_settings";
@@ -298,7 +298,7 @@ export const adminUpsertRestaurant = onCall(async (request) => {
     longitude: lng,
     is_active: readBool(data, "isActive", true),
     updated_at: FieldValue.serverTimestamp(),
-    ...catalogNameStamp(name, merchantId),
+    ...stampStoredRow("restaurants", { name, external_merchant_id: merchantId }),
   };
   if (id) {
     const existing = await ref.get();

@@ -1,7 +1,15 @@
 "use server";
 
 import type { QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import {
+  asEpochReader,
+  getEpochCache,
+  readEpochQuery,
+  type EpochCounters,
+} from "@/lib/auth/epoch-cache";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 
@@ -43,8 +51,19 @@ export async function getMenuConfig(role: string): Promise<MenuNode[]> {
   if (!session) return [];
 
   try {
-    const { docs } = await menuDocsForRole(role);
-    return configOf(docs[0]?.data()?.config);
+    const db = await staffDb();
+    if (!db) return [];
+    return await readEpochQuery(
+      asEpochReader(db),
+      getEpochCache(),
+      "menu",
+      `menu:${role}`,
+      session.epochs.menu,
+      async () => {
+        const { docs } = await menuDocsForRole(role);
+        return configOf(docs[0]?.data()?.config);
+      },
+    );
   } catch (error) {
     if (process.env.NODE_ENV === "development") {
       console.warn("getMenuConfig", formatMenuConfigError(error));
@@ -53,9 +72,14 @@ export async function getMenuConfig(role: string): Promise<MenuNode[]> {
   }
 }
 
-export async function saveMenuConfig(role: string, config: MenuNode[]): Promise<void> {
-  const session = await getSessionUser();
-  if (!session) throw new Error("not_authenticated");
+async function requireMenuMutation() {
+  const auth = await requireMutationAuth();
+  if ("error" in auth) throw new Error("not_authenticated");
+  return auth.session;
+}
+
+export async function saveMenuConfig(role: string, config: MenuNode[]): Promise<EpochCounters> {
+  const session = await requireMenuMutation();
 
   const { db, docs } = await menuDocsForRole(role);
   if (!db) throw new Error("not_configured");
@@ -69,29 +93,33 @@ export async function saveMenuConfig(role: string, config: MenuNode[]): Promise<
     updated_by: session.id,
   };
 
-  if (docs[0]) {
-    await docs[0].ref.set(payload, { merge: true });
-    return;
-  }
-
-  const id = crypto.randomUUID();
-  await db.collection(COLLECTIONS.menuConfigs).doc(id).set({ id, ...payload });
+  const written = await writeWithEpochCounters(db, "menu", ({ tx }) => {
+    if (docs[0]) {
+      tx.set(docs[0].ref, payload, { merge: true });
+      return;
+    }
+    const id = crypto.randomUUID();
+    tx.set(db.collection(COLLECTIONS.menuConfigs).doc(id), { id, ...payload });
+  });
+  return written.epochs;
 }
 
-export async function resetMenuConfig(role: string): Promise<void> {
-  const session = await getSessionUser();
-  if (!session) throw new Error("not_authenticated");
+export async function resetMenuConfig(role: string): Promise<EpochCounters> {
+  await requireMenuMutation();
 
   const { db, docs } = await menuDocsForRole(role);
   if (!db) throw new Error("not_configured");
-  await Promise.all(docs.map((doc) => doc.ref.delete()));
+  const written = await writeWithEpochCounters(db, "menu", ({ tx }) => {
+    for (const doc of docs) tx.delete(doc.ref);
+  });
+  return written.epochs;
 }
 
 /** Copy saved menu config from one role to another (overwrites target). */
-export async function copyMenuConfig(fromRole: string, toRole: string): Promise<void> {
+export async function copyMenuConfig(fromRole: string, toRole: string): Promise<EpochCounters> {
   if (fromRole === toRole) {
     throw new Error("Source and target roles must differ");
   }
   const config = await getMenuConfig(fromRole);
-  await saveMenuConfig(toRole, config);
+  return saveMenuConfig(toRole, config);
 }
