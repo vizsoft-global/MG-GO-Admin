@@ -817,7 +817,9 @@
         "afternoon": "Good afternoon",
         "evening": "Good evening"
       },
-      "footer": "{name} · {subtitle} v{version} · Made with ♥ by websitek"
+      "footer": "{name} · {subtitle} v{version} ·",
+      "company": "Al‑Musallam Group Holding Company",
+      "slogan": "POWERED BY PASSION"
     },
     "rcmV2": {
       "breadcrumb": "EmployeeDesk",
@@ -9676,6 +9678,12 @@
       "forceCleared": "Cleared force for {count}",
       "saving": "Saving…",
       "exportDone": "Exported {count} rows",
+      "sentry": {
+        "not_configured": "Sentry is not configured for this panel.",
+        "unauthorized": "Sentry rejected the API token.",
+        "timeout": "Sentry timed out.",
+        "request_failed": "Could not reach Sentry."
+      },
       "errors": {
         "notificationsSendRequired": "You need notifications.send to push",
         "missingFields": "Title and message are required",

@@ -2,15 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Bell, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Logo } from "@/components/brand/logo";
 import { useAuth } from "@/contexts/auth-context";
 import { useBranding } from "@/contexts/branding-context";
 import { useNavBadges } from "@/hooks/use-nav-badges";
 import { Link } from "@/i18n/navigation";
 import { signOut } from "@/features/auth/actions";
+import { launcherFontClassName } from "@/lib/fonts/app-fonts";
 import {
   filterLauncherTiles,
   greetingBucket,
@@ -19,7 +17,8 @@ import {
   type LauncherTileId,
   visibleLauncherTiles,
 } from "@/lib/menu/launcher-modules";
-import { APP_NAV_KEY_BY_ID, resolveIcon } from "@/lib/menu/menu-registry";
+import { LAUNCHER_GLYPH } from "@/lib/menu/launcher-glyphs";
+import { APP_NAV_KEY_BY_ID } from "@/lib/menu/menu-registry";
 import { LAUNCHER_BRAND, launcherTileHex } from "@/lib/menu/module-colors";
 import type { Permission } from "@/lib/auth/permissions";
 import { APP_PANEL_VERSION } from "@/lib/app/build-id";
@@ -33,12 +32,33 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+const TILE_SHADOW =
+  "inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -2px 0 rgba(0,0,0,0.10), 0 1px 2px rgba(41,41,63,0.12), 0 8px 18px -6px rgba(41,41,63,0.28)";
+
 function formatAdminRole(slug: string): string {
   if (!slug) return "";
   return slug
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function LauncherGlyph({ id }: { id: LauncherTileId }) {
+  return (
+    <svg
+      width="27"
+      height="27"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#ffffff"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d={LAUNCHER_GLYPH[id]} />
+    </svg>
+  );
 }
 
 export function AppLauncherShell() {
@@ -92,8 +112,12 @@ export function AppLauncherShell() {
 
   return (
     <div
-      className="relative flex min-h-svh flex-col overflow-hidden"
-      style={{ backgroundColor: LAUNCHER_BRAND.canvas, color: LAUNCHER_BRAND.text }}
+      className={`${launcherFontClassName} relative flex h-full min-h-svh flex-col overflow-hidden`}
+      style={{
+        backgroundColor: LAUNCHER_BRAND.canvas,
+        color: LAUNCHER_BRAND.text,
+        fontFamily: 'var(--font-launcher), "Noto Sans Arabic", "Segoe UI", sans-serif',
+      }}
     >
       <img
         src="/launcher-mg-watermark.png"
@@ -102,20 +126,17 @@ export function AppLauncherShell() {
         className="pointer-events-none absolute -end-10 -bottom-[150px] w-[520px] opacity-60"
       />
       <header
-        className="relative z-10 flex h-16 shrink-0 items-center gap-4 px-6 text-white"
-        style={{
-          backgroundColor: LAUNCHER_BRAND.topBar,
-        }}
+        className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-4 px-6 py-2.5 text-white"
+        style={{ backgroundColor: LAUNCHER_BRAND.topBar }}
       >
         <Link href="/dashboard" className="flex shrink-0 items-center gap-[10px]">
-          <span
-            className="grid size-7 shrink-0 place-items-center overflow-hidden rounded-md"
-            style={{ backgroundColor: LAUNCHER_BRAND.logoChip }}
-          >
-            <Logo size="sm" priority />
-          </span>
-          <span className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-[13px] font-semibold tracking-tight">
+          <img
+            src="/launcher-mark.png"
+            alt={branding.appName}
+            className="h-[26px] w-auto"
+          />
+          <span className="flex min-w-0 flex-col leading-[1.15]">
+            <span className="truncate text-[13px] font-bold tracking-[0.04em]">
               {branding.appName}
             </span>
             <span className="truncate text-[11px]" style={{ color: LAUNCHER_BRAND.muted }}>
@@ -124,16 +145,25 @@ export function AppLauncherShell() {
           </span>
         </Link>
 
-        <span className="h-px flex-1" />
-
         <label
-          className="relative flex h-[38px] w-[440px] max-w-[46vw] shrink-0 items-center gap-2 rounded-lg px-3"
+          className="relative flex min-w-[200px] flex-[0_1_380px] items-center gap-2 rounded-lg px-3 py-[7px]"
           style={{
             backgroundColor: LAUNCHER_BRAND.search,
             border: `1px solid ${LAUNCHER_BRAND.searchBorder}`,
           }}
         >
-          <Search className="size-4 shrink-0" style={{ color: LAUNCHER_BRAND.muted }} />
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={LAUNCHER_BRAND.muted}
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M11 18a7 7 0 1 0 0-14a7 7 0 1 0 0 14z M20 20l-4-4" />
+          </svg>
           <Input
             ref={searchRef}
             value={query}
@@ -142,32 +172,46 @@ export function AppLauncherShell() {
             className="h-auto w-full flex-1 border-0 bg-transparent p-0 text-[13px] text-white shadow-none focus-visible:border-0 focus-visible:ring-0"
           />
           <kbd
-            className="hidden shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium sm:inline"
-            style={{ backgroundColor: LAUNCHER_BRAND.searchHint, color: LAUNCHER_BRAND.muted }}
+            className="hidden shrink-0 rounded px-[5px] py-px text-[11px] sm:inline"
+            style={{
+              color: LAUNCHER_BRAND.muted,
+              border: "1px solid rgba(255,255,255,0.2)",
+            }}
           >
             {t("searchHint")}
           </kbd>
         </label>
 
-        <span className="h-px flex-1" />
-
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3.5">
           <Link
             href="/notifications"
-            className="relative grid size-8 place-items-center rounded-full text-white/70 hover:bg-white/10 hover:text-white"
+            className="grid size-9 place-items-center rounded-full text-white hover:bg-white/10"
             aria-label={tNav("nav.notifications")}
           >
-            <Bell className="size-[18px]" />
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 21h4" />
+            </svg>
           </Link>
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex h-9 cursor-pointer items-center gap-2 rounded-full pe-2 hover:bg-white/10">
-              <Avatar className="size-8">
-                <AvatarFallback className="bg-white/15 text-[10px] font-semibold text-white">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <span className="hidden max-w-[140px] truncate text-start text-[12px] font-medium leading-tight lg:block">
-                {initials} {roleLabel || displayName}
+            <DropdownMenuTrigger className="flex cursor-pointer items-center gap-2 rounded-full pe-1 hover:bg-white/10">
+              <span
+                className="grid size-[30px] place-items-center rounded-full text-[11px] font-bold text-white"
+                style={{ backgroundColor: LAUNCHER_BRAND.accent }}
+              >
+                {initials}
+              </span>
+              <span className="hidden max-w-[140px] truncate text-start text-[13px] font-semibold leading-tight lg:block">
+                {roleLabel || displayName}
               </span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -191,62 +235,98 @@ export function AppLauncherShell() {
         </div>
       </header>
 
-      <section className="relative z-10 mt-[72px] flex flex-col items-center gap-1.5 text-center">
-        <h1 className="text-[24px] font-semibold leading-none tracking-tight" style={{ color: LAUNCHER_BRAND.text }}>
-          {t(`greeting.${greeting}`)}, {displayName}
-        </h1>
-        <p className="text-[14px]" style={{ color: LAUNCHER_BRAND.subText }}>
-          {t("subtitle")}
-        </p>
-      </section>
+      <main className="relative z-10 flex min-h-0 flex-1 flex-col px-6 pt-6 pb-6 sm:px-12 sm:pt-9 sm:pb-10">
+        <div className="flex flex-col items-start gap-1.5">
+          <span
+            aria-hidden
+            className="mb-1.5 h-0.5 w-6"
+            style={{ backgroundColor: LAUNCHER_BRAND.accent }}
+          />
+          <h1
+            className="m-0 text-[18px] font-normal tracking-[0.01em]"
+            style={{ color: LAUNCHER_BRAND.text }}
+          >
+            {t(`greeting.${greeting}`)}, <span className="font-semibold">{displayName}</span>
+          </h1>
+          <p className="m-0 text-[12.5px]" style={{ color: LAUNCHER_BRAND.subText }}>
+            {t("subtitle")}
+          </p>
+        </div>
 
-      <div className="relative z-10 mx-auto mt-[52px] grid w-full max-w-[690px] grid-cols-3 justify-items-center gap-x-[30px] gap-y-[24px] sm:grid-cols-4 lg:grid-cols-6">
-        {visible.map((item) => {
-          const Icon = resolveIcon(item.defaultIcon);
-          const badge = badges[item.id];
-          return (
-            <Link
-              key={item.id}
-              href={item.href}
-              className="group flex w-[90px] flex-col items-center gap-[10px] text-center"
-            >
-              <span
-                className="relative grid size-16 place-items-center rounded-[16px]"
-                style={{ backgroundColor: launcherTileHex(item.id) }}
-              >
-                <Icon className="size-[30px] text-white" aria-hidden />
-                {badge ? (
+        <div className="mx-auto mt-11 flex w-full max-w-[720px] flex-col">
+          <nav
+            aria-label={t("title")}
+            className="grid w-full grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-x-3 gap-y-[30px]"
+          >
+            {visible.map((item) => {
+              const tileId = item.id as LauncherTileId;
+              const badge = badges[item.id];
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className="flex flex-col items-center gap-2.5 text-center"
+                >
                   <span
-                    className="absolute -end-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums text-white"
+                    className="relative grid size-[60px] place-items-center rounded-[18px]"
                     style={{
-                      backgroundColor: LAUNCHER_BRAND.badge,
-                      border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,
+                      backgroundColor: launcherTileHex(item.id),
+                      boxShadow: TILE_SHADOW,
                     }}
                   >
-                    {badge > 999 ? "999+" : badge}
+                    <LauncherGlyph id={tileId} />
+                    {badge ? (
+                      <span
+                        className="absolute -end-[7px] -top-[7px] inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-[11px] font-bold tabular-nums text-white"
+                        style={{
+                          backgroundColor: LAUNCHER_BRAND.badge,
+                          border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,
+                        }}
+                      >
+                        {badge > 999 ? "999+" : badge}
+                      </span>
+                    ) : null}
                   </span>
-                ) : null}
-              </span>
-              <p
-                className="text-[13px] font-medium leading-snug"
-                style={{ color: LAUNCHER_BRAND.tileLabel }}
-              >
-                {labels.get(item.id) ?? item.defaultLabel}
-              </p>
-            </Link>
-          );
-        })}
-      </div>
+                  <span
+                    className="text-[12px] font-medium leading-[1.3]"
+                    style={{ color: LAUNCHER_BRAND.tileLabel }}
+                  >
+                    {labels.get(item.id) ?? item.defaultLabel}
+                  </span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="relative mx-auto mt-[60px] pt-[9px] ps-[15px]">
+            <img
+              src="/launcher-passion.png"
+              alt=""
+              aria-hidden
+              className="absolute start-0 top-0 w-[17px]"
+            />
+            <div
+              className="text-[12px] font-bold tracking-[0.22em] whitespace-nowrap"
+              style={{ color: LAUNCHER_BRAND.text }}
+            >
+              {t("slogan")}
+            </div>
+          </div>
+        </div>
+      </main>
 
       <footer
-        className="relative z-10 mt-auto pt-12 pb-6 text-center text-[12px]"
+        className="relative z-10 shrink-0 px-4 pt-[18px] pb-[22px] text-center text-[12px]"
         style={{ color: LAUNCHER_BRAND.footer }}
       >
         {t("footer", {
           name: branding.appName,
           subtitle: branding.appSubtitle,
           version: APP_PANEL_VERSION,
-        })}
+        })}{" "}
+        <span className="font-semibold" style={{ color: LAUNCHER_BRAND.text }}>
+          {t("company")}
+        </span>
       </footer>
     </div>
   );

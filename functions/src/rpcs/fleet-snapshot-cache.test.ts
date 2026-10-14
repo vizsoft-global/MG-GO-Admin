@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   createFleetBaseCache,
   fleetBaseCacheKey,
+  fleetRowIsEligible,
   projectFleetSnapshot,
   type FleetCacheRow,
 } from "./fleet-snapshot-cache";
@@ -96,5 +97,55 @@ describe("fleet snapshot cache", () => {
     assert.equal(visible.drivers[0]?.phone, "111");
     assert.equal(base.drivers[0]?.phone, "111");
     assert.equal(base.drivers[1]?.contact, "ops@example.com");
+  });
+
+  it("keeps a coalesced rider whose last_report_at is fresh and last_seen_at is stale", () => {
+    const stale = new Date(NOW - 2 * 60 * 60_000).toISOString();
+    const fresh = new Date(NOW).toISOString();
+    const projected = projectFleetSnapshot(
+      {
+        drivers: [
+          row({
+            driver_id: "idle",
+            is_on_duty: false,
+            last_seen_at: stale,
+            last_report_at: fresh,
+          }),
+        ],
+      },
+      {
+        zoneIds: null,
+        partnerIds: null,
+        seenWithinMinutes: 30,
+        nowMs: NOW,
+        canSeeContact: true,
+      },
+    );
+    assert.deepEqual(projected.drivers.map((driver) => driver.driver_id), ["idle"]);
+  });
+
+  it("keeps an online session when both location stamps are stale", () => {
+    assert.equal(
+      fleetRowIsEligible({
+        isOnDuty: false,
+        isOnline: true,
+        isBlocked: false,
+        lastSeenAt: new Date(NOW - 2 * 60 * 60_000).toISOString(),
+        lastReportAt: new Date(NOW - 2 * 60 * 60_000).toISOString(),
+        cutoffMs: NOW - 30 * 60_000,
+      }),
+      true,
+    );
+    assert.equal(
+      fleetRowIsEligible({
+        isOnDuty: false,
+        isOnline: false,
+        isBlocked: false,
+        lastSeenAt: new Date(NOW - 2 * 60 * 60_000).toISOString(),
+        lastReportAt: new Date(NOW - 2 * 60 * 60_000).toISOString(),
+        cutoffMs: NOW - 30 * 60_000,
+      }),
+      false,
+    );
   });
 });

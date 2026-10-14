@@ -355,6 +355,10 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "driverReportDeviceMeta",
     "driverRecordLoginVerification"
   ],
+  "./rpcs/driver-push-tokens": [
+    "driverUpsertPushToken",
+    "driverDeactivatePushToken"
+  ],
   "./rpcs/driver-attendance-get": [
     "driverGetAttendance"
   ],

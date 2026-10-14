@@ -98,6 +98,7 @@ export const COLLECTIONS = {
   notificationAudienceSnapshots: "notification_audience_snapshots",
   notificationClientEvents: "notification_client_events",
   notificationDeviceTokens: "notification_device_tokens",
+  driverPushTokens: "driver_push_tokens",
   notificationTimeline: "notification_timeline",
   driverPerformanceDaily: "driver_performance_daily",
   performanceScoreComponents: "performance_score_components",

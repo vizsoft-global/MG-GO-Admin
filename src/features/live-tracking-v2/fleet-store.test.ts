@@ -236,6 +236,47 @@ describe("FleetStore filters and roster", () => {
     assert.ok(store.getSnapshot().driverIds.includes("d1"));
   });
 
+  it("does not wipe a meta-filled rail when the snapshot comes back empty", () => {
+    const store = new FleetStore();
+    store.applyMeta([
+      {
+        idIdx: 1,
+        driverId: "d1",
+        driverName: "Jhon Doe",
+        driverCode: "10001",
+        employeeId: "1001",
+        avatarObjectKey: null,
+        avatarUpdatedAt: null,
+        zoneId: "z1",
+        zoneName: "Kuwait City",
+        partnerId: "p1",
+        partnerName: "Talabat",
+        restaurantName: "Burger Place",
+        vehicleLabel: "B1",
+        accountStatus: "active",
+        onDutySince: NOW,
+        deliveriesToday: 0,
+        deliveriesCompletedToday: 0,
+        distanceTodayMeters: 0,
+        batteryPct: 80,
+        accuracyMeters: 8,
+        activeDeliveryId: null,
+        currentZoneId: null,
+        currentZoneName: null,
+        shiftStartAt: null,
+        shiftEndAt: null,
+        lastFixAt: NOW,
+      },
+    ]);
+    store.applySnapshot({
+      generatedAt: NOW,
+      settings: null,
+      drivers: [],
+    });
+    assert.equal(store.getDriver("d1") != null, true);
+    assert.equal(store.getSnapshot().totalDrivers, 1);
+  });
+
   it("lists a blocked driver when the Blocked chip is the only status", () => {
     const store = new FleetStore();
     store.applySnapshot({

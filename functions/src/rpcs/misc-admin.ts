@@ -329,6 +329,7 @@ export const notifyDriverTransactional = onCall(async (request) => {
         : typeof data.p_action_params === "object" && data.p_action_params !== null
           ? (data.p_action_params as Record<string, unknown>)
           : {},
+    skipPush: true,
   });
 
   return {

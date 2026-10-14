@@ -525,7 +525,7 @@ export async function updateVisitNoteToRider(input: {
   if (payload.ok === false) {
     return { ok: false, error: String(payload.error ?? "save_failed") };
   }
-  if (payload.notified === true && typeof payload.driver_id === "string") {
+  if (payload.notified === true && typeof payload.driver_id === "string" && payload.pushed !== true) {
     await sendVisitNotePush({
       driverId: payload.driver_id,
       bookingId: input.bookingId,

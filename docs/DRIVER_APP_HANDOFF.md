@@ -2,7 +2,7 @@
 
 > **Paste this entire file** into a new AI session when building the driver mobile app.  
 > It stays in sync with the admin panel (`MGgo-Admin` / `dpdadmin`).  
-> **Driver-facing stack (Plan 1, 2026-10-10):** Firebase Auth custom token + Firestore named `default` (`me-central2`) + 55 gen2 rider callables (`me-central1`) on `musallam-delivery-prod`. Live GPS ingest: Cloudflare Worker `https://dpd-live.vizsoft.workers.dev` (Firebase ID token). Admin https://dpdadmin-prod.vercel.app.  
+> **Driver-facing stack (Plan 1, 2026-10-10):** Firebase Auth custom token + Firestore named `default` (`me-central2`) + 57 gen2 rider callables (`me-central1`) on `musallam-delivery-prod`. Live GPS ingest: Cloudflare Worker `https://dpd-live.vizsoft.workers.dev` (Firebase ID token). Admin https://dpdadmin-prod.vercel.app.  
 > See **§1a** (ids) and **§1b** (Flutter paste). Production is the only stack. **Play withheld.** Dump ongoing. Vercel prod alias not moved.
 
 ---
@@ -41,7 +41,7 @@ MG-GO is off live Supabase onto Firebase Auth + Firestore + gen2 callables. Do n
 |-------|----------|
 | Auth | Firebase **custom token**. `uid` = `drivers.id`. Custom claim `deviceId`. Employee ID + 6-digit passcode still the login fields. |
 | Public settings | Firestore `app_settings/1` on named database `default` in `me-central2`. Anon read. Same branding / maintenance / force-update fields as the old `id = 1` row. |
-| Callables | **55** rider gen2 HTTPS callables **ACTIVE** in `me-central1` on `musallam-delivery-prod` (`cpu: 0.08`, `concurrency: 1`, `maxInstances: 2`). Client envelope is Firebase callable `{ data }`. |
+| Callables | **57** rider gen2 HTTPS callables **ACTIVE** in `me-central1` on `musallam-delivery-prod` (`cpu: 0.08`, `concurrency: 1`, `maxInstances: 2`). Client envelope is Firebase callable `{ data }`. Includes `driverUpsertPushToken` / `driverDeactivatePushToken`. |
 | Error codes | Unchanged strings (`inactive`, `driver_off_duty`, `duplicate_order_id`, `shift_locked`, `declaration_required`, `driver_blocked`, `driver_archived`, …). |
 | Force-update | Checked **before** `createCustomToken`. Gated builds (`versionCode` ≥ 83) get callable details `update_required`. Pre-gate / missing `versionCode` still `driver_blocked` (details may include `update_required: true`) so older mappers keep working. |
 | Earnings name | Rider callable is **`driverGetEarningsDetail` only**. Admin export `getDriverEarningsDetail` stays in `functions/src/rpcs/earnings.ts`. Do not alias the rider name to the admin name. |
@@ -918,16 +918,14 @@ Alternatively call RPC `record_notification_client_event(p_campaign_id, p_dispat
 
 ### Push token registration
 
-Upsert into `driver_push_tokens` on login/token refresh:
+Do **not** write `driver_push_tokens` from the client. Firestore rules deny it. On login / token refresh call `driverUpsertPushToken`; on sign-out / mute call `driverDeactivatePushToken`. Both are rider-gated (`requireRider`). The callable upserts by SHA-256 of the token and deactivates every other active row for `auth.uid()`.
 
-| Column | Value |
-|--------|-------|
-| `driver_id` | `auth.uid()` |
-| `token` | FCM device token |
-| `platform` | `ios` \| `android` |
-| `is_active` | `true` |
+| Callable | Args | Effect |
+|----------|------|--------|
+| `driverUpsertPushToken` | `token` / `p_token`, `platform` / `p_platform` (`ios` \| `android`) | `{ ok, id }` — `is_active: true`, `last_seen_at` ISO |
+| `driverDeactivatePushToken` | `token` / `p_token` | `{ ok, deactivated }` — own token only |
 
-Deactivate stale tokens when FCM returns invalid-registration. On each upsert, deactivate every other active token for the same `driver_id` — `onConflict: token` does not retire previous devices/builds.
+Transactional inbox (`notifyDriverTransactional`) now sends FCM after the inbox commit. Campaign dispatch still reads `driver_push_tokens` and sends from Vercel. Deactivate stale tokens when FCM returns invalid-registration / sender-id-mismatch.
 
 ### Firebase client bootstrap
 

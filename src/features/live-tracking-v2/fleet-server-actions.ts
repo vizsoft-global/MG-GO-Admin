@@ -46,18 +46,36 @@ export async function fetchDriverDayRoute(driverId: string, date: string) {
 }
 
 export async function fetchLiveFleetSnapshot() {
-  return callAdminFunction<{
-    generated_at: string;
-    settings: Record<string, number> | null;
-    drivers: FleetSnapshotRow[];
-  } | null>("admin_live_fleet_snapshot", { p_seen_within_minutes: 30 });
+  try {
+    return await callAdminFunction<{
+      generated_at: string;
+      settings: Record<string, number> | null;
+      drivers: FleetSnapshotRow[];
+    } | null>("admin_live_fleet_snapshot", { p_seen_within_minutes: 30 });
+  } catch (error) {
+    return {
+      data: null,
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+      },
+    };
+  }
 }
 
 export async function fetchFleetEventSeed() {
-  return callAdminFunction<{ events?: Array<Record<string, unknown>> } | null>(
-    "admin_list_fleet_events",
-    { p_limit: 50 },
-  );
+  try {
+    return await callAdminFunction<{ events?: Array<Record<string, unknown>> } | null>(
+      "admin_list_fleet_events",
+      { p_limit: 50 },
+    );
+  } catch (error) {
+    return {
+      data: null,
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+      },
+    };
+  }
 }
 
 export async function fetchFleetZones(): Promise<FleetZone[]> {
@@ -97,5 +115,9 @@ async function readOps(db: Firestore): Promise<Loose[]> {
 export async function fetchFleetOpsSeed(): Promise<Loose[]> {
   const db = await staffDb();
   if (!db) return [];
-  return readOps(db);
+  try {
+    return await readOps(db);
+  } catch {
+    return [];
+  }
 }

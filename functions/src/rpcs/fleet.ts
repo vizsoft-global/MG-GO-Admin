@@ -5,7 +5,11 @@ import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { parseId, parseIdList, parseInstant } from "../core/query";
 import { requireStaff } from "../core/staff";
-import { createFleetBaseCache, projectFleetSnapshot } from "./fleet-snapshot-cache";
+import {
+  createFleetBaseCache,
+  fleetRowIsEligible,
+  projectFleetSnapshot,
+} from "./fleet-snapshot-cache";
 
 const FLEET_EVENT_ID_CEILING = 9223372036854775807;
 
@@ -230,7 +234,20 @@ export async function buildLiveFleetSnapshot(
       const open = openByDriver.get(doc.id) ?? null;
       const blocked = Boolean(driver.is_blocked) || freezeActive(driver, now);
       const lastSeenAt = asDate(location.last_seen_at);
-      if (!driver.is_on_duty && !blocked && !(lastSeenAt && lastSeenAt >= cutoff) && !open) {
+      const lastReportAt = asDate(location.last_report_at);
+      const onDuty = Boolean(driver.is_on_duty) || attendanceByDriver.has(doc.id);
+      const online = onlineDrivers.has(doc.id);
+      if (
+        !fleetRowIsEligible({
+          isOnDuty: onDuty,
+          isOnline: online,
+          isBlocked: blocked,
+          activeDeliveryId: open?.id ?? null,
+          lastSeenAt,
+          lastReportAt,
+          cutoffMs: cutoff.getTime(),
+        })
+      ) {
         return null;
       }
 
@@ -258,7 +275,7 @@ export async function buildLiveFleetSnapshot(
         avatar_url: (profile.avatar_url as string | null) ?? null,
         phone: (profile.phone as string | null) ?? null,
         account_status: (driver.status as string | null) ?? null,
-        is_on_duty: Boolean(driver.is_on_duty),
+        is_on_duty: onDuty,
         is_blocked: blocked,
         zone_id: (driver.zone_id as string | null) ?? null,
         zone_name: zone ? (zone.name as string | null) ?? null : null,
@@ -354,7 +371,7 @@ export const adminLiveFleetSnapshot = measureOnCall("adminLiveFleetSnapshot", as
   const seenWithin = num(data.seenWithinMinutes ?? data.p_seen_within_minutes) ?? 30;
   const zoneIds = parseIdList(data.zoneIds ?? data.p_zone_ids);
   const partnerIds = parseIdList(data.partnerIds ?? data.p_partner_ids);
-  const base = await fleetBaseCache.get(() => buildLiveFleetSnapshot(seenWithin, { unscoped: true }));
+  const base = await fleetBaseCache.get(() => buildLiveFleetSnapshot(seenWithin));
   const projected = projectFleetSnapshot(base, {
     zoneIds,
     partnerIds,

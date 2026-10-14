@@ -14,6 +14,10 @@ import {
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
+import {
+  applyTransactionalPushResult,
+  sendTransactionalPushToDriver,
+} from "./driver-push-tokens";
 
 const DAY_MS = 86_400_000;
 const GET_ALL_CHUNK = 300;
@@ -573,26 +577,37 @@ export type TransactionalNotifyParams = {
   priority: string;
   actionParams?: Record<string, unknown>;
   createdBy?: string | null;
+  /** Next.js DPD cron / visit-note still send FCM themselves until that panel build ships. */
+  skipPush?: boolean;
 };
 
 export type TransactionalNotifyResult = {
   ok: boolean;
   campaign_id: string | null;
   dispatch_item_id: string | null;
+  pushed: boolean;
+  push_status: "sent" | "no_token" | "failed" | "skipped";
 };
 
 /**
- * `notify_driver_transactional` — the campaign, its dispatch run and the single
- * item addressed to the rider, written in one commit so the rider's inbox row can
- * never exist without the campaign it belongs to. The caller sends FCM from the
- * ids this returns, exactly as the panel's server action already does.
+ * `notify_driver_transactional` — inbox row first, then FCM from this helper.
+ *
+ * The inbox commit must not wait on FCM. After commit we send, stamp the item
+ * with the real result, and never claim `sent_count: 1` until send succeeds.
+ * Next.js DPD / visit-note paths skip their own send when `pushed` is true.
  */
 export async function notifyDriverTransactional(
   params: TransactionalNotifyParams,
 ): Promise<TransactionalNotifyResult> {
   const title = params.title?.trim() ?? "";
   if (!params.driverId || params.title === null || title === "") {
-    return { ok: false, campaign_id: null, dispatch_item_id: null };
+    return {
+      ok: false,
+      campaign_id: null,
+      dispatch_item_id: null,
+      pushed: false,
+      push_status: "skipped",
+    };
   }
 
   const actionParams: Record<string, unknown> = { ...(params.actionParams ?? {}) };
@@ -600,6 +615,7 @@ export async function notifyDriverTransactional(
   if (deepLink !== "") actionParams.deep_link = deepLink;
 
   const body = params.body?.trim() ?? "";
+  const textBody = body === "" ? title : body;
 
   const db = getFirestore();
   const now = FieldValue.serverTimestamp();
@@ -610,7 +626,7 @@ export async function notifyDriverTransactional(
   const batch = db.batch();
   batch.set(campaignRef, {
     title,
-    body: body === "" ? title : body,
+    body: textBody,
     category: params.category,
     priority: params.priority,
     status: "sent",
@@ -619,7 +635,7 @@ export async function notifyDriverTransactional(
     payload_version: 2,
     target_spec: { mode: "transactional", driver_ids: [params.driverId] },
     recipient_count: 1,
-    delivered_count: 1,
+    delivered_count: 0,
     sent_at: now,
     estimated_audience_count: 1,
     created_at: now,
@@ -632,7 +648,7 @@ export async function notifyDriverTransactional(
     started_at: now,
     finished_at: now,
     total_count: 1,
-    sent_count: 1,
+    sent_count: 0,
     created_at: now,
   });
   batch.set(itemRef, {
@@ -646,5 +662,39 @@ export async function notifyDriverTransactional(
   });
   await batch.commit();
 
-  return { ok: true, campaign_id: campaignRef.id, dispatch_item_id: itemRef.id };
+  if (params.skipPush) {
+    return {
+      ok: true,
+      campaign_id: campaignRef.id,
+      dispatch_item_id: itemRef.id,
+      pushed: false,
+      push_status: "skipped",
+    };
+  }
+
+  let push: Awaited<ReturnType<typeof sendTransactionalPushToDriver>>;
+  try {
+    push = await sendTransactionalPushToDriver({
+      driverId: params.driverId,
+      title,
+      body: textBody,
+      campaignId: campaignRef.id,
+      dispatchItemId: itemRef.id,
+      category: params.category,
+      priority: params.priority,
+      deepLink,
+      actionParams,
+    });
+    await applyTransactionalPushResult(itemRef.id, runRef.id, campaignRef.id, push);
+  } catch {
+    push = { pushed: false, status: "failed", error_code: "send_failed" };
+  }
+
+  return {
+    ok: true,
+    campaign_id: campaignRef.id,
+    dispatch_item_id: itemRef.id,
+    pushed: push.pushed,
+    push_status: push.status,
+  };
 }
