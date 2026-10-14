@@ -696,10 +696,15 @@ function documentForLocale(
       source: "entry",
     });
   }
-  const absenceSpecs = [
+  const absenceSpecs: Array<{
+    key: string;
+    aliases: readonly string[];
+    en: string;
+    ar: string;
+  }> = [
     { key: "absence_from", aliases: ["from_date", "absent_from"], en: "From", ar: "من" },
     { key: "absence_to", aliases: ["to_date", "absent_to"], en: "To", ar: "إلى" },
-  ] as const;
+  ];
   for (const spec of absenceSpecs) {
     const value =
       fieldValues[spec.key]?.trim() ||
