@@ -277,19 +277,21 @@ export function AppLauncherShell() {
                 <Link
                   key={item.id}
                   href={item.href}
-                  className="flex flex-col items-center gap-2.5 text-center"
+                  className="group/hub flex flex-col items-center gap-2.5 text-center"
                 >
                   <span
-                    className="relative grid size-[60px] place-items-center rounded-[18px]"
+                    className="relative grid size-[60px] place-items-center overflow-visible rounded-[18px]"
                     style={{
                       backgroundColor: launcherTileHex(item.id),
                       boxShadow: TILE_SHADOW,
                     }}
                   >
-                    <LauncherGlyph id={tileId} />
+                    <span className="inline-grid origin-center transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none motion-reduce:group-hover/hub:scale-100 [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:scale-[1.4]">
+                      <LauncherGlyph id={tileId} />
+                    </span>
                     {badge ? (
                       <span
-                        className="absolute -end-[7px] -top-[7px] inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-[11px] font-bold tabular-nums text-white"
+                        className="absolute -end-[7px] -top-[7px] z-10 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-[11px] font-bold tabular-nums text-white"
                         style={{
                           backgroundColor: LAUNCHER_BRAND.badge,
                           border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,

@@ -53,8 +53,8 @@ const SENDER_TILES: SenderTile[] = [
   { href: "/requests/esign/templates", labelKey: "hub.senderTemplates", icon: "/hub/documents.svg", color: "bg-[#4f46e5]" },
   { href: "/requests/esign/send", labelKey: "hub.senderSend", icon: "/hub/esign.svg", color: "bg-[#0f766e]", },
   { href: "/requests/esign/bulk", labelKey: "hub.senderBulk", icon: "/hub/all.svg", color: "bg-[#2563eb]" },
-  { href: "/requests/esign/sent", labelKey: "hub.senderSent", icon: "/hub/audit.svg", color: "bg-[#0891b2]" },
-  { href: "/requests/esign/batches", labelKey: "hub.senderBatches", icon: "/hub/reports.svg", color: "bg-[#7c3aed]" },
+  { href: "/employeedesk/esign/batches?scope=individual", labelKey: "hub.senderSent", icon: "/hub/audit.svg", color: "bg-[#0891b2]" },
+  { href: "/employeedesk/esign/batches", labelKey: "hub.senderBatches", icon: "/hub/reports.svg", color: "bg-[#7c3aed]" },
 ];
 
 const OP_TILES: OpTile[] = [

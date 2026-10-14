@@ -27,6 +27,8 @@ import {
 import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
+import { LAYOUT } from "@/components/app/layout-spacing";
+import { cn } from "@/lib/utils";
 import { driverSearchOptions } from "@/lib/search-options";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { EsignDocumentPreview } from "@/features/employeedesk/esign/document-preview";
@@ -662,7 +664,8 @@ export function EsignSendShell({
     );
   }
 
-  const preview = template ? (
+  const renderPreview = (fill: boolean) =>
+    template ? (
     <EsignDocumentPreview
       templateName={title || template.name_en}
       nameAr={template.name_ar}
@@ -678,6 +681,7 @@ export function EsignSendShell({
             : field,
       )}
       values={previewValues}
+      fill={fill}
       documentKind={template.document_kind}
       signers={{
         employeeLabel: tBuilder("previewEmployeeSignature"),
@@ -690,10 +694,63 @@ export function EsignSendShell({
     />
   ) : null;
 
+  const previewCard = (
+    <AppListCard
+      className={cn(
+        isV2 ? "flex h-full min-h-0 flex-col overflow-hidden p-0" : "space-y-3 p-4",
+      )}
+    >
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-x-3 gap-y-1",
+          isV2 && "shrink-0 px-4 pt-3",
+        )}
+      >
+        <p className="text-sm font-semibold">{t("documentPreview")}</p>
+        <button
+          type="button"
+          className={`text-xs font-semibold disabled:text-muted-foreground ${
+            isV2 ? "text-[#EA580C]" : "text-primary"
+          }`}
+          disabled={!template}
+          onClick={() => setFullOpen(true)}
+        >
+          {t("seeFullDocument")}
+        </button>
+        <Link
+          href={bulkHref}
+          className={`text-xs font-semibold ${isV2 ? "text-[#EA580C]" : "text-[#B54708]"}`}
+        >
+          {t("manyEmployees")}
+        </Link>
+      </div>
+      <div
+        className={cn(
+          "flex flex-wrap gap-3 text-[11px] text-muted-foreground",
+          isV2 && "shrink-0 px-4 pb-2",
+        )}
+      >
+        <LegendDot color="bg-[#2563EB]" label={t("sourceSystem")} />
+        <LegendDot color="bg-[#16A34A]" label={t("sourceEntry")} />
+        <LegendDot color="bg-[#0A0A0A]" label={t("sourceFixed")} />
+        <LegendDot color={isV2 ? "bg-[#7C3AED]" : "bg-[#EA580C]"} label={t("sourceSigned")} />
+      </div>
+      <div className={isV2 ? "min-h-0 flex-1 overflow-hidden px-2 pb-2" : undefined}>
+        {renderPreview(isV2)}
+      </div>
+    </AppListCard>
+  );
+
   return (
-    <AppPage>
+    <AppPage
+      className={
+        isV2
+          ? `flex ${LAYOUT.commandViewportHeight} min-h-0 flex-col space-y-2`
+          : undefined
+      }
+    >
       {isV2 ? (
-        <div className="space-y-2">
+        <div className="shrink-0 space-y-2">
           <Link
             href={hubHref}
             className="inline-flex h-9 items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -737,8 +794,16 @@ export function EsignSendShell({
         />
       )}
 
-      <div className="grid gap-2 lg:grid-cols-2 lg:items-start">
-        <AppListCard className="space-y-3 p-4">
+      <div
+        className={cn(
+          "grid gap-2",
+          isV2
+            ? "min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] lg:items-stretch"
+            : "lg:grid-cols-2 lg:items-start",
+        )}
+      >
+        {isV2 ? previewCard : null}
+        <AppListCard className={cn("space-y-3 p-4", isV2 && "h-full min-h-0 overflow-y-auto")}>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>
@@ -969,35 +1034,7 @@ export function EsignSendShell({
             )}
           </div>
         </AppListCard>
-
-        <AppListCard className="space-y-3 p-4">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p className="text-sm font-semibold">{t("documentPreview")}</p>
-            <button
-              type="button"
-              className={`text-xs font-semibold disabled:text-muted-foreground ${
-                isV2 ? "text-[#EA580C]" : "text-primary"
-              }`}
-              disabled={!template}
-              onClick={() => setFullOpen(true)}
-            >
-              {t("seeFullDocument")}
-            </button>
-            <Link
-              href={bulkHref}
-              className={`text-xs font-semibold ${isV2 ? "text-[#EA580C]" : "text-[#B54708]"}`}
-            >
-              {t("manyEmployees")}
-            </Link>
-          </div>
-          <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-            <LegendDot color="bg-[#2563EB]" label={t("sourceSystem")} />
-            <LegendDot color="bg-[#16A34A]" label={t("sourceEntry")} />
-            <LegendDot color="bg-[#0A0A0A]" label={t("sourceFixed")} />
-            <LegendDot color={isV2 ? "bg-[#7C3AED]" : "bg-[#EA580C]"} label={t("sourceSigned")} />
-          </div>
-          {preview}
-        </AppListCard>
+        {isV2 ? null : previewCard}
       </div>
 
       <Dialog open={fullOpen} onOpenChange={setFullOpen}>
@@ -1010,7 +1047,7 @@ export function EsignSendShell({
               <DialogDescription>{t("seeFullDocument")}</DialogDescription>
             )}
           </DialogHeader>
-          <div className="max-h-[min(70vh,640px)] overflow-y-auto px-5 py-4">{preview}</div>
+          <div className="max-h-[min(70vh,640px)] overflow-y-auto px-5 py-4">{renderPreview(false)}</div>
           <DialogFooter className="border-t border-border px-5 py-3">
             <Button type="button" variant="outline" className="h-9" onClick={() => setFullOpen(false)}>
               {t("back")}

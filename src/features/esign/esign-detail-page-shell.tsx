@@ -112,7 +112,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
     return (
       <AppPage>
         <AppPageHeader title={t("notFound")} />
-        <Button variant="outline" className="h-9" render={<Link href="/requests/esign/sent" />}>
+        <Button variant="outline" className="h-9" render={<Link href="/employeedesk/esign/batches?scope=individual" />}>
           <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
           {t("back")}
         </Button>
@@ -176,7 +176,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               variant="outline"
               size="sm"
               className="h-9"
-              render={<Link href="/requests/esign/sent" />}
+              render={<Link href="/employeedesk/esign/batches?scope=individual" />}
             >
               <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
               {t("back")}
@@ -185,14 +185,14 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
         }
       />
 
-      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-        <AppListCard className="flex min-h-[420px] flex-col gap-3 bg-muted/30 p-4">
+      <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch">
+        <AppListCard className="flex min-h-0 flex-col gap-3 bg-muted/30 p-2 lg:h-[calc(100dvh-8rem)]">
           {previewUrl ? (
-            <div className="flex flex-col gap-1">
+            <div className="flex min-h-0 flex-1 flex-col gap-1">
               <iframe
                 src={previewUrl}
                 title={request.title || request.request_code}
-                className="h-[520px] w-full rounded-lg border border-border bg-card"
+                className="min-h-0 w-full flex-1 rounded-lg border border-border bg-card"
               />
               {previewIsSignedCopy ? (
                 <p className="text-[10px] text-muted-foreground">{t("previewSignedCopy")}</p>

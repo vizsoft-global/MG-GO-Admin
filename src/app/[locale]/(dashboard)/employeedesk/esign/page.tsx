@@ -5,7 +5,6 @@ import {
   FileSignature,
   Layers,
   PenLine,
-  Send,
   SendHorizontal,
   Upload,
 } from "lucide-react";
@@ -28,7 +27,6 @@ const CARDS = [
   { key: "send", href: "/employeedesk/esign/send", icon: SendHorizontal },
   { key: "bulk", href: "/employeedesk/esign/bulk", icon: Upload },
   { key: "drafts", href: "/requests/esign/drafts", icon: FileClock },
-  { key: "sent", href: "/employeedesk/esign/sent", icon: Send },
   { key: "waiting", href: "/employeedesk/esign/waiting", icon: BellRing },
   { key: "signing", href: "/employeedesk/esign/signing", icon: PenLine },
   { key: "batches", href: "/employeedesk/esign/batches", icon: Layers },
