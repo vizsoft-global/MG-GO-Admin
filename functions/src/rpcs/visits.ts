@@ -428,7 +428,6 @@ export const adminSetVisitNoteToRider = onCall(async (request) => {
       booking_code: bookingCode,
       note_to_rider: note,
     },
-    skipPush: true,
   });
 
   return {

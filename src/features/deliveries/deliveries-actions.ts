@@ -1,6 +1,7 @@
 "use server";
 
 import { sendDpdCongratsFor } from "@/features/notifications/dpd-shift-notices";
+import { deliveryDecisionNotice } from "./delivery-decision-notice";
 import { fetchLocationEventByDeliveryId, fetchLocationEventsForDelivery } from "@/features/locations/locations-actions";
 import type { DriverLocationEvent } from "@/features/locations/types";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
@@ -1217,6 +1218,27 @@ export async function updateDeliveryStatus(
       },
       session.id,
     );
+    if (
+      existing.status !== status &&
+      (status === "verified" || status === "rejected") &&
+      str(existing.driver_id)
+    ) {
+      const notice = deliveryDecisionNotice({
+        status,
+        deliveryId,
+        orderId: strOrNull(existing.external_order_id),
+        reason: status === "rejected" ? rejectionReason?.trim() ?? null : null,
+      });
+      await callAdminFunction("notify_driver_transactional", {
+        p_driver_id: str(existing.driver_id),
+        p_title: notice.title,
+        p_body: notice.body,
+        p_deep_link: notice.deepLink,
+        p_category: notice.category,
+        p_priority: notice.priority,
+        p_action_params: notice.actionParams,
+      });
+    }
     if (status === "verified") await sendDpdCongratsFor([str(existing.driver_id)]);
   } catch (sideEffectError) {
     console.error("[updateDeliveryStatus] post-update side effect failed", sideEffectError);

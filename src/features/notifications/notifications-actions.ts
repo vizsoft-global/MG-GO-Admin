@@ -1524,6 +1524,8 @@ async function executeNotificationDispatch(
       resolved_body: personalized?.body ?? null,
       import_row_index: personalized?.rowIndex ?? null,
       import_vars: personalized?.vars ?? null,
+      dismissed_at: null,
+      opened_at: null,
     };
   });
   const { data: insertedItems, error: insertError } = await service
