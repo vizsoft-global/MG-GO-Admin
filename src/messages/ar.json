@@ -78,7 +78,8 @@
     "attendanceSettings": "حدود الحضور",
     "driverFields": "حقول السائق المخصصة",
     "requests": "EmployeeDesk",
-    "visitBookings": "حجوزات الزيارة",
+    "visitBookings": "مواعيد الزيارة",
+    "visitSlots": "مواعيد الزيارة",
     "wrongActions": "المخالفات",
     "earnings": "الأرباح والحوافز",
     "notifications": "الإشعارات",
@@ -128,7 +129,7 @@
   "appNavGroups": {
     "overview": "نظرة عامة",
     "employeedesk": "EmployeeDesk",
-    "visitBookings": "حجوزات الزيارة",
+    "visitBookings": "مواعيد الزيارة",
     "operationsHub": "مركز العمليات",
     "apps": "تطبيقات",
     "fleet": "الأسطول",
@@ -402,7 +403,7 @@
         },
         "delivery": {
           "pickup_create": "تم استلام الطلب",
-          "complete": "تم إرسال التوصيل",
+          "complete": "تم تسليم الطلب",
           "cancel": "تم إلغاء التوصيل",
           "auto_cancel": "إلغاء تلقائي لاستلام قديم"
         },
@@ -726,8 +727,10 @@
         "shift_submit": "إرسال الشفت",
         "location_zone_entry": "دخول المنطقة",
         "location_zone_exit": "خروج من المنطقة",
+        "gps_offline": "GPS غير متصل",
+        "gps_restored": "عاد GPS",
         "delivery_pickup_create": "استلام الطلب",
-        "delivery_complete": "تسليم الطلب",
+        "delivery_complete": "تم تسليم الطلب",
         "delivery_cancel": "إلغاء الطلب",
         "request_create": "إنشاء طلب",
         "request_clarify": "إرسال توضيح",
@@ -895,6 +898,8 @@
       "incomingFootnote": "فئات الواردة بلا قوالب بعد، فيُرفع كل مستند يدوياً.",
       "emptyAction": "لا شيء بانتظارك.",
       "emptyBatches": "لا دفعات قيد التنفيذ.",
+      "emptySends": "لا إرسالات أخيرة.",
+      "viewAllSent": "عرض المُرسَل",
       "ageMinutes": "قبل {n} د",
       "ageHours": "قبل {n} س",
       "ageToday": "اليوم",
@@ -929,6 +934,8 @@
         "submit": "رفع وتسجيل",
         "required": "السائق والموضوع وملف مطلوبون",
         "failed": "فشل الرفع",
+        "not_authorized": "ليست لديك صلاحية الرفع.",
+        "readFailed": "تعذر قراءة الملف.",
         "saved": "سُجّل {code}",
         "categories": {
           "letter": "خطاب",
@@ -4984,6 +4991,7 @@
           "staffPlaceholder": "اختر موظفًا…",
           "staffSearch": "ابحث بالاسم أو البريد الإلكتروني",
           "perTypeHint": "حدد مستوى الوصول لكل نوع طلب.",
+          "outgoingSenderHeading": "فئات إرسال الصادر",
           "level": {
             "none": "لا شيء",
             "view_only": "عرض",
@@ -5208,6 +5216,8 @@
           "fieldKey": "المفتاح",
           "fieldLabelEn": "التسمية (EN)",
           "fieldLabelAr": "التسمية (AR)",
+          "fieldOptions": "خيارات القائمة",
+          "fieldOptionsHint": "خيار واحد في كل سطر",
           "reservedHint": "محجوز: {keys}",
           "section": {
             "header": "العنوان",
@@ -5235,9 +5245,13 @@
           "fieldDriverPlaceholder": "ابحث برقم MG أو الاسم…",
           "fieldDriverSearch": "بحث بالاسم أو الرقم",
           "fieldTitle": "العنوان",
+          "fieldTitlePlaceholder": "مثال: عقد العمل",
           "fieldLocale": "لغة PDF",
           "fieldDue": "تاريخ الاستحقاق",
           "fieldDescription": "الوصف",
+          "fieldDescriptionPlaceholder": "ملاحظة اختيارية لهذا الإرسال",
+          "absenceFrom": "من",
+          "absenceTo": "إلى",
           "categoryFields": "حقول الفئة",
           "company": "الشركة",
           "employeeName": "اسم الموظف",
@@ -5255,6 +5269,22 @@
           "sheetInputs": "حقول الورقة",
           "fieldEmployeeId": "رقم الموظف",
           "sendForSignature": "إرسال للتوقيع الإلكتروني",
+          "hideField": "إخفاء هذا الحقل لهذا الإرسال",
+          "penaltyOptions": "الجزاء",
+          "hideOption": "إخفاء هذا الخيار لهذا الإرسال",
+          "showHiddenOptions": "إظهار الخيارات المخفية",
+          "emptyCategory": "لا قوالب نشطة في هذه الفئة.",
+          "openLibrary": "افتح مكتبة القوالب",
+          "fieldSelectPlaceholder": "اختر…",
+          "fieldSelectSearch": "ابحث في الخيارات",
+          "fieldAbsenceFrom": "الغياب من",
+          "fieldAbsenceTo": "الغياب إلى",
+          "placeholders": {
+            "penalty": "أدخل تفاصيل الجزاء",
+            "investigation": "أدخل تفاصيل التحقيق",
+            "generic": "أدخل قيمة",
+            "violationDate": "اختر تاريخ المخالفة"
+          },
           "fieldPosition": "المسمى",
           "fieldSponsor": "الكفيل",
           "fieldPayThrough": "طريقة الدفع",
@@ -5274,7 +5304,17 @@
             "createFailed": "تعذر إنشاء الطلب",
             "due_in_past": "لا يمكن أن يكون تاريخ الاستحقاق في الماضي",
             "draftTemplate": "اختر قالباً قبل حفظ المسودة",
-            "draftFailed": "تعذر حفظ المسودة"
+            "draftFailed": "تعذر حفظ المسودة",
+            "not_configured": "تخزين المستندات غير مُعدّ.",
+            "storage_bucket_missing": "حاوية تخزين المستندات غير موجودة.",
+            "unknown_fn": "التحقق من الموظفين غير متاح.",
+            "wrong_lane": "التحقق من الموظفين غير متاح.",
+            "unknown_id": "رقم الموظف غير موجود.",
+            "not_authorized": "لا يمكنك إرسال هذه الفئة.",
+            "field_required": "حقل مطلوب ما زال فارغًا.",
+            "ambiguous": "رقم الموظف يطابق أكثر من مندوب.",
+            "archived": "هذا الموظف مؤرشف.",
+            "blocked": "هذا الموظف محظور."
           }
         },
         "signers": {
@@ -5358,6 +5398,16 @@
             "noOkRows": "لا أرقام موظفين قابلة للحل",
             "createFailed": "تعذر إنشاء الدفعة",
             "processFailed": "فشلت دفعة — افتح الدفعة للمتابعة",
+            "not_configured": "تخزين المستندات غير مُعدّ.",
+            "storage_bucket_missing": "حاوية تخزين المستندات غير موجودة.",
+            "unknown_fn": "التحقق من الموظفين غير متاح.",
+            "wrong_lane": "التحقق من الموظفين غير متاح.",
+            "unknown_id": "رقم الموظف غير موجود.",
+            "not_authorized": "لا يمكنك إرسال هذه الفئة.",
+            "field_required": "حقل مطلوب ما زال فارغًا.",
+            "ambiguous": "رقم الموظف يطابق أكثر من مندوب.",
+            "archived": "هذا الموظف مؤرشف.",
+            "blocked": "هذا الموظف محظور.",
             "draftTemplate": "اختر قالباً قبل حفظ المسودة",
             "draftEmpty": "ارفع ملفاً قبل حفظ المسودة",
             "draftFailed": "تعذر حفظ المسودة"
@@ -7465,6 +7515,22 @@
         "outgoingSender": "الصادر · مرسل",
         "incomingReceiver": "الوارد · مستلم",
         "requestTypes": "أنواع الطلبات",
+        "outgoingCategoriesHeading": "فئات التوقيع الصادر",
+        "outgoingCategories": {
+          "loan": "سلفة",
+          "payslip": "قسيمة راتب",
+          "asset": "أصل",
+          "leave": "إجازة",
+          "penalty": "جزاء",
+          "investigation": "تحقيق",
+          "accident": "حادث",
+          "general_doc": "مستند عام",
+          "late_attendance": "تأخير حضور",
+          "unauthorised_absence": "غياب غير مصرح",
+          "written_warning": "إنذار كتابي",
+          "damage_to_property": "إتلاف ممتلكات",
+          "penalty_others": "جزاء آخر"
+        },
         "previewTitle": "ما الذي سيراه {name}",
         "eyebrowPreview": "معاينة وحفظ",
         "previewRole": "معاينة الصلاحيات",
@@ -8427,7 +8493,8 @@
         "from": "من",
         "to": "إلى",
         "daysCount": "{count} أيام",
-        "windowHint": "داخل {from} – {to}."
+        "windowHint": "داخل {from} – {to}.",
+        "clearCustom": "مسح النطاق"
       },
       "clearFilters": "مسح الفلاتر",
       "clearSearch": "مسح البحث",
@@ -8732,7 +8799,7 @@
         "apply": "تطبيق على {count} خلية",
         "cancel": "إلغاء",
         "copied": "تم نسخ {count} خلية",
-        "gridHint": "اسحب للتحديد · المقبض للتعيئة · Ctrl+C / Ctrl+V / Ctrl+D · Ctrl+Z للتراجع · Esc للمسح",
+        "gridHint": "اسحب للتحديد · المقبض للتعيئة · Ctrl+C / Ctrl+V / Ctrl+D · Ctrl+Z للتراجع · Ctrl+Y للإعادة · Esc للمسح",
         "nothingSelected": "حدد يوماً واحداً على الأقل.",
         "nothingFilled": "لا يوجد ما يمكن تعبئته.",
         "nothingPasted": "لا يوجد ما يمكن لصقه.",
@@ -8741,6 +8808,8 @@
         "applied": "تم تعديل {count} خلية",
         "undo": "تراجع",
         "undone": "تم التراجع عن {count} خلية",
+        "redo": "إعادة",
+        "redone": "أُعيدت {count} خلية",
         "patternNote": "نمط منسوخ من الخلايا المصدر",
         "willChange": "{change} ستتغير، {same} كما هي",
         "automatic": "النتيجة التلقائية",
@@ -8767,6 +8836,13 @@
           "no_cells": "حدد يوماً واحداً على الأقل.",
           "too_many_cells": "عدد الخلايا في الدفعة كبير جداً.",
           "not_authorized": "لا تملك صلاحية تعديل أيام الرواتب.",
+          "date_out_of_range": "هذا اليوم خارج نافذة رواتب الكويت (الشهران الماضيان حتى اليوم).",
+          "invalid_cell": "تعذّر تعديل أحد الأيام المحددة.",
+          "invalid_cells": "تعذّر تعديل الخلايا المحددة.",
+          "unknown_driver": "أحد السائقين المحددين لم يعد في القائمة.",
+          "cell_out_of_scope": "أحد الأيام المحددة خارج عامل التصفية الحالي.",
+          "invalid_hours": "يجب أن تكون الساعات بين 0 و 24.",
+          "invalid_custom_hours": "يجب أن تكون الساعات المخصصة بين 0 و 24.",
           "unknown": "حدث خطأ. لم يتم حفظ التعديل."
         }
       },
@@ -8994,6 +9070,7 @@
           "client_has_riders": "لا يزال لهذا العميل سائقون معيّنون.",
           "system_client": "لا يمكن حذف عملاء النظام.",
           "invalid_thresholds": "عتبة الجيد يجب أن تكون على الأقل عتبة المتوسط.",
+          "rule_condition_required": "يجب أن تحتوي كل قاعدة على شرط واحد على الأقل قبل الحفظ.",
           "unknown": "حدث خطأ. لم يتم حفظ التغيير."
         }
       }
@@ -9691,6 +9768,8 @@
           "loadFailed": "تعذّر تحميل القوالب.",
           "emptyTitle": "لا توجد قوالب بعد",
           "emptyBody": "أنشئ قالباً لتحديد ما يقرأه المندوب ويوقّع عليه.",
+          "tabLibrary": "المكتبة",
+          "tabDraft": "مسودة",
           "fieldCount": "{count} حقول",
           "versionLabel": "إصدار {version}",
           "open": "عرض المستند",
@@ -9757,6 +9836,8 @@
           "fieldTemplate": "القالب",
           "fieldTemplatePlaceholder": "اختر قالبًا",
           "fieldTemplateSearch": "بحث في القوالب",
+          "penaltyCategory": "فئة الجزاء",
+          "penaltyMissingTemplate": "لا يوجد قالب قابل للإرسال لهذه الفئة بعد.",
           "fieldTitle": "عنوان الدفعة",
           "fieldDue": "تاريخ الاستحقاق",
           "downloadExample": "تنزيل الملف النموذجي",
@@ -9836,7 +9917,17 @@
             "processFailed": "أُنشئت الدفعة، لكن توليد المستندات توقف في المنتصف.",
             "draftTemplate": "اختر قالبًا قبل حفظ المسودة",
             "draftEmpty": "حمّل ملفًا قبل حفظ المسودة",
-            "draftFailed": "تعذّر حفظ المسودة"
+            "draftFailed": "تعذّر حفظ المسودة",
+            "not_configured": "تخزين المستندات غير مُعدّ.",
+            "storage_bucket_missing": "حاوية تخزين المستندات غير موجودة.",
+            "unknown_fn": "التحقق من الموظفين غير متاح.",
+            "wrong_lane": "التحقق من الموظفين غير متاح.",
+            "unknown_id": "رقم الموظف غير موجود.",
+            "not_authorized": "لا يمكنك إرسال هذه الفئة.",
+            "field_required": "حقل مطلوب ما زال فارغًا.",
+            "ambiguous": "رقم الموظف يطابق أكثر من مندوب.",
+            "archived": "هذا الموظف مؤرشف.",
+            "blocked": "هذا الموظف محظور."
           },
           "fix": {
             "title": "تصحيح هذا الصف",
@@ -9898,6 +9989,7 @@
           "fixedValue": "نص ثابت في المستند",
           "options": "الخيارات",
           "optionsHint": "يختار المندوب أحد هذه الخيارات.",
+          "penaltyOptionsHint": "هذه هي خانات الاختيار المطبوعة على إشعار الجزاء.",
           "optionPlaceholder": "نص الخيار",
           "addOption": "إضافة خيار",
           "removeOption": "حذف الخيار",
@@ -9933,7 +10025,11 @@
           },
           "errors": {
             "fixedNeedsValue": "الحقل الثابت يحتاج النص الذي يظهر في المستند.",
-            "signatureNotDropdown": "الحقل الذي يوقّعه شخص لا يمكن أن يكون قائمة اختيار."
+            "signatureNotDropdown": "الحقل الذي يوقّعه شخص لا يمكن أن يكون قائمة اختيار.",
+            "invalid_field_key": "معرّف هذا الحقل محجوز لصف موظف من النظام.",
+            "invalid_category": "اختر فئة نشطة.",
+            "invalid_document_kind": "هذا التخطيط غير متاح.",
+            "not_authorized": "ليست لديك صلاحية حفظ هذا القالب."
           },
           "preview": {
             "internalDocument": "مستند داخلي",
@@ -9983,7 +10079,7 @@
           "workflows": "مسارات الموافقة",
           "types": "أنواع الطلبات وحقولها",
           "departments": "الأقسام والموظفون",
-          "roles": "الأدوار وصلاحيات الوصول",
+          "roles": "صلاحية نوع الطلب",
           "categories": "تصنيفات الشكاوى",
           "tenure": "مدد السلف المتاحة",
           "assets": "كتالوج الأصول",
@@ -9997,7 +10093,7 @@
           "workflows": "تحديد خطوات الموافقة ومهل الإنجاز ومسارات التصعيد",
           "types": "إدارة أنواع الطلبات والحقول المخصصة وخانات الأيقونات ولقطات الشاشة",
           "departments": "الفرق والأعضاء وقواعد الإسناد",
-          "roles": "صلاحية المُرسِل والمستلم، لكل نوع",
+          "roles": "من يمكنه عرض أو البت في كل نوع طلب. ليست صلاحيات لوحة الموظفين.",
           "categories": "إدارة خيارات تصنيفات الشكاوى",
           "tenure": "مدد سداد السلف التي يمكن للمندوب اختيارها",
           "assets": "الأصناف التي يمكن للمندوب طلبها مع أرصدة المخزون",
@@ -10149,6 +10245,14 @@
         "subtitle": "القواعد والشركاء والمناطق والجداول التشغيلية التي يتبعها كل توصيل.",
         "breadcrumb": "مركز العمليات",
         "cards": {
+          "performance": {
+            "title": "الأداء",
+            "body": "درجات السائقين وكفاءة الطلبات اليومية والقوى العاملة المباشرة."
+          },
+          "orderReconciliation": {
+            "title": "مطابقة الطلبات",
+            "body": "مقارنة تحميل AM بعدد طلبات MGGO ليوم الكويت."
+          },
           "partners": {
             "title": "الشركاء",
             "body": "طلبات ودورداش وأوبر إيتس والعقود المرتبطة بها."

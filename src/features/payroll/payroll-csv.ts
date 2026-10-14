@@ -6,6 +6,7 @@ import {
   PAYROLL_EFF_BUCKETS,
   type PayrollEffBucketId,
 } from "./payroll-formulas";
+import { aoShownOrders } from "./payroll-orders-display";
 import { cellParticular } from "./payroll-particulars";
 import { payrollVehicleKind } from "./payroll-rider-columns";
 import type { PayrollHubTab, PayrollRequestRow, PayrollRiderRow } from "./payroll-types";
@@ -223,7 +224,7 @@ export function exportPayrollAttendanceOrdersCsv(
         ...identity.cells(row),
         ...dates.flatMap((_, i) => [
           cellParticular(row, i),
-          row.dayInfo[i]?.orders ? row.dayInfo[i]!.orders : "–",
+          aoShownOrders(row.dayInfo[i]) || "–",
         ]),
       ]),
     ),

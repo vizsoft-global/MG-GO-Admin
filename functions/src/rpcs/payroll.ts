@@ -237,7 +237,12 @@ async function loadPayrollContext(input: {
       .get(),
   ]));
 
-  const recon = await timedPhase(phases, "reconMs", () => loadReconOrders(firstDay, lastDay));
+  const [recon, verifiedByDriverDay] = await timedPhase(phases, "reconMs", () =>
+    Promise.all([
+      loadReconOrders(firstDay, lastDay),
+      loadVerifiedByDriverDay(firstDay, lastDay, monthKeysInclusive(firstDay, lastDay)),
+    ]),
+  );
 
   const restaurantById = new Map<string, Record<string, unknown>>();
   for (const doc of restaurantsSnap.docs) restaurantById.set(doc.id, doc.data());
@@ -292,6 +297,7 @@ async function loadPayrollContext(input: {
     metricsSnap,
     requestsSnap,
     recon,
+    verifiedByDriverDay,
     offStructure,
     workedByDriverDay,
     adjustmentByDriverDay,
@@ -308,6 +314,69 @@ async function loadPayrollContext(input: {
  */
 function hoursFromLog(doc: DocumentSnapshot): number {
   return payrollHoursFromFields(doc.data() ?? {});
+}
+
+function monthKeysInclusive(firstDay: string, lastDay: string): string[] {
+  const keys: string[] = [];
+  let cursor = firstDay.slice(0, 7);
+  const end = lastDay.slice(0, 7);
+  while (cursor <= end) {
+    keys.push(cursor);
+    const [year, month] = cursor.split("-").map(Number);
+    cursor =
+      month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, "0")}`;
+  }
+  return keys;
+}
+
+function reconOrdersFor(
+  recon: Map<string, { orders: number; createdAt: number }>,
+  date: string,
+  ...ids: Array<string | null | undefined>
+): number | null {
+  for (const id of ids) {
+    const key = id?.trim().toLowerCase();
+    if (!key) continue;
+    const hit = recon.get(`${key}|${date}`);
+    if (hit) return hit.orders;
+  }
+  return null;
+}
+
+function displayOrdersFor(recon: number | null, verified: number): number {
+  return recon ?? verified;
+}
+
+async function loadVerifiedByDriverDay(
+  firstDay: string,
+  lastDay: string,
+  months: readonly string[],
+) {
+  const db = getFirestore();
+  try {
+    const snaps = await Promise.all(
+      months.map((month) =>
+        db
+          .collection(COLLECTIONS.rollupsDriverDay)
+          .where("month", "==", month)
+          .select("driver_id", "day", "verified")
+          .limit(SCAN_CAP)
+          .get(),
+      ),
+    );
+    const map = new Map<string, number>();
+    for (const snap of snaps) {
+      for (const doc of snap.docs) {
+        const driverId = asString(doc.get("driver_id"));
+        const day = asString(doc.get("day"));
+        if (!driverId || !day || day < firstDay || day > lastDay) continue;
+        map.set(`${driverId}|${day}`, asNumber(doc.get("verified")));
+      }
+    }
+    return map;
+  } catch {
+    return new Map<string, number>();
+  }
 }
 
 /**
@@ -607,10 +676,12 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
         const cover = covers.get(key);
         const hours = ctx.workedByDriverDay.get(key) ?? 0;
         const adjustment = ctx.adjustmentByDriverDay.get(key);
+        const reconHit = reconOrdersFor(ctx.recon, day, employeeId, driverCode);
         return {
           d: day,
           h: Math.round(hours * 100) / 100,
-          o: employeeId ? (ctx.recon.get(`${employeeId.toLowerCase()}|${day}`)?.orders ?? 0) : 0,
+          o: reconHit ?? 0,
+          do: displayOrdersFor(reconHit, ctx.verifiedByDriverDay.get(key) ?? 0),
           // Whether an attendance log exists at all: a check-in with no check-out
           // is 0 h and is still a worked day, not an absent one.
           k: ctx.workedByDriverDay.has(key),

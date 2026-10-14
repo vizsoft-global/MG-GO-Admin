@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { selectOptions } from "@/lib/select-items";
 import { ESIGN_STAFF_SIGNER_ROLES, type EsignStaffSignerRole } from "./types";
 import {
   useAddEsignSigner,
@@ -34,10 +33,12 @@ export function EsignSignersEditor({
   requestId,
   draft = [],
   onDraftChange,
+  onSelectedDisplayNameChange,
 }: {
   requestId?: string;
   draft?: EsignDraftStaffSigner[];
   onDraftChange?: (next: EsignDraftStaffSigner[]) => void;
+  onSelectedDisplayNameChange?: (name: string) => void;
 }) {
   const t = useTranslations("pages.requests.esign.signers");
   const persisted = Boolean(requestId);
@@ -114,7 +115,11 @@ export function EsignSignersEditor({
           <SearchSelect
             items={items}
             value={staffId}
-            onChange={setStaffId}
+            onChange={(next) => {
+              setStaffId(next);
+              const picked = options.find((row) => row.id === next);
+              onSelectedDisplayNameChange?.(picked?.full_name || picked?.email || "");
+            }}
             placeholder={t("staffPlaceholder")}
             searchPlaceholder={t("staffSearch")}
             recentsKey="esign-staff-signer"
@@ -124,12 +129,6 @@ export function EsignSignersEditor({
         <div className="space-y-1">
           <Label>{t("role")}</Label>
           <Select
-            items={selectOptions(
-              ESIGN_STAFF_SIGNER_ROLES.map((value) => ({
-                value,
-                label: roleLabel(value),
-              })),
-            )}
             value={role}
             onValueChange={(value) => {
               if (value === "countersigner" || value === "manager" || value === "witness") {
@@ -138,11 +137,11 @@ export function EsignSignersEditor({
             }}
           >
             <SelectTrigger className="h-9 w-full">
-              <SelectValue />
+              <SelectValue>{roleLabel(role)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {ESIGN_STAFF_SIGNER_ROLES.map((value) => (
-                <SelectItem key={value} value={value}>
+                <SelectItem key={value} value={value} label={roleLabel(value)}>
                   {roleLabel(value)}
                 </SelectItem>
               ))}

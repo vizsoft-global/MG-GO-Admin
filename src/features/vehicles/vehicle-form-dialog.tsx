@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { queryKeys } from "@/lib/query/query-keys";
 import { Bike, Car, Fuel, Wrench } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ import {
   VEHICLE_FUEL_TYPES,
   defaultFuelMonthlyLimit,
   isDriverProjectKey,
+  isVehicleTypeOfUse,
   toKuwaitYmd,
   type DriverProjectKey,
 } from "@/features/fleet/fleet-labels";
@@ -31,6 +32,7 @@ import { ProjectKeyField } from "@/features/fleet/project-key-field";
 import { saveVehicle, assignVehicleDriver } from "./vehicles-actions";
 import { plateToBikeId } from "./plate-id";
 import { listVehicleTabDrivers } from "./vehicle-tabs-actions";
+import { useTypeLabel } from "./vehicle-use-types";
 import { useVehiclePartners, useVehicleUseTypes } from "./use-vehicles";
 import type { VehicleListRow, VehicleTypeRow } from "./types";
 import {
@@ -61,6 +63,7 @@ export function VehicleFormDialog({
   onSaved: (id: string) => void;
 }) {
   const t = useTranslations("pages.vehicles");
+  const locale = useLocale();
   const [pending, startTransition] = useTransition();
   const { data: partners = [] } = useVehiclePartners();
   const { data: useTypes = [] } = useVehicleUseTypes();
@@ -132,14 +135,19 @@ export function VehicleFormDialog({
   const useTypeItems = useMemo(() => {
     const rows = useTypes.filter((item) => item.is_active || item.key === typeOfUse);
     if (rows.length > 0) {
-      return rows.map((item) => ({ key: item.key, label: item.label_en }));
+      return rows.map((item) => ({
+        key: item.key,
+        label: isVehicleTypeOfUse(item.key)
+          ? t(`typeOfUse.${item.key}`)
+          : useTypeLabel(item.key, useTypes, locale),
+      }));
     }
     return [
       { key: "operational", label: t("typeOfUse.operational") },
       { key: "trainer", label: t("typeOfUse.trainer") },
       { key: "standby", label: t("typeOfUse.standby") },
     ];
-  }, [t, typeOfUse, useTypes]);
+  }, [locale, t, typeOfUse, useTypes]);
 
   const replacementItems = useMemo(
     () =>

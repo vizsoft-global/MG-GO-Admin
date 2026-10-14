@@ -23,6 +23,7 @@ import {
 } from "./payroll-actions";
 import { monthKeysTouched, type PayrollPeriod } from "./payroll-formulas";
 import { stitchPayrollRange } from "./payroll-snapshot";
+import type { PayrollColumnConfigRow } from "./payroll-column-config";
 import type { PayrollSlicers } from "./payroll-types";
 
 export function usePayrollSnapshot(monthKey: string, slicers: PayrollSlicers) {
@@ -214,12 +215,36 @@ export function usePayrollColumnConfig() {
 
 export function useSavePayrollColumnConfig() {
   const client = useQueryClient();
+  const key = queryKeys.payroll.columnConfig();
   return useMutation({
     mutationFn: savePayrollColumnConfig,
-    onSuccess: (result) => {
-      if (!("error" in result)) {
-        void client.invalidateQueries({ queryKey: queryKeys.payroll.columnConfig() });
+    onMutate: async (input) => {
+      await client.cancelQueries({ queryKey: key });
+      const previous = client.getQueryData<PayrollColumnConfigRow[]>(key);
+      client.setQueryData<PayrollColumnConfigRow[]>(key, (current) => {
+        const rows = [...(current ?? [])];
+        const index = rows.findIndex((row) => row.columnKey === input.columnKey);
+        const next: PayrollColumnConfigRow = {
+          columnKey: input.columnKey,
+          label: input.label,
+          hiddenViews: [...input.hiddenViews],
+        };
+        if (index >= 0) rows[index] = next;
+        else rows.push(next);
+        return rows;
+      });
+      return { previous };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous) client.setQueryData(key, context.previous);
+    },
+    onSuccess: (result, _input, context) => {
+      if ("error" in result && context?.previous) {
+        client.setQueryData(key, context.previous);
       }
+    },
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: key });
     },
   });
 }

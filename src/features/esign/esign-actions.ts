@@ -2,7 +2,6 @@
 
 import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
 import { callAdminFunction } from "@/lib/firebase/callable";
-import { getFirebaseStorage } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { writeWithEpoch } from "@/lib/auth/auth-epochs";
@@ -12,6 +11,7 @@ import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { effectiveEsignStatus, isEsignDueDateAllowed } from "./esign-due-date";
+import { putEsignObject } from "./esign-r2";
 import { esignDocumentHref } from "./esign-storage-key";
 import { esignRecipientStage, isEsignRecipientStage } from "./esign-recipient-stage";
 import type {
@@ -445,7 +445,6 @@ export async function fetchEsignRequestDetail(
   };
 }
 
-const ESIGN_BUCKET = "esign-documents";
 const COMPOSE_TIMEOUT_MS = 120_000;
 
 async function maybeComposeSignedCopy(id: string, row: DocRow): Promise<DocRow> {
@@ -525,20 +524,14 @@ export async function uploadEsignDocument(
   if (!ext) return { ok: false, error: "unsupported_source_type" };
   if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: "file_too_large" };
 
-  const storage = await getFirebaseStorage();
-  if (!storage) return { ok: false, error: "not_configured" };
   const key = `admin/${crypto.randomUUID()}.${ext}`;
-  try {
-    const object = storage.bucket().file(`${ESIGN_BUCKET}/${key}`);
-    const [exists] = await object.exists();
-    if (exists) return { ok: false, error: "already_exists" };
-    await object.save(Buffer.from(await file.arrayBuffer()), {
-      contentType: file.type,
-      resumable: false,
-    });
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "upload_failed" };
-  }
+  const uploaded = await putEsignObject(
+    key,
+    Buffer.from(await file.arrayBuffer()),
+    file.type,
+    { rejectIfExists: true },
+  );
+  if (!uploaded.ok) return { ok: false, error: uploaded.error };
   return { ok: true, key };
 }
 

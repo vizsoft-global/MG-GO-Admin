@@ -1,8 +1,17 @@
 import { normalizeDocumentKind } from "../document-kind";
 import { ESIGN_EMPLOYEE_CORE_ROWS, ESIGN_EMPLOYEE_ROWS } from "../employee-block";
+import {
+  checksFromPenaltyFields,
+  parsePenaltyActionTokens,
+  PENALTY_CHECKS,
+  PENALTY_CHECK_SLOT_COUNT,
+  PENALTY_VISIBLE_FIELD_KEY,
+} from "../esign-penalty-checks";
 import type { EsignDocumentKind } from "../types";
 import type { EsignEmployeeSnapshot } from "./esign-placeholders";
 import { fillPlaceholders, snapshotValues } from "./esign-placeholders";
+
+export { PENALTY_CHECKS } from "../esign-penalty-checks";
 
 /** A4 portrait in PDF points — Figma D1/D2 frames are 595×842. */
 export const A4_WIDTH_PT = 595.28;
@@ -47,6 +56,7 @@ export type LayoutCheckbox = {
   key: string;
   label: BilingualText;
   checked: boolean;
+  note?: string;
 };
 
 export type LayoutSection = {
@@ -98,6 +108,8 @@ export type LayoutFieldInput = {
   value: string;
   section?: "employee" | "document";
   source?: LayoutSource;
+  /** Author-controlled Penalty checkbox labels, when this is `penalty_action`. */
+  options?: string[];
 };
 
 export type BuildLayoutInput = {
@@ -114,25 +126,6 @@ export type BuildLayoutInput = {
   company?: string;
   dateLabel?: string;
 };
-
-/**
- * Figma `5931:4010` checkbox list. English only on the sheet; Arabic stays
- * empty so a filled option does not grow a second line the frame does not draw.
- * `deduct_1_day`…`deduct_5_day` replace the old combined `deduct_1_5` row.
- */
-export const PENALTY_CHECKS: LayoutCheckbox[] = [
-  { key: "written_warning", label: { en: "Written warning", ar: "" }, checked: false },
-  { key: "deduct_10", label: { en: "10% deduction of a day's salary", ar: "" }, checked: false },
-  { key: "deduct_25", label: { en: "25% deduction of a day's salary", ar: "" }, checked: false },
-  { key: "deduct_50", label: { en: "50% deduction of a day's salary", ar: "" }, checked: false },
-  { key: "deduct_1_day", label: { en: "One day deduction", ar: "" }, checked: false },
-  { key: "deduct_2_day", label: { en: "Two days deduction", ar: "" }, checked: false },
-  { key: "deduct_3_day", label: { en: "Three days deduction", ar: "" }, checked: false },
-  { key: "deduct_4_day", label: { en: "Four days deduction", ar: "" }, checked: false },
-  { key: "deduct_5_day", label: { en: "Five days deduction", ar: "" }, checked: false },
-  { key: "dismissal_warning", label: { en: "Dismissal final warning", ar: "" }, checked: false },
-  { key: "others", label: { en: "Others", ar: "" }, checked: false },
-];
 
 /**
  * Fixed skeleton metrics for Figma `5931:4010` / `5931:4160`.
@@ -194,6 +187,22 @@ export const PENALTY_GEOM: FigmaGeom[] = [
   { h: 26 },
   { h: 22 },
 ];
+
+/** Bottom of the painted skeleton, including the pad and the stack under every row. */
+export function figmaContentEndPt(steps: ReadonlyArray<{ h: number }>): number {
+  return FIGMA_PAD_TOP + steps.reduce((sum, step) => sum + step.h + FIGMA_STACK, 0);
+}
+
+/**
+ * Band under the skeleton and inside the A4 page.
+ * Opening text, the declaration, and leftover rows sit here so they cannot
+ * push the sheet onto a second page or move the named signature boxes.
+ */
+export function figmaTailBand(steps: ReadonlyArray<{ h: number }>): { top: number; height: number } {
+  const top = figmaContentEndPt(steps) + 4;
+  const height = Math.max(0, A4_HEIGHT_PT - top - 10);
+  return { top, height };
+}
 
 export const LOAN_GEOM: FigmaGeom[] = [
   { h: 18 },
@@ -628,23 +637,8 @@ function firstField(fields: LayoutFieldInput[], keys: string[]): string {
   return "";
 }
 
-function isCheckedToken(value: string): boolean {
-  const token = value.trim().toLowerCase();
-  return token === "1" || token === "true" || token === "yes" || token === "checked" || token === "on";
-}
-
 function checksFromFields(fields: LayoutFieldInput[]): LayoutCheckbox[] {
-  return PENALTY_CHECKS.map((check) => {
-    const checked = fields.some((field) => {
-      const value = field.value.trim();
-      const lower = value.toLowerCase();
-      if (field.key === check.key && isCheckedToken(value)) return true;
-      if (lower === check.key) return true;
-      if (check.label.en && lower === check.label.en.toLowerCase()) return true;
-      return false;
-    });
-    return { ...check, checked };
-  });
+  return checksFromPenaltyFields(fields);
 }
 
 function catalogueEmployeeRows(values: Record<string, string>): LayoutFieldRow[] {
@@ -663,13 +657,57 @@ function fillBoth(en: string, ar: string, merged: Record<string, string>): Bilin
 }
 
 /** Opening paragraph, leftover fields, and author signature rows under a fixed skeleton. */
+function foldTitleEcho(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?،؛]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+/** Seed bodies that only repeat the sheet title stay off the leftover tail. */
+export function isTitleEcho(body: BilingualText, title: BilingualText): boolean {
+  if (!body.en.trim() && !body.ar.trim()) return false;
+  const en = foldTitleEcho(body.en);
+  const ar = foldTitleEcho(body.ar);
+  const titleEn = foldTitleEcho(title.en);
+  const titleAr = foldTitleEcho(title.ar);
+  const enEcho = !en || en === titleEn || en === titleAr;
+  const arEcho = !ar || ar === titleAr || ar === titleEn;
+  return enEcho && arEcho;
+}
+
+function leftoverValuePrints(value: string, title: BilingualText): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return !isTitleEcho({ en: trimmed, ar: "" }, title);
+}
+
+function appendAbsenceRange(sections: LayoutSection[], from: string, to: string) {
+  const rows = [
+    ...(from ? [row("absence_from", "From", "من", from, "entry")] : []),
+    ...(to ? [row("absence_to", "To", "إلى", to, "entry")] : []),
+  ];
+  if (rows.length === 0) return;
+  const appendix = sections.find((section) => section.key === "appendix");
+  if (appendix) appendix.rows.unshift(...rows);
+  else {
+    sections.push({
+      key: "appendix",
+      title: { en: "Details", ar: "التفاصيل" },
+      rows,
+    });
+  }
+}
+
 function appendDocumentTail(
   sections: LayoutSection[],
   fields: LayoutFieldInput[],
   consumed: Set<string>,
   body: BilingualText,
+  title: BilingualText,
 ) {
-  if (body.en || body.ar) {
+  if ((body.en || body.ar) && !isTitleEcho(body, title)) {
     sections.push({
       key: "opening",
       title: { en: "Opening paragraph", ar: "الفقرة الافتتاحية" },
@@ -677,7 +715,12 @@ function appendDocumentTail(
       body,
     });
   }
-  const extras = fields.filter((field) => field.source !== "signature" && !consumed.has(field.key));
+  const extras = fields.filter(
+    (field) =>
+      field.source !== "signature" &&
+      !consumed.has(field.key) &&
+      leftoverValuePrints(field.value, title),
+  );
   if (extras.length > 0) {
     sections.push({
       key: "appendix",
@@ -734,8 +777,29 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     const penaltyText =
       firstField(allFields, ["penalty", "penalty_text", "violation", "description"]) || description;
     const violationDate = firstField(allFields, ["penalty_date", "violation_date", "date_of_violation"]);
+    const absenceFrom =
+      firstField(allFields, ["absence_from", "absent_from", "from_date"]) ||
+      (merged.absence_from ?? merged.absent_from ?? "").trim();
+    const absenceTo =
+      firstField(allFields, ["absence_to", "absent_to", "to_date"]) ||
+      (merged.absence_to ?? merged.absent_to ?? "").trim();
     const repeated = firstField(allFields, ["repeated_penalty", "penalty_if_repeated", "penalty_repeated"]);
     const remarks = firstField(allFields, ["remarks", "notes"]);
+    const othersAmount = firstField(allFields, ["others_amount", "others_amt", "other_amount"]);
+    const penaltyChecks = checksFromFields(allFields).map((check) =>
+      check.key === "others" && othersAmount ? { ...check, note: othersAmount } : check,
+    );
+    const actionValue = firstField(allFields, ["penalty_action", "penalty_type"]);
+    const actionTokens = parsePenaltyActionTokens(actionValue);
+    const actionMatched =
+      actionTokens.length > 0 &&
+      actionTokens.every((token) =>
+        penaltyChecks.some(
+          (check) =>
+            token.toLowerCase() === check.key ||
+            token.toLowerCase() === check.label.en.toLowerCase(),
+        ),
+      );
     employeeRows = [
       row("employee_name", "Employee Name", "اسم الموظف", values.employee_name ?? "", "system"),
       row("employee_number", "Employee Number", "رقم الموظف", values.employee_id ?? "", "system"),
@@ -751,6 +815,12 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       "penalty_date",
       "violation_date",
       "date_of_violation",
+      "absence_from",
+      "absence_to",
+      "absent_from",
+      "absent_to",
+      "from_date",
+      "to_date",
       "repeated_penalty",
       "penalty_if_repeated",
       "penalty_repeated",
@@ -763,7 +833,16 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       "company_name",
       "company",
       "accommodation",
+      "others_amount",
+      "others_amt",
+      "other_amount",
+      "optional_remark",
+      "optional_remarks",
+      "penalty_notice",
+      PENALTY_VISIBLE_FIELD_KEY,
       ...PENALTY_CHECKS.map((check) => check.key),
+      ...penaltyChecks.map((check) => check.key),
+      ...(actionMatched ? ["penalty_action", "penalty_type"] : []),
     ]);
     sections.push(
       {
@@ -777,17 +856,19 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
         rows: [
           row("penalty_text", "Penalty (English + Arabic)", "المخالفة (إنجليزي + عربي)", penaltyText, "entry"),
           row("violation_date", "Date of Violation", "تاريخ المخالفة", violationDate, "entry"),
+          row("absence_from", "From", "من", absenceFrom, "entry"),
+          row("absence_to", "To", "إلى", absenceTo, "entry"),
         ],
       },
       {
         key: "penalty",
         title: { en: "Penalty", ar: "الجزاء" },
         rows: [row("repeated", "Penalty if repeated", "العقوبة في حالة التكرار", repeated, "entry")],
-        checkboxes: checksFromFields(allFields),
+        checkboxes: penaltyChecks,
       },
       {
         key: "management",
-        title: { en: "Management Use Only", ar: "" },
+        title: { en: "Management Use Only", ar: "للاستخدام الإداري فقط" },
         rows: [],
       },
       {
@@ -796,7 +877,23 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
         rows: [row("remarks", "Remarks", "ملاحظات", remarks, "entry")],
       },
     );
-    appendDocumentTail(sections, [...employeeFields, ...documentFields], consumed, body);
+    appendDocumentTail(sections, [...employeeFields, ...documentFields], consumed, body, title);
+    appendAbsenceRange(sections, absenceFrom, absenceTo);
+    const overflow = penaltyChecks.slice(PENALTY_CHECK_SLOT_COUNT);
+    if (overflow.length) {
+      const extraRows = overflow.map((check) =>
+        row(check.key, check.label.en, check.label.ar, check.checked ? "checked" : "", "entry"),
+      );
+      const appendix = sections.find((section) => section.key === "appendix");
+      if (appendix) appendix.rows.push(...extraRows);
+      else {
+        sections.push({
+          key: "appendix",
+          title: { en: "Details", ar: "التفاصيل" },
+          rows: extraRows,
+        });
+      }
+    }
   } else if (kind === "loan") {
     const requestDate =
       firstField(allFields, ["request_date", "date_of_request", "loan_date"]) || input.dateLabel || "";
@@ -894,7 +991,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
         ],
       },
     );
-    appendDocumentTail(sections, [...employeeFields, ...documentFields], consumed, body);
+    appendDocumentTail(sections, [...employeeFields, ...documentFields], consumed, body, title);
   } else if (kind === "payslip") {
     payslip = buildPayslipSheet(values, documentFields);
     employeeRows = payslip.identity.map((item) =>
@@ -913,7 +1010,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
         ),
       ),
     });
-    if (body.en || body.ar) {
+    if ((body.en || body.ar) && !isTitleEcho(body, title)) {
       sections.push({
         key: "opening",
         title: { en: "Opening paragraph", ar: "الفقرة الافتتاحية" },
@@ -923,7 +1020,10 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     }
     const consumed = payslipConsumedKeys();
     const extras = documentFields.filter(
-      (field) => field.source !== "signature" && !consumed.has(field.key),
+      (field) =>
+        field.source !== "signature" &&
+        !consumed.has(field.key) &&
+        leftoverValuePrints(field.value, title),
     );
     if (extras.length > 0) {
       sections.push({
@@ -950,7 +1050,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       if (field.source === "signature") continue;
       employeeRows.push(row(field.key, field.labelEn, field.labelAr || field.labelEn, field.value, field.source));
     }
-    if (body.en || body.ar) {
+    if ((body.en || body.ar) && !isTitleEcho(body, title)) {
       sections.push({
         key: "opening",
         title: { en: "Opening paragraph", ar: "الفقرة الافتتاحية" },
@@ -959,15 +1059,21 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       });
     }
     const signs = [...employeeFields, ...documentFields].filter((field) => field.source === "signature");
-    const rest = documentFields.filter((field) => field.source !== "signature");
-    sections.push({
-      key: "document",
-      title: { en: "Details", ar: "التفاصيل" },
-      rows: rest.map((field) =>
-        row(field.key, field.labelEn, field.labelAr || field.labelEn, field.value, field.source ?? "entry"),
-      ),
-      body: !body.en && !body.ar && description ? { en: description, ar: description } : undefined,
-    });
+    const rest = documentFields.filter(
+      (field) => field.source !== "signature" && leftoverValuePrints(field.value, title),
+    );
+    const descBody =
+      !body.en && !body.ar && description.trim() ? { en: description, ar: description } : undefined;
+    if (rest.length > 0 || descBody) {
+      sections.push({
+        key: "document",
+        title: { en: "Details", ar: "التفاصيل" },
+        rows: rest.map((field) =>
+          row(field.key, field.labelEn, field.labelAr || field.labelEn, field.value, field.source ?? "entry"),
+        ),
+        body: descBody,
+      });
+    }
     if (signs.length > 0) {
       sections.push({
         key: "author_signs",

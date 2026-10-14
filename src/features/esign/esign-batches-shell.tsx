@@ -76,10 +76,24 @@ function esignDeskPaths(pathname: string) {
 
 export function EsignBatchesShell() {
   const t = useTranslations("pages.requests.esign.tracker");
+  const tHub = useTranslations("pages.requests.esign.hub");
   const tRcm = useTranslations("pages.rcmV2");
   const router = useRouter();
   const pathname = usePathname();
   const paths = esignDeskPaths(pathname);
+  const breadcrumbs = paths.desk
+    ? [
+        { label: tRcm("hubTitle"), href: paths.outgoingHref },
+        { label: tRcm("outgoingShort"), href: paths.outgoingHref },
+        { label: t("title") },
+      ]
+    : [
+        { label: tHub("title"), href: paths.outgoingHref },
+        { label: t("title") },
+      ];
+  const newTemplateHref = paths.desk
+    ? "/employeedesk/esign/templates/new"
+    : "/requests/esign/templates/new";
   const queryClient = useQueryClient();
 
   const batchesQuery = useEsignBatches();
@@ -196,16 +210,12 @@ export function EsignBatchesShell() {
       <AppPageHeader
         title={t("title")}
         description={t("subtitle")}
-        breadcrumbs={[
-          { label: tRcm("hubTitle"), href: "/employeedesk" },
-          { label: tRcm("outgoingShort"), href: "/employeedesk" },
-          { label: t("title") },
-        ]}
+        breadcrumbs={breadcrumbs}
         actions={
           <Button
             size="sm"
             className="h-9 cursor-pointer bg-zinc-950 text-white hover:bg-zinc-800"
-            render={<Link href="/employeedesk/esign/templates/new" />}
+            render={<Link href={newTemplateHref} />}
           >
             <Plus className="me-1.5 h-3.5 w-3.5" />
             {t("newFromTemplate")}

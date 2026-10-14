@@ -3,8 +3,8 @@
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
-import { getFirebaseStorage } from "@/lib/firebase/admin";
 import { callAdminFunction } from "@/lib/firebase/callable";
+import { putEsignObject } from "./esign-r2";
 import { isEsignStaffSignerRole } from "./esign-signers";
 import type {
   EsignCounterSignatureState,
@@ -15,24 +15,13 @@ import type {
   EsignStaffSignerRole,
 } from "./types";
 
-const ESIGN_BUCKET = "esign-documents";
-
 async function uploadEsignObject(
   key: string,
   bytes: Buffer,
   contentType: string,
 ): Promise<{ error: string | null }> {
-  const storage = await getFirebaseStorage();
-  if (!storage) return { error: "not_configured" };
-  try {
-    const file = storage.bucket().file(`${ESIGN_BUCKET}/${key}`);
-    const [exists] = await file.exists();
-    if (exists) return { error: "already_exists" };
-    await file.save(bytes, { contentType, resumable: false });
-    return { error: null };
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "upload_failed" };
-  }
+  const uploaded = await putEsignObject(key, bytes, contentType, { rejectIfExists: true });
+  return uploaded.ok ? { error: null } : { error: uploaded.error };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

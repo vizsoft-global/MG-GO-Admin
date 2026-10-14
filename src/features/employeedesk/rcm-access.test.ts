@@ -33,7 +33,7 @@ describe("rcm access chips", () => {
       RCM_ADMIN_CHIPS.map((chip) => chip.href),
       [
         "/employeedesk/esign/templates",
-        "/employeedesk/all",
+        "/employeedesk/all?scope=all",
         "/employeedesk/reports",
         "/settings/logs?module=requests",
         "/employeedesk/settings",
@@ -55,7 +55,7 @@ describe("rcm access chips", () => {
 
   it("maps Incoming hub chips onto existing list flags", () => {
     assert.deepEqual(incomingHubListFlags("all"), {
-      assignedToMe: true,
+      assignedToMe: false,
       forwardedToMe: false,
       handledByMe: false,
       dueToday: false,

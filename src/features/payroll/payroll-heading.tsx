@@ -168,12 +168,18 @@ export function PayrollColumnsMenu({
 export function stickyIdentityStyle(
   columnId: string,
   offset: number,
+  kind: "head" | "cell" = "cell",
 ): { className: string; style: CSSProperties } | null {
   if (columnId !== "amId" && columnId !== "mgId" && columnId !== "name") return null;
   const width = columnId === "name" ? 190 : 64;
   return {
-    className: "sticky z-20 bg-card",
-    style: { insetInlineStart: offset, minWidth: width, width },
+    className: kind === "head" ? "sticky top-0 z-30 bg-card" : "sticky z-20 bg-card",
+    style: {
+      ...(kind === "head" ? { top: 0 } : {}),
+      insetInlineStart: offset,
+      minWidth: width,
+      width,
+    },
   };
 }
 

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Send } from "lucide-react";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { OUTGOING_SENDER_KEYS } from "@/features/esign/outgoing-hub-categories";
 import { saveStaffAccessGrants } from "./requests-settings-actions";
 import { REQUEST_TYPE_SLUGS, type AccessLevel, type RequestTypeSlug, type StaffProfileOption } from "./settings-types";
 
@@ -76,6 +78,7 @@ export function StaffAccessDrawer({
   staff,
   staffOptions,
   initialAccess,
+  initialEsignKeys,
   onSaved,
 }: {
   open: boolean;
@@ -84,14 +87,17 @@ export function StaffAccessDrawer({
   staff?: StaffTarget | null;
   staffOptions?: StaffProfileOption[];
   initialAccess?: Partial<Record<RequestTypeSlug, AccessLevel>>;
+  initialEsignKeys?: string[];
   onSaved: () => void;
 }) {
   const t = useTranslations("pages.requests.settings.roles");
   const tTypes = useTranslations("pages.requests.types");
+  const tAccess = useTranslations("pages.settings.accessControl");
   const isAssignMode = !staff;
 
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [access, setAccess] = useState<Partial<Record<RequestTypeSlug, AccessLevel>>>({});
+  const [esignKeys, setEsignKeys] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   /** Figma "Change" affordance: swap the pre-selected staff member for another one. */
   const [changingStaff, setChangingStaff] = useState(false);
@@ -101,8 +107,9 @@ export function StaffAccessDrawer({
       setPickedId(null);
       setChangingStaff(false);
       setAccess(initialAccess ?? {});
+      setEsignKeys(initialEsignKeys ?? []);
     }
-  }, [open, initialAccess]);
+  }, [open, initialAccess, initialEsignKeys]);
 
   const staffItems = useMemo(
     () =>
@@ -128,7 +135,7 @@ export function StaffAccessDrawer({
       return;
     }
     setSaving(true);
-    const result = await saveStaffAccessGrants(targetId, access);
+    const result = await saveStaffAccessGrants(targetId, access, esignKeys);
     setSaving(false);
     if (!result.ok) {
       toast.error(result.error ?? t("errors.saveFailed"));
@@ -200,6 +207,29 @@ export function StaffAccessDrawer({
           <p className="text-[11px] text-muted-foreground">
             {isAssignMode ? t("perTypeHintAssign") : t("perTypeHint")}
           </p>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-foreground">{t("outgoingSenderHeading")}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {OUTGOING_SENDER_KEYS.map((key) => {
+                const selected = esignKeys.includes(key);
+                return (
+                  <ToggleChip
+                    key={key}
+                    selected={selected}
+                    icon={Send}
+                    onClick={() =>
+                      setEsignKeys((prev) =>
+                        selected ? prev.filter((item) => item !== key) : [...prev, key],
+                      )
+                    }
+                  >
+                    {tAccess(`outgoingCategories.${key}`)}
+                  </ToggleChip>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="space-y-2">
             {REQUEST_TYPE_SLUGS.map((type) => {

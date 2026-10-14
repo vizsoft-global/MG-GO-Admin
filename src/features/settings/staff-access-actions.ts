@@ -26,6 +26,11 @@ import {
 import { logAdminActivity } from "@/lib/audit/log-admin-activity";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { isPenaltyChild } from "@/features/esign/esign-penalty-subcategories";
+import {
+  normalizeEsignSenderKeys,
+  type EsignCategoryGrant,
+} from "@/features/esign/esign-staff-access";
 
 export type StaffLastChanged = {
   by: string | null;
@@ -71,6 +76,7 @@ export type StaffAccessDetail = {
   slugs: string[];
   staffDepartment: StaffDepartment | null;
   requestTypes: RequestTypeGrant[];
+  esignCategories: EsignCategoryGrant[];
   lastChanged: StaffLastChanged;
 };
 
@@ -300,10 +306,11 @@ export async function getStaffAccess(userId: string): Promise<{
   if (!snap.exists || !data || data.role !== "staff") return { error: "user_not_found" };
 
   const roleId = typeof data.admin_role_id === "string" ? data.admin_role_id : null;
-  const [roleSnap, tickSnap, grantSnap, lastChanged] = await Promise.all([
+  const [roleSnap, tickSnap, grantSnap, esignSnap, lastChanged] = await Promise.all([
     roleId ? db.collection(COLLECTIONS.adminRoles).doc(roleId).get() : Promise.resolve(null),
     db.collection(COLLECTIONS.adminUserPermissions).doc(userId).get(),
     db.collection(COLLECTIONS.requestStaffAccess).where("profile_id", "==", userId).get(),
+    db.collection(COLLECTIONS.esignStaffAccess).where("profile_id", "==", userId).get(),
     lastChangedByEntities(db, [userId]),
   ]);
 
@@ -324,6 +331,14 @@ export async function getStaffAccess(userId: string): Promise<{
         return {
           requestType: String(grant.request_type ?? ""),
           accessLevel: grant.access_level === "approver" ? "approver" : "view_only",
+        };
+      }),
+      esignCategories: esignSnap.docs.map((doc) => {
+        const grant = doc.data();
+        return {
+          categoryKey: String(grant.category_key ?? ""),
+          parentKey: typeof grant.parent_key === "string" ? grant.parent_key : null,
+          accessLevel: "sender" as const,
         };
       }),
       lastChanged: lastChanged.get(userId) ?? { by: null, at: null },
@@ -368,6 +383,7 @@ export async function saveStaffAccess(input: {
   slugs: string[];
   department?: StaffDepartment | null;
   requestTypes?: RequestTypeGrant[];
+  esignCategories?: EsignCategoryGrant[];
 }): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
   const auth = await requireStaffMutation();
   if ("error" in auth) return auth;
@@ -411,15 +427,26 @@ export async function saveStaffAccess(input: {
     (kind === "user" && previousTicks.some((tick) => !slugs.includes(tick)));
 
   let requestDocs: QueryDocumentSnapshot[] = [];
+  let esignDocs: QueryDocumentSnapshot[] = [];
   const requestRows = (input.requestTypes ?? []).filter(
     (row) => row.accessLevel === "view_only" || row.accessLevel === "approver",
   );
+  const esignKeys = input.esignCategories
+    ? normalizeEsignSenderKeys(input.esignCategories.map((row) => row.categoryKey))
+    : null;
   if (input.requestTypes) {
     const existing = await db
       .collection(COLLECTIONS.requestStaffAccess)
       .where("profile_id", "==", input.userId)
       .get();
     requestDocs = existing.docs;
+  }
+  if (input.esignCategories) {
+    const existing = await db
+      .collection(COLLECTIONS.esignStaffAccess)
+      .where("profile_id", "==", input.userId)
+      .get();
+    esignDocs = existing.docs;
   }
 
   const writeRows = (tx: Transaction) => {
@@ -429,15 +456,30 @@ export async function saveStaffAccess(input: {
       { permission_slugs: slugs },
       { merge: true },
     );
-    if (!input.requestTypes) return;
-    for (const doc of requestDocs) tx.delete(doc.ref);
-    for (const row of requestRows) {
-      const id = `${input.userId}_${row.requestType}`;
-      tx.set(db.collection(COLLECTIONS.requestStaffAccess).doc(id), {
+    if (input.requestTypes) {
+      for (const doc of requestDocs) tx.delete(doc.ref);
+      for (const row of requestRows) {
+        const id = `${input.userId}_${row.requestType}`;
+        tx.set(db.collection(COLLECTIONS.requestStaffAccess).doc(id), {
+          id,
+          profile_id: input.userId,
+          request_type: row.requestType,
+          access_level: row.accessLevel,
+        });
+      }
+    }
+    if (!input.esignCategories || !esignKeys) return;
+    for (const doc of esignDocs) tx.delete(doc.ref);
+    for (const categoryKey of esignKeys) {
+      const id = `${input.userId}_${categoryKey}`;
+      tx.set(db.collection(COLLECTIONS.esignStaffAccess).doc(id), {
         id,
         profile_id: input.userId,
-        request_type: row.requestType,
-        access_level: row.accessLevel,
+        category_key: categoryKey,
+        parent_key: isPenaltyChild({ key: categoryKey, parent_key: "penalty" })
+          ? "penalty"
+          : null,
+        access_level: "sender",
       });
     }
   };
@@ -506,6 +548,7 @@ export async function getUserTicksForCopy(sourceUserId: string): Promise<{
   slugs?: string[];
   accessKind?: StaffAccessKind;
   requestTypes?: RequestTypeGrant[];
+  esignCategories?: EsignCategoryGrant[];
 }> {
   const auth = await requireSuperAdmin();
   if ("error" in auth) return auth;
@@ -517,6 +560,7 @@ export async function getUserTicksForCopy(sourceUserId: string): Promise<{
     slugs: loaded.detail.slugs,
     accessKind: loaded.detail.accessKind,
     requestTypes: loaded.detail.requestTypes,
+    esignCategories: loaded.detail.esignCategories,
   };
 }
 

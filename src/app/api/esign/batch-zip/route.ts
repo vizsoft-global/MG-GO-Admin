@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import type { DocumentData } from "firebase-admin/firestore";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { getFirebaseStorage } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { contentDispositionAttachment } from "@/lib/storage/order-proof-url";
-import { ESIGN_BUCKET, normalizeEsignStorageKey } from "@/features/esign/esign-storage-key";
+import { readEsignObject } from "@/features/esign/esign-r2";
+import { normalizeEsignStorageKey } from "@/features/esign/esign-storage-key";
 import {
   esignArchiveFilename,
   planEsignZipEntries,
@@ -78,15 +78,8 @@ function compareValues(a: unknown, b: unknown): number {
 }
 
 async function downloadEsignObject(key: string): Promise<Uint8Array | null> {
-  const storage = await getFirebaseStorage();
-  if (!storage) return null;
-  try {
-    const file = storage.bucket().file(`${ESIGN_BUCKET}/${key}`);
-    const [buf] = await file.download();
-    return new Uint8Array(buf);
-  } catch {
-    return null;
-  }
+  const object = await readEsignObject(key);
+  return object?.bytes ?? null;
 }
 
 export async function GET(request: Request) {

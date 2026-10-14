@@ -2,6 +2,7 @@
 
 import { vehicleLabel } from "@/features/performance/performance-ops-format";
 import { PAYROLL_DAY_HOURS, type DayStatus } from "./payroll-formulas";
+import { aoShownOrders } from "./payroll-orders-display";
 import { cellParticular } from "./payroll-particulars";
 import { ADJUSTMENT_STATUS_TO_DAY, type AdjustmentStatus } from "./payroll-rules-engine";
 import type { PayrollRiderRow } from "./payroll-types";
@@ -166,7 +167,7 @@ export function riderColumnValue(
       if (/^o\d+$/.test(columnId)) {
         const index = Number(columnId.slice(1)) - 1;
         const info = row.dayInfo[index];
-        return info ? info.orders : null;
+        return info ? aoShownOrders(info) : null;
       }
       return null;
   }

@@ -231,12 +231,63 @@ describe("buildEsignDocumentHtml", () => {
       employee: sampleEmployee(),
     });
     assert.match(html, /data-section="opening"/);
+    assert.match(html, /class="tail"/);
+    assert.match(html, /class="tail-fit"/);
+    assert.match(html, /height: 841\.89pt/);
+    assert.doesNotMatch(html, /min-height: 841\.89pt/);
     assert.match(html, /Opening paragraph/);
     assert.match(html, /Please read this notice\./);
     assert.match(html, /data-section="declaration"/);
     assert.match(html, /I acknowledge\./);
     assert.match(html, /Warning/);
     assert.match(html, /Employee Sign/);
+  });
+
+  it("prints only visible penalty checks and ticks every selected row", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "penalty",
+      header: "Penalty",
+      fields: [
+        {
+          key: "penalty_action",
+          label: "Action",
+          labelEn: "Action",
+          labelAr: "الإجراء",
+          value: "Written warning",
+          options: ["Written warning", "Others"],
+        },
+      ],
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /data-check-key="written_warning"/);
+    assert.match(html, /data-check-key="others"/);
+    assert.match(html, /tick on/);
+    assert.doesNotMatch(html, /One day deduction/);
+    assert.doesNotMatch(html, /figma_geom_mismatch/);
+  });
+
+  it("ticks two selected penalty checks on one document", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "penalty",
+      header: "Penalty",
+      fields: [
+        {
+          key: "penalty_action",
+          labelEn: "Action",
+          labelAr: "الإجراء",
+          value: "Written warning, One day deduction",
+          options: ["Written warning", "One day deduction", "Others"],
+        },
+      ],
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /tick on" data-check-key="written_warning"/);
+    assert.match(html, /tick on" data-check-key="deduct_1_day"/);
+    assert.match(html, /data-check-key="others"/);
+    assert.doesNotMatch(html, /tick on" data-check-key="others"/);
+    assert.doesNotMatch(html, /figma_geom_mismatch/);
   });
 
   it("prints a general opening paragraph and a named signature caption", () => {
@@ -258,6 +309,9 @@ describe("buildEsignDocumentHtml", () => {
       employee: sampleEmployee(),
     });
     assert.match(html, /data-section="opening"/);
+    assert.match(html, /sheet-body-fit/);
+    assert.match(html, /height: 841\.89pt/);
+    assert.doesNotMatch(html, /min-height: 841\.89pt/);
     assert.match(html, /Leave starts Monday\./);
     assert.match(html, /I confirm\./);
     assert.match(html, /Employee Sign/);
@@ -374,16 +428,122 @@ describe("buildEsignDocumentHtml", () => {
       ],
       employee: sampleEmployee(),
     });
+    assert.match(html, /sheet-body-fit/);
     assert.match(html, /data-section="opening"/);
     assert.match(html, /This slip covers the month/);
     assert.match(html, /data-section="declaration"/);
     assert.match(html, /I received this payslip/);
     assert.match(html, /data-section="payslip_extra"/);
     assert.match(html, /Night shift/);
+    assert.match(html, /data-logo="1"/);
     assert.match(html, /data-payslip-line="deduction_amount_kwd"/);
     assert.match(html, /12\.000/);
     assert.match(html, /data-slot-role="employee"/);
     assert.match(html, /data-slot-role="hr"/);
     assert.doesNotMatch(html, /data-management="1"/);
+  });
+
+  it("inserts a logo and a two-column management grid, and skips empty leftover dump", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "penalty",
+      headerEn: "Penalty Notice",
+      headerAr: "إشعار جزاء",
+      bodyEn: "Penalty notice",
+      bodyAr: "إشعار جزاء",
+      fields: [
+        { key: "others_amount", labelEn: "Others amount", labelAr: "مبلغ آخر", value: "" },
+        { key: "optional_remark", labelEn: "Optional remark", labelAr: "ملاحظة اختيارية", value: "" },
+      ],
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /data-logo="1"/);
+    assert.match(html, /class="logo-img"/);
+    assert.match(html, /grid-template-columns: 140pt 140pt/);
+    assert.match(html, /HR \/ Admin Department/);
+    assert.match(html, /إدارة الموارد البشرية \/ الإدارة/);
+    assert.match(html, /Form Ref\.: MG HR Ref Emp\. 0011/);
+    assert.doesNotMatch(html, />Logo</);
+    assert.doesNotMatch(html, /Others amount/);
+    assert.doesNotMatch(html, /Optional remark/);
+    assert.doesNotMatch(html, /Opening paragraph/);
+  });
+
+  it("stacks general management and prints a sheet foot without empty leftovers", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "general",
+      headerEn: "Asset Request",
+      headerAr: "طلب أصل",
+      bodyEn: "Asset Request",
+      bodyAr: "طلب أصل",
+      fields: [
+        { key: "empty_note", labelEn: "Empty note", labelAr: "ملاحظة فارغة", value: "" },
+        { key: "title_echo", labelEn: "Title echo", labelAr: "صدى", value: "Asset Request" },
+      ],
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /data-management="1"/);
+    assert.match(html, /data-sheet-foot="1"/);
+    assert.match(html, /data-logo="1"/);
+    assert.match(html, /mgmt-signs/);
+    assert.match(html, /grid-template-columns: 140pt 140pt/);
+    assert.match(html, /Form Ref\.: MG HR Ref Emp\./);
+    assert.doesNotMatch(html, />Logo</);
+    assert.doesNotMatch(html, /Empty note/);
+    assert.doesNotMatch(html, /Title echo/);
+    assert.doesNotMatch(html, /data-section="opening"/);
+  });
+
+  it("prints a loan sheet foot outside the geom stack", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "loan",
+      headerEn: "Loan Request",
+      headerAr: "طلب قرض",
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /data-sheet-foot="1"/);
+    assert.match(html, /data-logo="1"/);
+    assert.match(html, /Form Ref\.: MG HR Ref Emp\. 0011/);
+    assert.doesNotMatch(html, />Logo</);
+  });
+
+  it("prints a payslip sheet foot without a management box", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "payslip",
+      headerEn: "Payslip",
+      employee: sampleEmployee(),
+    });
+    assert.match(html, /data-sheet-foot="1"/);
+    assert.match(html, /data-logo="1"/);
+    assert.match(html, /payslip-page-foot/);
+    assert.doesNotMatch(html, /data-management="1"/);
+    assert.doesNotMatch(html, />Logo</);
+  });
+
+  it("prints the selected staff display name on the HR block", () => {
+    const html = buildEsignDocumentHtml({
+      language: "en",
+      kind: "penalty",
+      headerEn: "Notice",
+      employee: sampleEmployee(),
+      staffLabel: "Sara Ahmed",
+    });
+    assert.match(html, /Sara Ahmed/);
+  });
+
+  it("uses a supplied logo url on every document kind", () => {
+    for (const kind of ["penalty", "loan", "payslip", "general"] as const) {
+      const html = buildEsignDocumentHtml({
+        language: "en",
+        kind,
+        logoUrl: "https://cdn.example/brand.png",
+        employee: sampleEmployee(),
+      });
+      assert.match(html, /src="https:\/\/cdn.example\/brand.png"/, kind);
+      assert.match(html, /data-logo="1"/, kind);
+    }
   });
 });

@@ -50,9 +50,23 @@ import {
   resolveEsignEmployees,
   saveEsignDraft,
 } from "@/features/esign/esign-sender-actions";
+import { mappedEsignErrorKey } from "@/features/esign/esign-resolve-error";
+import { mergeFieldValuesForSend } from "@/features/esign/esign-snapshot-merge";
+import { snapshotValues } from "@/features/esign/render/esign-placeholders";
+import {
+  alignPenaltyCategoryKey,
+  effectiveOutgoingCategoryKey,
+  isSendableHubTemplate,
+  pickSendableHubTemplate,
+} from "@/features/esign/outgoing-hub-categories";
 import { isEmployeeRowKey } from "@/features/esign/employee-block";
 import { templateFieldLabel } from "@/features/esign/template-source";
-import { useEsignDraft, useEsignTemplate, useEsignTemplates } from "@/features/esign/use-esign";
+import {
+  useEsignCategories,
+  useEsignDraft,
+  useEsignTemplate,
+  useEsignTemplates,
+} from "@/features/esign/use-esign";
 import type {
   EsignLocale,
   EsignResolveRow,
@@ -66,6 +80,39 @@ type ReviewTone = "ready" | "check_id" | "add_value" | "pending";
 const BATCH_LANGUAGE: EsignLocale = "en";
 
 const PAGE_SIZE = 6;
+
+const FALLBACK_PENALTIES = [
+  { key: "late_attendance", label: "Late attendance" },
+  { key: "unauthorised_absence", label: "Unauthorised absence" },
+  { key: "written_warning", label: "Written warning" },
+  { key: "damage_to_property", label: "Damage to company property" },
+  { key: "penalty_others", label: "Others" },
+] as const;
+
+function toastEsignError(t: (key: string) => string, error: string | undefined) {
+  if (!error) return;
+  const mapped = mappedEsignErrorKey(error);
+  toast.error(mapped ? t(`errors.${mapped}`) : error);
+}
+
+function applySnapshots(
+  rows: EsignResolveRow[],
+  drafts: EsignBulkDraftRow[],
+  fields: EsignTemplateFieldRow[],
+): EsignBulkDraftRow[] {
+  return drafts.map((draft, index) => {
+    const row = rows[index];
+    if (!row?.ok || !row.snapshot) return draft;
+    return {
+      ...draft,
+      field_values: mergeFieldValuesForSend(
+        snapshotValues(row.snapshot),
+        draft.field_values,
+        fields,
+      ),
+    };
+  });
+}
 
 function requiredSheetKeys(fields: EsignTemplateFieldRow[]): string[] {
   return fields
@@ -205,10 +252,34 @@ export function BulkImportShell({
   const router = useRouter();
 
   const { data: templatesData } = useEsignTemplates();
+  const { data: categoriesData } = useEsignCategories();
   const templates = useMemo(
-    () => (templatesData?.rows ?? []).filter((row) => row.is_active),
+    () => (templatesData?.rows ?? []).filter((row) => isSendableHubTemplate(row)),
     [templatesData?.rows],
   );
+  const penaltyChildren = useMemo(() => {
+    const live = (categoriesData?.rows ?? []).filter(
+      (row) => row.is_active && row.parent_key === "penalty",
+    );
+    if (live.length > 0) {
+      return live.map((row) => ({ key: row.key, label: row.label_en }));
+    }
+    return FALLBACK_PENALTIES.map((row) => ({ key: row.key, label: row.label }));
+  }, [categoriesData?.rows]);
+
+  function pickPenaltyChild(key: string) {
+    const picked = pickSendableHubTemplate(templatesData?.rows ?? [], key);
+    if (!picked) {
+      toast.error(t("penaltyMissingTemplate"));
+      return;
+    }
+    setTemplateId(picked.id);
+    setDrafts([]);
+    setResolved([]);
+    setFileName("");
+    setChecked(new Set());
+    setPrimedKey(null);
+  }
 
   const [step, setStep] = useState<Step>(initialTemplateId ? 2 : 1);
   const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null);
@@ -274,11 +345,14 @@ export function BulkImportShell({
       if (ignore) return;
       setBusy(false);
       if (result.error) {
-        toast.error(result.error);
+        toastEsignError(t, result.error);
         return;
       }
+      const fields = template?.fields ?? [];
+      const merged = applySnapshots(result.rows, restored, fields);
+      setDrafts(merged);
       setResolved(result.rows);
-      setChecked(readyIndexSet(result.rows, restored, template?.fields ?? []));
+      setChecked(readyIndexSet(result.rows, merged, fields));
     });
     return () => {
       ignore = true;
@@ -395,11 +469,13 @@ export function BulkImportShell({
     const result = await resolveEsignEmployees(parsed.rows.map((r) => r.employee_id));
     setBusy(false);
     if (result.error) {
-      toast.error(result.error);
+      toastEsignError(t, result.error);
       return;
     }
+    const merged = applySnapshots(result.rows, parsed.rows, template.fields);
+    setDrafts(merged);
     setResolved(result.rows);
-    setChecked(readyIndexSet(result.rows, parsed.rows, template.fields));
+    setChecked(readyIndexSet(result.rows, merged, template.fields));
   }
 
   /**
@@ -417,11 +493,22 @@ export function BulkImportShell({
     const result = await resolveEsignEmployees([employeeId]);
     setBusy(false);
     if (result.error) {
-      toast.error(result.error);
+      toastEsignError(t, result.error);
       return;
     }
     const row = result.rows[0];
-    const nextDraft = { ...draft, employee_id: employeeId };
+    const nextDraft = {
+      ...draft,
+      employee_id: employeeId,
+      field_values:
+        row?.ok && row.snapshot
+          ? mergeFieldValuesForSend(
+              snapshotValues(row.snapshot),
+              draft.field_values,
+              template?.fields ?? [],
+            )
+          : draft.field_values,
+    };
     const nextResolve: EsignResolveRow = {
       ...resolved[rowIndex],
       row_index: resolved[rowIndex]?.row_index ?? rowIndex,
@@ -511,19 +598,23 @@ export function BulkImportShell({
         driver_id: p.resolve!.driver_id!,
         employee_id: p.draft.employee_id,
         description: p.draft.description,
-        field_values: p.draft.field_values,
+        field_values: mergeFieldValuesForSend(
+          p.resolve?.snapshot ? snapshotValues(p.resolve.snapshot) : null,
+          p.draft.field_values,
+          template.fields,
+        ),
       })),
     });
     if (!created.ok || !created.id) {
       setBusy(false);
-      toast.error(created.error ?? t("errors.createFailed"));
+      toastEsignError(t, created.error ?? t("errors.createFailed"));
       return;
     }
     let remaining = usable.length;
     while (remaining > 0) {
       const chunk = await processEsignBatchChunk(created.id);
       if (!chunk.ok) {
-        toast.error(chunk.error ?? t("errors.processFailed"));
+        toastEsignError(t, chunk.error ?? t("errors.processFailed"));
         break;
       }
       remaining = chunk.remaining;
@@ -597,6 +688,32 @@ export function BulkImportShell({
                 className="w-full"
               />
             )}
+            {step === 1 ? (
+              <div className="space-y-1.5 pt-1">
+                <p className="text-[10px] font-normal uppercase tracking-[0.5px] text-[#a1a1aa]">
+                  {t("penaltyCategory")}
+                </p>
+                <div className="flex flex-col gap-1">
+                  {penaltyChildren.map((child) => (
+                    <button
+                      key={child.key}
+                      type="button"
+                      className={cn(
+                        "flex h-8 items-center rounded px-2 text-start text-[12.5px] font-normal text-[#18181b] hover:bg-[#f4f4f5]",
+                        template &&
+                          effectiveOutgoingCategoryKey(template) ===
+                            alignPenaltyCategoryKey(child.key)
+                          ? "bg-[#f4f4f5] font-semibold"
+                          : null,
+                      )}
+                      onClick={() => pickPenaltyChild(child.key)}
+                    >
+                      {child.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
           {template ? (
             <ColumnGroups
@@ -1111,7 +1228,7 @@ function ColumnGroup({
         <Icon className="size-3" aria-hidden />
         {label}
       </p>
-      <ul className="flex flex-wrap gap-1.5">
+      <ul className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
         {items.map((item) => (
           <li
             key={item.header}

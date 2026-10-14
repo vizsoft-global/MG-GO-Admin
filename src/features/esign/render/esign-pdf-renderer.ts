@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   buildEsignDocumentHtml,
+  fitEsignSinglePage,
   type EsignDocumentInput,
 } from "./esign-document-html";
 
@@ -71,10 +72,12 @@ export async function renderEsignPdf(
     await page.setJavaScriptEnabled(false);
     const html = buildEsignDocumentHtml({ ...input, fontCss: embeddedFontCss() });
     await page.setContent(html, { waitUntil: "load" });
+    await page.evaluate(fitEsignSinglePage);
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true,
+      pageRanges: "1",
     });
     return new Uint8Array(pdf);
   } finally {

@@ -170,12 +170,14 @@ export function PayrollRangePills({
   customRange,
   onPreset,
   onApplyCustom,
+  onClearCustom,
 }: {
   today: string;
   preset: PayrollRangePreset;
   customRange: PayrollRange | null;
   onPreset: (next: Exclude<PayrollRangePreset, "custom">) => void;
   onApplyCustom: (range: PayrollRange) => void;
+  onClearCustom?: () => void;
 }) {
   const t = useTranslations("pages.payroll.range");
   const win = useMemo(() => payrollAccessibleRange(today), [today]);
@@ -271,6 +273,15 @@ export function PayrollRangePills({
           </div>
         </PopoverContent>
       </Popover>
+      {preset === "custom" && onClearCustom ? (
+        <button
+          type="button"
+          onClick={onClearCustom}
+          className="inline-flex h-7 items-center rounded-md border border-border bg-muted/30 px-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        >
+          {t("clearCustom")}
+        </button>
+      ) : null}
     </div>
   );
 }

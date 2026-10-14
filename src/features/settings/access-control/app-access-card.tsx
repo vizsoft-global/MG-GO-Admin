@@ -12,6 +12,8 @@ import {
 import { launcherTileHex } from "@/lib/menu/module-colors";
 import { resolveIcon } from "@/lib/menu/menu-registry";
 import type { RequestTypeGrant, RequestTypeOption } from "@/features/settings/staff-access-actions";
+import type { EsignCategoryGrant } from "@/features/esign/esign-staff-access";
+import { OUTGOING_SENDER_KEYS } from "@/features/esign/outgoing-hub-categories";
 import { cn } from "@/lib/utils";
 
 const LEVEL_KEYS: Record<AppAccessLevel, string> = {
@@ -70,10 +72,12 @@ export function AppAccessCard({
   disabled,
   requestTypes,
   grants,
+  esignGrants,
   onLevel,
   onToggleSubView,
   onSides,
   onToggleType,
+  onToggleEsign,
 }: {
   entry: AppAccessEntry;
   item: AppAccessItem;
@@ -82,13 +86,16 @@ export function AppAccessCard({
   disabled?: boolean;
   requestTypes?: RequestTypeOption[];
   grants?: RequestTypeGrant[];
+  esignGrants?: EsignCategoryGrant[];
   onLevel: (level: AppAccessLevel) => void;
   onToggleSubView: (id: string) => void;
   onSides?: (sides: { sender: boolean; receiver: boolean }) => void;
   onToggleType?: (key: string) => void;
+  onToggleEsign?: (key: string) => void;
 }) {
   const t = useTranslations("pages.settings.accessControl");
   const selected = new Set(grants?.map((row) => row.requestType) ?? []);
+  const selectedEsign = new Set(esignGrants?.map((row) => row.categoryKey) ?? []);
   const hidden = item.level === "none";
   const shownSubViews = entry.subViews.filter((view) => item.subViews.includes(view.id)).length;
 
@@ -191,7 +198,26 @@ export function AppAccessCard({
         </div>
       ) : null}
 
-      {!hidden && entry.rcm && requestTypes && onToggleType ? (
+      {!hidden && entry.rcm && item.sender === true && onToggleEsign ? (
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[9.5px] font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
+            {t("outgoingCategoriesHeading")}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {OUTGOING_SENDER_KEYS.map((key) => (
+              <SubViewChip
+                key={key}
+                active={selectedEsign.has(key)}
+                disabled={disabled}
+                onClick={() => onToggleEsign(key)}
+                label={t(`outgoingCategories.${key}`)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {!hidden && entry.rcm && item.receiver === true && requestTypes && onToggleType ? (
         <div className="flex flex-col gap-1.5">
           <p className="text-[9.5px] font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
             {t("requestTypes")}

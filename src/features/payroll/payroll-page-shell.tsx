@@ -28,6 +28,7 @@ import {
   PayrollSummaryStrip,
   PayrollZoneCategoryChips,
 } from "./payroll-chrome";
+import { PayrollAdjustProvider } from "./payroll-adjust-context";
 import { PayrollLegend } from "./payroll-grid";
 import { PayrollTab } from "./payroll-tab";
 import { CombinedPayrollTab } from "./combined-tab";
@@ -118,6 +119,11 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
     setZoneCategory(null);
   }
 
+  function clearCustomRange() {
+    setCustomRange(null);
+    changePreset("thisMonth");
+  }
+
   function changeSlicers(next: PayrollSlicers) {
     setSlicers(next);
     setStatusFilter(null);
@@ -156,6 +162,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
 
   return (
     <AppPage className="space-y-2">
+      <PayrollAdjustProvider>
       <AppPageHeader
         title={t("title")}
         description={t("subtitle")}
@@ -194,6 +201,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         customRange={customRange}
         onPreset={changePreset}
         onApplyCustom={applyCustomRange}
+        onClearCustom={clearCustomRange}
       />
       <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
         <PayrollSlicerBar
@@ -288,6 +296,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           onApplied={refreshSnapshot}
         />
       ) : null}
+      </PayrollAdjustProvider>
     </AppPage>
   );
 }

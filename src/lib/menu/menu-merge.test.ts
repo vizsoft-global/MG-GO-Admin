@@ -6,6 +6,8 @@ type TestNode = {
   id: string;
   type: string;
   label?: string;
+  icon?: string;
+  hidden?: boolean;
   children?: TestNode[];
 };
 
@@ -65,7 +67,7 @@ describe("saved menu layout", () => {
 });
 
 describe("relocateOrderReconItem", () => {
-  it("keeps a saved Deliveries / reconciliation order", () => {
+  it("strips leftover reconciliation so it is a hub card, not a sidebar row", () => {
     const { tree } = mergeMenu([
       {
         id: "group-operations",
@@ -79,16 +81,11 @@ describe("relocateOrderReconItem", () => {
         ],
       },
     ]);
-    const ids = (tree.find((node) => node.id === "group-operations")?.children ?? []).map(
+    const opsIds = (tree.find((node) => node.id === "group-operations")?.children ?? []).map(
       (child) => child.id,
     );
-    assert.deepEqual(ids.slice(0, 3), ["deliveries", "order-reconciliation", "dpd-verification"]);
-    assert.equal(
-      tree
-        .find((node) => node.id === "group-operations")
-        ?.children?.find((child) => child.id === "order-reconciliation")?.hidden,
-      true,
-    );
+    assert.deepEqual(opsIds.slice(0, 2), ["deliveries", "dpd-verification"]);
+    assert.equal(findNode(tree, "order-reconciliation"), null);
   });
 });
 
@@ -178,7 +175,15 @@ describe("relocateOperationsHubItems", () => {
     );
     assert.deepEqual(fleetIds, ["vehicles", "source-companies"]);
     assert.equal(findNode(tree, "vehicles")?.label, "Vehicles");
-    assert.equal(tree.some((node) => node.id === "group-operationshub"), false);
+    const hubIds = (tree.find((node) => node.id === "group-operationshub")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.ok(hubIds.includes("earnings"));
+    assert.equal(hubIds.includes("performance"), false);
+    assert.equal(hubIds.includes("order-reconciliation"), false);
+    assert.equal(findNode(tree, "performance"), null);
+    assert.equal(findNode(tree, "order-reconciliation"), null);
+    assert.equal(settingsIds.includes("performance"), false);
   });
 
   it("does not move a saved root order down between System and Unorganised", () => {
@@ -197,7 +202,14 @@ describe("relocateOperationsHubItems", () => {
     assert.equal(tree[0]?.id, "visit-bookings");
     assert.equal(tree[1]?.id, "attendance");
     assert.equal(tree[2]?.id, "operations-hub");
-    assert.equal(tree.find((node) => node.id === "group-operationshub"), undefined);
+    const hubIds = (tree.find((node) => node.id === "group-operationshub")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.ok(hubIds.includes("earnings"));
+    assert.equal(hubIds.includes("performance"), false);
+    assert.equal(hubIds.includes("order-reconciliation"), false);
+    assert.equal(findNode(tree, "performance"), null);
+    assert.equal(findNode(tree, "order-reconciliation"), null);
   });
 
   it("keeps a hidden OperationsHub row in the group it was saved in", () => {
@@ -243,10 +255,11 @@ describe("relocateOperationsHubItems", () => {
     ]);
     const hubs = tree.filter((node) => node.id === "group-operationshub");
     assert.equal(hubs.length, 1);
-    assert.deepEqual(
-      (hubs[0].children ?? []).map((child) => child.id),
-      ["operations-hub", "zones"],
-    );
+    const hubIds = (hubs[0].children ?? []).map((child) => child.id);
+    assert.deepEqual(hubIds.slice(0, 2), ["operations-hub", "zones"]);
+    assert.ok(hubIds.includes("earnings"));
+    assert.equal(hubIds.includes("performance"), false);
+    assert.equal(hubIds.includes("order-reconciliation"), false);
   });
 });
 
@@ -268,8 +281,11 @@ describe("relocatePayrollItem", () => {
     const ids = (tree.find((node) => node.id === "group-operations")?.children ?? []).map(
       (child) => child.id,
     );
-    assert.equal(ids[ids.indexOf("performance") + 1], "payroll");
-    assert.equal(findNode(tree, "payroll")?.label, "Payroll & Requests");
+    assert.equal(ids.includes("performance"), false);
+    assert.ok(ids.includes("payroll"));
+    assert.equal(findNode(tree, "payroll")?.label, "Payroll");
+    assert.equal(findNode(tree, "payroll")?.icon, "Banknote");
+    assert.equal(findNode(tree, "performance"), null);
     const payoutSiblings = siblingIds(tree, "payouts");
     assert.notEqual(payoutSiblings?.[payoutSiblings.indexOf("payouts") + 1], "payroll");
   });
@@ -307,6 +323,20 @@ describe("sidebar hides retired Requests and EmployeeDesk visits", () => {
     const payoutsAt = opsIds.indexOf("payouts");
     assert.equal(opsIds[payoutsAt + 1], "payroll");
     assert.equal(opsIds.includes("attendance"), false);
+    assert.equal(opsIds.includes("performance"), false);
+    assert.equal(opsIds.includes("order-reconciliation"), false);
+    const hubIds = (tree.find((node) => node.id === "group-operationshub")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.equal(hubIds.includes("performance"), false);
+    assert.equal(hubIds.includes("order-reconciliation"), false);
+    assert.ok(hubIds.includes("earnings"));
+    assert.equal(findNode(tree, "performance"), null);
+    assert.equal(findNode(tree, "order-reconciliation"), null);
+    assert.equal(findNode(tree, "visit-bookings")?.label, "Visit Slots");
+    assert.equal(findNode(tree, "visit-bookings")?.icon, "Table2");
+    assert.equal(findNode(tree, "vehicles")?.icon, "Truck");
+    assert.equal(findNode(tree, "payroll")?.icon, "Banknote");
     assert.equal(opsIds.includes("document-expiry"), false);
     const systemIds = (tree.find((node) => node.id === "group-system")?.children ?? []).map(
       (child) => child.id,
@@ -314,6 +344,8 @@ describe("sidebar hides retired Requests and EmployeeDesk visits", () => {
     const driverAppAt = systemIds.indexOf("driver-app");
     assert.ok(driverAppAt >= 0);
     assert.equal(systemIds[driverAppAt + 1], "document-expiry");
+    assert.ok(systemIds.includes("assistant"));
+    assert.equal(opsIds.includes("assistant"), false);
   });
 
   it("strips a saved Requests item at resolveForSidebar", () => {
@@ -329,9 +361,116 @@ describe("sidebar hides retired Requests and EmployeeDesk visits", () => {
         ],
       },
     ]);
+    const mergedIds = collectItemIds(tree);
+    assert.equal(mergedIds.includes("requests"), false);
     const resolved = resolveForSidebar(tree, () => true, true);
     const resolvedIds = collectItemIds(resolved);
     assert.equal(resolvedIds.includes("requests"), false);
     assert.ok(resolvedIds.includes("wrong-actions"));
+  });
+});
+
+describe("remapClientIaSavedMenu", () => {
+  it("moves named leftover rows and rewrites stale Fleet / Payroll / Visit labels", () => {
+    const { tree } = mergeMenu([
+      {
+        id: "group-operations",
+        type: "group",
+        label: "Operations",
+        icon: "Folder",
+        children: [
+          { id: "deliveries", type: "item", label: "Live Deliveries", icon: "Package" },
+          { id: "performance", type: "item", label: "Performance", icon: "BarChart3" },
+          { id: "assistant", type: "item", label: "Staff Assistant", icon: "Sparkles" },
+          { id: "earnings", type: "item", label: "Earnings", icon: "Wallet" },
+        ],
+      },
+      {
+        id: "group-system",
+        type: "group",
+        label: "System",
+        icon: "Settings",
+        children: [
+          { id: "driver-devices", type: "item", label: "Driver devices", icon: "Smartphone" },
+          { id: "maintenance", type: "item", label: "Maintenance", icon: "Wrench" },
+        ],
+      },
+      {
+        id: "group-wip",
+        type: "group",
+        label: "WIP",
+        icon: "AlertTriangle",
+        children: [
+          { id: "support", type: "item", label: "Support", icon: "LifeBuoy" },
+          { id: "wrong-actions", type: "item", label: "Wrong Actions", icon: "AlertTriangle" },
+        ],
+      },
+      { id: "vehicles", type: "item", label: "Fleet Hub", icon: "Car" },
+      { id: "visit-bookings", type: "item", label: "Visit Bookings", icon: "CalendarCheck" },
+      { id: "payroll", type: "item", label: "Payroll & Requests", icon: "CalendarClock" },
+    ]);
+    const hubIds = (tree.find((node) => node.id === "group-operationshub")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.equal(hubIds.includes("performance"), false);
+    assert.ok(hubIds.includes("earnings"));
+    assert.equal(findNode(tree, "performance"), null);
+    const settingsIds = (tree.find((node) => node.id === "group-settings")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.ok(settingsIds.includes("driver-devices"));
+    assert.ok(settingsIds.includes("support"));
+    const opsIds = (tree.find((node) => node.id === "group-operations")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.ok(opsIds.includes("wrong-actions"));
+    assert.equal(opsIds.includes("performance"), false);
+    assert.equal(opsIds.includes("assistant"), false);
+    const systemIds = (tree.find((node) => node.id === "group-system")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.ok(systemIds.includes("assistant"));
+    assert.equal(findNode(tree, "vehicles")?.icon, "Truck");
+    assert.equal(findNode(tree, "visit-bookings")?.label, "Visit Slots");
+    assert.equal(findNode(tree, "visit-bookings")?.icon, "Table2");
+    assert.equal(findNode(tree, "payroll")?.label, "Payroll");
+    assert.equal(findNode(tree, "payroll")?.icon, "Banknote");
+  });
+
+  it("drops leftover Requests and remaps EmployeeDesk settings after reports", () => {
+    const { tree } = mergeMenu([
+      {
+        id: "group-wip",
+        type: "group",
+        label: "WIP",
+        icon: "AlertTriangle",
+        children: [{ id: "requests", type: "item", label: "Requests", icon: "Inbox" }],
+      },
+      {
+        id: "group-reports",
+        type: "group",
+        label: "Reports",
+        icon: "BarChart3",
+        children: [
+          { id: "employeedesk-settings", type: "item", label: "Settings", icon: "Settings" },
+        ],
+      },
+      {
+        id: "group-employeedesk",
+        type: "group",
+        label: "EmployeeDesk",
+        icon: "Inbox",
+        children: [
+          { id: "employeedesk", type: "item", label: "EmployeeDesk", icon: "Inbox" },
+          { id: "employeedesk-reports", type: "item", label: "Reports", icon: "BarChart3" },
+        ],
+      },
+    ]);
+    assert.equal(findNode(tree, "requests"), null);
+    const desk = tree.find((node) => node.id === "group-employeedesk");
+    const deskIds = (desk?.children ?? []).map((child) => child.id);
+    assert.ok(deskIds.includes("employeedesk-settings"));
+    assert.ok(deskIds.indexOf("employeedesk-reports") < deskIds.indexOf("employeedesk-settings"));
+    assert.equal(findNode(tree, "employeedesk-settings")?.label, "EmployeeDesk settings");
   });
 });

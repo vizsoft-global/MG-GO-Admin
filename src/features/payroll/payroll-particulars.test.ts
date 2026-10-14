@@ -8,6 +8,7 @@ import {
 } from "./payroll-particulars";
 import { ADJUSTMENT_STATUSES, ADJUSTMENT_STATUS_TO_DAY } from "./payroll-rules-engine";
 import {
+  cellsFromSelection,
   fillTargetCells,
   hoursForAdjustmentChoice,
   parseAdjustmentCellText,
@@ -58,6 +59,26 @@ describe("payroll particulars catalog", () => {
     assert.equal(parseAdjustmentCellText("0h", 0)?.status, "custom");
     assert.equal(parseAdjustmentCellText("24h", 0)?.hours, 24);
     assert.equal(parseAdjustmentCellText("25h", 0), null);
+    assert.equal(parseAdjustmentCellText("–", 0)?.status, "auto");
+    assert.equal(parseAdjustmentCellText("—", 0)?.status, "auto");
+    assert.equal(parseAdjustmentCellText("-", 0)?.status, "auto");
+  });
+
+  it("keeps unparsed fill cells on the current status instead of dropping them", () => {
+    const result = cellsFromSelection([
+      {
+        driverId: "d1",
+        date: "2026-10-01",
+        text: "??",
+        currentHours: 12,
+        beforeStatus: "12",
+        beforeHours: null,
+      },
+    ]);
+    assert.equal(result.rejected, 1);
+    assert.equal(result.cells.length, 1);
+    assert.equal(result.cells[0]?.status, "12");
+    assert.equal(result.before[0]?.status, "12");
   });
 
   it("sorts numeric particulars before words", () => {

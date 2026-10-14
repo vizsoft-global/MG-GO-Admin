@@ -13,7 +13,7 @@
  * and "the edge inferred this" carry different weight in an incident review.
  */
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Pause, Play, Radio } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,12 +25,19 @@ import { eventTakesValue, humaniseEventKey, isTranslatedEventKey } from "./fleet
 import { useFleetSnapshot, useFleetStore } from "./use-fleet";
 import type { FleetFeedItem } from "./fleet-types";
 
-function formatClock(atMs: number): string {
-  const date = new Date(atMs);
-  const hh = `${date.getHours()}`.padStart(2, "0");
-  const mm = `${date.getMinutes()}`.padStart(2, "0");
-  const ss = `${date.getSeconds()}`.padStart(2, "0");
-  return `${hh}:${mm}:${ss}`;
+const KUWAIT_TZ = "Asia/Kuwait";
+
+function formatClock(atMs: number, locale: string): string {
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone: KUWAIT_TZ,
+    }).format(new Date(atMs));
+  } catch {
+    return new Date(atMs).toISOString();
+  }
 }
 
 export function FleetEventFeed() {
@@ -48,7 +55,7 @@ export function FleetEventFeed() {
     : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-[10rem] flex-1 flex-col overflow-hidden">
       <div className="flex h-8 shrink-0 items-center gap-1.5 px-2">
         <Radio className="size-3.5 text-muted-foreground" aria-hidden />
         <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -118,6 +125,7 @@ export function FleetEventFeed() {
 
 function FeedRow({ item, showDriver }: { item: FleetFeedItem; showDriver: boolean }) {
   const t = useTranslations("pages.liveTrackingV2");
+  const locale = useLocale();
   const tone = fleetEventTone(item.severity);
 
   const label = isTranslatedEventKey(item.eventKey)
@@ -149,7 +157,7 @@ function FeedRow({ item, showDriver }: { item: FleetFeedItem; showDriver: boolea
           {showDriver && item.driverName ? (
             <span className="truncate">{item.driverName}</span>
           ) : null}
-          <span className="tabular-nums">{formatClock(item.atMs)}</span>
+          <span className="tabular-nums">{formatClock(item.atMs, locale)}</span>
           <span className="rounded border border-border/60 px-0.5 uppercase">
             {item.kind === "ops" ? t("feed.classOps") : t("feed.classFleet")}
           </span>

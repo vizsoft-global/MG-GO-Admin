@@ -103,6 +103,20 @@ function boolOf(value: unknown): boolean {
   return value === true || value === "true";
 }
 
+async function loadSourceCompanyByKey(key: string | null): Promise<Dict | null> {
+  if (!key) return null;
+  const db = getFirestore();
+  const byId = await db.collection(COLLECTIONS.sourceCompanies).doc(key).get();
+  if (byId.exists) return dataOf(byId);
+  const snap = await db
+    .collection(COLLECTIONS.sourceCompanies)
+    .where("key", "==", key)
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  return dataOf(snap.docs[0]);
+}
+
 function intOf(value: unknown): number | null {
   const parsed = numberOrNull(value);
   return parsed === null ? null : Math.trunc(parsed);
@@ -657,6 +671,13 @@ export const adminGetRequest = onCall(async (request) => {
 
   const driver = driverSnap?.exists ? dataOf(driverSnap) : null;
   const profile = profileSnap?.exists ? dataOf(profileSnap) : null;
+  const companyKey = textOf(driver?.source_company);
+  const zoneId = textOf(driver?.zone_id);
+  const [companyRow, zoneSnap] = await Promise.all([
+    loadSourceCompanyByKey(companyKey),
+    zoneId ? db.collection(COLLECTIONS.zones).doc(zoneId).get() : Promise.resolve(null),
+  ]);
+  const zone = zoneSnap?.exists ? dataOf(zoneSnap) : null;
 
   const comments = commentsSnap.docs.map((doc): Dict => ({ id: doc.id, ...dataOf(doc) }));
   comments.sort(byInstant("created_at"));
@@ -699,6 +720,16 @@ export const adminGetRequest = onCall(async (request) => {
       name: driver ? textOf(profile?.full_name) ?? textOf(driver.name) : null,
       driver_code: driver ? textOf(driver.driver_code) : null,
       employee_id: driver ? textOf(driver.employee_id) : null,
+      phone: driver
+        ? textOf(driver.phone) ?? textOf(profile?.phone) ?? textOf(driver.driver_phone)
+        : null,
+      zone: driver
+        ? textOf(zone?.name) ?? textOf(zone?.name_en) ?? textOf(driver.zone_name)
+        : null,
+      company: driver
+        ? textOf(driver.company_name) ?? textOf(companyRow?.name) ?? textOf(companyRow?.name_en)
+        : null,
+      project_key: driver ? textOf(driver.project_key) : null,
     },
     confidential_revealed: confidential,
     comments: comments.map((c) => {

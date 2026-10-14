@@ -121,6 +121,18 @@ export function columnsToConditions(
   return conditions;
 }
 
+/** Wire shape for `admin_save_payroll_client_rules` — conditions must be an array. */
+export function payrollRulesSavePayload(
+  rules: ReadonlyArray<{ label: string; conditions: readonly unknown[]; result: unknown }>,
+): Array<{ label: string; conditions: unknown[]; result: unknown; sortOrder: number }> {
+  return rules.map((rule, index) => ({
+    label: rule.label,
+    conditions: [...rule.conditions],
+    result: rule.result,
+    sortOrder: index + 1,
+  }));
+}
+
 export function readsAs(
   row: RuleTableRow,
   uses: { usesZone: boolean; usesOrders: boolean; usesHours: boolean },

@@ -11,6 +11,8 @@ import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { getPresignedGetUrl } from "@/lib/storage/r2-client";
 import { isR2ObjectKey } from "@/lib/storage/r2-keys";
+import { fetchMyDeskGrants } from "@/features/esign/desk-grants-actions";
+import { canViewIncomingType } from "@/features/esign/esign-staff-access";
 import { attachmentDisplayName } from "./attachment-display-name";
 import { datePresetToBounds } from "./date-presets";
 import { isNeededByInPast } from "./request-create-utils";
@@ -251,8 +253,14 @@ export async function fetchRequestTypeCounts(): Promise<{
   }
 
   const raw = asRecord(payload.counts);
+  const grants = await fetchMyDeskGrants();
+  const incomingCtx = {
+    isSuperAdmin: grants.isSuperAdmin,
+    hasIncomingView: grants.hasIncomingView,
+  };
   const counts: Record<string, { total: number; pending: number }> = {};
   for (const [type, value] of Object.entries(raw)) {
+    if (!canViewIncomingType(type, grants.requestTypes, incomingCtx)) continue;
     const v = asRecord(value);
     counts[type] = { total: Number(v.total ?? 0), pending: Number(v.pending ?? 0) };
   }
@@ -313,8 +321,29 @@ export async function fetchAdminRequestsList(
     };
   }
 
+  const grants = await fetchMyDeskGrants();
+  const incomingCtx = {
+    isSuperAdmin: grants.isSuperAdmin,
+    hasIncomingView: grants.hasIncomingView,
+  };
+  if (
+    filters.type &&
+    !canViewIncomingType(filters.type, grants.requestTypes, incomingCtx)
+  ) {
+    return {
+      rows: [],
+      kpi: emptyKpi(),
+      filteredTotal: 0,
+      statusCounts: {},
+      departmentOptions: [],
+    };
+  }
+
   const kpiRaw = asRecord(payload.kpi);
-  const rowsRaw = Array.isArray(payload.rows) ? payload.rows : [];
+  const rowsRaw = (Array.isArray(payload.rows) ? payload.rows : []).filter((row) => {
+    const r = asRecord(row);
+    return canViewIncomingType(String(r.request_type ?? ""), grants.requestTypes, incomingCtx);
+  });
   const statusCountsRaw = asRecord(payload.status_counts);
   const statusCounts: Record<string, number> = {};
   for (const [key, value] of Object.entries(statusCountsRaw)) {
@@ -553,8 +582,13 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
           ? {
               name: String(requesterRaw.name ?? senderRaw.name ?? ""),
               code: String(requesterRaw.code ?? senderRaw.driver_code ?? ""),
-              phone: requesterRaw.phone != null ? String(requesterRaw.phone) : null,
-              zone: requesterRaw.zone != null ? String(requesterRaw.zone) : null,
+              phone: String(requesterRaw.phone ?? senderRaw.phone ?? "") || null,
+              zone: String(requesterRaw.zone ?? senderRaw.zone ?? "") || null,
+              employee_id:
+                String(requesterRaw.employee_id ?? senderRaw.employee_id ?? "") || null,
+              company: String(requesterRaw.company ?? senderRaw.company ?? "") || null,
+              project_key:
+                String(requesterRaw.project_key ?? senderRaw.project_key ?? "") || null,
             }
           : null,
       amount_kwd: r.amount_kwd != null ? Number(r.amount_kwd) : null,

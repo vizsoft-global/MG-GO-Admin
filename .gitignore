@@ -13,8 +13,8 @@
 # testing
 /coverage
 
-# next.js
-/.next/
+# next.js (root and nested package builds)
+.next/
 /.next-old-*/
 /out/
 
@@ -59,7 +59,6 @@ graphify-out/
 
 .vercel
 
-.vercel
 .qa/
 
 # Local Figma QA dumps / screenshots (do not commit)

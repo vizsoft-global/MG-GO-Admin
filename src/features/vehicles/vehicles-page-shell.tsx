@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Ban,
@@ -60,7 +60,8 @@ import {
   ReplacementBadge,
   VehicleStatusBadge,
 } from "@/features/fleet/fleet-badges";
-import { formatReplacementSince } from "@/features/fleet/fleet-labels";
+import { formatReplacementSince, isVehicleTypeOfUse } from "@/features/fleet/fleet-labels";
+import { useTypeLabel } from "./vehicle-use-types";
 import { VehicleBulkImportDialog } from "./import/vehicle-bulk-import-dialog";
 import { downloadVehicleListXlsx } from "./import/vehicle-import-sheet";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
@@ -139,6 +140,7 @@ export function VehiclesPageShell({
   tab?: string;
 }) {
   const t = useTranslations("pages.vehicles");
+  const locale = useLocale();
   const { can } = useAuth();
   const canCreate = can("vehicles.create");
   const canManage = can("vehicles.manage");
@@ -287,12 +289,18 @@ export function VehiclesPageShell({
       if (column === "fuelCompany") return t(`fuelCompany.${value}` as "fuelCompany.mus");
       if (column === "carType") return t(`carType.${value}` as "carType.company");
       if (column === "typeOfUse") {
-        return useTypes.find((item) => item.key === value)?.label_en ?? value;
+        if (isVehicleTypeOfUse(value)) return t(`typeOfUse.${value}`);
+        return useTypeLabel(value, useTypes, locale);
+      }
+      if (column === "project") {
+        if (value === "keeta") return t("projectKeeta");
+        if (value === "americana") return t("projectAmericana");
+        return value;
       }
       if (column === "replacement") return value === "yes" ? t("replacementBanner") : t("replacementNo");
       return value;
     },
-    [t, useTypes],
+    [locale, t, useTypes],
   );
 
   const tabSelectItems = useMemo(
@@ -718,7 +726,11 @@ function VehicleRow({
         <ProjectBadge value={row.assigned_project_key} />
       </VisibleTableCell>
       <VisibleTableCell columnId="typeOfUse" isVisible={isVisible} className="whitespace-nowrap">
-        {row.type_of_use_label ?? row.type_of_use ?? "—"}
+        {row.type_of_use
+          ? isVehicleTypeOfUse(row.type_of_use)
+            ? t(`typeOfUse.${row.type_of_use}`)
+            : row.type_of_use_label || row.type_of_use
+          : "—"}
       </VisibleTableCell>
       <VisibleTableCell columnId="location" isVisible={isVisible} className="whitespace-nowrap">
         {row.location_text ?? "—"}

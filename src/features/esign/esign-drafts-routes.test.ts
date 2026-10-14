@@ -8,17 +8,17 @@ const root = path.resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const v1Page = path.join(root, "src/app/[locale]/(dashboard)/requests/esign/drafts/page.tsx");
 const v2Page = path.join(root, "src/app/[locale]/(dashboard)/employeedesk/esign/drafts/page.tsx");
 
-describe("eSign drafts canonical route", () => {
+describe("eSign drafts routes", () => {
   it("keeps the working list on /requests/esign/drafts", () => {
     assert.equal(existsSync(v1Page), true);
     assert.match(readFileSync(v1Page, "utf8"), /requirePermission\(locale, "requests\.manage"\)/);
   });
 
-  it("does not invent a V2 twin that would fork the screen", () => {
+  it("leaves /employeedesk/esign/drafts as a 404", () => {
     assert.equal(existsSync(v2Page), false);
   });
 
-  it("points every hub tile at the working V1 route", () => {
+  it("points both hub cards at the V1 drafts list", () => {
     const v1Hub = readFileSync(path.join(root, "src/features/esign/esign-hub-shell.tsx"), "utf8");
     const v2Hub = readFileSync(
       path.join(root, "src/app/[locale]/(dashboard)/employeedesk/esign/page.tsx"),
@@ -27,6 +27,6 @@ describe("eSign drafts canonical route", () => {
     assert.match(v1Hub, /href: "\/requests\/esign\/drafts"/);
     assert.match(v2Hub, /href: "\/requests\/esign\/drafts"/);
     assert.doesNotMatch(v1Hub, /\/employeedesk\/esign\/drafts/);
-    assert.doesNotMatch(v2Hub, /\/employeedesk\/esign\/drafts/);
+    assert.doesNotMatch(v2Hub, /href: "\/employeedesk\/esign\/drafts"/);
   });
 });

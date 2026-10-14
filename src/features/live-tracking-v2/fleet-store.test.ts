@@ -641,7 +641,7 @@ describe("FleetStore filters and roster", () => {
     );
   });
 
-  it("pins an open pickup at the top until the delivery closes", () => {
+  it("keeps pickup chronological after a later movement event, even while on_delivery", () => {
     const store = new FleetStore();
     store.applySnapshot({
       generatedAt: NOW,
@@ -675,10 +675,13 @@ describe("FleetStore filters and roster", () => {
         detectedAt: new Date(Date.parse(NOW) + 2_000).toISOString(),
       },
     ]);
-    assert.equal(store.getSnapshot().feed[0]?.eventKey, "delivery.pickup_create");
+    assert.deepEqual(
+      store.getSnapshot().feed.map((item) => item.eventKey),
+      ["movement.started", "delivery.pickup_create"],
+    );
   });
 
-  it("pins GPS offline above a leftover pickup so the top row matches the list", () => {
+  it("keeps Live Events chronological so a GPS offline pin does not steal the top row", () => {
     const store = new FleetStore();
     store.applySnapshot({
       generatedAt: new Date(Date.parse(NOW) + 120_000).toISOString(),
@@ -733,8 +736,64 @@ describe("FleetStore filters and roster", () => {
         detectedAt: new Date(Date.parse(NOW) + 110_000).toISOString(),
       },
     ]);
-    assert.equal(store.getSnapshot().feed[0]?.eventKey, "gps.offline");
-    assert.ok(store.getSnapshot().feed.some((item) => item.eventKey === "delivery.pickup_create"));
+    const keys = store.getSnapshot().feed.map((item) => item.eventKey);
+    assert.deepEqual(keys.slice(0, 3), [
+      "movement.started",
+      "gps.offline",
+      "delivery.pickup_create",
+    ]);
+  });
+
+  it("clears out_of_zone as soon as zone.entry arrives", () => {
+    const store = new FleetStore();
+    store.applySnapshot({
+      generatedAt: NOW,
+      settings: null,
+      drivers: [
+        row({
+          latitude: 28,
+          longitude: 48,
+          out_of_zone_since: NOW,
+          zone_status: "in_zone",
+        }),
+      ],
+    });
+    assert.equal(store.getDriver("d1")?.flags.out_of_zone, true);
+
+    store.applyFleetEvents([
+      {
+        driverId: "d1",
+        eventKey: "zone.entry",
+        severity: "info",
+        value: null,
+        statusBefore: "idle",
+        statusAfter: "idle",
+        zoneId: "z1",
+        latitude: 29.37,
+        longitude: 47.98,
+        context: {},
+        detectedAt: new Date(Date.parse(NOW) + 5_000).toISOString(),
+      },
+    ]);
+    assert.equal(store.getDriver("d1")?.flags.out_of_zone, false);
+  });
+
+  it("lets a newer in-zone fix beat a stale out_of_zone_since", () => {
+    const store = new FleetStore();
+    store.applySnapshot({
+      generatedAt: NOW,
+      settings: null,
+      drivers: [
+        row({
+          out_of_zone_since: "2026-08-16T10:00:00.000Z",
+          last_report_at: NOW,
+          last_seen_at: NOW,
+          zone_status: "in_zone",
+        }),
+      ],
+      zones: [ZONE],
+    });
+    assert.equal(store.getDriver("d1")?.flags.out_of_zone, false);
   });
 
   it("does not re-seed a feed that already has rows", () => {

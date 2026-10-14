@@ -65,6 +65,7 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
   const [fieldLabelEn, setFieldLabelEn] = useState("");
   const [fieldLabelAr, setFieldLabelAr] = useState("");
   const [fieldType, setFieldType] = useState<EsignTemplateFieldType>("text");
+  const [fieldOptions, setFieldOptions] = useState("");
   const [fieldRequired, setFieldRequired] = useState(false);
 
   useEffect(() => {
@@ -143,6 +144,13 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
       label_en: fieldLabelEn,
       label_ar: fieldLabelAr || null,
       field_type: fieldType,
+      options:
+        fieldType === "select"
+          ? fieldOptions
+              .split(/[\n,]/)
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : undefined,
       is_required: fieldRequired,
       sort_order: template?.fields.length ?? 0,
     });
@@ -156,6 +164,7 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
     setFieldLabelEn("");
     setFieldLabelAr("");
     setFieldType("text");
+    setFieldOptions("");
     setFieldRequired(false);
     await queryClient.invalidateQueries({ queryKey: queryKeys.esign.template(templateId) });
   }
@@ -420,6 +429,17 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
                 {t("required")}
               </ToggleChip>
             </div>
+            {fieldType === "select" ? (
+              <div className="space-y-1">
+                <Label>{t("fieldOptions")}</Label>
+                <Textarea
+                  className="min-h-16"
+                  value={fieldOptions}
+                  onChange={(e) => setFieldOptions(e.target.value)}
+                  placeholder={t("fieldOptionsHint")}
+                />
+              </div>
+            ) : null}
           </div>
           <AppModalFooter title={t("addFieldTitle")} subtitle={t("addFieldSubtitle")}>
             <Button variant="outline" className="h-9" onClick={() => setFieldOpen(false)}>

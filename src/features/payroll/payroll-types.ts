@@ -33,8 +33,13 @@ export type PayrollOptions = {
 export type PayrollDayInfo = {
   /** Kuwait calendar date of this cell (YYYY-MM-DD). */
   date: string;
-  /** Daily final adjusted orders (Order Reconciliation). */
+  /** Daily final adjusted orders (Order Reconciliation) — rule engine input. */
   orders: number;
+  /**
+   * Grid / CSV only. Recon when present; otherwise that day's completed
+   * deliveries. Never feed this into `evalDay`.
+   */
+  displayOrders?: number;
   /** Kuwait check-in → check-out hours. */
   loggedHours: number;
   source: DaySource;

@@ -28,6 +28,7 @@ import {
 import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitives";
 import { selectOptions } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
+import { OUTGOING_SENDER_KEYS } from "@/features/esign/outgoing-hub-categories";
 import { fetchStaffAccessMatrix } from "./requests-settings-actions";
 import {
   REQUEST_TYPE_SLUGS,
@@ -55,7 +56,10 @@ type StaffRow = {
   profile_name: string;
   profile_email: string | null;
   access: Partial<Record<RequestTypeSlug, AccessLevel>>;
+  esignKeys: string[];
 };
+
+type EsignAccessRow = { profile_id: string; category_key: string };
 
 const ROLE_CARDS: readonly {
   id: GrantRole;
@@ -99,7 +103,11 @@ function initialsOf(name: string): string {
  * Figma lists every staff member with "—" where they have no access, so an admin can grant
  * rights from the row itself. Seeding from the profile list keeps staff without any grant visible.
  */
-function buildStaffRows(staff: StaffProfileOption[], rows: StaffAccessRow[]): StaffRow[] {
+function buildStaffRows(
+  staff: StaffProfileOption[],
+  rows: StaffAccessRow[],
+  esignRows: EsignAccessRow[],
+): StaffRow[] {
   const map = new Map<string, StaffRow>();
   for (const option of staff) {
     map.set(option.id, {
@@ -107,6 +115,7 @@ function buildStaffRows(staff: StaffProfileOption[], rows: StaffAccessRow[]): St
       profile_name: option.full_name,
       profile_email: option.email,
       access: {},
+      esignKeys: [],
     });
   }
   for (const row of rows) {
@@ -115,25 +124,25 @@ function buildStaffRows(staff: StaffProfileOption[], rows: StaffAccessRow[]): St
       profile_name: row.profile_name,
       profile_email: row.profile_email,
       access: {} as Partial<Record<RequestTypeSlug, AccessLevel>>,
+      esignKeys: [],
     };
     existing.access[row.request_type as RequestTypeSlug] = row.access_level;
     map.set(row.profile_id, existing);
   }
+  for (const row of esignRows) {
+    const existing = map.get(row.profile_id);
+    if (!existing) continue;
+    if (!existing.esignKeys.includes(row.category_key)) {
+      existing.esignKeys.push(row.category_key);
+    }
+  }
   return Array.from(map.values()).sort((a, b) => a.profile_name.localeCompare(b.profile_name));
 }
 
-/**
- * Sender-for is a column on the Figma table. `request_staff_access` only stores
- * `view_only` and `approver`, so there is nothing to list until a sender grant exists.
- */
-function senderTypesFor(): RequestTypeSlug[] {
-  return [];
-}
-
-function typesFor(row: StaffRow, level: GrantRole): RequestTypeSlug[] {
+function typesFor(row: StaffRow, level: GrantRole): string[] {
   switch (level) {
     case "sender":
-      return senderTypesFor();
+      return row.esignKeys;
     case "view_only":
     case "approver":
       return REQUEST_TYPE_SLUGS.filter((type) => row.access[type] === level);
@@ -168,14 +177,16 @@ function filterIcon(filter: RoleFilter) {
 export function RolesSettingsPanel() {
   const t = useTranslations("pages.requests.settings.roles");
   const tTypes = useTranslations("pages.requests.types");
+  const tAccess = useTranslations("pages.settings.accessControl");
   const tRoot = useTranslations("pages.requests");
   const [rawRows, setRawRows] = useState<StaffAccessRow[]>([]);
+  const [esignRows, setEsignRows] = useState<EsignAccessRow[]>([]);
   const [staffOptions, setStaffOptions] = useState<StaffProfileOption[]>([]);
   const [departments, setDepartments] = useState<StaffDepartmentMap>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
-  const [typeFilter, setTypeFilter] = useState<"all" | RequestTypeSlug>("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | string>("all");
   const [drawerTarget, setDrawerTarget] = useState<StaffRow | null | "assign">(null);
 
   const load = useCallback(async () => {
@@ -187,6 +198,7 @@ export function RolesSettingsPanel() {
       return;
     }
     setRawRows(result.rows);
+    setEsignRows(result.esignRows);
     setStaffOptions(result.staffOptions);
     setDepartments(result.departments);
   }, []);
@@ -202,6 +214,7 @@ export function RolesSettingsPanel() {
         return;
       }
       setRawRows(result.rows);
+      setEsignRows(result.esignRows);
       setStaffOptions(result.staffOptions);
       setDepartments(result.departments);
     })();
@@ -211,8 +224,8 @@ export function RolesSettingsPanel() {
   }, []);
 
   const staffRows = useMemo(
-    () => buildStaffRows(staffOptions, rawRows),
-    [staffOptions, rawRows],
+    () => buildStaffRows(staffOptions, rawRows, esignRows),
+    [staffOptions, rawRows, esignRows],
   );
 
   const roleCounts = useMemo(() => {
@@ -231,8 +244,8 @@ export function RolesSettingsPanel() {
       if (roleFilter !== "all" && !holdsRole(row, roleFilter)) return false;
       if (
         typeFilter !== "all" &&
-        !row.access[typeFilter] &&
-        !senderTypesFor().includes(typeFilter)
+        !row.access[typeFilter as RequestTypeSlug] &&
+        !row.esignKeys.includes(typeFilter)
       ) {
         return false;
       }
@@ -274,9 +287,16 @@ export function RolesSettingsPanel() {
     }
   }
 
-  function renderChips(types: RequestTypeSlug[], tone: ChipTone, allLabel: string) {
+  function chipLabel(key: string): string {
+    if ((REQUEST_TYPE_SLUGS as readonly string[]).includes(key)) {
+      return tTypes(key as RequestTypeSlug);
+    }
+    return tAccess(`outgoingCategories.${key}`);
+  }
+
+  function renderChips(types: string[], tone: ChipTone, allLabel: string) {
     if (types.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
-    if (types.length === REQUEST_TYPE_SLUGS.length) {
+    if (types.length === REQUEST_TYPE_SLUGS.length && types.every((key) => REQUEST_TYPE_SLUGS.includes(key as RequestTypeSlug))) {
       return <span className={chipClass(tone)}>{allLabel}</span>;
     }
     const visible = types.slice(0, MAX_VISIBLE_CHIPS);
@@ -285,13 +305,13 @@ export function RolesSettingsPanel() {
       <div className="flex flex-wrap items-center gap-1">
         {visible.map((type) => (
           <span key={type} className={chipClass(tone)}>
-            {tTypes(type)}
+            {chipLabel(type)}
           </span>
         ))}
         {overflow > 0 ? (
           <span
             className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
-            title={types.slice(MAX_VISIBLE_CHIPS).map((type) => tTypes(type)).join(", ")}
+            title={types.slice(MAX_VISIBLE_CHIPS).map((type) => chipLabel(type)).join(", ")}
           >
             +{overflow}
           </span>
@@ -370,10 +390,14 @@ export function RolesSettingsPanel() {
           </div>
           <Select
             value={typeFilter}
-            onValueChange={(v) => v && setTypeFilter(v as "all" | RequestTypeSlug)}
+            onValueChange={(v) => v && setTypeFilter(v)}
             items={selectOptions([
               { value: "all", label: t("allRequestTypes") },
               ...REQUEST_TYPE_SLUGS.map((type) => ({ value: type, label: tTypes(type) })),
+              ...OUTGOING_SENDER_KEYS.map((key) => ({
+                value: key,
+                label: tAccess(`outgoingCategories.${key}`),
+              })),
             ])}
           >
             <SelectTrigger className="h-9 w-[180px]">
@@ -384,6 +408,11 @@ export function RolesSettingsPanel() {
               {REQUEST_TYPE_SLUGS.map((type) => (
                 <SelectItem key={type} value={type}>
                   {tTypes(type)}
+                </SelectItem>
+              ))}
+              {OUTGOING_SENDER_KEYS.map((key) => (
+                <SelectItem key={key} value={key}>
+                  {tAccess(`outgoingCategories.${key}`)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -484,6 +513,7 @@ export function RolesSettingsPanel() {
         }
         staffOptions={staffOptions}
         initialAccess={drawerTarget && drawerTarget !== "assign" ? drawerTarget.access : undefined}
+        initialEsignKeys={drawerTarget && drawerTarget !== "assign" ? drawerTarget.esignKeys : undefined}
         onSaved={() => void load()}
       />
     </AppPage>

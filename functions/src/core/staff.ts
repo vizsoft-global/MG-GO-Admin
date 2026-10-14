@@ -93,6 +93,19 @@ export async function requireStaff(
   return { uid, isSuperAdmin, isManager, roleId, permissionSlugs: permissions };
 }
 
+/** Staff with any of the slugs (super admin still bypasses). */
+export async function requireStaffAny(
+  request: CallableRequest<unknown>,
+  slugs: readonly string[],
+): Promise<StaffContext> {
+  const staff = await requireStaff(request);
+  if (staff.isSuperAdmin) return staff;
+  if (slugs.some((slug) => permissionGranted(staff.permissionSlugs, slug))) {
+    return staff;
+  }
+  throw new HttpsError("permission-denied", "not_authorized");
+}
+
 /**
  * A Manager holds the whole catalog, so slugs come from the catalog doc; a User
  * holds only their own ticks. Both are one array doc, which is what keeps a

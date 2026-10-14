@@ -9,6 +9,11 @@ export function normalizeEsignStorageKey(key: string): string {
   return trimmed.startsWith(prefix) ? trimmed.slice(prefix.length) : trimmed;
 }
 
+/** R2 object key. Prefix is a folder, not a bucket name. */
+export function esignObjectPath(key: string): string {
+  return `${ESIGN_BUCKET}/${normalizeEsignStorageKey(key)}`;
+}
+
 export function esignDocumentHref(
   requestId: string,
   kind: EsignDocumentKind,

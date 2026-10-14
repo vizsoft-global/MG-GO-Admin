@@ -1,5 +1,6 @@
 "use server";
 
+import { getLocale } from "next-intl/server";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
@@ -232,6 +233,7 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
   const auth = await requireVehicles("vehicles.view");
   if ("error" in auth) throw new Error(auth.error);
 
+  const locale = await getLocale();
   const db = await openDb();
   const today = kuwaitTodayYmd();
   const yesterday = addKuwaitDays(today, -1);
@@ -294,7 +296,11 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
 
   const plateById = new Map(vehicleRows.map((row) => [row.id, row.reg_number]));
   const useTypeLabels = new Map(
-    useTypes.map((row) => [str(row.key) || row.id, str(row.label_en)]),
+    useTypes.map((row) => {
+      const labelEn = str(row.label_en);
+      const labelAr = str(row.label_ar);
+      return [str(row.key) || row.id, locale.startsWith("ar") ? labelAr || labelEn : labelEn];
+    }),
   );
   const openAttendance = new Set(
     logs.docs
@@ -333,7 +339,11 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       project_type: row.project_type,
       status: row.status,
       vehicle_type_key: row.vehicle_type_key,
-      vehicle_type_label: type?.label_en ?? row.vehicle_type_key,
+      vehicle_type_label: type
+        ? locale.startsWith("ar")
+          ? type.label_ar || type.label_en
+          : type.label_en
+        : row.vehicle_type_key,
       location_text: row.location_text,
       condition: isVehicleCondition(row.condition) ? row.condition : null,
       car_type: isVehicleCarType(row.car_type) ? row.car_type : null,

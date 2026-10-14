@@ -78,7 +78,8 @@
     "attendanceSettings": "Attendance thresholds",
     "driverFields": "Driver custom fields",
     "requests": "EmployeeDesk",
-    "visitBookings": "Visit Bookings",
+    "visitBookings": "Visit Slots",
+    "visitSlots": "Visit Slots",
     "wrongActions": "Wrong Actions",
     "earnings": "Earnings & Incentives",
     "notifications": "Notifications",
@@ -128,7 +129,7 @@
   "appNavGroups": {
     "overview": "Overview",
     "employeedesk": "EmployeeDesk",
-    "visitBookings": "Visit Bookings",
+    "visitBookings": "Visit Slots",
     "operationsHub": "OperationsHub",
     "apps": "Apps",
     "fleet": "Fleet",
@@ -402,7 +403,7 @@
         },
         "delivery": {
           "pickup_create": "Order picked up",
-          "complete": "Delivery submitted",
+          "complete": "Order delivered",
           "cancel": "Delivery cancelled",
           "auto_cancel": "Stale pickup auto-cancelled"
         },
@@ -731,6 +732,8 @@
         "shift_submit": "Shift submitted",
         "location_zone_entry": "Entered zone",
         "location_zone_exit": "Left zone",
+        "gps_offline": "GPS offline",
+        "gps_restored": "GPS restored",
         "delivery_pickup_create": "Order picked up",
         "delivery_complete": "Order delivered",
         "delivery_cancel": "Order cancelled",
@@ -895,6 +898,8 @@
       "incomingFootnote": "Incoming categories have no templates yet, so each document is uploaded by hand.",
       "emptyAction": "Nothing waiting for you.",
       "emptyBatches": "No batches in flight.",
+      "emptySends": "No recent sends.",
+      "viewAllSent": "View sent",
       "ageMinutes": "{n}m ago",
       "ageHours": "{n}h ago",
       "ageToday": "Today",
@@ -929,6 +934,8 @@
         "submit": "Upload and log",
         "required": "Rider, subject and a file are required",
         "failed": "Upload failed",
+        "not_authorized": "You do not have permission to upload.",
+        "readFailed": "The file could not be read.",
         "saved": "Logged {code}",
         "categories": {
           "letter": "Letter",
@@ -4984,6 +4991,7 @@
           "staffPlaceholder": "Select staff…",
           "staffSearch": "Search by name or email",
           "perTypeHint": "Set the access level per request type.",
+          "outgoingSenderHeading": "Outgoing sender categories",
           "level": {
             "none": "None",
             "view_only": "View",
@@ -5208,6 +5216,8 @@
           "fieldKey": "Key",
           "fieldLabelEn": "Label (EN)",
           "fieldLabelAr": "Label (AR)",
+          "fieldOptions": "Select options",
+          "fieldOptionsHint": "One option per line",
           "reservedHint": "Reserved: {keys}",
           "section": {
             "header": "Header",
@@ -5235,9 +5245,13 @@
           "fieldDriverPlaceholder": "Search MG ID or name…",
           "fieldDriverSearch": "Search by name, ID, or code",
           "fieldTitle": "Title",
+          "fieldTitlePlaceholder": "e.g. Employment contract",
           "fieldLocale": "PDF language",
           "fieldDue": "Due date",
           "fieldDescription": "Description",
+          "fieldDescriptionPlaceholder": "Optional note for this send",
+          "absenceFrom": "From",
+          "absenceTo": "To",
           "categoryFields": "Category fields",
           "company": "Company",
           "employeeName": "Employee name",
@@ -5255,6 +5269,22 @@
           "sheetInputs": "Sheet inputs",
           "fieldEmployeeId": "Employee ID",
           "sendForSignature": "Send for e-signature",
+          "hideField": "Hide this field for this send",
+          "penaltyOptions": "Penalty",
+          "hideOption": "Hide this option for this send",
+          "showHiddenOptions": "Show hidden options",
+          "emptyCategory": "No active templates in this category.",
+          "openLibrary": "Open the template library",
+          "fieldSelectPlaceholder": "Select…",
+          "fieldSelectSearch": "Search options",
+          "fieldAbsenceFrom": "Absence from",
+          "fieldAbsenceTo": "Absence to",
+          "placeholders": {
+            "penalty": "Enter the penalty detail",
+            "investigation": "Enter the investigation detail",
+            "generic": "Enter a value",
+            "violationDate": "Select the violation date"
+          },
           "fieldPosition": "Position",
           "fieldSponsor": "Sponsor",
           "fieldPayThrough": "Pay through",
@@ -5274,7 +5304,17 @@
             "createFailed": "Could not create request",
             "due_in_past": "Due date cannot be in the past",
             "draftTemplate": "Pick a template before saving a draft",
-            "draftFailed": "Could not save the draft"
+            "draftFailed": "Could not save the draft",
+            "not_configured": "Document storage is not configured.",
+            "storage_bucket_missing": "The document storage bucket is missing.",
+            "unknown_fn": "Resolve is not available.",
+            "wrong_lane": "Resolve is not available.",
+            "unknown_id": "That Employee ID was not found.",
+            "not_authorized": "You cannot send this category.",
+            "field_required": "A required field is still empty.",
+            "ambiguous": "That Employee ID matches more than one rider.",
+            "archived": "That employee is archived.",
+            "blocked": "That employee is blocked."
           }
         },
         "signers": {
@@ -5358,6 +5398,16 @@
             "noOkRows": "No resolvable Employee IDs",
             "createFailed": "Could not create batch",
             "processFailed": "A chunk failed — open the batch to resume",
+            "not_configured": "Document storage is not configured.",
+            "storage_bucket_missing": "The document storage bucket is missing.",
+            "unknown_fn": "Resolve is not available.",
+            "wrong_lane": "Resolve is not available.",
+            "unknown_id": "That Employee ID was not found.",
+            "not_authorized": "You cannot send this category.",
+            "field_required": "A required field is still empty.",
+            "ambiguous": "That Employee ID matches more than one rider.",
+            "archived": "That employee is archived.",
+            "blocked": "That employee is blocked.",
             "draftTemplate": "Pick a template before saving a draft",
             "draftEmpty": "Upload a sheet before saving a draft",
             "draftFailed": "Could not save the draft"
@@ -7465,6 +7515,22 @@
         "outgoingSender": "Outgoing · Sender",
         "incomingReceiver": "Incoming · Receiver",
         "requestTypes": "Request types",
+        "outgoingCategoriesHeading": "Outgoing e-sign categories",
+        "outgoingCategories": {
+          "loan": "Loan",
+          "payslip": "Payslip",
+          "asset": "Asset",
+          "leave": "Leave",
+          "penalty": "Penalty",
+          "investigation": "Investigation",
+          "accident": "Accident",
+          "general_doc": "General document",
+          "late_attendance": "Late attendance",
+          "unauthorised_absence": "Unauthorised absence",
+          "written_warning": "Written warning",
+          "damage_to_property": "Damage to property",
+          "penalty_others": "Other penalty"
+        },
         "previewTitle": "What {name} will see",
         "eyebrowPreview": "Preview & save",
         "previewRole": "Access preview",
@@ -8427,7 +8493,8 @@
         "from": "From",
         "to": "To",
         "daysCount": "{count} days",
-        "windowHint": "Inside {from} – {to}."
+        "windowHint": "Inside {from} – {to}.",
+        "clearCustom": "Clear range"
       },
       "clearFilters": "Clear filters",
       "clearSearch": "Clear search",
@@ -8732,7 +8799,7 @@
         "apply": "Apply to {count} cells",
         "cancel": "Cancel",
         "copied": "Copied {count} cells",
-        "gridHint": "Drag to select · corner handle fills · Ctrl+C / Ctrl+V / Ctrl+D · Ctrl+Z undoes · Esc clears",
+        "gridHint": "Drag to select · corner handle fills · Ctrl+C / Ctrl+V / Ctrl+D · Ctrl+Z undoes · Ctrl+Y redoes · Esc clears",
         "nothingSelected": "Select at least one day first.",
         "nothingFilled": "Nothing to fill.",
         "nothingPasted": "Nothing to paste.",
@@ -8741,6 +8808,8 @@
         "applied": "Adjusted {count} day cells",
         "undo": "Undo",
         "undone": "Undid {count} cells",
+        "redo": "Redo",
+        "redone": "Redid {count} cells",
         "patternNote": "Pattern copied from the source cells",
         "willChange": "{change} will change, {same} already the same",
         "automatic": "Automatic result",
@@ -8767,6 +8836,13 @@
           "no_cells": "Select at least one day.",
           "too_many_cells": "Too many cells in one batch.",
           "not_authorized": "You do not have permission to adjust payroll days.",
+          "date_out_of_range": "That day is outside the Kuwait payroll window (the last two months through today).",
+          "invalid_cell": "One of the selected days could not be adjusted.",
+          "invalid_cells": "The selected cells could not be adjusted.",
+          "unknown_driver": "One of the selected riders is no longer on the roster.",
+          "cell_out_of_scope": "One of the selected days is outside the current filter.",
+          "invalid_hours": "Hours must be between 0 and 24.",
+          "invalid_custom_hours": "Custom hours must be between 0 and 24.",
           "unknown": "Something went wrong. The adjustment was not saved."
         }
       },
@@ -8994,6 +9070,7 @@
           "client_has_riders": "This client still has riders assigned.",
           "system_client": "System clients cannot be deleted.",
           "invalid_thresholds": "Good must be at least Average.",
+          "rule_condition_required": "Each rule needs at least one condition before it can be saved.",
           "unknown": "Something went wrong. The change was not saved."
         }
       }
@@ -9691,6 +9768,8 @@
           "loadFailed": "Templates could not be loaded.",
           "emptyTitle": "No templates yet",
           "emptyBody": "Create a template to define what the rider reads and signs.",
+          "tabLibrary": "Library",
+          "tabDraft": "Draft",
           "fieldCount": "{count} fields",
           "versionLabel": "v{version}",
           "open": "See the document",
@@ -9783,6 +9862,7 @@
           "fixedValue": "Fixed text on the document",
           "options": "Options",
           "optionsHint": "The rider picks one of these.",
+          "penaltyOptionsHint": "These are the checkboxes printed on the Penalty notice.",
           "optionPlaceholder": "Option text",
           "addOption": "Add option",
           "removeOption": "Remove option",
@@ -9818,7 +9898,11 @@
           },
           "errors": {
             "fixedNeedsValue": "A fixed field needs the text that appears on the document.",
-            "signatureNotDropdown": "A field signed by a person cannot be a list to choose from."
+            "signatureNotDropdown": "A field signed by a person cannot be a list to choose from.",
+            "invalid_field_key": "This field key is reserved for a system employee row.",
+            "invalid_category": "Choose an active category.",
+            "invalid_document_kind": "This layout is not available.",
+            "not_authorized": "You do not have permission to save this template."
           },
           "preview": {
             "internalDocument": "Internal document",
@@ -9882,6 +9966,8 @@
           "fieldTemplate": "Template",
           "fieldTemplatePlaceholder": "Select a template",
           "fieldTemplateSearch": "Search templates",
+          "penaltyCategory": "Penalty category",
+          "penaltyMissingTemplate": "No sendable template exists for this penalty yet.",
           "fieldTitle": "Batch title",
           "fieldDue": "Due date",
           "downloadExample": "Download the example sheet",
@@ -9961,7 +10047,17 @@
             "processFailed": "The batch was created, but generating the documents stopped part way.",
             "draftTemplate": "Pick a template before saving a draft",
             "draftEmpty": "Upload a sheet before saving a draft",
-            "draftFailed": "Could not save the draft"
+            "draftFailed": "Could not save the draft",
+            "not_configured": "Document storage is not configured.",
+            "storage_bucket_missing": "The document storage bucket is missing.",
+            "unknown_fn": "Resolve is not available.",
+            "wrong_lane": "Resolve is not available.",
+            "unknown_id": "That Employee ID was not found.",
+            "not_authorized": "You cannot send this category.",
+            "field_required": "A required field is still empty.",
+            "ambiguous": "That Employee ID matches more than one rider.",
+            "archived": "That employee is archived.",
+            "blocked": "That employee is blocked."
           },
           "fix": {
             "title": "Fix this row",
@@ -9983,7 +10079,7 @@
           "workflows": "Approval workflows",
           "types": "Request types & fields",
           "departments": "Departments & staff",
-          "roles": "Roles & access rights",
+          "roles": "Request type access",
           "categories": "Complaint categories",
           "tenure": "Loan tenure options",
           "assets": "Asset catalog",
@@ -9997,7 +10093,7 @@
           "workflows": "Define approval steps, SLAs and escalation paths",
           "types": "Manage request types, custom fields, icon slots and screenshots",
           "departments": "Teams, members and assignment rules",
-          "roles": "Sender and receiver access, per type",
+          "roles": "Who can view or decide each request type. This is not staff panel access.",
           "categories": "Manage complaint category options",
           "tenure": "Which loan repayment periods riders can choose",
           "assets": "Items riders can request with stock levels",
@@ -10149,6 +10245,14 @@
         "subtitle": "Rules, partners, zones and the operational tables every delivery follows.",
         "breadcrumb": "OperationsHub",
         "cards": {
+          "performance": {
+            "title": "Performance",
+            "body": "Rider scores, DPD efficiency and the live workforce."
+          },
+          "orderReconciliation": {
+            "title": "Order reconciliation",
+            "body": "AM upload versus MGGO order counts for the Kuwait day."
+          },
           "partners": {
             "title": "Partners",
             "body": "Talabat, DoorDash, UberEats and the contracts behind them."

@@ -14,6 +14,8 @@
  * exactly why they are not reused here.
  */
 
+import { haversineMeters } from "@/features/locations/location-status";
+
 import type { FleetZone } from "./fleet-types";
 
 type ZoneRow = {
@@ -106,4 +108,54 @@ export function fleetZoneCenter(zone: FleetZone): [number, number] | null {
     lat += ring[i]![1];
   }
   return count > 0 ? [lng / count, lat / count] : null;
+}
+
+function pointInLngLatRing(lng: number, lat: number, ring: readonly [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const current = ring[i];
+    const previous = ring[j];
+    if (!current || !previous) continue;
+    const [xi, yi] = current;
+    const [xj, yj] = previous;
+    const denom = yj - yi;
+    const intersect =
+      yi > lat !== yj > lat &&
+      denom !== 0 &&
+      lng < ((xj - xi) * (lat - yi)) / denom + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+export function pointInFleetZone(lat: number, lng: number, zone: FleetZone): boolean {
+  switch (zone.zoneType) {
+    case "circle": {
+      if (!zone.center) return false;
+      const [zoneLng, zoneLat] = zone.center;
+      return haversineMeters(lat, lng, zoneLat, zoneLng) <= zone.radiusMeters;
+    }
+    case "polygon": {
+      const ring = zone.ring;
+      if (!ring || ring.length < 4) return false;
+      return pointInLngLatRing(lng, lat, ring);
+    }
+    default: {
+      const _never: never = zone.zoneType;
+      return _never;
+    }
+  }
+}
+
+/** `null` when the assigned zone or the fix is missing — the caller must not invent a side. */
+export function pointInAssignedZone(
+  lat: number | null,
+  lng: number | null,
+  zoneId: string | null,
+  zones: readonly FleetZone[],
+): boolean | null {
+  if (lat == null || lng == null || !zoneId) return null;
+  const zone = zones.find((entry) => entry.id === zoneId);
+  if (!zone) return null;
+  return pointInFleetZone(lat, lng, zone);
 }

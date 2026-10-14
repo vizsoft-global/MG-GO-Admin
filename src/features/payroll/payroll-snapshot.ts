@@ -43,6 +43,7 @@ import {
   type ZoneCategory,
 } from "./payroll-rules-engine";
 import { categoryForZone } from "./payroll-zone-metrics";
+import { aoShownOrders, lookupReconOrders } from "./payroll-orders-display";
 import type {
   OffStructureSource,
   PayrollAdjustmentCell,
@@ -101,9 +102,10 @@ export type RawPayrollRequest = {
   roleKey: string | null;
 };
 
-/** Daily final adjusted orders (Order Reconciliation) keyed on the MG ID. */
+/** Daily final adjusted orders (Order Reconciliation) keyed on MG ID or AM ID. */
 export type RawPayrollOrders = {
   mgId: string;
+  employeeId?: string | null;
   date: string;
   orders: number;
 };
@@ -186,6 +188,8 @@ type RawDayRow = {
   d: string;
   h: number | string | null;
   o: number | string | null;
+  /** Display-only completed orders when recon is missing. */
+  do?: number | string | null;
   /** Operations cover on the date, from a request. */
   c: string | null;
   /** True when that cover is approved (a pending request covers nothing). */
@@ -353,6 +357,7 @@ type DayFactsInput = {
   /** Display-only elapsed hours for a still-open log (today). */
   elapsedHours?: number;
   orders: number;
+  displayOrders?: number;
   cover: "off" | "sick" | "accident" | null;
   coverApproved: boolean;
   hasCheckIn: boolean;
@@ -395,6 +400,7 @@ function dayInfoFrom(
       autoRuleLabel: auto.ruleLabel,
       autoSource: auto.source,
       orders: facts.orders,
+      displayOrders: facts.displayOrders ?? facts.orders,
       loggedHours: Math.round(facts.loggedHours * 100) / 100,
       source: outcome.source,
       ruleLabel: outcome.ruleLabel,
@@ -484,9 +490,11 @@ export function assemblePayrollSnapshot(input: {
 
   const ordersByMgId = new Map<string, Map<string, number>>();
   for (const row of input.orders ?? []) {
-    const perDate = ordersByMgId.get(row.mgId) ?? new Map<string, number>();
-    perDate.set(row.date, (perDate.get(row.date) ?? 0) + num(row.orders));
-    ordersByMgId.set(row.mgId, perDate);
+    for (const key of [row.mgId, row.employeeId].map((id) => id?.trim().toLowerCase()).filter(Boolean)) {
+      const perDate = ordersByMgId.get(key as string) ?? new Map<string, number>();
+      perDate.set(row.date, (perDate.get(row.date) ?? 0) + num(row.orders));
+      ordersByMgId.set(key as string, perDate);
+    }
   }
 
   const adjustmentByDriver = new Map<string, Map<string, RawPayrollAdjustment>>();
@@ -587,7 +595,8 @@ export function assemblePayrollSnapshot(input: {
       const coverPerDate = coverByDriver.get(r.id) ?? new Map<string, RawPayrollCover>();
       const legacyCover = coversByDriver.get(r.id) ?? new Map<string, DayCoverFlags>();
       const adjustmentPerDate = adjustmentByDriver.get(r.id) ?? new Map<string, RawPayrollAdjustment>();
-      const ordersPerDate = ordersByMgId.get((r.employeeId ?? "").trim().toLowerCase()) ?? new Map();
+      const reconOrders = (date: string) =>
+        lookupReconOrders(ordersByMgId, date, r.employeeId, r.driverCode) ?? 0;
 
       const days: DayStatus[] = [];
       const dayInfo: PayrollDayInfo[] = [];
@@ -622,7 +631,7 @@ export function assemblePayrollSnapshot(input: {
         const facts: DayFactsInput = {
           date,
           loggedHours: logged,
-          orders: ordersPerDate.get(date) ?? 0,
+          orders: reconOrders(date),
           cover,
           coverApproved,
           hasCheckIn: Boolean(hoursByDate?.has(date)),
@@ -993,6 +1002,7 @@ export function snapshotFromRpc(
             ? openElapsed.get(row.driverId)
             : undefined,
         orders: num(day.o),
+        displayOrders: day.do == null ? num(day.o) : num(day.do),
         cover,
         coverApproved: Boolean(day.ca),
         hasCheckIn: Boolean(day.k) || logged > 0,
@@ -1139,7 +1149,7 @@ export function parseAdjustmentCellText(
   const raw = text.trim();
   if (!raw) return null;
   const lower = raw.toLowerCase();
-  if (["auto", "reset", "clear", "-"].includes(lower)) {
+  if (["auto", "reset", "clear", "-", "–", "—"].includes(lower) || raw === "–" || raw === "—") {
     return { status: "auto", hours: null };
   }
   if (lower === "12" || lower === "work" || lower === "full" || lower === "12 hours") {
@@ -1216,15 +1226,18 @@ export function cellsFromSelection(
   let rejected = 0;
   for (const input of inputs) {
     const parsed = parseAdjustmentCellText(input.text, input.currentHours);
-    if (!parsed) {
-      rejected += 1;
-      continue;
-    }
+    const status = parsed?.status ?? input.beforeStatus ?? "auto";
+    const hours = parsed
+      ? parsed.hours
+      : input.beforeStatus && input.beforeStatus !== "auto"
+        ? (input.beforeHours ?? null)
+        : null;
+    if (!parsed) rejected += 1;
     cells.push({
       driverId: input.driverId,
       date: input.date,
-      status: parsed.status,
-      hours: parsed.hours,
+      status,
+      hours,
     });
     before.push({
       driverId: input.driverId,

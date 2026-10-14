@@ -153,7 +153,9 @@ export function mergeMenu(config: MenuNode[]): {
         );
 
   return {
-    tree: dropRegistryHiddenItems(dropAppsGroup(stripStaffAccessItem(arranged))),
+    tree: remapClientIaSavedMenu(
+      dropRegistryHiddenItems(dropAppsGroup(stripStaffAccessItem(arranged))),
+    ),
     unassignedIds: unassigned,
   };
 }
@@ -165,7 +167,7 @@ function relocateFleetItems(tree: MenuNode[]): MenuNode[] {
   const fleetIds = new Set(
     MENU_REGISTRY.filter((item) => item.defaultGroup === "Fleet").map((item) => item.id),
   );
-  let hubIcon = "Car";
+  let hubIcon = "Truck";
 
   const strip = (nodes: MenuNode[]): MenuNode[] =>
     nodes.flatMap((node) => {
@@ -223,7 +225,7 @@ function relocateVisitBookingsItems(tree: MenuNode[]): MenuNode[] {
   const visitIds = new Set(
     MENU_REGISTRY.filter((item) => item.defaultGroup === VISIT_BOOKINGS_GROUP).map((item) => item.id),
   );
-  let visitIcon = "CalendarCheck";
+  let visitIcon = "Table2";
 
   const strip = (nodes: MenuNode[]): MenuNode[] =>
     nodes.flatMap((node) => {
@@ -248,8 +250,8 @@ function relocateVisitBookingsItems(tree: MenuNode[]): MenuNode[] {
   const item: MenuNode = {
     id: VISIT_BOOKINGS_ID,
     type: "item",
-    label: registry?.defaultLabel ?? "Visit Bookings",
-    icon: visitIcon || registry?.defaultIcon || "CalendarCheck",
+    label: registry?.defaultLabel ?? "Visit Slots",
+    icon: visitIcon || registry?.defaultIcon || "Table2",
     hidden: false,
   };
 
@@ -284,38 +286,28 @@ function relocateAssistantItem(tree: MenuNode[]): MenuNode[] {
     hidden: false,
   };
 
-  const opsIdx = stripped.findIndex((node) => node.id === "group-operations");
-  if (opsIdx < 0) {
-    return [
-      ...stripped,
-      {
-        id: "group-operations",
-        type: "group",
-        label: "Operations",
-        icon: "Folder",
-        children: [item],
-      },
-    ];
+  const systemIdx = stripped.findIndex((node) => node.id === SYSTEM_GROUP_ID);
+  if (systemIdx < 0) {
+    return [...stripped, { ...groupNodeFor(SYSTEM_GROUP_ID), children: [item] }];
   }
 
-  const ops = stripped[opsIdx];
-  const children = [...(ops.children ?? [])].filter((child) => child.id !== ASSISTANT_ID);
-  const perfIdx = children.findIndex((child) => child.id === "performance");
-  children.splice(perfIdx >= 0 ? perfIdx + 1 : children.length, 0, item);
+  const system = stripped[systemIdx];
+  const children = [...(system.children ?? [])].filter((child) => child.id !== ASSISTANT_ID);
+  children.push(item);
   const next = [...stripped];
-  next[opsIdx] = { ...ops, children };
+  next[systemIdx] = { ...system, children };
   return next;
 }
 
 function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
   const PAYROLL_ID = "payroll";
   const GROUP_ID = "group-payroll";
-  let foundIcon = "CalendarClock";
+  let foundIcon = "Banknote";
   const strip = (nodes: MenuNode[]): MenuNode[] =>
     nodes.flatMap((node) => {
       if (node.type === "item") {
         if (node.id === PAYROLL_ID) {
-          foundIcon = node.icon || "CalendarClock";
+          foundIcon = node.icon || "Banknote";
           return [];
         }
         return [node];
@@ -323,7 +315,7 @@ function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
       if (node.id === GROUP_ID) {
         const rest: MenuNode[] = [];
         for (const child of node.children ?? []) {
-          if (child.id === PAYROLL_ID) foundIcon = child.icon || "CalendarClock";
+          if (child.id === PAYROLL_ID) foundIcon = child.icon || "Banknote";
           else rest.push(child);
         }
         return rest;
@@ -384,29 +376,18 @@ function relocateOrderReconItem(tree: MenuNode[]): MenuNode[] {
     hidden: false,
   };
 
-  const opsIdx = stripped.findIndex((node) => node.id === "group-operations");
-  if (opsIdx < 0) {
-    return [
-      ...stripped,
-      {
-        id: "group-operations",
-        type: "group",
-        label: "Operations",
-        icon: "Folder",
-        children: [item],
-      },
-    ];
+  const hubIdx = stripped.findIndex((node) => node.id === OPERATIONS_HUB_GROUP_ID);
+  if (hubIdx < 0) {
+    const hub = groupNodeFor(OPERATIONS_HUB_GROUP_ID);
+    hub.children = [item];
+    return [...stripped, hub];
   }
 
-  const ops = stripped[opsIdx];
-  const children = [...(ops.children ?? [])].filter((child) => child.id !== RECON_ID);
-  const verificationIdx = children.findIndex((child) => child.id === "dpd-verification");
-  const deliveriesIdx = children.findIndex((child) => child.id === "deliveries");
-  const insertAt =
-    verificationIdx >= 0 ? verificationIdx + 1 : deliveriesIdx >= 0 ? deliveriesIdx + 1 : children.length;
-  children.splice(insertAt, 0, item);
+  const hub = stripped[hubIdx];
+  const children = [...(hub.children ?? [])].filter((child) => child.id !== RECON_ID);
+  children.push(item);
   const next = [...stripped];
-  next[opsIdx] = { ...ops, children };
+  next[hubIdx] = { ...hub, children };
   return next;
 }
 
@@ -438,6 +419,7 @@ const SETTINGS_SPLIT: ReadonlyArray<{ id: string; group: string; after?: string 
   { id: "maintenance", group: SYSTEM_GROUP_ID },
   { id: "languages", group: SYSTEM_GROUP_ID },
   { id: "data-cleanup", group: SYSTEM_GROUP_ID },
+  { id: "assistant", group: SYSTEM_GROUP_ID },
   { id: "driver-devices", group: SETTINGS_GROUP_ID },
 ];
 
@@ -476,6 +458,7 @@ const OPERATIONS_HUB_IDS = [
   "driver-fields",
   "attendance-settings",
   "source-companies",
+  "earnings",
 ] as const;
 
 const OPERATIONS_HUB_ID_SET = new Set<string>(OPERATIONS_HUB_IDS);
@@ -698,6 +681,130 @@ function stripStaffAccessItem(tree: MenuNode[]): MenuNode[] {
       return [node];
     });
   return strip(tree);
+}
+
+const ALWAYS_OPERATIONS_HUB_IDS = ["earnings"] as const;
+
+/**
+ * Narrow remappers for saved `menu_configs`. The relocator pipeline only
+ * runs when a role has never been saved — production menus would otherwise
+ * keep September placement. These only move named ids or rewrite one stale
+ * label/icon so Menu Editor edits on other rows survive.
+ */
+function dropSavedMenuItems(tree: MenuNode[], ids: readonly string[]): MenuNode[] {
+  const idSet = new Set(ids);
+  const walk = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "item" && idSet.has(node.id)) return [];
+      if (!node.children?.length) return [node];
+      const children = walk(node.children);
+      if (children.length === 0 && !node.id.startsWith("group-custom-")) return [];
+      return [{ ...node, children }];
+    });
+  return walk(tree);
+}
+
+function placeEmployeeDeskSettings(tree: MenuNode[]): MenuNode[] {
+  return tree.map((node) => {
+    if (node.id !== "group-employeedesk" || !node.children) return node;
+    const children = [...node.children];
+    const settingsIdx = children.findIndex((child) => child.id === "employeedesk-settings");
+    if (settingsIdx < 0) return node;
+    const [settings] = children.splice(settingsIdx, 1);
+    if (!settings) return node;
+    const reportsIdx = children.findIndex((child) => child.id === "employeedesk-reports");
+    if (reportsIdx < 0) children.push(settings);
+    else children.splice(reportsIdx + 1, 0, settings);
+    return { ...node, children };
+  });
+}
+
+function remapClientIaSavedMenu(tree: MenuNode[]): MenuNode[] {
+  let next = dropSavedMenuItems(tree, ["requests"]);
+  next = remapItemsToGroup(next, ALWAYS_OPERATIONS_HUB_IDS, OPERATIONS_HUB_GROUP_ID);
+  next = remapItemsToGroup(next, ["driver-devices"], SETTINGS_GROUP_ID);
+  next = remapItemsToGroup(next, ["assistant"], SYSTEM_GROUP_ID);
+  next = remapItemsToGroup(next, ["wrong-actions"], "group-operations");
+  next = remapItemsToGroup(next, ["support"], SETTINGS_GROUP_ID);
+  next = remapItemsToGroup(next, ["employeedesk-settings"], "group-employeedesk");
+  next = placeEmployeeDeskSettings(next);
+  return remapClientIaLabelsAndIcons(next);
+}
+
+function remapItemsToGroup(
+  tree: MenuNode[],
+  ids: readonly string[],
+  groupId: string,
+): MenuNode[] {
+  const idSet = new Set(ids);
+  const collected = new Map<string, MenuNode>();
+
+  const strip = (nodes: MenuNode[], inTarget: boolean): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "item" && idSet.has(node.id)) {
+        if (inTarget) return [node];
+        collected.set(node.id, node);
+        return [];
+      }
+      if (!node.children?.length) return [node];
+      const children = strip(node.children, node.id === groupId);
+      if (children.length === 0 && !node.id.startsWith("group-custom-")) return [];
+      return [{ ...node, children }];
+    });
+
+  let next = strip(tree, false);
+  if (collected.size === 0) return next;
+
+  let groupIdx = next.findIndex((node) => node.id === groupId);
+  if (groupIdx < 0) {
+    next = [...next, { ...groupNodeFor(groupId), children: [] }];
+    groupIdx = next.length - 1;
+  }
+  const group = next[groupIdx];
+  const children = [...(group.children ?? [])];
+  for (const id of ids) {
+    const item = collected.get(id);
+    if (item && !children.some((child) => child.id === id)) children.push(item);
+  }
+  const patched = [...next];
+  patched[groupIdx] = { ...group, children };
+  return patched;
+}
+
+function remapClientIaLabelsAndIcons(tree: MenuNode[]): MenuNode[] {
+  const walk = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.map((node) => {
+      const children = node.children ? walk(node.children) : node.children;
+      if (node.type === "item" && node.id === "vehicles" && node.icon === "Car") {
+        return { ...node, icon: "Truck", children };
+      }
+      if (node.type === "item" && node.id === "payroll") {
+        return {
+          ...node,
+          label: node.label === "Payroll & Requests" ? "Payroll" : node.label,
+          icon: node.icon === "CalendarClock" ? "Banknote" : node.icon,
+          children,
+        };
+      }
+      if (node.type === "item" && node.id === "visit-bookings") {
+        return {
+          ...node,
+          label: node.label === "Visit Bookings" ? "Visit Slots" : node.label,
+          icon:
+            node.icon === "CalendarCheck" || node.icon === "Calendar" ? "Table2" : node.icon,
+          children,
+        };
+      }
+      if (node.type === "item" && node.id === "employeedesk-settings") {
+        return {
+          ...node,
+          label: node.label === "Settings" ? "EmployeeDesk settings" : node.label,
+          children,
+        };
+      }
+      return children === node.children ? node : { ...node, children };
+    });
+  return walk(tree);
 }
 
 export function resolveForSidebar(

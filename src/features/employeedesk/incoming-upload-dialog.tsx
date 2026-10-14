@@ -81,28 +81,55 @@ export function IncomingUploadDialog({
     setFiles((current) => [...current, ...next]);
   }
 
+  function classifyUploadError(error: unknown): "not_authorized" | "read_failed" | "failed" {
+    const raw = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+    if (raw.includes("not_authorized")) return "not_authorized";
+    if (raw.includes("read_failed") || raw.includes("readFailed")) return "read_failed";
+    return "failed";
+  }
+
+  function uploadErrorMessage(error: unknown): string {
+    const code = classifyUploadError(error);
+    switch (code) {
+      case "not_authorized":
+        return t("not_authorized");
+      case "read_failed":
+        return t("readFailed");
+      case "failed":
+        return t("failed");
+      default: {
+        const unexpected: never = code;
+        return unexpected;
+      }
+    }
+  }
+
   async function submit() {
     if (!driverId || !subject.trim() || files.length === 0) {
       toast.error(t("required"));
       return;
     }
-    const payloads = await Promise.all(files.map((file) => fileToDecisionAttachmentPayload(file)));
-    const result = await upload.mutateAsync({
-      driverId,
-      category,
-      subject: subject.trim(),
-      receivedOn,
-      startRoute,
-      files: payloads,
-    });
-    if (!result.ok) {
-      toast.error(result.error ?? t("failed"));
-      return;
+    try {
+      const payloads = await Promise.all(files.map((file) => fileToDecisionAttachmentPayload(file)));
+      const result = await upload.mutateAsync({
+        driverId,
+        category,
+        subject: subject.trim(),
+        receivedOn,
+        startRoute,
+        files: payloads,
+      });
+      if (!result.ok) {
+        toast.error(uploadErrorMessage(result.error ?? t("failed")));
+        return;
+      }
+      toast.success(t("saved", { code: result.request_code ?? "" }));
+      setSubject("");
+      setFiles([]);
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(uploadErrorMessage(error));
     }
-    toast.success(t("saved", { code: result.request_code ?? "" }));
-    setSubject("");
-    setFiles([]);
-    onOpenChange(false);
   }
 
   return (

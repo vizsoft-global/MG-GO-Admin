@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import type { DocumentData } from "firebase-admin/firestore";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import { getFirebaseStorage } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { contentDispositionAttachment } from "@/lib/storage/order-proof-url";
 import { guessProofContentType } from "@/lib/storage/proof-image-url";
+import { readEsignObject } from "@/features/esign/esign-r2";
 import {
-  ESIGN_BUCKET,
   type EsignDocumentKind,
   normalizeEsignStorageKey,
 } from "@/features/esign/esign-storage-key";
@@ -62,17 +61,12 @@ function docFields(data: DocumentData | undefined): Record<string, unknown> | nu
 async function downloadEsignObject(
   key: string,
 ): Promise<{ bytes: Buffer; contentType: string } | { error: string }> {
-  const storage = await getFirebaseStorage();
-  if (!storage) return { error: "not_configured" };
-  try {
-    const file = storage.bucket().file(`${ESIGN_BUCKET}/${key}`);
-    const [buf] = await file.download();
-    const [meta] = await file.getMetadata();
-    const contentType = typeof meta.contentType === "string" ? meta.contentType : "";
-    return { bytes: Buffer.from(buf), contentType };
-  } catch {
-    return { error: "read_failed" };
-  }
+  const object = await readEsignObject(key);
+  if (!object) return { error: "read_failed" };
+  return {
+    bytes: Buffer.from(object.bytes),
+    contentType: object.contentType ?? "",
+  };
 }
 
 export async function GET(request: Request) {

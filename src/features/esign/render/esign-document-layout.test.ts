@@ -5,13 +5,18 @@ import {
   A4_WIDTH_PT,
   bilingualTitle,
   buildEsignDocumentLayout,
+  isTitleEcho,
   buildPayslipSheet,
+  figmaContentEndPt,
+  figmaTailBand,
   fitImageInSlot,
   isBottomRightFallback,
+  LOAN_GEOM,
   maskBankNumber,
   MISSING_EMPLOYEE_SLOT,
   parseSignatureSlots,
   PAYSLIP_SLOTS,
+  PENALTY_GEOM,
   PENALTY_SLOTS,
   requireEmployeeSlot,
   resolveEmployeeStampSlot,
@@ -69,6 +74,57 @@ describe("esign bilingual layout", () => {
       "dismissal_warning",
       "others",
     ]);
+  });
+
+  it("prints only author penalty options and ticks the selected one", () => {
+    const layout = buildEsignDocumentLayout({
+      kind: "penalty",
+      employee: sampleEmployee(),
+      fields: [
+        {
+          key: "penalty_action",
+          labelEn: "Action",
+          labelAr: "",
+          value: "Written warning",
+          options: ["Written warning", "Others"],
+        },
+      ],
+    });
+    const checks = layout.sections.find((section) => section.checkboxes)?.checkboxes ?? [];
+    assert.deepEqual(
+      checks.map((row) => row.key),
+      ["written_warning", "others"],
+    );
+    assert.equal(checks[0]?.checked, true);
+    assert.equal(checks[1]?.checked, false);
+  });
+
+  it("prints penalty absence dates in the leftover tail without moving stamps", () => {
+    const layout = buildEsignDocumentLayout({
+      kind: "penalty",
+      employee: sampleEmployee(),
+      fields: [
+        { key: "absence_from", labelEn: "From", labelAr: "من", value: "2026-10-01" },
+        { key: "absence_to", labelEn: "To", labelAr: "إلى", value: "2026-10-03" },
+      ],
+    });
+    const details = layout.sections.find((section) => section.key === "penalty_details");
+    assert.equal(details?.rows.find((row) => row.key === "absence_from")?.value, "2026-10-01");
+    assert.equal(details?.rows.find((row) => row.key === "absence_to")?.value, "2026-10-03");
+    const appendix = layout.sections.find((section) => section.key === "appendix");
+    assert.equal(appendix?.rows.find((row) => row.key === "absence_from")?.value, "2026-10-01");
+    assert.equal(appendix?.rows.find((row) => row.key === "absence_to")?.value, "2026-10-03");
+    assert.deepEqual(layout.slots, slotsForKind("penalty"));
+  });
+
+  it("hides the penalty list when penalty_visible is none", () => {
+    const layout = buildEsignDocumentLayout({
+      kind: "penalty",
+      employee: sampleEmployee(),
+      fields: [{ key: "penalty_visible", labelEn: "", labelAr: "", value: "__none__" }],
+    });
+    const checks = layout.sections.find((section) => section.checkboxes)?.checkboxes ?? [];
+    assert.deepEqual(checks, []);
   });
 
   it("keeps Next and Cloud Functions slot maps identical", () => {
@@ -180,6 +236,18 @@ describe("payslip sheet", () => {
   });
 });
 
+describe("single page tail band", () => {
+  it("keeps the penalty and loan tails inside one A4 page", () => {
+    for (const steps of [PENALTY_GEOM, LOAN_GEOM]) {
+      const end = figmaContentEndPt(steps);
+      const tail = figmaTailBand(steps);
+      assert.ok(end < A4_HEIGHT_PT - 24);
+      assert.ok(tail.height > 40);
+      assert.ok(tail.top + tail.height <= A4_HEIGHT_PT);
+    }
+  });
+});
+
 describe("fitImageInSlot", () => {
   it("centres a PNG inside the employee slot without overflow", () => {
     const box = PENALTY_SLOTS[0];
@@ -199,5 +267,16 @@ describe("fitImageInSlot", () => {
     assert.ok(fitted.x < A4_WIDTH_PT - 80);
     assert.ok(fitted.y > 80);
     assert.ok(fitted.y !== 36);
+  });
+
+  it("treats a seed title echo as leftover noise", () => {
+    assert.equal(
+      isTitleEcho({ en: "Penalty notice", ar: "إشعار جزاء" }, { en: "Penalty Notice", ar: "إشعار جزاء" }),
+      true,
+    );
+    assert.equal(
+      isTitleEcho({ en: "Please read this notice.", ar: "" }, { en: "Penalty Notice", ar: "إشعار جزاء" }),
+      false,
+    );
   });
 });

@@ -12,6 +12,26 @@ import type {
   VehicleFuelType,
 } from "./fleet-labels";
 
+type VehicleStatus = "active" | "suspended" | "maintenance";
+
+function vehicleStatusLabel(
+  status: VehicleStatus,
+  t: ReturnType<typeof useTranslations<"pages.vehicles">>,
+): string {
+  switch (status) {
+    case "active":
+      return t("statusActive");
+    case "suspended":
+      return t("statusSuspended");
+    case "maintenance":
+      return t("statusMaintenance");
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
 function Pill({
   icon: Icon,
   className,
@@ -71,19 +91,21 @@ export function CarTypeBadge({ value }: { value: VehicleCarType | null | undefin
 export function VehicleStatusBadge({
   status,
 }: {
-  status: "active" | "suspended" | "maintenance";
+  status: VehicleStatus;
 }) {
+  const t = useTranslations("pages.vehicles");
+  const label = vehicleStatusLabel(status, t);
   if (status === "maintenance") {
     return (
       <Pill icon={Wrench} className="border-warning/50 bg-warning-bg text-warning">
-        Under Repair
+        {label}
       </Pill>
     );
   }
   if (status === "suspended") {
-    return <Pill className="border-destructive/30 bg-destructive/10 text-destructive">Suspended</Pill>;
+    return <Pill className="border-destructive/30 bg-destructive/10 text-destructive">{label}</Pill>;
   }
-  return <Pill className="border-success/30 bg-success-bg text-success">Active</Pill>;
+  return <Pill className="border-success/30 bg-success-bg text-success">{label}</Pill>;
 }
 
 const CONDITION_CLASS: Record<VehicleCondition, string> = {
@@ -98,24 +120,14 @@ const CONDITION_CLASS: Record<VehicleCondition, string> = {
   accident: "border-destructive/30 bg-destructive/10 text-destructive",
 };
 
-const CONDITION_LABEL: Record<VehicleCondition, string> = {
-  running: "Running",
-  inventory_assembled: "Inventory / Assembled",
-  sold: "Sold",
-  deadstock: "Deadstock",
-  stolen: "Stolen",
-  repair_required: "Repairs Required",
-  standby: "Standby",
-  police_custody: "Police Custody",
-  accident: "Accident",
-};
-
 export function ConditionBadge({ value }: { value: VehicleCondition | null | undefined }) {
+  const t = useTranslations("pages.vehicles");
   if (!value) return <span className="text-muted-foreground">—</span>;
-  return <Pill className={CONDITION_CLASS[value]}>{CONDITION_LABEL[value]}</Pill>;
+  return <Pill className={CONDITION_CLASS[value]}>{t(`condition.${value}`)}</Pill>;
 }
 
 export function KindBadge({ value }: { value: string | null | undefined }) {
+  const t = useTranslations("pages.vehicles");
   const isCar = value === "car";
   return (
     <SoftPill
@@ -123,12 +135,13 @@ export function KindBadge({ value }: { value: string | null | undefined }) {
         isCar ? "bg-fleet-kind-car text-fleet-kind-car-fg" : "bg-fleet-kind-bike text-fleet-kind-bike-fg"
       }
     >
-      {isCar ? "Car" : "Bike"}
+      {isCar ? t("kindCar") : t("kindBike")}
     </SoftPill>
   );
 }
 
 export function FuelTypeBadge({ value }: { value: VehicleFuelType | null | undefined }) {
+  const t = useTranslations("pages.vehicles");
   if (!value) return <span className="text-muted-foreground">—</span>;
   return (
     <Pill
@@ -139,16 +152,17 @@ export function FuelTypeBadge({ value }: { value: VehicleFuelType | null | undef
           : "border-primary/20 bg-primary/10 text-primary"
       }
     >
-      {value === "card" ? "Fuel card" : "Chip"}
+      {t(`fuelType.${value}`)}
     </Pill>
   );
 }
 
 export function FuelCompanyBadge({ value }: { value: VehicleFuelCompany | null | undefined }) {
+  const t = useTranslations("pages.vehicles");
   if (!value) return <span className="text-muted-foreground">—</span>;
   return (
     <Pill className="border-border bg-muted/30 font-mono text-muted-foreground uppercase">
-      {value}
+      {t(`fuelCompany.${value}`)}
     </Pill>
   );
 }
@@ -164,8 +178,9 @@ export function ProjectBadge({ value }: { value: DriverProjectKey | null | undef
 }
 
 export function ReplacementBadge({ active }: { active: boolean }) {
+  const t = useTranslations("pages.vehicles");
   if (!active) return <span className="text-muted-foreground">—</span>;
-  return <SoftPill className="bg-fleet-purple text-fleet-purple-fg">Replacement</SoftPill>;
+  return <SoftPill className="bg-fleet-purple text-fleet-purple-fg">{t("replacementBanner")}</SoftPill>;
 }
 
 export function DepartmentBadge({ value }: { value: string | null | undefined }) {

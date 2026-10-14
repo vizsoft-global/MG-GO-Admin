@@ -254,7 +254,9 @@ export function FleetInsightsPanel({
           )}
         </section>
 
-        <FleetEventFeed />
+        <div className="flex min-h-[10rem] flex-1 flex-col overflow-hidden">
+          <FleetEventFeed />
+        </div>
       </div>
     </div>
   );

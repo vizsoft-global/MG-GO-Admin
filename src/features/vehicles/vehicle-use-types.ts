@@ -28,5 +28,5 @@ export function useTypeLabel(
   if (!key) return "—";
   const hit = types.find((item) => item.key === key);
   if (!hit) return key;
-  return locale.startsWith("ar") ? hit.label_ar : hit.label_en;
+  return locale.startsWith("ar") ? hit.label_ar || hit.label_en : hit.label_en;
 }

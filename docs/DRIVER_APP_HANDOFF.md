@@ -45,7 +45,7 @@ MG-GO is off live Supabase onto Firebase Auth + Firestore + gen2 callables. Do n
 | Error codes | Unchanged strings (`inactive`, `driver_off_duty`, `duplicate_order_id`, `shift_locked`, `declaration_required`, `driver_blocked`, `driver_archived`, …). |
 | Force-update | Checked **before** `createCustomToken`. Gated builds (`versionCode` ≥ 83) get callable details `update_required`. Pre-gate / missing `versionCode` still `driver_blocked` (details may include `update_required: true`) so older mappers keep working. |
 | Earnings name | Rider callable is **`driverGetEarningsDetail` only**. Admin export `getDriverEarningsDetail` stays in `functions/src/rpcs/earnings.ts`. Do not alias the rider name to the admin name. |
-| Proof storage | `driverGetUploadUrl` / `driverGetDownloadUrl` — signed **GCS** for `fuel-fills` \| `request-attachments` \| `esign-documents` only. R2 `dpd-private-prod` still holds intake / docs / logos; do not move those into GCS. |
+| Proof storage | `driverGetUploadUrl` / `driverGetDownloadUrl` — signed **GCS** for `fuel-fills` \| `request-attachments` only. Rider eSign open/sign uses admin `GET/POST /api/driver-uploads/*` on R2 `dpd-private-prod` (`entityType: esign_signature`). Do not call the GCS pair for `esign-documents`. Compose CF uses R2. |
 | FGS isolate | Foreground-service isolate uses the **Firebase ID token**, not a GoTrue JWT. |
 | Worker ingest | Same Firebase ID token as Bearer on `POST https://dpd-live.vizsoft.workers.dev/ingest`. Worker version `ecb39c9a-12eb-426c-b95e-031556e226b8` verifies via Google JWKS RS256, `iss` = `https://securetoken.google.com/musallam-delivery-prod`. |
 | Worker data | `worker-port` is live on that version. Snapshot + zones, durable flush, and Class B events are gen2 HTTPS in `me-central1`: `workerFleetRead`, `adminIngestDriverPositions`, `adminRecordFleetEvents`, header `X-Worker-Secret`. Zones come from Firestore `zones`. The Supabase broadcast mirror is dropped; the admin 10s snapshot poll is the fallback. |
@@ -458,7 +458,7 @@ Staff can also raise a request for a rider via `admin_create_request`. `p_type` 
 |-------|-------|
 | `esign_categories` | Figma-seeded categories + per-category screenshot_restricted. `20261118000500` adds nullable `parent_key` (Penalty children). Older builds ignore it. |
 | `esign_requests.resent_from_id` | `20261118000400` — optional link to the request this row was resent from. Older builds ignore it. Remind RPC now accepts optional `p_message`. |
-| `esign_requests` | Code **SIG-####**; status pending/signed/expired/cancelled/declined; signature PNG in bucket `esign-documents` |
+| `esign_requests` | Code **SIG-####**; status pending/signed/expired/cancelled/declined; admin + rider objects under R2 prefix `esign-documents/` (`dpd-private-prod`). Rider open/sign: `GET /api/driver-uploads/read` and `POST …/presign` (`esign_signature`). Compose CF uses R2. |
 | `esign-documents` RLS (driver) | Three policies, all scoped to the caller: `esign_documents_driver_own` (write + read under `{uid}/…`), `esign_documents_driver_read_source` (**read the `document_storage_key` of your own request**, whatever prefix the admin used — added `20260829100000`), `esign_documents_driver_read_signed` (read the composed copy under `signed/…`). Before the source policy existed, admin uploads at `admin/{uuid}.{ext}` matched nothing and the viewer could never load its document. |
 | Driver RPCs | `driver_list_esign_requests`, `driver_get_esign_request`, `driver_submit_esignature`, `driver_decline_esignature`, `driver_mark_esign_viewed` |
 | **Staff countersignature is a second fact** | `20261117000200` adds `awaiting_counter_signature` (bool) and `counter_signature_state` (`none` \| `pending` \| `signed` \| `declined`) on the rider list + get. `esign_requests.status` stays the **employee's** signature (`signed` after the rider signs). Do not remap status. Inbox: a signed row with the flag true is "Awaiting counter-signature", not finished. Viewer: render `signer_meta.declined_reason` on declined rows. Confirmed: do not call `composeSignedEsignDocument` while awaiting — the final copy waits on staff. Older builds that ignore the new keys keep working. |
@@ -654,6 +654,7 @@ Env: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAM
 | `drivers/intakes/{intake_id}/` | Admin panel (Add Driver) | `{doc_type}.{pdf\|png\|jpg\|webp}` |
 | `drivers/{driver_id}/` | Link RPC / mobile onboarding | `{doc_type}.{ext}` |
 | `partners/{partner_id}/` | Admin panel | `logo.{ext}` |
+| `esign-documents/` | Admin send / template / staff signature / download / zip; rider open/sign via `/api/driver-uploads/*` | `admin/{uuid}.{ext}` unsigned PDFs; `{uid}/{requestId}/signature.png`. Folder on `dpd-private-prod`, not a GCS bucket. Compose CF uses R2. |
 
 `driver_documents.file_url` should store the **object key** (e.g. `drivers/{uuid}/license.pdf`), not a public URL. Resolve with presigned GET in admin/mobile as needed.
 
@@ -1208,8 +1209,9 @@ Driver images and documents use the **same private R2 bucket** as the admin pane
 | `driver_avatar` | 2 MB | `image/*` |
 | `order_proof` | 10 MB | `image/*`, `application/pdf` |
 | `login_verification` | 5 MB | `image/*` |
+| `esign_signature` | 4 MB | `image/png` only. `entityId` = request id. |
 
-Object keys are server-generated: `drivers/{driverId}/{entityType}/{date}/{uuid}.{ext}`, except `driver_avatar` which uses `driver-avatars/{driverId}/{date}/{uuid}.{ext}`.
+Object keys are server-generated: `drivers/{driverId}/{entityType}/{date}/{uuid}.{ext}`, except `driver_avatar` (`driver-avatars/{driverId}/{date}/{uuid}.{ext}`) and `esign_signature` (`{uid}/{requestId}/signature.png` on R2 as `esign-documents/{uid}/{requestId}/signature.png`). Skip `confirm` for `esign_signature` (`uploadId` is empty). When admin S3 keys are empty, `esign_signature` presign returns `{ useProxy: true, uploadUrl: "" }` — POST `/api/driver-uploads/proxy` instead. `GET /api/driver-uploads/read` may return a same-origin `readUrl` (`&stream=1`) that the Worker serves; fetch it as a file URL, no extra header. Fuel / request attachments stay on `driverGetUploadUrl` / `driverGetDownloadUrl` (GCS).
 
 Confirm or proxy of `driver_avatar` writes `drivers.avatar_object_key`, `profiles.avatar_url`, and the linked intake `avatar_url`. Still call `driver_update_avatar(p_object_key)` after confirm (idempotent; also validates the key belongs to the caller).
 
@@ -1323,7 +1325,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-10-13 — [admin+app] eSign viewer snapshot also carries `position`, `sponsor`, `pay_through`, `bank_number` (mask the bank number as above). Complaint closing summary is `payload.closing_remark`, separate from `decision_note`. Documents are one bilingual page; do not add a language toggle. Bulk CSV resolve is `admin_esign_resolve_employees` (`adminEsignResolveEmployees`, `me-central1`) — unauthenticated POST returns 401 `not_authorized`, not 404. **Play withheld.** No Vercel prod.
+*Last synced: 2026-10-14 — [admin+app] Rider eSign open/sign still uses `/api/driver-uploads/*`. When S3 ACCESS/SECRET are empty, presign returns `useProxy: true` and read may return a same-origin `&stream=1` URL through `dpd-esign-r2`. Fuel / request attachments stay GCS. **Play required** if the app only PUTs a presigned URL. No Vercel prod.
 
 *Prior: 2026-10-10 — [admin+app] Plan 1 rider backend paste is **§1b**. Flutter is off live Supabase onto Firebase Auth custom token + Firestore named `default` (`me-central2`) + 55 gen2 rider callables (`me-central1`). Worker `ecb39c9a-12eb-426c-b95e-031556e226b8` verifies Firebase ID tokens and `worker-port` is live: snapshot, flush, and Class B events go to `me-central1` HTTPS (`workerFleetRead`, `adminIngestDriverPositions`, `adminRecordFleetEvents`); the Supabase broadcast mirror is dropped. Cutover SMS/WhatsApp copy is in §1b and **unsent** (dump ongoing; Play blocked — no `android/key.properties`). Vercel prod withheld. **Do not claim Play shipped.**
 

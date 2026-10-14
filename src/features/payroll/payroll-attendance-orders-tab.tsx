@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Download, Info, Undo2 } from "lucide-react";
+import { Download, Info, Redo2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { SearchField } from "@/components/app";
@@ -31,8 +31,9 @@ import {
   dayOrdersColumnId,
   riderColumnValue,
 } from "./payroll-rider-columns";
-import { dayClass, PayrollFillHandle, PayrollLegend, ZoneCategoryPill } from "./payroll-grid";
-import { AdjustmentDialog } from "./adjustment-dialog";
+import { dayClass, PayrollFillHandle, ZoneCategoryPill } from "./payroll-grid";
+import { usePayrollAdjust } from "./payroll-adjust-context";
+import { aoShownOrders } from "./payroll-orders-display";
 import { PayrollCellMenu, type PayrollCellMenuState } from "./payroll-cell-menu";
 import {
   columnHiddenIn,
@@ -50,7 +51,6 @@ import {
   type GridEdgeScrollLayout,
 } from "./grid-edge-scroll";
 import type { PayrollRiderRow } from "./payroll-types";
-import { usePayrollAdjustSession } from "./use-payroll-adjust";
 import { usePayrollColumnConfig } from "./use-payroll";
 
 type CellRect = { r0: number; c0: number; r1: number; c1: number };
@@ -96,7 +96,7 @@ export function PayrollAttendanceOrdersTab({
   const dragStopRef = useRef<(() => void) | null>(null);
   const endDragRef = useRef<() => void>(() => undefined);
   const gridMetricsRef = useRef({ rowCount: 0, colCount: 0 });
-  const session = usePayrollAdjustSession();
+  const session = usePayrollAdjust();
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
   const columns = useMemo(
@@ -436,6 +436,7 @@ export function PayrollAttendanceOrdersTab({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {editable ? (
+            <>
             <Button
               type="button"
               variant="outline"
@@ -446,6 +447,17 @@ export function PayrollAttendanceOrdersTab({
               <Undo2 className="size-3.5" />
               {t("adjust.undo")}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9"
+              disabled={session.redoCount === 0 || session.pending}
+              onClick={() => session.redo()}
+            >
+              <Redo2 className="size-3.5" />
+              {t("adjust.redo")}
+            </Button>
+            </>
           ) : null}
           <PayrollColumnsMenu
             view="ao"
@@ -500,6 +512,7 @@ export function PayrollAttendanceOrdersTab({
                   const sticky = stickyIdentityStyle(
                     column.id,
                     columns.slice(0, index).reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
+                    "head",
                   );
                   return (
                   <th
@@ -608,7 +621,7 @@ export function PayrollAttendanceOrdersTab({
                       const status = row.days[i] ?? "blank";
                       const info = row.dayInfo[i];
                       const adjusted = Boolean(info?.adjusted);
-                      const orders = info?.orders ?? 0;
+                      const orders = aoShownOrders(info);
                       const selected = isSelected(rowIndex, i);
                       return (
                         <Fragment key={`${row.driverId}-${date}`}>
@@ -731,13 +744,6 @@ export function PayrollAttendanceOrdersTab({
           </div>
         </div>
       </div>
-      <PayrollLegend riders={riders} />
-      <AdjustmentDialog
-        state={session.adjust}
-        pending={session.pending}
-        onCancel={session.cancel}
-        onConfirm={session.confirm}
-      />
       <PayrollCellMenu
         state={menu}
         onClose={() => setMenu(null)}

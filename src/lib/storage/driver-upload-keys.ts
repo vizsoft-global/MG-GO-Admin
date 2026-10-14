@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { esignSignatureStoredKey } from "@/features/esign/esign-rider-access";
 
 export const DRIVER_UPLOAD_ENTITY_TYPES = [
   "driver_doc",
@@ -6,6 +7,7 @@ export const DRIVER_UPLOAD_ENTITY_TYPES = [
   "driver_avatar",
   "order_proof",
   "login_verification",
+  "esign_signature",
 ] as const;
 
 export type DriverUploadEntityType = (typeof DRIVER_UPLOAD_ENTITY_TYPES)[number];
@@ -33,6 +35,10 @@ const ENTITY_RULES: Record<
   login_verification: {
     maxBytes: 5 * 1024 * 1024,
     allowedMimePrefixes: ["image/"],
+  },
+  esign_signature: {
+    maxBytes: 4 * 1024 * 1024,
+    allowedMimePrefixes: ["image/png"],
   },
 };
 
@@ -80,11 +86,28 @@ export function buildDriverObjectKey(params: {
   driverId: string;
   entityType: DriverUploadEntityType;
   originalFilename: string;
-}): string {
-  const date = new Date().toISOString().slice(0, 10);
-  const ext = extensionFromFilename(params.originalFilename);
-  if (params.entityType === "driver_avatar") {
-    return `driver-avatars/${params.driverId}/${date}/${randomUUID()}.${ext}`;
+  entityId?: string | null;
+}): string | null {
+  switch (params.entityType) {
+    case "esign_signature": {
+      return esignSignatureStoredKey(params.driverId, params.entityId ?? "");
+    }
+    case "driver_avatar": {
+      const date = new Date().toISOString().slice(0, 10);
+      const ext = extensionFromFilename(params.originalFilename);
+      return `driver-avatars/${params.driverId}/${date}/${randomUUID()}.${ext}`;
+    }
+    case "driver_doc":
+    case "driver_selfie":
+    case "order_proof":
+    case "login_verification": {
+      const date = new Date().toISOString().slice(0, 10);
+      const ext = extensionFromFilename(params.originalFilename);
+      return `drivers/${params.driverId}/${params.entityType}/${date}/${randomUUID()}.${ext}`;
+    }
+    default: {
+      const _never: never = params.entityType;
+      return _never;
+    }
   }
-  return `drivers/${params.driverId}/${params.entityType}/${date}/${randomUUID()}.${ext}`;
 }

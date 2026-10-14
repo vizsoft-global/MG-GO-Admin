@@ -15,6 +15,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Link, useRouter } from "@/i18n/navigation";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
@@ -27,10 +34,45 @@ import {
   resolveEsignEmployees,
   saveEsignDraft,
 } from "./esign-sender-actions";
-import { useEsignDraft, useEsignTemplate, useEsignTemplates } from "./use-esign";
+import {
+  alignPenaltyCategoryKey,
+  effectiveOutgoingCategoryKey,
+} from "./outgoing-hub-categories";
+import { PENALTY_SUBCATEGORY_KEYS } from "./esign-penalty-subcategories";
+import {
+  useEsignCategories,
+  useEsignDraft,
+  useEsignTemplate,
+  useEsignTemplates,
+} from "./use-esign";
 import type { EsignLocale, EsignResolveRow } from "./types";
 
 const BATCH_LANGUAGE: EsignLocale = "en";
+
+const FALLBACK_PENALTIES = [
+  { key: "late_attendance", label: "Late attendance" },
+  { key: "unauthorised_absence", label: "Unauthorised absence" },
+  { key: "written_warning", label: "Written warning" },
+  { key: "damage_to_property", label: "Damage to company property" },
+  { key: "penalty_others", label: "Others" },
+] as const;
+
+function isPenaltySubcategoryKey(key: string): boolean {
+  return (PENALTY_SUBCATEGORY_KEYS as readonly string[]).includes(key);
+}
+
+function bulkTemplateSelectItem(row: {
+  id: string;
+  name_en: string;
+  category_key: string;
+}) {
+  return {
+    value: row.id,
+    label: row.name_en,
+    hint: row.category_key,
+    keywords: [row.name_en, row.category_key, row.id],
+  };
+}
 
 function statusVariant(status: string): "success" | "warning" | "danger" | "neutral" {
   if (status === "ok") return "success";
@@ -59,13 +101,16 @@ export function EsignBulkShell({
 }) {
   const t = useTranslations("pages.requests.esign.bulk");
   const tHub = useTranslations("pages.requests.esign.hub");
+  const tRcm = useTranslations("pages.rcmV2");
   const router = useRouter();
   const { data: templatesData } = useEsignTemplates();
+  const { data: categoriesData } = useEsignCategories();
   const templates = useMemo(
     () => (templatesData?.rows ?? []).filter((row) => row.is_active),
     [templatesData?.rows],
   );
   const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null);
+  const [penaltySubKey, setPenaltySubKey] = useState<string | null>(null);
   const { data: templateData } = useEsignTemplate(templateId ?? "");
   const template = templateData?.template;
   const [dueAt, setDueAt] = useState("");
@@ -82,16 +127,76 @@ export function EsignBulkShell({
   /** One-shot — a refetch must never clobber the rows the operator has corrected. */
   const draftAppliedRef = useRef(false);
 
-  const templateItems = useMemo(
+  const penaltyChildren = useMemo(() => {
+    const live = (categoriesData?.rows ?? []).filter(
+      (row) => row.is_active && row.parent_key === "penalty",
+    );
+    if (live.length > 0) {
+      return live.map((row) => ({
+        key: row.key,
+        label: row.label_en,
+      }));
+    }
+    return FALLBACK_PENALTIES.map((row) => ({ key: row.key, label: row.label }));
+  }, [categoriesData?.rows]);
+
+  const visiblePenaltyChildren = useMemo(
     () =>
-      templates.map((row) => ({
-        value: row.id,
-        label: row.name_en,
-        hint: row.category_key,
-        keywords: [row.name_en, row.category_key, row.id],
-      })),
+      penaltyChildren.filter((child) =>
+        templates.some(
+          (row) =>
+            effectiveOutgoingCategoryKey(row) === alignPenaltyCategoryKey(child.key),
+        ),
+      ),
+    [penaltyChildren, templates],
+  );
+
+  const nonPenaltyTemplateItems = useMemo(
+    () =>
+      templates
+        .filter((row) => !isPenaltySubcategoryKey(effectiveOutgoingCategoryKey(row)))
+        .map(bulkTemplateSelectItem),
     [templates],
   );
+
+  const penaltyTemplateItems = useMemo(() => {
+    if (!penaltySubKey) return [];
+    const aligned = alignPenaltyCategoryKey(penaltySubKey);
+    return templates
+      .filter((row) => effectiveOutgoingCategoryKey(row) === aligned)
+      .map(bulkTemplateSelectItem);
+  }, [penaltySubKey, templates]);
+
+  useEffect(() => {
+    if (!initialTemplateId || templates.length === 0) return;
+    const row = templates.find((tpl) => tpl.id === initialTemplateId);
+    if (!row) return;
+    const hubKey = effectiveOutgoingCategoryKey(row);
+    if (isPenaltySubcategoryKey(hubKey)) {
+      setPenaltySubKey(alignPenaltyCategoryKey(hubKey));
+    }
+  }, [initialTemplateId, templates]);
+
+  function resetTemplateSelection() {
+    setTemplateId(null);
+    setDrafts([]);
+    setResolved([]);
+  }
+
+  function selectTemplate(id: string | null) {
+    setTemplateId(id);
+    setDrafts([]);
+    setResolved([]);
+    if (!id) return;
+    const row = templates.find((tpl) => tpl.id === id);
+    if (!row) return;
+    const hubKey = effectiveOutgoingCategoryKey(row);
+    if (isPenaltySubcategoryKey(hubKey)) {
+      setPenaltySubKey(alignPenaltyCategoryKey(hubKey));
+    } else {
+      setPenaltySubKey(null);
+    }
+  }
 
   /**
    * Rehydrate a resumed draft.
@@ -278,23 +383,76 @@ export function EsignBulkShell({
 
       <AppListCard className="space-y-3 p-4">
         <div className="grid gap-2 lg:grid-cols-4">
-          <div className="space-y-1 lg:col-span-3">
-            <Label>
-              {t("fieldTemplate")} <span className="text-destructive">*</span>
-            </Label>
-            <SearchSelect
-              items={templateItems}
-              value={templateId}
-              onChange={(id) => {
-                setTemplateId(id);
-                setDrafts([]);
-                setResolved([]);
-              }}
-              placeholder={t("fieldTemplatePlaceholder")}
-              searchPlaceholder={t("fieldTemplateSearch")}
-              recentsKey="esign-bulk-template"
-              className="w-full"
-            />
+          <div className="space-y-2 lg:col-span-3">
+            <div className="space-y-1">
+              <Label>
+                {t("fieldTemplate")} <span className="text-destructive">*</span>
+              </Label>
+              <SearchSelect
+                items={nonPenaltyTemplateItems}
+                value={
+                  templateId &&
+                  nonPenaltyTemplateItems.some((item) => item.value === templateId)
+                    ? templateId
+                    : null
+                }
+                onChange={(id) => {
+                  setPenaltySubKey(null);
+                  selectTemplate(id);
+                }}
+                placeholder={t("fieldTemplatePlaceholder")}
+                searchPlaceholder={t("fieldTemplateSearch")}
+                recentsKey="esign-bulk-template"
+                className="w-full"
+              />
+            </div>
+            {visiblePenaltyChildren.length > 0 ? (
+              <div className="space-y-1 rounded-lg border border-border bg-muted/20 p-3">
+                <p className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+                  {tRcm("penaltyCategory")}
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Select
+                    value={penaltySubKey ?? ""}
+                    onValueChange={(next) => {
+                      if (!next) {
+                        setPenaltySubKey(null);
+                        resetTemplateSelection();
+                        return;
+                      }
+                      setPenaltySubKey(next);
+                      resetTemplateSelection();
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-full">
+                      <SelectValue placeholder={tRcm("penaltyCategory")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {visiblePenaltyChildren.map((child) => (
+                        <SelectItem key={child.key} value={child.key}>
+                          {child.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <SearchSelect
+                    items={penaltyTemplateItems}
+                    value={
+                      templateId &&
+                      penaltyTemplateItems.some((item) => item.value === templateId)
+                        ? templateId
+                        : null
+                    }
+                    onChange={selectTemplate}
+                    placeholder={t("fieldTemplatePlaceholder")}
+                    searchPlaceholder={t("fieldTemplateSearch")}
+                    recentsKey="esign-bulk-penalty-template"
+                    className="w-full"
+                    disabled={!penaltySubKey || penaltyTemplateItems.length === 0}
+                  />
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="space-y-1">
             <Label>{t("fieldDue")}</Label>

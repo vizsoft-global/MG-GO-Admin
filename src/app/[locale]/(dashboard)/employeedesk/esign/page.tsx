@@ -20,15 +20,15 @@ import { requireAnyPermission } from "@/lib/auth/require-permission";
  *
  * Every door onto the EmployeeDesk tree is listed here, which is the point: the
  * V2 routes (`templates`, `send`, `bulk`, `waiting`, `signing`, `batches`) are
- * twins of their `/requests/esign` originals. Drafts and Sent stay on the V1
- * routes: a second URL there would fork a screen that has no twin.
+ * twins of their `/requests/esign` originals. Drafts stay on the V1 URL so a
+ * second list cannot fork the screen.
  */
 const CARDS = [
   { key: "templates", href: "/employeedesk/esign/templates", icon: FileSignature },
   { key: "send", href: "/employeedesk/esign/send", icon: SendHorizontal },
   { key: "bulk", href: "/employeedesk/esign/bulk", icon: Upload },
   { key: "drafts", href: "/requests/esign/drafts", icon: FileClock },
-  { key: "sent", href: "/requests/esign/sent", icon: Send },
+  { key: "sent", href: "/employeedesk/esign/sent", icon: Send },
   { key: "waiting", href: "/employeedesk/esign/waiting", icon: BellRing },
   { key: "signing", href: "/employeedesk/esign/signing", icon: PenLine },
   { key: "batches", href: "/employeedesk/esign/batches", icon: Layers },

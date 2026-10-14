@@ -42,10 +42,24 @@ const PAYSLIP_SHEET = [
   ["net_salary", "Net salary", "صافي الراتب", "number"],
 ];
 
+const PENALTY_ACTION_OPTIONS = [
+  "Written warning",
+  "10% deduction of a day's salary",
+  "25% deduction of a day's salary",
+  "50% deduction of a day's salary",
+  "One day deduction",
+  "Two days deduction",
+  "Three days deduction",
+  "Four days deduction",
+  "Five days deduction",
+  "Dismissal final warning",
+  "Others",
+];
+
 const PENALTY_SHEET = [
   ["penalty", "Penalty", "الجزاء", "number"],
   ["date_of_violation", "Date of violation", "تاريخ المخالفة", "date"],
-  ["penalty_action", "Penalty action", "إجراء الجزاء", "text"],
+  ["penalty_action", "Penalty action", "إجراء الجزاء", "select", PENALTY_ACTION_OPTIONS],
   ["others_amount", "Others amount", "مبلغ آخر", "number"],
   ["penalty_if_repeated", "Penalty if repeated", "الجزاء عند التكرار", "text"],
   ["remarks", "Remarks", "ملاحظات", "textarea"],
@@ -66,7 +80,7 @@ function systemFields(extra = []) {
 }
 
 function sheetFields(rows, start) {
-  return rows.map(([field_key, label_en, label_ar, field_type], index) =>
+  return rows.map(([field_key, label_en, label_ar, field_type, options], index) =>
     field({
       field_key,
       label_en,
@@ -75,6 +89,7 @@ function sheetFields(rows, start) {
       source_kind: "entry",
       section_key: "document",
       sort_order: start + index,
+      options: options ?? [],
     }),
   );
 }
@@ -93,23 +108,27 @@ function signature(field_key, label_en, label_ar, sort_order) {
 
 function field(body) {
   return {
-    ...body,
     options: [],
     is_required: false,
     options_source: null,
     preview_value: null,
+    ...body,
   };
 }
 
 const EMPLOYEE_SIGNATURE = signature("employee_signature", "Employee Signature", "توقيع الموظف", 60);
 
 const TEMPLATES = [
-  {
+  createSpec({
     figma_key: "loan_request",
     sort_order: 1,
     bulk_mode: "sign_and_return",
     name_en: "Loan Request",
     name_ar: "طلب سلفه",
+    category_key: "loan",
+    document_kind: "loan",
+    body_en: "Loan request",
+    body_ar: "طلب سلفه",
     rename: false,
     aliases: [{ name_en: "Loan Request" }],
     fields: [
@@ -118,13 +137,17 @@ const TEMPLATES = [
       signature("hr_signature", "HR", "الموارد البشرية", 70),
       signature("ceo_signature", "CEO", "الرئيس التنفيذي", 80),
     ],
-  },
-  {
+  }),
+  createSpec({
     figma_key: "payslip",
     sort_order: 2,
     bulk_mode: "sign_and_return",
     name_en: "Payslip",
     name_ar: "قسيمة الراتب",
+    category_key: "payslip",
+    document_kind: "payslip",
+    body_en: "Payslip",
+    body_ar: "قسيمة الراتب",
     rename: true,
     aliases: [{ name_en: "Salary Deduction Acknowledgement", document_kind: "payslip" }],
     fields: [
@@ -132,7 +155,7 @@ const TEMPLATES = [
       ...sheetFields(PAYSLIP_SHEET, 20),
       EMPLOYEE_SIGNATURE,
     ],
-  },
+  }),
   createSpec({
     figma_key: "asset",
     sort_order: 3,
@@ -190,16 +213,20 @@ const TEMPLATES = [
     body_en: "Accident report",
     body_ar: "تقرير حادث",
   }),
-  {
+  createSpec({
     figma_key: "general_document",
     sort_order: 8,
     bulk_mode: "import",
     name_en: "General document",
     name_ar: "مستند عام",
+    category_key: "general_doc",
+    document_kind: "general",
+    body_en: "General document",
+    body_ar: "مستند عام",
     rename: true,
     aliases: [{ name_en: "General Acknowledgement" }],
     fields: [...systemFields(), EMPLOYEE_SIGNATURE],
-  },
+  }),
 ];
 
 function createSpec(spec) {
@@ -298,6 +325,14 @@ function planOne(spec, match, fieldsByTemplate, categories) {
     bulk_mode: spec.bulk_mode,
     sort_order: spec.sort_order,
   };
+  if (spec.category_key) {
+    patch.category_key = spec.category_key;
+    patch.is_active = true;
+    patch.is_draft = false;
+  }
+  if (spec.document_kind) {
+    patch.document_kind = spec.document_kind;
+  }
   if (spec.rename) {
     patch.name_en = spec.name_en;
     patch.name_ar = spec.name_ar;
@@ -442,6 +477,14 @@ async function main() {
         sort_order: spec.sort_order,
         updated_at: FieldValue.serverTimestamp(),
       };
+      if (spec.category_key) {
+        patch.category_key = spec.category_key;
+        patch.is_active = true;
+        patch.is_draft = false;
+      }
+      if (spec.document_kind) {
+        patch.document_kind = spec.document_kind;
+      }
       if (spec.rename) {
         patch.name_en = spec.name_en;
         patch.name_ar = spec.name_ar;

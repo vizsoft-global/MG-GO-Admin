@@ -17,7 +17,7 @@ import {
   type Query,
 } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffAny } from "../core/staff";
 import {
   BATCH_LIMIT,
   SCAN_CAP,
@@ -631,9 +631,9 @@ export const adminDeleteEsignDraft = onCall(async (request) => {
   return { ok: true };
 });
 
-/** `admin_esign_resolve_employees` — staff with `requests.manage`. */
+/** `admin_esign_resolve_employees` — `requests.manage` or `employeedesk.manage`. */
 export const adminEsignResolveEmployees = onCall(async (request) => {
-  await requireStaff(request, "requests.manage");
+  await requireStaffAny(request, ["requests.manage", "employeedesk.manage"]);
   return resolveEmployeesPayload(request.data);
 });
 
