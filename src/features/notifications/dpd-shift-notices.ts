@@ -109,6 +109,7 @@ export async function dispatchDpdShiftNotices(options: {
     dispatchItemId: string | null;
     priority: "high" | "normal";
     params: Record<string, string>;
+    alreadyPushed: boolean;
   }> = [];
 
   for (const candidate of candidates) {
@@ -139,6 +140,7 @@ export async function dispatchDpdShiftNotices(options: {
       ok?: boolean;
       campaign_id?: string;
       dispatch_item_id?: string;
+      pushed?: boolean;
     } | null>("notify_driver_transactional", {
       p_driver_id: candidate.driver_id,
       p_title: message.title,
@@ -175,6 +177,7 @@ export async function dispatchDpdShiftNotices(options: {
       if (docs.length > 0) await batch.commit();
     }
     result.sent += 1;
+    if (payload.pushed === true) result.pushed += 1;
     pushes.push({
       driverId: candidate.driver_id,
       title: message.title,
@@ -183,14 +186,16 @@ export async function dispatchDpdShiftNotices(options: {
       dispatchItemId: payload.dispatch_item_id ?? null,
       priority: noticePriority,
       params,
+      alreadyPushed: payload.pushed === true,
     });
   }
 
-  if (pushes.length === 0) return result;
+  const pendingPushes = pushes.filter((push) => !push.alreadyPushed);
+  if (pendingPushes.length === 0) return result;
 
   try {
     const db = await staffDb();
-    const driverIds = [...new Set(pushes.map((push) => push.driverId))];
+    const driverIds = [...new Set(pendingPushes.map((push) => push.driverId))];
     const tokens: Array<{
       id: string;
       driver_id: string;
@@ -225,7 +230,7 @@ export async function dispatchDpdShiftNotices(options: {
     }
     const byDriver = pickLatestPushTokenByDriver(tokens);
     const messages: PushMessageInput[] = [];
-    for (const push of pushes) {
+    for (const push of pendingPushes) {
       const token = byDriver.get(push.driverId);
       if (!token) continue;
       const action = buildActionPayload({
@@ -249,7 +254,7 @@ export async function dispatchDpdShiftNotices(options: {
     }
     if (messages.length > 0) {
       const push = await sendPushBatch(messages);
-      result.pushed = push.successCount;
+      result.pushed += push.successCount;
     }
   } catch {
     // Inbox rows already exist; a dead FCM path must not fail the run.

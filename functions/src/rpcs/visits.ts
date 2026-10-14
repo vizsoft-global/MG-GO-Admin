@@ -428,6 +428,7 @@ export const adminSetVisitNoteToRider = onCall(async (request) => {
       booking_code: bookingCode,
       note_to_rider: note,
     },
+    skipPush: true,
   });
 
   return {
@@ -437,6 +438,7 @@ export const adminSetVisitNoteToRider = onCall(async (request) => {
     booking_code: bookingCode,
     campaign_id: notified.campaign_id,
     dispatch_item_id: notified.dispatch_item_id,
+    pushed: notified.pushed,
   };
 });
 
