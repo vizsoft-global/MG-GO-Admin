@@ -71,6 +71,19 @@ export function normalizePushPlatform(raw: unknown): PushPlatform | null {
   return null;
 }
 
+/** Firestore `== null` matches only an explicit null, not a missing field. */
+export function inboxOpenFields(): { dismissed_at: null; opened_at: null } {
+  return { dismissed_at: null, opened_at: null };
+}
+
+export function isInboxVisible(data: { dismissed_at?: unknown }): boolean {
+  return data.dismissed_at == null;
+}
+
+export function isInboxUnread(data: { dismissed_at?: unknown; opened_at?: unknown }): boolean {
+  return data.dismissed_at == null && data.opened_at == null;
+}
+
 export function isDeadFcmCode(code: string): boolean {
   return DEAD_FCM_CODES.has(code);
 }

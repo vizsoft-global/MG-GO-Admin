@@ -23,6 +23,8 @@ import {
   loadRestaurantsByPartner,
   resolveDeliveryRestaurantId,
 } from "./deliveries-shared";
+import { deliveryDecisionNotice } from "./delivery-notify";
+import { notifyDriverTransactional } from "./visits-shared";
 
 const MAX_IDS = 100;
 /** The only two statuses this action can write. */
@@ -140,6 +142,7 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
       zoneId: string | null;
       day: string | null;
       status: string;
+      orderId: string | null;
     }> = [];
     let updated = 0;
 
@@ -180,6 +183,7 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
             zoneId: asString(raw[FIELDS.deliveries.zoneId]),
             day,
             status,
+            orderId: asString(raw.external_order_id) ?? asString(raw.order_id),
           });
         }
       }
@@ -223,6 +227,39 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
       status: touch.status,
     });
   }
+
+  const notifyTargets = changed.touches.filter(
+    (touch) => touch.status === "verified" || touch.status === "rejected",
+  );
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(8, notifyTargets.length) }, async () => {
+      while (cursor < notifyTargets.length) {
+        const current = notifyTargets[cursor];
+        cursor += 1;
+        if (!current) return;
+        const notice = deliveryDecisionNotice({
+          status: current.status as "verified" | "rejected",
+          deliveryId: current.id,
+          orderId: current.orderId,
+          reason,
+        });
+        try {
+          await notifyDriverTransactional({
+            driverId: current.driverId,
+            title: notice.title,
+            body: notice.body,
+            deepLink: notice.deepLink,
+            category: notice.category,
+            priority: notice.priority,
+            actionParams: notice.actionParams,
+          });
+        } catch {
+          // The status write already committed.
+        }
+      }
+    }),
+  );
 
   return {
     updated: changed.updated,

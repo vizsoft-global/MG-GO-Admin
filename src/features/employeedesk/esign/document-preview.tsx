@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { resolveFieldSource } from "@/features/esign/template-source";
 import { employeeSampleValues } from "@/features/esign/employee-block";
@@ -84,6 +84,7 @@ export function EsignDocumentPreview({
   values,
   documentKind,
   signers,
+  fill = false,
   className,
 }: {
   templateName: string;
@@ -97,6 +98,8 @@ export function EsignDocumentPreview({
   values: Record<string, string>;
   documentKind: EsignDocumentKind;
   signers: DocumentPreviewSigners;
+  /** Scale the A4 sheet to the parent box (Individual send left pane). */
+  fill?: boolean;
   className?: string;
 }) {
   const branding = useBrandingOptional();
@@ -199,10 +202,35 @@ export function EsignDocumentPreview({
     values,
   ]);
 
+  const fillRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (!fill) return;
+    const el = fillRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect;
+      if (!next) return;
+      setBox({ w: next.width, h: next.height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fill]);
+
+  const scale =
+    fill && box.w > 0 && box.h > 0
+      ? Math.min(box.w / A4_CSS_WIDTH, box.h / A4_CSS_HEIGHT)
+      : FIGMA_PREVIEW_SCALE;
+
   return (
     <div
-      className={cn("relative mx-auto w-full max-w-[620px] overflow-hidden", className)}
-      style={{ height: A4_CSS_HEIGHT * FIGMA_PREVIEW_SCALE }}
+      ref={fillRef}
+      className={cn(
+        "relative w-full overflow-hidden",
+        fill ? "h-full min-h-0 max-w-none" : "mx-auto max-w-[620px]",
+        className,
+      )}
+      style={fill ? undefined : { height: A4_CSS_HEIGHT * FIGMA_PREVIEW_SCALE }}
     >
       <iframe
         title={templateName || "Document preview"}
@@ -211,7 +239,7 @@ export function EsignDocumentPreview({
         style={{
           width: A4_CSS_WIDTH,
           height: A4_CSS_HEIGHT,
-          transform: `scale(${FIGMA_PREVIEW_SCALE})`,
+          transform: `scale(${scale})`,
           transformOrigin: "top left",
         }}
         onLoad={(event) => {

@@ -167,20 +167,15 @@ describe("relocateOperationsHubItems", () => {
     const settingsIds = (tree.find((node) => node.id === "group-settings")?.children ?? []).map(
       (child) => child.id,
     );
-    assert.ok(settingsIds.includes("partners"));
+    assert.equal(settingsIds.includes("partners"), false);
     assert.ok(settingsIds.includes("roles"));
     assert.equal(settingsIds.includes("driver-app"), true);
-    const fleetIds = (tree.find((node) => node.id === "group-fleet")?.children ?? []).map(
-      (child) => child.id,
-    );
-    assert.deepEqual(fleetIds, ["vehicles", "source-companies"]);
+    assert.equal(tree.some((node) => node.id === "group-fleet"), false);
     assert.equal(findNode(tree, "vehicles")?.label, "Vehicles");
-    const hubIds = (tree.find((node) => node.id === "group-operationshub")?.children ?? []).map(
-      (child) => child.id,
-    );
-    assert.ok(hubIds.includes("earnings"));
-    assert.equal(hubIds.includes("performance"), false);
-    assert.equal(hubIds.includes("order-reconciliation"), false);
+    assert.equal(tree.some((node) => node.id === "group-operationshub"), false);
+    assert.ok(collectItemIds(tree).includes("operations-hub"));
+    assert.equal(findNode(tree, "earnings"), null);
+    assert.equal(findNode(tree, "partners"), null);
     assert.equal(findNode(tree, "performance"), null);
     assert.equal(findNode(tree, "order-reconciliation"), null);
     assert.equal(settingsIds.includes("performance"), false);
@@ -202,12 +197,8 @@ describe("relocateOperationsHubItems", () => {
     assert.equal(tree[0]?.id, "visit-bookings");
     assert.equal(tree[1]?.id, "attendance");
     assert.equal(tree[2]?.id, "operations-hub");
-    const hubIds = (tree.find((node) => node.id === "group-operationshub")?.children ?? []).map(
-      (child) => child.id,
-    );
-    assert.ok(hubIds.includes("earnings"));
-    assert.equal(hubIds.includes("performance"), false);
-    assert.equal(hubIds.includes("order-reconciliation"), false);
+    assert.equal(tree.some((node) => node.id === "group-operationshub"), false);
+    assert.equal(findNode(tree, "earnings"), null);
     assert.equal(findNode(tree, "performance"), null);
     assert.equal(findNode(tree, "order-reconciliation"), null);
   });
@@ -254,12 +245,12 @@ describe("relocateOperationsHubItems", () => {
       },
     ]);
     const hubs = tree.filter((node) => node.id === "group-operationshub");
-    assert.equal(hubs.length, 1);
-    const hubIds = (hubs[0].children ?? []).map((child) => child.id);
-    assert.deepEqual(hubIds.slice(0, 2), ["operations-hub", "zones"]);
-    assert.ok(hubIds.includes("earnings"));
-    assert.equal(hubIds.includes("performance"), false);
-    assert.equal(hubIds.includes("order-reconciliation"), false);
+    assert.equal(hubs.length, 0);
+    assert.equal(findNode(tree, "operations-hub")?.type, "item");
+    assert.equal(findNode(tree, "zones"), null);
+    assert.equal(findNode(tree, "earnings"), null);
+    assert.equal(findNode(tree, "performance"), null);
+    assert.equal(findNode(tree, "order-reconciliation"), null);
   });
 });
 
@@ -302,18 +293,23 @@ describe("sidebar hides retired Requests and EmployeeDesk visits", () => {
     assert.equal(ids.includes("asset-requests"), false);
     assert.ok(ids.includes("visit-bookings"));
     assert.ok(ids.includes("employeedesk"));
+    assert.equal(ids.includes("employeedesk-incoming"), false);
+    assert.equal(ids.includes("employeedesk-outgoing"), false);
+    assert.equal(ids.includes("employeedesk-reports"), false);
+    assert.equal(ids.includes("partners"), false);
+    assert.equal(ids.includes("earnings"), false);
     assert.equal(tree.some((node) => node.id === "group-visit bookings"), false);
     assert.equal(tree.some((node) => node.id === "group-fleet"), false);
     assert.equal(tree.some((node) => node.id === "group-apps"), false);
-    const employeeAt = tree.findIndex((node) => node.id === "group-employeedesk");
+    assert.equal(tree.some((node) => node.id === "group-employeedesk"), false);
+    assert.equal(tree.some((node) => node.id === "group-operationshub"), false);
+    assert.equal(tree.some((node) => node.id === "group-unorganised"), false);
+    const employeeAt = tree.findIndex((node) => node.id === "employeedesk");
     assert.equal(tree[employeeAt + 1]?.id, "group-operations");
     const systemAt = tree.findIndex((node) => node.id === "group-system");
-    const unorgAt = tree.findIndex((node) => node.id === "group-unorganised");
-    assert.equal(tree[systemAt + 1]?.id, "group-operationshub");
-    assert.equal(tree[systemAt + 2]?.id, "operations-hub");
-    assert.equal(tree[systemAt + 3]?.id, "attendance");
-    assert.equal(tree[systemAt + 4]?.id, "visit-bookings");
-    if (unorgAt >= 0) assert.equal(unorgAt, systemAt + 5);
+    assert.equal(tree[systemAt + 1]?.id, "operations-hub");
+    assert.equal(tree[systemAt + 2]?.id, "attendance");
+    assert.equal(tree[systemAt + 3]?.id, "visit-bookings");
     const opsIds = (tree.find((node) => node.id === "group-operations")?.children ?? []).map(
       (child) => child.id,
     );
@@ -325,12 +321,6 @@ describe("sidebar hides retired Requests and EmployeeDesk visits", () => {
     assert.equal(opsIds.includes("attendance"), false);
     assert.equal(opsIds.includes("performance"), false);
     assert.equal(opsIds.includes("order-reconciliation"), false);
-    const hubIds = (tree.find((node) => node.id === "group-operationshub")?.children ?? []).map(
-      (child) => child.id,
-    );
-    assert.equal(hubIds.includes("performance"), false);
-    assert.equal(hubIds.includes("order-reconciliation"), false);
-    assert.ok(hubIds.includes("earnings"));
     assert.equal(findNode(tree, "performance"), null);
     assert.equal(findNode(tree, "order-reconciliation"), null);
     assert.equal(findNode(tree, "visit-bookings")?.label, "Visit Slots");
@@ -409,11 +399,9 @@ describe("remapClientIaSavedMenu", () => {
       { id: "visit-bookings", type: "item", label: "Visit Bookings", icon: "CalendarCheck" },
       { id: "payroll", type: "item", label: "Payroll & Requests", icon: "CalendarClock" },
     ]);
-    const hubIds = (tree.find((node) => node.id === "group-operationshub")?.children ?? []).map(
-      (child) => child.id,
-    );
-    assert.equal(hubIds.includes("performance"), false);
-    assert.ok(hubIds.includes("earnings"));
+    assert.equal(tree.some((node) => node.id === "group-operationshub"), false);
+    assert.ok(collectItemIds(tree).includes("operations-hub"));
+    assert.equal(findNode(tree, "earnings"), null);
     assert.equal(findNode(tree, "performance"), null);
     const settingsIds = (tree.find((node) => node.id === "group-settings")?.children ?? []).map(
       (child) => child.id,
@@ -467,10 +455,9 @@ describe("remapClientIaSavedMenu", () => {
       },
     ]);
     assert.equal(findNode(tree, "requests"), null);
-    const desk = tree.find((node) => node.id === "group-employeedesk");
-    const deskIds = (desk?.children ?? []).map((child) => child.id);
-    assert.ok(deskIds.includes("employeedesk-settings"));
-    assert.ok(deskIds.indexOf("employeedesk-reports") < deskIds.indexOf("employeedesk-settings"));
-    assert.equal(findNode(tree, "employeedesk-settings")?.label, "EmployeeDesk settings");
+    assert.equal(tree.some((node) => node.id === "group-employeedesk"), false);
+    assert.equal(findNode(tree, "employeedesk")?.type, "item");
+    assert.equal(findNode(tree, "employeedesk-settings"), null);
+    assert.equal(findNode(tree, "employeedesk-reports"), null);
   });
 });

@@ -7,7 +7,7 @@ import {
   type QueryDocumentSnapshot,
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffAny } from "../core/staff";
 import { kuwaitDayString } from "../core/kuwait";
 import { applyDeliveryRollup } from "../core/rollups";
 import { stampStoredRow } from "../core/search-text";
@@ -309,7 +309,7 @@ export const driverDismissNotifications = onCall(async (request) => {
  * external one.
  */
 export const notifyDriverTransactional = onCall(async (request) => {
-  await requireStaff(request, "notifications.send");
+  await requireStaffAny(request, ["notifications.send", "deliveries.manage"]);
 
   const data = (request.data ?? {}) as Record<string, unknown>;
   const driverId = pickId(data, "driverId", "p_driver_id");
@@ -329,7 +329,6 @@ export const notifyDriverTransactional = onCall(async (request) => {
         : typeof data.p_action_params === "object" && data.p_action_params !== null
           ? (data.p_action_params as Record<string, unknown>)
           : {},
-    skipPush: true,
   });
 
   return {

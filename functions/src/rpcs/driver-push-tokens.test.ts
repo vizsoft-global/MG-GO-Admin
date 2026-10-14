@@ -2,7 +2,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildTransactionalFcmData,
+  inboxOpenFields,
   isDeadFcmCode,
+  isInboxUnread,
+  isInboxVisible,
   normalizePushPlatform,
   pickLatestActivePushToken,
   pushTokenDocId,
@@ -68,6 +71,19 @@ describe("pickLatestActivePushToken", () => {
       ]),
       null,
     );
+  });
+});
+
+describe("inboxOpenFields", () => {
+  it("stores explicit nulls so the rider list query can see the row", () => {
+    const fields = inboxOpenFields();
+    assert.equal(fields.dismissed_at, null);
+    assert.equal(fields.opened_at, null);
+    assert.equal(isInboxVisible({}), true);
+    assert.equal(isInboxVisible({ dismissed_at: null }), true);
+    assert.equal(isInboxVisible({ dismissed_at: "2026-10-14T00:00:00Z" }), false);
+    assert.equal(isInboxUnread({}), true);
+    assert.equal(isInboxUnread({ dismissed_at: null, opened_at: "2026-10-14T00:00:00Z" }), false);
   });
 });
 

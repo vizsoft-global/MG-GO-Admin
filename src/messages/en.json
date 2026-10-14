@@ -866,6 +866,7 @@
       },
       "admin": {
         "templates": "Manage templates",
+        "toSign": "To sign",
         "all": "All requests",
         "reports": "Reports",
         "audit": "Audit log",
@@ -5480,7 +5481,10 @@
         },
         "tracker": {
           "title": "Sent for signature",
-          "subtitle": "Every document batch you have sent and how far it has got.",
+          "subtitle": "Every batch and individual document you have sent, and how far it has got.",
+          "scopeAll": "All",
+          "scopeBatch": "Batch",
+          "scopeIndividual": "Individual",
           "kpiBatches30d": "Batches sent (30d)",
           "kpiWaiting": "Waiting on signatures",
           "kpiSigned": "Fully signed",

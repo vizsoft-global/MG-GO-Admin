@@ -16,6 +16,7 @@ import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import {
   applyTransactionalPushResult,
+  inboxOpenFields,
   sendTransactionalPushToDriver,
 } from "./driver-push-tokens";
 
@@ -577,7 +578,7 @@ export type TransactionalNotifyParams = {
   priority: string;
   actionParams?: Record<string, unknown>;
   createdBy?: string | null;
-  /** Next.js DPD cron / visit-note still send FCM themselves until that panel build ships. */
+  /** Test-only: skip FCM after the inbox row lands. Production callers send. */
   skipPush?: boolean;
 };
 
@@ -659,6 +660,7 @@ export async function notifyDriverTransactional(
     delivered_at: now,
     sent_at: now,
     created_at: now,
+    ...inboxOpenFields(),
   });
   await batch.commit();
 

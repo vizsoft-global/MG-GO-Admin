@@ -589,20 +589,12 @@ export function RcmV2HubShell() {
             <section className="flex flex-col gap-2 rounded-xl border border-[#e4e4e7] bg-white p-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-[15px] font-semibold text-[#18181b]">{t("sentForSignature")}</h2>
-                <div className="flex items-center gap-1.5">
-                  <Link
-                    href="/employeedesk/esign/batches"
-                    className="text-[12px] font-medium text-[#b54708] underline decoration-solid underline-offset-2"
-                  >
-                    {t("viewAll")}
-                  </Link>
-                  <Link
-                    href="/employeedesk/esign/sent"
-                    className="inline-flex h-7 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-[12px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
-                  >
-                    {t("viewAllSent")}
-                  </Link>
-                </div>
+                <Link
+                  href="/employeedesk/esign/batches"
+                  className="text-[12px] font-medium text-[#b54708] underline decoration-solid underline-offset-2"
+                >
+                  {t("viewAll")}
+                </Link>
               </div>
               {recentSends.length === 0 ? (
                 <p className="py-6 text-center text-[12px] text-[#71717a]">{t("emptySends")}</p>

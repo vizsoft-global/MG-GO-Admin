@@ -1,6 +1,6 @@
 import { setRequestLocale } from "next-intl/server";
+import { redirect } from "@/i18n/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
-import { EsignSentShell } from "@/features/esign/esign-sent-shell";
 
 export default async function EsignSentPage({
   params,
@@ -10,5 +10,5 @@ export default async function EsignSentPage({
   const { locale } = await params;
   setRequestLocale(locale);
   await requirePermission(locale, "requests.manage");
-  return <EsignSentShell />;
+  redirect({ href: "/employeedesk/esign/batches?scope=individual", locale });
 }

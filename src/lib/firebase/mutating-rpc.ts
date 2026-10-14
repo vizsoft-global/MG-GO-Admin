@@ -61,6 +61,7 @@ const WRITE_VERBS = new Set([
   "force",
   "recompute",
   "enqueue",
+  "notify",
 ]);
 
 const READ_VERBS = new Set([

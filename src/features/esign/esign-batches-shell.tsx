@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { ChevronDown, Loader2, Plus, RefreshCw } from "lucide-react";
+import { Layers, LayoutList, Loader2, Plus, RefreshCw, UserRound } from "lucide-react";
 import { toast } from "sonner";
-import { AppEmptyState, AppListCard, AppPage, AppPageHeader, AppListToolbar } from "@/components/app";
+import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -13,12 +15,13 @@ import {
 } from "@/components/app/app-data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import { EsignDotKpis } from "./esign-kpi-strip";
+import { EsignIndividualSentPanel } from "./esign-individual-sent-panel";
+import { parseSentScope, SENT_SCOPES, type SentScope } from "./esign-sent-scope";
 import {
   ESIGN_TRACKER_TABS,
   batchStageKey,
@@ -67,7 +70,7 @@ function esignDeskPaths(pathname: string) {
   return {
     desk,
     outgoingHref: desk ? "/employeedesk" : "/requests/esign",
-    batchesHref: desk ? "/employeedesk/esign/batches" : "/requests/esign/batches",
+    batchesHref: "/employeedesk/esign/batches",
     sendHref: desk ? "/employeedesk/esign/send" : "/requests/esign/send",
     detailHref: (id: string) =>
       desk ? `/employeedesk/esign/batches/${id}` : `/requests/esign/batches/${id}`,
@@ -100,6 +103,8 @@ export function EsignBatchesShell() {
   const recipientsQuery = useEsignTrackerRecipients();
   const kpisQuery = useEsignBatchKpis();
 
+  const searchParams = useSearchParams();
+  const scope = parseSentScope(searchParams.get("scope"));
   const [tab, setTab] = useState<EsignTrackerTab>("all");
   const [search, setSearch] = useState("");
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -107,6 +112,14 @@ export function EsignBatchesShell() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [retryingAll, setRetryingAll] = useState(false);
+
+  function setScope(next: SentScope) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "all") params.delete("scope");
+    else params.set("scope", next);
+    const query = params.toString();
+    router.replace(query ? `${paths.batchesHref}?${query}` : paths.batchesHref);
+  }
 
   // Module-level fallbacks, not `?? []`: a fresh array on every render is a new
   // identity for every memo that reads it, which is the `= []` shape that once
@@ -200,10 +213,125 @@ export function EsignBatchesShell() {
     label: t(`tabs.${tabKey(id)}`),
     count: tabCounts[id],
   }));
-  const dateLabel =
-    dateFrom || dateTo
-      ? [dateFrom || t("dateFrom"), dateTo || t("dateTo")].join(" – ")
-      : t("dateRange");
+  const showBatch = scope === "all" || scope === "batch";
+  const showIndividual = scope === "all" || scope === "individual";
+
+  const batchTable = loading ? (
+    <div className="flex h-48 items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  ) : error ? (
+    <AppEmptyState title={t("emptyTitle")} description={error} />
+  ) : visible.length === 0 ? (
+    <AppEmptyState
+      title={tracker.length === 0 ? t("emptyTitle") : t("emptyFiltered")}
+      description={tracker.length === 0 ? t("emptyDescription") : t("clearFilters")}
+    />
+  ) : (
+    <AppDataTable
+      columns={[
+        { id: "batch", label: t("colBatch") },
+        { id: "template", label: t("colTemplate") },
+        { id: "recipients", label: t("colRecipients") },
+        { id: "progress", label: t("colProgress") },
+        { id: "status", label: t("colStatus") },
+        { id: "sent", label: t("colSent") },
+        { id: "actions", label: t("colActions"), className: "text-end" },
+      ]}
+    >
+      {visible.map((row) => (
+        <BatchRow
+          key={row.batch.id}
+          row={row}
+          t={t}
+          trackLabel={tRcm("track")}
+          onOpen={() => router.push(paths.detailHref(row.batch.id))}
+        />
+      ))}
+    </AppDataTable>
+  );
+
+  const batchFilters = (
+    <aside className="flex flex-col gap-2 border-b border-border p-3 lg:border-b-0 lg:border-e">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {t("scopeBatch")}
+      </p>
+      <Input
+        className="h-9"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder={t("searchPlaceholder")}
+      />
+      <CountPills items={tabItems} activeId={tab} onSelect={(id) => setTab(id)} vertical />
+      <SearchSelect
+        items={options.templates}
+        value={templateId}
+        onChange={setTemplateId}
+        placeholder={t("templateAll")}
+        searchPlaceholder={t("searchPlaceholder")}
+        recentsKey="esign-batch-template"
+        className="w-full"
+      />
+      <SearchSelect
+        items={options.senders}
+        value={senderId}
+        onChange={setSenderId}
+        placeholder={t("senderAll")}
+        searchPlaceholder={t("senderSearch")}
+        recentsKey="esign-batch-sender"
+        className="w-full"
+      />
+      <label className="block space-y-1 text-[10px] font-medium text-muted-foreground">
+        {t("dateFrom")}
+        <Input
+          type="date"
+          className="h-9"
+          value={dateFrom}
+          onChange={(event) => setDateFrom(event.target.value)}
+        />
+      </label>
+      <label className="block space-y-1 text-[10px] font-medium text-muted-foreground">
+        {t("dateTo")}
+        <Input
+          type="date"
+          className="h-9"
+          value={dateTo}
+          onChange={(event) => setDateTo(event.target.value)}
+        />
+      </label>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-9 w-full"
+        onClick={() => {
+          setSearch("");
+          setTemplateId(null);
+          setSenderId(null);
+          setDateFrom("");
+          setDateTo("");
+          setTab("all");
+        }}
+      >
+        {t("clearFilters")}
+      </Button>
+      {failedBatches.length > 0 ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 cursor-pointer"
+          disabled={retryingAll}
+          onClick={() => void retryAll()}
+        >
+          {retryingAll ? (
+            <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="me-1.5 h-3.5 w-3.5" />
+          )}
+          {retryingAll ? t("retrying") : t("retry")}
+        </Button>
+      ) : null}
+    </aside>
+  );
 
   return (
     <AppPage>
@@ -223,164 +351,95 @@ export function EsignBatchesShell() {
         }
       />
 
-      <EsignDotKpis
-        items={[
-          {
-            label: t("kpiBatches30d"),
-            value: kpis.batchesSent,
-            dotClass: "bg-rose-500",
-          },
-          {
-            label: t("kpiWaiting"),
-            value: kpis.waitingSignatures,
-            unit: t("unitEmployees"),
-            dotClass: "bg-sky-500",
-          },
-          {
-            label: t("kpiSigned"),
-            value: kpis.fullySigned,
-            unit: t("unitBatches"),
-            dotClass: "bg-emerald-500",
-          },
-          {
-            label: t("kpiDeclined"),
-            value: kpis.declined,
-            unit: t("unitEmployees"),
-            dotClass: "bg-rose-500",
-          },
-        ]}
-      />
+      {scope === "individual" ? null : (
+        <EsignDotKpis
+          items={[
+            {
+              label: t("kpiBatches30d"),
+              value: kpis.batchesSent,
+              dotClass: "bg-rose-500",
+            },
+            {
+              label: t("kpiWaiting"),
+              value: kpis.waitingSignatures,
+              unit: t("unitEmployees"),
+              dotClass: "bg-sky-500",
+            },
+            {
+              label: t("kpiSigned"),
+              value: kpis.fullySigned,
+              unit: t("unitBatches"),
+              dotClass: "bg-emerald-500",
+            },
+            {
+              label: t("kpiDeclined"),
+              value: kpis.declined,
+              unit: t("unitEmployees"),
+              dotClass: "bg-rose-500",
+            },
+          ]}
+        />
+      )}
 
-      <AppListCard className="p-0">
-        <div className="flex flex-col gap-3 border-b border-border p-3">
-          <CountPills
-            items={tabItems}
-            activeId={tab}
-            onSelect={(id) => setTab(id)}
-          />
-          <AppListToolbar
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            filterSlot={
-              <div className="flex flex-wrap items-center gap-2">
-                <SearchSelect
-                  items={options.templates}
-                  value={templateId}
-                  onChange={setTemplateId}
-                  placeholder={t("templateAll")}
-                  searchPlaceholder={t("searchPlaceholder")}
-                  recentsKey="esign-batch-template"
-                  className="w-40"
-                />
-                <SearchSelect
-                  items={options.senders}
-                  value={senderId}
-                  onChange={setSenderId}
-                  placeholder={t("senderAll")}
-                  searchPlaceholder={t("senderSearch")}
-                  recentsKey="esign-batch-sender"
-                  className="w-36"
-                />
-                <Popover>
-                  <PopoverTrigger
-                    className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium"
-                  >
-                    {dateLabel}
-                    <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64 space-y-2 p-3">
-                    <label className="block space-y-1 text-[10px] font-medium text-muted-foreground">
-                      {t("dateFrom")}
-                      <Input
-                        type="date"
-                        className="h-9"
-                        value={dateFrom}
-                        onChange={(event) => setDateFrom(event.target.value)}
-                      />
-                    </label>
-                    <label className="block space-y-1 text-[10px] font-medium text-muted-foreground">
-                      {t("dateTo")}
-                      <Input
-                        type="date"
-                        className="h-9"
-                        value={dateTo}
-                        onChange={(event) => setDateTo(event.target.value)}
-                      />
-                    </label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-9 w-full"
-                      onClick={() => {
-                        setDateFrom("");
-                        setDateTo("");
-                      }}
-                    >
-                      {t("clearFilters")}
-                    </Button>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            }
-            trailing={
-              failedBatches.length > 0 ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 cursor-pointer"
-                  disabled={retryingAll}
-                  onClick={() => void retryAll()}
-                >
-                  {retryingAll ? (
-                    <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="me-1.5 h-3.5 w-3.5" />
-                  )}
-                  {retryingAll ? t("retrying") : t("retry")}
-                </Button>
-              ) : null
-            }
-          />
-        </div>
-
-        {loading ? (
-          <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : error ? (
-          <AppEmptyState title={t("emptyTitle")} description={error} />
-        ) : visible.length === 0 ? (
-          <AppEmptyState
-            title={tracker.length === 0 ? t("emptyTitle") : t("emptyFiltered")}
-            description={tracker.length === 0 ? t("emptyDescription") : t("clearFilters")}
-          />
-        ) : (
-          <AppDataTable
-            columns={[
-              { id: "batch", label: t("colBatch") },
-              { id: "template", label: t("colTemplate") },
-              { id: "recipients", label: t("colRecipients") },
-              { id: "progress", label: t("colProgress") },
-              { id: "status", label: t("colStatus") },
-              { id: "sent", label: t("colSent") },
-              { id: "actions", label: t("colActions"), className: "text-end" },
-            ]}
+      <div className="flex flex-wrap gap-1.5">
+        {SENT_SCOPES.map((id) => (
+          <ToggleChip
+            key={id}
+            selected={scope === id}
+            icon={scopeIcon(id)}
+            onClick={() => setScope(id)}
           >
-            {visible.map((row) => (
-              <BatchRow
-                key={row.batch.id}
-                row={row}
-                t={t}
-                trackLabel={tRcm("track")}
-                onOpen={() => router.push(paths.detailHref(row.batch.id))}
-              />
-            ))}
-          </AppDataTable>
-        )}
-      </AppListCard>
+            {t(scopeLabelKey(id))}
+          </ToggleChip>
+        ))}
+      </div>
+
+      {showBatch ? (
+        <AppListCard className="p-0">
+          <div className="grid min-w-0 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+            {batchFilters}
+            <div className="min-w-0">{batchTable}</div>
+          </div>
+        </AppListCard>
+      ) : null}
+
+      {showIndividual ? (
+        <AppListCard className="p-0">
+          <EsignIndividualSentPanel />
+        </AppListCard>
+      ) : null}
     </AppPage>
   );
+}
+
+function scopeLabelKey(id: SentScope): "scopeAll" | "scopeBatch" | "scopeIndividual" {
+  switch (id) {
+    case "all":
+      return "scopeAll";
+    case "batch":
+      return "scopeBatch";
+    case "individual":
+      return "scopeIndividual";
+    default: {
+      const _exhaustive: never = id;
+      return _exhaustive;
+    }
+  }
+}
+
+function scopeIcon(id: SentScope) {
+  switch (id) {
+    case "all":
+      return LayoutList;
+    case "batch":
+      return Layers;
+    case "individual":
+      return UserRound;
+    default: {
+      const _exhaustive: never = id;
+      return _exhaustive;
+    }
+  }
 }
 
 /** `TabBar` ids are the stage keys; only the two multi-word labels differ. */
@@ -435,13 +494,20 @@ function CountPills({
   items,
   activeId,
   onSelect,
+  vertical = false,
 }: {
   items: { id: EsignTrackerTab; label: string; count: number }[];
   activeId: EsignTrackerTab;
   onSelect: (id: EsignTrackerTab) => void;
+  vertical?: boolean;
 }) {
   return (
-    <div className="inline-flex w-fit flex-wrap gap-1 rounded-lg bg-muted/70 p-1">
+    <div
+      className={cn(
+        "flex gap-1 rounded-lg bg-muted/70 p-1",
+        vertical ? "w-full flex-col" : "inline-flex w-fit flex-wrap",
+      )}
+    >
       {items.map((item) => {
         const active = item.id === activeId;
         return (
@@ -450,7 +516,8 @@ function CountPills({
             type="button"
             onClick={() => onSelect(item.id)}
             className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium",
+              "inline-flex items-center gap-1.5 rounded-md px-3 text-xs font-medium",
+              vertical ? "h-9 w-full justify-between" : "h-8",
               active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
             )}
           >

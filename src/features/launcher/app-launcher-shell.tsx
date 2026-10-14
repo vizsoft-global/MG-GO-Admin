@@ -21,7 +21,6 @@ import { LAUNCHER_GLYPH } from "@/lib/menu/launcher-glyphs";
 import { APP_NAV_KEY_BY_ID } from "@/lib/menu/menu-registry";
 import { LAUNCHER_BRAND, launcherTileHex } from "@/lib/menu/module-colors";
 import type { Permission } from "@/lib/auth/permissions";
-import { APP_PANEL_VERSION } from "@/lib/app/build-id";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,12 +118,25 @@ export function AppLauncherShell() {
         fontFamily: 'var(--font-launcher), "Noto Sans Arabic", "Segoe UI", sans-serif',
       }}
     >
-      <img
-        src="/launcher-mg-watermark.png"
-        alt=""
-        aria-hidden
-        className="pointer-events-none absolute -end-10 -bottom-[150px] w-[520px] opacity-60"
-      />
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 80% 55% at 50% 28%, rgba(255,255,255,0.62) 0%, rgba(249,241,235,0) 68%), radial-gradient(ellipse 46% 38% at 100% 100%, rgba(41,41,63,0.07) 0%, transparent 62%)",
+          }}
+        />
+        <svg
+          className="absolute -end-6 -bottom-[40px] w-[min(42vw,420px)] opacity-[0.11]"
+          viewBox="0 0 200 200"
+          fill="none"
+        >
+          <path
+            d="M28 168V42h46l26 78 26-78h46v126h-32V78l-28 80h-24L60 78v90H28z"
+            fill="#29293f"
+          />
+        </svg>
+      </div>
       <header
         className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-4 px-6 py-2.5 text-white"
         style={{ backgroundColor: LAUNCHER_BRAND.topBar }}
@@ -265,19 +277,21 @@ export function AppLauncherShell() {
                 <Link
                   key={item.id}
                   href={item.href}
-                  className="flex flex-col items-center gap-2.5 text-center"
+                  className="group/hub flex flex-col items-center gap-2.5 text-center"
                 >
                   <span
-                    className="relative grid size-[60px] place-items-center rounded-[18px]"
+                    className="relative grid size-[60px] place-items-center overflow-visible rounded-[18px]"
                     style={{
                       backgroundColor: launcherTileHex(item.id),
                       boxShadow: TILE_SHADOW,
                     }}
                   >
-                    <LauncherGlyph id={tileId} />
+                    <span className="inline-grid origin-center transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none motion-reduce:group-hover/hub:scale-100 [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:scale-[1.4]">
+                      <LauncherGlyph id={tileId} />
+                    </span>
                     {badge ? (
                       <span
-                        className="absolute -end-[7px] -top-[7px] inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-[11px] font-bold tabular-nums text-white"
+                        className="absolute -end-[7px] -top-[7px] z-10 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-[11px] font-bold tabular-nums text-white"
                         style={{
                           backgroundColor: LAUNCHER_BRAND.badge,
                           border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,
@@ -319,11 +333,6 @@ export function AppLauncherShell() {
         className="relative z-10 shrink-0 px-4 pt-[18px] pb-[22px] text-center text-[12px]"
         style={{ color: LAUNCHER_BRAND.footer }}
       >
-        {t("footer", {
-          name: branding.appName,
-          subtitle: branding.appSubtitle,
-          version: APP_PANEL_VERSION,
-        })}{" "}
         <span className="font-semibold" style={{ color: LAUNCHER_BRAND.text }}>
           {t("company")}
         </span>
