@@ -18,6 +18,7 @@ export const LAUNCHER_TILE_IDS = [
   "notifications",
   "attendance",
   "profile",
+  "assets",
   "operations-hub",
   "vehicles",
   "payroll",
@@ -39,7 +40,6 @@ export const APP_ACCESS_EXTRA_MODULE_IDS = [
   "roles",
   "document-expiry",
   "driver-app",
-  "assets",
 ] as const;
 
 export type AppAccessModuleId =
@@ -49,13 +49,14 @@ export type AppAccessModuleId =
 export const LAUNCHER_LABEL_OVERRIDE: Partial<Record<AppAccessModuleId, string>> = {
   "dashboard-ops": "Dashboard",
   "live-tracking-v2": "Live tracking",
-  "visit-bookings": "Visit Slots",
+  "visit-bookings": "Visit Bookings",
   "dpd-verification": "Verification",
   earnings: "Earnings",
   profile: "Settings",
   assets: "Assets",
+  payroll: "Payroll & Requests",
   roles: "Roles & Permissions",
-  vehicles: "Fleet Hub",
+  vehicles: "Vehicles",
 };
 
 const TILE_SET = new Set<string>(LAUNCHER_TILE_IDS);

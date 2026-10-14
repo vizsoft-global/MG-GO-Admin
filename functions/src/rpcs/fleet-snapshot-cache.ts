@@ -29,11 +29,48 @@ export type FleetCacheRow = {
   is_blocked: boolean;
   active_delivery_id: string | null;
   last_seen_at: string | null;
+  last_report_at?: string | null;
+  is_online?: boolean;
   phone?: string | null;
   contact?: string | null;
   email?: string | null;
   driver_phone?: string | null;
 };
+
+type FixInstant = string | number | Date | null | undefined;
+
+/** The ingest coalesce path stamps `last_report_at` and leaves `last_seen_at` frozen. */
+export function fleetLatestFixMs(lastSeenAt: FixInstant, lastReportAt: FixInstant): number | null {
+  let max = Number.NaN;
+  for (const value of [lastSeenAt, lastReportAt]) {
+    const ms =
+      value instanceof Date
+        ? value.getTime()
+        : typeof value === "number"
+          ? value
+          : typeof value === "string"
+            ? Date.parse(value)
+            : Number.NaN;
+    if (Number.isFinite(ms) && (!Number.isFinite(max) || ms > max)) max = ms;
+  }
+  return Number.isFinite(max) ? max : null;
+}
+
+export function fleetRowIsEligible(input: {
+  isOnDuty: boolean;
+  isOnline?: boolean;
+  isBlocked: boolean;
+  activeDeliveryId?: string | null;
+  lastSeenAt?: FixInstant;
+  lastReportAt?: FixInstant;
+  cutoffMs: number;
+}): boolean {
+  if (input.isOnDuty || input.isOnline || input.isBlocked || input.activeDeliveryId) {
+    return true;
+  }
+  const seen = fleetLatestFixMs(input.lastSeenAt, input.lastReportAt);
+  return seen != null && seen >= input.cutoffMs;
+}
 
 export type FleetSnapshotScope = {
   zoneIds: readonly string[] | null;
@@ -54,9 +91,19 @@ export function projectFleetSnapshot<T extends FleetCacheRow>(
   for (const row of base.drivers) {
     if (zones && !zones.has(row.zone_id ?? "")) continue;
     if (partners && !partners.has(row.partner_id ?? "")) continue;
-    const seen = row.last_seen_at ? Date.parse(row.last_seen_at) : Number.NaN;
-    const recentlySeen = Number.isFinite(seen) && seen >= cutoff;
-    if (!row.is_on_duty && !row.is_blocked && !recentlySeen && !row.active_delivery_id) continue;
+    if (
+      !fleetRowIsEligible({
+        isOnDuty: row.is_on_duty,
+        isOnline: row.is_online,
+        isBlocked: row.is_blocked,
+        activeDeliveryId: row.active_delivery_id,
+        lastSeenAt: row.last_seen_at,
+        lastReportAt: row.last_report_at,
+        cutoffMs: cutoff,
+      })
+    ) {
+      continue;
+    }
     const copy = { ...row };
     if (!scope.canSeeContact) {
       for (const field of FLEET_CONTACT_FIELDS) delete copy[field];

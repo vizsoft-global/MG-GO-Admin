@@ -241,6 +241,10 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-14` — **Home launcher matches artifact `Main.dc.html`.** Montserrat on `/dashboard` only, artifact stroke glyphs, Assets tile, launcher labels Visit Bookings / Vehicles / Payroll & Requests. Footer is Al‑Musallam Group Holding Company. Slogan POWERED BY PASSION. Sidebar registry labels stay Fleet Hub / Visit Slots.
+
+- `[admin only] 2026-10-14` — **Live Tracking V2 empty rail: eligibility used only `last_seen_at`.** Coalesce writes `last_report_at` and freezes `last_seen_at`, so a parked on-shift rider aged out of the 30-minute window; `projectFleetSnapshot` then dropped them again. Eligibility is now last-fix (`last_seen_at` or `last_report_at`) plus open attendance / online session. The admin cache no longer builds an unscoped epoch roster. An empty snapshot no longer prunes a meta-filled store, and an empty live edge keeps the 10s poll. `pages.driverDevices.sentry.*` keys close the console `MISSING_MESSAGE`. `adminLiveFleetSnapshot`, `adminApiScan`, and `workerFleetRead` updated in `me-central1` (Successful update, no `--force`).
+
 - `[admin+app] 2026-10-14` — **QA 39 leftover doors closed.** Drafts stay `/requests/esign/drafts` (`/employeedesk/esign/drafts` is 404). Hub Sent is `/employeedesk/esign/sent`. Bulk step 1 lists Penalty children via `pickSendableHubTemplate`. Saved leftover `requests` drops via remapper. `MENU_CACHE_VERSION` v28. Rider Extra Earnings card order, eSign FLAG_SECURE fail-open, attachments read R2 first. No CF deploy, no git, no Vercel `--prod`.
 
 - `[admin only] 2026-10-14` — **EmployeeDesk QA 15–19 / 23–25 / 27–28 / 35–39.** Hub cream is a light scope; Incoming tiles use `scope=all` and the action list scrolls. Send picks the category's first sendable template, shows title + placeholders, and adds absence dates without moving stamps. Bulk step 1 lists the five penalty children. Sent lives under `/employeedesk/esign/sent`; drafts stay `/requests/esign/drafts`. Remapper drops leftover `requests` and rewrites EmployeeDesk Settings. `MENU_CACHE_VERSION` v27 → v28. No CF deploy, no git, no Vercel `--prod`.

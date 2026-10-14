@@ -817,7 +817,9 @@
         "afternoon": "طاب يومك",
         "evening": "مساء الخير"
       },
-      "footer": "{name} · {subtitle} v{version} · صُنع بـ ♥ بواسطة websitek"
+      "footer": "{name} · {subtitle} v{version} ·",
+      "company": "Al‑Musallam Group Holding Company",
+      "slogan": "POWERED BY PASSION"
     },
     "rcmV2": {
       "breadcrumb": "EmployeeDesk",
@@ -9676,6 +9678,12 @@
       "forceCleared": "أُلغي الإجبار لـ {count}",
       "saving": "جارٍ الحفظ…",
       "exportDone": "تم تصدير {count}",
+      "sentry": {
+        "not_configured": "Sentry غير مُعدّ لهذه اللوحة.",
+        "unauthorized": "Sentry رفض رمز الواجهة.",
+        "timeout": "انتهت مهلة Sentry.",
+        "request_failed": "تعذر الوصول إلى Sentry."
+      },
       "errors": {
         "notificationsSendRequired": "تحتاج صلاحية notifications.send",
         "missingFields": "العنوان والرسالة مطلوبان",

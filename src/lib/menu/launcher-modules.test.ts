@@ -1,23 +1,36 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Permission } from "@/lib/auth/permissions";
+import { LAUNCHER_GLYPH } from "./launcher-glyphs";
 import {
   filterLauncherTiles,
   greetingBucket,
+  LAUNCHER_LABEL_OVERRIDE,
   LAUNCHER_TILE_IDS,
   launcherRegistryItems,
   visibleLauncherTiles,
 } from "./launcher-modules";
 
 describe("launcher modules", () => {
-  it("uses the approved client module names on the launcher tiles", () => {
+  it("uses the artifact names on the launcher and keeps sidebar registry labels", () => {
     const items = launcherRegistryItems();
     assert.equal(items.find((item) => item.id === "drivers")?.defaultLabel, "Employees");
     assert.equal(items.find((item) => item.id === "employeedesk")?.defaultLabel, "EmployeeDesk");
     assert.equal(items.find((item) => item.id === "vehicles")?.defaultLabel, "Fleet Hub");
     assert.equal(items.find((item) => item.id === "visit-bookings")?.defaultLabel, "Visit Slots");
+    assert.equal(LAUNCHER_LABEL_OVERRIDE.vehicles, "Vehicles");
+    assert.equal(LAUNCHER_LABEL_OVERRIDE["visit-bookings"], "Visit Bookings");
+    assert.equal(LAUNCHER_LABEL_OVERRIDE.assets, "Assets");
+    assert.equal(LAUNCHER_LABEL_OVERRIDE.payroll, "Payroll & Requests");
     assert.equal(items.find((item) => item.id === "visit-bookings")?.href, "/visit-bookings/slots");
-    assert.equal(items.some((item) => item.id === "assets"), false);
+    assert.equal(items.find((item) => item.id === "assets")?.href, "/assets");
+    assert.equal(
+      LAUNCHER_TILE_IDS[LAUNCHER_TILE_IDS.indexOf("profile") + 1],
+      "assets",
+    );
+    for (const id of LAUNCHER_TILE_IDS) {
+      assert.ok(LAUNCHER_GLYPH[id]?.length, id);
+    }
   });
 
   it("does not duplicate tile ids", () => {
@@ -37,7 +50,8 @@ describe("launcher modules", () => {
     const tiles = visibleLauncherTiles(new Set(), true);
     assert.ok(tiles.some((item) => item.id === "profile"));
     assert.ok(tiles.some((item) => item.id === "operations-hub"));
-    for (const id of ["restaurants", "roles", "document-expiry", "driver-app", "assets"]) {
+    assert.ok(tiles.some((item) => item.id === "assets"));
+    for (const id of ["restaurants", "roles", "document-expiry", "driver-app"]) {
       assert.ok(!tiles.some((item) => item.id === id), id);
     }
   });

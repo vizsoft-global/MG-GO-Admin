@@ -1,6 +1,7 @@
 import {
   DM_Sans,
   Inter,
+  Montserrat,
   Open_Sans,
   Plus_Jakarta_Sans,
   Roboto,
@@ -40,6 +41,16 @@ const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta-sans",
   display: "swap",
 });
+
+/** Home launcher only (`Main.dc.html`). The rest of the panel stays on `appFontClassName`. */
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-launcher",
+  display: "swap",
+});
+
+export const launcherFontClassName = montserrat.variable;
 
 export const appFontClassName = [
   inter.variable,

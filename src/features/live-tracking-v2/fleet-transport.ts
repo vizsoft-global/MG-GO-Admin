@@ -263,6 +263,7 @@ export class FleetTransport {
       // distance today, shift changes).
       this.stopPolling();
       this.startRosterRefresh();
+      if (this.store.getSnapshot().totalDrivers === 0) this.startPolling();
     };
 
     socket.onmessage = (event) => {
@@ -419,7 +420,10 @@ export class FleetTransport {
     if (!live) return;
     // Nobody on duty means nobody should be publishing. Silence is the correct state of
     // an empty fleet, and calling it degraded would train operators to ignore the pill.
-    if (this.store.getSnapshot().kpis.onDuty === 0) return;
+    if (this.store.getSnapshot().kpis.onDuty === 0) {
+      if (this.store.getSnapshot().totalDrivers === 0) this.startPolling();
+      return;
+    }
     if (Date.now() - this.lastLivePositionAt < POSITION_SILENCE_MS) return;
 
     this.starved = true;

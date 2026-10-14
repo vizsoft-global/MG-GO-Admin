@@ -691,12 +691,17 @@ export class FleetStore {
       }
     }
 
-    for (const driverId of [...this.drivers.keys()]) {
-      if (seen.has(driverId)) continue;
-      this.drivers.delete(driverId);
-      this.interpolator.remove(driverId);
-      this.trails.remove(driverId);
-      this.dirtyDrivers.add(driverId);
+    // An empty successful snapshot is usually an over-filtered read (coalesced
+    // last_seen_at, or a timed-out action that returned []). Pruning would wipe
+    // every rider the edge `meta` frame just put in the rail.
+    if (input.drivers.length > 0) {
+      for (const driverId of [...this.drivers.keys()]) {
+        if (seen.has(driverId)) continue;
+        this.drivers.delete(driverId);
+        this.interpolator.remove(driverId);
+        this.trails.remove(driverId);
+        this.dirtyDrivers.add(driverId);
+      }
     }
 
     this.connection = { ...this.connection, lastFrameAt: Date.now() };
