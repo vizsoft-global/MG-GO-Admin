@@ -83,6 +83,11 @@ export function VehicleBulkBar({
         {t("bulkAssign")}
       </Button>
       <Select
+        items={[
+          { value: "active", label: t("statusActive") },
+          { value: "suspended", label: t("statusSuspended") },
+          { value: "maintenance", label: t("statusMaintenance") },
+        ]}
         value={status}
         onValueChange={(value) => {
           if (value === "active" || value === "suspended" || value === "maintenance") setStatus(value);
@@ -92,9 +97,15 @@ export function VehicleBulkBar({
           <SelectValue placeholder={t("bulkStatus")} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="active">{t("statusActive")}</SelectItem>
-          <SelectItem value="suspended">{t("statusSuspended")}</SelectItem>
-          <SelectItem value="maintenance">{t("statusMaintenance")}</SelectItem>
+          <SelectItem value="active" label={t("statusActive")}>
+            {t("statusActive")}
+          </SelectItem>
+          <SelectItem value="suspended" label={t("statusSuspended")}>
+            {t("statusSuspended")}
+          </SelectItem>
+          <SelectItem value="maintenance" label={t("statusMaintenance")}>
+            {t("statusMaintenance")}
+          </SelectItem>
         </SelectContent>
       </Select>
       <Button type="button" variant="outline" className="h-9" disabled={pending || !status} onClick={applyStatus}>

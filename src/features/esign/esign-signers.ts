@@ -25,3 +25,13 @@ export function counterSignatureState(staffStatuses: string[]): EsignCounterSign
   if (staffStatuses.some((status) => status === "pending")) return "pending";
   return "signed";
 }
+
+export function previewStaffLabel(
+  rows: readonly { display_name: string }[],
+  selectedName: string,
+  fallback: string,
+): string {
+  const fromRows = rows.map((row) => row.display_name.trim()).find(Boolean);
+  const picked = selectedName.trim();
+  return fromRows || picked || fallback;
+}

@@ -1,4 +1,5 @@
 import { ESIGN_EMPLOYEE_ROWS, employeeRowLabel, isEmployeeRowKey } from "./employee-block";
+import { defaultPenaltyActionOptions, isPenaltyActionFieldKey } from "./esign-penalty-checks";
 import { templateFieldLabel } from "./template-source";
 import type { EsignTemplateFieldRow } from "./types";
 
@@ -33,6 +34,9 @@ export type EsignExampleSheetField = Pick<
 
 /** A plausible value per field type, so the example row is importable as-is. */
 function sampleValue(field: EsignExampleSheetField): string {
+  if (isPenaltyActionFieldKey(field.field_key)) {
+    return defaultPenaltyActionOptions(field)[0] ?? "";
+  }
   if (field.source_kind === "fixed") return field.options[0] ?? "";
   switch (field.field_type) {
     case "date":

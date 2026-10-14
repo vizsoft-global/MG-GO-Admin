@@ -58,10 +58,12 @@ function useRailClock(): number {
 
 export function FleetRail({
   onFocusDriver,
+  onReselectDriver,
   collapsed,
   onCollapsedChange,
 }: {
   onFocusDriver: (driverId: string) => void;
+  onReselectDriver?: (driverId: string) => void;
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
 }) {
@@ -171,8 +173,11 @@ export function FleetRail({
                     nowMs={nowMs}
                     selected={driverId === snapshot.selectedDriverId}
                     onSelect={(id) => {
-                      // Same-marker click deselects (§12); same-row click re-zooms.
+                      // Same-marker click deselects (§12); same-row click re-opens
+                      // Rider Details after Back (id does not change, so the canvas
+                      // effect would otherwise leave Insights up).
                       if (snapshot.selectedDriverId === id) {
+                        onReselectDriver?.(id);
                         onFocusDriver(id);
                         return;
                       }

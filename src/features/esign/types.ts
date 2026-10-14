@@ -283,6 +283,26 @@ export const ESIGN_RESERVED_FIELD_KEYS = [
   "nationality",
 ] as const;
 
+/**
+ * Keys an author may persist on a template field row.
+ *
+ * Reserved names are the employee-block tokens. V1 refused every one of them so
+ * a custom field could not steal `{{employee_name}}`. V2 stores those tokens as
+ * `source_kind = system` rows so the builder can order and preview them — Save
+ * has to accept that pair. An authored (entry / fixed / signature) row still
+ * cannot take a reserved key.
+ */
+export function isWritableEsignFieldKey(
+  key: string,
+  sourceKind: EsignFieldSource = "entry",
+): boolean {
+  if (!/^[a-z][a-z0-9_]*$/.test(key)) return false;
+  if ((ESIGN_RESERVED_FIELD_KEYS as readonly string[]).includes(key)) {
+    return sourceKind === "system";
+  }
+  return true;
+}
+
 export type EsignTemplateFieldType = "text" | "textarea" | "number" | "date" | "select";
 
 export type EsignTemplateFieldRow = {
@@ -316,6 +336,8 @@ export type EsignTemplateFieldRow = {
 export type EsignTemplateRow = {
   id: string;
   category_key: string;
+  /** Seed id for the eight outgoing HUB templates. Absent on operator drafts. */
+  figma_key?: string | null;
   /**
    * The category's own name, resolved from `esign_categories` on the list query.
    *

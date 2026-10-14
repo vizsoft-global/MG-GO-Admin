@@ -1,11 +1,15 @@
 "use client";
 
+import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, ListChecks } from "lucide-react";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
-import { fetchDriverOperationTimeline } from "./operations-read-actions";
+import {
+  fetchDriverOperationTimeline,
+  type DriverOperationEvent,
+} from "./operations-read-actions";
 import {
   humanizeErrorCode,
   humanizeOperationKey,
@@ -14,6 +18,7 @@ import {
 } from "./operation-labels";
 
 const KUWAIT_TZ = "Asia/Kuwait";
+const NO_EXTRA_EVENTS: readonly TimelineExtraEvent[] = [];
 
 const TONE_DOT: Record<string, string> = {
   primary: "bg-primary",
@@ -35,15 +40,51 @@ function formatClock(iso: string, locale: string): string {
   }
 }
 
+export type TimelineExtraEvent = {
+  id: string;
+  occurredAt: string;
+  operationKey: string;
+  success?: boolean;
+  category?: string;
+};
+
+function extraToOperationEvent(
+  extra: TimelineExtraEvent,
+  driverId: string,
+): DriverOperationEvent {
+  return {
+    id: extra.id,
+    driverId,
+    driverName: "",
+    driverCode: "",
+    category: extra.category ?? extra.operationKey.split(".")[0] ?? "location",
+    operationKey: extra.operationKey,
+    source: "fleet",
+    sourceName: null,
+    success: extra.success ?? true,
+    errorCode: null,
+    entityType: null,
+    entityId: null,
+    context: {},
+    latitude: null,
+    longitude: null,
+    deviceId: null,
+    appVersionCode: null,
+    occurredAt: extra.occurredAt,
+  };
+}
+
 /** Recent operations for one driver — used in the map popup and the driver detail tab. */
 export function DriverOperationTimeline({
   driverId,
   limit = 8,
+  extraEvents = NO_EXTRA_EVENTS,
   onViewAll,
   className,
 }: {
   driverId: string;
   limit?: number;
+  extraEvents?: readonly TimelineExtraEvent[];
   onViewAll?: () => void;
   className?: string;
 }) {
@@ -55,6 +96,23 @@ export function DriverOperationTimeline({
     queryFn: () => fetchDriverOperationTimeline(driverId, limit),
     enabled: Boolean(driverId),
   });
+
+  const rows = useMemo(() => {
+    if (extraEvents.length === 0) return events;
+    const seen = new Set(events.map((event) => event.id));
+    const merged = [...events];
+    for (const extra of extraEvents) {
+      if (seen.has(extra.id)) continue;
+      seen.add(extra.id);
+      merged.push(extraToOperationEvent(extra, driverId));
+    }
+    merged.sort((a, b) => {
+      const delta = Date.parse(b.occurredAt) - Date.parse(a.occurredAt);
+      if (delta !== 0) return delta;
+      return b.id.localeCompare(a.id);
+    });
+    return merged.slice(0, limit);
+  }, [events, extraEvents, driverId, limit]);
 
   return (
     <section
@@ -86,11 +144,11 @@ export function DriverOperationTimeline({
             <div key={i} className="h-5 animate-pulse rounded bg-muted/50" />
           ))}
         </div>
-      ) : events.length === 0 ? (
+      ) : rows.length === 0 ? (
         <p className="mt-2 text-xs text-slate-500 dark:text-slate-300">{t("activityEmpty")}</p>
       ) : (
         <ul className="mt-2 space-y-1.5">
-          {events.map((event) => {
+          {rows.map((event) => {
             const messageKey = `activityOperations.${operationMessageKey(event.operationKey)}`;
             const label = t.has(messageKey)
               ? t(messageKey)

@@ -20,7 +20,7 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Link, useRouter } from "@/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { cn } from "@/lib/utils";
 import { EsignKpiStrip } from "./esign-kpi-strip";
@@ -134,7 +134,11 @@ export function EsignWaitingShell({
 } = {}) {
   const t = useTranslations("pages.requests.esign.waiting");
   const tHub = useTranslations("pages.requests.esign.hub");
+  const tRcm = useTranslations("pages.rcmV2");
   const router = useRouter();
+  const pathname = usePathname();
+  const isV2 = pathname.includes("/employeedesk");
+  const hubHref = isV2 ? "/employeedesk" : "/requests/esign";
 
   const [tab, setTab] = useState<WaitingTab>(initialTab);
   const [remindOpen, setRemindOpen] = useState(false);
@@ -224,18 +228,25 @@ export function EsignWaitingShell({
       <AppPageHeader
         title={t("title")}
         description={t("subtitle")}
-        breadcrumbs={[
-          { label: tHub("requests"), href: "/requests" },
-          { label: tHub("title"), href: "/requests/esign" },
-          { label: t("title") },
-        ]}
+        breadcrumbs={
+          isV2
+            ? [
+                { label: tRcm("outgoing"), href: "/employeedesk" },
+                { label: t("title") },
+              ]
+            : [
+                { label: tHub("requests"), href: "/requests" },
+                { label: tHub("title"), href: "/requests/esign" },
+                { label: t("title") },
+              ]
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               className="h-9 cursor-pointer"
-              render={<Link href="/requests/esign" />}
+              render={<Link href={hubHref} />}
             >
               {t("back")}
             </Button>

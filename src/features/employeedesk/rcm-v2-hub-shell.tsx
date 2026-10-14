@@ -8,13 +8,25 @@ import { cn } from "@/lib/utils";
 import {
   useEsignBatches,
   useEsignCategories,
+  useEsignRequestsList,
   useEsignTrackerRecipients,
 } from "@/features/esign/use-esign";
+import { fetchMyDeskGrants, type MyDeskGrants } from "@/features/esign/desk-grants-actions";
 import { buildEsignExampleSheet } from "@/features/esign/esign-example-sheet";
+import { mergeEsignRecentSends } from "@/features/esign/esign-recent-sends";
+import {
+  canSendEsignCategory,
+  canViewIncomingType,
+  hubReceiverBadge,
+  hubSenderBadge,
+  outgoingCategoryVisible,
+} from "@/features/esign/esign-staff-access";
 import { buildEsignTracker } from "@/features/esign/esign-tracker";
+import { alignPenaltyCategoryKey } from "@/features/esign/outgoing-hub-categories";
 import type { EsignBatchRow } from "@/features/esign/types";
 import { useAdminRequestsList, useRequestTypeCounts } from "@/features/requests/use-requests";
 import { maskedListSender } from "@/features/requests/request-confidential";
+import { REQUEST_DECIDED_STATUSES } from "@/features/requests/request-status-utils";
 import type { RequestListRow } from "@/features/requests/types";
 import { IncomingUploadDialog } from "./incoming-upload-dialog";
 import {
@@ -26,6 +38,7 @@ import {
   type IncomingHubFilter,
 } from "./rcm-access";
 import { useAuth } from "@/contexts/auth-context";
+import { LAUNCHER_BRAND } from "@/lib/menu/module-colors";
 
 const NO_BATCHES: EsignBatchRow[] = [];
 
@@ -45,7 +58,7 @@ const FALLBACK_PENALTIES = [
   { key: "unauthorised_absence", label: "Unauthorised absence" },
   { key: "written_warning", label: "Written warning" },
   { key: "damage_to_property", label: "Damage to company property" },
-  { key: "other", label: "Others" },
+  { key: "penalty_others", label: "Others" },
 ];
 
 const INCOMING_TYPES: Array<{
@@ -182,16 +195,11 @@ function YouBadge({ children }: { children: ReactNode }) {
   );
 }
 
-function formatAge(
-  iso: string,
-  t: (key: string, values?: { n: number }) => string,
-): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const days = Math.max(0, Math.round((Date.now() - then) / 86_400_000));
-  if (days <= 0) return t("ageToday");
-  if (days === 1) return t("ageDay");
-  return t("ageDays", { n: days });
+function actionTrack(row: RequestListRow): { done: boolean; percent: number; metric: string } {
+  const done = REQUEST_DECIDED_STATUSES.has(row.status);
+  const step = row.current_step_order != null && row.current_step_order > 0 ? row.current_step_order : 1;
+  const metric = row.current_step_label?.trim() || row.request_code;
+  return { done, percent: done ? 100 : Math.min(80, step * 20), metric };
 }
 
 function formatSentDate(iso: string, locale: string): string {
@@ -227,6 +235,7 @@ export function RcmV2HubShell() {
   const locale = useLocale();
   const { permissions, isSuperAdmin } = useAuth();
   const access = rcmAccessChips(permissions, isSuperAdmin);
+  const [grants, setGrants] = useState<MyDeskGrants | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = searchParams.get("tab") === "incoming" ? "incoming" : "outgoing";
@@ -241,6 +250,12 @@ export function RcmV2HubShell() {
   const [sort, setSort] = useState<"oldest" | "newest">("oldest");
   const penaltyRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void fetchMyDeskGrants().then((result) => {
+      if (!result.error || result.error === "not_configured") setGrants(result);
+    });
+  }, []);
 
   useEffect(() => {
     if (!penaltyOpen && !sortOpen) return;
@@ -278,25 +293,83 @@ export function RcmV2HubShell() {
     return FALLBACK_PENALTIES;
   }, [categories?.rows]);
 
+  const outgoingCtx = grants
+    ? { isSuperAdmin: grants.isSuperAdmin, hasOutgoingManage: grants.hasOutgoingManage }
+    : { isSuperAdmin, hasOutgoingManage: access.sender };
+  const incomingCtx = grants
+    ? { isSuperAdmin: grants.isSuperAdmin, hasIncomingView: grants.hasIncomingView }
+    : { isSuperAdmin, hasIncomingView: access.receiver };
+
+  const visibleParents = useMemo(
+    () =>
+      parents.filter((tile) =>
+        outgoingCategoryVisible(tile.key, grants?.esignCategories ?? [], outgoingCtx),
+      ),
+    [parents, grants, outgoingCtx.isSuperAdmin, outgoingCtx.hasOutgoingManage],
+  );
+
+  const visiblePenaltyChildren = useMemo(
+    () =>
+      penaltyChildren.filter((child) =>
+        canSendEsignCategory(
+          alignPenaltyCategoryKey(child.key),
+          grants?.esignCategories ?? [],
+          outgoingCtx,
+        ),
+      ),
+    [penaltyChildren, grants, outgoingCtx.isSuperAdmin, outgoingCtx.hasOutgoingManage],
+  );
+
+  const visibleIncomingTypes = useMemo(
+    () =>
+      INCOMING_TYPES.filter((tile) =>
+        canViewIncomingType(tile.type, grants?.requestTypes ?? [], incomingCtx),
+      ),
+    [grants, incomingCtx.isSuperAdmin, incomingCtx.hasIncomingView],
+  );
+
+  const senderBadge = grants
+    ? hubSenderBadge(grants.esignCategories, outgoingCtx)
+    : access.sender;
+  const receiverBadge = grants
+    ? hubReceiverBadge(grants.requestTypes, incomingCtx)
+    : access.receiver;
+
+  const singlesQuery = useEsignRequestsList({ limit: 20 });
+
   const counts = typeCounts?.counts ?? {};
   const incomingCount = incomingPendingTotal(counts);
   const flags = incomingHubListFlags(incomingFilter);
   const actionQuery = useAdminRequestsList({
     datePreset: "all",
-    limit: 20,
+    limit: 50,
+    sort: sort === "oldest" ? "oldest" : undefined,
     assignedToMe: flags.assignedToMe,
     forwardedToMe: flags.forwardedToMe,
     dueToday: flags.dueToday,
   });
 
   const actionRows = useMemo(() => {
-    const rows = [...(actionQuery.data?.rows ?? [])];
+    const rows = [...(actionQuery.data?.rows ?? [])].filter((row) => {
+      if (!canViewIncomingType(row.request_type, grants?.requestTypes ?? [], incomingCtx)) {
+        return false;
+      }
+      if (incomingFilter === "all" && REQUEST_DECIDED_STATUSES.has(row.status)) return false;
+      return true;
+    });
     rows.sort((a, b) => {
       const delta = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       return sort === "oldest" ? delta : -delta;
     });
-    return rows.slice(0, 5);
-  }, [actionQuery.data?.rows, sort]);
+    return rows;
+  }, [
+    actionQuery.data?.rows,
+    sort,
+    incomingFilter,
+    grants,
+    incomingCtx.isSuperAdmin,
+    incomingCtx.hasIncomingView,
+  ]);
 
   const tracker = useMemo(
     () =>
@@ -307,7 +380,10 @@ export function RcmV2HubShell() {
     [batchesQuery.data?.rows, recipientsQuery.data?.recipients],
   );
 
-  const recentBatches = tracker.slice(0, 3);
+  const recentSends = useMemo(
+    () => mergeEsignRecentSends(tracker, singlesQuery.data?.rows ?? [], 5),
+    [tracker, singlesQuery.data?.rows],
+  );
   const adminChips =
     tab === "incoming"
       ? RCM_ADMIN_CHIPS.filter((chip) => chip.id !== "templates")
@@ -315,7 +391,10 @@ export function RcmV2HubShell() {
   const sortLabel = sort === "oldest" ? t("oldestFirst") : t("newestFirst");
 
   return (
-    <div className="-m-3 flex min-h-svh flex-col bg-[#fafafa] text-[#18181b]">
+    <div
+      className="-m-3 flex min-h-svh flex-col [color-scheme:light] bg-[#f9f1eb] text-[#18181b] dark:bg-[#f9f1eb] dark:text-[#18181b]"
+      style={{ backgroundColor: LAUNCHER_BRAND.canvas, colorScheme: "light" }}
+    >
       <p className="px-6 pt-4 text-[13px] font-normal text-[#71717a]">{t("hubTitle")}</p>
       <div className="flex items-center justify-between gap-3 border-b border-[#ececee] px-6 py-2.5">
         <div className="inline-flex items-start rounded-lg border-[0.5px] border-black/15 bg-[#f4f4f5] p-[3px]">
@@ -368,10 +447,10 @@ export function RcmV2HubShell() {
             <span className="text-[10px] font-normal text-[#787887]">{t("incomingHint")}</span>
           </button>
         </div>
-        {access.sender || access.receiver ? (
+        {senderBadge || receiverBadge ? (
           <div className="flex items-center gap-2">
             <span className="text-[12px] font-normal text-[#71717a]">{t("yourAccess")}</span>
-            {access.sender ? (
+            {senderBadge ? (
               <span
                 className={cn(
                   "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-[#18181b]",
@@ -386,7 +465,7 @@ export function RcmV2HubShell() {
                 {t("access.sender")}
               </span>
             ) : null}
-            {access.receiver ? (
+            {receiverBadge ? (
               <span
                 className={cn(
                   "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-[#18181b]",
@@ -424,7 +503,7 @@ export function RcmV2HubShell() {
               </p>
             </div>
             <div className="flex flex-col gap-[30px]">
-              {chunk(parents, 4).map((row) => (
+              {chunk(visibleParents, 4).map((row) => (
                 <div key={row[0]?.key} className="flex w-full items-start justify-between gap-2">
                   {row.map((tile) =>
                     tile.key === "penalty" ? (
@@ -454,10 +533,10 @@ export function RcmV2HubShell() {
                               {t("penaltyCategory")}
                             </p>
                             <div className="flex flex-col gap-1">
-                              {penaltyChildren.map((child) => (
+                              {visiblePenaltyChildren.map((child) => (
                                 <Link
                                   key={child.key}
-                                  href={`/employeedesk/esign/send?category=${FALLBACK_PENALTIES.some((item) => item.key === child.key) ? "penalty" : child.key}`}
+                                  href={`/employeedesk/esign/send?category=${alignPenaltyCategoryKey(child.key)}`}
                                   className="flex h-[31px] w-[204px] items-center rounded p-2 text-[12.5px] font-normal text-[#18181b] hover:bg-[#f4f4f5]"
                                   onClick={() => setPenaltyOpen(false)}
                                 >
@@ -507,39 +586,54 @@ export function RcmV2HubShell() {
               </div>
             </section>
 
-            <section className="flex flex-col gap-[14px] rounded-xl border border-[#e4e4e7] bg-white p-5">
+            <section className="flex flex-col gap-2 rounded-xl border border-[#e4e4e7] bg-white p-4">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="text-[16px] font-semibold text-[#18181b]">{t("sentForSignature")}</h2>
-                <Link
-                  href="/employeedesk/esign/batches"
-                  className="text-[13px] font-medium text-[#b54708] underline decoration-solid underline-offset-2"
-                >
-                  {t("viewAll")}
-                </Link>
+                <h2 className="text-[15px] font-semibold text-[#18181b]">{t("sentForSignature")}</h2>
+                <div className="flex items-center gap-1.5">
+                  <Link
+                    href="/employeedesk/esign/batches"
+                    className="text-[12px] font-medium text-[#b54708] underline decoration-solid underline-offset-2"
+                  >
+                    {t("viewAll")}
+                  </Link>
+                  <Link
+                    href="/employeedesk/esign/sent"
+                    className="inline-flex h-7 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-[12px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
+                  >
+                    {t("viewAllSent")}
+                  </Link>
+                </div>
               </div>
-              {recentBatches.length === 0 ? (
-                <p className="py-8 text-center text-[12px] text-[#71717a]">{t("emptyBatches")}</p>
+              {recentSends.length === 0 ? (
+                <p className="py-6 text-center text-[12px] text-[#71717a]">{t("emptySends")}</p>
               ) : (
-                <div className="flex flex-col gap-3">
-                  {recentBatches.map((row, index) => {
-                    const done = row.stage === "completed";
-                    const total = row.progress.total || row.batch.total_count;
-                    const signed = row.progress.signed;
-                    const percent = Math.round(row.progress.percent);
-                    const sent = formatSentDate(row.batch.created_at, locale);
-                    const bulk = Boolean(row.batch.source_filename);
+                <div className="flex flex-col">
+                  {recentSends.map((row) => {
+                    const done = row.done;
+                    const total = row.total;
+                    const signed = row.signed;
+                    const percent = Math.min(100, row.percent);
+                    const sent = formatSentDate(row.created_at, locale);
+                    const bulk = row.bulk;
                     return (
                       <div
-                        key={row.batch.id}
-                        className={cn(
-                          "flex flex-col gap-2",
-                          index < recentBatches.length - 1 && "border-b border-[#e4e4e7] pb-3",
-                        )}
+                        key={`${row.kind}-${row.id}`}
+                        className="flex flex-col gap-1 border-b border-[#f4f4f5] py-2 last:border-b-0 last:pb-0"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="min-w-0 truncate text-[13.5px] font-semibold text-[#18181b]">
-                            {row.batch.title || row.batch.template_name || row.batch.batch_code}
-                          </p>
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-semibold leading-4 text-[#18181b]">
+                              {row.title}
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px] leading-4 text-[#71717a]">
+                              {bulk
+                                ? t("batchEmployeesBulk", { count: total, date: sent })
+                                : t("batchEmployees", { count: total, date: sent })}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-[11px] font-medium tabular-nums text-[#3f3f46]">
+                            {t("signedOf", { signed, total, percent })}
+                          </span>
                           <span
                             className={cn(
                               "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
@@ -551,28 +645,28 @@ export function RcmV2HubShell() {
                             <span className="size-1 rounded-full bg-current" />
                             {done ? t("completed") : t("inProgress")}
                           </span>
-                        </div>
-                        <p className="text-[11px] font-normal text-[#71717a]">
-                          {bulk
-                            ? t("batchEmployeesBulk", { count: total, date: sent })
-                            : t("batchEmployees", { count: total, date: sent })}
-                        </p>
-                        <div className="flex items-center gap-3">
-                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#f4f4f5]">
-                            <div
-                              className={cn("h-full rounded-full", done ? "bg-[#067647]" : "bg-[#b54708]")}
-                              style={{ width: `${Math.min(100, percent)}%` }}
-                            />
-                          </div>
-                          <span className="shrink-0 text-[11.5px] font-medium tabular-nums text-[#71717a]">
-                            {t("signedOf", { signed, total, percent })}
-                          </span>
                           <Link
-                            href={`/employeedesk/esign/batches/${row.batch.id}`}
-                            className="inline-flex shrink-0 items-center rounded border border-[#e4e4e7] px-2 py-1 text-[11px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa]"
+                            href={row.href}
+                            className="inline-flex h-7 shrink-0 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-[11px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
                           >
                             {t("track")}
                           </Link>
+                        </div>
+                        <div
+                          className="h-1 overflow-hidden rounded-full bg-[#e4e4e7]"
+                          role="progressbar"
+                          aria-valuenow={percent}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={t("signedOf", { signed, total, percent })}
+                        >
+                          <div
+                            className={cn(
+                              "h-full rounded-full motion-reduce:transition-none transition-[width] duration-200 ease-out",
+                              done ? "bg-[#067647]" : "bg-[#b54708]",
+                            )}
+                            style={{ width: `${percent}%` }}
+                          />
                         </div>
                       </div>
                     );
@@ -590,12 +684,12 @@ export function RcmV2HubShell() {
               <YouBadge>{t("youReceive")}</YouBadge>
             </div>
             <div className="flex flex-col gap-[25px]">
-              {chunk(INCOMING_TYPES, 3).map((row) => (
+              {chunk(visibleIncomingTypes, 3).map((row) => (
                 <div key={row[0]?.type} className="flex w-full items-start justify-between gap-2">
                   {row.map((tile) => (
                     <HubTile
                       key={tile.type}
-                      href={`/employeedesk/all?type=${tile.type}&preset=all`}
+                      href={`/employeedesk/all?type=${tile.type}&preset=all&scope=all`}
                       glyph={tile.glyph}
                       glyphSize={tile.glyphSize}
                       color={tile.color}
@@ -609,18 +703,26 @@ export function RcmV2HubShell() {
             </div>
           </section>
 
-          <section className="flex min-w-0 w-full flex-1 flex-col gap-[14px] rounded-xl border border-[#e4e4e7] bg-white p-5">
+          <section className="flex min-w-0 w-full flex-1 flex-col gap-2 rounded-xl border border-[#e4e4e7] bg-white p-4">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-[16px] font-semibold text-[#18181b]">{t("needsAction")}</h2>
-              <button
-                type="button"
-                className="rounded-md bg-[#18181b] px-3 py-1.5 text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-[#27272a] active:scale-[0.97] motion-reduce:active:scale-100"
-                onClick={() => setUploadOpen(true)}
-              >
-                {t("uploadDocument")}
-              </button>
+              <h2 className="text-[15px] font-semibold text-[#18181b]">{t("needsAction")}</h2>
+              <div className="flex items-center gap-1.5">
+                <Link
+                  href="/employeedesk/all?scope=all"
+                  className="text-[12px] font-medium text-[#b54708] underline decoration-solid underline-offset-2"
+                >
+                  {t("viewAll")}
+                </Link>
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-[12px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
+                  onClick={() => setUploadOpen(true)}
+                >
+                  {t("uploadDocument")}
+                </button>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <FilterChip selected={incomingFilter === "all"} onClick={() => setIncomingFilter("all")}>
                   {t("filterAll", { count: incomingCount })}
@@ -667,12 +769,14 @@ export function RcmV2HubShell() {
                 ) : null}
               </div>
             </div>
-            {actionRows.length === 0 ? (
-              <p className="py-10 text-center text-[12px] text-[#71717a]">{t("emptyAction")}</p>
+            {actionQuery.isPending && actionRows.length === 0 ? (
+              <div className="py-6" aria-busy="true" />
+            ) : actionRows.length === 0 ? (
+              <p className="py-6 text-center text-[12px] text-[#71717a]">{t("emptyAction")}</p>
             ) : (
-              <div className="flex flex-col">
+              <div className="max-h-[min(22rem,40vh)] min-h-0 overflow-y-auto">
                 {actionRows.map((row) => (
-                  <ActionRow key={row.id} row={row} />
+                  <ActionRow key={row.id} row={row} locale={locale} />
                 ))}
               </div>
             )}
@@ -703,44 +807,72 @@ export function RcmV2HubShell() {
   );
 }
 
-function ActionRow({ row }: { row: RequestListRow }) {
+function ActionRow({ row, locale }: { row: RequestListRow; locale: string }) {
   const t = useTranslations("pages.rcmV2");
-  const typeMeta = INCOMING_TYPES.find((item) => item.type === row.request_type);
   const name = maskedListSender(false, row.driver_name, t("confidentialSender"));
+  const sent = formatSentDate(row.created_at, locale);
+  const who = row.department_label
+    ? t("fromEmployeeDept", { name, department: row.department_label })
+    : name;
+  const track = actionTrack(row);
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-[#e4e4e7] px-4 py-3">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <span className={cn("size-2 shrink-0 rounded-full", typeMeta?.dot ?? "bg-[#a1a1aa]")} />
+    <div className="flex flex-col gap-1 border-b border-[#f4f4f5] py-2 last:border-b-0 last:pb-0">
+      <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13.5px] font-semibold text-[#18181b]">
+          <p className="truncate text-[13px] font-semibold leading-4 text-[#18181b]">
             {t(`types.${row.request_type}` as "types.leave")}
           </p>
           {row.is_confidential ? (
-            <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-normal text-[#71717a]">
+            <p className="mt-0.5 inline-flex min-w-0 items-center gap-1 text-[11px] leading-4 text-[#71717a]">
               <Glyph src="/hub/lock.svg" size={11} />
-              <span className="truncate">{t("confidentialLine")}</span>
+              <span className="truncate">
+                {t("confidentialLine")}
+                {track.metric ? ` · ${track.metric}` : ""}
+              </span>
             </p>
           ) : (
-            <p className="mt-0.5 truncate text-[11px] font-normal leading-normal text-[#71717a]">
+            <p className="mt-0.5 truncate text-[11px] leading-4 text-[#71717a]">
               {t("fromPrefix")}
-              <span className="font-medium text-[#18181b]">
-                {row.department_label
-                  ? t("fromEmployeeDept", { name, department: row.department_label })
-                  : name}
-              </span>
+              {who}
+              {sent ? ` · ${sent}` : ""}
+              {track.metric ? ` · ${track.metric}` : ""}
             </p>
           )}
         </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-4">
-        <span className="text-[12px] font-normal text-[#71717a]">{formatAge(row.created_at, t)}</span>
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
+            track.done
+              ? "border-[#d3f3df] bg-[#ecfdf3] text-[#067647]"
+              : "border-[#f6e5c3] bg-[#fffaeb] text-[#b54708]",
+          )}
+        >
+          <span className="size-1 rounded-full bg-current" />
+          {track.done ? t("completed") : t("inProgress")}
+        </span>
         <Link
           href={`/employeedesk/${row.id}`}
-          className="inline-flex items-center rounded-md border border-[#e4e4e7] bg-white px-3 py-1.5 text-[12px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa]"
+          className="inline-flex h-7 shrink-0 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-[11px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
         >
           {t("review")}
         </Link>
+      </div>
+      <div
+        className="h-1 overflow-hidden rounded-full bg-[#e4e4e7]"
+        role="progressbar"
+        aria-valuenow={track.percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={track.metric}
+      >
+        <div
+          className={cn(
+            "h-full rounded-full motion-reduce:transition-none transition-[width] duration-200 ease-out",
+            track.done ? "bg-[#067647]" : "bg-[#b54708]",
+          )}
+          style={{ width: `${track.percent}%` }}
+        />
       </div>
     </div>
   );

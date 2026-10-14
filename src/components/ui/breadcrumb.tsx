@@ -1,5 +1,6 @@
 import * as React from "react";
 import { ChevronRight, MoreHorizontal } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 
 function Breadcrumb({ ...props }: React.ComponentProps<"nav">) {
@@ -29,13 +30,13 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
   );
 }
 
-function BreadcrumbLink({ className, ...props }: React.ComponentProps<"a">) {
+function BreadcrumbLink({ className, href, ...props }: React.ComponentProps<"a">) {
+  const classes = cn("transition-colors hover:text-foreground", className);
+  if (!href) {
+    return <a data-slot="breadcrumb-link" className={classes} {...props} />;
+  }
   return (
-    <a
-      data-slot="breadcrumb-link"
-      className={cn("transition-colors hover:text-foreground", className)}
-      {...props}
-    />
+    <Link data-slot="breadcrumb-link" href={href} className={classes} {...props} />
   );
 }
 

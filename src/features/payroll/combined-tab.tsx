@@ -2,18 +2,17 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Hand, Undo2 } from "lucide-react";
+import { Hand, Redo2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { SearchField } from "@/components/app";
 import { payrollRiderMatchesSearch, type PayrollPeriod } from "./payroll-formulas";
-import { AdjustmentDialog } from "./adjustment-dialog";
+import { usePayrollAdjust } from "./payroll-adjust-context";
 import { PayrollDayGrid, PayrollLegend } from "./payroll-grid";
 import { exportCombinedPayrollCsv } from "./payroll-csv";
 import { configByKey, exportLabelsFromConfig, hiddenSetFor } from "./payroll-column-config";
 import { PayrollColumnsMenu } from "./payroll-heading";
 import { usePayrollAdjustmentAudit, usePayrollColumnConfig } from "./use-payroll";
-import { usePayrollAdjustSession } from "./use-payroll-adjust";
 import type { PayrollRiderRow } from "./payroll-types";
 
 export function CombinedPayrollTab({
@@ -29,7 +28,7 @@ export function CombinedPayrollTab({
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
-  const session = usePayrollAdjustSession();
+  const session = usePayrollAdjust();
   const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
@@ -54,6 +53,7 @@ export function CombinedPayrollTab({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canManage ? (
+            <>
             <Button
               type="button"
               variant="outline"
@@ -64,6 +64,17 @@ export function CombinedPayrollTab({
               <Undo2 className="size-3.5" />
               {t("adjust.undo")}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9"
+              disabled={session.redoCount === 0 || session.pending}
+              onClick={() => session.redo()}
+            >
+              <Redo2 className="size-3.5" />
+              {t("adjust.redo")}
+            </Button>
+            </>
           ) : null}
           <PayrollColumnsMenu
             view="combined"
@@ -110,12 +121,6 @@ export function CombinedPayrollTab({
         })}
       />
       <PayrollLegend riders={searched} />
-      <AdjustmentDialog
-        state={session.adjust}
-        pending={session.pending}
-        onCancel={session.cancel}
-        onConfirm={session.confirm}
-      />
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="border-b border-border px-4 py-2">
           <h3 className="text-[13px] font-semibold">{t("manualChanges.title")}</h3>

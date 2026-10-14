@@ -13,6 +13,8 @@ import {
   isRequestsListScan,
   type RequestsAuditDetail,
 } from "./request-audit-summary";
+import { esignGrantDocId, normalizeEsignSenderKeys } from "@/features/esign/esign-staff-access";
+import { isPenaltyChild } from "@/features/esign/esign-penalty-subcategories";
 import type {
   AccessLevel,
   AppointmentStatusCounts,
@@ -533,11 +535,15 @@ export async function deleteLoanTenureOption(
 
 export async function fetchStaffAccess(): Promise<{
   rows: StaffAccessRow[];
+  esignRows: { profile_id: string; category_key: string }[];
   error?: string;
 }> {
   await requireRequestsManage();
-  const listed = await listDocs(COLLECTIONS.requestStaffAccess);
-  if (listed.error) return { rows: [], error: listed.error };
+  const [listed, esignListed] = await Promise.all([
+    listDocs(COLLECTIONS.requestStaffAccess),
+    listDocs(COLLECTIONS.esignStaffAccess),
+  ]);
+  if (listed.error) return { rows: [], esignRows: [], error: listed.error };
 
   await logAdminRead("requests", "requests.settings.staff_access.list", {});
 
@@ -561,6 +567,10 @@ export async function fetchStaffAccess(): Promise<{
         access_level: row.access_level as "view_only" | "approver",
       };
     }),
+    esignRows: (esignListed.rows ?? []).map((row) => ({
+      profile_id: String(row.profile_id ?? ""),
+      category_key: String(row.category_key ?? ""),
+    })),
   };
 }
 
@@ -867,6 +877,7 @@ export async function updateRequestTypeScreenshotPolicy(
 export async function fetchStaffAccessMatrix(): Promise<{
   staffOptions: StaffProfileOption[];
   rows: StaffAccessRow[];
+  esignRows: { profile_id: string; category_key: string }[];
   departments: StaffDepartmentMap;
   error?: string;
 }> {
@@ -878,6 +889,7 @@ export async function fetchStaffAccessMatrix(): Promise<{
   return {
     staffOptions: staff,
     rows: accessResult.rows,
+    esignRows: accessResult.esignRows,
     departments,
     error: accessResult.error,
   };
@@ -1099,6 +1111,7 @@ export async function removeDepartmentMember(id: string): Promise<{ ok: boolean;
 export async function saveStaffAccessGrants(
   profileId: string,
   grants: Partial<Record<RequestTypeSlug, AccessLevel>>,
+  esignKeys?: string[],
 ): Promise<{ ok: boolean; error?: string }> {
   await requireRequestsManage();
 
@@ -1127,12 +1140,41 @@ export async function saveStaffAccessGrants(
     if (saved.error) return { ok: false, error: saved.error };
   }
 
+  if (esignKeys) {
+    const cleared = await deleteWhere(COLLECTIONS.esignStaffAccess, [
+      ["profile_id", profileId],
+    ]);
+    if (cleared) return { ok: false, error: cleared };
+    const db = await openDb();
+    if (!db) return { ok: false, error: "not_configured" };
+    const keys = normalizeEsignSenderKeys(esignKeys);
+    try {
+      const batch = db.batch();
+      for (const categoryKey of keys) {
+        const id = esignGrantDocId(profileId, categoryKey);
+        batch.set(db.collection(COLLECTIONS.esignStaffAccess).doc(id), {
+          id,
+          profile_id: profileId,
+          category_key: categoryKey,
+          parent_key: isPenaltyChild({ key: categoryKey, parent_key: "penalty" })
+            ? "penalty"
+            : null,
+          access_level: "sender",
+          updated_at: new Date(),
+        });
+      }
+      if (keys.length > 0) await batch.commit();
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "write_failed" };
+    }
+  }
+
   await logAdminMutation({
     action: "update",
     entityType: "request_staff_access",
     entityId: profileId,
     routeName: "requests.settings.roles.saveGrants",
-    context: { grants },
+    context: { grants, esignKeys: esignKeys ?? [] },
   });
 
   return { ok: true };

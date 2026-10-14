@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   columnsToConditions,
   conditionsToColumns,
+  payrollRulesSavePayload,
   readsAs,
   summariseAudit,
   type RuleTableRow,
@@ -131,5 +132,21 @@ describe("summariseAudit", () => {
       }),
       "Client delete · keeta",
     );
+  });
+});
+
+describe("payrollRulesSavePayload", () => {
+  it("sends conditions as an array, never { all }", () => {
+    const payload = payrollRulesSavePayload([
+      {
+        label: "Full day",
+        conditions: [{ field: "hours", op: "gte", value: 6 }],
+        result: { kind: "12", hours: null },
+      },
+    ]);
+    assert.equal(payload.length, 1);
+    assert.ok(Array.isArray(payload[0].conditions));
+    assert.equal(payload[0].sortOrder, 1);
+    assert.deepEqual(payload[0].conditions, [{ field: "hours", op: "gte", value: 6 }]);
   });
 });

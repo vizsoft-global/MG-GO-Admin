@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { Building2, FileSpreadsheet, Plus, Send } from "lucide-react";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppListCard } from "@/components/app/app-list-card";
@@ -23,6 +25,10 @@ import {
   ESIGN_EMPLOYEE_ROWS,
 } from "@/features/esign/employee-block";
 import { buildEsignExampleSheet } from "@/features/esign/esign-example-sheet";
+import { previewStaffLabel } from "@/features/esign/esign-signers";
+import { ensureOutgoingHubDrafts } from "@/features/esign/esign-sender-actions";
+import { isSendableHubTemplate } from "@/features/esign/outgoing-hub-categories";
+import { queryKeys } from "@/lib/query/query-keys";
 import { useEsignTemplate, useEsignTemplates } from "@/features/esign/use-esign";
 import type { EsignTemplateDetail, EsignTemplateRow } from "@/features/esign/types";
 import { EsignDocumentPreview } from "./document-preview";
@@ -89,12 +95,32 @@ export function TemplatesShell() {
   const tBuilder = useTranslations("pages.employeedesk.esign.templateBuilder");
   const tCommon = useTranslations("common");
   const locale = useLocale() === "ar" ? "ar" : "en";
+  const queryClient = useQueryClient();
   const { data, isLoading, isError } = useEsignTemplates();
-  const rows = useMemo(() => data?.rows ?? [], [data]);
+  const [tab, setTab] = useState<"library" | "draft">("library");
+  const allRows = useMemo(() => data?.rows ?? [], [data]);
+  const rows = useMemo(
+    () =>
+      allRows.filter((row) =>
+        tab === "library" ? isSendableHubTemplate(row) : !isSendableHubTemplate(row),
+      ),
+    [allRows, tab],
+  );
   const loadFailed = isError || Boolean(data?.error);
 
   const [pickedId, setPickedId] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void ensureOutgoingHubDrafts().then((result) => {
+      if (cancelled || result.error || (result.updated ?? 0) === 0) return;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.esign.templates() });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient]);
 
   const selectedId = rows.some((row) => row.id === pickedId)
     ? pickedId
@@ -149,6 +175,14 @@ export function TemplatesShell() {
 
       <div className={`grid min-h-0 lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)] ${LAYOUT.panelGap}`}>
         <AppListCard className="h-full min-h-0 p-2">
+          <div className="mb-2 flex flex-wrap gap-1.5 px-1 pt-1">
+            <ToggleChip selected={tab === "library"} onClick={() => setTab("library")}>
+              {t("tabLibrary")}
+            </ToggleChip>
+            <ToggleChip selected={tab === "draft"} onClick={() => setTab("draft")}>
+              {t("tabDraft")}
+            </ToggleChip>
+          </div>
           {loadFailed ? (
             <p className="px-2 py-6 text-sm text-muted-foreground">{t("loadFailed")}</p>
           ) : isLoading ? (
@@ -354,7 +388,7 @@ export function TemplatesShell() {
                 documentKind={detail.document_kind}
                 signers={{
                   employeeLabel: tBuilder("previewEmployeeSignature"),
-                  staffLabel: tBuilder("previewStaffSignature"),
+                  staffLabel: previewStaffLabel([], "", tBuilder("previewStaffSignature")),
                 }}
               />
             ) : null}

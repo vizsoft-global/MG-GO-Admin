@@ -45,7 +45,9 @@ import {
 } from "./fleet-status";
 import { FleetInterpolator } from "./fleet-interpolator";
 import { FleetTrailStore } from "./fleet-trail";
-import { haversineMeters } from "@/features/locations/location-status";import {
+import { haversineMeters } from "@/features/locations/location-status";
+import { pointInAssignedZone } from "./fleet-zones";
+import {
   emptyFleetFilters,
   persistFleetFilters,
   readPersistedFleetFilters,
@@ -565,9 +567,10 @@ export class FleetStore {
         batteryPct: row.battery_pct,
         isMocked: row.is_mocked === true,
         // Assigned-zone geometry is the Worker's job on the edge rail. The polling
-        // rail can still flag Out of Zone from `out_of_zone_since`, which is what
-        // the database already records on the pin.
-        inAssignedZone: row.out_of_zone_since ? false : null,
+        // rail can still flag Out of Zone from `out_of_zone_since`, but a newer
+        // in-zone fix (or a zone.entry already applied) must beat a leftover since
+        // — the Worker cooldown is left alone.
+        inAssignedZone: this.pollInAssignedZone(row, lat, lng, fixAtMs),
         rangeStatus: normalizeRange(row.zone_status),
         shiftScheduledStartMs: shiftStart,
         shiftScheduledEndMs: shiftEnd,
@@ -634,7 +637,7 @@ export class FleetStore {
           on_duty: true,
           online: live,
           out_of_range: live && normalizeRange(row.zone_status) === "out_of_zone",
-          out_of_zone: row.out_of_zone_since ? live : existing.flags.out_of_zone,
+          out_of_zone: liveIsOutOfZoneFromPoll(row, existing, live),
         };
         this.drivers.set(row.driver_id, {
           ...existing,
@@ -759,45 +762,45 @@ export class FleetStore {
   // -------------------------------------------------------------------------
 
   applyFleetEvents(events: FleetEventFrame[]): void {
-    this.pushFeed(
-      events.map((event) => ({
-        id: `fleet:${event.driverId}:${event.eventKey}:${event.detectedAt}`,
-        kind: "fleet" as const,
-        driverId: event.driverId,
-        driverName: this.drivers.get(event.driverId)?.meta.driverName ?? null,
-        eventKey: event.eventKey,
-        severity: event.severity,
-        value: event.value,
-        statusAfter: event.statusAfter,
-        success: true,
-        errorCode: null,
-        latitude: event.latitude,
-        longitude: event.longitude,
-        context: event.context,
-        atMs: Date.parse(event.detectedAt) || Date.now(),
-      })),
-    );
+    const items = events.map((event) => ({
+      id: `fleet:${event.driverId}:${event.eventKey}:${event.detectedAt}`,
+      kind: "fleet" as const,
+      driverId: event.driverId,
+      driverName: this.drivers.get(event.driverId)?.meta.driverName ?? null,
+      eventKey: event.eventKey,
+      severity: event.severity,
+      value: event.value,
+      statusAfter: event.statusAfter,
+      success: true,
+      errorCode: null,
+      latitude: event.latitude,
+      longitude: event.longitude,
+      context: event.context,
+      atMs: Date.parse(event.detectedAt) || Date.now(),
+    }));
+    this.applyZoneEpisodeFromFeed(items);
+    this.pushFeed(items);
   }
 
   applyOpsEvents(events: OpsEventFrame[]): void {
-    this.pushFeed(
-      events.map((event) => ({
-        id: `ops:${event.id}`,
-        kind: "ops" as const,
-        driverId: event.driverId,
-        driverName: this.drivers.get(event.driverId)?.meta.driverName ?? null,
-        eventKey: event.operationKey,
-        severity: opsSeverity(event),
-        value: null,
-        statusAfter: null,
-        success: event.success,
-        errorCode: event.errorCode,
-        latitude: null,
-        longitude: null,
-        context: event.context,
-        atMs: Date.parse(event.occurredAt) || Date.now(),
-      })),
-    );
+    const items = events.map((event) => ({
+      id: `ops:${event.id}`,
+      kind: "ops" as const,
+      driverId: event.driverId,
+      driverName: this.drivers.get(event.driverId)?.meta.driverName ?? null,
+      eventKey: event.operationKey,
+      severity: opsSeverity(event),
+      value: null,
+      statusAfter: null,
+      success: event.success,
+      errorCode: event.errorCode,
+      latitude: null,
+      longitude: null,
+      context: event.context,
+      atMs: Date.parse(event.occurredAt) || Date.now(),
+    }));
+    this.applyZoneEpisodeFromFeed(items);
+    this.pushFeed(items);
   }
 
   /** Poll seed is a warm-start. Re-running it on every roster refresh is what made rows flicker. */
@@ -1037,6 +1040,74 @@ export class FleetStore {
     this.interpolator.clear();
     this.trails.clear();
   }
+
+  /**
+   * `zone.entry` must drop the Left zone pin immediately. The Worker still holds
+   * `out_of_zone_since` for its own cooldown; this page must not wait on that.
+   */
+  private applyZoneEpisodeFromFeed(items: readonly FleetFeedItem[]): void {
+    for (const item of items) {
+      const nextOut = zoneEpisodeOutOfZone(item.eventKey);
+      if (nextOut == null) continue;
+      const driver = this.drivers.get(item.driverId);
+      if (!driver || driver.flags.out_of_zone === nextOut) continue;
+      const flags = { ...driver.flags, out_of_zone: nextOut };
+      this.drivers.set(item.driverId, {
+        ...driver,
+        flags,
+        activeFlags: activeFleetFlags(flags),
+      });
+      this.dirtyDrivers.add(item.driverId);
+    }
+  }
+
+  private pollInAssignedZone(
+    row: FleetSnapshotRow,
+    lat: number | null,
+    lng: number | null,
+    fixAtMs: number,
+  ): boolean | null {
+    const sinceMs = toTime(row.out_of_zone_since);
+    const inZone = pointInAssignedZone(lat, lng, row.zone_id, this.zones);
+    if (inZone === true && (sinceMs === 0 || fixAtMs > sinceMs)) return true;
+    if (inZone === false) return false;
+    if (this.zoneEntryBeatsSince(row.driver_id, sinceMs)) return true;
+    if (row.out_of_zone_since) return false;
+    return null;
+  }
+
+  private zoneEntryBeatsSince(driverId: string, sinceMs: number): boolean {
+    if (sinceMs <= 0) return false;
+    for (const item of this.feed) {
+      if (item.driverId !== driverId) continue;
+      if (item.eventKey !== "zone.entry" && item.eventKey !== "location.zone_entry") continue;
+      if (item.atMs >= sinceMs) return true;
+    }
+    return false;
+  }
+}
+
+function zoneEpisodeOutOfZone(eventKey: string): boolean | null {
+  switch (eventKey) {
+    case "zone.entry":
+    case "location.zone_entry":
+      return false;
+    case "zone.exit":
+    case "location.zone_exit":
+      return true;
+    default:
+      return null;
+  }
+}
+
+function liveIsOutOfZoneFromPoll(
+  row: FleetSnapshotRow,
+  existing: FleetDriver,
+  live: boolean,
+): boolean {
+  const sinceMs = toTime(row.out_of_zone_since);
+  if (sinceMs > existing.fixAtMs) return live;
+  return existing.flags.out_of_zone;
 }
 
 function opsSeverity(event: OpsEventFrame): FleetEventSeverity {

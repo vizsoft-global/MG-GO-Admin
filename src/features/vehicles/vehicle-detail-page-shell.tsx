@@ -19,7 +19,7 @@ import {
   ProjectBadge,
   VehicleStatusBadge,
 } from "@/features/fleet/fleet-badges";
-import { isDriverProjectKey } from "@/features/fleet/fleet-labels";
+import { isDriverProjectKey, isVehicleTypeOfUse } from "@/features/fleet/fleet-labels";
 import { VehicleFormDialog } from "./vehicle-form-dialog";
 import { VehicleDetailTabs } from "./vehicle-tabs";
 import { assignVehicleDriver } from "./vehicles-actions";
@@ -84,12 +84,21 @@ export function VehicleDetailPageShell({
     { label: t("colChassis"), value: vehicle.chassis_no || "—" },
     { label: t("fieldModel"), value: [vehicle.make, vehicle.model].filter(Boolean).join(" ") || "—" },
     { label: t("colYear"), value: vehicle.model_year != null ? String(vehicle.model_year) : "—" },
-    { label: t("colKind"), value: vehicle.vehicle_type_label || "—" },
+    {
+      label: t("colKind"),
+      value: vehicle.vehicle_type_key === "car" ? t("kindCar") : t("kindBike"),
+    },
     {
       label: t("colCarType"),
       value: vehicle.car_type ? t(`carType.${vehicle.car_type}` as "carType.company") : "—",
     },
-    { label: t("colTypeOfUse"), value: vehicle.type_of_use_label || "—" },
+    {
+      label: t("colTypeOfUse"),
+      value:
+        vehicle.type_of_use && isVehicleTypeOfUse(vehicle.type_of_use)
+          ? t(`typeOfUse.${vehicle.type_of_use}`)
+          : vehicle.type_of_use_label || "—",
+    },
     { label: t("colFuelType"), value: fuelLabel },
     { label: t("colChip"), value: vehicle.chip_no || "—" },
     {
@@ -104,9 +113,12 @@ export function VehicleDetailPageShell({
     { label: t("fieldContact"), value: vehicle.assigned_driver_phone || "—" },
     {
       label: t("fieldDriverProject"),
-      value: isDriverProjectKey(vehicle.assigned_project_key)
-        ? vehicle.assigned_project_key
-        : "—",
+      value:
+        vehicle.assigned_project_key === "keeta"
+          ? t("projectKeeta")
+          : vehicle.assigned_project_key === "americana"
+            ? t("projectAmericana")
+            : "—",
     },
   ];
 

@@ -2,7 +2,6 @@
 
 import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
 import { callAdminFunction, callCronFunction } from "@/lib/firebase/callable";
-import { getFirebaseStorage } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
@@ -11,38 +10,56 @@ import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { isEsignDueDateAllowed } from "./esign-due-date";
+import { classifyEsignResolveError } from "./esign-resolve-error";
+import { canSendEsignCategory } from "./esign-staff-access";
+import {
+  firstMissingRequiredKey,
+  mergeFieldValuesForSend,
+} from "./esign-snapshot-merge";
+import { getAppSettings } from "@/lib/branding/get-app-settings";
+import { putEsignObject } from "./esign-r2";
+import {
+  effectiveOutgoingCategoryKey,
+  FIGMA_HUB_DOCUMENT_KIND,
+  isSendableHubTemplate,
+  outgoingHubDraftDecision,
+} from "./outgoing-hub-categories";
+import { fetchMyDeskGrants } from "./desk-grants-actions";
+import {
+  defaultPenaltyActionOptions,
+  isPenaltyActionFieldKey,
+  PENALTY_VISIBLE_FIELD_KEY,
+} from "./esign-penalty-checks";
 import { CHUNK_SIZE } from "./render/esign-batch-cap";
 import { launchEsignBrowser, renderEsignPdf } from "./render/esign-pdf-renderer";
 // Fallback: unsigned template PDFs still compile here via renderEsignPdf (needs Chrome). Signed copies are esignComposeSignedDocument.
-import type { EsignEmployeeSnapshot } from "./render/esign-placeholders";
-import type {
-  EsignBatchLine,
-  EsignBatchRow,
-  EsignBatchRowStatus,
-  EsignBatchStatus,
-  EsignDocumentKind,
-  EsignDraftDetail,
-  EsignDraftKind,
-  EsignDraftRow,
-  EsignFieldSection,
-  EsignFieldSource,
-  EsignLocale,
-  EsignReminderState,
-  EsignResolveRow,
-  EsignResolveStatus,
-  EsignTemplateDetail,
-  EsignTemplateFieldRow,
-  EsignTemplateFieldType,
-  EsignTemplateRow,
-  EsignTrackerRecipient,
+import { snapshotValues, type EsignEmployeeSnapshot } from "./render/esign-placeholders";
+import {
+  isWritableEsignFieldKey,
+  type EsignBatchLine,
+  type EsignBatchRow,
+  type EsignBatchRowStatus,
+  type EsignBatchStatus,
+  type EsignDocumentKind,
+  type EsignDraftDetail,
+  type EsignDraftKind,
+  type EsignDraftRow,
+  type EsignFieldSection,
+  type EsignFieldSource,
+  type EsignLocale,
+  type EsignReminderState,
+  type EsignResolveRow,
+  type EsignResolveStatus,
+  type EsignTemplateDetail,
+  type EsignTemplateFieldRow,
+  type EsignTemplateFieldType,
+  type EsignTemplateRow,
+  type EsignTrackerRecipient,
 } from "./types";
 import { normalizeDocumentKind } from "./document-kind";
 import { effectiveEsignStatus } from "./esign-due-date";
 import { parseEsignBatchKpis, type EsignBatchKpis } from "./esign-batch-kpis";
 import { esignRecipientStage } from "./esign-recipient-stage";
-import { ESIGN_RESERVED_FIELD_KEYS } from "./types";
-
-const ESIGN_BUCKET = "esign-documents";
 
 async function requireRequestsManage() {
   const session = await getSessionUser();
@@ -61,6 +78,20 @@ async function requireRequestsManage() {
     throw new Error("not_authorized");
   }
   return session;
+}
+
+async function assertCanSendEsignCategory(categoryKey: string): Promise<string | null> {
+  const grants = await fetchMyDeskGrants();
+  if (grants.error === "not_authorized") return "not_authorized";
+  if (
+    !canSendEsignCategory(categoryKey, grants.esignCategories, {
+      isSuperAdmin: grants.isSuperAdmin,
+      hasOutgoingManage: grants.hasOutgoingManage,
+    })
+  ) {
+    return "not_authorized";
+  }
+  return null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -296,6 +327,9 @@ function mapTemplate(r: Record<string, unknown>, fieldCount = 0): EsignTemplateR
   return {
     id: String(r.id),
     category_key: String(r.category_key ?? ""),
+    figma_key: r.figma_key != null && String(r.figma_key).trim() !== ""
+      ? String(r.figma_key)
+      : null,
     // The library card leads with the category's own name. `esign_templates`
     // only stores the slug, and the reference shows an operator-readable label
     // where a card would otherwise print `accommodation_penalties`. It rides the
@@ -363,7 +397,14 @@ export async function fetchEsignTemplates(): Promise<{
         field_key: field.field_key,
         source_kind: field.source_kind,
       }));
-      const category = categoryByKey.get(String(row.category_key ?? ""));
+      const category =
+        categoryByKey.get(
+          effectiveOutgoingCategoryKey({
+            category_key: String(row.category_key ?? ""),
+            figma_key: row.figma_key != null ? String(row.figma_key) : null,
+            name_en: row.name_en != null ? String(row.name_en) : null,
+          }),
+        ) ?? categoryByKey.get(String(row.category_key ?? ""));
       return mapTemplate(
         {
           ...row,
@@ -376,6 +417,46 @@ export async function fetchEsignTemplates(): Promise<{
   };
 }
 
+/** Idempotent: Figma eight stay live on HUB keys; leftover V1 rows become Draft. */
+export async function ensureOutgoingHubDrafts(): Promise<{
+  ok: boolean;
+  updated: number;
+  error?: string;
+}> {
+  await requireRequestsManage();
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { ok: false, updated: 0, error: mutationAuth.error };
+  const listed = await listDocs(COLLECTIONS.esignTemplates);
+  if (listed.error) return { ok: false, updated: 0, error: listed.error };
+  let updated = 0;
+  for (const row of listed.rows) {
+    const figmaKey = row.figma_key != null ? String(row.figma_key) : null;
+    const decision = outgoingHubDraftDecision({
+      category_key: String(row.category_key ?? ""),
+      figma_key: figmaKey,
+      name_en: row.name_en != null ? String(row.name_en) : null,
+      is_active: row.is_active !== false,
+      is_draft: row.is_draft === true,
+    });
+    if (decision.action === "skip") continue;
+    const patch =
+      decision.action === "draft"
+        ? { is_draft: true, is_active: false }
+        : {
+            category_key: decision.category_key,
+            is_draft: false,
+            is_active: true,
+            ...(figmaKey && FIGMA_HUB_DOCUMENT_KIND[figmaKey]
+              ? { document_kind: FIGMA_HUB_DOCUMENT_KIND[figmaKey] }
+              : {}),
+          };
+    const err = await patchDoc(COLLECTIONS.esignTemplates, row.id, patch);
+    if (err) return { ok: false, updated, error: err };
+    updated += 1;
+  }
+  return { ok: true, updated };
+}
+
 async function loadEsignTemplate(
   id: string,
 ): Promise<{ template: EsignTemplateDetail | null; error?: string }> {
@@ -383,8 +464,13 @@ async function loadEsignTemplate(
   if (loaded.error) return { template: null, error: loaded.error };
   if (!loaded.row) return { template: null };
   const fields = await queryDocs(COLLECTIONS.esignTemplateFields, [["template_id", id]]);
-  const category = loaded.row.category_key
-    ? await queryDocs(COLLECTIONS.esignCategories, [["key", String(loaded.row.category_key)]])
+  const categoryKey = effectiveOutgoingCategoryKey({
+    category_key: String(loaded.row.category_key ?? ""),
+    figma_key: loaded.row.figma_key != null ? String(loaded.row.figma_key) : null,
+    name_en: loaded.row.name_en != null ? String(loaded.row.name_en) : null,
+  });
+  const category = categoryKey
+    ? await queryDocs(COLLECTIONS.esignCategories, [["key", categoryKey]])
     : { rows: [] as DocRow[], error: null };
   const row = {
     ...loaded.row,
@@ -455,9 +541,8 @@ export async function upsertEsignTemplate(input: {
   return { ok: true, id: result.id != null ? String(result.id) : undefined };
 }
 
-function validFieldKey(key: string): boolean {
-  if (!/^[a-z][a-z0-9_]*$/.test(key)) return false;
-  return !(ESIGN_RESERVED_FIELD_KEYS as readonly string[]).includes(key);
+function validFieldKey(key: string, sourceKind?: EsignFieldSource): boolean {
+  return isWritableEsignFieldKey(key, sourceKind ?? "entry");
 }
 
 export async function upsertEsignTemplateField(input: {
@@ -478,7 +563,7 @@ export async function upsertEsignTemplateField(input: {
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   await requireRequestsManage();
   const key = input.field_key.trim().toLowerCase();
-  if (!validFieldKey(key)) return { ok: false, error: "invalid_field_key" };
+  if (!validFieldKey(key, input.source_kind)) return { ok: false, error: "invalid_field_key" };
   if (!input.label_en.trim()) return { ok: false, error: "invalid_input" };
   const { data, error } = await callAdminFunction("admin_upsert_esign_template_field", {
     p_field: {
@@ -531,9 +616,11 @@ async function resolveEmployeesOnClient(
     asWorker ? "esign_worker_resolve_employees" : "admin_esign_resolve_employees",
     { p_rows: employeeIds.map((employee_id) => ({ employee_id })) },
   );
-  if (error) return { rows: [], error: error.message };
+  if (error) return { rows: [], error: classifyEsignResolveError(error.message) };
   const payload = asRecord(data);
-  if (payload.ok === false) return { rows: [], error: String(payload.error ?? "failed") };
+  if (payload.ok === false) {
+    return { rows: [], error: classifyEsignResolveError(String(payload.error ?? "failed")) };
+  }
   const raw = Array.isArray(payload.rows) ? payload.rows : [];
   return {
     rows: raw.map((row) => {
@@ -568,12 +655,22 @@ export async function fetchEsignSnapshot(
   return { snapshot: mapSnapshot(data) ?? null };
 }
 
+async function esignSheetLogoUrl(): Promise<string | null> {
+  try {
+    const settings = await getAppSettings();
+    return settings.logoUrl;
+  } catch {
+    return null;
+  }
+}
+
 function documentForLocale(
   template: EsignTemplateDetail,
   _locale: EsignLocale,
   snapshot: EsignEmployeeSnapshot,
   fieldValues: Record<string, string>,
   description: string,
+  logoUrl?: string | null,
 ) {
   const fields = template.fields.map((f) => ({
     key: f.field_key,
@@ -583,7 +680,47 @@ function documentForLocale(
     value: fieldValues[f.field_key] ?? "",
     section: f.section_key,
     source: f.source_kind,
+    ...(isPenaltyActionFieldKey(f.field_key)
+      ? { options: defaultPenaltyActionOptions(f) }
+      : {}),
   }));
+  const visible = fieldValues[PENALTY_VISIBLE_FIELD_KEY]?.trim();
+  if (visible) {
+    fields.push({
+      key: PENALTY_VISIBLE_FIELD_KEY,
+      label: "",
+      labelEn: "",
+      labelAr: "",
+      value: visible,
+      section: "document",
+      source: "entry",
+    });
+  }
+  const absenceSpecs = [
+    { key: "absence_from", aliases: ["from_date", "absent_from"], en: "From", ar: "من" },
+    { key: "absence_to", aliases: ["to_date", "absent_to"], en: "To", ar: "إلى" },
+  ] as const;
+  for (const spec of absenceSpecs) {
+    const value =
+      fieldValues[spec.key]?.trim() ||
+      spec.aliases.map((alias) => fieldValues[alias]?.trim()).find(Boolean) ||
+      "";
+    if (
+      !value ||
+      fields.some((field) => field.key === spec.key || spec.aliases.includes(field.key))
+    ) {
+      continue;
+    }
+    fields.push({
+      key: spec.key,
+      label: spec.en,
+      labelEn: spec.en,
+      labelAr: spec.ar,
+      value,
+      section: "document",
+      source: "entry",
+    });
+  }
   return {
     language: "en" as const,
     kind: template.document_kind,
@@ -599,23 +736,16 @@ function documentForLocale(
     description,
     fields,
     employee: snapshot,
+    logoUrl,
   };
 }
 
 async function uploadPdfBytes(
   bytes: Uint8Array,
 ): Promise<{ ok: true; key: string } | { ok: false; error: string }> {
-  const storage = await getFirebaseStorage();
-  if (!storage) return { ok: false, error: "not_configured" };
   const key = `admin/${crypto.randomUUID()}.pdf`;
-  try {
-    const file = storage.bucket().file(`${ESIGN_BUCKET}/${key}`);
-    const [exists] = await file.exists();
-    if (exists) return { ok: false, error: "already_exists" };
-    await file.save(Buffer.from(bytes), { contentType: "application/pdf", resumable: false });
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "upload_failed" };
-  }
+  const uploaded = await putEsignObject(key, bytes, "application/pdf");
+  if (!uploaded.ok) return uploaded;
   return { ok: true, key };
 }
 
@@ -635,19 +765,28 @@ export async function createEsignFromTemplate(input: {
   }
   const loaded = await fetchEsignTemplate(input.template_id);
   if (loaded.error) return { ok: false, error: loaded.error };
-  if (!loaded.template || !loaded.template.is_active) {
+  if (!loaded.template || !isSendableHubTemplate(loaded.template)) {
     return { ok: false, error: "invalid_template" };
   }
+  const sendCategory = effectiveOutgoingCategoryKey(loaded.template);
+  const gated = await assertCanSendEsignCategory(sendCategory);
+  if (gated) return { ok: false, error: gated };
   const snap = await fetchEsignSnapshot(input.driver_id);
-  if (!snap.snapshot) return { ok: false, error: snap.error ?? "unknown_id" };
-
-  const fieldValues = input.field_values ?? {};
-  for (const field of loaded.template.fields) {
-    if (field.is_required && !fieldValues[field.field_key]?.trim()) {
-      return { ok: false, error: "field_required" };
-    }
+  if (!snap.snapshot) {
+    const miss = classifyEsignResolveError(snap.error ?? "unknown_id");
+    return { ok: false, error: miss === "failed" ? "unknown_id" : miss };
   }
 
+  const fieldValues = mergeFieldValuesForSend(
+    snapshotValues(snap.snapshot),
+    input.field_values ?? {},
+    loaded.template.fields,
+  );
+  if (firstMissingRequiredKey(fieldValues, loaded.template.fields)) {
+    return { ok: false, error: "field_required" };
+  }
+
+  const logoUrl = await esignSheetLogoUrl();
   const browser = await launchEsignBrowser();
   try {
     const pdf = await renderEsignPdf(
@@ -657,6 +796,7 @@ export async function createEsignFromTemplate(input: {
         snap.snapshot,
         fieldValues,
         input.description ?? "",
+        logoUrl,
       ),
       browser,
     );
@@ -666,7 +806,7 @@ export async function createEsignFromTemplate(input: {
     const { data, error } = await callAdminFunction("admin_create_esign_request", {
       p_driver_id: input.driver_id,
       p_title: input.title.trim(),
-      p_category_key: loaded.template.category_key,
+      p_category_key: sendCategory,
       p_due_at: input.due_at || undefined,
       p_document_storage_key: upload.key,
       p_screenshot_restricted: undefined,
@@ -725,6 +865,21 @@ export async function createEsignBatch(input: {
   if (!isEsignDueDateAllowed(input.due_at ?? "", kuwaitTodayYmd())) {
     return { ok: false, error: "due_in_past" };
   }
+  const loaded = await fetchEsignTemplate(input.template_id);
+  if (loaded.error) return { ok: false, error: loaded.error };
+  if (!loaded.template || !isSendableHubTemplate(loaded.template)) {
+    return { ok: false, error: "invalid_template" };
+  }
+  const gated = await assertCanSendEsignCategory(effectiveOutgoingCategoryKey(loaded.template));
+  if (gated) return { ok: false, error: gated };
+  const rows = input.rows.map((row) => ({
+    ...row,
+    field_values: mergeFieldValuesForSend(
+      null,
+      row.field_values ?? {},
+      loaded.template?.fields ?? [],
+    ),
+  }));
   const { data, error } = await callAdminFunction("admin_create_esign_batch", {
     p_batch: {
       template_id: input.template_id,
@@ -732,7 +887,7 @@ export async function createEsignBatch(input: {
       language: input.language,
       due_at: input.due_at ?? "",
       source_filename: input.source_filename ?? "",
-      rows: input.rows,
+      rows,
     },
   });
   if (error) return { ok: false, error: error.message };
@@ -1233,6 +1388,7 @@ export async function runEsignBatchChunk(input: {
   const locale: EsignLocale = batch.language === "ar" ? "ar" : "en";
   const title = String(batch.title ?? loaded.template.name_en);
   const dueAt = batch.due_at != null ? String(batch.due_at) : null;
+  const logoUrl = await esignSheetLogoUrl();
 
   const browser = await launchEsignBrowser();
   let created = 0;
@@ -1279,6 +1435,7 @@ export async function runEsignBatchChunk(input: {
             snapshot,
             values,
             row.description != null ? String(row.description) : "",
+            logoUrl,
           ),
           browser,
         );
@@ -1289,7 +1446,7 @@ export async function runEsignBatchChunk(input: {
           {
             p_driver_id: driverId,
             p_title: title,
-            p_category_key: loaded.template.category_key,
+            p_category_key: effectiveOutgoingCategoryKey(loaded.template),
             p_due_at: dueAt || undefined,
             p_document_storage_key: upload.key,
             p_screenshot_restricted: undefined,

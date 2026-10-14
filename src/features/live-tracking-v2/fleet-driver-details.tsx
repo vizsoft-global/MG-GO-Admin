@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type WheelEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type WheelEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import {
@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 
 import { displaySpeedKmh, fleetMotion, fleetStatusTone, hasLiveTelemetry } from "./fleet-status";
 import { FLEET_TONE_BADGE, FLEET_TONE_DOT } from "./fleet-tone";
-import { useFleetDriver } from "./use-fleet";
+import { useFleetDriver, useFleetSnapshot } from "./use-fleet";
 
 function stopWheelFromReachingMap(event: WheelEvent) {
   event.stopPropagation();
@@ -65,7 +65,25 @@ export function FleetDriverDetails({
   const { can } = useAuth();
   const router = useRouter();
   const driver = useFleetDriver(driverId);
+  const snapshot = useFleetSnapshot();
   const canViewActivity = can("driver_ops.view");
+  const gpsTimelineEvents = useMemo(
+    () =>
+      snapshot.feed
+        .filter(
+          (item) =>
+            item.driverId === driverId &&
+            (item.eventKey === "gps.offline" || item.eventKey === "gps.restored"),
+        )
+        .map((item) => ({
+          id: item.id,
+          occurredAt: new Date(item.atMs).toISOString(),
+          operationKey: item.eventKey,
+          success: item.success,
+          category: "location",
+        })),
+    [snapshot.feed, driverId],
+  );
   const [address, setAddress] = useState<string | null>(null);
   const [addressState, setAddressState] = useState<"idle" | "loading" | "done">("idle");
   const [refreshSeq, setRefreshSeq] = useState(0);
@@ -331,6 +349,7 @@ export function FleetDriverDetails({
           <DriverOperationTimeline
             driverId={driverId}
             limit={4}
+            extraEvents={gpsTimelineEvents}
             onViewAll={() =>
               router.push(
                 `/drivers/${driverId}?tab=activity&from=live-tracking-v2&driver=${driverId}`,

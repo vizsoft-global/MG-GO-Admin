@@ -12,7 +12,7 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Link, useRouter } from "@/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
 import { deleteEsignDraft } from "./esign-sender-actions";
 import { formatEsignTrackerDate } from "./esign-tracker";
@@ -34,14 +34,18 @@ import type { EsignDraftKind, EsignDraftRow } from "./types";
  * draw a count would put the wizard's payload on a page that only prints
  * numbers. The rows arrive when a draft is resumed, from `admin_get_esign_draft`.
  *
- * Canonical route is `/requests/esign/drafts`. There is no EmployeeDesk twin —
- * `/employeedesk/esign/drafts` answers 404 on purpose so a second URL cannot
- * fork the screen. Every hub tile (RCM V1 and EmployeeDesk eSign) points here.
+ * Canonical list is `/requests/esign/drafts`. `/employeedesk/esign/drafts`
+ * stays 404 so a second URL cannot fork the screen.
  */
 export function EsignDraftsShell() {
   const t = useTranslations("pages.requests.esign.drafts");
   const tHub = useTranslations("pages.requests.esign.hub");
   const router = useRouter();
+  const pathname = usePathname();
+  const isV2 = pathname.includes("/employeedesk");
+  const hubHref = isV2 ? "/employeedesk" : "/requests/esign";
+  const sendHref = isV2 ? "/employeedesk/esign/send" : "/requests/esign/send";
+  const bulkHref = isV2 ? "/employeedesk/esign/bulk" : "/requests/esign/bulk";
   const queryClient = useQueryClient();
 
   const draftsQuery = useEsignDrafts();
@@ -73,7 +77,7 @@ export function EsignDraftsShell() {
   ];
 
   function resume(row: EsignDraftRow) {
-    const path = row.kind === "bulk" ? "/requests/esign/bulk" : "/requests/esign/send";
+    const path = row.kind === "bulk" ? bulkHref : sendHref;
     router.push(`${path}?draft=${row.id}`);
   }
 
@@ -97,8 +101,8 @@ export function EsignDraftsShell() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[
-          { label: tHub("requests"), href: "/requests" },
-          { label: tHub("title"), href: "/requests/esign" },
+          { label: tHub("requests"), href: "/employeedesk" },
+          { label: tHub("title"), href: hubHref },
           { label: t("title") },
         ]}
         actions={
@@ -107,14 +111,14 @@ export function EsignDraftsShell() {
               variant="outline"
               size="sm"
               className="h-9 cursor-pointer"
-              render={<Link href="/requests/esign" />}
+              render={<Link href={hubHref} />}
             >
               {t("back")}
             </Button>
             <Button
               size="sm"
               className="h-9 cursor-pointer"
-              render={<Link href="/requests/esign/send" />}
+              render={<Link href={sendHref} />}
             >
               {t("newDraft")}
             </Button>

@@ -732,6 +732,7 @@ export function PayrollDayGrid({
                   ? stickyIdentityStyle(
                       column.id,
                       identity.slice(0, index).reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
+                      "head",
                     )
                   : null;
                 return (

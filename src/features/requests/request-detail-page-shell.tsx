@@ -79,6 +79,7 @@ import {
 } from "./request-create-utils";
 import { FleetAttachmentRow } from "@/features/fleet/fleet-attachment-row";
 import { CarTypeBadge, FuelCompanyBadge, ProjectBadge } from "@/features/fleet/fleet-badges";
+import { parseDriverProjectKey } from "@/features/fleet/fleet-labels";
 import { FleetDetailRow } from "@/features/fleet/fleet-record-dialog";
 import { RequestRecordBody } from "./request-record-body";
 import { RequesterHeader } from "./requester-header";
@@ -950,11 +951,15 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         employee={
           <>
             <FleetDetailRow label={fleetT("colDriver")}>{request.requester?.name ?? "—"}</FleetDetailRow>
-            <FleetDetailRow label={fleetT("fieldEmployeeId")}>—</FleetDetailRow>
-            <FleetDetailRow label={fleetT("colEmpCompany")}>—</FleetDetailRow>
+            <FleetDetailRow label={fleetT("fieldEmployeeId")}>
+              {request.requester?.employee_id ?? "—"}
+            </FleetDetailRow>
+            <FleetDetailRow label={fleetT("colEmpCompany")}>
+              {request.requester?.company ?? "—"}
+            </FleetDetailRow>
             <FleetDetailRow label={fleetT("fieldPhone")}>{request.requester?.phone ?? "—"}</FleetDetailRow>
             <FleetDetailRow label={fleetT("colProject")}>
-              <ProjectBadge value={null} />
+              <ProjectBadge value={parseDriverProjectKey(request.requester?.project_key)} />
             </FleetDetailRow>
             <FleetDetailRow label={fleetT("colZone")}>{request.requester?.zone ?? "—"}</FleetDetailRow>
           </>

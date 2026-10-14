@@ -25,8 +25,8 @@ export type AppDefinition = {
 export const APP_REGISTRY: readonly AppDefinition[] = [
   {
     id: "visits",
-    href: "/visit-bookings",
-    icon: "CalendarCheck",
+    href: "/visit-bookings/slots",
+    icon: "Table2",
     prefixes: ["/visit-bookings", "/employeedesk/visits"],
     groups: [],
     permissionAnyOf: ["visits.view"],
@@ -42,7 +42,7 @@ export const APP_REGISTRY: readonly AppDefinition[] = [
   {
     id: "fleet",
     href: "/fleet",
-    icon: "Car",
+    icon: "Truck",
     prefixes: ["/fleet", "/vehicles", "/fuel", "/assets"],
     groups: [],
     permissionAnyOf: ["vehicles.view", "fuel.view", "assets.view"],
@@ -59,6 +59,7 @@ export const APP_REGISTRY: readonly AppDefinition[] = [
       "/delivery-rules",
       "/incentive-rules",
       "/performance",
+      "/deliveries/reconciliation",
     ],
     groups: ["OperationsHub", "Operations"],
     permissionAnyOf: [

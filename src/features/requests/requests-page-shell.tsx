@@ -435,7 +435,7 @@ export function RequestsPageShell({
           ) : (
             <>
               <BreadcrumbItem>
-                <BreadcrumbLink href="/requests">{t("hub.title")}</BreadcrumbLink>
+                <BreadcrumbLink href="/employeedesk">{t("hub.title")}</BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>

@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Building2, ChevronLeft, FileClock, FileText, Loader2, PencilLine } from "lucide-react";
+import { Building2, ChevronLeft, FileClock, FileText, Loader2, PencilLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +17,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
@@ -25,6 +33,29 @@ import { EsignDocumentPreview } from "@/features/employeedesk/esign/document-pre
 import { isEsignDueDateAllowed } from "./esign-due-date";
 import { addEsignSigner } from "./esign-signer-actions";
 import { EsignSignersEditor, type EsignDraftStaffSigner } from "./esign-signers-editor";
+import { previewStaffLabel } from "./esign-signers";
+import { classifyEsignResolveError, mappedEsignErrorKey } from "./esign-resolve-error";
+import { mergeFieldValuesForSend } from "./esign-snapshot-merge";
+import {
+  defaultPenaltyActionOptions,
+  isPenaltyActionFieldKey,
+  parsePenaltyVisible,
+  penaltyControlFieldValues,
+  resolvePenaltyCheckCatalogue,
+  selectedKeysFromPenaltyValues,
+} from "./esign-penalty-checks";
+import {
+  ABSENCE_FROM_KEYS,
+  ABSENCE_TO_KEYS,
+  withAbsenceDateFields,
+} from "./esign-absence-fields";
+import {
+  isPenaltyHubQuery,
+  isSendableHubTemplate,
+  pickSendableHubTemplate,
+  selectOptionsForField,
+  templatesForHubCategory,
+} from "./outgoing-hub-categories";
 import { deleteEsignDraft, fetchEsignSnapshot, saveEsignDraft } from "./esign-sender-actions";
 import {
   useCreateEsignFromTemplate,
@@ -172,19 +203,35 @@ export function EsignSendShell({
   const create = useCreateEsignFromTemplate();
 
   const templates = useMemo(
-    () => (templatesData?.rows ?? []).filter((row) => row.is_active),
+    () => (templatesData?.rows ?? []).filter(isSendableHubTemplate),
     [templatesData?.rows],
   );
+  const categoryTemplates = useMemo(() => {
+    if (!initialCategoryKey) return templates;
+    return templatesForHubCategory(templates, initialCategoryKey);
+  }, [initialCategoryKey, templates]);
   const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null);
   const [categorySeeded, setCategorySeeded] = useState(false);
+  const [hiddenKeys, setHiddenKeys] = useState<string[]>([]);
+  const [hiddenCheckKeys, setHiddenCheckKeys] = useState<string[]>([]);
+  const [selectedCheckKeys, setSelectedCheckKeys] = useState<string[]>([]);
+  const penaltyRestoredRef = useRef(false);
   useEffect(() => {
     if (categorySeeded || templateId || !initialCategoryKey) return;
-    const match = templates.find((row) => row.category_key === initialCategoryKey);
-    if (match) {
-      setTemplateId(match.id);
+    const picked = pickSendableHubTemplate(templatesData?.rows ?? [], initialCategoryKey);
+    if (picked) {
+      setTemplateId(picked.id);
       setCategorySeeded(true);
+      return;
     }
-  }, [categorySeeded, initialCategoryKey, templateId, templates]);
+    if (templatesData) setCategorySeeded(true);
+  }, [categorySeeded, initialCategoryKey, templateId, templatesData]);
+  useEffect(() => {
+    setHiddenKeys([]);
+    setHiddenCheckKeys([]);
+    setSelectedCheckKeys([]);
+    penaltyRestoredRef.current = false;
+  }, [templateId]);
   const { data: templateData } = useEsignTemplate(templateId ?? "");
   const template = templateData?.template;
 
@@ -205,6 +252,7 @@ export function EsignSendShell({
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [staffSigners, setStaffSigners] = useState<EsignDraftStaffSigner[]>([]);
+  const [pickedStaffName, setPickedStaffName] = useState("");
   const draftQuery = useEsignDraft(initialDraftId ?? "");
   /**
    * One-shot. A draft payload is the *starting* state, so it may only be
@@ -215,21 +263,49 @@ export function EsignSendShell({
   const draftAppliedRef = useRef(false);
 
   const isPayslip = template?.document_kind === "payslip";
+  const isPenalty = template?.document_kind === "penalty";
   const payslipGroups = useMemo(
     () => (template ? partitionPayslipFields(template.fields) : null),
     [template],
   );
-  const previewValues = useMemo(
-    () => (template ? previewFieldValues(template.fields, values, snapshot) : {}),
-    [template, values, snapshot],
+  const penaltyCatalogue = useMemo(() => {
+    if (!isPenalty || !template) return [];
+    const action = template.fields.find((field) => isPenaltyActionFieldKey(field.field_key));
+    return resolvePenaltyCheckCatalogue({
+      fields: [
+        {
+          key: action?.field_key ?? "penalty_action",
+          options: defaultPenaltyActionOptions({
+            field_key: action?.field_key ?? "penalty_action",
+            options: action?.options,
+          }),
+        },
+      ],
+    });
+  }, [isPenalty, template]);
+  const penaltyValues = useMemo(
+    () =>
+      isPenalty ? penaltyControlFieldValues(penaltyCatalogue, selectedCheckKeys, hiddenCheckKeys) : {},
+    [hiddenCheckKeys, isPenalty, penaltyCatalogue, selectedCheckKeys],
   );
+  const previewValues = useMemo(() => {
+    if (!template) return {};
+    return { ...previewFieldValues(template.fields, values, snapshot), ...values, ...penaltyValues };
+  }, [penaltyValues, snapshot, template, values]);
   const sheetFields = useMemo(() => {
     if (!template) return [];
-    const ordered = payslipGroups
+    const source = payslipGroups
       ? [...payslipGroups.period, ...payslipGroups.money, ...payslipGroups.rest]
       : template.fields;
-    return ordered.filter(isSheetInput);
-  }, [payslipGroups, template]);
+    const ordered = isPenalty ? withAbsenceDateFields(source, template.id) : source;
+    return ordered.filter(
+      (field) =>
+        isSheetInput(field) &&
+        !hiddenKeys.includes(field.field_key) &&
+        !isPenaltyActionFieldKey(field.field_key),
+    );
+  }, [isPenalty, payslipGroups, template, hiddenKeys]);
+  const resolvedTitle = title.trim() || template?.name_en || "";
 
   const hubHref = isV2 ? "/employeedesk" : "/requests/esign";
   const templatesHref = isV2 ? "/employeedesk/esign/templates" : "/requests/esign/templates";
@@ -243,7 +319,7 @@ export function EsignSendShell({
       ? `/employeedesk/esign/templates/${templateId}/edit`
       : `/requests/esign/templates/${templateId}`
     : templatesHref;
-  const draftsHref = isV2 ? "/requests/esign/drafts" : "/requests/esign/drafts";
+  const draftsHref = "/requests/esign/drafts";
 
   const driverItems = useMemo(
     () =>
@@ -259,13 +335,13 @@ export function EsignSendShell({
   );
   const templateItems = useMemo(
     () =>
-      templates.map((row) => ({
+      (initialCategoryKey ? categoryTemplates : templates).map((row) => ({
         value: row.id,
         label: row.name_en,
         hint: row.category_key,
         keywords: [row.name_en, row.name_ar, row.category_key, row.id].filter(Boolean) as string[],
       })),
-    [templates],
+    [categoryTemplates, initialCategoryKey, templates],
   );
 
   useEffect(() => {
@@ -282,15 +358,25 @@ export function EsignSendShell({
   }, [draftQuery.data?.draft]);
 
   useEffect(() => {
+    if (!draftAppliedRef.current || penaltyRestoredRef.current) return;
+    if (!penaltyCatalogue.length) return;
+    penaltyRestoredRef.current = true;
+    const visible = parsePenaltyVisible(values.penalty_visible);
+    if (visible) {
+      setHiddenCheckKeys(
+        penaltyCatalogue.filter((check) => !visible.includes(check.key)).map((check) => check.key),
+      );
+    }
+    setSelectedCheckKeys(selectedKeysFromPenaltyValues(penaltyCatalogue, values));
+  }, [penaltyCatalogue, values.penalty_action, values.penalty_type, values.penalty_visible]);
+
+  useEffect(() => {
     if (!template) return;
     // A resumed draft is authoritative: its title, language and field values are
     // what the operator last saw, and re-seeding them from the template would
     // quietly replace that with the template's own defaults.
     if (draftAppliedRef.current) return;
-    setTitle((prev) => {
-      if (isV2) return template.name_en;
-      return prev || template.name_en;
-    });
+    setTitle((prev) => prev || template.name_en);
     setValues((prev) => {
       const next = { ...prev };
       for (const field of template.fields) {
@@ -298,7 +384,7 @@ export function EsignSendShell({
       }
       return next;
     });
-  }, [isV2, template]);
+  }, [template]);
 
   useEffect(() => {
     if (!driverId) {
@@ -306,12 +392,22 @@ export function EsignSendShell({
       return;
     }
     void fetchEsignSnapshot(driverId).then((result) => {
+      if (!result.snapshot) {
+        setSnapshot(null);
+        const code = classifyEsignResolveError(result.error ?? "unknown_id");
+        const mapped = mappedEsignErrorKey(code === "failed" ? "unknown_id" : code);
+        if (mapped) toast.error(t(`errors.${mapped}`));
+        return;
+      }
       setSnapshot(result.snapshot);
+      setValues((prev) =>
+        mergeFieldValuesForSend(snapshotValues(result.snapshot!), prev, template?.fields ?? []),
+      );
     });
-  }, [driverId]);
+  }, [driverId, t, template?.fields]);
 
   async function submit() {
-    if (!driverId || !templateId || !title.trim()) {
+    if (!driverId || !templateId || !resolvedTitle) {
       toast.error(t("errors.missingFields"));
       return;
     }
@@ -322,15 +418,16 @@ export function EsignSendShell({
     const result = await create.mutateAsync({
       driver_id: driverId,
       template_id: templateId,
-      title: title.trim(),
+      title: resolvedTitle,
       locale: "en",
       due_at: dueAt || null,
       description: description.trim() || null,
-      field_values: values,
+      field_values: { ...values, ...penaltyValues },
       resent_from_id: initialResentFromId ?? null,
     });
     if (!result.ok) {
-      toast.error(result.error ?? t("errors.createFailed"));
+      const mapped = mappedEsignErrorKey(result.error);
+      toast.error(mapped ? t(`errors.${mapped}`) : (result.error ?? t("errors.createFailed")));
       return;
     }
     if (result.id) {
@@ -381,7 +478,7 @@ export function EsignSendShell({
       title: title.trim() || template?.name_en || null,
       due_at: dueAt || null,
       description: description.trim() || null,
-      field_values: values,
+      field_values: { ...values, ...penaltyValues },
       rows: driverId
         ? [
             {
@@ -400,27 +497,100 @@ export function EsignSendShell({
     toast.success(t("draftSaved"));
   }
 
+  function fieldInputPlaceholder(field: EsignTemplateFieldRow): string {
+    const key = field.field_key;
+    if (
+      key === "violation_date" ||
+      key === "penalty_date" ||
+      key === "date_of_violation"
+    ) {
+      return t("placeholders.violationDate");
+    }
+    if (
+      (ABSENCE_FROM_KEYS as readonly string[]).includes(key) ||
+      key === "from_date"
+    ) {
+      return t("fieldAbsenceFrom");
+    }
+    if ((ABSENCE_TO_KEYS as readonly string[]).includes(key) || key === "to_date") {
+      return t("fieldAbsenceTo");
+    }
+    const category = template?.category_key ?? "";
+    if (isPenalty || isPenaltyHubQuery(category)) return t("placeholders.penalty");
+    if (category === "investigation") return t("placeholders.investigation");
+    return t("placeholders.generic");
+  }
+
   function renderField(field: EsignTemplateFieldRow, code?: string) {
+    const options = selectOptionsForField(field, template?.category_key ?? "");
+    const placeholder = fieldInputPlaceholder(field);
     return (
       <div key={field.id} className="space-y-1">
-        <Label className="flex items-center gap-1.5">
-          <span>
-            {field.label_en}
-            {isPayslip && PAYSLIP_KD_KEYS.has(field.field_key) && !field.label_en.includes("(KD)")
-              ? " (KD)"
-              : ""}
-            {field.is_required ? <span className="text-destructive"> *</span> : null}
-          </span>
-          {code ? (
-            <span className="rounded border border-border bg-muted/50 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {code}
+        <div className="flex items-center justify-between gap-2">
+          <Label className="flex items-center gap-1.5">
+            <span>
+              {field.label_en}
+              {isPayslip && PAYSLIP_KD_KEYS.has(field.field_key) && !field.label_en.includes("(KD)")
+                ? " (KD)"
+                : ""}
+              {field.is_required ? <span className="text-destructive"> *</span> : null}
             </span>
-          ) : null}
-        </Label>
-        {field.field_type === "textarea" ? (
+            {code ? (
+              <span className="rounded border border-border bg-muted/50 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {code}
+              </span>
+            ) : null}
+          </Label>
+          <button
+            type="button"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+            onClick={() => setHiddenKeys((prev) => [...prev, field.field_key])}
+          >
+            <Trash2 className="size-3" aria-hidden />
+            {t("hideField")}
+          </button>
+        </div>
+        {field.field_type === "select" && options.length > 0 ? (
+          options.length > 30 ? (
+            <SearchSelect
+              items={options.map((option) => ({
+                value: option,
+                label: option,
+                keywords: [option],
+              }))}
+              value={values[field.field_key] || null}
+              onChange={(next) =>
+                setValues((prev) => ({ ...prev, [field.field_key]: next ?? "" }))
+              }
+              placeholder={t("fieldSelectPlaceholder")}
+              searchPlaceholder={t("fieldSelectSearch")}
+              recentsKey={`esign-send-select-${field.field_key}`}
+              className="w-full"
+            />
+          ) : (
+            <Select
+              value={values[field.field_key] || undefined}
+              onValueChange={(next) =>
+                setValues((prev) => ({ ...prev, [field.field_key]: next ?? "" }))
+              }
+            >
+              <SelectTrigger className="h-9 w-full">
+                <SelectValue placeholder={t("fieldSelectPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )
+        ) : field.field_type === "textarea" ? (
           <Textarea
             className="min-h-16"
             value={values[field.field_key] ?? ""}
+            placeholder={placeholder}
             onChange={(e) =>
               setValues((prev) => ({ ...prev, [field.field_key]: e.target.value }))
             }
@@ -430,6 +600,7 @@ export function EsignSendShell({
             className="h-9"
             type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"}
             value={values[field.field_key] ?? ""}
+            placeholder={placeholder}
             onChange={(e) =>
               setValues((prev) => ({ ...prev, [field.field_key]: e.target.value }))
             }
@@ -445,7 +616,7 @@ export function EsignSendShell({
         { label: t("title") },
       ]
     : [
-        { label: tHub("requests"), href: "/requests" },
+        { label: tHub("requests"), href: "/employeedesk" },
         { label: tHub("title"), href: "/requests/esign" },
         { label: t("title") },
       ];
@@ -500,12 +671,21 @@ export function EsignSendShell({
       bodyAr={template.body_ar}
       declaration={template.declaration_en}
       declarationAr={template.declaration_ar}
-      fields={template.fields}
+      fields={(isPenalty ? withAbsenceDateFields(template.fields, template.id) : template.fields).map(
+        (field) =>
+          isPenaltyActionFieldKey(field.field_key)
+            ? { ...field, options: defaultPenaltyActionOptions(field) }
+            : field,
+      )}
       values={previewValues}
       documentKind={template.document_kind}
       signers={{
         employeeLabel: tBuilder("previewEmployeeSignature"),
-        staffLabel: tBuilder("previewStaffSignature"),
+        staffLabel: previewStaffLabel(
+          staffSigners,
+          pickedStaffName,
+          tBuilder("previewStaffSignature"),
+        ),
       }}
     />
   ) : null;
@@ -574,6 +754,14 @@ export function EsignSendShell({
                 recentsKey="esign-send-template"
                 className="w-full"
               />
+              {initialCategoryKey && categoryTemplates.length === 0 && templatesData ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {t("emptyCategory")}{" "}
+                  <Link href={templatesHref} className="font-medium text-primary hover:underline">
+                    {t("openLibrary")}
+                  </Link>
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1">
               <Label>
@@ -614,56 +802,147 @@ export function EsignSendShell({
             </div>
           </div>
 
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label>
+                {t("fieldTitle")} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                className="h-9"
+                value={title}
+                placeholder={t("fieldTitlePlaceholder")}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>{t("fieldDue")}</Label>
+              <Input
+                type="date"
+                className="h-9"
+                min={kuwaitTodayYmd()}
+                value={dueAt}
+                onChange={(e) => setDueAt(e.target.value)}
+              />
+            </div>
+          </div>
           {isV2 ? null : (
-            <>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label>
-                    {t("fieldTitle")} <span className="text-destructive">*</span>
-                  </Label>
-                  <Input className="h-9" value={title} onChange={(e) => setTitle(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>{t("fieldDue")}</Label>
-                  <Input
-                    type="date"
-                    className="h-9"
-                    min={kuwaitTodayYmd()}
-                    value={dueAt}
-                    onChange={(e) => setDueAt(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label>{t("fieldDescription")}</Label>
-                <Textarea
-                  className="min-h-16"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </div>
-            </>
+            <div className="space-y-1">
+              <Label>{t("fieldDescription")}</Label>
+              <Textarea
+                className="min-h-16"
+                value={description}
+                placeholder={t("fieldDescriptionPlaceholder")}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
           )}
 
-          {sheetFields.length > 0 ? (
+          {sheetFields.length > 0 || isPenalty ? (
             <div className="space-y-2">
               {isV2 ? null : <p className="text-xs font-semibold">{t("sheetInputs")}</p>}
               <div className="grid gap-2 sm:grid-cols-2">
                 {sheetFields.map((field) =>
                   renderField(field, isPayslip ? PAYSLIP_MONEY_CODES[field.field_key] : undefined),
                 )}
+                {isPenalty &&
+                !sheetFields.some(
+                  (field) => field.field_key === "absence_from" || field.field_key === "from_date",
+                ) ? (
+                  <div className="space-y-1">
+                    <Label>{t("absenceFrom")}</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={values.absence_from ?? ""}
+                      placeholder={t("fieldAbsenceFrom")}
+                      onChange={(e) =>
+                        setValues((prev) => ({ ...prev, absence_from: e.target.value }))
+                      }
+                    />
+                  </div>
+                ) : null}
+                {isPenalty &&
+                !sheetFields.some(
+                  (field) => field.field_key === "absence_to" || field.field_key === "to_date",
+                ) ? (
+                  <div className="space-y-1">
+                    <Label>{t("absenceTo")}</Label>
+                    <Input
+                      type="date"
+                      className="h-9"
+                      value={values.absence_to ?? ""}
+                      placeholder={t("fieldAbsenceTo")}
+                      onChange={(e) =>
+                        setValues((prev) => ({ ...prev, absence_to: e.target.value }))
+                      }
+                    />
+                  </div>
+                ) : null}
+                {isPenalty && penaltyCatalogue.length > 0 ? (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label>{t("penaltyOptions")}</Label>
+                      {hiddenCheckKeys.length > 0 ? (
+                        <button
+                          type="button"
+                          className="inline-flex h-7 items-center rounded-md px-1.5 text-[11px] font-medium text-primary hover:bg-primary/10"
+                          onClick={() => setHiddenCheckKeys([])}
+                        >
+                          {t("showHiddenOptions")}
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {penaltyCatalogue
+                        .filter((check) => !hiddenCheckKeys.includes(check.key))
+                        .map((check) => (
+                          <span key={check.key} className="inline-flex items-center gap-0.5">
+                            <ToggleChip
+                              selected={selectedCheckKeys.includes(check.key)}
+                              onClick={() =>
+                                setSelectedCheckKeys((prev) =>
+                                  prev.includes(check.key)
+                                    ? prev.filter((key) => key !== check.key)
+                                    : [...prev, check.key],
+                                )
+                              }
+                            >
+                              {check.label.en}
+                            </ToggleChip>
+                            <button
+                              type="button"
+                              className="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                              aria-label={t("hideOption")}
+                              onClick={() => {
+                                setHiddenCheckKeys((prev) => [...prev, check.key]);
+                                setSelectedCheckKeys((prev) =>
+                                  prev.filter((key) => key !== check.key),
+                                );
+                              }}
+                            >
+                              <Trash2 className="size-3" aria-hidden />
+                            </button>
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
 
           {isV2 ? null : (
-            <EsignSignersEditor draft={staffSigners} onDraftChange={setStaffSigners} />
+            <EsignSignersEditor
+              draft={staffSigners}
+              onDraftChange={setStaffSigners}
+              onSelectedDisplayNameChange={setPickedStaffName}
+            />
           )}
 
           <div className="flex flex-col gap-2">
             <Button
               className="h-9 w-full bg-[#0A0A0A] text-white hover:bg-[#262626]"
-              disabled={create.isPending || !driverId || !templateId || !title.trim()}
+              disabled={create.isPending || !driverId || !templateId || !resolvedTitle}
               onClick={() => void submit()}
             >
               {create.isPending ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
@@ -672,7 +951,7 @@ export function EsignSendShell({
             <Button
               variant="outline"
               className="h-9 w-full cursor-pointer"
-              disabled={savingDraft || !templateId || !title.trim()}
+              disabled={savingDraft || !templateId || !resolvedTitle}
               onClick={() => void saveDraft()}
             >
               {savingDraft ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}

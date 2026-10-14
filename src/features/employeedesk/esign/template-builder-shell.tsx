@@ -53,16 +53,22 @@ import {
   resolveFieldSource,
 } from "@/features/esign/template-source";
 import { buildEsignExampleSheet } from "@/features/esign/esign-example-sheet";
+import { previewStaffLabel } from "@/features/esign/esign-signers";
+import {
+  defaultPenaltyActionOptions,
+  isPenaltyActionFieldKey,
+} from "@/features/esign/esign-penalty-checks";
 import {
   ESIGN_EMPLOYEE_ROWS,
 } from "@/features/esign/employee-block";
-import type {
-  EsignDocumentKind,
-  EsignFieldSection,
-  EsignLocale,
-  EsignTemplateDetail,
-  EsignTemplateFieldRow,
-  EsignTemplateFieldType,
+import {
+  isWritableEsignFieldKey,
+  type EsignDocumentKind,
+  type EsignFieldSection,
+  type EsignLocale,
+  type EsignTemplateDetail,
+  type EsignTemplateFieldRow,
+  type EsignTemplateFieldType,
 } from "@/features/esign/types";
 import { FieldSourceBadge } from "./field-source-badge";
 import { EsignDocumentPreview } from "./document-preview";
@@ -128,7 +134,7 @@ export function TemplateBuilderShell({
   isNew = false,
 }: {
   template: EsignTemplateDetail;
-  categories: { key: string; label_en: string }[];
+  categories: { key: string; label_en: string; is_active?: boolean }[];
   /** Create mode: the draft has no server row yet, so save inserts then routes. */
   isNew?: boolean;
 }) {
@@ -146,7 +152,9 @@ export function TemplateBuilderShell({
    * category fetch returned nothing, which is exactly the moment a wrong control is
    * most confusing. An empty catalogue now renders an empty state instead.
    */
-  const categoryOptions = categories.map((c) => ({ key: c.key, label: c.label_en }));
+  const categoryOptions = categories
+    .filter((c) => c.is_active !== false || c.key === template.category_key)
+    .map((c) => ({ key: c.key, label: c.label_en }));
 
   const [draft, setDraft] = useState({
     name_en: template.name_en,
@@ -164,9 +172,16 @@ export function TemplateBuilderShell({
     declaration_ar: template.declaration_ar,
   });
 
-  const [fields, setFields] = useState<DraftField[]>(() =>
-    [...template.fields].sort((a, b) => a.sort_order - b.sort_order),
-  );
+  const [fields, setFields] = useState<DraftField[]>(() => {
+    const sorted = [...template.fields].sort((a, b) => a.sort_order - b.sort_order);
+    if (template.document_kind !== "penalty") return sorted;
+    return sorted.map((field) => {
+      if (!isPenaltyActionFieldKey(field.field_key)) return field;
+      const options = defaultPenaltyActionOptions(field);
+      if (options.length === field.options.filter((item) => item.trim()).length) return field;
+      return { ...field, options };
+    });
+  });
   const [selectedId, setSelectedId] = useState<string | null>(
     template.fields[0]?.id ?? null,
   );
@@ -317,7 +332,7 @@ export function TemplateBuilderShell({
     visibleFields.every(
       (f) =>
         f.label_en.trim().length > 0 &&
-        /^[a-z][a-z0-9_]*$/.test(f.field_key) &&
+        isWritableEsignFieldKey(f.field_key, resolveFieldSource(f)) &&
         !fieldPairErrorKey(
           resolveFieldSource(f),
           f.field_type,
@@ -980,7 +995,8 @@ export function TemplateBuilderShell({
                     option row visible as an empty option row rather than as a
                     stray comma. Blank rows are allowed while typing and dropped
                     on save, so a half-typed option does not block the write. */}
-                {selected.field_type === "select" &&
+                {(selected.field_type === "select" ||
+                  isPenaltyActionFieldKey(selected.field_key)) &&
                 resolveFieldSource(selected) !== "fixed" ? (
                   <Field label={t("options")}>
                     <div className="space-y-1.5">
@@ -1031,7 +1047,11 @@ export function TemplateBuilderShell({
                           {t("addOption")}
                         </Button>
                         <span className="text-[10px] text-muted-foreground">
-                          {t("optionsHint")}
+                          {t(
+                            isPenaltyActionFieldKey(selected.field_key)
+                              ? "penaltyOptionsHint"
+                              : "optionsHint",
+                          )}
                         </span>
                       </div>
                     </div>
@@ -1101,7 +1121,7 @@ export function TemplateBuilderShell({
                 documentKind={draft.document_kind}
                 signers={{
                   employeeLabel: t("previewEmployeeSignature"),
-                  staffLabel: t("previewStaffSignature"),
+                  staffLabel: previewStaffLabel([], "", t("previewStaffSignature")),
                 }}
               />
             </div>

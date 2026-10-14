@@ -1,5 +1,5 @@
-import { getStorage } from "firebase-admin/storage";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { getR2ObjectBytes, headR2Object, putR2Object, r2ConfigFromEnv } from "../core/r2-esign";
 import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff, type StaffContext } from "../core/staff";
@@ -72,38 +72,31 @@ export const esignComposeSignedDocument = onCall(
       return { ok: false, error: code, request_id: requestId, ...extra };
     }
 
-    let bucket: ReturnType<ReturnType<typeof getStorage>["bucket"]>;
-    try {
-      bucket = getStorage().bucket();
-    } catch (error) {
-      console.error("esign compose storage", error);
+    if (!r2ConfigFromEnv()) {
       return { ok: false, error: "server_misconfigured" };
     }
 
     if (textOrNull(row.signed_document_storage_key) === outputKey) {
-      const existing = bucket.file(esignObjectPath(outputKey));
-      const [exists] = await existing.exists().catch(() => [false] as const);
-      if (exists) {
-        let bytes = 0;
-        try {
-          const [meta] = await existing.getMetadata();
-          bytes = Number(meta.size ?? 0);
-        } catch {
-          bytes = 0;
+      try {
+        const existing = await headR2Object(esignObjectPath(outputKey));
+        if (existing.exists) {
+          return {
+            ok: true,
+            already_generated: true,
+            request_id: requestId,
+            storage_key: outputKey,
+            bytes: Number.isFinite(existing.size) ? existing.size : 0,
+          };
         }
-        return {
-          ok: true,
-          already_generated: true,
-          request_id: requestId,
-          storage_key: outputKey,
-          bytes: Number.isFinite(bytes) ? bytes : 0,
-        };
+      } catch (error) {
+        console.error("esign compose storage", error);
+        return { ok: false, error: "server_misconfigured" };
       }
     }
 
     const [sourceFile, signatureFile] = await Promise.all([
-      readObject(bucket, documentKey),
-      readObject(bucket, signatureKey),
+      readObject(documentKey),
+      readObject(signatureKey),
     ]);
     if (!sourceFile) return fail("source_document_unavailable");
     if (!signatureFile) return fail("signature_unavailable");
@@ -168,10 +161,7 @@ export const esignComposeSignedDocument = onCall(
     }
 
     try {
-      await bucket.file(esignObjectPath(outputKey)).save(Buffer.from(pdfBytes), {
-        contentType: "application/pdf",
-        resumable: false,
-      });
+      await putR2Object(esignObjectPath(outputKey), Buffer.from(pdfBytes), "application/pdf");
     } catch (error) {
       console.error("esign compose upload", error);
       return fail("upload_failed", {
@@ -228,16 +218,9 @@ function formatSignedAt(value: string | null): string {
   return `${parsed.toISOString().slice(0, 10)} ${parsed.toISOString().slice(11, 16)} UTC`;
 }
 
-async function readObject(
-  bucket: ReturnType<ReturnType<typeof getStorage>["bucket"]>,
-  key: string,
-): Promise<Buffer | null> {
+async function readObject(key: string): Promise<Buffer | null> {
   try {
-    const file = bucket.file(esignObjectPath(key));
-    const [exists] = await file.exists();
-    if (!exists) return null;
-    const [bytes] = await file.download();
-    return bytes;
+    return await getR2ObjectBytes(esignObjectPath(key));
   } catch (error) {
     console.error("esign compose download", error);
     return null;

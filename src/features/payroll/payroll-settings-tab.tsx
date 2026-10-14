@@ -42,6 +42,7 @@ import {
 import {
   conditionsToColumns,
   columnsToConditions,
+  payrollRulesSavePayload,
   readsAs,
   summariseAudit,
   type RuleTableRow,
@@ -316,6 +317,8 @@ export function PayrollSettingsTab({
 
   function persistRules(list: RuleDraft[]) {
     if (!clientKey || !canManage) return;
+    const ready = list.filter((rule) => rule.conditions.length > 0);
+    if (ready.length === 0 && list.length > 0) return;
     const sig = rulesSignature(list);
     if (sig === lastRulesSig.current) return;
     lastRulesSig.current = sig;
@@ -324,19 +327,19 @@ export function PayrollSettingsTab({
       {
         clientKey,
         monthKey: month.key,
-        rules: list.map((r, index) => ({
-          label: r.label,
-          conditions: { all: r.conditions },
-          result: r.result,
-          sortOrder: index + 1,
-        })),
+        rules: payrollRulesSavePayload(ready),
       },
       {
         onSuccess: (result) => {
-          if ("error" in result) toast.error(errorText(t, result.error));
-          else markSaved();
+          if ("error" in result) {
+            lastRulesSig.current = "";
+            toast.error(errorText(t, result.error));
+          } else markSaved();
         },
-        onError: () => toast.error(t("errors.unknown")),
+        onError: () => {
+          lastRulesSig.current = "";
+          toast.error(t("errors.unknown"));
+        },
       },
     );
   }
@@ -1566,6 +1569,7 @@ const KNOWN_SETTINGS_ERRORS = new Set([
   "client_has_riders",
   "system_client",
   "invalid_thresholds",
+  "rule_condition_required",
 ]);
 
 function errorText(t: (key: string) => string, code: string): string {

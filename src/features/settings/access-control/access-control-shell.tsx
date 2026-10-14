@@ -41,6 +41,8 @@ import {
   type StaffAccessListRow,
   type StaffLastChanged,
 } from "@/features/settings/staff-access-actions";
+import { grantsKeyForEsign, type EsignCategoryGrant } from "@/features/esign/esign-staff-access";
+import { isPenaltyChild } from "@/features/esign/esign-penalty-subcategories";
 import { useRouter } from "@/i18n/navigation";
 import { useApplySidebarEpochs } from "@/contexts/sidebar-epochs-context";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -223,12 +225,14 @@ function StaffAccessWorkspace({
   const [unknown, setUnknown] = useState<string[]>(() => preservedUnknownSlugs(row.slugs));
   const [department, setDepartment] = useState<StaffDepartment | null>(row.staffDepartment);
   const [grants, setGrants] = useState<RequestTypeGrant[]>([]);
+  const [esignGrants, setEsignGrants] = useState<EsignCategoryGrant[]>([]);
   const [lastChanged, setLastChanged] = useState<StaffLastChanged>(row.lastChanged);
   const [baseline, setBaseline] = useState({
     kind: initialKind,
     access: initialAccess,
     department: row.staffDepartment,
     grants: [] as RequestTypeGrant[],
+    esignGrants: [] as EsignCategoryGrant[],
   });
 
   const [copyOpen, setCopyOpen] = useState(false);
@@ -255,8 +259,13 @@ function StaffAccessWorkspace({
     void getStaffAccess(row.id).then((loaded) => {
       if (cancelled || !loaded.detail) return;
       setGrants(loaded.detail.requestTypes);
+      setEsignGrants(loaded.detail.esignCategories);
       setLastChanged(loaded.detail.lastChanged);
-      setBaseline((prev) => ({ ...prev, grants: loaded.detail!.requestTypes }));
+      setBaseline((prev) => ({
+        ...prev,
+        grants: loaded.detail!.requestTypes,
+        esignGrants: loaded.detail!.esignCategories,
+      }));
     });
     return () => {
       cancelled = true;
@@ -268,9 +277,10 @@ function StaffAccessWorkspace({
     if (kind !== baseline.kind) count += 1;
     if (department !== baseline.department) count += 1;
     if (grantsKey(grants) !== grantsKey(baseline.grants)) count += 1;
+    if (grantsKeyForEsign(esignGrants) !== grantsKeyForEsign(baseline.esignGrants)) count += 1;
     if (!fullAccess) count += diffAccess(baseline.access, access).changeCount;
     return count;
-  }, [access, baseline, department, fullAccess, grants, kind]);
+  }, [access, baseline, department, esignGrants, fullAccess, grants, kind]);
 
   useEffect(() => {
     unsavedRef.current = unsaved;
@@ -325,6 +335,7 @@ function StaffAccessWorkspace({
         slugs: draftTicks,
         department,
         requestTypes: grants,
+        esignCategories: esignGrants,
       });
       if (result.error) {
         toast.error(t("errors.saveFailed"));
@@ -333,7 +344,7 @@ function StaffAccessWorkspace({
       toast.success(t("saved"));
       applyEpochs(result.epochs);
       void queryClient.invalidateQueries({ queryKey: queryKeys.menu.all() });
-      setBaseline({ kind, access, department, grants });
+      setBaseline({ kind, access, department, grants, esignGrants });
       router.refresh();
     });
   };
@@ -343,6 +354,7 @@ function StaffAccessWorkspace({
     setAccess(baseline.access);
     setDepartment(baseline.department);
     setGrants(baseline.grants);
+    setEsignGrants(baseline.esignGrants);
   };
 
   const resetRole = () => {
@@ -473,6 +485,7 @@ function StaffAccessWorkspace({
                     disabled={cardsLocked || isPending}
                     requestTypes={localizedTypes}
                     grants={grants}
+                    esignGrants={esignGrants}
                     onLevel={(level: AppAccessLevel) =>
                       setAccess((prev) => setAppLevel(prev, entry.appId, level))
                     }
@@ -506,6 +519,27 @@ function StaffAccessWorkspace({
                           }
                         : undefined
                     }
+                    onToggleEsign={
+                      entry.rcm
+                        ? (key) => {
+                            setEsignGrants((prev) => {
+                              if (prev.some((grant) => grant.categoryKey === key)) {
+                                return prev.filter((grant) => grant.categoryKey !== key);
+                              }
+                              return [
+                                ...prev,
+                                {
+                                  categoryKey: key,
+                                  parentKey: isPenaltyChild({ key, parent_key: "penalty" })
+                                    ? "penalty"
+                                    : null,
+                                  accessLevel: "sender",
+                                },
+                              ];
+                            });
+                          }
+                        : undefined
+                    }
                   />
                 );
               })}
@@ -532,9 +566,10 @@ function StaffAccessWorkspace({
         users={rows}
         roles={roles}
         currentUserId={row.id}
-        onApply={(next, copiedTypes) => {
+        onApply={(next, copiedTypes, copiedEsign) => {
           setAccess(next);
           if (copiedTypes) setGrants(copiedTypes);
+          if (copiedEsign) setEsignGrants(copiedEsign);
         }}
       />
 

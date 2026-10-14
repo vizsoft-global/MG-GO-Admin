@@ -15,6 +15,8 @@ describe("launcher modules", () => {
     assert.equal(items.find((item) => item.id === "drivers")?.defaultLabel, "Employees");
     assert.equal(items.find((item) => item.id === "employeedesk")?.defaultLabel, "EmployeeDesk");
     assert.equal(items.find((item) => item.id === "vehicles")?.defaultLabel, "Fleet Hub");
+    assert.equal(items.find((item) => item.id === "visit-bookings")?.defaultLabel, "Visit Slots");
+    assert.equal(items.find((item) => item.id === "visit-bookings")?.href, "/visit-bookings/slots");
     assert.equal(items.some((item) => item.id === "assets"), false);
   });
 

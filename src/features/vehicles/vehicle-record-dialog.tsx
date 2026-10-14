@@ -17,7 +17,7 @@ import {
   ReplacementBadge,
   VehicleStatusBadge,
 } from "@/features/fleet/fleet-badges";
-import { formatReplacementSince } from "@/features/fleet/fleet-labels";
+import { formatReplacementSince, isVehicleTypeOfUse } from "@/features/fleet/fleet-labels";
 import { SectionHeading } from "@/features/drivers/form/driver-form-primitives";
 import type { VehicleListRow } from "./types";
 
@@ -88,7 +88,11 @@ export function VehicleRecordDialog({
                 <DetailRow label={t("colCarsCompany")} value={vehicle.owner_partner_name ?? "—"} />
                 <DetailRow
                   label={t("colTypeOfUse")}
-                  value={vehicle.type_of_use ? t(`typeOfUse.${vehicle.type_of_use}`) : "—"}
+                  value={
+                    vehicle.type_of_use && isVehicleTypeOfUse(vehicle.type_of_use)
+                      ? t(`typeOfUse.${vehicle.type_of_use}`)
+                      : vehicle.type_of_use_label || "—"
+                  }
                 />
                 <DetailRow label={t("colLocation")} value={vehicle.location_text ?? "—"} />
                 <DetailRow label={t("colFuelType")} value={<FuelTypeBadge value={vehicle.fuel_type} />} />

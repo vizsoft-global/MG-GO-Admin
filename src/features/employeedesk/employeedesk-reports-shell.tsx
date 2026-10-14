@@ -104,13 +104,12 @@ function formatDays(seconds: number | null | undefined): string {
 }
 
 export function EmployeeDeskReportsShell({
-  origin = "employeedesk",
+  origin: _origin = "employeedesk",
 }: {
   origin?: EmployeeDeskReportsOrigin;
 } = {}) {
   const t = useTranslations("pages.employeedesk.reports");
   const tRoot = useTranslations("pages.employeedesk.hub");
-  const tRequests = useTranslations("pages.requests");
   const { can } = usePermissions();
 
   const canManageRequests = can("requests.manage");
@@ -158,15 +157,11 @@ export function EmployeeDeskReportsShell({
   const loading = requests.isLoading || esign.isLoading;
 
   /**
-   * The breadcrumb root is the only thing `origin` decides. `/employeedesk` is
-   * always a valid parent for this page; when the operator arrived from the
-   * Requests hub the tile they clicked is on `/requests`, so going "up" to
-   * EmployeeDesk would leave them one door away from where they started.
+   * Reports is an EmployeeDesk surface. The `/requests/reports` twin stays as
+   * a route, but the crumb goes to EmployeeDesk — the old Requests hub is
+   * hidden and is no longer the parent door.
    */
-  const breadcrumbRoot =
-    origin === "requests"
-      ? { label: tRequests("title"), href: "/requests" }
-      : { label: tRoot("title"), href: "/employeedesk" };
+  const breadcrumbRoot = { label: tRoot("title"), href: "/employeedesk" };
 
   function linkMeta(key: ReportLinkKey): string | null {
     switch (key) {

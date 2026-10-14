@@ -17,7 +17,7 @@ export type IncomingTypeKey = (typeof INCOMING_TYPE_KEYS)[number];
 
 export const RCM_ADMIN_CHIPS = [
   { id: "templates", href: "/employeedesk/esign/templates" },
-  { id: "all", href: "/employeedesk/all" },
+  { id: "all", href: "/employeedesk/all?scope=all" },
   { id: "reports", href: "/employeedesk/reports" },
   { id: "audit", href: "/settings/logs?module=requests" },
   { id: "settings", href: "/employeedesk/settings" },
@@ -55,7 +55,7 @@ export function incomingHubListFlags(filter: IncomingHubFilter): {
   dueToday: boolean;
 } {
   return {
-    assignedToMe: filter === "all",
+    assignedToMe: false,
     forwardedToMe: filter === "forwarded",
     handledByMe: false,
     dueToday: filter === "due",

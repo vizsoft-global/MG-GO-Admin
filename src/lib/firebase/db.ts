@@ -74,6 +74,7 @@ export const COLLECTIONS = {
   requestForwards: "request_forwards",
   requestDepartments: "request_departments",
   requestStaffAccess: "request_staff_access",
+  esignStaffAccess: "esign_staff_access",
   requestExceptionActions: "request_exception_actions",
   esignCategories: "esign_categories",
   esignRequestSigners: "esign_request_signers",

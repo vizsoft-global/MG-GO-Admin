@@ -203,6 +203,9 @@ export type RequestRequester = {
   code: string;
   phone: string | null;
   zone: string | null;
+  employee_id: string | null;
+  company: string | null;
+  project_key: string | null;
 };
 
 export type RequestDetail = {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   esignDocumentHref,
+  esignObjectPath,
   normalizeEsignStorageKey,
 } from "./esign-storage-key";
 
@@ -15,6 +16,16 @@ describe("normalizeEsignStorageKey", () => {
 
   it("leaves a bare object key unchanged", () => {
     assert.equal(normalizeEsignStorageKey("admin/abc.pdf"), "admin/abc.pdf");
+  });
+});
+
+describe("esignObjectPath", () => {
+  it("prefixes the R2 folder once", () => {
+    assert.equal(esignObjectPath("admin/abc.pdf"), "esign-documents/admin/abc.pdf");
+    assert.equal(
+      esignObjectPath("esign-documents/admin/abc.pdf"),
+      "esign-documents/admin/abc.pdf",
+    );
   });
 });
 

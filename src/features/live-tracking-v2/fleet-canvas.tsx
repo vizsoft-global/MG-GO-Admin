@@ -468,6 +468,7 @@ export function FleetCanvas() {
                   setRailCollapsed(collapsed);
                 }}
                 onFocusDriver={(driverId) => mapRef.current?.focusDriver(driverId)}
+                onReselectDriver={() => setShowInsightsWhileSelected(false)}
               />
             </div>
             <div className="pointer-events-auto shrink-0">

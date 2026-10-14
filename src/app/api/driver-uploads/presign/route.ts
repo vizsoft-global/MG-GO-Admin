@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { withCors } from "@/lib/http/cors";
+import { esignObjectPath } from "@/features/esign/esign-storage-key";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
 import { requireDriverFromRequest } from "@/lib/storage/driver-upload-auth";
 import {
   buildDriverObjectKey,
   validateDriverUploadRequest,
 } from "@/lib/storage/driver-upload-keys";
+import { esignR2WorkerConfig } from "@/lib/storage/esign-r2-worker";
 import { getPresignedPutUrl } from "@/lib/storage/r2-client";
+import { isR2Configured } from "@/lib/storage/r2-config";
 import { createPendingUpload } from "@/lib/storage/storage-upload-audit";
 
 const PRESIGN_TTL_SECONDS = 600;
@@ -47,34 +52,71 @@ async function handler(request: Request): Promise<Response> {
     driverId: auth.driverId,
     entityType: validation.entityType,
     originalFilename: filename,
+    entityId,
   });
+  if (!objectKey) {
+    return NextResponse.json({ error: "invalid_entity_id" }, { status: 400 });
+  }
+
+  const putKey =
+    validation.entityType === "esign_signature" ? esignObjectPath(objectKey) : objectKey;
+
+  if (validation.entityType === "esign_signature") {
+    if (!entityId) {
+      return NextResponse.json({ error: "invalid_entity_id" }, { status: 400 });
+    }
+    const db = await getFirebaseFirestore();
+    if (!db) return NextResponse.json({ error: "not_configured" }, { status: 503 });
+    const requestSnap = await db.collection(COLLECTIONS.esignRequests).doc(entityId).get();
+    if (!requestSnap.exists || requestSnap.get("driver_id") !== auth.driverId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+  }
 
   const expiresAt = new Date(
     Date.now() + PRESIGN_TTL_SECONDS * 1000,
   ).toISOString();
 
-  const pending = await createPendingUpload({
-    objectKey,
-    contentType,
-    entityType: validation.entityType,
-    entityId,
-    uploadedBy: auth.authUid,
-    expiresAt,
-  });
+  let uploadId = "";
+  if (validation.entityType !== "esign_signature") {
+    const pending = await createPendingUpload({
+      objectKey,
+      contentType,
+      entityType: validation.entityType,
+      entityId,
+      uploadedBy: auth.authUid,
+      expiresAt,
+    });
 
-  if ("error" in pending) {
-    return NextResponse.json({ error: pending.error }, { status: 409 });
+    if ("error" in pending) {
+      return NextResponse.json({ error: pending.error }, { status: 409 });
+    }
+    uploadId = pending.id;
+  }
+
+  if (validation.entityType === "esign_signature" && !(await isR2Configured())) {
+    if (!esignR2WorkerConfig()) {
+      return NextResponse.json({ error: "not_configured" }, { status: 503 });
+    }
+    return NextResponse.json({
+      uploadId: "",
+      uploadUrl: "",
+      objectKey,
+      expiresAt,
+      useProxy: true,
+      requiredHeaders: { "Content-Type": contentType },
+    });
   }
 
   try {
     const uploadUrl = await getPresignedPutUrl(
-      objectKey,
+      putKey,
       contentType,
       PRESIGN_TTL_SECONDS,
     );
 
     return NextResponse.json({
-      uploadId: pending.id,
+      uploadId,
       uploadUrl,
       objectKey,
       expiresAt,

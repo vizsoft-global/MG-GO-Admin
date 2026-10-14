@@ -37,6 +37,7 @@ import {
   type RequestTypeGrant,
   type StaffAccessListRow,
 } from "@/features/settings/staff-access-actions";
+import type { EsignCategoryGrant } from "@/features/esign/esign-staff-access";
 
 type CopyTab = "user" | "role";
 
@@ -61,7 +62,11 @@ export function CopyAccessDialog({
   users: StaffAccessListRow[];
   roles: AdminRoleRow[];
   currentUserId: string;
-  onApply: (next: AppAccessMap, requestTypes?: RequestTypeGrant[]) => void;
+  onApply: (
+    next: AppAccessMap,
+    requestTypes?: RequestTypeGrant[],
+    esignCategories?: EsignCategoryGrant[],
+  ) => void;
 }) {
   const t = useTranslations("pages.settings.accessControl");
   const tNav = useTranslations();
@@ -73,6 +78,7 @@ export function CopyAccessDialog({
   const [keepSubViews, setKeepSubViews] = useState(false);
   const [preview, setPreview] = useState<AppAccessMap | null>(null);
   const [copiedTypes, setCopiedTypes] = useState<RequestTypeGrant[] | undefined>(undefined);
+  const [copiedEsign, setCopiedEsign] = useState<EsignCategoryGrant[] | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,6 +136,7 @@ export function CopyAccessDialog({
         if (!sourceUserId) {
           setPreview(null);
           setCopiedTypes(undefined);
+          setCopiedEsign(undefined);
           return;
         }
         setBusy(true);
@@ -144,6 +151,7 @@ export function CopyAccessDialog({
           const source = ticksToAppAccess(loaded.slugs);
           setPreview(copyAccess(source, current, keepSubViews));
           setCopiedTypes(keepSubViews ? undefined : loaded.requestTypes);
+          setCopiedEsign(keepSubViews ? undefined : loaded.esignCategories);
         } finally {
           if (!cancelled) setBusy(false);
         }
@@ -152,6 +160,7 @@ export function CopyAccessDialog({
       if (!sourceRoleId) {
         setPreview(null);
         setCopiedTypes(undefined);
+        setCopiedEsign(undefined);
         return;
       }
       setBusy(true);
@@ -165,6 +174,7 @@ export function CopyAccessDialog({
         }
         setPreview(copyAccess(ticksToAppAccess(loaded.slugs), current, keepSubViews));
         setCopiedTypes(undefined);
+        setCopiedEsign(undefined);
       } finally {
         if (!cancelled) setBusy(false);
       }
@@ -178,7 +188,7 @@ export function CopyAccessDialog({
 
   const apply = () => {
     if (!preview) return;
-    onApply(preview, copiedTypes);
+    onApply(preview, copiedTypes, copiedEsign);
     onOpenChange(false);
     setPreview(null);
   };
@@ -191,6 +201,8 @@ export function CopyAccessDialog({
     setSourceRoleId("");
     setTab("user");
     setKeepSubViews(false);
+    setCopiedTypes(undefined);
+    setCopiedEsign(undefined);
   };
 
   return (

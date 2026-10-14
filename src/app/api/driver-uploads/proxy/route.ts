@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { withCors } from "@/lib/http/cors";
+import { putEsignObject } from "@/features/esign/esign-r2";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { getFirebaseFirestore } from "@/lib/firebase/admin";
 import { requireDriverFromRequest } from "@/lib/storage/driver-upload-auth";
 import {
   buildDriverObjectKey,
@@ -48,17 +51,47 @@ async function handler(request: Request): Promise<Response> {
     driverId: auth.driverId,
     entityType: validation.entityType,
     originalFilename: file.name || "upload.bin",
+    entityId,
   });
+  if (!objectKey) {
+    return NextResponse.json({ error: "invalid_entity_id" }, { status: 400 });
+  }
+
+  if (validation.entityType === "esign_signature") {
+    if (!entityId) {
+      return NextResponse.json({ error: "invalid_entity_id" }, { status: 400 });
+    }
+    const db = await getFirebaseFirestore();
+    if (!db) return NextResponse.json({ error: "not_configured" }, { status: 503 });
+    const requestSnap = await db.collection(COLLECTIONS.esignRequests).doc(entityId).get();
+    if (!requestSnap.exists || requestSnap.get("driver_id") !== auth.driverId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
   try {
-    await putObject(objectKey, buffer, file.type || "application/octet-stream", {
-      uploadedBy: auth.authUid,
-      entityType: validation.entityType,
-      entityId: entityId ?? undefined,
-      uploadedVia: "driver_proxy",
-    });
+    if (validation.entityType === "esign_signature") {
+      const uploaded = await putEsignObject(
+        objectKey,
+        buffer,
+        file.type || "image/png",
+      );
+      if (!uploaded.ok) {
+        return NextResponse.json(
+          { error: uploaded.error },
+          { status: uploaded.error === "not_configured" ? 503 : 500 },
+        );
+      }
+    } else {
+      await putObject(objectKey, buffer, file.type || "application/octet-stream", {
+        uploadedBy: auth.authUid,
+        entityType: validation.entityType,
+        entityId: entityId ?? undefined,
+        uploadedVia: "driver_proxy",
+      });
+    }
   } catch {
     return NextResponse.json({ error: "upload_failed" }, { status: 500 });
   }

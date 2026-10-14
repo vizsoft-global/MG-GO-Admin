@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Link, useRouter } from "@/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { driverSearchOptions } from "@/lib/search-options";
 import { selectOptions } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
@@ -79,7 +79,13 @@ function formatDay(value: string | null): string {
 export function EsignSentShell() {
   const t = useTranslations("pages.requests.esign.sent");
   const tCommon = useTranslations("pages.requests.esign");
+  const tHub = useTranslations("pages.requests.esign.hub");
+  const tRcm = useTranslations("pages.rcmV2");
   const router = useRouter();
+  const pathname = usePathname();
+  const isV2 = pathname.includes("/employeedesk");
+  const hubHref = isV2 ? "/employeedesk" : "/requests/esign";
+  const sentHref = isV2 ? "/employeedesk/esign/sent" : "/requests/esign/sent";
   const searchParams = useSearchParams();
   const [createOpen, setCreateOpen] = useState(false);
   const [driverId, setDriverId] = useState<string | null>(null);
@@ -130,9 +136,9 @@ export function EsignSentShell() {
   useEffect(() => {
     if (searchParams.get("add") === "1") {
       setCreateOpen(true);
-      router.replace("/requests/esign/sent");
+      router.replace(sentHref);
     }
-  }, [searchParams, router]);
+  }, [searchParams, router, sentHref]);
 
   const submitCreate = async () => {
     if (!driverId || !title.trim() || !categoryKey || !documentFile) {
@@ -194,18 +200,25 @@ export function EsignSentShell() {
       <AppPageHeader
         title={t("title")}
         description={t("subtitle")}
-        breadcrumbs={[
-          { label: tCommon("hub.requests"), href: "/requests" },
-          { label: tCommon("hub.title"), href: "/requests/esign" },
-          { label: t("title") },
-        ]}
+        breadcrumbs={
+          isV2
+            ? [
+                { label: tRcm("outgoing"), href: "/employeedesk" },
+                { label: t("title") },
+              ]
+            : [
+                { label: tHub("requests"), href: "/employeedesk" },
+                { label: tHub("title"), href: "/requests/esign" },
+                { label: t("title") },
+              ]
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               className="h-9"
-              render={<Link href="/requests/esign" />}
+              render={<Link href={hubHref} />}
             >
               <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
               {t("back")}

@@ -49,7 +49,7 @@ export type AppAccessModuleId =
 export const LAUNCHER_LABEL_OVERRIDE: Partial<Record<AppAccessModuleId, string>> = {
   "dashboard-ops": "Dashboard",
   "live-tracking-v2": "Live tracking",
-  "visit-bookings": "Visit Bookings",
+  "visit-bookings": "Visit Slots",
   "dpd-verification": "Verification",
   earnings: "Earnings",
   profile: "Settings",
