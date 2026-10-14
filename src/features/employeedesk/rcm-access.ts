@@ -17,6 +17,7 @@ export type IncomingTypeKey = (typeof INCOMING_TYPE_KEYS)[number];
 
 export const RCM_ADMIN_CHIPS = [
   { id: "templates", href: "/employeedesk/esign/templates" },
+  { id: "toSign", href: "/employeedesk/esign/signing" },
   { id: "all", href: "/employeedesk/all?scope=all" },
   { id: "reports", href: "/employeedesk/reports" },
   { id: "audit", href: "/settings/logs?module=requests" },

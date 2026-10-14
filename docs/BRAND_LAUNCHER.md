@@ -18,5 +18,6 @@ Sidebar, Settings, and the rest of the panel stay on the Shopify shell (`themes.
 
 - Panel fonts stay `appFontClassName`. Launcher only: `launcherFontClassName` (Montserrat 400/500/600/700)
 - Launcher footer is the company name. Do not put a website credit back.
+- Launcher tile labels: Payroll, Visit Slots, Vehicles. Performance is not a tile.
 - `text-[14px]`, `font-semibold`, and existing heading sizes on the hub
 - Tile / chip colours on EmployeeDesk (only the page canvas moved from `#fafafa` to `#f9f1eb`)

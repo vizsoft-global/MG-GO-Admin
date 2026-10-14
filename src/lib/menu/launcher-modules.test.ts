@@ -19,15 +19,16 @@ describe("launcher modules", () => {
     assert.equal(items.find((item) => item.id === "vehicles")?.defaultLabel, "Fleet Hub");
     assert.equal(items.find((item) => item.id === "visit-bookings")?.defaultLabel, "Visit Slots");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.vehicles, "Vehicles");
-    assert.equal(LAUNCHER_LABEL_OVERRIDE["visit-bookings"], "Visit Bookings");
+    assert.equal(LAUNCHER_LABEL_OVERRIDE["visit-bookings"], "Visit Slots");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.assets, "Assets");
-    assert.equal(LAUNCHER_LABEL_OVERRIDE.payroll, "Payroll & Requests");
+    assert.equal(LAUNCHER_LABEL_OVERRIDE.payroll, "Payroll");
     assert.equal(items.find((item) => item.id === "visit-bookings")?.href, "/visit-bookings/slots");
     assert.equal(items.find((item) => item.id === "assets")?.href, "/assets");
     assert.equal(
-      LAUNCHER_TILE_IDS[LAUNCHER_TILE_IDS.indexOf("profile") + 1],
-      "assets",
+      LAUNCHER_TILE_IDS[LAUNCHER_TILE_IDS.indexOf("assets") + 1],
+      "profile",
     );
+    assert.equal(LAUNCHER_TILE_IDS.includes("performance"), false);
     for (const id of LAUNCHER_TILE_IDS) {
       assert.ok(LAUNCHER_GLYPH[id]?.length, id);
     }
@@ -51,6 +52,7 @@ describe("launcher modules", () => {
     assert.ok(tiles.some((item) => item.id === "profile"));
     assert.ok(tiles.some((item) => item.id === "operations-hub"));
     assert.ok(tiles.some((item) => item.id === "assets"));
+    assert.ok(!tiles.some((item) => item.id === "performance"));
     for (const id of ["restaurants", "roles", "document-expiry", "driver-app"]) {
       assert.ok(!tiles.some((item) => item.id === id), id);
     }

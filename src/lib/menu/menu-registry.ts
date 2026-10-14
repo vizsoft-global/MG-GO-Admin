@@ -186,12 +186,12 @@ export const DEFAULT_GROUP_META: Record<
   { icon: string; displayMode?: "inline" | "panel" }
 > = {
   Overview: { icon: "Folder" },
-  EmployeeDesk: { icon: "Inbox", displayMode: "panel" },
-  OperationsHub: { icon: "Building2", displayMode: "panel" },
-  Operations: { icon: "Folder", displayMode: "panel" },
+  EmployeeDesk: { icon: "Inbox" },
+  OperationsHub: { icon: "Building2" },
+  Operations: { icon: "Folder" },
   Settings: { icon: "Settings", displayMode: "inline" },
   System: { icon: "Cog", displayMode: "inline" },
-  WIP: { icon: "AlertTriangle", displayMode: "panel" },
+  WIP: { icon: "AlertTriangle" },
   Unorganised: { icon: "Folder" },
 };
 
@@ -231,6 +231,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "EmployeeDesk",
     defaultOrder: 1,
     permission: "requests.view",
+    hidden: true,
   },
   {
     id: "employeedesk-incoming",
@@ -240,6 +241,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "EmployeeDesk",
     defaultOrder: 2,
     permission: "requests.view",
+    hidden: true,
   },
   {
     id: "employeedesk-outgoing",
@@ -249,6 +251,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "EmployeeDesk",
     defaultOrder: 3,
     permission: "requests.view",
+    hidden: true,
   },
   {
     id: "employeedesk-esign",
@@ -258,6 +261,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "EmployeeDesk",
     defaultOrder: 4,
     permission: "requests.view",
+    hidden: true,
   },
   {
     id: "employeedesk-esign-signing",
@@ -268,6 +272,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultOrder: 5,
     permission: "esign.sign",
     permissionAnyOf: ["esign.sign", "requests.manage", "employeedesk.manage"],
+    hidden: true,
   },
   {
     id: "employeedesk-visits",
@@ -287,6 +292,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "EmployeeDesk",
     defaultOrder: 7,
     permission: "requests.view",
+    hidden: true,
   },
   {
     id: "employeedesk-settings",
@@ -296,6 +302,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "EmployeeDesk",
     defaultOrder: 8,
     permission: "requests.manage",
+    hidden: true,
   },
   {
     id: "operations-hub",
@@ -359,6 +366,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 1,
     permission: "partners.view",
+    hidden: true,
   },
   {
     id: "vehicles",
@@ -467,6 +475,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 2,
     permission: "restaurants.view",
+    hidden: true,
   },
   {
     id: "deliveries",
@@ -569,6 +578,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 9.5,
     permission: "earnings.view",
+    hidden: true,
   },
   {
     id: "delivery-rules",
@@ -578,6 +588,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 4,
     permission: "earnings.view",
+    hidden: true,
   },
   {
     id: "incentive-rules",
@@ -587,6 +598,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 5,
     permission: "earnings.view",
+    hidden: true,
   },
   {
     id: "earnings-calculation",
@@ -679,6 +691,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 10,
     permission: "companies.view",
+    hidden: true,
   },
   {
     id: "attendance-settings",
@@ -688,6 +701,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 7,
     permission: "attendance.manage",
+    hidden: true,
   },
   {
     id: "driver-fields",
@@ -697,6 +711,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 6,
     permission: "drivers.manage",
+    hidden: true,
   },
   {
     id: "storage",
@@ -787,6 +802,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 3,
     permission: "zones.view",
+    hidden: true,
   },
 ];
 

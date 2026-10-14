@@ -2,7 +2,6 @@ import {
   DEFAULT_GROUPS,
   DEFAULT_GROUP_META,
   MENU_REGISTRY,
-  OPERATIONS_HUB_GROUP,
   type MenuRegistryItem,
 } from "@/lib/menu/menu-registry";
 import type { MenuNode } from "@/services/menu-config-service";
@@ -101,34 +100,38 @@ export function mergeMenu(config: MenuNode[]): {
   const { pruned, unassigned } = mergeGeneric(config, ids, buildDefaultTree());
 
   if (unassigned.length > 0) {
-    const newChildren = unassigned.map((id) => {
-      const r = reg.get(id)!;
-      return {
+    const skipGroups = new Set([
+      "Unorganised",
+      "EmployeeDesk",
+      "OperationsHub",
+      "Fleet",
+      "WIP",
+      "Visit Bookings",
+    ]);
+    for (const id of unassigned) {
+      const r = reg.get(id);
+      if (!r) continue;
+      const child = {
         id,
         type: "item" as const,
         label: r.defaultLabel,
         icon: r.defaultIcon,
         hidden: false,
       };
-    });
-    const idx = pruned.findIndex(
-      (n) => n.id === "group-unorganised" || n.id === "group-unassigned",
-    );
-    if (idx >= 0) {
-      pruned[idx] = {
-        ...pruned[idx],
-        id: "group-unorganised",
-        label: "Unorganised",
-        children: [...(pruned[idx].children || []), ...newChildren],
-      };
-    } else {
-      pruned.push({
-        id: "group-unorganised",
-        type: "group",
-        label: "Unorganised",
-        icon: "Folder",
-        children: newChildren,
-      });
+      if (skipGroups.has(r.defaultGroup)) {
+        pruned.push(child);
+        continue;
+      }
+      const gid = `group-${r.defaultGroup.toLowerCase()}`;
+      const idx = pruned.findIndex((n) => n.id === gid);
+      if (idx >= 0) {
+        pruned[idx] = {
+          ...pruned[idx],
+          children: [...(pruned[idx].children || []), child],
+        };
+      } else {
+        pruned.push(child);
+      }
     }
   }
 
@@ -255,7 +258,9 @@ function relocateVisitBookingsItems(tree: MenuNode[]): MenuNode[] {
     hidden: false,
   };
 
-  const employeeIdx = stripped.findIndex((node) => node.id === "group-employeedesk");
+  const employeeIdx = stripped.findIndex(
+    (node) => node.id === "group-employeedesk" || node.id === "employeedesk",
+  );
   const next = [...stripped];
   next.splice(employeeIdx >= 0 ? employeeIdx + 1 : 0, 0, item);
   return next;
@@ -353,42 +358,15 @@ function relocatePayrollItem(tree: MenuNode[]): MenuNode[] {
 
 function relocateOrderReconItem(tree: MenuNode[]): MenuNode[] {
   const RECON_ID = "order-reconciliation";
-  let found: MenuNode | null = null;
   const strip = (nodes: MenuNode[]): MenuNode[] =>
     nodes.flatMap((node) => {
-      if (node.type === "item") {
-        if (node.id === RECON_ID) {
-          found = { ...node, hidden: false };
-          return [];
-        }
-        return [node];
-      }
-      const children = node.children ? strip(node.children) : [];
+      if (node.type === "item" && node.id === RECON_ID) return [];
+      if (!node.children?.length) return [node];
+      const children = strip(node.children);
+      if (children.length === 0 && !node.id.startsWith("group-custom-")) return [];
       return [{ ...node, children }];
     });
-
-  const stripped = strip(tree);
-  const item: MenuNode = found ?? {
-    id: RECON_ID,
-    type: "item",
-    label: "Order reconciliation",
-    icon: "Scale",
-    hidden: false,
-  };
-
-  const hubIdx = stripped.findIndex((node) => node.id === OPERATIONS_HUB_GROUP_ID);
-  if (hubIdx < 0) {
-    const hub = groupNodeFor(OPERATIONS_HUB_GROUP_ID);
-    hub.children = [item];
-    return [...stripped, hub];
-  }
-
-  const hub = stripped[hubIdx];
-  const children = [...(hub.children ?? [])].filter((child) => child.id !== RECON_ID);
-  children.push(item);
-  const next = [...stripped];
-  next[hubIdx] = { ...hub, children };
-  return next;
+  return strip(tree);
 }
 
 const SETTINGS_GROUP_ID = "group-settings";
@@ -488,27 +466,21 @@ function relocateOperationsHubItems(tree: MenuNode[]): MenuNode[] {
     });
 
   const stripped = strip(tree);
-  const children = OPERATIONS_HUB_IDS.filter((id) => collected.has(id)).map((id) => {
-    const existing = collected.get(id)!;
-    // The hub itself is a nav entry the operations team depends on, so it is
-    // never left hidden — matching how Fleet is pinned.
-    return id === "operations-hub" ? { ...existing, hidden: false } : existing;
-  });
+  const existing = collected.get("operations-hub");
+  const hub: MenuNode = existing
+    ? { ...existing, hidden: false }
+    : {
+        id: "operations-hub",
+        type: "item",
+        label: "OperationsHub",
+        icon: "Building2",
+        hidden: false,
+      };
 
-  if (children.length === 0) return stripped;
-
-  const meta = DEFAULT_GROUP_META.OperationsHub;
-  const hub: MenuNode = {
-    id: OPERATIONS_HUB_GROUP_ID,
-    type: "group",
-    label: "OperationsHub",
-    icon: meta?.icon ?? "Building2",
-    displayMode: meta?.displayMode,
-    children,
-  };
-
-  const next = [...stripped, hub];
-  return next.filter((node) => node.type === "item" || (node.children?.length ?? 0) > 0);
+  if (stripped.some((node) => node.id === "operations-hub")) return stripped;
+  return [...stripped, hub].filter(
+    (node) => node.type === "item" || (node.children?.length ?? 0) > 0,
+  );
 }
 
 function findChildList(nodes: MenuNode[], id: string): MenuNode[] | null {
@@ -542,9 +514,8 @@ const OPERATIONS_HUB_ITEM_ID = "operations-hub";
 const UNORGANISED_GROUP_ID = "group-unorganised";
 
 /**
- * OperationsHub is a root row, not a child of the OperationsHub group.
- * That row, Attendance, and Visit Bookings sit between System and Unorganised.
- * The group stays only when it still has other children (partners, zones, rules).
+ * OperationsHub, Attendance, and Visit Slots sit after System as root rows.
+ * The OperationsHub group and Unorganised dump are never re-inserted.
  */
 function placeSidebarTail(tree: MenuNode[]): MenuNode[] {
   const hubItem = detachNode(tree, OPERATIONS_HUB_ITEM_ID);
@@ -555,12 +526,11 @@ function placeSidebarTail(tree: MenuNode[]): MenuNode[] {
   const rest = unorganised.tree;
   const systemIdx = rest.findIndex((node) => node.id === SYSTEM_GROUP_ID);
   const insertAt = systemIdx >= 0 ? systemIdx + 1 : rest.length;
-  const cluster = [hubGroup.node, hubItem.node, attendance.node, visit.node].filter(
+  const cluster = [hubItem.node, attendance.node, visit.node].filter(
     (node): node is MenuNode => node !== null,
   );
   const next = [...rest];
   next.splice(insertAt, 0, ...cluster);
-  if (unorganised.node) next.splice(insertAt + cluster.length, 0, unorganised.node);
   return next;
 }
 
@@ -683,8 +653,6 @@ function stripStaffAccessItem(tree: MenuNode[]): MenuNode[] {
   return strip(tree);
 }
 
-const ALWAYS_OPERATIONS_HUB_IDS = ["earnings"] as const;
-
 /**
  * Narrow remappers for saved `menu_configs`. The relocator pipeline only
  * runs when a role has never been saved — production menus would otherwise
@@ -704,30 +672,82 @@ function dropSavedMenuItems(tree: MenuNode[], ids: readonly string[]): MenuNode[
   return walk(tree);
 }
 
-function placeEmployeeDeskSettings(tree: MenuNode[]): MenuNode[] {
+function flattenHubGroup(
+  tree: MenuNode[],
+  groupId: string,
+  hubItemId: string,
+): MenuNode[] {
+  const walk = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.id === groupId) {
+        const child = node.children?.find((item) => item.id === hubItemId);
+        const registry = MENU_REGISTRY.find((item) => item.id === hubItemId);
+        return [
+          {
+            id: hubItemId,
+            type: "item" as const,
+            label: child?.label ?? registry?.defaultLabel ?? hubItemId,
+            icon: child?.icon ?? registry?.defaultIcon ?? "Folder",
+            hidden: false,
+          },
+        ];
+      }
+      if (!node.children?.length) return [node];
+      return [{ ...node, children: walk(node.children) }];
+    });
+  return dropDuplicateItems(walk(tree), hubItemId);
+}
+
+function dropDuplicateItems(tree: MenuNode[], id: string): MenuNode[] {
+  let seen = false;
+  const walk = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.id === id) {
+        if (seen) return [];
+        seen = true;
+        return [node];
+      }
+      if (!node.children?.length) return [node];
+      const children = walk(node.children);
+      if (children.length === 0 && !node.id.startsWith("group-custom-")) return [];
+      return [{ ...node, children }];
+    });
+  return walk(tree);
+}
+
+function dropUnorganisedGroup(tree: MenuNode[]): MenuNode[] {
+  const walk = (nodes: MenuNode[]): MenuNode[] =>
+    nodes.flatMap((node) => {
+      if (node.id === UNORGANISED_GROUP_ID || node.id === "group-unassigned") return [];
+      if (!node.children?.length) return [node];
+      const children = walk(node.children);
+      if (children.length === 0 && !node.id.startsWith("group-custom-")) return [];
+      return [{ ...node, children }];
+    });
+  return walk(tree);
+}
+
+function stripPanelDisplayMode(tree: MenuNode[]): MenuNode[] {
   return tree.map((node) => {
-    if (node.id !== "group-employeedesk" || !node.children) return node;
-    const children = [...node.children];
-    const settingsIdx = children.findIndex((child) => child.id === "employeedesk-settings");
-    if (settingsIdx < 0) return node;
-    const [settings] = children.splice(settingsIdx, 1);
-    if (!settings) return node;
-    const reportsIdx = children.findIndex((child) => child.id === "employeedesk-reports");
-    if (reportsIdx < 0) children.push(settings);
-    else children.splice(reportsIdx + 1, 0, settings);
-    return { ...node, children };
+    const children = node.children ? stripPanelDisplayMode(node.children) : node.children;
+    if (node.type === "group" && node.displayMode === "panel") {
+      return { ...node, displayMode: undefined, children };
+    }
+    return children === node.children ? node : { ...node, children };
   });
 }
 
 function remapClientIaSavedMenu(tree: MenuNode[]): MenuNode[] {
   let next = dropSavedMenuItems(tree, ["requests"]);
-  next = remapItemsToGroup(next, ALWAYS_OPERATIONS_HUB_IDS, OPERATIONS_HUB_GROUP_ID);
   next = remapItemsToGroup(next, ["driver-devices"], SETTINGS_GROUP_ID);
   next = remapItemsToGroup(next, ["assistant"], SYSTEM_GROUP_ID);
   next = remapItemsToGroup(next, ["wrong-actions"], "group-operations");
   next = remapItemsToGroup(next, ["support"], SETTINGS_GROUP_ID);
-  next = remapItemsToGroup(next, ["employeedesk-settings"], "group-employeedesk");
-  next = placeEmployeeDeskSettings(next);
+  next = flattenHubGroup(next, "group-employeedesk", "employeedesk");
+  next = flattenHubGroup(next, OPERATIONS_HUB_GROUP_ID, OPERATIONS_HUB_ITEM_ID);
+  next = flattenHubGroup(next, FLEET_GROUP_ID, FLEET_HUB_ID);
+  next = dropUnorganisedGroup(next);
+  next = stripPanelDisplayMode(next);
   return remapClientIaLabelsAndIcons(next);
 }
 

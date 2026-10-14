@@ -22,7 +22,6 @@ export const LAUNCHER_GLYPH: Record<LauncherTileId, string> = {
   vehicles:
     "M2 6h11v10H2z M13 10h4l3 3v3h-7 M6 19a2 2 0 1 0 0-4a2 2 0 1 0 0 4z M17 19a2 2 0 1 0 0-4a2 2 0 1 0 0 4z",
   payroll: "M6 3h9l4 4v14H6z M14 3v5h5 M9 13h7 M9 17h5",
-  performance: "M3 17l6-6 4 4 8-8 M15 7h6v6",
   assistant:
     "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z",
 };

@@ -866,6 +866,7 @@
       },
       "admin": {
         "templates": "Manage templates",
+        "toSign": "To sign",
         "all": "All requests",
         "reports": "Reports",
         "audit": "Audit log",

@@ -8,21 +8,20 @@ import { MENU_REGISTRY, type MenuRegistryItem } from "@/lib/menu/menu-registry";
 export const LAUNCHER_TILE_IDS = [
   "dashboard-ops",
   "live-tracking-v2",
-  "driver-groups",
   "drivers",
+  "driver-groups",
   "deliveries",
+  "attendance",
+  "dpd-verification",
   "employeedesk",
   "visit-bookings",
-  "dpd-verification",
+  "vehicles",
+  "operations-hub",
+  "payroll",
   "earnings",
   "notifications",
-  "attendance",
-  "profile",
   "assets",
-  "operations-hub",
-  "vehicles",
-  "payroll",
-  "performance",
+  "profile",
   "assistant",
 ] as const;
 
@@ -40,6 +39,7 @@ export const APP_ACCESS_EXTRA_MODULE_IDS = [
   "roles",
   "document-expiry",
   "driver-app",
+  "performance",
 ] as const;
 
 export type AppAccessModuleId =
@@ -49,12 +49,12 @@ export type AppAccessModuleId =
 export const LAUNCHER_LABEL_OVERRIDE: Partial<Record<AppAccessModuleId, string>> = {
   "dashboard-ops": "Dashboard",
   "live-tracking-v2": "Live tracking",
-  "visit-bookings": "Visit Bookings",
+  "visit-bookings": "Visit Slots",
   "dpd-verification": "Verification",
   earnings: "Earnings",
   profile: "Settings",
   assets: "Assets",
-  payroll: "Payroll & Requests",
+  payroll: "Payroll",
   roles: "Roles & Permissions",
   vehicles: "Vehicles",
 };

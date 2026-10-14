@@ -33,6 +33,7 @@ describe("rcm access chips", () => {
       RCM_ADMIN_CHIPS.map((chip) => chip.href),
       [
         "/employeedesk/esign/templates",
+        "/employeedesk/esign/signing",
         "/employeedesk/all?scope=all",
         "/employeedesk/reports",
         "/settings/logs?module=requests",
