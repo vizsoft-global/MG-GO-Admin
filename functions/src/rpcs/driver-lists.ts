@@ -2,6 +2,7 @@ import { onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { requireRider, riderError } from "../core/rider";
+import { serializeDelivery } from "./delivery-serialize";
 import { pickCount, pickDay, pickId, pickText, type Dict } from "./_shared";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -76,7 +77,10 @@ export const driverListMyDeliveries = onCall(async (request) => {
     .orderBy(FIELDS.deliveries.createdAt, "desc")
     .limit(limit)
     .get();
-  return { ok: true, rows: mapDocs(snap.docs) };
+  return {
+    ok: true,
+    rows: snap.docs.map((doc) => serializeDelivery(doc.id, (doc.data() ?? {}) as Dict)),
+  };
 });
 
 export const driverListEarningsDaily = onCall(async (request) => {

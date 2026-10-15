@@ -78,6 +78,7 @@ import {
   RestaurantsCell,
 } from "./driver-list-ui";
 import { DriverFormSheet } from "./driver-form-sheet";
+import { DriverRestoreDialog } from "./driver-restore-dialog";
 import { DriverEditSheet } from "./driver-edit-sheet";
 import { DriversKpiStrip } from "./drivers-kpi-strip";
 import { DriversColumnHeader, type DriversHeaderLabels } from "./drivers-column-header";
@@ -190,6 +191,12 @@ function DriversPageContent() {
   );
   const approveDriver = useApproveDriverIntake();
   const restoreDriver = useRestoreDriverIntake();
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<{
+    intakeId: string;
+    detailId: string;
+    profileId: string | null;
+  } | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const router = useRouter();
@@ -1094,29 +1101,13 @@ function DriversPageContent() {
                                       size="icon-sm"
                                       className="h-8 w-8 cursor-pointer rounded-md text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
                                       disabled={restoreDriver.isPending}
-                                      onClick={async () => {
-                                        if (!window.confirm(t("restoreConfirm"))) return;
-                                        try {
-                                          await restoreDriver.mutateAsync({
-                                            intakeId: driver.id,
-                                            detailId: driver.linked_profile_id ?? driver.id,
-                                            profileId: driver.linked_profile_id,
-                                          });
-                                          toast.success(t("restored"));
-                                        } catch (err) {
-                                          const key =
-                                            err instanceof Error &&
-                                            isDriverErrorKey(err.message)
-                                              ? err.message
-                                              : "save_failed";
-                                          toast.error(
-                                            isDriverErrorKey(key)
-                                              ? t(
-                                                  `restoreErrors.${key}` as "restoreErrors.save_failed",
-                                                )
-                                              : t("restoreFailed"),
-                                          );
-                                        }
+                                      onClick={() => {
+                                        setRestoreTarget({
+                                          intakeId: driver.id,
+                                          detailId: driver.linked_profile_id ?? driver.id,
+                                          profileId: driver.linked_profile_id,
+                                        });
+                                        setRestoreOpen(true);
                                       }}
                                       aria-label={t("restoreDriver")}
                                     >
@@ -1203,6 +1194,33 @@ function DriversPageContent() {
       {canCreate ? (
         <DriverBulkImportDialog open={bulkOpen} onOpenChange={setBulkOpen} />
       ) : null}
+      <DriverRestoreDialog
+        open={restoreOpen}
+        onOpenChange={(open) => {
+          setRestoreOpen(open);
+          if (!open) setRestoreTarget(null);
+        }}
+        pending={restoreDriver.isPending}
+        onConfirm={async () => {
+          if (!restoreTarget) return;
+          try {
+            await restoreDriver.mutateAsync(restoreTarget);
+            setRestoreOpen(false);
+            setRestoreTarget(null);
+            toast.success(t("restored"));
+          } catch (err) {
+            const key =
+              err instanceof Error && isDriverErrorKey(err.message)
+                ? err.message
+                : "save_failed";
+            toast.error(
+              isDriverErrorKey(key)
+                ? t(`restoreErrors.${key}` as "restoreErrors.save_failed")
+                : t("restoreFailed"),
+            );
+          }
+        }}
+      />
     </AppPage>
   );
 }

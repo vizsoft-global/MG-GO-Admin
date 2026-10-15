@@ -46,4 +46,12 @@ describe("lane membership", () => {
     assert.equal(routerRequirePath("syncStaffClaims"), "../rpcs/sync-staff-claims");
     assert.equal(moduleForFunction("workerFleetRead"), "./rpcs/fleet-worker-http");
   });
+
+  it("routes HR dashboard to scan and catalog upsert to light", () => {
+    assert.equal(laneOf("adminEmployeesDashboard"), "scan");
+    assert.equal(SCAN_FUNCTIONS.includes("adminEmployeesDashboard"), true);
+    assert.equal(laneOf("adminUpsertEmployeeCatalog"), "light");
+    assert.equal(moduleForFunction("adminUpsertEmployeeCatalog"), "./rpcs/catalogs");
+    assert.equal(moduleForFunction("adminEmployeesDashboard"), "./rpcs/employees-dashboard");
+  });
 });

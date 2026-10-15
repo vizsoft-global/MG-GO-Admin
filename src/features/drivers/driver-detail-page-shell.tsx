@@ -59,6 +59,7 @@ import { DriverHistoryTab } from "./driver-history-tab";
 import { DriverPerformanceTab } from "./driver-performance-tab";
 import { DriverWrongActionsTab } from "@/features/wrong-actions/driver-wrong-actions-tab";
 import { DriverArchiveDialog } from "./driver-archive-dialog";
+import { DriverRestoreDialog } from "./driver-restore-dialog";
 import { DriverEditSheet } from "./driver-edit-sheet";
 import { getCountryLabel } from "@/lib/geo/countries";
 import { riderCategoryMessageKey } from "./driver-rider-category";
@@ -315,6 +316,12 @@ function DriverDetailContent({ id }: { id: string }) {
   const [activeTab, setActiveTab] = useState<DetailTabId>("assets");
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<{
+    intakeId: string;
+    detailId: string;
+    profileId: string | null;
+  } | null>(null);
   const [holdApproveSlot, setHoldApproveSlot] = useState(false);
   const editRouteConsumedRef = useRef(false);
   const suppressEditOpenUntilRef = useRef(0);
@@ -956,14 +963,35 @@ function DriverDetailContent({ id }: { id: string }) {
                   size="sm"
                   className="cursor-pointer rounded-lg"
                   disabled={restoreDriver.isPending}
-                  onClick={async () => {
-                    if (!window.confirm(t("restoreConfirm"))) return;
+                  onClick={() => {
+                    setRestoreTarget({
+                      intakeId: driver.intake_id!,
+                      detailId: id,
+                      profileId: driver.linked_profile_id,
+                    });
+                    setRestoreOpen(true);
+                  }}
+                >
+                  {restoreDriver.isPending ? (
+                    <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ArchiveRestore className="me-2 h-3.5 w-3.5" />
+                  )}
+                  {t("restoreDriver")}
+                </Button>
+                <DriverRestoreDialog
+                  open={restoreOpen}
+                  onOpenChange={(open) => {
+                    setRestoreOpen(open);
+                    if (!open) setRestoreTarget(null);
+                  }}
+                  pending={restoreDriver.isPending}
+                  onConfirm={async () => {
+                    if (!restoreTarget) return;
                     try {
-                      await restoreDriver.mutateAsync({
-                        intakeId: driver.intake_id!,
-                        detailId: id,
-                        profileId: driver.linked_profile_id,
-                      });
+                      await restoreDriver.mutateAsync(restoreTarget);
+                      setRestoreOpen(false);
+                      setRestoreTarget(null);
                       toast.success(t("restored"));
                     } catch (err) {
                       const key =
@@ -977,14 +1005,7 @@ function DriverDetailContent({ id }: { id: string }) {
                       );
                     }
                   }}
-                >
-                  {restoreDriver.isPending ? (
-                    <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <ArchiveRestore className="me-2 h-3.5 w-3.5" />
-                  )}
-                  {t("restoreDriver")}
-                </Button>
+                />
               </div>
             ) : null}
           </div>

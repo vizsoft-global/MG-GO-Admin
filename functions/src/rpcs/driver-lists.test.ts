@@ -1,5 +1,6 @@
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { Timestamp } from "firebase-admin/firestore";
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { COLLECTIONS } from "../core/collections";
 import {
@@ -136,6 +137,68 @@ describe("driverListMyDeliveries", () => {
         ["own-cancel", "cancelled"],
       ],
     );
+  });
+
+  it("turns Timestamp and Date instants into ISO strings", async () => {
+    const created = new Date("2026-10-15T08:00:00.000Z");
+    const pickup = Timestamp.fromDate(new Date("2026-10-15T09:15:00.000Z"));
+    const delivered = Timestamp.fromDate(new Date("2026-10-15T10:30:00.000Z"));
+    driverListsDeps.requireRider = async () => rider();
+    driverListsDeps.getFirestore = () =>
+      mockDb({
+        [COLLECTIONS.deliveries]: [
+          {
+            id: "iso-row",
+            data: {
+              driver_id: UID,
+              status: "verified",
+              created_at: created,
+              pickup_at: pickup,
+              delivered_at: delivered,
+            },
+          },
+        ],
+      }) as never;
+
+    const result = await driverListMyDeliveries.run(req());
+    const row = result.rows[0] as {
+      created_at: unknown;
+      pickup_at: unknown;
+      delivered_at: unknown;
+    };
+    assert.equal(row.created_at, created.toISOString());
+    assert.equal(row.pickup_at, pickup.toDate().toISOString());
+    assert.equal(row.delivered_at, delivered.toDate().toISOString());
+  });
+
+  it("passes ISO timestamp strings through and omits unknown fields", async () => {
+    const createdAt = "2026-10-14T18:00:00.000Z";
+    const pickupAt = "2026-10-14T18:10:00.000Z";
+    const deliveredAt = "2026-10-14T18:40:00.000Z";
+    driverListsDeps.requireRider = async () => rider();
+    driverListsDeps.getFirestore = () =>
+      mockDb({
+        [COLLECTIONS.deliveries]: [
+          {
+            id: "legacy-iso",
+            data: {
+              driver_id: UID,
+              status: "verified",
+              created_at: createdAt,
+              pickup_at: pickupAt,
+              delivered_at: deliveredAt,
+              extra_junk: "do-not-ship",
+            },
+          },
+        ],
+      }) as never;
+
+    const result = await driverListMyDeliveries.run(req());
+    const row = result.rows[0] as Record<string, unknown>;
+    assert.equal(row.created_at, createdAt);
+    assert.equal(row.pickup_at, pickupAt);
+    assert.equal(row.delivered_at, deliveredAt);
+    assert.equal("extra_junk" in row, false);
   });
 });
 
