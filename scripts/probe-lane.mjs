@@ -193,9 +193,25 @@ const cases = mode === "full"
           ? groupCases("light")
           : mode === "group-scan"
             ? groupCases("scan")
-            : mode === "group-heavy"
-              ? groupCases("heavy")
-              : [{ name: "adminListDriversPage", lane: "adminApiScan", data: PAGE }];
+  : mode === "group-heavy"
+          ? groupCases("heavy")
+          : mode === "group-by"
+            ? [
+                { name: "adminListDriversPage", lane: "adminApiScan", tag: "none", data: PAGE },
+                {
+                  name: "adminListDriversPage",
+                  lane: "adminApiScan",
+                  tag: "zone",
+                  data: { ...PAGE, groupBy: "zone" },
+                },
+                {
+                  name: "adminListDriversPage",
+                  lane: "adminApiScan",
+                  tag: "employeeStatus",
+                  data: { ...PAGE, groupBy: "employeeStatus" },
+                },
+              ]
+          : [{ name: "adminListDriversPage", lane: "adminApiScan", data: PAGE }];
 
 for (const item of cases) {
   const laneTarget = {

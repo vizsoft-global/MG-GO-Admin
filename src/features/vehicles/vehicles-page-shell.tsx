@@ -15,15 +15,20 @@ import {
   Plus,
   RefreshCw,
   Repeat,
-  Search,
   Upload,
   UserX,
   Users,
   Wallet,
   Wrench,
-  X,
 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { useRouter } from "@/i18n/navigation";
 import { Link } from "@/i18n/navigation";
 import {
@@ -38,7 +43,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TableCell } from "@/components/ui/table";
 import { CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Tooltip,
@@ -151,6 +155,8 @@ export function VehiclesPageShell({
   const { data: types = [] } = useVehicleTypes();
   const { data: useTypes = [] } = useVehicleUseTypes();
   const [search, setSearch] = useState("");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("vehicles");
   const [projectFilter, setProjectFilter] = useState<VehicleProjectFilter>("all");
   const [statusFilter, setStatusFilter] = useState<VehicleStatusFilter>("all");
   const [carTypeFilter, setCarTypeFilter] = useState<VehicleCarTypeFilter>("all");
@@ -208,13 +214,14 @@ export function VehiclesPageShell({
           vehicleMatchesProject(row, projectFilter) &&
           vehicleMatchesAssignment(row, assignmentFilter) &&
           vehicleMatchesReplacement(row, replacementFilter) &&
-          vehicleMatchesSearch(row, search),
+          vehicleMatchesSearch(row, search, prefs.searchField),
       ),
     [
       activeTab,
       assignmentFilter,
       carTypeFilter,
       kindFilter,
+      prefs.searchField,
       projectFilter,
       replacementFilter,
       search,
@@ -227,6 +234,21 @@ export function VehiclesPageShell({
   const visible = useMemo(
     () => sortVehicles(scoped.filter((row) => rowMatchesColumnFilters(row, columnFilters)), sort),
     [columnFilters, scoped, sort],
+  );
+
+  const groupedVehicles = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        {
+          status: (row) => row.status,
+          project: (row) => row.assigned_project_key,
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, visible],
   );
 
   const applyKpi = (key: VehicleKpiKey) => {
@@ -419,72 +441,68 @@ export function VehiclesPageShell({
 
       <AppListCard
         toolbar={
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-              <Select
-                items={tabSelectItems}
-                value={activeTab}
-                onValueChange={(value) => {
-                  if (value) replaceQuery({ tab: parseVehicleListTab(value) });
-                }}
-              >
-                <SelectTrigger className="h-9 w-[148px] shrink-0 cursor-pointer rounded-lg text-xs">
-                  <SelectValue placeholder={t("filterView")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {tabSelectItems.map((item) => (
-                    <SelectItem key={item.value} value={item.value} className="cursor-pointer">
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder={t("searchPlaceholder")}
-                  className="h-9 rounded-lg bg-background ps-8 pe-8 text-xs"
-                  aria-label={t("searchPlaceholder")}
-                />
-                {search ? (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    className="absolute end-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
-                    aria-label={t("clearSearch")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                ) : null}
-              </div>
-
-              {activeFilterCount > 0 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={clearAll}
+          <AppListControls
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={t("searchPlaceholder")}
+            searchAriaLabel={t("searchPlaceholder")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[labels.field.all, labels.field.plate, labels.field.name, labels.field.employee_id]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[labels.group.none, labels.group.status, labels.group.project]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+            tableViewLabel={labels.viewTable}
+            cardsViewLabel={labels.viewCards}
+            filterSlot={
+              <>
+                <Select
+                  items={tabSelectItems}
+                  value={activeTab}
+                  onValueChange={(value) => {
+                    if (value) replaceQuery({ tab: parseVehicleListTab(value) });
+                  }}
                 >
-                  <FilterX className="h-3.5 w-3.5" aria-hidden />
-                  {t("clearAllFilters")}
-                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white tabular-nums">
-                    {activeFilterCount}
-                  </span>
-                </Button>
-              ) : null}
-
-              <AppTableColumnPicker
-                options={pickerOptions}
-                isVisible={isVisible}
-                onToggle={toggle}
-                onReset={reset}
-                hiddenCount={hiddenToggleableCount}
-              />
-            </div>
-
+                  <SelectTrigger className="h-9 w-[148px] shrink-0 cursor-pointer rounded-lg text-xs">
+                    <SelectValue placeholder={t("filterView")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tabSelectItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value} className="cursor-pointer">
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {activeFilterCount > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={clearAll}
+                  >
+                    <FilterX className="h-3.5 w-3.5" aria-hidden />
+                    {t("clearAllFilters")}
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white tabular-nums">
+                      {activeFilterCount}
+                    </span>
+                  </Button>
+                ) : null}
+                <AppTableColumnPicker
+                  options={pickerOptions}
+                  isVisible={isVisible}
+                  onToggle={toggle}
+                  onReset={reset}
+                  hiddenCount={hiddenToggleableCount}
+                />
+              </>
+            }
+            trailing={
             <div className="flex shrink-0 items-center gap-1.5">
               {!isLoading ? (
                 <p className="hidden text-xs tabular-nums text-muted-foreground lg:inline">
@@ -564,7 +582,8 @@ export function VehiclesPageShell({
                 </Button>
               ) : null}
             </div>
-          </div>
+            }
+          />
         }
       >
         {isLoading ? (
@@ -588,6 +607,35 @@ export function VehiclesPageShell({
             ) : null}
           </div>
         ) : (
+          prefs.viewMode === "cards" ? (
+          <CardContent className="p-4">
+            {canManage && selectedRows.length > 0 ? (
+              <VehicleBulkBar rows={selectedRows} onDone={() => setSelectedIds(new Set())} />
+            ) : null}
+            <GroupedSections groups={groupedVehicles}>
+              {(rows) => (
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {rows.map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => router.push(`/vehicles/${row.id}`)}
+                      className="cursor-pointer rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/30"
+                    >
+                      <p className="truncate text-sm font-semibold text-foreground">{row.reg_number}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {row.assigned_driver_name || "—"}
+                      </p>
+                      <div className="mt-2">
+                        <VehicleStatusBadge status={row.status} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
+          </CardContent>
+        ) : (
           <CardContent className="p-0">
             {canManage && selectedRows.length > 0 ? (
               <VehicleBulkBar rows={selectedRows} onDone={() => setSelectedIds(new Set())} />
@@ -604,7 +652,21 @@ export function VehiclesPageShell({
                 ) : undefined
               }
             >
-              {visible.map((row) => (
+              {groupedVehicles.flatMap((group) => [
+                prefs.groupBy !== "none" ? (
+                  <AppDataTableRow key={`group-${group.key}`} className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={tableColumns.length}
+                      className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
+                    >
+                      {group.label}
+                      <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                        {group.rows.length}
+                      </span>
+                    </TableCell>
+                  </AppDataTableRow>
+                ) : null,
+                ...group.rows.map((row) => (
                 <VehicleRow
                   key={row.id}
                   row={row}
@@ -621,9 +683,11 @@ export function VehiclesPageShell({
                   }
                   onOpen={() => router.push(`/vehicles/${row.id}`)}
                 />
-              ))}
+                )),
+              ])}
             </AppDataTable>
           </CardContent>
+        )
         )}
       </AppListCard>
       <VehicleFormDialog

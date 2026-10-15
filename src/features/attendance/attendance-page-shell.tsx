@@ -33,6 +33,13 @@ import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { TrackingTableToolbar } from "@/features/driver-tracking/table-toolbar";
+import {
+  AppListControls,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { downloadCsv } from "@/features/driver-tracking/csv-export";
 import { Link } from "@/i18n/navigation";
 import { LIST_SEARCH_DEBOUNCE_MS } from "@/lib/menu/sidebar-menu-query";
@@ -44,13 +51,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
@@ -119,6 +119,8 @@ function countActiveFilters(filters: AttendanceFiltersState): number {
 
 function AttendancePageContent() {
   const t = useTranslations("pages.attendance");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("attendance");
   const auth = useAuth();
   const canManage = auth.can("attendance.manage");
   const searchParams = useSearchParams();
@@ -142,7 +144,6 @@ function AttendancePageContent() {
   const [fromDate, setFromDate] = useState(addDays(today, -6));
   const [toDate, setToDate] = useState(today);
   const [kpiFilter, setKpiFilter] = useState<string | null>(null);
-  const [groupBy, setGroupBy] = useState<HistoryGroupKey>("none");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -539,14 +540,27 @@ function AttendancePageContent() {
     );
   }
 
-  const dailyRows = useMemo(
-    () => sortAttendanceDailyRows(dailyData?.rows ?? [], sortKey),
-    [dailyData?.rows, sortKey],
-  );
-  const groupedSections =
-    tab === "history" && groupBy !== "none"
-      ? groupDailyRows(dailyRows, groupBy)
-      : [{ key: "all", label: "", rows: dailyRows }];
+  const dailyRows = useMemo(() => {
+    const sorted = sortAttendanceDailyRows(dailyData?.rows ?? [], sortKey);
+    return sorted.filter((row) =>
+      fieldSearchMatch(row, search, prefs.searchField, {
+        name: (item) => item.driver_name,
+        employee_id: (item) => item.employee_id ?? item.driver_code,
+        zone: (item) => item.zone_name,
+        status: (item) => item.live_status,
+      }),
+    );
+  }, [dailyData?.rows, prefs.searchField, search, sortKey]);
+  const groupedSections = useMemo(() => {
+    if (prefs.groupBy === "none") return [{ key: "all", label: "", rows: dailyRows }];
+    if (prefs.groupBy === "partner" || prefs.groupBy === "date") {
+      return groupDailyRows(dailyRows, prefs.groupBy as HistoryGroupKey);
+    }
+    return groupRows(dailyRows, prefs.groupBy, {
+      status: (row) => row.live_status,
+      zone: (row) => row.zone_name,
+    });
+  }, [dailyRows, prefs.groupBy]);
 
   const sortColumnHeader = (column: AttendanceSortColumn, label: string) => (
     <SortableTableHeadLabel
@@ -681,7 +695,36 @@ function AttendancePageContent() {
             }
             toolbar={
               <div className="space-y-3 px-1">
+                <AppListControls
+                  searchValue={search}
+                  onSearchChange={setSearch}
+                  searchPlaceholder={t("searchPlaceholder")}
+                  searchAriaLabel={t("searchPlaceholder")}
+                  clearSearchLabel={labels.clearSearch}
+                  searchFields={[
+                    labels.field.all,
+                    labels.field.name,
+                    labels.field.employee_id,
+                    labels.field.zone,
+                  ]}
+                  searchField={prefs.searchField}
+                  onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+                  searchFieldLabel={labels.searchBy}
+                  groupByOptions={
+                    tab === "history"
+                      ? [labels.group.none, labels.group.partner, labels.group.date]
+                      : [labels.group.none, labels.group.partner, labels.group.status]
+                  }
+                  groupBy={prefs.groupBy}
+                  onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+                  groupByLabel={labels.groupBy}
+                  viewMode={prefs.viewMode}
+                  onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+                  tableViewLabel={labels.viewTable}
+                  cardsViewLabel={labels.viewCards}
+                />
                 <TrackingTableToolbar
+                  hideSearch
                   search={search}
                   onSearchChange={setSearch}
                   searchPlaceholder={t("searchPlaceholder")}
@@ -766,21 +809,6 @@ function AttendancePageContent() {
                           hiddenCount={availableHiddenColumnCount}
                         />
                       ) : null}
-                      {tab === "history" ? (
-                        <Select
-                          value={groupBy}
-                          onValueChange={(v) => v && setGroupBy(v as HistoryGroupKey)}
-                        >
-                          <SelectTrigger className="w-[160px]">
-                            <SelectValue placeholder={t("groupBy")} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">{t("groupNone")}</SelectItem>
-                            <SelectItem value="partner">{t("groupPartner")}</SelectItem>
-                            <SelectItem value="date">{t("groupDate")}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : null}
                     </>
                   }
                 />
@@ -857,6 +885,38 @@ function AttendancePageContent() {
                   );
                 })}
               </AppDataTable>
+            ) : prefs.viewMode === "cards" ? (
+              groupedSections.map((section) => (
+                <div key={section.key} className="space-y-2 p-3">
+                  {section.label ? (
+                    <p className="text-xs font-semibold text-foreground">
+                      {section.label}
+                      <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                        {section.rows.length}
+                      </span>
+                    </p>
+                  ) : null}
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {section.rows.map((row) => (
+                      <div
+                        key={`${row.driver_id}-${row.log_date}`}
+                        className="rounded-xl border border-border bg-card p-4 shadow-sm"
+                      >
+                        <p className="truncate text-sm font-semibold">{row.driver_name}</p>
+                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                          {row.employee_id ?? row.driver_code}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">{row.log_date}</p>
+                        <div className="mt-2">
+                          <StatusPill variant={resolveStatusVariant(row.live_status)}>
+                            {t((LIVE_STATUS_LABEL_KEYS[row.live_status] ?? "livePresent") as "livePresent")}
+                          </StatusPill>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
             ) : (
               groupedSections.map((section) => (
                 <div key={section.key}>

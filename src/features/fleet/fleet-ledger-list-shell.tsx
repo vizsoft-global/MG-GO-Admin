@@ -1,10 +1,17 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -54,9 +61,13 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
   const tDetail = useTranslations("pages.vehicleDetail");
   const t =
     kind === "service" ? tService : kind === "handover" ? tHandover : tAccident;
+  const tCommon = useTranslations("common");
+  const labels = useListControlLabels();
+  const { prefs, update } = useListViewPrefs(`fleet-${kind}`);
+  const [search, setSearch] = useState("");
   const list = useQuery<FleetLedgerRow[]>({
     queryKey: queryKeys.vehicles.fleetLedger(kind),
-    queryFn: () => {
+    queryFn: async (): Promise<FleetLedgerRow[]> => {
       switch (kind) {
         case "service":
           return listFleetVehicleServices();
@@ -66,12 +77,49 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
           return listFleetVehicleAccidents();
         default: {
           const _exhaustive: never = kind;
-          return _exhaustive;
+          throw new Error(`unexpected fleet ledger kind: ${String(_exhaustive)}`);
         }
       }
     },
   });
-  const rows = list.data ?? [];
+  const rows: FleetLedgerRow[] = list.data ?? [];
+  const filtered = useMemo(
+    () =>
+      rows.filter((row) =>
+        fieldSearchMatch<FleetLedgerRow>(row, search, prefs.searchField, {
+          plate: (item) => item.plate,
+          name: (item) => {
+            if ("from_name" in item) return item.from_name;
+            if ("vendor" in item) return item.vendor;
+            if ("location_text" in item) return item.location_text;
+            return null;
+          },
+          status: (item) => ("severity" in item ? item.severity : "kind" in item ? item.kind : null),
+        }),
+      ),
+    [prefs.searchField, rows, search],
+  );
+  const grouped = useMemo(
+    () =>
+      groupRows<FleetLedgerRow>(
+        filtered,
+        prefs.groupBy,
+        {
+          date: (row) =>
+            dayLabel(
+              "serviced_at" in row
+                ? row.serviced_at
+                : "handed_at" in row
+                  ? row.handed_at
+                  : row.occurred_at,
+            ),
+          status: (row) => ("severity" in row ? row.severity : "kind" in row ? row.kind : null),
+        },
+        {},
+        "—",
+      ),
+    [filtered, prefs.groupBy],
+  );
   const columns =
     kind === "service"
       ? [
@@ -105,7 +153,24 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
         title={t("title")}
         description={t("subtitle")}
       />
-      <AppListCard>
+      <AppListCard
+        toolbar={
+          <AppListControls
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={tCommon("search")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[labels.field.all, labels.field.plate, labels.field.name]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => update({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[labels.group.none, labels.group.date, labels.group.status]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => update({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+          />
+        }
+      >
         {list.isPending ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -115,52 +180,67 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
         ) : (
           <AppDataTable
             columns={columns}
-            empty={rows.length === 0 ? <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty> : null}
+            empty={filtered.length === 0 ? <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty> : null}
           >
-            {kind === "service"
-              ? (rows as FleetVehicleServiceRow[]).map((row) => (
+            {grouped.flatMap((group) => [
+              prefs.groupBy !== "none" ? (
+                <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                  <TableCell colSpan={columns.length} className="bg-muted/40 py-2 text-xs font-semibold">
+                    {group.label}
+                  </TableCell>
+                </AppDataTableRow>
+              ) : null,
+              ...group.rows.map((row) =>
+                kind === "service" ? (
                   <LedgerRow
                     key={row.id}
                     href={`/vehicles/${row.vehicle_id}?tab=service`}
                     plate={row.plate}
                     viewLabel={t("viewVehicle")}
                   >
-                    <TableCell className="whitespace-nowrap">{dayLabel(row.serviced_at)}</TableCell>
-                    <TableCell className="whitespace-nowrap">{row.kind || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap">{row.vendor ?? "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap">{row.odometer ?? "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap">{row.cost_kwd ?? "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {dayLabel((row as FleetVehicleServiceRow).serviced_at)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleServiceRow).kind || "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleServiceRow).vendor ?? "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleServiceRow).odometer ?? "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleServiceRow).cost_kwd ?? "—"}</TableCell>
                   </LedgerRow>
-                ))
-              : kind === "handover"
-                ? (rows as FleetVehicleHandoverRow[]).map((row) => (
-                    <LedgerRow
-                      key={row.id}
-                      href={`/vehicles/${row.vehicle_id}?tab=handover`}
-                      plate={row.plate}
-                      viewLabel={t("viewVehicle")}
-                    >
-                      <TableCell className="whitespace-nowrap">{dayLabel(row.handed_at)}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.from_name ?? "—"}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.to_name ?? "—"}</TableCell>
-                      <TableCell className="min-w-[160px]">{row.notes ?? "—"}</TableCell>
-                    </LedgerRow>
-                  ))
-                : (rows as FleetVehicleAccidentRow[]).map((row) => (
-                    <LedgerRow
-                      key={row.id}
-                      href={`/vehicles/${row.vehicle_id}?tab=accident`}
-                      plate={row.plate}
-                      viewLabel={t("viewVehicle")}
-                    >
-                      <TableCell className="whitespace-nowrap">{dayLabel(row.occurred_at)}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.location_text ?? "—"}</TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {severityLabel(row.severity, tDetail)}
-                      </TableCell>
-                      <TableCell className="min-w-[160px]">{row.notes ?? "—"}</TableCell>
-                    </LedgerRow>
-                  ))}
+                ) : kind === "handover" ? (
+                  <LedgerRow
+                    key={row.id}
+                    href={`/vehicles/${row.vehicle_id}?tab=handover`}
+                    plate={row.plate}
+                    viewLabel={t("viewVehicle")}
+                  >
+                    <TableCell className="whitespace-nowrap">
+                      {dayLabel((row as FleetVehicleHandoverRow).handed_at)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleHandoverRow).from_name ?? "—"}</TableCell>
+                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleHandoverRow).to_name ?? "—"}</TableCell>
+                    <TableCell className="min-w-[160px]">{(row as FleetVehicleHandoverRow).notes ?? "—"}</TableCell>
+                  </LedgerRow>
+                ) : (
+                  <LedgerRow
+                    key={row.id}
+                    href={`/vehicles/${row.vehicle_id}?tab=accident`}
+                    plate={row.plate}
+                    viewLabel={t("viewVehicle")}
+                  >
+                    <TableCell className="whitespace-nowrap">
+                      {dayLabel((row as FleetVehicleAccidentRow).occurred_at)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {(row as FleetVehicleAccidentRow).location_text ?? "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {severityLabel((row as FleetVehicleAccidentRow).severity, tDetail)}
+                    </TableCell>
+                    <TableCell className="min-w-[160px]">{(row as FleetVehicleAccidentRow).notes ?? "—"}</TableCell>
+                  </LedgerRow>
+                ),
+              ),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

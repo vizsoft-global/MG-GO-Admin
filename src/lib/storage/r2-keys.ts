@@ -1,4 +1,4 @@
-import type { DriverDocumentType } from "@/features/drivers/types";
+import { DOCUMENT_TYPES, type DriverDocumentType } from "@/features/drivers/types";
 
 const ALLOWED_PREFIXES = [
   "drivers/",
@@ -105,12 +105,7 @@ export function allAssetCatalogImageKeys(catalogItemId: string): string[] {
 /** All possible intake document keys for rollback (unknown ext per doc). */
 export function allIntakeDocumentKeys(intakeId: string): string[] {
   const exts = ["pdf", "png", "jpg", "webp"] as const;
-  const docTypes: DriverDocumentType[] = [
-    "license",
-    "civil_id",
-    "work_permit",
-    "passport",
-  ];
+  const docTypes = DOCUMENT_TYPES;
   return docTypes.flatMap((docType) =>
     exts.map((ext) => buildIntakeDocumentKey(intakeId, docType, ext)),
   );

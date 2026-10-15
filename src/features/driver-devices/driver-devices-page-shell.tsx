@@ -17,7 +17,6 @@ import {
   ExternalLink,
   Loader2,
   RefreshCw,
-  Search,
   ShieldAlert,
   Smartphone,
   SmartphoneNfc,
@@ -26,6 +25,14 @@ import {
 import { toast } from "sonner";
 
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -56,7 +63,6 @@ import {
 } from "./driver-devices-actions";
 import {
   decorateDriverDeviceRows,
-  driverDeviceMatchesSearch,
   driverDeviceMatchesTab,
   driverDevicesKpis,
   driverDevicesSortDirection,
@@ -125,6 +131,8 @@ function SelectBox({
 
 export function DriverDevicesPageShell() {
   const t = useTranslations("pages.driverDevices");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("driver-devices");
   const { can } = useAuth();
   const canForce = can("drivers.manage");
   const canNotify = can("notifications.send");
@@ -179,11 +187,32 @@ export function DriverDevicesPageShell() {
     const filtered = rows.filter(
       (row) =>
         driverDeviceMatchesTab(row, activeTab) &&
-        driverDeviceMatchesSearch(row, search) &&
+        fieldSearchMatch(row, search, prefs.searchField, {
+          name: (item) => item.full_name,
+          employee_id: (item) => item.employee_id ?? item.driver_code,
+          zone: (item) => item.zone_name,
+          phone: (item) => item.phone,
+          device: (item) => formatDeviceName(item),
+          manufacturer: (item) => item.device_meta?.manufacturer,
+          version: (item) => formatBuild(item),
+        }) &&
         (buildFilter == null || row.app_version_code === buildFilter),
     );
     return sortDriverDeviceRows(filtered, sortKey);
-  }, [rows, activeTab, search, buildFilter, sortKey]);
+  }, [rows, activeTab, search, prefs.searchField, buildFilter, sortKey]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        {
+          zone: (row) => row.zone_name,
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, visible],
+  );
 
   const kpis = useMemo(() => driverDevicesKpis(rows), [rows]);
 
@@ -426,43 +455,51 @@ export function DriverDevicesPageShell() {
 
       <AppListCard
         toolbar={
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <div className="relative min-w-[220px] flex-1">
-              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t("searchPlaceholder")}
-                className="h-9 rounded-lg bg-background ps-9 pe-9"
-              />
-              {search ? (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
-            </div>
-            {buildFilter != null ? (
-              <button
-                type="button"
-                onClick={() => replaceQuery({ build: null })}
-                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-emerald-500 bg-emerald-100 px-2.5 text-xs font-semibold text-emerald-900"
-              >
-                <Check className="h-3 w-3 stroke-[2.5]" />
-                {t("buildFilter", { code: buildFilter })}
-                <X className="h-3 w-3" />
-              </button>
-            ) : null}
-            {sentry && !sentry.connected ? (
-              <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-100 px-2.5 text-xs font-medium text-amber-800">
-                <Bug className="h-3.5 w-3.5" />
-                {t(`sentry.${sentry.reason}`)}
-              </span>
-            ) : null}
-          </div>
+          <AppListControls
+            className="min-w-0 flex-1"
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={t("searchPlaceholder")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[
+              labels.field.all,
+              labels.field.name,
+              labels.field.employee_id,
+              labels.field.zone,
+            ]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[labels.group.none, labels.group.zone]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+            tableViewLabel={labels.viewTable}
+            cardsViewLabel={labels.viewCards}
+            filterSlot={
+              <>
+                {buildFilter != null ? (
+                  <button
+                    type="button"
+                    onClick={() => replaceQuery({ build: null })}
+                    className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-emerald-500 bg-emerald-100 px-2.5 text-xs font-semibold text-emerald-900"
+                  >
+                    <Check className="h-3 w-3 stroke-[2.5]" />
+                    {t("buildFilter", { code: buildFilter })}
+                    <X className="h-3 w-3" />
+                  </button>
+                ) : null}
+                {sentry && !sentry.connected ? (
+                  <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-100 px-2.5 text-xs font-medium text-amber-800">
+                    <Bug className="h-3.5 w-3.5" />
+                    {t(`sentry.${sentry.reason}`)}
+                  </span>
+                ) : null}
+              </>
+            }
+          />
         }
       >
         {isLoading ? (
@@ -526,6 +563,34 @@ export function DriverDevicesPageShell() {
               </div>
             ) : null}
 
+            {prefs.viewMode === "cards" ? (
+              visible.length === 0 ? (
+                <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty>
+              ) : (
+                <div className="p-4">
+                  <GroupedSections groups={grouped}>
+                    {(groupRowsList) => (
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {groupRowsList.map((row) => (
+                          <Link
+                            key={row.driver_id}
+                            href={`/drivers/${row.driver_id}?from=driver-devices`}
+                            className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                          >
+                            <p className="truncate text-sm font-semibold">{row.full_name}</p>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                              #{row.driver_code}
+                              {row.zone_name ? ` · ${row.zone_name}` : ""}
+                            </p>
+                            <p className="mt-2 text-xs font-medium">{formatBuild(row)}</p>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </GroupedSections>
+                </div>
+              )
+            ) : (
             <AppDataTable
               columns={[
                 {
@@ -558,18 +623,36 @@ export function DriverDevicesPageShell() {
                 ) : null
               }
             >
-              {visible.map((row) => (
-                <DeviceRow
-                  key={row.driver_id}
-                  row={row}
-                  minVersionCode={snapshot?.minVersionCode ?? null}
-                  selected={selected.has(row.driver_id)}
-                  sentryConnected={sentry?.connected === true}
-                  sentryUrl={sentryUrlByDriver.get(row.driver_id) ?? null}
-                  onToggle={() => toggleRow(row.driver_id)}
-                />
-              ))}
+              {grouped.flatMap((group) => [
+                ...(prefs.groupBy !== "none"
+                  ? [
+                      <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                        <TableCell
+                          colSpan={13}
+                          className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
+                        >
+                          {group.label}
+                          <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                            {group.rows.length}
+                          </span>
+                        </TableCell>
+                      </AppDataTableRow>,
+                    ]
+                  : []),
+                ...group.rows.map((row) => (
+                  <DeviceRow
+                    key={row.driver_id}
+                    row={row}
+                    minVersionCode={snapshot?.minVersionCode ?? null}
+                    selected={selected.has(row.driver_id)}
+                    sentryConnected={sentry?.connected === true}
+                    sentryUrl={sentryUrlByDriver.get(row.driver_id) ?? null}
+                    onToggle={() => toggleRow(row.driver_id)}
+                  />
+                )),
+              ])}
             </AppDataTable>
+            )}
           </>
         )}
       </AppListCard>

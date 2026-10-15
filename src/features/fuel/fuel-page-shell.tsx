@@ -2,8 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Calendar, CalendarDays, CalendarRange, ChevronLeft, ChevronRight, ExternalLink, Loader2, Pencil, Search, SlidersHorizontal } from "lucide-react";
+import { Calendar, CalendarDays, CalendarRange, ChevronLeft, ChevronRight, ExternalLink, Loader2, Pencil, SlidersHorizontal } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  fieldSearchMatch,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -27,7 +33,7 @@ import type { FleetRequestListRow } from "./fleet-request-types";
 import { FuelFillDialog } from "./fuel-fill-dialog";
 import { resolveFuelRange, shiftFuelAnchor, type FuelRangeMode } from "./fuel-range";
 import { FuelWithdrawnDialog } from "./fuel-withdrawn-dialog";
-import { applyWithdrawnOverride, formatKwd, buildFuelWeekRows, fuelWeekMatchesSearch, withFuelRequestRows, type FuelLogRow } from "./fuel-week";
+import { applyWithdrawnOverride, formatKwd, buildFuelWeekRows, withFuelRequestRows, type FuelLogRow } from "./fuel-week";
 import { useFleetRequests } from "./use-fleet-requests";
 import { useFuelFills, useFuelWithdrawnOverrides } from "./use-fuel";
 
@@ -39,6 +45,8 @@ export function FuelPageShell({
   embedded?: boolean;
 }) {
   const t = useTranslations("pages.fuel");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("fuel");
   const { can } = useAuth();
   const canEditFuel = can("fuel.edit");
   const [mode, setMode] = useState<FuelRangeMode>("weekly");
@@ -114,8 +122,18 @@ export function FuelPageShell({
     );
     return withFuelRequestRows(fillsOnly, requests, range.days)
       .map((row) => applyWithdrawnOverride(row, overrideByKey.get(`${row.vehicleId}:${row.driverId}`)))
-      .filter((row) => fuelWeekMatchesSearch(row, search));
-  }, [fills, range.days, range.start, requestRows, search, withdrawnOverrides.data]);
+      .filter((row) =>
+        fieldSearchMatch(row, search, prefs.searchField, {
+          name: (item) => item.driverName,
+          employee_id: (item) => item.employeeId,
+          plate: (item) => item.plate,
+          zone: (item) => item.zone,
+          company: (item) => item.employeeCompany,
+          vehicleCompany: (item) => item.vehicleCompany,
+          chip: (item) => item.chip,
+        }),
+      );
+  }, [fills, prefs.searchField, range.days, range.start, requestRows, search, withdrawnOverrides.data]);
   const selected = rows.find((row) => row.key === selectedKey) ?? null;
 
   const applyCustom = () => {
@@ -221,15 +239,23 @@ export function FuelPageShell({
                 {rangeError === "span" ? t("rangeTooLong") : t("rangeOrder")}
               </p>
             ) : null}
-            <div className="relative min-w-[220px] flex-1">
-              <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t("searchPlaceholder")}
-                className="h-9 ps-8"
-              />
-            </div>
+            <AppListControls
+              className="min-w-[220px] flex-1"
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={t("searchPlaceholder")}
+              clearSearchLabel={labels.clearSearch}
+              searchFields={[
+                labels.field.all,
+                labels.field.name,
+                labels.field.employee_id,
+                labels.field.plate,
+                labels.field.zone,
+              ]}
+              searchField={prefs.searchField}
+              onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+              searchFieldLabel={labels.searchBy}
+            />
             <Select
               items={[
                 { value: "all", label: t("projectAll") },

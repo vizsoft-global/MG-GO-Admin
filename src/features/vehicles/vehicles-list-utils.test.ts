@@ -105,6 +105,9 @@ describe("vehicleMatchesSearch", () => {
     assert.equal(vehicleMatchesSearch(assigned, "55221"), true);
     assert.equal(vehicleMatchesSearch(assigned, "hassan"), true);
     assert.equal(vehicleMatchesSearch(assigned, "zzz"), false);
+    assert.equal(vehicleMatchesSearch(assigned, "kwt", "plate"), true);
+    assert.equal(vehicleMatchesSearch(assigned, "hassan", "plate"), false);
+    assert.equal(vehicleMatchesSearch(assigned, "55221", "employee_id"), true);
   });
 });
 

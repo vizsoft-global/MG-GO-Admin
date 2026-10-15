@@ -11429,7 +11429,7 @@ export type Database = {
         | "under_review"
         | "in_transit"
         | "cancelled"
-      document_type: "license" | "civil_id" | "work_permit" | "passport"
+      document_type: "license" | "civil_id" | "work_permit" | "passport" | "health_card" | "operations_card"
       driver_import_batch_status:
         | "previewed"
         | "applied"
@@ -11744,7 +11744,7 @@ export const Constants = {
         "in_transit",
         "cancelled",
       ],
-      document_type: ["license", "civil_id", "work_permit", "passport"],
+      document_type: ["license", "civil_id", "work_permit", "passport", "health_card", "operations_card"],
       driver_import_batch_status: [
         "previewed",
         "applied",

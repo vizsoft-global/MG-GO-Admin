@@ -41,6 +41,12 @@ function row(overrides: Partial<DriverListRow> = {}): DriverListRow {
     client_id: "CLI-1",
     client_name: "Gulf Retail",
     custom_fields: { helmet_size: "M" },
+    employee_status_key: "new",
+    section_keys: [],
+    nationality_category_keys: [],
+    project_key: null,
+    civil_id: null,
+    passport_number: null,
     ...overrides,
   };
 }

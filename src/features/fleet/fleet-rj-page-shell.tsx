@@ -5,6 +5,13 @@ import { useTranslations } from "next-intl";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
+  AppListControls,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
+import {
   AppDataTable,
   AppDataTableEmpty,
   AppDataTableRow,
@@ -51,6 +58,10 @@ export function FleetRjPageShell() {
   const refund = useFleetRequests("fuel_refund");
   const asset = useFleetRequests("asset");
   const [selected, setSelected] = useState<FleetRequestListRow | null>(null);
+  const tCommon = useTranslations("common");
+  const labels = useListControlLabels();
+  const { prefs, update } = useListViewPrefs("fleet-rj");
+  const [search, setSearch] = useState("");
 
   const rows = useMemo(() => {
     const listed: FleetRequestListRow[] = [];
@@ -61,6 +72,32 @@ export function FleetRjPageShell() {
       .filter((row) => row.status === "rejected")
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
   }, [asset.data, canAsset, canFuel, canRefund, fuel.data, refund.data]);
+
+  const filtered = useMemo(
+    () =>
+      rows.filter((row) =>
+        fieldSearchMatch(row, search, prefs.searchField, {
+          name: (item) => item.driver_name,
+          employee_id: (item) => item.employee_id,
+          plate: (item) => item.plate,
+          status: (item) => item.status,
+        }),
+      ),
+    [prefs.searchField, rows, search],
+  );
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filtered,
+        prefs.groupBy,
+        {
+          status: (row) => row.request_type,
+        },
+        {},
+        "—",
+      ),
+    [filtered, prefs.groupBy],
+  );
 
   const isPending =
     (canFuel && fuel.data === undefined && fuel.isPending) ||
@@ -74,7 +111,24 @@ export function FleetRjPageShell() {
         title={t("title")}
         description={t("subtitle")}
       />
-      <AppListCard>
+      <AppListCard
+        toolbar={
+          <AppListControls
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={tCommon("search")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[labels.field.all, labels.field.name, labels.field.employee_id, labels.field.plate]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => update({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[labels.group.none, labels.group.status]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => update({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+          />
+        }
+      >
         {isPending ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -92,9 +146,17 @@ export function FleetRjPageShell() {
               { id: "date", label: tQueue("colDate") },
               { id: "actions", label: tQueue("colActions") },
             ]}
-            empty={rows.length === 0 ? <AppDataTableEmpty>{tQueue("emptyFilters")}</AppDataTableEmpty> : null}
+            empty={filtered.length === 0 ? <AppDataTableEmpty>{tQueue("emptyFilters")}</AppDataTableEmpty> : null}
           >
-            {rows.map((row) => (
+            {grouped.flatMap((group) => [
+              prefs.groupBy !== "none" ? (
+                <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                  <TableCell colSpan={7} className="bg-muted/40 py-2 text-xs font-semibold">
+                    {group.label}
+                  </TableCell>
+                </AppDataTableRow>
+              ) : null,
+              ...group.rows.map((row) => (
               <AppDataTableRow
                 key={row.id}
                 className="cursor-pointer"
@@ -131,7 +193,8 @@ export function FleetRjPageShell() {
                   </button>
                 </TableCell>
               </AppDataTableRow>
-            ))}
+              )),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

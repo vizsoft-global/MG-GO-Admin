@@ -6,6 +6,9 @@ export const DRIVER_ERROR_KEYS = [
   "invalid_civil_id",
   "phone_exists",
   "civil_id_exists",
+  "passport_exists",
+  "invalid_passport",
+  "invalid_bank",
   "employee_id_exists",
   "employee_id_format",
   "driver_code_exists",
@@ -18,6 +21,7 @@ export const DRIVER_ERROR_KEYS = [
   "invalid_restaurants",
   "missing_active_restaurant",
   "missing_assignment",
+  "missing_archive_reason",
   "missing_block_reason",
   "missing_freeze_reason",
   "missing_freeze_window",
@@ -52,6 +56,7 @@ export function mapDriverDbError(
     const msg = error.message ?? "";
     if (msg.includes("employee_id")) return "employee_id_exists";
     if (msg.includes("civil_id")) return "civil_id_exists";
+    if (msg.includes("passport")) return "passport_exists";
     return "phone_exists";
   }
   return "save_failed";
@@ -73,4 +78,13 @@ export function normalizeEmployeeId(raw: string): string | null {
 
 export function isValidEmployeeId(raw: string): boolean {
   return EMPLOYEE_ID_RE.test(raw.trim());
+}
+
+const PASSPORT_RE = /^[A-Z0-9]{5,20}$/;
+
+export function normalizePassport(raw: string): string | null {
+  const value = raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+  if (!value) return null;
+  if (!PASSPORT_RE.test(value)) return null;
+  return value;
 }

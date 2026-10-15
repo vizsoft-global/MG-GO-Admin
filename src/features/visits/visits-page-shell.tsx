@@ -24,7 +24,14 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
-import { AppListToolbar } from "@/components/app/app-list-toolbar";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -135,6 +142,8 @@ function toCsv(rows: VisitListRow[]): string {
 
 export function VisitsPageShell() {
   const t = useTranslations("pages.visitBookings");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("visits");
   const locale = useLocale();
   const { can } = useAuth();
   const canOperate = can("visits.operate");
@@ -186,15 +195,14 @@ export function VisitsPageShell() {
     if (branchFilter !== "all") list = list.filter((r) => r.branch_id === branchFilter);
     if (deptFilter !== "all") list = list.filter((r) => r.department_key === deptFilter);
     if (statusFilter !== "all") list = list.filter((r) => r.status === statusFilter);
-    const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (r) =>
-          r.booking_code.toLowerCase().includes(q) ||
-          r.driver_name.toLowerCase().includes(q) ||
-          r.driver_code.toLowerCase().includes(q),
-      );
-    }
+    list = list.filter((r) =>
+      fieldSearchMatch(r, search, prefs.searchField, {
+        name: (item) => item.driver_name,
+        employee_id: (item) => item.driver_code,
+        status: (item) => item.status,
+        code: (item) => item.booking_code,
+      }),
+    );
     if (sortDir) {
       list = [...list].sort((a, b) =>
         sortDir === "asc"
@@ -203,7 +211,25 @@ export function VisitsPageShell() {
       );
     }
     return list;
-  }, [tabRows, branchFilter, deptFilter, statusFilter, search, sortDir]);
+  }, [tabRows, branchFilter, deptFilter, statusFilter, search, prefs.searchField, sortDir]);
+
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        visibleRows,
+        prefs.groupBy,
+        {
+          status: (row) => row.status,
+          date: (row) => row.scheduled_date,
+        },
+        Object.fromEntries(
+          STATUS_KEYS.map((status) => [status, t(`status.${status}` as "status.confirmed")]),
+        ),
+        "—",
+      ),
+    [prefs.groupBy, t, visibleRows],
+  );
+  const visitColCount = canOperate ? 9 : 8;
 
   const setStatus = async (
     bookingId: string,
@@ -430,14 +456,28 @@ export function VisitsPageShell() {
         ))}
       </div>
 
-      <AppListToolbar
+      <AppListControls
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder={t("allVisits.searchPlaceholder")}
-        countLabel={t("allVisits.countLabel", {
-          shown: visibleRows.length,
-          total: tabRows.length,
-        })}
+        clearSearchLabel={labels.clearSearch}
+        searchFields={[
+          labels.field.all,
+          labels.field.name,
+          labels.field.employee_id,
+          labels.field.status,
+        ]}
+        searchField={prefs.searchField}
+        onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+        searchFieldLabel={labels.searchBy}
+        groupByOptions={[labels.group.none, labels.group.status, labels.group.date]}
+        groupBy={prefs.groupBy}
+        onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+        groupByLabel={labels.groupBy}
+        viewMode={prefs.viewMode}
+        onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+        tableViewLabel={labels.viewTable}
+        cardsViewLabel={labels.viewCards}
         filterSlot={
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -495,6 +535,14 @@ export function VisitsPageShell() {
             />
           </div>
         }
+        trailing={
+          <p className="text-xs text-muted-foreground">
+            {t("allVisits.countLabel", {
+              shown: visibleRows.length,
+              total: tabRows.length,
+            })}
+          </p>
+        }
       />
 
       {canOperate && selected.size > 0 ? (
@@ -551,6 +599,33 @@ export function VisitsPageShell() {
               description={t("emptyDescription")}
             />
           </div>
+        ) : prefs.viewMode === "cards" ? (
+          <div className="p-4">
+            <GroupedSections groups={grouped}>
+              {(groupRowsList) => (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {groupRowsList.map((row) => (
+                    <Link
+                      key={row.id}
+                      href={`/visit-bookings/${row.id}`}
+                      className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                    >
+                      <p className="truncate text-sm font-semibold">{row.booking_code}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {row.driver_name}
+                        {row.driver_code ? ` · ${row.driver_code}` : ""}
+                      </p>
+                      <div className="mt-2">
+                        <StatusPill variant={visitStatusVariant(row.status)} dot>
+                          {t(`status.${row.status}` as "status.confirmed")}
+                        </StatusPill>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
+          </div>
         ) : (
           <AppDataTable
             columns={[
@@ -593,7 +668,23 @@ export function VisitsPageShell() {
               { id: "actions", label: t("colActions") },
             ]}
           >
-            {visibleRows.map((row) => {
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={visitColCount}
+                        className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
+                      >
+                        {group.label}
+                        <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                          {group.rows.length}
+                        </span>
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => {
               const variant = visitStatusVariant(row.status);
               return (
                 <AppDataTableRow key={row.id}>
@@ -715,7 +806,8 @@ export function VisitsPageShell() {
                   </TableCell>
                 </AppDataTableRow>
               );
-            })}
+            }),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

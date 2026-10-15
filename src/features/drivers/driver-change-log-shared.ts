@@ -67,6 +67,11 @@ export function flattenProfileSnapshot(input: {
   client_name?: unknown;
   workflow_status?: unknown;
   account_status?: unknown;
+  passport_number?: unknown;
+  employee_status_key?: unknown;
+  section_keys?: unknown;
+  nationality_category_keys?: unknown;
+  bank_code?: unknown;
   custom_fields?: Record<string, unknown> | null;
 }): DriverChangeSnapshot {
   const snapshot: DriverChangeSnapshot = {
@@ -87,6 +92,11 @@ export function flattenProfileSnapshot(input: {
     client_name: displayChangeValue(input.client_name),
     workflow_status: displayChangeValue(input.workflow_status),
     account_status: displayChangeValue(input.account_status),
+    passport_number: displayChangeValue(input.passport_number),
+    employee_status_key: displayChangeValue(input.employee_status_key),
+    section_keys: displayChangeValue(input.section_keys),
+    nationality_category_keys: displayChangeValue(input.nationality_category_keys),
+    bank_code: displayChangeValue(input.bank_code),
   };
   for (const [key, value] of Object.entries(input.custom_fields ?? {})) {
     snapshot[`custom.${key}`] = displayChangeValue(value);

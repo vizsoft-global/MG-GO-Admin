@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Download, Info, Redo2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app";
-import { SearchField } from "@/components/app";
+import { PayrollListToolbar, usePayrollListPrefs } from "./payroll-list-toolbar";
 import { cn } from "@/lib/utils";
 import {
   isoDayLabel,
@@ -77,6 +77,7 @@ export function PayrollAttendanceOrdersTab({
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
+  const { prefs } = usePayrollListPrefs("payroll-ao");
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
   const [rect, setRect] = useState<CellRect | null>(null);
@@ -107,8 +108,8 @@ export function PayrollAttendanceOrdersTab({
   const editable = canManage;
 
   const searched = useMemo(
-    () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
-    [riders, search],
+    () => riders.filter((r) => payrollRiderMatchesSearch(r, search, prefs.searchField)),
+    [prefs.searchField, riders, search],
   );
 
   const visibleRows = useMemo(() => {
@@ -467,11 +468,10 @@ export function PayrollAttendanceOrdersTab({
           />
         </div>
       </div>
-      <SearchField
-        value={search}
-        onChange={setSearch}
-        placeholder={t("searchPlaceholder")}
-        clearLabel={t("clearSearch")}
+      <PayrollListToolbar
+        prefKey="payroll-ao"
+        search={search}
+        onSearchChange={setSearch}
       />
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         {chips.length || sort ? (

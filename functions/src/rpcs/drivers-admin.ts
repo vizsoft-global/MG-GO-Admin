@@ -55,18 +55,20 @@ const MONTH_RE = /^(\d{4})-(\d{2})/;
 const PAYROLL_WRITE_SLUGS = ["payroll.manage", "payroll.create", "payroll.edit", "payroll.delete"];
 const DRIVER_WRITE_SLUGS = ["drivers.manage", "drivers.create", "drivers.edit"];
 
-type LockField = "employeeId" | "civilId" | "phone";
+type LockField = "employeeId" | "civilId" | "phone" | "passport";
 
 const LOCK_ERRORS: Record<LockField, string> = {
   employeeId: "employee_id_exists",
   civilId: "civil_id_exists",
   phone: "phone_exists",
+  passport: "passport_exists",
 };
 
 const LOCK_SOURCE: Record<LockField, string> = {
   employeeId: "employee_id",
   civilId: "civil_id",
   phone: "phone",
+  passport: "passport_number",
 };
 
 /** One read surface over a transaction or plain reads, so a pre-check and the transaction share the rules. */
@@ -522,6 +524,8 @@ export const archiveDriverIntake = onCall(async (request) => {
   const data = (request.data ?? {}) as Dict;
   const intakeId = pickId(data, "intakeId", "p_intake_id");
   if (!intakeId) return { ok: false, error: "intake_not_found" };
+  const archiveReason = pickText(data, "archiveReason", "p_archive_reason");
+  if (!archiveReason) return { ok: false, error: "missing_archive_reason" };
 
   const db = getFirestore();
   const outcome = await db.runTransaction(async (tx) => {
@@ -541,11 +545,16 @@ export const archiveDriverIntake = onCall(async (request) => {
       : [];
 
     const now = Timestamp.now();
-    tx.update(intakeRef, { archived_at: now, status: "cancelled", updated_at: now });
+    tx.update(intakeRef, {
+      archived_at: now,
+      status: "cancelled",
+      updated_at: now,
+      archive_reason: archiveReason,
+    });
 
     let driverArchived = false;
     if (driverRef && driverSnap?.exists && dataOf(driverSnap)["archived_at"] == null) {
-      tx.update(driverRef, { archived_at: now, updated_at: now });
+      tx.update(driverRef, { archived_at: now, updated_at: now, archive_reason: archiveReason });
       driverArchived = true;
     }
 

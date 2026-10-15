@@ -110,6 +110,10 @@ export const COLLECTIONS = {
   driverOperationEvents: "driver_operation_events",
   driverTelemetryEvents: "driver_telemetry_events",
   vehicleUseTypes: "vehicle_use_types",
+  employeeStatuses: "employee_statuses",
+  employeeSections: "employee_sections",
+  nationalityCategories: "nationality_categories",
+  bankCodes: "bank_codes",
   vehicleTypes: "vehicle_types",
   menuConfigs: "menu_configs",
   locales: "locales",
@@ -139,6 +143,7 @@ export const UNIQ_COLLECTIONS = {
   employeeId: "uniq_employee_id",
   phone: "uniq_phone",
   civilId: "uniq_civil_id",
+  passport: "uniq_passport",
   plate: "uniq_plate",
   passcode: "uniq_passcode",
 } as const;

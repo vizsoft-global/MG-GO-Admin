@@ -52,6 +52,20 @@ async function resolveIntakeIdForDriver(
   return data?.id ?? null;
 }
 
+async function mirrorDriverZoneToIntake(
+  db: StaffClient,
+  driverId: string,
+  zoneId: string | null,
+): Promise<boolean> {
+  const intakeId = await resolveIntakeIdForDriver(db, driverId);
+  if (!intakeId) return true;
+  const { error } = await db
+    .from("driver_intakes")
+    .update({ zone_id: zoneId, updated_at: new Date().toISOString() })
+    .eq("id", intakeId);
+  return !error;
+}
+
 async function syncLinkedDriverRestaurants(
   db: StaffClient,
   driverId: string,
@@ -455,6 +469,8 @@ export async function assignDriverToRestaurant(input: {
       .update({ zone_id: nextZoneId, updated_at: new Date().toISOString() })
       .eq("id", driverId);
     if (zoneErr) return { error: "save_failed" };
+    const mirrored = await mirrorDriverZoneToIntake(db, driverId, nextZoneId);
+    if (!mirrored) return { error: "save_failed" };
   }
 
   await logAssignmentEvent(db, {
@@ -545,6 +561,8 @@ export async function assignDriverToZone(input: {
     .update({ zone_id: zoneId, updated_at: new Date().toISOString() })
     .eq("id", driverId);
   if (updateErr) return { error: "save_failed" };
+  const mirrored = await mirrorDriverZoneToIntake(db, driverId, zoneId);
+  if (!mirrored) return { error: "save_failed" };
 
   await logAssignmentEvent(db, {
     driverId,

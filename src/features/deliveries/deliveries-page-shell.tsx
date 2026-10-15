@@ -19,11 +19,18 @@ import {
   TriangleAlert,
   Package,
   RefreshCw,
-  Search,
   X,
   XCircle,
 } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -31,6 +38,7 @@ import {
   AppTableColumnPicker,
   VisibleTableCell,
 } from "@/components/app";
+import { TableCell } from "@/components/app/app-data-table";
 import { AppPage } from "@/components/app/app-page";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
@@ -49,7 +57,6 @@ import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { CardContent } from "@/components/ui/card";
 import { SearchSelect } from "@/components/ui/search-select";
 import {
@@ -179,6 +186,8 @@ async function fetchDeliveryGpsFromApi(deliveryId: string) {
 
 function DeliveriesPageContent() {
   const t = useTranslations("pages.deliveries");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("deliveries");
   const queryClient = useQueryClient();
   const { can } = useAuth();
   const canManage = can("deliveries.manage");
@@ -256,7 +265,34 @@ function DeliveriesPageContent() {
     () => data?.pages.flatMap((page) => page.rows) ?? [],
     [data],
   );
-  const visible = deliveries;
+  const visible = useMemo(
+    () =>
+      deliveries.filter((row) =>
+        fieldSearchMatch(row, search, prefs.searchField, {
+          name: (item) => item.driver_name,
+          employee_id: (item) => item.driver_employee_id || item.driver_code,
+          zone: (item) => item.zone_name,
+          order_id: (item) => item.external_order_id,
+          status: (item) => item.status,
+        }),
+      ),
+    [deliveries, prefs.searchField, search],
+  );
+  const groupedDeliveries = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        {
+          status: (row) => row.status,
+          zone: (row) => row.zone_name,
+          partner: (row) => row.partner_name,
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, visible],
+  );
   const totalForFilter = data?.pages[0]?.total ?? 0;
   const searchIncomplete = data?.pages.some((page) => page.searchTruncated === true) ?? false;
   const prefixTooShort =
@@ -678,140 +714,151 @@ function DeliveriesPageContent() {
       <AppListCard
         toolbar={
           <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={tabFilter}
-                onValueChange={(value) =>
-                  selectTab((value as DeliveryStatusFilterValue | null) ?? "all")
-                }
-              >
-                <SelectTrigger
-                  className="h-9 w-[min(180px,42vw)] shrink-0 cursor-pointer rounded-lg bg-background"
-                  aria-label={t("filterStatus")}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="start">
-                  {statusFilterOptions.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      className="cursor-pointer"
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <DateRangeFilter value={dateRange} onChange={setDateRange} />
-              <div className="relative min-w-[180px] flex-1">
-                <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t("searchPlaceholder")}
-                  className="h-9 rounded-lg bg-background ps-9 pe-9"
-                  aria-label={t("searchPlaceholder")}
-                />
-                {search ? (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
-                    aria-label={t("clearSearch")}
+            <AppListControls
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={t("searchPlaceholder")}
+              searchAriaLabel={t("searchPlaceholder")}
+              clearSearchLabel={labels.clearSearch}
+              searchFields={[
+                labels.field.all,
+                labels.field.name,
+                labels.field.employee_id,
+                labels.field.zone,
+                labels.field.order_id,
+              ]}
+              searchField={prefs.searchField}
+              onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+              searchFieldLabel={labels.searchBy}
+              groupByOptions={[labels.group.none, labels.group.status, labels.group.zone, labels.group.partner]}
+              groupBy={prefs.groupBy}
+              onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+              groupByLabel={labels.groupBy}
+              viewMode={prefs.viewMode}
+              onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+              tableViewLabel={labels.viewTable}
+              cardsViewLabel={labels.viewCards}
+              filterSlot={
+                <>
+                  <Select
+                    value={tabFilter}
+                    onValueChange={(value) =>
+                      selectTab((value as DeliveryStatusFilterValue | null) ?? "all")
+                    }
                   >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
-              </div>
-              {tabFilter === "cancelled" ? (
-                <SearchSelect
-                  items={cancelReasonSelectItems}
-                  value={cancelReasonFilter}
-                  onChange={(v) =>
-                    setCancelReasonFilter((v as CancelReasonCode | "all") ?? "all")
-                  }
-                  placeholder={t("filterCancelReason")}
-                  searchPlaceholder={t("filterCancelReason")}
-                  defaultLimit={8}
-                  recentsKey="deliveries-cancel-reason-filter"
-                  className="w-[160px]"
-                  clearable={false}
-                />
-              ) : null}
-              <SearchSelect
-                items={zoneSelectItems}
-                value={zoneFilter}
-                onChange={(v) => setZoneFilter(v ?? "all")}
-                placeholder={t("filterZone")}
-                searchPlaceholder={t("filterZone")}
-                defaultLimit={8}
-                recentsKey="deliveries-zone-filter"
-                className="w-[140px]"
-                clearable={false}
-              />
-              <SearchSelect
-                items={partnerSelectItems}
-                value={partnerFilter}
-                onChange={(v) => setPartnerFilter(v ?? "all")}
-                placeholder={t("filterPartner")}
-                searchPlaceholder={t("filterPartner")}
-                defaultLimit={8}
-                recentsKey="deliveries-partner-filter"
-                className="w-[150px]"
-                clearable={false}
-              />
-              <AppTableColumnPicker
-                options={columnPickerOptions}
-                isVisible={isColumnVisible}
-                onToggle={toggleColumn}
-                onReset={resetColumns}
-                hiddenCount={hiddenToggleableCount}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 w-9 cursor-pointer rounded-lg p-0"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                title={t("refresh")}
-                aria-label={t("refresh")}
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
-                />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 cursor-pointer rounded-lg px-2.5"
-                onClick={() => setOrdersReportOpen(true)}
-                title={t("ordersReport.button")}
-                aria-label={t("ordersReport.button")}
-              >
-                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t("ordersReport.button")}</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 w-9 cursor-pointer rounded-lg p-0"
-                onClick={handleExport}
-                disabled={isExporting || totalForFilter === 0}
-                title={t("export")}
-                aria-label={t("export")}
-              >
-                {isExporting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Download className="h-3.5 w-3.5" />
-                )}
-              </Button>
-              <ClearAllModuleButton entity="deliveries" compact />
-            </div>
+                    <SelectTrigger
+                      className="h-9 w-[min(180px,42vw)] shrink-0 cursor-pointer rounded-lg bg-background"
+                      aria-label={t("filterStatus")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      {statusFilterOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          className="cursor-pointer"
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <DateRangeFilter value={dateRange} onChange={setDateRange} />
+                  {tabFilter === "cancelled" ? (
+                    <SearchSelect
+                      items={cancelReasonSelectItems}
+                      value={cancelReasonFilter}
+                      onChange={(v) =>
+                        setCancelReasonFilter((v as CancelReasonCode | "all") ?? "all")
+                      }
+                      placeholder={t("filterCancelReason")}
+                      searchPlaceholder={t("filterCancelReason")}
+                      defaultLimit={8}
+                      recentsKey="deliveries-cancel-reason-filter"
+                      className="w-[160px]"
+                      clearable={false}
+                    />
+                  ) : null}
+                  <SearchSelect
+                    items={zoneSelectItems}
+                    value={zoneFilter}
+                    onChange={(v) => setZoneFilter(v ?? "all")}
+                    placeholder={t("filterZone")}
+                    searchPlaceholder={t("filterZone")}
+                    defaultLimit={8}
+                    recentsKey="deliveries-zone-filter"
+                    className="w-[140px]"
+                    clearable={false}
+                  />
+                  <SearchSelect
+                    items={partnerSelectItems}
+                    value={partnerFilter}
+                    onChange={(v) => setPartnerFilter(v ?? "all")}
+                    placeholder={t("filterPartner")}
+                    searchPlaceholder={t("filterPartner")}
+                    defaultLimit={8}
+                    recentsKey="deliveries-partner-filter"
+                    className="w-[150px]"
+                    clearable={false}
+                  />
+                  <AppTableColumnPicker
+                    options={columnPickerOptions}
+                    isVisible={isColumnVisible}
+                    onToggle={toggleColumn}
+                    onReset={resetColumns}
+                    hiddenCount={hiddenToggleableCount}
+                  />
+                </>
+              }
+              trailing={
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 w-9 cursor-pointer rounded-lg p-0"
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    title={t("refresh")}
+                    aria-label={t("refresh")}
+                  >
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+                    />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 cursor-pointer rounded-lg px-2.5"
+                    onClick={() => setOrdersReportOpen(true)}
+                    title={t("ordersReport.button")}
+                    aria-label={t("ordersReport.button")}
+                  >
+                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{t("ordersReport.button")}</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 w-9 cursor-pointer rounded-lg p-0"
+                    onClick={handleExport}
+                    disabled={isExporting || totalForFilter === 0}
+                    title={t("export")}
+                    aria-label={t("export")}
+                  >
+                    {isExporting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                  <ClearAllModuleButton entity="deliveries" compact />
+                </>
+              }
+            />
             {(hasActiveFilters || search) && !searchIncomplete && !prefixTooShort && (
               <p className="text-sm tabular-nums text-muted-foreground">
                 {t("totalDeliveries", { count: totalForFilter })}
@@ -899,6 +946,31 @@ function DeliveriesPageContent() {
               {t("emptyDescription")}
             </p>
           </div>
+        ) : prefs.viewMode === "cards" ? (
+          <CardContent className="p-4">
+            <GroupedSections groups={groupedDeliveries}>
+              {(rows) => (
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {rows.map((delivery) => (
+                    <button
+                      key={delivery.id}
+                      type="button"
+                      onClick={() => openDeliveryDetail(delivery)}
+                      className="cursor-pointer rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/30"
+                    >
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {delivery.external_order_id ?? delivery.short_id}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{delivery.driver_name}</p>
+                      <div className="mt-2">
+                        <StatusPill variant="neutral">{delivery.status}</StatusPill>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
+          </CardContent>
         ) : (
           <CardContent className="p-0">
             {searchIncomplete ? (
@@ -934,7 +1006,21 @@ function DeliveriesPageContent() {
               }
             >
               {!showEmptySearch
-                ? visible.map((delivery) => (
+                ? groupedDeliveries.flatMap((group) => [
+                    prefs.groupBy !== "none" ? (
+                      <AppDataTableRow key={`group-${group.key}`} className="hover:bg-transparent">
+                        <TableCell
+                          colSpan={tableColumns.length}
+                          className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
+                        >
+                          {group.label}
+                          <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                            {group.rows.length}
+                          </span>
+                        </TableCell>
+                      </AppDataTableRow>
+                    ) : null,
+                    ...group.rows.map((delivery) => (
                     <AppDataTableRow
                       key={delivery.id}
                       onClick={() => openDeliveryDetail(delivery)}
@@ -1059,7 +1145,8 @@ function DeliveriesPageContent() {
                         </DropdownMenu>
                       </VisibleTableCell>
                     </AppDataTableRow>
-                  ))
+                    )),
+                  ])
                 : null}
             </AppDataTable>
 

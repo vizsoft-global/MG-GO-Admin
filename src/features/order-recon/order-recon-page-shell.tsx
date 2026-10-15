@@ -16,6 +16,12 @@ import {
 } from "recharts";
 import { CalendarDays, Download, Loader2, Upload, UserX, Users } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
+import {
+  AppListControls,
+  fieldSearchMatch,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -55,6 +61,8 @@ type Tab = "both" | "unused" | "unmatched";
 
 export function OrderReconPageShell() {
   const t = useTranslations("pages.orderRecon");
+  const labels = useListControlLabels();
+  const { prefs, update } = useListViewPrefs("order-recon");
   const locale = useLocale();
   const { can } = useAuth();
   const canManage = can("order_recon.manage");
@@ -93,10 +101,16 @@ export function OrderReconPageShell() {
   );
   const kpi = useMemo(() => comparisonKpis(riders), [riders]);
   const daily = useMemo(() => dailyTotals(riders, days), [riders, days]);
-  const filtered = useMemo(
-    () => applyPageFilters(riders, { search, result, dayIndex, columns }),
-    [riders, search, result, dayIndex, columns],
-  );
+  const filtered = useMemo(() => {
+    const base = applyPageFilters(riders, { search: "", result, dayIndex, columns });
+    return base.filter((row) =>
+      fieldSearchMatch(row, search, prefs.searchField, {
+        name: (item) => item.name,
+        employee_id: (item) => item.mgId,
+        restaurant: (item) => item.restaurant,
+      }),
+    );
+  }, [columns, dayIndex, prefs.searchField, result, riders, search]);
 
   const both = useMemo(() => ridersInBoth(filtered), [filtered]);
   const unused = useMemo(() => ridersNotUsingApp(filtered), [filtered]);
@@ -321,17 +335,27 @@ export function OrderReconPageShell() {
             <ToggleChip selected={tab === "unmatched"} icon={CalendarDays} className="h-9" onClick={() => setTab("unmatched")}>
               {t("tabUnmatched")}
             </ToggleChip>
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("searchRiders")}
-              className="h-9 w-56"
+            <AppListControls
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={t("searchRiders")}
+              clearSearchLabel={labels.clearSearch}
+              searchFields={[labels.field.all, labels.field.name, labels.field.employee_id]}
+              searchField={prefs.searchField}
+              onSearchFieldChange={(value) => update({ searchField: value })}
+              searchFieldLabel={labels.searchBy}
+              filterSlot={
+                dayIndex != null ? (
+                  <button
+                    type="button"
+                    className="h-8 rounded-md border border-border px-2 text-[11px]"
+                    onClick={() => setDayIndex(null)}
+                  >
+                    {t("clearDay", { day: days[dayIndex]?.slice(8) ?? "" })}
+                  </button>
+                ) : null
+              }
             />
-            {dayIndex != null ? (
-              <button type="button" className="h-8 rounded-md border border-border px-2 text-[11px]" onClick={() => setDayIndex(null)}>
-                {t("clearDay", { day: days[dayIndex]?.slice(8) ?? "" })}
-              </button>
-            ) : null}
           </div>
 
           {chips.length > 0 ? (

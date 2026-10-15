@@ -20,7 +20,12 @@ import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff } from "../core/staff";
 import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
-import { driverPrefixQueries, tokenPrefixMatch } from "../core/search-text";
+import {
+  DRIVER_SEARCH_FIELD_MAP,
+  driverPrefixQueries,
+  driverPrefixQueriesForField,
+  tokenPrefixMatch,
+} from "../core/search-text";
 import {
   logDriverOperation,
   pickBoolean,
@@ -55,6 +60,22 @@ const LIST_FILTER_KEYS = new Set([
   "status",
   "attendance",
   "platformName",
+  "employeeStatus",
+  "section",
+  "nationalityCategory",
+  "project",
+]);
+
+const GROUP_BY_KEYS = new Set([
+  "none",
+  "employeeStatus",
+  "zone",
+  "partner",
+  "project",
+  "company",
+  "section",
+  "nationalityCategory",
+  "riderCategory",
 ]);
 
 const SORT_KEYS = new Set([
@@ -157,6 +178,14 @@ function columnValue(row: Dict, key: string): unknown {
       return row["status_key"] ?? null;
     case "attendance":
       return row["attendance_key"] ?? null;
+    case "employeeStatus":
+      return row["employee_status_key"] ?? "";
+    case "section":
+      return asStrList(row["section_keys"]);
+    case "nationalityCategory":
+      return asStrList(row["nationality_category_keys"]);
+    case "project":
+      return row["project_key"] ?? "";
     default: {
       if (key.startsWith("cf:")) {
         const fields = (row["custom_fields"] ?? {}) as Dict;
@@ -273,9 +302,40 @@ function rowMatches(row: Dict, filters: Filters, skip?: string): boolean {
 }
 
 /** Prefix of a stored field or of one of its tokens. Column `contains` filters stay substring. */
-function searchMatches(row: Dict, search: string | null): boolean {
+function searchFieldValue(row: Dict, field: string): unknown {
+  switch (field) {
+    case "name":
+      return row["full_name"];
+    case "employeeId":
+      return row["mg_id"];
+    case "driverId":
+      return row["driver_code"];
+    case "civilId":
+      return row["civil_id"];
+    case "passport":
+      return row["passport_number"];
+    case "zone":
+      return row["zone_name"];
+    case "phone":
+      return row["phone_digits"];
+    default:
+      return null;
+  }
+}
+
+function searchMatches(row: Dict, search: string | null, searchField: string | null): boolean {
   const needle = (search ?? "").trim();
   if (needle === "") return true;
+  const field = searchField && searchField !== "all" ? searchField : null;
+  if (field) {
+    const value = searchFieldValue(row, field);
+    if (field === "phone" || field === "civilId") {
+      const digits = needle.replace(/\D/g, "");
+      if (!digits) return false;
+      return String(value ?? "").replace(/\D/g, "").startsWith(digits);
+    }
+    return tokenPrefixMatch(typeof value === "string" ? value : "", needle);
+  }
   const fields = [
     row["full_name"],
     row["driver_code"],
@@ -286,11 +346,36 @@ function searchMatches(row: Dict, search: string | null): boolean {
     row["client_name"],
     row["company_name"],
     row["company_client_code"],
+    row["civil_id"],
+    row["passport_number"],
   ];
   if (fields.some((part) => tokenPrefixMatch(typeof part === "string" ? part : "", needle))) return true;
   const digits = needle.replace(/\D/g, "");
   if (digits === "") return false;
   return String(row["phone_digits"] ?? "").startsWith(digits);
+}
+
+function groupKeyOf(row: Dict, groupBy: string): string {
+  switch (groupBy) {
+    case "employeeStatus":
+      return asStr(row["employee_status_key"]) ?? "unassigned";
+    case "zone":
+      return asStr(row["zone_id"]) ?? "unassigned";
+    case "partner":
+      return asStr(row["partner_id"]) ?? "unassigned";
+    case "project":
+      return asStr(row["project_key"]) ?? "unassigned";
+    case "company":
+      return asStr(row["company_key"]) ?? "unassigned";
+    case "section":
+      return asStrList(row["section_keys"])[0] ?? "unassigned";
+    case "nationalityCategory":
+      return asStrList(row["nationality_category_keys"])[0] ?? "unassigned";
+    case "riderCategory":
+      return asStr(row["rider_category"]) ?? "unassigned";
+    default:
+      return "all";
+  }
 }
 
 /** `admin_drivers_tab_matches`. */
@@ -543,6 +628,16 @@ async function loadDriverRows(
       client_name: asStr(intake["client_name"]),
       custom_fields: (intake["custom_fields"] ?? {}) as Dict,
       multi_device: linkedProfileId !== null && multiDevice.has(linkedProfileId),
+      employee_status_key:
+        asStr(intake["employee_status_key"]) ?? (driver ? asStr(driver["employee_status_key"]) : null),
+      section_keys: asStrList(intake["section_keys"] ?? (driver ? driver["section_keys"] : null)),
+      nationality_category_keys: asStrList(
+        intake["nationality_category_keys"] ?? (driver ? driver["nationality_category_keys"] : null),
+      ),
+      project_key: asStr(intake["project_key"]) ?? (driver ? asStr(driver["project_key"]) : null),
+      civil_id: asStr(intake["civil_id"]) ?? (driver ? asStr(driver["civil_id"]) : null),
+      passport_number:
+        asStr(intake["passport_number"]) ?? (driver ? asStr(driver["passport_number"]) : null),
     } satisfies Dict;
   });
 }
@@ -710,6 +805,7 @@ async function loadDriversForList(
   search: string | null,
   phases?: PhaseMarks,
   deferLive = false,
+  searchField: string | null = null,
 ): Promise<{ rows: Dict[]; kpis: DriverKpis | null }> {
   const term = (search ?? "").trim();
   if (!term) {
@@ -718,9 +814,16 @@ async function loadDriversForList(
     return { rows, kpis };
   }
   const db = getFirestore();
-  const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.driverIntakes, "name_lower");
+  const mapped =
+    searchField && searchField !== "all" && searchField in DRIVER_SEARCH_FIELD_MAP
+      ? DRIVER_SEARCH_FIELD_MAP[searchField as keyof typeof DRIVER_SEARCH_FIELD_MAP]
+      : "name_lower";
+  const indexField = mapped ?? "name_lower";
+  const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.driverIntakes, indexField);
   if (fullScanFallback(indexed, term)) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
-  const ids = await prefixMatchIds(db, COLLECTIONS.driverIntakes, driverPrefixQueries(term));
+  const queries = searchField && searchField !== "all" ? driverPrefixQueriesForField(term, searchField) : driverPrefixQueries(term);
+  if (queries.length === 0) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
+  const ids = await prefixMatchIds(db, COLLECTIONS.driverIntakes, queries);
   const rows = await loadDriverRows(archived, new Set(ids), phases);
   try {
     return { rows, kpis: await fleetKpiCounts(archived) };
@@ -746,6 +849,12 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
   if (!DRIVER_TABS.has(tab)) throw new HttpsError("invalid-argument", "invalid_tab");
 
   const search = pickText(data, "search", "p_search");
+  const searchFieldRaw = (pickText(data, "searchField", "p_search_field") ?? "all").trim();
+  const searchField =
+    searchFieldRaw && searchFieldRaw in DRIVER_SEARCH_FIELD_MAP ? searchFieldRaw : "all";
+  const groupByRaw = (pickText(data, "groupBy", "p_group_by") ?? "none").trim();
+  if (!GROUP_BY_KEYS.has(groupByRaw)) throw new HttpsError("invalid-argument", "invalid_group_by");
+  const groupBy = groupByRaw;
   const filters = validateFilters(data["filters"] ?? data["p_filters"] ?? {});
   const sortKey = pickText(data, "sortKey", "p_sort_key") ?? "name";
   if (!SORT_KEYS.has(sortKey) && !CUSTOM_KEY_PATTERN.test(sortKey)) {
@@ -762,14 +871,14 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
     sortKey,
   });
 
-  const loaded = await loadDriversForList(tab === "archived", search, phases, deferLive);
+  const loaded = await loadDriversForList(tab === "archived", search, phases, deferLive, searchField);
   const base = loaded.rows;
   const tabbed = base.filter((row) => tabMatches(row, tab));
   const filtered = tabbed.filter(
-    (row) => searchMatches(row, search) && rowMatches(row, filters),
+    (row) => searchMatches(row, search, searchField) && rowMatches(row, filters),
   );
 
-  const sorted = [...filtered].sort((left, right) => {
+  const compareRows = (left: Dict, right: Dict): number => {
     if (sortKey === "todayDeliveries") {
       const byNumber = compareNullable(
         asNum(left["today_deliveries"]),
@@ -782,7 +891,28 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
       if (byText !== 0) return byText;
     }
     return String(left["id"]).localeCompare(String(right["id"]));
-  });
+  };
+
+  const sorted = await timedPhase(phases, "groupSortMs", async () =>
+    [...filtered].sort((left, right) => {
+      if (groupBy !== "none") {
+        const byGroup = groupKeyOf(left, groupBy).localeCompare(groupKeyOf(right, groupBy));
+        if (byGroup !== 0) return byGroup;
+      }
+      return compareRows(left, right);
+    }),
+  );
+
+  const groupCounts =
+    groupBy === "none"
+      ? []
+      : Object.entries(
+          sorted.reduce<Record<string, number>>((acc, row) => {
+            const key = groupKeyOf(row, groupBy);
+            acc[key] = (acc[key] ?? 0) + 1;
+            return acc;
+          }, {}),
+        ).map(([key, count]) => ({ key, count }));
 
   const pageRows = sorted.slice(offset, offset + limit);
   if (deferLive) await hydrateDeferredPage(pageRows, phases);
@@ -796,6 +926,8 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
         : tabTotalOf(tab, loaded.kpis)
       : tabbed.length,
     kpis: loaded.kpis ?? kpisFromRows(base),
+    group_by: groupBy,
+    group_counts: groupCounts,
   };
   } finally {
     logPhases("adminListDriversPage", phases);
@@ -832,7 +964,7 @@ export const adminDriversFilterValues = measureOnCall("adminDriversFilterValues"
   const scoped = base.filter(
     (row) =>
       tabMatches(row, tab) &&
-      searchMatches(row, search) &&
+      searchMatches(row, search, "all") &&
       rowMatches(row, filters, column),
   );
 
