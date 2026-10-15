@@ -4,8 +4,15 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { Plus } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
@@ -24,16 +31,26 @@ import { useDriverGroups } from "./use-driver-groups";
 
 export function DriverGroupsPageShell() {
   const t = useTranslations("pages.driverGroups");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("driver-groups");
   const router = useRouter();
   const auth = useAuth();
   const canManage = auth.can("driver_groups.manage");
   const { data: groups = [], isLoading } = useDriverGroups();
   const [search, setSearch] = useState("");
-  const visible = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return groups;
-    return groups.filter((g) => g.name.toLowerCase().includes(term));
-  }, [groups, search]);
+  const visible = useMemo(
+    () =>
+      groups.filter((group) =>
+        fieldSearchMatch(group, search, prefs.searchField, {
+          name: (item) => item.name,
+        }),
+      ),
+    [groups, prefs.searchField, search],
+  );
+  const grouped = useMemo(
+    () => groupRows(visible, "none", {}, {}, "—"),
+    [visible],
+  );
 
   return (
     <AppPage>
@@ -54,11 +71,19 @@ export function DriverGroupsPageShell() {
       />
       <AppListCard title={t("listTitle")}>
         <div className="p-4 pb-0">
-          <Input
-            className="h-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("listSearchPlaceholder")}
+          <AppListControls
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={t("listSearchPlaceholder")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[labels.field.all, labels.field.name]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+            tableViewLabel={labels.viewTable}
+            cardsViewLabel={labels.viewCards}
           />
         </div>
         {isLoading ? (
@@ -67,6 +92,28 @@ export function DriverGroupsPageShell() {
           <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : visible.length === 0 ? (
           <AppEmptyState title={t("listSearchEmpty")} description={t("listSearchEmptyHint")} />
+        ) : prefs.viewMode === "cards" ? (
+          <div className="p-4">
+            <GroupedSections groups={grouped}>
+              {(groupRowsList) => (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {groupRowsList.map((group) => (
+                    <Link
+                      key={group.id}
+                      href={`/drivers/groups/${group.id}`}
+                      className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                    >
+                      <div className="flex items-center gap-2">
+                        <DriverGroupIconBadge iconKey={group.icon_key} />
+                        <p className="truncate text-sm font-semibold">{group.name}</p>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{group.member_count}</p>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -78,23 +125,25 @@ export function DriverGroupsPageShell() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {visible.map((group) => (
-                  <TableRow key={group.id}>
-                    <TableCell>
-                      <Link
-                        href={`/drivers/groups/${group.id}`}
-                        className="inline-flex items-center gap-2 font-medium text-primary hover:underline"
-                      >
-                        <DriverGroupIconBadge iconKey={group.icon_key} />
-                        {group.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{group.member_count}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(group.updated_at).toLocaleDateString()}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {grouped.flatMap((bucket) =>
+                  bucket.rows.map((group) => (
+                    <TableRow key={group.id}>
+                      <TableCell>
+                        <Link
+                          href={`/drivers/groups/${group.id}`}
+                          className="inline-flex items-center gap-2 font-medium text-primary hover:underline"
+                        >
+                          <DriverGroupIconBadge iconKey={group.icon_key} />
+                          {group.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{group.member_count}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(group.updated_at).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  )),
+                )}
               </TableBody>
             </Table>
           </div>

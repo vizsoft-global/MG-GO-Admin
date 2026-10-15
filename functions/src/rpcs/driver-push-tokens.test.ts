@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   buildTransactionalFcmData,
   inboxInstant,
+  inboxListMillis,
+  inboxMatchesBefore,
   inboxOpenFields,
   isDeadFcmCode,
   isInboxUnread,
@@ -140,6 +142,15 @@ describe("mapInboxListItem", () => {
 describe("inboxInstant", () => {
   it("reads callable Timestamp maps", () => {
     assert.equal(inboxInstant({ _seconds: 1760500000, _nanoseconds: 0 }), new Date(1760500000 * 1000).toISOString());
+  });
+});
+
+describe("inbox list order", () => {
+  it("treats a missing created_at as newest and keeps it off a before cursor", () => {
+    const stamped = inboxListMillis({ created_at: "2026-10-01T00:00:00.000Z" });
+    assert.ok(inboxListMillis({}) > stamped);
+    assert.equal(inboxMatchesBefore({}, "2026-10-15T00:00:00.000Z"), false);
+    assert.equal(inboxMatchesBefore({ created_at: "2026-10-01T00:00:00.000Z" }, "2026-10-15T00:00:00.000Z"), true);
   });
 });
 

@@ -702,3 +702,50 @@ export const adminDeleteComplaintCategory = onCall(async (request) => {
   await getFirestore().collection(COMPLAINT_CATEGORIES).doc(id).delete();
   return { success: true };
 });
+
+const EMPLOYEE_CATALOG: Record<string, string> = {
+  employee_statuses: COLLECTIONS.employeeStatuses,
+  employee_sections: COLLECTIONS.employeeSections,
+  nationality_categories: COLLECTIONS.nationalityCategories,
+  bank_codes: COLLECTIONS.bankCodes,
+};
+
+/** `admin_upsert_employee_catalog` — HR catalogs. Gate is `drivers.manage`. */
+export const adminUpsertEmployeeCatalog = onCall(async (request) => {
+  await requireStaff(request, "drivers.manage");
+
+  const data = asRecord(request.data);
+  const kind = readString(data, "kind");
+  const collection = EMPLOYEE_CATALOG[kind];
+  if (!collection) throw new HttpsError("invalid-argument", "invalid_kind");
+
+  const key = readString(data, "key").toLowerCase();
+  if (!key || !SLUG_KEY_RE.test(key)) throw new HttpsError("invalid-argument", "invalid_key");
+  const labelEn = readString(data, "labelEn") || readString(data, "label");
+  if (!labelEn) throw new HttpsError("invalid-argument", "missing_fields");
+
+  const db = getFirestore();
+  const ref = db.collection(collection).doc(key);
+  const existing = await ref.get();
+  const wasSystem = existing.exists && existing.get("is_system") === true;
+  const isActive = readBool(data, "isActive", true);
+  if (wasSystem && !isActive && kind === "employee_statuses") {
+    throw new HttpsError("failed-precondition", "system_status_locked");
+  }
+
+  await ref.set(
+    {
+      key,
+      label_en: labelEn,
+      label_ar: optionalString(data, "labelAr") ?? labelEn,
+      is_active: isActive,
+      is_system: wasSystem || readBool(data, "isSystem", false),
+      sort_order: readNumber(data, "sortOrder") ?? 100,
+      color: optionalString(data, "color"),
+      is_nbk: kind === "bank_codes" && (key === "nbk" || readBool(data, "isNbk", false)),
+      updated_at: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+  return { success: true, id: key };
+});

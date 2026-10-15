@@ -5,8 +5,9 @@ import { useTranslations } from "next-intl";
 import { Hand, Redo2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app";
-import { SearchField } from "@/components/app";
+import { GroupedSections, groupRows } from "@/components/app/app-list-controls";
 import { payrollRiderMatchesSearch, type PayrollPeriod } from "./payroll-formulas";
+import { PayrollListToolbar, usePayrollListPrefs } from "./payroll-list-toolbar";
 import { usePayrollAdjust } from "./payroll-adjust-context";
 import { PayrollDayGrid, PayrollLegend } from "./payroll-grid";
 import { exportCombinedPayrollCsv } from "./payroll-csv";
@@ -28,14 +29,30 @@ export function CombinedPayrollTab({
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
+  const { prefs } = usePayrollListPrefs("payroll-combined");
   const session = usePayrollAdjust();
   const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
 
   const searched = useMemo(
-    () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
-    [riders, search],
+    () => riders.filter((r) => payrollRiderMatchesSearch(r, search, prefs.searchField)),
+    [prefs.searchField, riders, search],
+  );
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        searched,
+        prefs.groupBy,
+        {
+          zone: (row) => row.zone,
+          partner: (row) => row.partner,
+          status: (row) => row.status,
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, searched],
   );
 
   const adjustedCells = useMemo(
@@ -88,38 +105,38 @@ export function CombinedPayrollTab({
           </span>
         </div>
       </div>
-      <SearchField
-        value={search}
-        onChange={setSearch}
-        placeholder={t("searchPlaceholder")}
-        clearLabel={t("clearSearch")}
-      />
-      <PayrollDayGrid
-        dates={month.dates}
-        rows={searched}
-        empty={t("emptyRiders")}
-        exportLabel={t("downloadTable")}
-        headingConfig={headingConfig}
-        headingManage={canManage}
-        onExport={(visible) => {
-          if (canExport) {
-            exportCombinedPayrollCsv(month.key, month.dates, visible, {
-              labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
-              hidden: hiddenSetFor("combined", headingConfig),
-            });
-          }
-        }}
-        editor={
-          canManage
-            ? { canManage, onRequestAdjust: session.openRequest, onNotice: session.onNotice }
-            : undefined
-        }
-        footer={t("tableFootRange", {
-          shown: searched.length,
-          total: riders.length,
-          range: month.label,
-        })}
-      />
+      <PayrollListToolbar prefKey="payroll-combined" search={search} onSearchChange={setSearch} />
+      <GroupedSections groups={grouped}>
+        {(rows, group) => (
+          <PayrollDayGrid
+            key={group.key}
+            dates={month.dates}
+            rows={rows}
+            empty={t("emptyRiders")}
+            exportLabel={t("downloadTable")}
+            headingConfig={headingConfig}
+            headingManage={canManage}
+            onExport={(visible) => {
+              if (canExport) {
+                exportCombinedPayrollCsv(month.key, month.dates, visible, {
+                  labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
+                  hidden: hiddenSetFor("combined", headingConfig),
+                });
+              }
+            }}
+            editor={
+              canManage
+                ? { canManage, onRequestAdjust: session.openRequest, onNotice: session.onNotice }
+                : undefined
+            }
+            footer={t("tableFootRange", {
+              shown: rows.length,
+              total: riders.length,
+              range: month.label,
+            })}
+          />
+        )}
+      </GroupedSections>
       <PayrollLegend riders={searched} />
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="border-b border-border px-4 py-2">

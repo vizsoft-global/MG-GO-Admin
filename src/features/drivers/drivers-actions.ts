@@ -6,7 +6,15 @@ import {
   logAdminRead,
 } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
+import { canViewDriverBankDetails, hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
+import { DEFAULT_EMPLOYEE_STATUS_KEY } from "@/features/employees/employee-catalogs";
+import {
+  parseBankDetails,
+  sanitizeBankForLog,
+  validateBankDetails,
+  type DriverBankDetails,
+} from "@/features/employees/bank-details";
+import { listEmployeeCatalog } from "@/features/employees/employee-catalogs-actions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
@@ -26,7 +34,7 @@ import {
   type SourceCompany,
 } from "./source-companies";
 import { parseDriverProjectKey } from "@/features/fleet/fleet-labels";
-import { mapDriverDbError, normalizeEmployeeId } from "./driver-errors";
+import { mapDriverDbError, normalizeEmployeeId, normalizePassport } from "./driver-errors";
 import type { RestrictionReason, RestrictionReasonKind } from "./driver-freeze";
 import {
   accountStatusToRestoreAfterRestaurantSync,
@@ -35,7 +43,7 @@ import {
 import { accountStatusToSyncFromOperations } from "./driver-operations-status";
 import { countDeliveriesInWindow } from "./driver-delivery-counts";
 import { defaultStartDate, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
-import { civilIdExists, employeeIdExists, fetchAllIn, staffClient, type StaffClient } from "./driver-uniqueness";
+import { civilIdExists, employeeIdExists, fetchAllIn, passportExists, staffClient, type StaffClient } from "./driver-uniqueness";
 import {
   allDriverAvatarKeys,
   allIntakeAvatarKeys,
@@ -134,9 +142,15 @@ async function resolveSourceCompanyForSave(
 }
 
 /** Server-side R2 check — must not call isR2Configured() from client components. */
-export async function getDriverUploadStorageStatus(): Promise<{ r2Configured: boolean }> {
-  await requireDriversView();
-  return { r2Configured: await isR2Configured() };
+export async function getDriverUploadStorageStatus(): Promise<{
+  r2Configured: boolean;
+  canViewBank: boolean;
+}> {
+  const session = await requireDriversView();
+  return {
+    r2Configured: await isR2Configured(),
+    canViewBank: canViewDriverBankDetails(session.permissions, session.isSuperAdmin),
+  };
 }
 
 function parseAssetsIssued(raw: unknown): Record<string, boolean> {
@@ -160,6 +174,65 @@ function parseRestaurantIds(formData: FormData): string[] {
         .filter(Boolean),
     ),
   ];
+}
+
+function parseCsvKeys(formData: FormData, name: string): string[] {
+  return String(formData.get(name) ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function asStringKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
+function parseHrFromForm(formData: FormData):
+  | {
+      passport: string | null;
+      employeeStatusKey: string;
+      sectionKeys: string[];
+      nationalityCategoryKeys: string[];
+    }
+  | { error: "invalid_passport" } {
+  const passportRaw = String(formData.get("passportNumber") ?? "");
+  const passport = passportRaw ? normalizePassport(passportRaw) : null;
+  if (passportRaw && !passport) return { error: "invalid_passport" };
+  return {
+    passport,
+    employeeStatusKey:
+      String(formData.get("employeeStatusKey") ?? "").trim() || DEFAULT_EMPLOYEE_STATUS_KEY,
+    sectionKeys: parseCsvKeys(formData, "sectionKeys"),
+    nationalityCategoryKeys: parseCsvKeys(formData, "nationalityCategoryKeys"),
+  };
+}
+
+async function parseBankFromForm(
+  formData: FormData,
+): Promise<{ skip: true } | { value: DriverBankDetails } | { error: "invalid_bank" }> {
+  if (!formData.has("bankCode")) return { skip: true };
+  const banks = await listEmployeeCatalog("bank_codes");
+  const parsed = validateBankDetails(
+    {
+      beneficiary_civil_id: String(formData.get("beneficiaryCivilId") ?? "") || null,
+      bank_code: String(formData.get("bankCode") ?? "") || null,
+      account_number: String(formData.get("accountNumber") ?? "") || null,
+      iban: String(formData.get("iban") ?? "") || null,
+      currency: String(formData.get("paymentCurrency") ?? "KWD") as DriverBankDetails["currency"],
+    },
+    banks,
+  );
+  if (!parsed.ok) return { error: "invalid_bank" };
+  return { value: parsed.value };
+}
+
+function bankWritePatch(bank: { skip: true } | { value: DriverBankDetails }) {
+  return "skip" in bank ? {} : { bank_details: bank.value };
+}
+
+function bankCodeOrNull(bank: { skip: true } | { value: DriverBankDetails }) {
+  return "skip" in bank ? null : bank.value.bank_code;
 }
 
 async function validateRestaurantsPublished(
@@ -376,6 +449,11 @@ export async function createDriverIntake(
   const civilIdNormalized = civilId ? normalizeCivilId(civilId) : null;
   if (civilId && !civilIdNormalized) return { error: "invalid_civil_id" };
 
+  const hr = parseHrFromForm(formData);
+  if ("error" in hr) return { error: hr.error };
+  const bank = await parseBankFromForm(formData);
+  if ("error" in bank) return { error: bank.error };
+
   const customFieldDefs = await listCustomFieldDefinitions("driver", {
     includeInactive: true,
   });
@@ -404,15 +482,17 @@ export async function createDriverIntake(
   const hasAvatarUpload = avatarFile instanceof File && avatarFile.size > 0;
   const needsR2 = docsToUpload.length > 0 || hasAvatarUpload;
 
-  const [phoneTaken, civilTaken, restaurantCheck, r2Configured] = await Promise.all([
+  const [phoneTaken, civilTaken, passportTaken, restaurantCheck, r2Configured] = await Promise.all([
     phone ? phoneExists(phone) : Promise.resolve(false),
     civilIdNormalized ? civilIdExists(civilIdNormalized) : Promise.resolve(false),
+    hr.passport ? passportExists(hr.passport) : Promise.resolve(false),
     validateRestaurantsPublished(db, restaurantIds),
     needsR2 ? isR2Configured() : Promise.resolve(true),
   ]);
 
   if (phoneTaken) return { error: "phone_exists" };
   if (civilTaken) return { error: "civil_id_exists" };
+  if (passportTaken) return { error: "passport_exists" };
   if (restaurantCheck.error) return { error: restaurantCheck.error };
   if (needsR2 && !r2Configured) return { error: "r2_not_configured" };
 
@@ -471,6 +551,11 @@ export async function createDriverIntake(
       client_id: clientId,
       client_name: clientName,
       accommodation,
+      passport_number: hr.passport,
+      employee_status_key: hr.employeeStatusKey,
+      section_keys: hr.sectionKeys,
+      nationality_category_keys: hr.nationalityCategoryKeys,
+      ...bankWritePatch(bank),
       driver_code: allocatedCode,
       partner_id: partnerId || null,
       zone_id: zoneId || null,
@@ -555,6 +640,11 @@ export async function createDriverIntake(
       client_id: clientId,
       client_name: clientName,
       workflow_status: normalizeIntakeWorkflowStatus(false, workflowStatus),
+      passport_number: hr.passport,
+      employee_status_key: hr.employeeStatusKey,
+      section_keys: hr.sectionKeys.join(","),
+      nationality_category_keys: hr.nationalityCategoryKeys.join(","),
+      bank_code: bankCodeOrNull(bank),
       custom_fields: customParsed.values as Record<string, unknown>,
     }),
   });
@@ -589,6 +679,12 @@ type IntakeListRow = {
   client_name: string | null;
   source_company: string | null;
   custom_fields: Json;
+  employee_status_key: string | null;
+  section_keys: string[] | null;
+  nationality_category_keys: string[] | null;
+  project_key: string | null;
+  civil_id: string | null;
+  passport_number: string | null;
   partners:
     | { name: string; logo_url: string | null }
     | { name: string; logo_url: string | null }[]
@@ -658,6 +754,10 @@ function relName<T extends { name: string }>(
   return row?.name ?? "—";
 }
 
+function presentId(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
 function relZone(
   rel:
     | { name: string; code?: string }
@@ -702,6 +802,12 @@ export async function fetchDriversForAdmin(options?: {
       linked,
       archived_at,
       custom_fields,
+      employee_status_key,
+      section_keys,
+      nationality_category_keys,
+      project_key,
+      civil_id,
+      passport_number,
       partners (name, logo_url),
       zones (name)
     `,
@@ -736,6 +842,12 @@ export async function fetchDriversForAdmin(options?: {
       employee_id: string | null;
       avatar_object_key: string | null;
       zone_id: string | null;
+      employee_status_key: string | null;
+      section_keys: string[] | null;
+      nationality_category_keys: string[] | null;
+      project_key: string | null;
+      civil_id: string | null;
+      passport_number: string | null;
     }
   >();
   const deliveryCountByDriverId = new Map<string, number>();
@@ -796,7 +908,7 @@ export async function fetchDriversForAdmin(options?: {
       fetchAllIn(linkedIds, (chunk) =>
         db
           .from("drivers")
-          .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id")
+          .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id, employee_status_key, section_keys, nationality_category_keys, project_key, civil_id, passport_number")
           .in("id", chunk),
       ),
       fetchAllIn(linkedIds, (chunk) =>
@@ -819,6 +931,12 @@ export async function fetchDriversForAdmin(options?: {
         employee_id: driver.employee_id ?? null,
         avatar_object_key: driver.avatar_object_key ?? null,
         zone_id: driver.zone_id ?? null,
+        employee_status_key: driver.employee_status_key ?? null,
+        section_keys: driver.section_keys ?? null,
+        nationality_category_keys: driver.nationality_category_keys ?? null,
+        project_key: driver.project_key ?? null,
+        civil_id: driver.civil_id ?? null,
+        passport_number: driver.passport_number ?? null,
       });
     }
 
@@ -916,6 +1034,13 @@ export async function fetchDriversForAdmin(options?: {
         client_id: row.client_id,
         client_name: row.client_name,
         custom_fields: parseCustomFieldsJson(row.custom_fields),
+        employee_status_key: row.employee_status_key ?? linkedDriver?.employee_status_key ?? null,
+        section_keys: row.section_keys ?? linkedDriver?.section_keys ?? [],
+        nationality_category_keys:
+          row.nationality_category_keys ?? linkedDriver?.nationality_category_keys ?? [],
+        project_key: row.project_key ?? linkedDriver?.project_key ?? null,
+        civil_id: row.civil_id ?? linkedDriver?.civil_id ?? null,
+        passport_number: row.passport_number ?? linkedDriver?.passport_number ?? null,
       };
     }),
   );
@@ -923,14 +1048,18 @@ export async function fetchDriversForAdmin(options?: {
 
 export async function archiveDriverIntake(
   intakeId: string,
+  reason?: string,
 ): Promise<DriverMutationResult> {
   const auth = await requireDriversManager("delete");
   if (auth.error) return { error: auth.error };
   if (!intakeId) return { error: "missing_fields" };
+  const archiveReason = reason?.trim() ?? "";
+  if (!archiveReason) return { error: "missing_archive_reason" };
 
   const db = await staffClient();
   const { data, error } = await db.rpc("archive_driver_intake", {
     p_intake_id: intakeId,
+    p_archive_reason: archiveReason,
   });
 
   if (error) return { error: mapDriverDbError(error) };
@@ -938,6 +1067,7 @@ export async function archiveDriverIntake(
   const payload = (data ?? {}) as { ok?: boolean; error?: string };
   if (!payload.ok) {
     if (payload.error === "intake_not_found") return { error: "save_failed" };
+    if (payload.error === "missing_archive_reason") return { error: "missing_archive_reason" };
     return { error: payload.error ?? "save_failed" };
   }
 
@@ -968,7 +1098,7 @@ export async function restoreDriverIntake(
   const db = await staffClient();
   const { data: intake, error: loadError } = await db
     .from("driver_intakes")
-    .select("id, phone, civil_id, employee_id, archived_at, linked_profile_id")
+    .select("id, phone, civil_id, employee_id, passport_number, archived_at, linked_profile_id")
     .eq("id", intakeId)
     .maybeSingle();
 
@@ -978,16 +1108,19 @@ export async function restoreDriverIntake(
   const phone = intake.phone?.trim();
   const civilId = intake.civil_id?.trim() ?? "";
   const employeeId = intake.employee_id?.trim() ?? "";
+  const passport = intake.passport_number?.trim() ?? "";
 
-  const [phoneTaken, civilTaken, employeeTaken] = await Promise.all([
+  const [phoneTaken, civilTaken, employeeTaken, passportTaken] = await Promise.all([
     phone ? phoneExists(phone, intakeId) : Promise.resolve(false),
     civilId ? civilIdExists(civilId, intakeId) : Promise.resolve(false),
     employeeId ? employeeIdExists(employeeId, intakeId) : Promise.resolve(false),
+    passport ? passportExists(passport, intakeId) : Promise.resolve(false),
   ]);
 
   if (phoneTaken) return { error: "phone_exists" };
   if (civilTaken) return { error: "civil_id_exists" };
   if (employeeTaken) return { error: "employee_id_exists" };
+  if (passportTaken) return { error: "passport_exists" };
 
   const { data, error } = await db.rpc("restore_driver_intake", {
     p_intake_id: intakeId,
@@ -1126,6 +1259,11 @@ async function updateDriverIntakeInner(
   const civilIdNormalized = civilId ? normalizeCivilId(civilId) : null;
   if (civilId && !civilIdNormalized) return { error: "invalid_civil_id" };
 
+  const hr = parseHrFromForm(formData);
+  if ("error" in hr) return { error: hr.error };
+  const bank = await parseBankFromForm(formData);
+  if ("error" in bank) return { error: bank.error };
+
   const db = await staffClient();
   const sourceCompany = await resolveSourceCompanyForSave(db, riderCategory, sourceCompanyRaw);
   const restaurantIds = parseRestaurantIds(formData);
@@ -1133,9 +1271,11 @@ async function updateDriverIntakeInner(
     return { error: "missing_assignment" };
   }
 
-  const [phoneTaken, civilTaken, existingResp, restaurantCheck, r2Configured] = await Promise.all([
+  const [phoneTaken, civilTaken, passportTaken, existingResp, restaurantCheck, r2Configured] =
+    await Promise.all([
     phone ? phoneExists(phone, intakeId) : Promise.resolve(false),
     civilIdNormalized ? civilIdExists(civilIdNormalized, intakeId) : Promise.resolve(false),
+    hr.passport ? passportExists(hr.passport, intakeId) : Promise.resolve(false),
     db
       .from("driver_intakes")
       .select("id, linked_profile_id, driver_code, avatar_url")
@@ -1148,6 +1288,7 @@ async function updateDriverIntakeInner(
 
   if (phoneTaken) return { error: "phone_exists" };
   if (civilTaken) return { error: "civil_id_exists" };
+  if (passportTaken) return { error: "passport_exists" };
   if (hasAvatarUpload && !r2Configured) return { error: "r2_not_configured" };
   if (restaurantCheck.error) return { error: restaurantCheck.error };
 
@@ -1221,6 +1362,11 @@ async function updateDriverIntakeInner(
       client_id: clientId,
       client_name: clientName,
       accommodation,
+      passport_number: hr.passport,
+      employee_status_key: hr.employeeStatusKey,
+      section_keys: hr.sectionKeys,
+      nationality_category_keys: hr.nationalityCategoryKeys,
+      ...bankWritePatch(bank),
       partner_id: partnerId || null,
       zone_id: zoneId || null,
       vehicle_id: vehicleId || null,
@@ -1292,6 +1438,11 @@ async function updateDriverIntakeInner(
           client_id: clientId,
           client_name: clientName,
           accommodation,
+          passport_number: hr.passport,
+          employee_status_key: hr.employeeStatusKey,
+          section_keys: hr.sectionKeys,
+          nationality_category_keys: hr.nationalityCategoryKeys,
+          ...bankWritePatch(bank),
           custom_fields: customParsed.values as unknown as Json,
           updated_at: new Date().toISOString(),
         })
@@ -1384,6 +1535,11 @@ async function updateDriverIntakeInner(
       client_name: clientName,
       workflow_status: resolvedWorkflowStatus,
       account_status: currentAccountStatus,
+      passport_number: hr.passport,
+      employee_status_key: hr.employeeStatusKey,
+      section_keys: hr.sectionKeys.join(","),
+      nationality_category_keys: hr.nationalityCategoryKeys.join(","),
+      bank_code: bankCodeOrNull(bank),
       custom_fields: customParsed.values as Record<string, unknown>,
     }),
   });
@@ -1429,10 +1585,13 @@ async function fetchDriverFreezeRow(
 export async function fetchDriverDetail(
   id: string,
 ): Promise<DriverDetailModel | null> {
-  await requireDriversView();
+  const session = await requireDriversView();
   void logAdminRead("driver_intake", "fetchDriverDetail", { id });
   try {
-    return await fetchDriverDetailInner(id);
+    return await fetchDriverDetailInner(
+      id,
+      canViewDriverBankDetails(session.permissions, session.isSuperAdmin),
+    );
   } catch {
     return null;
   }
@@ -1440,6 +1599,7 @@ export async function fetchDriverDetail(
 
 async function fetchDriverDetailInner(
   id: string,
+  canSeeBank: boolean,
 ): Promise<DriverDetailModel | null> {
   const db = await staffClient();
 
@@ -1459,6 +1619,12 @@ async function fetchDriverDetailInner(
       client_id,
       client_name,
       accommodation,
+      passport_number,
+      employee_status_key,
+      section_keys,
+      nationality_category_keys,
+      archive_reason,
+      bank_details,
       driver_code,
       workflow_status,
       linked,
@@ -1499,6 +1665,12 @@ async function fetchDriverDetailInner(
       source_company: string | null;
       project_key: string | null;
       accommodation: string | null;
+      passport_number: string | null;
+      employee_status_key: string | null;
+      section_keys: string[];
+      nationality_category_keys: string[];
+      archive_reason: string | null;
+      bank_details: DriverBankDetails | null;
       is_blocked: boolean;
       blocked_reason: string | null;
       blocked_at: string | null;
@@ -1510,6 +1682,8 @@ async function fetchDriverDetailInner(
       screenshots_allowed: boolean;
       avatar_object_key: string | null;
     } | null = null;
+    let liveZoneId: string | null = null;
+    let liveZoneRel: Parameters<typeof relZone>[0] = null;
     if (linkedId) {
       const [{ data: prof }, { data: drv }, freeze] = await Promise.all([
         db
@@ -1519,12 +1693,15 @@ async function fetchDriverDetailInner(
           .maybeSingle(),
         db
           .from("drivers")
-          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, accommodation, is_blocked, blocked_reason, blocked_at, login_verification_exempt, screenshots_allowed, avatar_object_key")
+          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, accommodation, passport_number, employee_status_key, section_keys, nationality_category_keys, archive_reason, bank_details, is_blocked, blocked_reason, blocked_at, login_verification_exempt, screenshots_allowed, avatar_object_key, zone_id, zones (name, code)")
           .eq("id", linkedId)
           .maybeSingle(),
         fetchDriverFreezeRow(db, linkedId),
       ]);
       profile = prof;
+      liveZoneId = presentId((drv as { zone_id?: unknown } | null)?.zone_id);
+      liveZoneRel = ((drv as { zones?: Parameters<typeof relZone>[0] } | null)?.zones ??
+        null) as Parameters<typeof relZone>[0];
       linkedDriver = drv
         ? {
             app_passcode: drv.app_passcode,
@@ -1537,6 +1714,12 @@ async function fetchDriverDetailInner(
             source_company: drv.source_company ?? null,
             project_key: drv.project_key ?? null,
             accommodation: drv.accommodation ?? null,
+            passport_number: drv.passport_number ?? null,
+            employee_status_key: drv.employee_status_key ?? null,
+            section_keys: asStringKeys(drv.section_keys),
+            nationality_category_keys: asStringKeys(drv.nationality_category_keys),
+            archive_reason: drv.archive_reason ?? null,
+            bank_details: canSeeBank ? parseBankDetails(drv.bank_details) : null,
             is_blocked: drv.is_blocked ?? false,
             blocked_reason: drv.blocked_reason ?? null,
             blocked_at: drv.blocked_at ?? null,
@@ -1591,7 +1774,22 @@ async function fetchDriverDetailInner(
       phone: profile?.phone ?? intake.phone ?? "—",
       email: profile?.email ?? null,
       civil_id: intake.civil_id ?? "—",
+      passport_number: linkedDriver?.passport_number ?? intake.passport_number ?? null,
       employee_id: linkedDriver?.employee_id ?? intake.employee_id ?? null,
+      employee_status_key:
+        linkedDriver?.employee_status_key ?? intake.employee_status_key ?? null,
+      section_keys:
+        linkedDriver?.section_keys?.length
+          ? linkedDriver.section_keys
+          : asStringKeys(intake.section_keys),
+      nationality_category_keys:
+        linkedDriver?.nationality_category_keys?.length
+          ? linkedDriver.nationality_category_keys
+          : asStringKeys(intake.nationality_category_keys),
+      archive_reason: linkedDriver?.archive_reason ?? intake.archive_reason ?? null,
+      bank_details: canSeeBank
+        ? parseBankDetails(linkedDriver?.bank_details ?? intake.bank_details)
+        : null,
       nationality: linkedDriver?.nationality ?? intake.nationality ?? null,
       rider_category: linkedDriver?.rider_category ?? intake.rider_category ?? "in_house",
       client_id: linkedDriver?.client_id ?? intake.client_id ?? null,
@@ -1608,10 +1806,10 @@ async function fetchDriverDetailInner(
       partner_name: relName(
         intake.partners as { name: string } | { name: string }[] | null,
       ),
-      zone_label: relZone(intake.zones),
+      zone_label: relZone(liveZoneId ? liveZoneRel : (intake.zones as Parameters<typeof relZone>[0])),
       vehicle_label,
       partner_id: intake.partner_id ?? null,
-      zone_id: intake.zone_id ?? null,
+      zone_id: liveZoneId ?? presentId(intake.zone_id),
       vehicle_id: intake.vehicle_id,
       vehicle_type_key: (intake as { vehicle_type_key?: string | null }).vehicle_type_key ?? null,
       workflow_status: intake.workflow_status as DriverWorkflowStatus,
@@ -1676,6 +1874,12 @@ async function fetchDriverDetailInner(
       source_company,
       project_key,
       accommodation,
+      passport_number,
+      employee_status_key,
+      section_keys,
+      nationality_category_keys,
+      archive_reason,
+      bank_details,
       is_blocked,
       blocked_reason,
       blocked_at,
@@ -1715,7 +1919,7 @@ async function fetchDriverDetailInner(
   const { data: intakeForDriver } = await db
     .from("driver_intakes")
     .select(
-      "id, assets_issued, workflow_status, linked, partner_id, zone_id, vehicle_id, archived_at, avatar_url, accommodation",
+      "id, assets_issued, workflow_status, linked, partner_id, zone_id, vehicle_id, archived_at, avatar_url, accommodation, passport_number, employee_status_key, section_keys, nationality_category_keys, archive_reason, bank_details, zones (name, code)",
     )
     .eq("linked_profile_id", id)
     .maybeSingle();
@@ -1745,7 +1949,20 @@ async function fetchDriverDetailInner(
     phone: prof?.phone ?? "—",
     email: prof?.email ?? null,
     civil_id: driverRow.civil_id ?? "—",
+    passport_number: driverRow.passport_number ?? intakeForDriver?.passport_number ?? null,
     employee_id: driverRow.employee_id ?? null,
+    employee_status_key:
+      driverRow.employee_status_key ?? intakeForDriver?.employee_status_key ?? null,
+    section_keys: asStringKeys(driverRow.section_keys).length
+      ? asStringKeys(driverRow.section_keys)
+      : asStringKeys(intakeForDriver?.section_keys),
+    nationality_category_keys: asStringKeys(driverRow.nationality_category_keys).length
+      ? asStringKeys(driverRow.nationality_category_keys)
+      : asStringKeys(intakeForDriver?.nationality_category_keys),
+    archive_reason: driverRow.archive_reason ?? intakeForDriver?.archive_reason ?? null,
+    bank_details: canSeeBank
+      ? parseBankDetails(driverRow.bank_details ?? intakeForDriver?.bank_details)
+      : null,
     nationality: driverRow.nationality ?? null,
     rider_category: (driverRow.rider_category as DriverRiderCategory) ?? "in_house",
     client_id: driverRow.client_id ?? null,
@@ -1755,12 +1972,16 @@ async function fetchDriverDetailInner(
     project_key: parseDriverProjectKey(driverRow.project_key),
     avatar_url,
     partner_name: relName(driverRow.partners as { name: string } | { name: string }[] | null),
-    zone_label: relZone(driverRow.zones),
+    zone_label: relZone(
+      (presentId(driverRow.zone_id) ? driverRow.zones : intakeForDriver?.zones) as Parameters<
+        typeof relZone
+      >[0],
+    ),
     vehicle_label: vehicleRow
       ? `${vehicleRow.bike_id}${vehicleRow.reg_number ? ` · ${vehicleRow.reg_number}` : ""}`
       : null,
     partner_id: intakeForDriver?.partner_id ?? driverRow.partner_id ?? "",
-    zone_id: intakeForDriver?.zone_id ?? driverRow.zone_id ?? "",
+    zone_id: presentId(driverRow.zone_id) ?? presentId(intakeForDriver?.zone_id) ?? "",
     vehicle_id: intakeForDriver?.vehicle_id ?? driverRow.vehicle_id,
     vehicle_type_key:
       (driverRow as { vehicle_type_key?: string | null }).vehicle_type_key ??

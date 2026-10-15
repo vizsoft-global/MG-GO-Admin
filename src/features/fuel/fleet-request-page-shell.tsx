@@ -2,8 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Loader2, Search } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -12,7 +20,6 @@ import {
 } from "@/components/app/app-data-table";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import {
@@ -26,10 +33,25 @@ import { Link } from "@/i18n/navigation";
 import { formatKuwaitDayLabel } from "@/lib/date/kuwait-dates";
 import { requestStatusLabelKey, requestStatusVariant } from "@/features/requests/request-status-utils";
 import { FleetRequestDialog } from "./fleet-request-dialog";
-import { fleetRequestMatchesSearch, type FleetQueueRequestType } from "./fleet-request-utils";
+import { type FleetQueueRequestType } from "./fleet-request-utils";
 import { formatKwd } from "./fuel-week";
 import { useFleetRequests } from "./use-fleet-requests";
 import type { FleetRequestListRow } from "./fleet-request-types";
+
+function fleetRequestPrefsKey(type: FleetQueueRequestType): string {
+  switch (type) {
+    case "fuel":
+      return "fuel-requests";
+    case "fuel_refund":
+      return "fuel-refunds";
+    case "asset":
+      return "asset-requests";
+    default: {
+      const _exhaustive: never = type;
+      return _exhaustive;
+    }
+  }
+}
 
 export function FleetRequestPageShell({
   type,
@@ -40,6 +62,8 @@ export function FleetRequestPageShell({
 }) {
   const t = useTranslations("pages.fleetFuelQueue");
   const statusT = useTranslations("pages.requests.status");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs(fleetRequestPrefsKey(type));
   const { data, isPending } = useFleetRequests(type);
   const rows = data?.rows ?? [];
   const isLoading = data === undefined || isPending;
@@ -47,17 +71,47 @@ export function FleetRequestPageShell({
   const [projectKey, setProjectKey] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const isAsset = type === "asset";
+  const tableColCount = isAsset ? 14 : 13;
 
   const visible = useMemo(
     () =>
       rows.filter((row) => {
-        if (!fleetRequestMatchesSearch(row, search)) return false;
+        if (
+          !fieldSearchMatch(row, search, prefs.searchField, {
+            name: (item) => item.driver_name,
+            employee_id: (item) => item.employee_id,
+            plate: (item) => item.plate,
+            zone: (item) => item.zone,
+            status: (item) => item.status,
+            code: (item) => item.request_code,
+            company: (item) => item.employee_company,
+            vehicleCompany: (item) => item.vehicle_company,
+            item: (item) => item.item,
+          })
+        ) {
+          return false;
+        }
         if (projectKey !== "all" && isDriverProjectKey(projectKey)) {
           return row.project_key === projectKey;
         }
         return true;
       }),
-    [projectKey, rows, search],
+    [prefs.searchField, projectKey, rows, search],
+  );
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        {
+          status: (row) => row.status,
+          zone: (row) => row.zone,
+          project: (row) => row.project_key,
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, visible],
   );
   const selected = rows.find((row) => row.id === selectedId) ?? null;
 
@@ -65,43 +119,65 @@ export function FleetRequestPageShell({
     <>
       <AppListCard
         toolbar={
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t("searchPlaceholder")}
-                className="h-9 rounded-lg bg-background ps-9"
-              />
-            </div>
-            <Select
-              items={[
-                { value: "all", label: t("projectAll") },
-                { value: "keeta", label: t("projectKeeta") },
-                { value: "americana", label: t("projectAmericana") },
-              ]}
-              value={projectKey}
-              onValueChange={(value) => {
-                if (value) setProjectKey(value);
-              }}
-            >
-              <SelectTrigger className="h-9 w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" label={t("projectAll")}>
-                  {t("projectAll")}
-                </SelectItem>
-                <SelectItem value="keeta" label={t("projectKeeta")}>
-                  {t("projectKeeta")}
-                </SelectItem>
-                <SelectItem value="americana" label={t("projectAmericana")}>
-                  {t("projectAmericana")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <AppListControls
+            className="min-w-0 flex-1"
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={t("searchPlaceholder")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[
+              labels.field.all,
+              labels.field.name,
+              labels.field.employee_id,
+              labels.field.plate,
+              labels.field.zone,
+              labels.field.status,
+            ]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[
+              labels.group.none,
+              labels.group.status,
+              labels.group.zone,
+              labels.group.project,
+            ]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+            tableViewLabel={labels.viewTable}
+            cardsViewLabel={labels.viewCards}
+            filterSlot={
+              <Select
+                items={[
+                  { value: "all", label: t("projectAll") },
+                  { value: "keeta", label: t("projectKeeta") },
+                  { value: "americana", label: t("projectAmericana") },
+                ]}
+                value={projectKey}
+                onValueChange={(value) => {
+                  if (value) setProjectKey(value);
+                }}
+              >
+                <SelectTrigger className="h-9 w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" label={t("projectAll")}>
+                    {t("projectAll")}
+                  </SelectItem>
+                  <SelectItem value="keeta" label={t("projectKeeta")}>
+                    {t("projectKeeta")}
+                  </SelectItem>
+                  <SelectItem value="americana" label={t("projectAmericana")}>
+                    {t("projectAmericana")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            }
+          />
         }
       >
         {isLoading ? (
@@ -113,6 +189,38 @@ export function FleetRequestPageShell({
             title={type === "fuel" ? t("emptyRequests") : type === "fuel_refund" ? t("emptyRefunds") : t("emptyAssets")}
             description={isAsset ? t("emptyAssetsHint") : t("emptyHint")}
           />
+        ) : prefs.viewMode === "cards" ? (
+          visible.length === 0 ? (
+            <AppEmptyState title={t("emptyFilters")} />
+          ) : (
+            <div className="p-4">
+              <GroupedSections groups={grouped}>
+                {(groupRowsList) => (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {groupRowsList.map((row) => (
+                      <button
+                        type="button"
+                        key={row.id}
+                        className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                        onClick={() => setSelectedId(row.id)}
+                      >
+                        <p className="truncate text-sm font-semibold">{row.request_code}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {row.driver_name}
+                          {row.employee_id ? ` · ${row.employee_id}` : ""}
+                        </p>
+                        <div className="mt-2">
+                          <StatusPill dot variant={requestStatusVariant(row.status)}>
+                            {statusT(requestStatusLabelKey(row.status) as "pending")}
+                          </StatusPill>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </GroupedSections>
+            </div>
+          )
         ) : (
           <AppDataTable
             columns={
@@ -153,15 +261,32 @@ export function FleetRequestPageShell({
             }
             empty={visible.length === 0 ? <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty> : null}
           >
-            {visible.map((row) => (
-              <FleetRequestRow
-                key={row.id}
-                row={row}
-                type={type}
-                statusLabel={statusT(requestStatusLabelKey(row.status) as "pending")}
-                onOpen={() => setSelectedId(row.id)}
-              />
-            ))}
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={tableColCount}
+                        className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
+                      >
+                        {group.label}
+                        <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                          {group.rows.length}
+                        </span>
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => (
+                <FleetRequestRow
+                  key={row.id}
+                  row={row}
+                  type={type}
+                  statusLabel={statusT(requestStatusLabelKey(row.status) as "pending")}
+                  onOpen={() => setSelectedId(row.id)}
+                />
+              )),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

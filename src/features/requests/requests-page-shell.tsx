@@ -26,6 +26,14 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -43,7 +51,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -87,6 +94,14 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
  * page stride here, so "Showing 50 of 300" and the footer cannot disagree.
  */
 const PAGE_SIZE = 50;
+
+const REQUEST_SEARCH_ACCESSORS = {
+  name: (row: RequestListRow) => (row.is_confidential ? "" : row.driver_name),
+  employee_id: (row: RequestListRow) =>
+    row.is_confidential ? "" : (row.employee_id ?? row.driver_code),
+  zone: (row: RequestListRow) => row.driver_zone,
+  status: (row: RequestListRow) => row.status,
+};
 
 /** "12 Jul" — built from parts so the day stays first regardless of runtime locale. */
 function shortDate(value: string | null): string {
@@ -219,6 +234,8 @@ export function RequestsPageShell({
 }) {
   const t = useTranslations("pages.requests");
   const tRcm = useTranslations("pages.rcmV2");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("requests");
   const router = useRouter();
   const fromEmployeeDesk = listScope != null || scopeTabs;
   const [datePreset, setDatePreset] = useState<RequestDatePreset>(
@@ -361,10 +378,35 @@ export function RequestsPageShell({
     zoneId !== "all" ||
     searchApplied !== "";
 
-  const selectableRows = rows.filter((row) => canBulkSelectRequest(row.status));
+  const visibleRows = useMemo(
+    () =>
+      prefs.searchField === "all"
+        ? rows
+        : rows.filter((row) =>
+            fieldSearchMatch(row, search, prefs.searchField, REQUEST_SEARCH_ACCESSORS),
+          ),
+    [prefs.searchField, rows, search],
+  );
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        visibleRows,
+        prefs.groupBy,
+        {
+          status: (row) => row.status,
+          zone: (row) => row.driver_zone,
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, visibleRows],
+  );
+  const selectableRows = visibleRows.filter((row) => canBulkSelectRequest(row.status));
   const showSelectColumn = canDecide;
-  const selectedRows = rows.filter((row) => selected.has(row.id));
+  const selectedRows = visibleRows.filter((row) => selected.has(row.id));
   const approvableRows = selectedRows.filter(canBulkApprove);
+  const tableColCount =
+    (showSelectColumn ? 1 : 0) + (isLoanQueue ? 2 : 0) + 8;
 
   const toggleRow = (id: string) =>
     setSelected((current) => {
@@ -533,9 +575,9 @@ export function RequestsPageShell({
               variant="outline"
               size="sm"
               className="h-8"
-              disabled={rows.length === 0}
+              disabled={visibleRows.length === 0}
               onClick={() =>
-                exportRowsToCsv(rows, `requests-${datePreset}-${Date.now()}.csv`)
+                exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)
               }
             >
               <Download className="me-1.5 h-3.5 w-3.5" />
@@ -566,7 +608,36 @@ export function RequestsPageShell({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
+        <div className="border-b border-border px-3 py-1.5">
+          <AppListControls
+            searchValue={search}
+            onSearchChange={(value) => {
+              setSearch(value);
+              setSearchApplied(value.trim());
+            }}
+            searchPlaceholder={t("searchPlaceholder")}
+            searchAriaLabel={t("searchPlaceholder")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[
+              labels.field.all,
+              labels.field.name,
+              labels.field.employee_id,
+              labels.field.zone,
+              labels.field.status,
+            ]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[labels.group.none, labels.group.status, labels.group.zone]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+            tableViewLabel={labels.viewTable}
+            cardsViewLabel={labels.viewCards}
+            filterSlot={
+              <>
           <Select
             items={TYPE_FILTERS.map((key) => ({
               value: key,
@@ -668,23 +739,16 @@ export function RequestsPageShell({
               ))}
             </SelectContent>
           </Select>
-
-          <p className="ms-auto shrink-0 text-xs text-muted-foreground tabular-nums">
-            {t("resultCount", {
-              shown: `${rows.length}`,
-              total: `${filteredTotal}`,
-            })}
-          </p>
-
-          <Input
-            className="h-9 w-[240px] shrink-0"
-            placeholder={t("searchPlaceholder")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onBlur={() => setSearchApplied(search.trim())}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") setSearchApplied(search.trim());
-            }}
+              </>
+            }
+            trailing={
+              <p className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                {t("resultCount", {
+                  shown: `${visibleRows.length}`,
+                  total: `${filteredTotal}`,
+                })}
+              </p>
+            }
           />
         </div>
 
@@ -739,13 +803,52 @@ export function RequestsPageShell({
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <AppEmptyState
-            title={filtersNarrow ? t("emptyFilteredTitle") : t("emptyTitle")}
+            title={filtersNarrow || search ? t("emptyFilteredTitle") : t("emptyTitle")}
             description={
-              filtersNarrow ? t("emptyFilteredDescription") : t("emptyDescription")
+              filtersNarrow || search ? t("emptyFilteredDescription") : t("emptyDescription")
             }
           />
+        ) : prefs.viewMode === "cards" ? (
+          <div className="p-3">
+            <GroupedSections groups={grouped}>
+              {(groupRowsForCards) => (
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {groupRowsForCards.map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      className="w-full cursor-pointer rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                      onClick={() =>
+                        router.push(
+                          fromEmployeeDesk ? `/employeedesk/${row.id}` : `/requests/${row.id}`,
+                        )
+                      }
+                    >
+                      <p className="truncate text-sm font-semibold tabular-nums">{row.request_code}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {row.is_confidential ? t("confidential") : row.driver_name}
+                      </p>
+                      <div className="mt-2">
+                        <StatusPill
+                          variant={requestStatusVariant(row.status, {
+                            awaiting_driver_ack: row.awaiting_driver_ack,
+                          })}
+                        >
+                          {t(
+                            `status.${requestStatusLabelKey(row.status, {
+                              awaiting_driver_ack: row.awaiting_driver_ack,
+                            })}` as "status.pending",
+                          )}
+                        </StatusPill>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
+          </div>
         ) : (
           <AppDataTable
             columns={[
@@ -784,7 +887,17 @@ export function RequestsPageShell({
               { id: "actions", label: t("colActions") },
             ]}
           >
-            {rows.map((row) => (
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={tableColCount} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => (
               <AppDataTableRow
                 key={row.id}
                 className={cn(
@@ -902,7 +1015,8 @@ export function RequestsPageShell({
                   </Button>
                 </TableCell>
               </AppDataTableRow>
-            ))}
+              )),
+            ])}
           </AppDataTable>
         )}
 

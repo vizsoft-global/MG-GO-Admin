@@ -9,11 +9,17 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import {
   AppEmptyState,
   AppListCard,
-  AppListToolbar,
   AppPage,
   AppPageHeader,
-  SearchField,
 } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { useAuth } from "@/contexts/auth-context";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
@@ -29,7 +35,6 @@ import {
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import { deleteDeliveryRule, isDpdErrorKey } from "./dpd-actions";
-import { filterDeliveryRules } from "./delivery-rule-filter";
 import { DpdStatusBadge } from "./dpd-status-badge";
 import { DeliveryRuleDpdImportDialog } from "./delivery-rule-dpd-import-dialog";
 import { RuleFormSheet } from "./rule-form-sheet";
@@ -39,6 +44,8 @@ import { useDeliveryRules, useDpdScopeOptions } from "./use-dpd";
 export function DeliveryRulesPageShell() {
   const t = useTranslations("pages.dpd");
   const tPage = useTranslations("pages.deliveryRules");
+  const labels = useListControlLabels();
+  const { prefs, update } = useListViewPrefs("delivery-rules");
   const { can } = useAuth();
   const canManage = can("earnings.manage");
   const queryClient = useQueryClient();
@@ -56,9 +63,29 @@ export function DeliveryRulesPageShell() {
   const [search, setSearch] = useState("");
 
   const filteredRules = useMemo(
-    () => filterDeliveryRules(deliveryRules ?? [], search),
-    [deliveryRules, search],
+    () =>
+      (deliveryRules ?? []).filter((row) =>
+        fieldSearchMatch(row, search, prefs.searchField, {
+          name: (item) => item.name,
+          status: (item) => item.status,
+          scope_label: (item) => item.scope_label,
+          scope_search: (item) => item.scope_search,
+        }),
+      ),
+    [deliveryRules, prefs.searchField, search],
   );
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filteredRules,
+        prefs.groupBy,
+        { status: (row) => row.status },
+        {},
+        "—",
+      ),
+    [filteredRules, prefs.groupBy],
+  );
+  const tableColCount = canManage ? 8 : 7;
 
   const handleDelete = () => {
     if (!deleteTarget) return;
@@ -113,16 +140,23 @@ export function DeliveryRulesPageShell() {
       <AppListCard
         toolbar={
           !isLoading && (deliveryRules?.length ?? 0) > 0 ? (
-            <AppListToolbar
-              filterSlot={
-                <SearchField
-                  value={search}
-                  onChange={setSearch}
-                  placeholder={tPage("searchPlaceholder")}
-                  clearLabel={tPage("clearSearch")}
-                  className="w-full sm:max-w-xs"
-                />
-              }
+            <AppListControls
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={tPage("searchPlaceholder")}
+              clearSearchLabel={labels.clearSearch}
+              searchFields={[labels.field.all, labels.field.name, labels.field.status]}
+              searchField={prefs.searchField}
+              onSearchFieldChange={(value) => update({ searchField: value })}
+              searchFieldLabel={labels.searchBy}
+              groupByOptions={[labels.group.none, labels.group.status]}
+              groupBy={prefs.groupBy}
+              onGroupByChange={(value) => update({ groupBy: value })}
+              groupByLabel={labels.groupBy}
+              viewMode={prefs.viewMode}
+              onViewModeChange={(value) => update({ viewMode: value })}
+              tableViewLabel={labels.viewTable}
+              cardsViewLabel={labels.viewCards}
             />
           ) : undefined
         }
@@ -136,6 +170,31 @@ export function DeliveryRulesPageShell() {
         ) : filteredRules.length === 0 ? (
           <div className="p-4">
             <AppEmptyState title={tPage("emptyFiltered")} />
+          </div>
+        ) : prefs.viewMode === "cards" ? (
+          <div className="p-4">
+            <GroupedSections groups={grouped}>
+              {(groupRowsList) => (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {groupRowsList.map((row) => (
+                    <button
+                      type="button"
+                      key={row.id}
+                      className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                      onClick={() => {
+                        if (canManage) setSheet({ open: true, row });
+                      }}
+                    >
+                      <p className="text-sm font-semibold">{row.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{row.scope_label}</p>
+                      <div className="mt-2">
+                        <DpdStatusBadge status={row.status} />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
           </div>
         ) : (
           <Table>
@@ -156,7 +215,17 @@ export function DeliveryRulesPageShell() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRules.map((row) => (
+              {grouped.flatMap((group) => [
+                ...(prefs.groupBy !== "none"
+                  ? [
+                      <TableRow key={`g-${group.key}`} className="bg-muted/40 hover:bg-muted/40">
+                        <TableCell colSpan={tableColCount} className="text-xs font-semibold">
+                          {group.label} · {group.rows.length}
+                        </TableCell>
+                      </TableRow>,
+                    ]
+                  : []),
+                ...group.rows.map((row) => (
                 <TableRow key={row.id} className="hover:bg-muted/40">
                   <TableCell className="font-medium">{row.name}</TableCell>
                   <TableCell>{row.scope_label}</TableCell>
@@ -196,7 +265,8 @@ export function DeliveryRulesPageShell() {
                     </TableCell>
                   ) : null}
                 </TableRow>
-              ))}
+                )),
+              ])}
             </TableBody>
           </Table>
         )}

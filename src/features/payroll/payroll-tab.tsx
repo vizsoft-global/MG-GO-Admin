@@ -4,12 +4,13 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Award, Clock, Hand, Percent, UserCheck, Users } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import { SearchField } from "@/components/app";
+import { GroupedSections, groupRows } from "@/components/app/app-list-controls";
 import {
   payrollRiderMatchesSearch,
   type PayrollKpis,
   type PayrollPeriod,
 } from "./payroll-formulas";
+import { PayrollListToolbar, usePayrollListPrefs } from "./payroll-list-toolbar";
 import { PayrollSummaryTable } from "./payroll-grid";
 import { exportPayrollViewCsv } from "./payroll-csv";
 import type { PayrollRiderRow } from "./payroll-types";
@@ -27,9 +28,25 @@ export function PayrollTab({
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
+  const { prefs } = usePayrollListPrefs("payroll-summary");
   const searched = useMemo(
-    () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
-    [riders, search],
+    () => riders.filter((r) => payrollRiderMatchesSearch(r, search, prefs.searchField)),
+    [prefs.searchField, riders, search],
+  );
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        searched,
+        prefs.groupBy,
+        {
+          zone: (row) => row.zone,
+          partner: (row) => row.partner,
+          status: (row) => row.status,
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, searched],
   );
 
   return (
@@ -75,21 +92,20 @@ export function PayrollTab({
           accent="warning"
         />
       </div>
-      <SearchField
-        value={search}
-        onChange={setSearch}
-        placeholder={t("searchPlaceholder")}
-        clearLabel={t("clearSearch")}
-      />
-      <PayrollSummaryTable
-        rows={searched}
-        empty={t("emptyRiders")}
-        rangeLabel={month.label}
-        exportLabel={canExport ? t("downloadTable") : undefined}
-        onExport={
-          canExport ? (visible) => exportPayrollViewCsv(month.key, month.dates, visible) : undefined
-        }
-      />
+      <PayrollListToolbar prefKey="payroll-summary" search={search} onSearchChange={setSearch} />
+      <GroupedSections groups={grouped}>
+        {(rows) => (
+          <PayrollSummaryTable
+            rows={rows}
+            empty={t("emptyRiders")}
+            rangeLabel={month.label}
+            exportLabel={canExport ? t("downloadTable") : undefined}
+            onExport={
+              canExport ? (visible) => exportPayrollViewCsv(month.key, month.dates, visible) : undefined
+            }
+          />
+        )}
+      </GroupedSections>
     </div>
   );
 }

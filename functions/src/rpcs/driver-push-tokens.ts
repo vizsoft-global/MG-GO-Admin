@@ -138,6 +138,23 @@ export function isInboxUnread(data: { dismissed_at?: unknown; opened_at?: unknow
   return data.dismissed_at == null && data.opened_at == null;
 }
 
+/** A row with no `created_at` sorts as newest so the first page still shows it. */
+export function inboxListMillis(item: Dict): number {
+  const created = inboxInstant(item["created_at"]);
+  if (created) {
+    const ms = Date.parse(created);
+    if (Number.isFinite(ms)) return ms;
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
+/** An unstamped row already appeared on page 1, so a `before` cursor skips it. */
+export function inboxMatchesBefore(item: Dict, before: string): boolean {
+  const created = inboxInstant(item["created_at"]);
+  if (!created) return false;
+  return created < before;
+}
+
 export function isDeadFcmCode(code: string): boolean {
   return DEAD_FCM_CODES.has(code);
 }

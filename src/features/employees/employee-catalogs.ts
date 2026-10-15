@@ -1,0 +1,142 @@
+export const CATALOG_KEY_RE = /^[a-z0-9_]{1,40}$/;
+
+export type EmployeeCatalogKind =
+  | "employee_statuses"
+  | "employee_sections"
+  | "nationality_categories"
+  | "bank_codes";
+
+export type EmployeeCatalogRow = {
+  key: string;
+  label_en: string;
+  label_ar: string;
+  is_active: boolean;
+  is_system: boolean;
+  sort_order: number;
+  color?: string | null;
+  is_nbk?: boolean;
+};
+
+export const DEFAULT_EMPLOYEE_STATUSES: readonly EmployeeCatalogRow[] = [
+  { key: "new", label_en: "New", label_ar: "جديد", is_active: true, is_system: true, sort_order: 10, color: "#3B82F6" },
+  { key: "running", label_en: "Running", label_ar: "يعمل", is_active: true, is_system: true, sort_order: 20, color: "#10B981" },
+  {
+    key: "absent_mosal",
+    label_en: "Absent from MOSAL",
+    label_ar: "غائب من وزارة الشؤون",
+    is_active: true,
+    is_system: true,
+    sort_order: 30,
+    color: "#F59E0B",
+  },
+  {
+    key: "absent_moi",
+    label_en: "Absent from MOI",
+    label_ar: "غائب من وزارة الداخلية",
+    is_active: true,
+    is_system: true,
+    sort_order: 40,
+    color: "#F97316",
+  },
+  {
+    key: "transfer_from_company",
+    label_en: "Transfer from Company",
+    label_ar: "نقل من الشركة",
+    is_active: true,
+    is_system: true,
+    sort_order: 50,
+    color: "#8B5CF6",
+  },
+  { key: "on_hold", label_en: "On Hold", label_ar: "موقوف", is_active: true, is_system: true, sort_order: 60, color: "#6B7280" },
+  { key: "training", label_en: "Training", label_ar: "تدريب", is_active: true, is_system: true, sort_order: 70, color: "#06B6D4" },
+  { key: "extension", label_en: "Extension", label_ar: "تمديد", is_active: true, is_system: true, sort_order: 80, color: "#0EA5E9" },
+  { key: "accident", label_en: "Accident", label_ar: "حادث", is_active: true, is_system: true, sort_order: 90, color: "#EF4444" },
+];
+
+export const DEFAULT_EMPLOYEE_SECTIONS: readonly EmployeeCatalogRow[] = [];
+
+export const DEFAULT_NATIONALITY_CATEGORIES: readonly EmployeeCatalogRow[] = [];
+
+export const DEFAULT_BANK_CODES: readonly EmployeeCatalogRow[] = [
+  { key: "nbk", label_en: "National Bank of Kuwait", label_ar: "بنك الكويت الوطني", is_active: true, is_system: true, sort_order: 10, is_nbk: true },
+  { key: "kfh", label_en: "Kuwait Finance House", label_ar: "بيت التمويل الكويتي", is_active: true, is_system: true, sort_order: 20 },
+  { key: "gulf", label_en: "Gulf Bank", label_ar: "بنك الخليج", is_active: true, is_system: true, sort_order: 30 },
+  { key: "burgan", label_en: "Burgan Bank", label_ar: "بنك برقان", is_active: true, is_system: true, sort_order: 40 },
+  { key: "boubyan", label_en: "Boubyan Bank", label_ar: "بنك بوبيان", is_active: true, is_system: true, sort_order: 50 },
+  { key: "cbk", label_en: "Commercial Bank of Kuwait", label_ar: "البنك التجاري الكويتي", is_active: true, is_system: true, sort_order: 60 },
+  { key: "abk", label_en: "Al Ahli Bank of Kuwait", label_ar: "البنك الأهلي الكويتي", is_active: true, is_system: true, sort_order: 70 },
+  { key: "kib", label_en: "Kuwait International Bank", label_ar: "بنك الكويت الدولي", is_active: true, is_system: true, sort_order: 80 },
+  { key: "warba", label_en: "Warba Bank", label_ar: "بنك وربة", is_active: true, is_system: true, sort_order: 90 },
+  { key: "aub", label_en: "Ahli United Bank", label_ar: "البنك الأهلي المتحد", is_active: true, is_system: true, sort_order: 100 },
+];
+
+export const DEFAULT_EMPLOYEE_STATUS_KEY = "new";
+export const RUNNING_EMPLOYEE_STATUS_KEY = "running";
+
+export function catalogKeyFromLabel(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+}
+
+export function catalogLabel(
+  key: string | null | undefined,
+  rows: readonly EmployeeCatalogRow[],
+  locale: string,
+): string {
+  if (!key) return "—";
+  const hit = rows.find((row) => row.key === key);
+  if (!hit) return key;
+  return locale.startsWith("ar") ? hit.label_ar || hit.label_en : hit.label_en;
+}
+
+export function mergeCatalogRows(
+  stored: readonly EmployeeCatalogRow[],
+  seeded: readonly EmployeeCatalogRow[],
+): EmployeeCatalogRow[] {
+  if (stored.length === 0) return seeded.map((row) => ({ ...row }));
+  const seen = new Set(stored.map((row) => row.key));
+  const extras = seeded.filter((row) => row.is_system && !seen.has(row.key));
+  return [...stored, ...extras].sort((a, b) => a.sort_order - b.sort_order || a.key.localeCompare(b.key));
+}
+
+export function seedsForKind(kind: EmployeeCatalogKind): readonly EmployeeCatalogRow[] {
+  switch (kind) {
+    case "employee_statuses":
+      return DEFAULT_EMPLOYEE_STATUSES;
+    case "employee_sections":
+      return DEFAULT_EMPLOYEE_SECTIONS;
+    case "nationality_categories":
+      return DEFAULT_NATIONALITY_CATEGORIES;
+    case "bank_codes":
+      return DEFAULT_BANK_CODES;
+    default: {
+      const _never: never = kind;
+      return _never;
+    }
+  }
+}
+
+export function isNbkBank(key: string | null | undefined, banks: readonly EmployeeCatalogRow[]): boolean {
+  if (!key) return false;
+  const hit = banks.find((row) => row.key === key);
+  return hit?.is_nbk === true || key === "nbk";
+}
+
+export function parseCatalogRow(raw: Record<string, unknown>): EmployeeCatalogRow | null {
+  const key = typeof raw.key === "string" ? raw.key : "";
+  if (!CATALOG_KEY_RE.test(key)) return null;
+  return {
+    key,
+    label_en: typeof raw.label_en === "string" ? raw.label_en : key,
+    label_ar: typeof raw.label_ar === "string" ? raw.label_ar : "",
+    is_active: raw.is_active !== false,
+    is_system: raw.is_system === true,
+    sort_order: typeof raw.sort_order === "number" ? raw.sort_order : 100,
+    color: typeof raw.color === "string" ? raw.color : null,
+    is_nbk: raw.is_nbk === true,
+  };
+}

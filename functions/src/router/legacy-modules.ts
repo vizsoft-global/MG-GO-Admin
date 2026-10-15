@@ -103,7 +103,11 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "adminUpsertLoanTenureOption",
     "adminDeleteLoanTenureOption",
     "adminUpsertComplaintCategory",
-    "adminDeleteComplaintCategory"
+    "adminDeleteComplaintCategory",
+    "adminUpsertEmployeeCatalog"
+  ],
+  "./rpcs/employees-dashboard": [
+    "adminEmployeesDashboard"
   ],
   "./rpcs/rules": [
     "adminInsertDeliveryRuleWithScope",

@@ -85,12 +85,12 @@ export function useRegenerateDriverPasscode() {
 export function useArchiveDriverIntake() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (intakeId: string) => {
-      const result = await archiveDriverIntake(intakeId);
+    mutationFn: async ({ intakeId, reason }: { intakeId: string; reason: string }) => {
+      const result = await archiveDriverIntake(intakeId, reason);
       if (result.error) throw new Error(result.error);
       return result;
     },
-    onSuccess: async (_data, intakeId) => {
+    onSuccess: async (_data, { intakeId }) => {
       await invalidateDriverCaches(queryClient, { intakeId });
     },
   });

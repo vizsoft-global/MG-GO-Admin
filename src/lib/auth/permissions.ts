@@ -41,6 +41,14 @@ export const RESTAURANTS_MANAGE_PERMISSIONS = [
   "earnings.manage",
 ] as const satisfies readonly Permission[];
 
+/** Bank numbers stay hidden unless this tick, manage, or super admin. */
+export function canViewDriverBankDetails(
+  permissions: ReadonlySet<string>,
+  isSuperAdmin: boolean,
+): boolean {
+  return hasAnyPermissionInSet(permissions, ["drivers.bank_view", "drivers.manage"], isSuperAdmin);
+}
+
 export function hasAnyPermissionInSet(
   permissions: ReadonlySet<string>,
   permissionList: readonly Permission[],

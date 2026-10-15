@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -43,6 +43,8 @@ import { DriverFormDocumentsGrid } from "./form/driver-form-documents-grid";
 import { DriverFormFooter } from "./form/driver-form-footer";
 import { DriverFormIdentitySection } from "./form/driver-form-identity-section";
 import { DriverFormOperationsCard } from "./form/driver-form-operations-card";
+import { DriverFormBankCard } from "./form/driver-form-bank-card";
+import { DriverFormHrSection } from "./form/driver-form-hr-section";
 import { DriverFormCustomFieldsSection } from "./form/driver-form-custom-fields-section";
 import { useDriverFormDraft } from "./form/use-driver-form-draft";
 import { sameCustomFieldValues } from "./form/custom-field-values-equal";
@@ -56,6 +58,14 @@ import type { CustomFieldDefinition, CustomFieldValues } from "@/lib/custom-fiel
 import type { DriverFormCatalogItem } from "@/features/assets/types";
 import { customFieldsToFormEntries } from "@/lib/custom-fields/serialize";
 import { isDriverProjectKey, type DriverProjectKey } from "@/features/fleet/fleet-labels";
+import { DEFAULT_EMPLOYEE_STATUS_KEY } from "@/features/employees/employee-catalogs";
+import { EMPTY_BANK_DETAILS, type DriverBankDetails } from "@/features/employees/bank-details";
+import {
+  useBankCodes,
+  useEmployeeSections,
+  useEmployeeStatuses,
+  useNationalityCategories,
+} from "@/features/employees/use-employee-catalogs";
 
 type DriverFormMode = "create" | "edit";
 
@@ -67,19 +77,14 @@ function driverErrorToast(
   return t("errors.save_failed");
 }
 
-const EMPTY_DOCS: Record<DriverDocumentType, File | null> = {
-  license: null,
-  civil_id: null,
-  work_permit: null,
-  passport: null,
-};
+const EMPTY_DOCS = Object.fromEntries(DOCUMENT_TYPES.map((key) => [key, null])) as Record<
+  DriverDocumentType,
+  File | null
+>;
 
-const EMPTY_EXPIRIES: Record<DriverDocumentType, DocumentExpiryConfig> = {
-  license: { ...EMPTY_DOCUMENT_EXPIRY },
-  civil_id: { ...EMPTY_DOCUMENT_EXPIRY },
-  work_permit: { ...EMPTY_DOCUMENT_EXPIRY },
-  passport: { ...EMPTY_DOCUMENT_EXPIRY },
-};
+const EMPTY_EXPIRIES = Object.fromEntries(
+  DOCUMENT_TYPES.map((key) => [key, { ...EMPTY_DOCUMENT_EXPIRY }]),
+) as Record<DriverDocumentType, DocumentExpiryConfig>;
 
 /**
  * Stable fallbacks for queries that have not resolved.
@@ -114,9 +119,15 @@ export function DriverFormSheet({
   const tNew = useTranslations("pages.driverNew");
   const tDetail = useTranslations("pages.driverDetail");
   const tDrivers = useTranslations("pages.drivers");
+  const locale = useLocale();
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [r2Ready, setR2Ready] = useState(true);
+  const [canViewBank, setCanViewBank] = useState(false);
+  const statusesQuery = useEmployeeStatuses();
+  const sectionsQuery = useEmployeeSections();
+  const nationsQuery = useNationalityCategories();
+  const banksQuery = useBankCodes();
   const { data: options, isLoading: optionsLoading } = useDriverFormOptions();
   const isEdit = mode === "edit";
   const activeDriver = isEdit ? driver ?? null : null;
@@ -154,6 +165,11 @@ export function DriverFormSheet({
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [civilId, setCivilId] = useState("");
+  const [passportNumber, setPassportNumber] = useState("");
+  const [employeeStatusKey, setEmployeeStatusKey] = useState(DEFAULT_EMPLOYEE_STATUS_KEY);
+  const [sectionKeys, setSectionKeys] = useState<string[]>([]);
+  const [nationalityCategoryKeys, setNationalityCategoryKeys] = useState<string[]>([]);
+  const [bankDetails, setBankDetails] = useState<DriverBankDetails>(EMPTY_BANK_DETAILS);
   const [employeeId, setEmployeeId] = useState("");
   const [nationality, setNationality] = useState("");
   const [riderCategory, setRiderCategory] = useState<DriverRiderCategory>("in_house");
@@ -189,7 +205,10 @@ export function DriverFormSheet({
   useEffect(() => {
     if (!open) return;
     void getDriverUploadStorageStatus()
-      .then(({ r2Configured }) => setR2Ready(r2Configured))
+      .then(({ r2Configured, canViewBank: nextCanViewBank }) => {
+        setR2Ready(r2Configured);
+        setCanViewBank(nextCanViewBank);
+      })
       .catch(() => setR2Ready(false));
   }, [open]);
 
@@ -202,6 +221,11 @@ export function DriverFormSheet({
       setFullName(activeDriver.full_name);
       setPhone(phoneStorageToDigits(activeDriver.phone));
       setCivilId(restrictDigits(activeDriver.civil_id, CIVIL_ID_DIGIT_COUNT));
+      setPassportNumber(activeDriver.passport_number ?? "");
+      setEmployeeStatusKey(activeDriver.employee_status_key ?? DEFAULT_EMPLOYEE_STATUS_KEY);
+      setSectionKeys(activeDriver.section_keys ?? []);
+      setNationalityCategoryKeys(activeDriver.nationality_category_keys ?? []);
+      setBankDetails(activeDriver.bank_details ?? EMPTY_BANK_DETAILS);
       setEmployeeId(activeDriver.employee_id ?? "");
       setNationality(activeDriver.nationality ?? "");
       setRiderCategory(activeDriver.rider_category ?? "in_house");
@@ -236,6 +260,11 @@ export function DriverFormSheet({
     setFullName("");
     setPhone("");
     setCivilId("");
+    setPassportNumber("");
+    setEmployeeStatusKey(DEFAULT_EMPLOYEE_STATUS_KEY);
+    setSectionKeys([]);
+    setNationalityCategoryKeys([]);
+    setBankDetails(EMPTY_BANK_DETAILS);
     setEmployeeId("");
     setNationality("");
     setRiderCategory("in_house");
@@ -504,6 +533,17 @@ export function DriverFormSheet({
       formData.append("fullName", fullName);
       formData.append("phone", phone);
       formData.append("civilId", civilId);
+      formData.append("passportNumber", passportNumber);
+      formData.append("employeeStatusKey", employeeStatusKey);
+      formData.append("sectionKeys", sectionKeys.join(","));
+      formData.append("nationalityCategoryKeys", nationalityCategoryKeys.join(","));
+      if (canViewBank) {
+        formData.append("beneficiaryCivilId", bankDetails.beneficiary_civil_id ?? "");
+        formData.append("bankCode", bankDetails.bank_code ?? "");
+        formData.append("accountNumber", bankDetails.account_number ?? "");
+        formData.append("iban", bankDetails.iban ?? "");
+        formData.append("paymentCurrency", bankDetails.currency);
+      }
       formData.append("employeeId", employeeId);
       formData.append("nationality", nationality);
       formData.append("riderCategory", riderCategory);
@@ -610,6 +650,8 @@ export function DriverFormSheet({
                 setCivilId(next);
                 clearFieldError("civilId");
               }}
+              passportNumber={passportNumber}
+              onPassportNumberChange={setPassportNumber}
               employeeId={employeeId}
               onEmployeeIdChange={(next) => {
                 setEmployeeId(next);
@@ -630,6 +672,7 @@ export function DriverFormSheet({
                 fullName: tNew("fields.fullName"),
                 phone: tNew("fields.phone"),
                 civilId: tNew("fields.civilId"),
+                passportNumber: tNew("fields.passportNumber"),
                 employeeId: tDrivers("employeeId"),
                 nationality: tNew("fields.nationality"),
                 riderCategory: tNew("fields.riderCategory"),
@@ -649,6 +692,7 @@ export function DriverFormSheet({
               placeholders={{
                 fullName: tNew("placeholders.fullName"),
                 civilId: tNew("placeholders.civilId"),
+                passportNumber: tNew("placeholders.passportNumber"),
                 employeeId: tDrivers("employeeIdPlaceholder"),
                 employeeIdHelp: tDrivers("employeeIdHelp"),
                 nationality: tNew("placeholders.nationality"),
@@ -669,6 +713,45 @@ export function DriverFormSheet({
                 employeeId: showFieldError("employeeId"),
               }}
             />
+
+            <DriverFormHrSection
+              locale={locale}
+              employeeStatusKey={employeeStatusKey}
+              onEmployeeStatusChange={setEmployeeStatusKey}
+              sectionKeys={sectionKeys}
+              onSectionKeysChange={setSectionKeys}
+              nationalityCategoryKeys={nationalityCategoryKeys}
+              onNationalityCategoryKeysChange={setNationalityCategoryKeys}
+              statuses={statusesQuery.data ?? []}
+              sections={sectionsQuery.data ?? []}
+              nationalityCategories={nationsQuery.data ?? []}
+              labels={{
+                section: tNew("sections.hr"),
+                employeeStatus: tNew("fields.employeeStatus"),
+                sections: tNew("fields.sections"),
+                nationalityCategories: tNew("fields.nationalityCategories"),
+                searchStatus: tNew("placeholders.searchStatus"),
+              }}
+            />
+
+            {canViewBank ? (
+              <DriverFormBankCard
+                locale={locale}
+                value={bankDetails}
+                onChange={setBankDetails}
+                banks={banksQuery.data ?? []}
+                labels={{
+                  section: tNew("sections.bank"),
+                  beneficiaryCivilId: tNew("fields.beneficiaryCivilId"),
+                  bank: tNew("fields.bank"),
+                  searchBank: tNew("placeholders.searchBank"),
+                  accountNumber: tNew("fields.accountNumber"),
+                  iban: tNew("fields.iban"),
+                  currency: tNew("fields.paymentCurrency"),
+                }}
+                errors={{}}
+              />
+            ) : null}
 
             <div className="grid gap-3 lg:grid-cols-2 lg:items-stretch">
               <DriverFormAssignmentCard

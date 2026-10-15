@@ -15,15 +15,21 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Search,
   X,
 } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CardContent } from "@/components/ui/card";
 import {
@@ -158,6 +164,8 @@ function AssetsPageContent() {
     low_stock_count: 0,
   };
 
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("assets");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -178,16 +186,15 @@ function AssetsPageContent() {
   );
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return items.filter((row) => {
       if (
-        q &&
-        !(
-          row.name.toLowerCase().includes(q) ||
-          row.code.toLowerCase().includes(q) ||
-          (row.category?.toLowerCase().includes(q) ?? false) ||
-          (row.description?.toLowerCase().includes(q) ?? false)
-        )
+        !fieldSearchMatch(row, search, prefs.searchField, {
+          name: (item) => item.name,
+          status: (item) => (item.is_active ? "active" : "inactive"),
+          code: (item) => item.code,
+          category: (item) => item.category,
+          description: (item) => item.description,
+        })
       ) {
         return false;
       }
@@ -197,7 +204,23 @@ function AssetsPageContent() {
       if (categoryFilter !== "all" && row.category !== categoryFilter) return false;
       return true;
     });
-  }, [items, search, statusFilter, categoryFilter]);
+  }, [items, search, prefs.searchField, statusFilter, categoryFilter]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        {
+          status: (row) => (row.is_active ? "active" : "inactive"),
+        },
+        {
+          active: t("statusActive"),
+          inactive: t("statusInactive"),
+        },
+        "—",
+      ),
+    [prefs.groupBy, t, visible],
+  );
 
   const invalidateAssets = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.assets.all() });
@@ -346,96 +369,96 @@ function AssetsPageContent() {
 
       <AppListCard
         toolbar={
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("searchPlaceholder")}
-                className="h-9 rounded-lg ps-9 pe-9"
-              />
-              {search ? (
-                <button
-                  type="button"
-                  className="absolute end-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-                  onClick={() => setSearch("")}
-                  aria-label={t("clearSearch")}
+          <AppListControls
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={t("searchPlaceholder")}
+            searchAriaLabel={t("searchPlaceholder")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[labels.field.all, labels.field.name, labels.field.status]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[labels.group.none, labels.group.status]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+            tableViewLabel={labels.viewTable}
+            cardsViewLabel={labels.viewCards}
+            filterSlot={
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "h-9 shrink-0 cursor-pointer rounded-lg",
+                  )}
                 >
-                  <X className="h-4 w-4" />
-                </button>
-              ) : null}
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "sm" }),
-                  "h-9 shrink-0 cursor-pointer rounded-lg",
-                )}
-              >
-                <Filter className="me-2 h-3.5 w-3.5" />
-                {t("filter")}
-                {hasActiveFilters ? (
-                  <Badge
-                    variant="secondary"
-                    className="ms-2 h-5 min-w-5 rounded-full px-1.5 text-[10px]"
-                  >
-                    {(statusFilter !== "all" ? 1 : 0) + (categoryFilter !== "all" ? 1 : 0)}
-                  </Badge>
-                ) : null}
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>{t("filterStatus")}</DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    value={statusFilter}
-                    onValueChange={(v) => setStatusFilter((v as StatusFilter) ?? "all")}
-                  >
-                    {(["all", "lowStock", "inactive", "assigned"] as const).map((value) => (
-                      <DropdownMenuRadioItem key={value} value={value}>
-                        {filterLabel(value)}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuGroup>
-                {categories.length > 0 ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel>{t("filterCategory")}</DropdownMenuLabel>
-                      <DropdownMenuRadioGroup
-                        value={categoryFilter}
-                        onValueChange={(v) => setCategoryFilter(v ?? "all")}
-                      >
-                        <DropdownMenuRadioItem value="all">
-                          {t("filterAllCategories")}
-                        </DropdownMenuRadioItem>
-                        {categories.map((category) => (
-                          <DropdownMenuRadioItem key={category} value={category}>
-                            {category}
-                          </DropdownMenuRadioItem>
-                        ))}
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuGroup>
-                  </>
-                ) : null}
-                {hasActiveFilters ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="cursor-pointer text-muted-foreground"
-                      onClick={() => {
-                        setStatusFilter("all");
-                        setCategoryFilter("all");
-                      }}
+                  <Filter className="me-2 h-3.5 w-3.5" />
+                  {t("filter")}
+                  {hasActiveFilters ? (
+                    <Badge
+                      variant="secondary"
+                      className="ms-2 h-5 min-w-5 rounded-full px-1.5 text-[10px]"
                     >
-                      {t("clearFilters")}
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                      {(statusFilter !== "all" ? 1 : 0) + (categoryFilter !== "all" ? 1 : 0)}
+                    </Badge>
+                  ) : null}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{t("filterStatus")}</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={statusFilter}
+                      onValueChange={(v) => setStatusFilter((v as StatusFilter) ?? "all")}
+                    >
+                      {(["all", "lowStock", "inactive", "assigned"] as const).map((value) => (
+                        <DropdownMenuRadioItem key={value} value={value}>
+                          {filterLabel(value)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuGroup>
+                  {categories.length > 0 ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>{t("filterCategory")}</DropdownMenuLabel>
+                        <DropdownMenuRadioGroup
+                          value={categoryFilter}
+                          onValueChange={(v) => setCategoryFilter(v ?? "all")}
+                        >
+                          <DropdownMenuRadioItem value="all">
+                            {t("filterAllCategories")}
+                          </DropdownMenuRadioItem>
+                          {categories.map((category) => (
+                            <DropdownMenuRadioItem key={category} value={category}>
+                              {category}
+                            </DropdownMenuRadioItem>
+                          ))}
+                        </DropdownMenuRadioGroup>
+                      </DropdownMenuGroup>
+                    </>
+                  ) : null}
+                  {hasActiveFilters ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="cursor-pointer text-muted-foreground"
+                        onClick={() => {
+                          setStatusFilter("all");
+                          setCategoryFilter("all");
+                        }}
+                      >
+                        {t("clearFilters")}
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            }
+          />
         }
       >
         <CardContent className="p-0">
@@ -472,6 +495,32 @@ function AssetsPageContent() {
                 {t("clearFilters")}
               </Button>
             </div>
+          ) : prefs.viewMode === "cards" ? (
+            <div className="p-4">
+              <p className="mb-3 text-xs text-muted-foreground">{countLabel}</p>
+              <GroupedSections groups={grouped}>
+                {(rows) => (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {rows.map((row) => (
+                      <button
+                        type="button"
+                        key={row.id}
+                        className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                        onClick={() => handleViewDetail(row)}
+                      >
+                        <p className="truncate text-sm font-semibold">{row.name}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{row.code}</p>
+                        <div className="mt-2">
+                          <Badge variant={row.is_active ? "default" : "secondary"}>
+                            {row.is_active ? t("statusActive") : t("statusInactive")}
+                          </Badge>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </GroupedSections>
+            </div>
           ) : (
             <>
               <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
@@ -493,7 +542,17 @@ function AssetsPageContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {visible.map((row) => (
+                    {grouped.flatMap((group) => [
+                      ...(prefs.groupBy !== "none"
+                        ? [
+                            <TableRow key={`g-${group.key}`} className="bg-muted/40 hover:bg-muted/40">
+                              <TableCell colSpan={9} className="text-xs font-semibold">
+                                {group.label} · {group.rows.length}
+                              </TableCell>
+                            </TableRow>,
+                          ]
+                        : []),
+                      ...group.rows.map((row) => (
                         <TableRow
                           key={row.id}
                           className="cursor-pointer"
@@ -583,7 +642,8 @@ function AssetsPageContent() {
                             </div>
                           </TableCell>
                         </TableRow>
-                    ))}
+                      )),
+                    ])}
                   </TableBody>
                 </Table>
               </div>

@@ -118,6 +118,10 @@ export const COLLECTIONS = {
   driverTelemetryEvents: "driver_telemetry_events",
   fleetEvents: "fleet_events",
   vehicleUseTypes: "vehicle_use_types",
+  employeeStatuses: "employee_statuses",
+  employeeSections: "employee_sections",
+  nationalityCategories: "nationality_categories",
+  bankCodes: "bank_codes",
   adminActivityLogs: "admin_activity_logs",
   counters: "counters",
 } as const;
@@ -127,6 +131,7 @@ export const UNIQUE_LOCKS = {
   employeeId: "uniq_employee_id",
   phone: "uniq_phone",
   civilId: "uniq_civil_id",
+  passport: "uniq_passport",
   plate: "uniq_plate",
   passcode: "uniq_passcode",
 } as const;

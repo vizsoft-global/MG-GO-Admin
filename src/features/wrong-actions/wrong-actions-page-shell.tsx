@@ -9,12 +9,18 @@ import {
   Loader2,
   Plus,
   Scale,
-  Search,
   ShieldAlert,
   Users,
-  X,
 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { useRouter } from "@/i18n/navigation";
 import {
   AppDataTable,
@@ -25,7 +31,6 @@ import {
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { useAuth } from "@/contexts/auth-context";
@@ -36,7 +41,6 @@ import type { WrongActionRow, WrongActionSeverity } from "./types";
 import {
   parseWrongActionTab,
   wrongActionKpis,
-  wrongActionMatchesSearch,
   wrongActionMatchesTab,
   type WrongActionTab,
 } from "./wrong-actions-list-utils";
@@ -71,6 +75,8 @@ export function WrongActionsPageShell({
   tab?: string;
 }) {
   const t = useTranslations("pages.wrongActions");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("wrong-actions");
   const { can } = useAuth();
   const canManage = can("wrong_actions.manage");
   const router = useRouter();
@@ -99,9 +105,36 @@ export function WrongActionsPageShell({
     () =>
       rows.filter(
         (row) =>
-          wrongActionMatchesTab(row, activeTab, now) && wrongActionMatchesSearch(row, search),
+          wrongActionMatchesTab(row, activeTab, now) &&
+          fieldSearchMatch(row, search, prefs.searchField, {
+            name: (item) => item.driver_name,
+            employee_id: (item) => item.driver_code,
+            zone: (item) => item.driver_zone_name,
+            status: (item) => item.severity,
+            type: (item) => item.action_type,
+            details: (item) => item.details,
+            createdBy: (item) => item.created_by_name,
+          }),
       ),
-    [activeTab, now, rows, search],
+    [activeTab, now, prefs.searchField, rows, search],
+  );
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        {
+          status: (row) => row.severity,
+          zone: (row) => row.driver_zone_name,
+        },
+        {
+          high: t("severity.high"),
+          medium: t("severity.medium"),
+          low: t("severity.low"),
+        },
+        "—",
+      ),
+    [prefs.groupBy, t, visible],
   );
 
   const counts = useMemo(() => wrongActionKpis(rows, now), [now, rows]);
@@ -158,24 +191,31 @@ export function WrongActionsPageShell({
       <KpiGrid items={kpis} compact />
       <AppListCard
         toolbar={
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={t("searchPlaceholder")}
-              className="h-9 rounded-lg bg-background ps-9 pe-9"
-            />
-            {search ? (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
-          </div>
+          <AppListControls
+            className="min-w-0 flex-1"
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={t("searchPlaceholder")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[
+              labels.field.all,
+              labels.field.name,
+              labels.field.employee_id,
+              labels.field.zone,
+              labels.field.status,
+            ]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[labels.group.none, labels.group.status, labels.group.zone]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+            tableViewLabel={labels.viewTable}
+            cardsViewLabel={labels.viewCards}
+          />
         }
       >
         {isLoading ? (
@@ -184,6 +224,38 @@ export function WrongActionsPageShell({
           </div>
         ) : rows.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
+        ) : prefs.viewMode === "cards" ? (
+          visible.length === 0 ? (
+            <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty>
+          ) : (
+            <div className="p-4">
+              <GroupedSections groups={grouped}>
+                {(groupRowsList) => (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {groupRowsList.map((row) => (
+                      <button
+                        type="button"
+                        key={row.id}
+                        className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                        onClick={() => router.push(`/wrong-actions/${row.id}`)}
+                      >
+                        <p className="truncate text-sm font-semibold">{row.driver_name ?? "—"}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {t(`type.${row.action_type}` as "type.delay")}
+                          {row.driver_code ? ` · ${row.driver_code}` : ""}
+                        </p>
+                        <div className="mt-2">
+                          <Badge variant={severityTone(row.severity)}>
+                            {t(`severity.${row.severity}` as "severity.low")}
+                          </Badge>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </GroupedSections>
+            </div>
+          )
         ) : (
           <AppDataTable
             columns={[
@@ -199,13 +271,30 @@ export function WrongActionsPageShell({
               ) : null
             }
           >
-            {visible.map((row) => (
-              <WrongActionListRow
-                key={row.id}
-                row={row}
-                onOpen={() => router.push(`/wrong-actions/${row.id}`)}
-              />
-            ))}
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={5}
+                        className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
+                      >
+                        {group.label}
+                        <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                          {group.rows.length}
+                        </span>
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => (
+                <WrongActionListRow
+                  key={row.id}
+                  row={row}
+                  onOpen={() => router.push(`/wrong-actions/${row.id}`)}
+                />
+              )),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

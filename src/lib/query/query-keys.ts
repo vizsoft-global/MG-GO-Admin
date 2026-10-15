@@ -40,6 +40,10 @@ export const queryKeys = {
     ) =>
       ["drivers", "login-verifications", driverId, startDate, endDate] as const,
   },
+  employees: {
+    catalog: (kind: string) => ["employees", "catalog", kind] as const,
+    dashboard: () => ["employees", "dashboard"] as const,
+  },
   driverDevices: {
     all: () => ["driver-devices"] as const,
     list: () => ["driver-devices", "list"] as const,

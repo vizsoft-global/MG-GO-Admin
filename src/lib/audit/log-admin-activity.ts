@@ -50,6 +50,23 @@ export type LogAdminActivityInput = {
   adminRoleSlug?: string;
 };
 
+const BANK_SECRET_KEYS = ["account_number", "iban", "beneficiary_civil_id", "bank_details"] as const;
+
+function stripBankSecrets(
+  value: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null | undefined {
+  if (!value) return value;
+  const next: Record<string, unknown> = { ...value };
+  for (const key of BANK_SECRET_KEYS) {
+    delete next[key];
+  }
+  if (next.bank && typeof next.bank === "object") {
+    const bank = next.bank as { bank_code?: unknown };
+    next.bank = { bank_code: bank.bank_code ?? null };
+  }
+  return next;
+}
+
 function jsonSafe<T>(value: T): T {
   if (value == null) return value;
   try {
@@ -97,7 +114,10 @@ export async function logAdminActivity(input: LogAdminActivityInput): Promise<vo
     if (!adminUserId) return;
 
     const { ipAddress, userAgent } = await readRequestMeta();
-    const changedFields = computeChangedFields(input.before, input.after);
+    const before = stripBankSecrets(input.before);
+    const after = stripBankSecrets(input.after);
+    const context = stripBankSecrets(input.context ?? {});
+    const changedFields = computeChangedFields(before, after);
     const db = await staffDb();
     if (!db) return;
 
@@ -113,9 +133,9 @@ export async function logAdminActivity(input: LogAdminActivityInput): Promise<vo
       route_name: input.routeName ?? null,
       success: input.success ?? true,
       error_message: input.errorMessage ?? null,
-      context: jsonSafe(input.context ?? {}),
-      before_state: jsonSafe(input.before ?? null),
-      after_state: jsonSafe(input.after ?? null),
+      context: jsonSafe(context ?? {}),
+      before_state: jsonSafe(before ?? null),
+      after_state: jsonSafe(after ?? null),
       changed_fields: changedFields,
       ip_address: ipAddress,
       user_agent: userAgent,

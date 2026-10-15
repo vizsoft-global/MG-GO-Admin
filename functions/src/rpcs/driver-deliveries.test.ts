@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertExternalOrderId,
+  assertPublishedPickupRestaurant,
   isWithinDeliveryRange,
   normalizeExternalOrderId,
   parseProofKeys,
@@ -165,5 +166,13 @@ describe("restaurant geofence", () => {
       }),
       true,
     );
+  });
+
+  it("refuses a pickup when no published restaurant is assigned", () => {
+    assert.throws(
+      () => assertPublishedPickupRestaurant([]),
+      (error: unknown) => messageOf(error) === "no_restaurants_assigned",
+    );
+    assert.doesNotThrow(() => assertPublishedPickupRestaurant([{ id: "r1" }]));
   });
 });

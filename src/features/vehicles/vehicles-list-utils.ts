@@ -228,27 +228,38 @@ export function vehicleMatchesProject(
   return row.assigned_project_key === filter;
 }
 
-export function vehicleMatchesSearch(row: VehicleListRow, query: string): boolean {
+export function vehicleMatchesSearch(
+  row: VehicleListRow,
+  query: string,
+  field = "all",
+): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return [
-    row.bike_id,
-    row.reg_number,
-    row.chassis_no,
-    row.model,
-    row.make,
-    row.chip_no,
-    row.location_text,
-    row.owner_partner_name,
-    row.replaces_plate,
-    row.assigned_driver_name,
-    row.assigned_driver_code,
-    row.assigned_employee_id,
-    row.assigned_partner_name,
-    row.vehicle_type_label,
-  ]
-    .filter(Boolean)
-    .some((value) => String(value).toLowerCase().includes(needle));
+  const accessors: Record<string, (item: VehicleListRow) => string | null | undefined> = {
+    plate: (item) => item.reg_number,
+    name: (item) => item.assigned_driver_name,
+    employee_id: (item) => item.assigned_employee_id ?? item.assigned_driver_code,
+    code: (item) => item.assigned_driver_code,
+    status: (item) => item.status,
+    bike_id: (item) => item.bike_id,
+    chassis: (item) => item.chassis_no,
+    model: (item) => item.model,
+    make: (item) => item.make,
+    chip: (item) => item.chip_no,
+    location: (item) => item.location_text,
+    owner: (item) => item.owner_partner_name,
+    replaces: (item) => item.replaces_plate,
+    partner: (item) => item.assigned_partner_name,
+    type: (item) => item.vehicle_type_label,
+  };
+  if (field !== "all" && accessors[field]) {
+    const value = accessors[field](row);
+    return value != null && String(value).toLowerCase().includes(needle);
+  }
+  return Object.values(accessors).some((read) => {
+    const value = read(row);
+    return value != null && String(value).toLowerCase().includes(needle);
+  });
 }
 
 export function vehicleListKpis(

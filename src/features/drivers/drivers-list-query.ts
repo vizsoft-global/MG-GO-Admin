@@ -22,6 +22,10 @@ export const DRIVERS_FILTER_KINDS = {
   todayDeliveries: "range",
   status: "list",
   attendance: "list",
+  employeeStatus: "list",
+  section: "list",
+  nationalityCategory: "list",
+  project: "list",
 } as const;
 
 export type DriversFixedColumn = keyof typeof DRIVERS_FILTER_KINDS;
@@ -176,5 +180,11 @@ export function mapDriversPageRow(raw: RawPageRow): DriverListPageRow {
     company_name: str(raw.company_name),
     company_client_code: str(raw.company_client_code),
     company_tone: tone && COMPANY_TONES.has(tone) ? tone : "unassigned",
+    employee_status_key: str(raw.employee_status_key),
+    section_keys: strArray(raw.section_keys),
+    nationality_category_keys: strArray(raw.nationality_category_keys),
+    project_key: str(raw.project_key),
+    civil_id: str(raw.civil_id),
+    passport_number: str(raw.passport_number),
   };
 }

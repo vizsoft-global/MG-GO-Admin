@@ -55,7 +55,29 @@
     },
     "yes": "نعم",
     "no": "لا",
-    "backToApps": "العودة إلى كل التطبيقات"
+    "backToApps": "العودة إلى كل التطبيقات",
+    "listControls": {
+      "searchBy": "البحث حسب",
+      "searchFieldAll": "كل الحقول",
+      "searchFieldName": "اسم الموظف",
+      "searchFieldEmployeeId": "رقم الموظف",
+      "searchFieldZone": "المنطقة",
+      "searchFieldPassport": "رقم جواز السفر",
+      "searchFieldCivilId": "الرقم المدني",
+      "searchFieldOrderId": "رقم الطلب",
+      "searchFieldPlate": "اللوحة",
+      "searchFieldStatus": "الحالة",
+      "groupBy": "تجميع حسب",
+      "groupNone": "بدون تجميع",
+      "groupStatus": "الحالة",
+      "groupZone": "المنطقة",
+      "groupPartner": "الشريك",
+      "groupDate": "التاريخ",
+      "groupProject": "المشروع",
+      "viewTable": "جدول",
+      "viewCards": "بطاقات",
+      "clearSearch": "مسح البحث"
+    }
   },
   "nav": {
     "dashboard": "التطبيقات",
@@ -111,6 +133,10 @@
     "payroll": "الرواتب",
     "driverDevices": "أجهزة السائقين",
     "sourceCompanies": "الشركات",
+    "employeeStatuses": "حالات الموظف",
+    "employeeSections": "أقسام الموظف",
+    "nationalityCategories": "فئات الجنسية",
+    "bankCodes": "رموز البنوك",
     "employeedesk": "EmployeeDesk",
     "employeedeskAll": "كل الطلبات",
     "employeedeskIncoming": "الواردة",
@@ -1314,6 +1340,37 @@
       },
       "searchPlaceholder": "ابحث عن أي شيء…",
       "clearSearch": "مسح البحث",
+      "searchBy": "البحث حسب",
+      "searchFieldAll": "كل الحقول",
+      "searchFieldName": "اسم الموظف",
+      "searchFieldEmployeeId": "رقم الموظف",
+      "searchFieldZone": "المنطقة",
+      "searchFieldPassport": "رقم الجواز",
+      "searchFieldCivilId": "الرقم المدني",
+      "groupBy": "تجميع حسب",
+      "groupNone": "بدون تجميع",
+      "groupZone": "المنطقة",
+      "groupPartner": "الشريك",
+      "groupEmployeeStatus": "حالة الموظف",
+      "groupProject": "المشروع",
+      "groupSection": "القسم",
+      "groupNationalityCategory": "فئة الجنسية",
+      "viewTable": "عرض الجدول",
+      "viewCards": "عرض البطاقات",
+      "employeesDashboardLink": "لوحة الموظفين",
+      "employeesDashboard": {
+        "title": "لوحة الموظفين",
+        "subtitle": "عدادات مباشرة حسب المشروع والشريك والحالة وفئة الجنسية والقسم.",
+        "backToList": "العودة إلى الموظفين",
+        "live": "الموظفون الحاليون",
+        "archived": "مؤرشفون",
+        "byProject": "حسب المشروع",
+        "byPartner": "حسب الشريك",
+        "byStatus": "حسب حالة الموظف",
+        "byNationality": "حسب فئة الجنسية",
+        "bySection": "حسب القسم",
+        "unassigned": "غير معيّن"
+      },
       "filterZone": "المنطقة",
       "filterZoneAll": "كل المناطق",
       "filterPartner": "الشريك",
@@ -1390,6 +1447,7 @@
         "phone_exists": "رقم الهاتف مستخدم من سائق نشط آخر.",
         "civil_id_exists": "الرقم المدني مستخدم من سائق نشط آخر.",
         "employee_id_exists": "سائق نشط آخر يستخدم رقم MG هذا.",
+        "passport_exists": "سائق نشط آخر يستخدم رقم الجواز هذا.",
         "not_authorized": "ليس لديك صلاحية.",
         "save_failed": "فشلت الاستعادة. حاول مرة أخرى."
       },
@@ -1868,6 +1926,10 @@
       },
       "archiveDriver": "أرشفة السائق",
       "archiveConfirm": "أرشفة هذا السائق؟ سيُخفى من القائمة النشطة ولن يتمكن من تسجيل الدخول للتطبيق. لن يُعاد استخدام رقمه.",
+      "archiveReasonPrompt": "سبب الأرشفة (مطلوب)",
+      "archiveReasonLabel": "سبب الأرشفة",
+      "archiveReasonPlaceholder": "موظف سابق، نقل، استقالة…",
+      "archiveReasonRequired": "أدخل سبباً لأرشفة هذا السائق.",
       "archived": "تم أرشفة السائق",
       "archiveFailed": "تعذر أرشفة السائق. حاول مرة أخرى.",
       "restoreDriver": "استعادة السائق",
@@ -1878,6 +1940,7 @@
         "phone_exists": "رقم الهاتف مستخدم من سائق نشط آخر.",
         "civil_id_exists": "الرقم المدني مستخدم من سائق نشط آخر.",
         "employee_id_exists": "سائق نشط آخر يستخدم رقم MG هذا.",
+        "passport_exists": "سائق نشط آخر يستخدم رقم الجواز هذا.",
         "not_authorized": "ليس لديك صلاحية.",
         "save_failed": "فشلت الاستعادة. حاول مرة أخرى."
       },
@@ -1897,7 +1960,7 @@
       "removingDocument": "جاري الحذف…",
       "tryAgain": "حاول مرة أخرى",
       "documentsTabTitle": "المستندات المرفوعة",
-      "documentsTabSummary": "{count} من 4 مرفقة",
+      "documentsTabSummary": "{count} من 6 مرفقة",
       "documentsNotUploaded": "غير مرفوع",
       "documentsEmptyTitle": "لا توجد مستندات",
       "documentsEmptyDescription": "ارفع الرخصة أو البطاقة المدنية أو تصريح العمل أو جواز السفر من تعديل السائق.",
@@ -2321,7 +2384,9 @@
         "assets": "الأصول المُسلّمة",
         "customFields": "حقول مخصصة",
         "documents": "المستندات",
-        "documentsDescription": "جميع المرفقات اختيارية — أضف الملفات الآن أو أكملها لاحقًا."
+        "documentsDescription": "جميع المرفقات اختيارية — أضف الملفات الآن أو أكملها لاحقًا.",
+        "hr": "حالة الموظف",
+        "bank": "البيانات البنكية"
       },
       "assetsDisabled": "لن يُسجَّل أي أصول لهذا السائق.",
       "fields": {
@@ -2340,7 +2405,16 @@
         "vehicleType": "نوع المركبة",
         "clientId": "معرّف المنصة (اختياري)",
         "clientName": "المنصة (اختياري)",
-        "accommodation": "السكن (اختياري)"
+        "accommodation": "السكن (اختياري)",
+        "passportNumber": "رقم الجواز",
+        "employeeStatus": "حالة الموظف",
+        "sections": "القسم",
+        "nationalityCategories": "فئة الجنسية",
+        "beneficiaryCivilId": "الرقم المدني للمستفيد",
+        "bank": "بنك المستفيد",
+        "accountNumber": "رقم الحساب",
+        "iban": "IBAN",
+        "paymentCurrency": "عملة الدفع"
       },
       "placeholders": {
         "fullName": "أدخل الاسم الكامل",
@@ -2357,7 +2431,10 @@
         "clientId": "مثال: CLI-204",
         "clientName": "مثال: مجموعة الخليج للتجزئة",
         "accommodation": "المبنى / المنطقة",
-        "searchRestaurants": "بحث في المطاعم…"
+        "searchRestaurants": "بحث في المطاعم…",
+        "passportNumber": "أحرف وأرقام",
+        "searchStatus": "ابحث عن حالة…",
+        "searchBank": "ابحث عن بنك…"
       },
       "assets": {
         "gps": "جهاز GPS",
@@ -2399,7 +2476,9 @@
         "license": "رخصة القيادة",
         "civil_id": "البطاقة المدنية",
         "work_permit": "تصريح العمل",
-        "passport": "جواز السفر"
+        "passport": "جواز السفر",
+        "health_card": "البطاقة الصحية",
+        "operations_card": "بطاقة العمليات"
       },
       "documentExpiry": {
         "trackExpiry": "تتبع الانتهاء",
@@ -2465,7 +2544,10 @@
         "custom_field_required": "هذا الحقل مطلوب",
         "custom_field_letters_only": "يُسمح بالحروف والمسافات والشرطة والفاصلة العليا فقط",
         "custom_field_non_negative": "أدخل صفرًا أو رقمًا موجبًا",
-        "save_failed": "تعذر حفظ السائق. حاول مرة أخرى."
+        "save_failed": "تعذر حفظ السائق. حاول مرة أخرى.",
+        "passport_exists": "رقم الجواز مسجّل لموظف آخر.",
+        "invalid_passport": "الجواز أحرف وأرقام حتى 20 حرفاً.",
+        "invalid_bank": "تحقق من البنك والرقم المدني ورقم الحساب أو الآيبان."
       }
     },
     "documentExpiry": {
@@ -6640,7 +6722,9 @@
       "markPaidSuccess": "تم تعيين التشغيل كمدفوع",
       "markPaidFailed": "تعذر تعيين التشغيل كمدفوع.",
       "voidSuccess": "تم إلغاء التشغيل",
-      "voidFailed": "تعذر إلغاء التشغيل."
+      "voidFailed": "تعذر إلغاء التشغيل.",
+      "searchPlaceholder": "ابحث بالفترة أو الحالة",
+      "emptyFiltered": "لا توجد دفعات تطابق هذا البحث"
     },
     "deliveryRules": {
       "title": "قواعد التوصيل",
@@ -7412,6 +7496,36 @@
           "passwordMismatch": "كلمتا المرور غير متطابقتين.",
           "weakPassword": "يجب أن تكون كلمة المرور 8 أحرف على الأقل.",
           "passwordFailed": "تعذر تغيير كلمة المرور. حاول مرة أخرى."
+        }
+      },
+      "employeeCatalogs": {
+        "add": "إضافة",
+        "edit": "تعديل",
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "saved": "تم حفظ الكتالوج",
+        "invalid": "أدخل تسمية إنجليزية ومفتاحاً صالحاً.",
+        "colKey": "المفتاح",
+        "colLabelEn": "الإنجليزية",
+        "colLabelAr": "العربية",
+        "colSystem": "النوع",
+        "system": "نظام",
+        "custom": "مخصص",
+        "statusesTitle": "حالات الموظف",
+        "statusesSubtitle": "قيم حالة الموارد البشرية على الموظفين والتقارير.",
+        "sectionsTitle": "أقسام الموظف",
+        "sectionsSubtitle": "الأقسام المعيّنة للموظفين.",
+        "nationalityTitle": "فئات الجنسية",
+        "nationalitySubtitle": "مجموعات الجنسية على الموظفين ولوحة العد.",
+        "banksTitle": "رموز البنوك",
+        "banksSubtitle": "بنوك الكويت لتفاصيل دفع الموظف.",
+        "errors": {
+          "not_authorized": "ليس لديك صلاحية.",
+          "not_configured": "حفظ الكتالوج غير متاح في هذه البيئة.",
+          "invalid_key": "المفتاح أحرف صغيرة وأرقام وشرطة سفلية.",
+          "missing_fields": "التسمية الإنجليزية مطلوبة.",
+          "system_status_locked": "لا يمكن إعادة تسمية حالات النظام.",
+          "save_failed": "تعذر حفظ الكتالوج."
         }
       },
       "accessRequests": {
@@ -10304,6 +10418,22 @@
           "sourceCompanies": {
             "title": "الشركات",
             "body": "الشركات التي يُورَّد من خلالها السائقون."
+          },
+          "employeeStatuses": {
+            "title": "حالات الموظف",
+            "body": "حالات الموارد البشرية مثل جديد وجارٍ وموقوف."
+          },
+          "employeeSections": {
+            "title": "أقسام الموظف",
+            "body": "الأقسام المعيّنة في سجل الموظف."
+          },
+          "nationalityCategories": {
+            "title": "فئات الجنسية",
+            "body": "مجموعات الجنسية على الموظفين والتقارير."
+          },
+          "bankCodes": {
+            "title": "رموز البنوك",
+            "body": "بنوك الكويت لتفاصيل دفع الموظف."
           }
         }
       }

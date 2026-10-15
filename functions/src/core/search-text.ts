@@ -58,6 +58,8 @@ export type DriverSearchInput = {
   zoneName?: unknown;
   partnerName?: unknown;
   companyName?: unknown;
+  civilId?: unknown;
+  passport?: unknown;
 };
 
 /** Lowercase fields written on driver / intake create and update. Empty inputs are omitted. */
@@ -71,6 +73,8 @@ export function driverSearchStamp(input: DriverSearchInput): Record<string, stri
   const zone = lowerText(input.zoneName);
   const partner = lowerText(input.partnerName);
   const company = lowerText(input.companyName);
+  const civilId = digitsOnly(typeof input.civilId === "string" ? input.civilId : "") || lowerText(input.civilId);
+  const passport = lowerText(input.passport);
   const phone = digitsOnly(typeof input.phone === "string" ? input.phone : "");
   put(out, "name_lower", name);
   put(out, "driver_code_lower", code);
@@ -80,8 +84,10 @@ export function driverSearchStamp(input: DriverSearchInput): Record<string, stri
   put(out, "zone_name_lower", zone);
   put(out, "partner_name_lower", partner);
   put(out, "company_name_lower", company);
+  put(out, "civil_id_lower", civilId);
+  put(out, "passport_lower", passport);
   put(out, "phone_digits", phone);
-  const identity = [name, code, employee, clientName, clientId, zone, partner, company].filter(Boolean);
+  const identity = [name, code, employee, clientName, clientId, zone, partner, company, civilId, passport].filter(Boolean);
   if (identity.length > 0) {
     out.search_name = [...identity, phone].filter(Boolean).join(" ");
   }
@@ -128,8 +134,37 @@ export const DRIVER_PREFIX_FIELDS = [
   "zone_name_lower",
   "partner_name_lower",
   "company_name_lower",
+  "civil_id_lower",
+  "passport_lower",
   "search_name",
 ] as const;
+
+export const DRIVER_SEARCH_FIELD_MAP = {
+  all: null,
+  name: "name_lower",
+  employeeId: "employee_id_lower",
+  driverId: "driver_code_lower",
+  civilId: "civil_id_lower",
+  passport: "passport_lower",
+  zone: "zone_name_lower",
+  phone: "phone_digits",
+} as const;
+
+export type DriverSearchField = keyof typeof DRIVER_SEARCH_FIELD_MAP;
+
+export function driverPrefixQueriesForField(
+  term: string,
+  field: string | null | undefined,
+): { field: string; term: string }[] {
+  const mapped =
+    field && field !== "all" && field in DRIVER_SEARCH_FIELD_MAP
+      ? DRIVER_SEARCH_FIELD_MAP[field as DriverSearchField]
+      : null;
+  if (!mapped) return driverPrefixQueries(term);
+  const text = mapped === "phone_digits" || mapped === "civil_id_lower" ? digitsOnly(term) || lowerText(term) : lowerText(term);
+  if (!text) return [];
+  return [{ field: mapped, term: text }];
+}
 
 export const REQUEST_PREFIX_FIELDS = [
   "request_code_lower",

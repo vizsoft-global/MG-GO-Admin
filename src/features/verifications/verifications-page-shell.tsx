@@ -10,11 +10,17 @@ import {
   Loader2,
   Plus,
   RefreshCw,
-  Search,
   Upload,
-  X,
 } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -167,6 +173,8 @@ const SORT_KEYS: VerificationSortKey[] = [
 
 export function VerificationsPageShell() {
   const t = useTranslations("pages.verifications");
+  const labels = useListControlLabels();
+  const { prefs, update } = useListViewPrefs("verifications");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [tabFilter, setTabFilter] = useState<VerificationTabFilter>("all");
@@ -241,9 +249,37 @@ export function VerificationsPageShell() {
 
   const { data: stats } = useVerificationListStats(statsFilters);
 
-  const rows = useMemo(
+  const loadedRows = useMemo(
     () => data?.pages.flatMap((p) => p.rows) ?? [],
     [data],
+  );
+  const rows = useMemo(() => {
+    if (prefs.searchField === "all") return loadedRows;
+    return loadedRows.filter((row) =>
+      fieldSearchMatch(row, search, prefs.searchField, {
+        name: (item) => item.driver_name,
+        employee_id: (item) => item.employee_id ?? item.driver_code,
+        status: (item) => item.status,
+        restaurant: (item) => item.restaurant_name,
+        partner: (item) => item.partner_name,
+        driver_code: (item) => item.driver_code,
+      }),
+    );
+  }, [loadedRows, prefs.searchField, search]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        rows,
+        prefs.groupBy,
+        {
+          status: (row) => row.status,
+          partner: (row) => row.partner_name,
+          date: (row) => row.service_date,
+        },
+        Object.fromEntries(VERIFICATION_STATUSES.map((status) => [status, t(`status.${status}`)])),
+        "—",
+      ),
+    [prefs.groupBy, rows, t],
   );
 
   const totalCount = data?.pages[0]?.totalCount ?? 0;
@@ -372,7 +408,7 @@ export function VerificationsPageShell() {
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [hasNextPage, fetchNextPage]);
+  }, [hasNextPage, fetchNextPage, prefs.viewMode]);
 
   const handleExport = async (target: ExportTarget) => {
     setIsExporting(true);
@@ -565,25 +601,24 @@ export function VerificationsPageShell() {
               }}
               className="border-b-0 pb-0"
             />
-            <div className="relative w-full max-w-xl">
-              <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("searchPlaceholder")}
-                className="rounded-lg ps-9"
-              />
-              {search ? (
-                <button
-                  type="button"
-                  className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground"
-                  onClick={() => setSearch("")}
-                  aria-label={t("clearSearch")}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              ) : null}
-            </div>
+            <AppListControls
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={t("searchPlaceholder")}
+              clearSearchLabel={labels.clearSearch}
+              searchFields={[labels.field.all, labels.field.name, labels.field.employee_id, labels.field.status]}
+              searchField={prefs.searchField}
+              onSearchFieldChange={(value) => update({ searchField: value })}
+              searchFieldLabel={labels.searchBy}
+              groupByOptions={[labels.group.none, labels.group.status, labels.group.partner, labels.group.date]}
+              groupBy={prefs.groupBy}
+              onGroupByChange={(value) => update({ groupBy: value })}
+              groupByLabel={labels.groupBy}
+              viewMode={prefs.viewMode}
+              onViewModeChange={(value) => update({ viewMode: value })}
+              tableViewLabel={labels.viewTable}
+              cardsViewLabel={labels.viewCards}
+              filterSlot={
             <div className="flex flex-wrap gap-2">
               <Select
                 items={statusItems}
@@ -703,6 +738,8 @@ export function VerificationsPageShell() {
                 </Button>
               ) : null}
             </div>
+              }
+            />
             <p className="text-xs text-muted-foreground">
               {t("resultCount", { shown: rows.length, total: totalCount })}
             </p>
@@ -722,10 +759,64 @@ export function VerificationsPageShell() {
               }
             />
           </div>
+        ) : prefs.viewMode === "cards" ? (
+          <CardContent className="p-4">
+            <GroupedSections groups={grouped}>
+              {(groupRowsList) => (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {groupRowsList.map((row) => (
+                    <button
+                      type="button"
+                      key={row.id}
+                      className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                      onClick={() => openDetail(row)}
+                    >
+                      <p className="text-sm font-semibold">{row.driver_name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        #{row.driver_code} · {row.restaurant_name}
+                      </p>
+                      <div className="mt-2">
+                        <StatusPill variant={resolveStatusVariant(row.status)} dot={false}>
+                          {t(`status.${row.status}`)}
+                        </StatusPill>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
+            <div ref={loadMoreRef} className="flex flex-col items-center gap-2 border-t border-border py-4">
+              {isFetchingNextPage ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : hasNextPage ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer rounded-lg"
+                  onClick={() => void fetchNextPage()}
+                >
+                  {t("loadMore")}
+                </Button>
+              ) : rows.length > 0 ? (
+                <p className="text-xs text-muted-foreground">{t("endOfList")}</p>
+              ) : null}
+            </div>
+          </CardContent>
         ) : (
           <CardContent className="p-0">
             <AppDataTable columns={tableColumns}>
-              {rows.map((row) => (
+              {grouped.flatMap((group) => [
+                ...(prefs.groupBy !== "none"
+                  ? [
+                      <AppDataTableRow key={`g-${group.key}`} className="bg-muted/40 hover:bg-muted/40">
+                        <TableCell colSpan={10} className="text-xs font-semibold">
+                          {group.label} · {group.rows.length}
+                        </TableCell>
+                      </AppDataTableRow>,
+                    ]
+                  : []),
+                ...group.rows.map((row) => (
                 <AppDataTableRow
                   key={row.id}
                   className="cursor-pointer"
@@ -785,7 +876,8 @@ export function VerificationsPageShell() {
                     </Button>
                   </TableCell>
                 </AppDataTableRow>
-              ))}
+                )),
+              ])}
             </AppDataTable>
             <div ref={loadMoreRef} className="flex flex-col items-center gap-2 border-t border-border py-4">
               {isFetchingNextPage ? (

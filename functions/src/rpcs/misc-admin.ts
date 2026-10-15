@@ -12,7 +12,8 @@ import { kuwaitDayString } from "../core/kuwait";
 import { applyDeliveryRollup } from "../core/rollups";
 import { stampStoredRow } from "../core/search-text";
 import { notifyDriverTransactional as writeTransactionalNotification } from "./visits-shared";
-import { mapInboxListItem } from "./driver-push-tokens";
+import { inboxListMillis, inboxMatchesBefore, mapInboxListItem } from "./driver-push-tokens";
+import type { Dict } from "./_shared";
 
 /**
  * Firestore caps a batched write at 500 operations and an `in` filter at 30.
@@ -118,19 +119,26 @@ export const driverListNotifications = onCall(async (request) => {
   const unreadOnly = pickBoolean(data, "unreadOnly", "p_unread_only");
 
   const db = getFirestore();
-  let query = db
+  // orderBy(created_at) drops documents that never received the field. The
+  // unread count does not order, so the badge can be 1 while the list is empty.
+  const snapshot = await db
     .collection(COLLECTIONS.notificationDispatchItems)
     .where("driver_id", "==", driverId)
-    .where("dismissed_at", "==", null);
+    .where("dismissed_at", "==", null)
+    .limit(SCAN_CAP)
+    .get();
 
-  if (before) query = query.where("created_at", "<", before);
-  const snapshot = await query.orderBy("created_at", "desc").limit(limit).get();
+  let rows = snapshot.docs.map((doc) => ({
+    id: doc.id,
+    data: (doc.data() ?? {}) as Dict,
+  }));
+  if (before) rows = rows.filter((row) => inboxMatchesBefore(row.data, before));
+  if (unreadOnly) rows = rows.filter((row) => !row.data["opened_at"]);
+  rows.sort((a, b) => inboxListMillis(b.data) - inboxListMillis(a.data));
+  rows = rows.slice(0, limit);
 
-  let rows = snapshot.docs;
-  if (unreadOnly) rows = rows.filter((doc) => !doc.get("opened_at"));
-
-  const campaignRefs = rows.map((doc) =>
-    db.collection(COLLECTIONS.notificationCampaigns).doc(String(doc.get("campaign_id"))),
+  const campaignRefs = rows.map((row) =>
+    db.collection(COLLECTIONS.notificationCampaigns).doc(String(row.data["campaign_id"] ?? "")),
   );
   const campaigns = campaignRefs.length ? await db.getAll(...campaignRefs) : [];
   const campaignById = new Map(campaigns.map((snap) => [snap.id, snap.data() ?? {}]));
@@ -143,12 +151,11 @@ export const driverListNotifications = onCall(async (request) => {
     .count()
     .get();
 
-  const items = rows.map((doc) => {
-    const item = doc.data() ?? {};
-    const campaign = campaignById.get(String(item.campaign_id)) ?? {};
+  const items = rows.map((row) => {
+    const campaign = campaignById.get(String(row.data["campaign_id"] ?? "")) ?? {};
     return {
-      dispatch_item_id: doc.id,
-      ...mapInboxListItem(item, campaign),
+      dispatch_item_id: row.id,
+      ...mapInboxListItem(row.data, campaign),
     };
   });
 

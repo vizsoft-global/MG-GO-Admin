@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { tokenPrefixMatch } from "@/lib/search/prefix";
 import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
@@ -12,11 +11,18 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Search,
   Users,
   X,
 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -28,7 +34,6 @@ import {
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CardContent } from "@/components/ui/card";
 import { SearchSelect } from "@/components/ui/search-select";
@@ -137,6 +142,8 @@ function RestaurantsPageContent() {
   );
 
   const { data: restaurants = [], isLoading, isError, refetch } = useRestaurantsList();
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("restaurants");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [partnerFilter, setPartnerFilter] = useState("all");
@@ -202,15 +209,15 @@ function RestaurantsPageContent() {
     hasLocationFilter !== "all";
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return restaurants.filter((r) => {
       if (
-        q &&
-        !(
-          tokenPrefixMatch(r.name, q) ||
-          tokenPrefixMatch(r.partner_name, q) ||
-          tokenPrefixMatch(r.external_merchant_id ?? "", q)
-        )
+        !fieldSearchMatch(r, search, prefs.searchField, {
+          name: (row) => row.name,
+          zone: (row) => row.zone_name,
+          status: (row) => row.status,
+          partner: (row) => row.partner_name,
+          merchant: (row) => row.external_merchant_id,
+        })
       ) {
         return false;
       }
@@ -226,12 +233,28 @@ function RestaurantsPageContent() {
   }, [
     restaurants,
     search,
+    prefs.searchField,
     statusFilter,
     partnerFilter,
     zoneFilter,
     hasDriversFilter,
     hasLocationFilter,
   ]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        {
+          status: (row) => row.status,
+          zone: (row) => row.zone_name,
+          partner: (row) => row.partner_name,
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, visible],
+  );
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -406,85 +429,94 @@ function RestaurantsPageContent() {
                 {countLabel}
               </p>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t("searchPlaceholder")}
-                  className="h-9 rounded-lg bg-background ps-9 pe-9"
-                  aria-label={t("searchPlaceholder")}
-                />
-                {search ? (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
-                    aria-label={t("clearSearch")}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <SearchSelect
-                  items={partnerSelectItems}
-                  value={partnerFilter}
-                  onChange={(v) => setPartnerFilter(v ?? "all")}
-                  placeholder={t("filterPartner")}
-                  searchPlaceholder={t("filterPartner")}
-                  defaultLimit={8}
-                  recentsKey="restaurants-partner-filter"
-                  className="w-full min-w-[140px] sm:w-[160px]"
-                  clearable={false}
-                />
-                <SearchSelect
-                  items={zoneSelectItems}
-                  value={zoneFilter}
-                  onChange={(v) => setZoneFilter(v ?? "all")}
-                  placeholder={t("filterZone")}
-                  searchPlaceholder={t("filterZone")}
-                  defaultLimit={8}
-                  recentsKey="restaurants-zone-filter"
-                  className="w-full min-w-[140px] sm:w-[160px]"
-                  clearable={false}
-                />
-                <SearchSelect
-                  items={hasDriversSelectItems}
-                  value={hasDriversFilter}
-                  onChange={(v) =>
-                    setHasDriversFilter((v as HasDriversFilter) ?? "all")
-                  }
-                  placeholder={t("filterHasDrivers")}
-                  searchPlaceholder={t("filterHasDrivers")}
-                  defaultLimit={8}
-                  recentsKey="restaurants-has-drivers-filter"
-                  className="w-full min-w-[140px] sm:w-[160px]"
-                  clearable={false}
-                />
-                <SearchSelect
-                  items={hasLocationSelectItems}
-                  value={hasLocationFilter}
-                  onChange={(v) =>
-                    setHasLocationFilter((v as HasLocationFilter) ?? "all")
-                  }
-                  placeholder={t("filterHasLocation")}
-                  searchPlaceholder={t("filterHasLocation")}
-                  defaultLimit={8}
-                  recentsKey="restaurants-has-location-filter"
-                  className="w-full min-w-[140px] sm:w-[160px]"
-                  clearable={false}
-                />
-                <AppTableColumnPicker
-                  options={columnPickerOptions}
-                  isVisible={isColumnVisible}
-                  onToggle={toggleColumn}
-                  onReset={resetColumns}
-                  hiddenCount={hiddenToggleableCount}
-                />
-              </div>
-            </div>
+            <AppListControls
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={t("searchPlaceholder")}
+              searchAriaLabel={t("searchPlaceholder")}
+              clearSearchLabel={labels.clearSearch}
+              searchFields={[
+                labels.field.all,
+                labels.field.name,
+                labels.field.zone,
+                labels.field.status,
+              ]}
+              searchField={prefs.searchField}
+              onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+              searchFieldLabel={labels.searchBy}
+              groupByOptions={[
+                labels.group.none,
+                labels.group.status,
+                labels.group.zone,
+                labels.group.partner,
+              ]}
+              groupBy={prefs.groupBy}
+              onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+              groupByLabel={labels.groupBy}
+              viewMode={prefs.viewMode}
+              onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+              tableViewLabel={labels.viewTable}
+              cardsViewLabel={labels.viewCards}
+              filterSlot={
+                <>
+                  <SearchSelect
+                    items={partnerSelectItems}
+                    value={partnerFilter}
+                    onChange={(v) => setPartnerFilter(v ?? "all")}
+                    placeholder={t("filterPartner")}
+                    searchPlaceholder={t("filterPartner")}
+                    defaultLimit={8}
+                    recentsKey="restaurants-partner-filter"
+                    className="w-full min-w-[140px] sm:w-[160px]"
+                    clearable={false}
+                  />
+                  <SearchSelect
+                    items={zoneSelectItems}
+                    value={zoneFilter}
+                    onChange={(v) => setZoneFilter(v ?? "all")}
+                    placeholder={t("filterZone")}
+                    searchPlaceholder={t("filterZone")}
+                    defaultLimit={8}
+                    recentsKey="restaurants-zone-filter"
+                    className="w-full min-w-[140px] sm:w-[160px]"
+                    clearable={false}
+                  />
+                  <SearchSelect
+                    items={hasDriversSelectItems}
+                    value={hasDriversFilter}
+                    onChange={(v) =>
+                      setHasDriversFilter((v as HasDriversFilter) ?? "all")
+                    }
+                    placeholder={t("filterHasDrivers")}
+                    searchPlaceholder={t("filterHasDrivers")}
+                    defaultLimit={8}
+                    recentsKey="restaurants-has-drivers-filter"
+                    className="w-full min-w-[140px] sm:w-[160px]"
+                    clearable={false}
+                  />
+                  <SearchSelect
+                    items={hasLocationSelectItems}
+                    value={hasLocationFilter}
+                    onChange={(v) =>
+                      setHasLocationFilter((v as HasLocationFilter) ?? "all")
+                    }
+                    placeholder={t("filterHasLocation")}
+                    searchPlaceholder={t("filterHasLocation")}
+                    defaultLimit={8}
+                    recentsKey="restaurants-has-location-filter"
+                    className="w-full min-w-[140px] sm:w-[160px]"
+                    clearable={false}
+                  />
+                  <AppTableColumnPicker
+                    options={columnPickerOptions}
+                    isVisible={isColumnVisible}
+                    onToggle={toggleColumn}
+                    onReset={resetColumns}
+                    hiddenCount={hiddenToggleableCount}
+                  />
+                </>
+              }
+            />
           </div>
         }
         filterChips={
@@ -611,6 +643,49 @@ function RestaurantsPageContent() {
               </Button>
             ) : null}
           </div>
+        ) : prefs.viewMode === "cards" ? (
+          <CardContent className="p-4">
+            {showEmptySearch ? (
+              <AppEmptyState
+                title={t("emptySearchTitle")}
+                description={t("emptySearchDescription")}
+              />
+            ) : (
+              <GroupedSections groups={grouped}>
+                {(rows) => (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {rows.map((row) => (
+                      <button
+                        type="button"
+                        key={row.id}
+                        className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                        onClick={() => handleRowClick(row)}
+                      >
+                        <p className="truncate text-sm font-semibold">{row.name}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {row.partner_name || row.zone_name || "—"}
+                        </p>
+                        <div className="mt-2">
+                          <Badge
+                            variant={
+                              row.status === "published"
+                                ? "default"
+                                : row.status === "archived"
+                                  ? "outline"
+                                  : "secondary"
+                            }
+                            className="rounded-lg"
+                          >
+                            {statusBadgeLabel(row.status)}
+                          </Badge>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </GroupedSections>
+            )}
+          </CardContent>
         ) : (
           <CardContent className="p-0">
             <AppDataTable
@@ -627,7 +702,26 @@ function RestaurantsPageContent() {
               }
             >
               {!showEmptySearch
-                ? visible.map((row) => (
+                ? grouped.flatMap((group) => [
+                    ...(prefs.groupBy !== "none"
+                      ? [
+                          <AppDataTableRow
+                            key={`g-${group.key}`}
+                            className="hover:bg-transparent"
+                          >
+                            <TableCell
+                              colSpan={tableColumns.length}
+                              className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
+                            >
+                              {group.label}
+                              <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                                {group.rows.length}
+                              </span>
+                            </TableCell>
+                          </AppDataTableRow>,
+                        ]
+                      : []),
+                    ...group.rows.map((row) => (
                     <AppDataTableRow
                       key={row.id}
                       tabIndex={0}
@@ -797,7 +891,8 @@ function RestaurantsPageContent() {
                         </div>
                       </VisibleTableCell>
                     </AppDataTableRow>
-                  ))
+                    )),
+                  ])
                 : null}
             </AppDataTable>
           </CardContent>
