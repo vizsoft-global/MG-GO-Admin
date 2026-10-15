@@ -35,6 +35,11 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { slug: "dashboard.view", label: "View dashboard", category: "dashboard" },
   { slug: "drivers.view", label: "View employees", category: "drivers" },
   { slug: "drivers.manage", label: "Manage employees", category: "drivers" },
+  {
+    slug: "drivers.bank_view",
+    label: "View employee bank details",
+    category: "drivers",
+  },
   { slug: "driver_groups.view", label: "View driver groups", category: "drivers" },
   { slug: "driver_groups.manage", label: "Manage driver groups", category: "drivers" },
   { slug: "driver_ops.view", label: "View driver app activity", category: "drivers" },

@@ -36,6 +36,9 @@ describe("prefix match", () => {
     assert.equal(stamped.driver_code_lower, "10088");
     assert.equal(stamped.employee_id_lower, "108899");
     assert.equal(stamped.phone_digits, "96551234567");
+    const withIds = driverSearchStamp({ civilId: "287010100001", passport: "A1234567" });
+    assert.equal(withIds.civil_id_lower, "287010100001");
+    assert.equal(withIds.passport_lower, "a1234567");
     assert.equal(stamped.search_name?.startsWith("jenson doe"), true);
     assert.deepEqual(driverSearchStamp({ phone: "5123" }), { phone_digits: "5123" });
   });

@@ -66,6 +66,7 @@ export const SCAN_FUNCTIONS = [
   "adminListAttendanceDaily",
   "adminAttendanceKpis",
   "adminIncentiveDailyReport",
+  "adminEmployeesDashboard",
 ] as const;
 
 export const HEAVY_FUNCTIONS = [

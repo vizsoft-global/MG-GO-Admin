@@ -3,10 +3,15 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { ChevronDown, Loader2, Plus, Search } from "lucide-react";
+import { ChevronDown, Loader2, Plus } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
+import {
+  AppListControls,
+  fieldSearchMatch,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +56,8 @@ function ZonesPageSkeleton() {
 
 function ZonesPageContent() {
   const t = useTranslations("pages.zones");
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("zones");
   const router = useRouter();
   const { can } = useAuth();
   const canManage = can("zones.manage");
@@ -92,14 +99,12 @@ function ZonesPageContent() {
     () =>
       zones.filter((z) => {
         if (!zoneMatchesKindFilter(z, kindFilter)) return false;
-        const query = search.trim().toLowerCase();
-        if (!query) return true;
-        return (
-          z.name.toLowerCase().includes(query) ||
-          z.code.toLowerCase().includes(query)
-        );
+        return fieldSearchMatch(z, search, prefs.searchField, {
+          name: (row) => row.name,
+          code: (row) => row.code,
+        });
       }),
-    [zones, kindFilter, search],
+    [kindFilter, prefs.searchField, search, zones],
   );
 
   const kindChips: Array<{ id: "all" | GeofenceKind; label: string }> = [
@@ -129,41 +134,45 @@ function ZonesPageContent() {
           <ZoneGeofencesSummary zones={zones} compact />
 
           <div className="shrink-0 space-y-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <div className="relative">
-              <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={t("placeholders.searchZones")}
-                className="h-9 rounded-lg border-slate-200 bg-slate-50 ps-8 text-sm dark:border-slate-700 dark:bg-slate-800"
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex h-8 flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
-                  {t("geofence.bulkActions")}
-                  <ChevronDown className="ms-1 h-3.5 w-3.5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-44">
-                  <DropdownMenuItem disabled>{t("geofence.bulkEnable")}</DropdownMenuItem>
-                  <DropdownMenuItem disabled>{t("geofence.bulkDisable")}</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem disabled>{t("geofence.bulkDelete")}</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <ClearAllModuleButton entity="zones" compact />
-              {canManage ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8 w-full cursor-pointer rounded-lg sm:w-auto sm:min-w-[9.5rem]"
-                  onClick={handleAdd}
-                >
-                  <Plus className="me-1.5 h-3.5 w-3.5" />
-                  {t("geofence.createButton")}
-                </Button>
-              ) : null}
-            </div>
+            <AppListControls
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={t("placeholders.searchZones")}
+              searchAriaLabel={t("placeholders.searchZones")}
+              clearSearchLabel={labels.clearSearch}
+              searchFields={[labels.field.all, labels.field.name]}
+              searchField={prefs.searchField}
+              onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+              searchFieldLabel={labels.searchBy}
+              filterSlot={
+                <>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
+                      {t("geofence.bulkActions")}
+                      <ChevronDown className="ms-1 h-3.5 w-3.5" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-44">
+                      <DropdownMenuItem disabled>{t("geofence.bulkEnable")}</DropdownMenuItem>
+                      <DropdownMenuItem disabled>{t("geofence.bulkDisable")}</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem disabled>{t("geofence.bulkDelete")}</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <ClearAllModuleButton entity="zones" compact />
+                  {canManage ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-9 w-full cursor-pointer rounded-lg sm:w-auto sm:min-w-[9.5rem]"
+                      onClick={handleAdd}
+                    >
+                      <Plus className="me-1.5 h-3.5 w-3.5" />
+                      {t("geofence.createButton")}
+                    </Button>
+                  ) : null}
+                </>
+              }
+            />
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">

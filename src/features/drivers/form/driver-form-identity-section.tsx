@@ -31,6 +31,8 @@ export function DriverFormIdentitySection({
   onCivilIdChange,
   employeeId,
   onEmployeeIdChange,
+  passportNumber,
+  onPassportNumberChange,
   employeeIdRequired = true,
   nationality,
   onNationalityChange,
@@ -62,6 +64,8 @@ export function DriverFormIdentitySection({
   onCivilIdChange: (next: string) => void;
   employeeId: string;
   onEmployeeIdChange: (next: string) => void;
+  passportNumber: string;
+  onPassportNumberChange: (next: string) => void;
   employeeIdRequired?: boolean;
   nationality: string;
   onNationalityChange: (next: string) => void;
@@ -79,6 +83,7 @@ export function DriverFormIdentitySection({
     phone: string;
     civilId: string;
     employeeId: string;
+    passportNumber: string;
     nationality: string;
     riderCategory: string;
     sourceCompany: string;
@@ -99,6 +104,7 @@ export function DriverFormIdentitySection({
     civilId: string;
     employeeId?: string;
     employeeIdHelp?: string;
+    passportNumber?: string;
     nationality: string;
     searchNationality: string;
     sourceCompany?: string;
@@ -115,6 +121,7 @@ export function DriverFormIdentitySection({
     phone?: string;
     civilId?: string;
     employeeId?: string;
+    passportNumber?: string;
   };
 }) {
   const countryItems = useMemo(() => countrySearchSelectItems(), []);
@@ -208,7 +215,7 @@ export function DriverFormIdentitySection({
         </FieldBlock>
       </div>
 
-      <div className="grid grid-cols-[8.5rem_minmax(0,1fr)_11rem_10rem_8.5rem] items-end gap-2.5">
+      <div className="grid grid-cols-[8.5rem_10rem_minmax(0,1fr)_11rem_10rem_8.5rem] items-end gap-2.5">
         <FieldBlock>
           <FieldLabel htmlFor="driver-employee-id">
             {labels.employeeId}
@@ -237,6 +244,23 @@ export function DriverFormIdentitySection({
             </p>
           ) : null}
           <FieldError message={errors.employeeId} />
+        </FieldBlock>
+
+        <FieldBlock>
+          <FieldLabel htmlFor="driver-passport">{labels.passportNumber}</FieldLabel>
+          <Input
+            id="driver-passport"
+            value={passportNumber}
+            disabled={disabled}
+            maxLength={20}
+            placeholder={placeholders.passportNumber}
+            onChange={(event) =>
+              onPassportNumberChange(event.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 20))
+            }
+            className="h-9 rounded-md font-mono text-sm uppercase"
+            aria-invalid={Boolean(errors.passportNumber)}
+          />
+          <FieldError message={errors.passportNumber} />
         </FieldBlock>
 
         <FieldBlock>

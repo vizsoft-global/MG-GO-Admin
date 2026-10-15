@@ -1,10 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { Bell, Copy, Loader2, Plus, RefreshCw, Send, ShieldOff } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
+import {
+  AppListControls,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -43,6 +50,10 @@ export function NotificationsPageShell() {
   const auth = useAuth();
   const canManage = auth.can("notifications.manage");
 
+  const tCommon = useTranslations("common");
+  const labels = useListControlLabels();
+  const { prefs, update } = useListViewPrefs("notifications");
+  const [search, setSearch] = useState("");
   const { data: kpis, isLoading: kpisLoading, refetch: refetchKpis } = useNotificationDashboard();
   const {
     data: campaignPages,
@@ -56,6 +67,29 @@ export function NotificationsPageShell() {
   const campaigns = useMemo(
     () => campaignPages?.pages.flatMap((page) => page.rows) ?? [],
     [campaignPages],
+  );
+  const filteredCampaigns = useMemo(
+    () =>
+      campaigns.filter((row) =>
+        fieldSearchMatch(row, search, prefs.searchField, {
+          name: (item) => item.title,
+          status: (item) => item.status,
+        }),
+      ),
+    [campaigns, prefs.searchField, search],
+  );
+  const groupedCampaigns = useMemo(
+    () =>
+      groupRows(
+        filteredCampaigns,
+        prefs.groupBy,
+        {
+          status: (row) => row.status,
+        },
+        {},
+        "—",
+      ),
+    [filteredCampaigns, prefs.groupBy],
   );
   const totalCount = campaignPages?.pages[0]?.totalCount ?? campaigns.length;
 
@@ -132,6 +166,22 @@ export function NotificationsPageShell() {
             {t("refresh")}
           </Button>
         }
+        toolbar={
+          <AppListControls
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={tCommon("search")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[labels.field.all, labels.field.name, labels.field.status]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => update({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[labels.group.none, labels.group.status]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => update({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+          />
+        }
       >
         <CardContent className="p-0">
           {isLoading ? (
@@ -143,7 +193,15 @@ export function NotificationsPageShell() {
           ) : (
             <>
               <AppDataTable columns={tableColumns}>
-                {campaigns.map((row) => (
+                {groupedCampaigns.flatMap((group) => [
+                  prefs.groupBy !== "none" ? (
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={6} className="bg-muted/40 py-2 text-xs font-semibold">
+                        {group.label}
+                      </TableCell>
+                    </AppDataTableRow>
+                  ) : null,
+                  ...group.rows.map((row) => (
                   <AppDataTableRow key={row.id}>
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -193,11 +251,12 @@ export function NotificationsPageShell() {
                       </div>
                     </TableCell>
                   </AppDataTableRow>
-                ))}
+                  )),
+                ])}
               </AppDataTable>
               <div className="flex flex-col items-center gap-2 border-t border-border py-4">
                 <p className="text-xs text-muted-foreground">
-                  {t("showingCount", { visible: campaigns.length, total: totalCount })}
+                  {t("showingCount", { visible: filteredCampaigns.length, total: totalCount })}
                 </p>
                 {isFetchingNextPage ? (
                   <Loader2 className="size-5 animate-spin text-muted-foreground" />

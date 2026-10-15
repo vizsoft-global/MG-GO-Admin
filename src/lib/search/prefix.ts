@@ -53,6 +53,8 @@ export function driverSearchStamp(input: {
   zoneName?: unknown;
   partnerName?: unknown;
   companyName?: unknown;
+  civilId?: unknown;
+  passport?: unknown;
 }): Record<string, string> {
   const out: Record<string, string> = {};
   const name = lowerText(input.fullName) || lowerText(input.name);
@@ -63,6 +65,8 @@ export function driverSearchStamp(input: {
   const zone = lowerText(input.zoneName);
   const partner = lowerText(input.partnerName);
   const company = lowerText(input.companyName);
+  const civilId = digitsOnly(typeof input.civilId === "string" ? input.civilId : "") || lowerText(input.civilId);
+  const passport = lowerText(input.passport);
   const phone = digitsOnly(typeof input.phone === "string" ? input.phone : "");
   put(out, "name_lower", name);
   put(out, "driver_code_lower", code);
@@ -72,8 +76,10 @@ export function driverSearchStamp(input: {
   put(out, "zone_name_lower", zone);
   put(out, "partner_name_lower", partner);
   put(out, "company_name_lower", company);
+  put(out, "civil_id_lower", civilId);
+  put(out, "passport_lower", passport);
   put(out, "phone_digits", phone);
-  const identity = [name, code, employee, clientName, clientId, zone, partner, company].filter(Boolean);
+  const identity = [name, code, employee, clientName, clientId, zone, partner, company, civilId, passport].filter(Boolean);
   if (identity.length > 0) out.search_name = [...identity, phone].filter(Boolean).join(" ");
   return out;
 }
@@ -158,6 +164,8 @@ export function stampSearchFields(table: string, data: Record<string, unknown>):
         zoneName: data.zone_name,
         partnerName: data.partner_name,
         companyName: data.company_name,
+        civilId: data.civil_id,
+        passport: data.passport_number,
       }),
     );
     return;
@@ -204,6 +212,8 @@ const STAMP_KEYS = [
   "zone_name_lower",
   "partner_name_lower",
   "company_name_lower",
+  "civil_id_lower",
+  "passport_lower",
   "phone_digits",
   "search_name",
   "merchant_id_lower",

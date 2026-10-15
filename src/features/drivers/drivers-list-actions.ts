@@ -34,6 +34,8 @@ async function requireDriversView() {
 export type DriversPageQuery = {
   tab: DriversTab;
   search: string;
+  searchField?: string;
+  groupBy?: string;
   filters: DriversColumnFilters;
   sort: DriversSort;
 };
@@ -50,6 +52,8 @@ function normalizeQuery(query: DriversPageQuery) {
   return {
     p_tab: TABS.has(query.tab) ? query.tab : "all",
     p_search: query.search.trim().slice(0, 200) || undefined,
+    p_search_field: query.searchField && query.searchField !== "all" ? query.searchField : undefined,
+    p_group_by: query.groupBy && query.groupBy !== "none" ? query.groupBy : undefined,
     p_filters: sanitizeDriversFilters(query.filters) as unknown as Json,
     p_sort_key: sortKey,
     p_sort_dir: query.sort.dir === "desc" ? "desc" : "asc",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 import {
@@ -10,16 +10,24 @@ import {
   Download,
   Eye,
   FilterX,
+  LayoutDashboard,
   Loader2,
   Pencil,
   Plus,
   RefreshCw,
-  Search,
   Upload,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  groupRows,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
+import { EmployeeStatusBadge } from "@/features/employees/employee-status-badge";
+import { catalogLabel } from "@/features/employees/employee-catalogs";
+import { useEmployeeStatuses } from "@/features/employees/use-employee-catalogs";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -32,7 +40,6 @@ import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -169,6 +176,7 @@ function CompanyClientIdCell({ row, notSet }: { row: DriverListPageRow; notSet: 
 function DriversPageContent() {
   const t = useTranslations("pages.drivers");
   const tCommon = useTranslations("common");
+  const locale = useLocale();
   // The quick-edit lookup targets one driver record, so its "not found" copy is
   // the driver-detail message rather than a second, drifting string here.
   const tDriverDetail = useTranslations("pages.driverDetail");
@@ -189,6 +197,8 @@ function DriversPageContent() {
   const [tabFilter, setTabFilter] = useState<DriversTab>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const { prefs, update: updateListPrefs } = useListViewPrefs("drivers");
+  const statusesQuery = useEmployeeStatuses();
   const [columnFilters, setColumnFilters] = useState<DriversColumnFilters>({});
   const [sort, setSort] = useState<DriversSort>(DEFAULT_DRIVERS_SORT);
 
@@ -198,8 +208,15 @@ function DriversPageContent() {
   }, [search]);
 
   const query = useMemo(
-    () => ({ tab: tabFilter, search: debouncedSearch, filters: columnFilters, sort }),
-    [tabFilter, debouncedSearch, columnFilters, sort],
+    () => ({
+      tab: tabFilter,
+      search: debouncedSearch,
+      searchField: prefs.searchField,
+      groupBy: prefs.groupBy,
+      filters: columnFilters,
+      sort,
+    }),
+    [tabFilter, debouncedSearch, prefs.searchField, prefs.groupBy, columnFilters, sort],
   );
   const pageQuery = useDriversPage(query);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = pageQuery;
@@ -207,6 +224,27 @@ function DriversPageContent() {
     () => pageQuery.data?.pages.flatMap((p) => p.rows) ?? [],
     [pageQuery.data],
   );
+  const groupedDrivers = useMemo(() => {
+    const statusRows = statusesQuery.data ?? [];
+    const labels: Record<string, string> = {};
+    for (const row of statusRows) {
+      labels[row.key] = catalogLabel(row.key, statusRows, locale);
+    }
+    return groupRows(
+      drivers,
+      prefs.groupBy,
+      {
+        zone: (row) => row.zone_name,
+        partner: (row) => row.partner_name,
+        employee_status: (row) => row.employee_status_key,
+        project: (row) => row.project_key,
+        section: (row) => row.section_keys[0],
+        nationality_category: (row) => row.nationality_category_keys[0],
+      },
+      labels,
+      t("companyUnassigned"),
+    );
+  }, [drivers, prefs.groupBy, statusesQuery.data, locale, t]);
   const firstPage = pageQuery.data?.pages[0];
   const kpiCounts = firstPage?.kpis ?? EMPTY_KPIS;
   const filteredTotal = firstPage?.filteredTotal ?? 0;
@@ -228,7 +266,7 @@ function DriversPageContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [quickEditId, setQuickEditId] = useState<string | null>(null);
-  const loadMoreRef = useRef<HTMLTableRowElement | null>(null);
+  const loadMoreRef = useRef<HTMLElement | null>(null);
   const quickEditQuery = useDriverDetail(quickEditId ?? "");
   const quickEditDriver = quickEditQuery.data ?? null;
 
@@ -514,6 +552,15 @@ function DriversPageContent() {
 
   return (
     <AppPage className="space-y-4">
+      <div className="flex justify-end">
+        <Link
+          href="/drivers/dashboard"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-primary hover:bg-primary/10"
+        >
+          <LayoutDashboard className="h-3.5 w-3.5" aria-hidden />
+          {t("employeesDashboardLink")}
+        </Link>
+      </div>
       <DriversKpiStrip
         {...kpiCounts}
         labels={{
@@ -528,74 +575,85 @@ function DriversPageContent() {
 
       <AppListCard
         toolbar={
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-              <Select
-                items={tabSelectItems}
-                value={tabFilter}
-                onValueChange={(value) => {
-                  if (value) setTabFilter(value as DriversTab);
-                }}
-              >
-                <SelectTrigger className="h-9 w-[108px] shrink-0 cursor-pointer rounded-lg text-xs">
-                  <SelectValue placeholder={t("filterView")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {tabSelectItems.map((item) => (
-                    <SelectItem key={item.value} value={item.value} className="cursor-pointer">
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t("searchPlaceholder")}
-                  className="h-9 rounded-lg bg-background ps-8 pe-8 text-xs"
-                  aria-label={t("searchPlaceholder")}
-                />
-                {search ? (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    className="absolute end-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
-                    aria-label={t("clearSearch")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                ) : null}
-              </div>
-
-              {activeFilterCount > 0 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => setColumnFilters({})}
+          <AppListControls
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={t("searchPlaceholder")}
+            searchAriaLabel={t("searchPlaceholder")}
+            clearSearchLabel={t("clearSearch")}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+            searchFieldLabel={t("searchBy")}
+            searchFields={[
+              { value: "all", label: t("searchFieldAll") },
+              { value: "name", label: t("searchFieldName") },
+              { value: "employee_id", label: t("searchFieldEmployeeId") },
+              { value: "zone", label: t("searchFieldZone") },
+              { value: "passport", label: t("searchFieldPassport") },
+              { value: "civil_id", label: t("searchFieldCivilId") },
+            ]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
+            groupByLabel={t("groupBy")}
+            groupByOptions={[
+              { value: "none", label: t("groupNone") },
+              { value: "zone", label: t("groupZone") },
+              { value: "partner", label: t("groupPartner") },
+              { value: "employee_status", label: t("groupEmployeeStatus") },
+              { value: "project", label: t("groupProject") },
+              { value: "section", label: t("groupSection") },
+              { value: "nationality_category", label: t("groupNationalityCategory") },
+            ]}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+            tableViewLabel={t("viewTable")}
+            cardsViewLabel={t("viewCards")}
+            filterSlot={
+              <>
+                <Select
+                  items={tabSelectItems}
+                  value={tabFilter}
+                  onValueChange={(value) => {
+                    if (value) setTabFilter(value as DriversTab);
+                  }}
                 >
-                  <FilterX className="h-3.5 w-3.5" aria-hidden />
-                  {t("clearAllFilters")}
-                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white tabular-nums">
-                    {activeFilterCount}
-                  </span>
-                </Button>
-              ) : null}
-
-              <AppTableColumnPicker
-                options={columnPickerOptions}
-                isVisible={isColumnVisible}
-                onToggle={toggleColumn}
-                onMove={moveColumn}
-                onReset={resetColumns}
-                sourceLabel={columnSourceLabel}
-                hiddenCount={hiddenToggleableCount}
-              />
-            </div>
-
+                  <SelectTrigger className="h-9 w-[108px] shrink-0 cursor-pointer rounded-lg text-xs">
+                    <SelectValue placeholder={t("filterView")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tabSelectItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value} className="cursor-pointer">
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {activeFilterCount > 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setColumnFilters({})}
+                  >
+                    <FilterX className="h-3.5 w-3.5" aria-hidden />
+                    {t("clearAllFilters")}
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white tabular-nums">
+                      {activeFilterCount}
+                    </span>
+                  </Button>
+                ) : null}
+                <AppTableColumnPicker
+                  options={columnPickerOptions}
+                  isVisible={isColumnVisible}
+                  onToggle={toggleColumn}
+                  onMove={moveColumn}
+                  onReset={resetColumns}
+                  sourceLabel={columnSourceLabel}
+                  hiddenCount={hiddenToggleableCount}
+                />
+              </>
+            }
+            trailing={
             <div className="flex shrink-0 items-center gap-1.5">
               {!isLoading ? (
                 <p className="hidden text-xs tabular-nums text-muted-foreground lg:inline">
@@ -676,7 +734,8 @@ function DriversPageContent() {
                 </Button>
               ) : null}
             </div>
-          </div>
+            }
+          />
         }
       >
         {isLoading ? (
@@ -701,6 +760,61 @@ function DriversPageContent() {
               </Button>
             ) : null}
           </div>
+        ) : prefs.viewMode === "cards" ? (
+          <CardContent className="p-4">
+            <GroupedSections groups={groupedDrivers}>
+              {(rows) => (
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {rows.map((driver) => (
+                    <button
+                      key={driver.id}
+                      type="button"
+                      onClick={() => router.push(`/drivers/${driver.id}`)}
+                      className="cursor-pointer rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/30"
+                    >
+                      <p className="truncate text-sm font-semibold text-foreground">{driver.full_name}</p>
+                      <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                        {driver.employee_id ?? formatDriverCodeDisplay(driver.driver_code)}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{driver.zone_name || "—"}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {driver.is_blocked ? (
+                          <StatusPill variant="danger" dot={false}>
+                            {t("blockedBadge")}
+                          </StatusPill>
+                        ) : (
+                          <AccountStatusPill
+                            status={driver.account_status}
+                            label={accountStatusLabel(driver.account_status)}
+                          />
+                        )}
+                        {driver.employee_status_key ? (
+                          <EmployeeStatusBadge
+                            statusKey={driver.employee_status_key}
+                            rows={statusesQuery.data ?? []}
+                            locale={locale}
+                          />
+                        ) : null}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
+            {hasNextPage ? (
+              <div
+                ref={(el) => {
+                  loadMoreRef.current = el;
+                }}
+                className="flex justify-center py-4"
+              >
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {t("loadMore")}
+                </span>
+              </div>
+            ) : null}
+          </CardContent>
         ) : (
           <CardContent className="p-0">
             <AppDataTable
@@ -719,7 +833,21 @@ function DriversPageContent() {
             >
               {!showEmptySearch ? (
                 <>
-                  {drivers.map((driver) => (
+                  {groupedDrivers.flatMap((group) => [
+                    prefs.groupBy !== "none" ? (
+                      <AppDataTableRow key={`group-${group.key}`} className="hover:bg-transparent">
+                        <TableCell
+                          colSpan={visibleColumnCount}
+                          className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
+                        >
+                          {group.label}
+                          <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                            {group.rows.length}
+                          </span>
+                        </TableCell>
+                      </AppDataTableRow>
+                    ) : null,
+                    ...group.rows.map((driver) => (
                       <AppDataTableRow
                         key={driver.id}
                         className={cn(
@@ -841,6 +969,13 @@ function DriversPageContent() {
                                 label={accountStatusLabel(driver.account_status)}
                               />
                             )}
+                            {driver.employee_status_key ? (
+                              <EmployeeStatusBadge
+                                statusKey={driver.employee_status_key}
+                                rows={statusesQuery.data ?? []}
+                                locale={locale}
+                              />
+                            ) : null}
                           </div>
                         </VisibleTableCell>
                         <VisibleTableCell columnId="attendance" isVisible={isColumnVisible}>
@@ -1014,9 +1149,15 @@ function DriversPageContent() {
                           </div>
                         </VisibleTableCell>
                       </AppDataTableRow>
-                    ))}
+                    )),
+                  ])}
                     {hasNextPage ? (
-                      <AppDataTableRow ref={loadMoreRef} className="hover:bg-transparent">
+                      <AppDataTableRow
+                        ref={(el) => {
+                          loadMoreRef.current = el;
+                        }}
+                        className="hover:bg-transparent"
+                      >
                         <TableCell colSpan={visibleColumnCount} className="border-t border-border py-4 text-center">
                           <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />

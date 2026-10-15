@@ -313,6 +313,12 @@ export async function loadDriverZone(
   return { geometry: data["geometry"], zone_type: data["zone_type"] };
 }
 
+export function assertPublishedPickupRestaurant(candidates: Array<{ id: string }>): void {
+  if (candidates.length === 0) {
+    throw riderError("failed-precondition", "no_restaurants_assigned");
+  }
+}
+
 function publishedCandidates(
   assigned: Array<{ id: string; data: Dict; geofences: Dict[] }>,
   partnerId: string | null,
@@ -463,6 +469,8 @@ export const driverCreatePickup = onCall(async (request) => {
   const proofKeys = parseProofKeys(pick(data, "p_order_proof_url", "order_proof_url", "orderProofUrl"));
   const settings = await loadProximitySettings();
   const assigned = await loadAssignedRestaurantContext(ctx.uid, ctx.driver);
+  const candidates = publishedCandidates(assigned, asString(ctx.driver["partner_id"]));
+  assertPublishedPickupRestaurant(candidates);
   const zone = await loadDriverZone(asString(ctx.driver["zone_id"]));
 
   if (
@@ -479,7 +487,7 @@ export const driverCreatePickup = onCall(async (request) => {
   }
 
   const restaurantId = resolvePickupRestaurantId({
-    candidates: publishedCandidates(assigned, asString(ctx.driver["partner_id"])),
+    candidates,
     lat,
     lng,
     proximityMeters: settings.proximityMeters,

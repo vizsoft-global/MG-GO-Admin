@@ -86,6 +86,7 @@ const INSERT_STAMPS: Record<string, readonly string[]> = {
   custom_field_definitions: ["created_at", "updated_at"],
   driver_intakes: ["created_at", "updated_at"],
   driver_login_verifications: ["created_at"],
+  notification_dispatch_items: ["created_at"],
 };
 
 const UPDATE_TOUCH = new Set(["driver_groups", "custom_field_definitions", "driver_intakes"]);
@@ -492,6 +493,18 @@ function pick(row: Record<string, unknown>, fields: "*" | string[]): Record<stri
   if (fields === "*") return { ...row, id: row.id };
   const out: Record<string, unknown> = { id: row.id };
   for (const field of fields) out[field] = row[field];
+  return out;
+}
+
+/** Column projection must keep PostgREST embeds (`zones (name, code)`). */
+export function projectStaffRow(
+  row: Record<string, unknown>,
+  fields: "*" | string[],
+  embedKeys: readonly string[],
+): Record<string, unknown> {
+  const out = pick(row, fields);
+  if (fields === "*") return out;
+  for (const key of embedKeys) out[key] = row[key] ?? null;
   return out;
 }
 
@@ -1093,7 +1106,8 @@ export class StaffQuery<M extends QueryMode = "list"> {
     if (this.head) return ok(null, count);
     const db = this.requireDb();
     const embedded = await attachEmbeds(db, sliced, this.parsed.embeds);
-    const projected = embedded.map((row) => pick(row, this.parsed.columns));
+    const embedKeys = this.parsed.embeds.map((embed) => embed.key);
+    const projected = embedded.map((row) => projectStaffRow(row, this.parsed.columns, embedKeys));
     if (this.mode === "maybe") {
       if (projected.length > 1) {
         return fail(new DbError("JSON object requested, multiple (or no) rows returned", "PGRST116"));
@@ -1221,6 +1235,34 @@ export async function civilIdExists(civilId: string, excludeIntakeId?: string): 
   if (intakeHit) return true;
 
   const { data: driverHits } = await db.from("drivers").select("id").eq("civil_id", civilId);
+  if (!driverHits?.length) return false;
+  if (!excludeIntakeId) return true;
+
+  for (const driver of driverHits) {
+    const { data: linkedIntake } = await db
+      .from("driver_intakes")
+      .select("id")
+      .eq("linked_profile_id", driver.id)
+      .maybeSingle();
+    if (linkedIntake?.id !== excludeIntakeId) return true;
+  }
+  return false;
+}
+
+/** True when another non-archived intake or linked driver already uses this passport. */
+export async function passportExists(passport: string, excludeIntakeId?: string): Promise<boolean> {
+  const db = await staffClient();
+  let intakeQuery = db
+    .from("driver_intakes")
+    .select("id")
+    .eq("passport_number", passport)
+    .is("archived_at", null)
+    .limit(1);
+  if (excludeIntakeId) intakeQuery = intakeQuery.neq("id", excludeIntakeId);
+  const { data: intakeHit } = await intakeQuery.maybeSingle();
+  if (intakeHit) return true;
+
+  const { data: driverHits } = await db.from("drivers").select("id").eq("passport_number", passport);
   if (!driverHits?.length) return false;
   if (!excludeIntakeId) return true;
 

@@ -58,6 +58,7 @@ import { DriverActivityTab } from "./driver-activity-tab";
 import { DriverHistoryTab } from "./driver-history-tab";
 import { DriverPerformanceTab } from "./driver-performance-tab";
 import { DriverWrongActionsTab } from "@/features/wrong-actions/driver-wrong-actions-tab";
+import { DriverArchiveDialog } from "./driver-archive-dialog";
 import { DriverEditSheet } from "./driver-edit-sheet";
 import { getCountryLabel } from "@/lib/geo/countries";
 import { riderCategoryMessageKey } from "./driver-rider-category";
@@ -313,6 +314,7 @@ function DriverDetailContent({ id }: { id: string }) {
   const approveDriver = useApproveDriverIntake();
   const [activeTab, setActiveTab] = useState<DetailTabId>("assets");
   const [editOpen, setEditOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [holdApproveSlot, setHoldApproveSlot] = useState(false);
   const editRouteConsumedRef = useRef(false);
   const suppressEditOpenUntilRef = useRef(0);
@@ -903,16 +905,7 @@ function DriverDetailContent({ id }: { id: string }) {
                   size="sm"
                   className="cursor-pointer rounded-lg text-destructive hover:text-destructive"
                   disabled={archiveDriver.isPending}
-                  onClick={async () => {
-                    if (!window.confirm(t("archiveConfirm"))) return;
-                    try {
-                      await archiveDriver.mutateAsync(driver.intake_id!);
-                      toast.success(t("archived"));
-                      router.push("/drivers");
-                    } catch {
-                      toast.error(t("archiveFailed"));
-                    }
-                  }}
+                  onClick={() => setArchiveOpen(true)}
                 >
                   {archiveDriver.isPending ? (
                     <Loader2 className="me-2 h-4 w-4 animate-spin" />
@@ -921,6 +914,32 @@ function DriverDetailContent({ id }: { id: string }) {
                   )}
                   {t("archiveDriver")}
                 </Button>
+                <DriverArchiveDialog
+                  open={archiveOpen}
+                  onOpenChange={setArchiveOpen}
+                  pending={archiveDriver.isPending}
+                  onConfirm={async (reason) => {
+                    try {
+                      await archiveDriver.mutateAsync({
+                        intakeId: driver.intake_id!,
+                        reason,
+                      });
+                      setArchiveOpen(false);
+                      toast.success(t("archived"));
+                      router.push("/drivers");
+                    } catch (err) {
+                      const key =
+                        err instanceof Error && isDriverErrorKey(err.message)
+                          ? err.message
+                          : "save_failed";
+                      toast.error(
+                        key === "missing_archive_reason"
+                          ? t("archiveReasonRequired")
+                          : t("archiveFailed"),
+                      );
+                    }
+                  }}
+                />
                 <DriverEditSheet
                   driver={driver}
                   intakeId={driver.intake_id}

@@ -1120,12 +1120,24 @@ export function payrollRiderMatchesSearch(
     mgId: string;
   },
   query: string,
+  field = "all",
 ): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return [row.name, row.zone, row.restaurant, row.restaurantId ?? "", row.amId, row.mgId].some((value) =>
-    value.toLowerCase().includes(needle),
-  );
+  const accessors: Record<string, string> = {
+    name: row.name,
+    employee_id: row.mgId,
+    zone: row.zone,
+    restaurant: row.restaurant,
+    restaurant_id: row.restaurantId ?? "",
+    am_id: row.amId,
+  };
+  if (field === "all" || field === "") {
+    return Object.values(accessors).some((value) => value.toLowerCase().includes(needle));
+  }
+  const value = accessors[field];
+  if (value == null) return true;
+  return value.toLowerCase().includes(needle);
 }
 
 export function keepSelectedPayrollOptions<

@@ -3,8 +3,12 @@ import {
   BarChart3,
   Building2,
   ClipboardCheck,
+  ClipboardList,
   FormInput,
+  Globe,
   Handshake,
+  Landmark,
+  Layers,
   ListTree,
   MapPin,
   Scale,
@@ -62,6 +66,30 @@ const CARDS: ReadonlyArray<{
     href: "/settings/source-companies",
     icon: Building2,
     permission: "companies.view",
+  },
+  {
+    key: "employeeStatuses",
+    href: "/settings/employee-statuses",
+    icon: ClipboardList,
+    permission: "drivers.manage",
+  },
+  {
+    key: "employeeSections",
+    href: "/settings/employee-sections",
+    icon: Layers,
+    permission: "drivers.manage",
+  },
+  {
+    key: "nationalityCategories",
+    href: "/settings/nationality-categories",
+    icon: Globe,
+    permission: "drivers.manage",
+  },
+  {
+    key: "bankCodes",
+    href: "/settings/bank-codes",
+    icon: Landmark,
+    permission: "drivers.manage",
   },
 ];
 

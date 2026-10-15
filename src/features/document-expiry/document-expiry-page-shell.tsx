@@ -13,6 +13,14 @@ import {
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
+import {
   AppDataTable,
   AppDataTableRow,
   TableCell,
@@ -21,7 +29,6 @@ import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
@@ -45,6 +52,8 @@ function statusVariant(row: DocumentExpiryRow): "danger" | "warning" | "success"
 
 export function DocumentExpiryPageShell() {
   const t = useTranslations("pages.documentExpiry");
+  const labels = useListControlLabels();
+  const { prefs, update } = useListViewPrefs("document-expiry");
   const tDocs = useTranslations("pages.driverNew.documents");
   const { can } = useAuth();
   const canManage = can("documents.manage") || can("drivers.manage");
@@ -58,17 +67,32 @@ export function DocumentExpiryPageShell() {
 
   const rows = useMemo(() => {
     const all = data?.rows ?? [];
-    const needle = search.trim().toLowerCase();
     return all.filter((row) => {
       if (row.bucket !== bucket) return false;
-      if (!needle) return true;
-      return (
-        row.driverName.toLowerCase().includes(needle) ||
-        row.driverCode.toLowerCase().includes(needle) ||
-        tDocs(row.docType).toLowerCase().includes(needle)
-      );
+      return fieldSearchMatch(row, search, prefs.searchField, {
+        name: (item) => item.driverName,
+        employee_id: (item) => item.driverCode,
+        status: (item) => item.bucket,
+        docType: (item) => tDocs(item.docType),
+      });
     });
-  }, [data?.rows, bucket, search, tDocs]);
+  }, [bucket, data?.rows, prefs.searchField, search, tDocs]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        rows,
+        prefs.groupBy,
+        { status: (row) => row.bucket },
+        {
+          expired: t("tabs.expired"),
+          week: t("tabs.week"),
+          month: t("tabs.month"),
+          quarter: t("tabs.quarter"),
+        },
+        "—",
+      ),
+    [prefs.groupBy, rows, t],
+  );
 
   const summary = data?.summary ?? { expired: 0, week: 0, month: 0, quarter: 0 };
 
@@ -132,12 +156,24 @@ export function DocumentExpiryPageShell() {
       />
 
       <AppListCard className="mt-2">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-          <Input
-            className="h-9 max-w-xs"
-            placeholder={t("searchPlaceholder")}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
+        <div className="border-b border-border p-3">
+          <AppListControls
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={t("searchPlaceholder")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[labels.field.all, labels.field.name, labels.field.employee_id, labels.field.status]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => update({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            groupByOptions={[labels.group.none, labels.group.status]}
+            groupBy={prefs.groupBy}
+            onGroupByChange={(value) => update({ groupBy: value })}
+            groupByLabel={labels.groupBy}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => update({ viewMode: value })}
+            tableViewLabel={labels.viewTable}
+            cardsViewLabel={labels.viewCards}
           />
         </div>
 
@@ -147,6 +183,39 @@ export function DocumentExpiryPageShell() {
           </div>
         ) : rows.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
+        ) : prefs.viewMode === "cards" ? (
+          <div className="p-4">
+            <GroupedSections groups={grouped}>
+              {(groupRowsList) => (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {groupRowsList.map((row) => (
+                    <button
+                      type="button"
+                      key={row.id}
+                      className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                      onClick={() => {
+                        if (row.driverId) {
+                          router.push(`/drivers/${row.driverId}?tab=documents`);
+                        }
+                      }}
+                    >
+                      <p className="text-sm font-semibold">{row.driverName}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {row.driverCode} · {tDocs(row.docType)}
+                      </p>
+                      <div className="mt-2">
+                        <StatusPill variant={statusVariant(row)}>
+                          {row.bucket === "expired"
+                            ? t("status.expired", { days: Math.abs(row.daysUntil) })
+                            : t("status.daysLeft", { days: row.daysUntil })}
+                        </StatusPill>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
+          </div>
         ) : (
           <AppDataTable
             columns={[
@@ -157,7 +226,17 @@ export function DocumentExpiryPageShell() {
               { id: "actions", label: t("columns.actions") },
             ]}
           >
-            {rows.map((row) => (
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="bg-muted/40 hover:bg-muted/40">
+                      <TableCell colSpan={5} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => (
               <AppDataTableRow
                 key={row.id}
                 className="cursor-pointer"
@@ -236,7 +315,8 @@ export function DocumentExpiryPageShell() {
                   </div>
                 </TableCell>
               </AppDataTableRow>
-            ))}
+              )),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

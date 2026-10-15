@@ -1,3 +1,4 @@
+import type { DriverBankDetails } from "@/features/employees/bank-details";
 import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
 
 export const DOCUMENT_TYPES = [
@@ -5,6 +6,8 @@ export const DOCUMENT_TYPES = [
   "civil_id",
   "work_permit",
   "passport",
+  "health_card",
+  "operations_card",
 ] as const;
 
 export type DriverDocumentType = (typeof DOCUMENT_TYPES)[number];
@@ -175,6 +178,12 @@ export type DriverListRow = {
   client_name: string | null;
   source_company: string | null;
   custom_fields: Record<string, string | number | boolean | string[] | null>;
+  employee_status_key: string | null;
+  section_keys: string[];
+  nationality_category_keys: string[];
+  project_key: string | null;
+  civil_id: string | null;
+  passport_number: string | null;
 };
 
 /** mg = in-house (system company), partner = outsourced with a company, unassigned = outsourced with none. */
@@ -207,7 +216,13 @@ export type DriverDetailModel = {
   phone: string;
   email: string | null;
   civil_id: string;
+  passport_number: string | null;
   employee_id: string | null;
+  employee_status_key: string | null;
+  section_keys: string[];
+  nationality_category_keys: string[];
+  archive_reason: string | null;
+  bank_details: DriverBankDetails | null;
   nationality: string | null;
   rider_category: DriverRiderCategory;
   client_id: string | null;

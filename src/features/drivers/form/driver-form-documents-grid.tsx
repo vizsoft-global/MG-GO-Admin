@@ -2,10 +2,11 @@
 
 import { FileText } from "lucide-react";
 import { DriverDocumentUpload } from "../driver-document-upload";
-import type {
-  DocumentExpiryConfig,
-  DriverDocumentType,
-  DriverRemoteDocument,
+import {
+  DOCUMENT_TYPES,
+  type DocumentExpiryConfig,
+  type DriverDocumentType,
+  type DriverRemoteDocument,
 } from "../types";
 import { EMPTY_DOCUMENT_EXPIRY } from "../types";
 import { SectionHeading } from "./driver-form-primitives";
@@ -37,7 +38,7 @@ export function DriverFormDocumentsGrid({
   onRemoteChange: (docType: DriverDocumentType, doc: DriverRemoteDocument | null) => void;
   sectionLabel: string;
 }) {
-  const docTypes: DriverDocumentType[] = ["license", "civil_id", "work_permit", "passport"];
+  const docTypes = DOCUMENT_TYPES;
 
   return (
     <section className="space-y-2.5 rounded-lg border border-border bg-card p-4">

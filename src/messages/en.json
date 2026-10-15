@@ -55,7 +55,29 @@
     },
     "yes": "Yes",
     "no": "No",
-    "backToApps": "Back to all apps"
+    "backToApps": "Back to all apps",
+    "listControls": {
+      "searchBy": "Search by",
+      "searchFieldAll": "All fields",
+      "searchFieldName": "Employee name",
+      "searchFieldEmployeeId": "Employee ID",
+      "searchFieldZone": "Zone",
+      "searchFieldPassport": "Passport number",
+      "searchFieldCivilId": "Civil ID number",
+      "searchFieldOrderId": "Order ID",
+      "searchFieldPlate": "Plate",
+      "searchFieldStatus": "Status",
+      "groupBy": "Group by",
+      "groupNone": "No grouping",
+      "groupStatus": "Status",
+      "groupZone": "Zone",
+      "groupPartner": "Partner",
+      "groupDate": "Date",
+      "groupProject": "Project",
+      "viewTable": "Table",
+      "viewCards": "Cards",
+      "clearSearch": "Clear search"
+    }
   },
   "nav": {
     "dashboard": "Apps",
@@ -111,6 +133,10 @@
     "payroll": "Payroll",
     "driverDevices": "Driver devices",
     "sourceCompanies": "Companies",
+    "employeeStatuses": "Employee statuses",
+    "employeeSections": "Employee sections",
+    "nationalityCategories": "Nationality categories",
+    "bankCodes": "Bank codes",
     "employeedesk": "EmployeeDesk",
     "employeedeskAll": "All requests",
     "employeedeskIncoming": "Incoming",
@@ -1315,6 +1341,37 @@
       },
       "searchPlaceholder": "Search anything…",
       "clearSearch": "Clear search",
+      "searchBy": "Search by",
+      "searchFieldAll": "All fields",
+      "searchFieldName": "Employee name",
+      "searchFieldEmployeeId": "Employee ID",
+      "searchFieldZone": "Zone",
+      "searchFieldPassport": "Passport number",
+      "searchFieldCivilId": "Civil ID",
+      "groupBy": "Group by",
+      "groupNone": "No grouping",
+      "groupZone": "Zone",
+      "groupPartner": "Partner",
+      "groupEmployeeStatus": "Employee status",
+      "groupProject": "Project",
+      "groupSection": "Section",
+      "groupNationalityCategory": "Nationality category",
+      "viewTable": "Table view",
+      "viewCards": "Card view",
+      "employeesDashboardLink": "Employee dashboard",
+      "employeesDashboard": {
+        "title": "Employee dashboard",
+        "subtitle": "Live counts by project, partner, status, nationality category and section.",
+        "backToList": "Back to employees",
+        "live": "Live employees",
+        "archived": "Archived",
+        "byProject": "By project",
+        "byPartner": "By partner",
+        "byStatus": "By employee status",
+        "byNationality": "By nationality category",
+        "bySection": "By section",
+        "unassigned": "Unassigned"
+      },
       "filterZone": "Zone",
       "filterZoneAll": "All zones",
       "filterPartner": "Partner",
@@ -1391,6 +1448,7 @@
         "phone_exists": "Another active driver already uses this phone number.",
         "civil_id_exists": "Another active driver already uses this civil ID.",
         "employee_id_exists": "Another active driver already uses this MG ID.",
+        "passport_exists": "Another active driver already uses this passport number.",
         "not_authorized": "You do not have permission.",
         "save_failed": "Restore failed. Please try again."
       },
@@ -1867,6 +1925,10 @@
       },
       "archiveDriver": "Archive driver",
       "archiveConfirm": "Archive this driver? They will be hidden from the active list and cannot sign in to the app. Their driver ID will not be reused.",
+      "archiveReasonPrompt": "Archive reason (required)",
+      "archiveReasonLabel": "Archive reason",
+      "archiveReasonPlaceholder": "Former employee, transfer, resignation…",
+      "archiveReasonRequired": "Enter a reason to archive this driver.",
       "archived": "Driver archived",
       "archiveFailed": "Could not archive the driver. Please try again.",
       "restoreDriver": "Restore driver",
@@ -1877,6 +1939,7 @@
         "phone_exists": "Another active driver already uses this phone number.",
         "civil_id_exists": "Another active driver already uses this civil ID.",
         "employee_id_exists": "Another active driver already uses this MG ID.",
+        "passport_exists": "Another active driver already uses this passport number.",
         "not_authorized": "You do not have permission.",
         "save_failed": "Restore failed. Please try again."
       },
@@ -1896,7 +1959,7 @@
       "removingDocument": "Removing…",
       "tryAgain": "Try again",
       "documentsTabTitle": "Uploaded documents",
-      "documentsTabSummary": "{count} of 4 on file",
+      "documentsTabSummary": "{count} of 6 on file",
       "documentsNotUploaded": "Not uploaded",
       "documentsEmptyTitle": "No documents on file",
       "documentsEmptyDescription": "Upload license, civil ID, work permit, or passport via Edit driver.",
@@ -2321,7 +2384,9 @@
         "assets": "Assets Issued",
         "customFields": "Custom fields",
         "documents": "Documents",
-        "documentsDescription": "All uploads are optional — add files now or complete them later."
+        "documentsDescription": "All uploads are optional — add files now or complete them later.",
+        "hr": "Employee status",
+        "bank": "Bank details"
       },
       "assetsDisabled": "No assets will be recorded for this driver.",
       "fields": {
@@ -2340,7 +2405,16 @@
         "vehicleType": "Vehicle type",
         "clientId": "Platform ID (optional)",
         "clientName": "Platform (optional)",
-        "accommodation": "Accommodation (optional)"
+        "accommodation": "Accommodation (optional)",
+        "passportNumber": "Passport number",
+        "employeeStatus": "Employee status",
+        "sections": "Section",
+        "nationalityCategories": "Nationality category",
+        "beneficiaryCivilId": "Beneficiary civil ID",
+        "bank": "Beneficiary bank",
+        "accountNumber": "Account number",
+        "iban": "IBAN",
+        "paymentCurrency": "Payment currency"
       },
       "placeholders": {
         "fullName": "Enter full name",
@@ -2357,7 +2431,10 @@
         "vehicle": "Select vehicle",
         "clientId": "e.g. CLI-204",
         "clientName": "e.g. Gulf Retail Group",
-        "accommodation": "Building / area"
+        "accommodation": "Building / area",
+        "passportNumber": "A-Z and digits",
+        "searchStatus": "Search status…",
+        "searchBank": "Search bank…"
       },
       "assets": {
         "gps": "GPS Device",
@@ -2399,7 +2476,9 @@
         "license": "Driving License",
         "civil_id": "Civil ID",
         "work_permit": "Work Permit",
-        "passport": "Passport"
+        "passport": "Passport",
+        "health_card": "Health card",
+        "operations_card": "Operations card"
       },
       "documentExpiry": {
         "trackExpiry": "Track expiry",
@@ -2465,7 +2544,10 @@
         "custom_field_required": "This field is required",
         "custom_field_letters_only": "Letters, spaces, hyphen, and apostrophe only",
         "custom_field_non_negative": "Enter zero or a positive number",
-        "save_failed": "Could not save the driver. Please try again."
+        "save_failed": "Could not save the driver. Please try again.",
+        "passport_exists": "This passport number is already registered to another employee.",
+        "invalid_passport": "Passport must be letters and digits, up to 20 characters.",
+        "invalid_bank": "Check bank, civil ID, and account or IBAN."
       }
     },
     "documentExpiry": {
@@ -6640,7 +6722,9 @@
       "markPaidSuccess": "Run marked as paid",
       "markPaidFailed": "Could not mark run paid.",
       "voidSuccess": "Run voided",
-      "voidFailed": "Could not void run."
+      "voidFailed": "Could not void run.",
+      "searchPlaceholder": "Search period or status",
+      "emptyFiltered": "No payout runs match this search"
     },
     "deliveryRules": {
       "title": "Delivery rules",
@@ -7412,6 +7496,36 @@
           "passwordMismatch": "Passwords do not match.",
           "weakPassword": "Password must be at least 8 characters.",
           "passwordFailed": "Could not change password. Try again."
+        }
+      },
+      "employeeCatalogs": {
+        "add": "Add",
+        "edit": "Edit",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saved": "Catalog saved",
+        "invalid": "Enter an English label and a valid key.",
+        "colKey": "Key",
+        "colLabelEn": "English",
+        "colLabelAr": "Arabic",
+        "colSystem": "Kind",
+        "system": "System",
+        "custom": "Custom",
+        "statusesTitle": "Employee statuses",
+        "statusesSubtitle": "HR status values used on Employees and reports.",
+        "sectionsTitle": "Employee sections",
+        "sectionsSubtitle": "Departments or sections assigned to employees.",
+        "nationalityTitle": "Nationality categories",
+        "nationalitySubtitle": "Nationality groups used on Employees and the dashboard.",
+        "banksTitle": "Bank codes",
+        "banksSubtitle": "Kuwait banks used for employee payment details.",
+        "errors": {
+          "not_authorized": "You do not have permission.",
+          "not_configured": "Catalog save is not available on this environment.",
+          "invalid_key": "Key must be lowercase letters, numbers, and underscores.",
+          "missing_fields": "English label is required.",
+          "system_status_locked": "System statuses cannot be renamed.",
+          "save_failed": "Could not save the catalog."
         }
       },
       "accessRequests": {
@@ -10304,6 +10418,22 @@
           "sourceCompanies": {
             "title": "Companies",
             "body": "The companies riders are supplied through."
+          },
+          "employeeStatuses": {
+            "title": "Employee statuses",
+            "body": "HR statuses such as New, Running, and On Hold."
+          },
+          "employeeSections": {
+            "title": "Employee sections",
+            "body": "Sections assigned on the employee record."
+          },
+          "nationalityCategories": {
+            "title": "Nationality categories",
+            "body": "Nationality groups used on Employees and reports."
+          },
+          "bankCodes": {
+            "title": "Bank codes",
+            "body": "Kuwait banks used for employee payment details."
           }
         }
       }

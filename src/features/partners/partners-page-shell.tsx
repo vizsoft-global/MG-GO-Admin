@@ -10,10 +10,17 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Search,
   X,
 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  AppListControls,
+  GroupedSections,
+  fieldSearchMatch,
+  groupRows,
+  useListControlLabels,
+  useListViewPrefs,
+} from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -23,7 +30,6 @@ import {
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CardContent } from "@/components/ui/card";
 import {
@@ -107,6 +113,8 @@ function PartnersPageContent() {
   const queryClient = useQueryClient();
 
   const { data: partners = [], isLoading, refetch } = usePartnersList();
+  const labels = useListControlLabels();
+  const { prefs, update: updateListPrefs } = useListViewPrefs("partners");
   const [search, setSearch] = useState("");
   const [driversFilter, setDriversFilter] = useState<DriversFilter>("all");
   const [logoFilter, setLogoFilter] = useState<LogoFilter>("all");
@@ -117,15 +125,13 @@ function PartnersPageContent() {
   const hasActiveFilters = driversFilter !== "all" || logoFilter !== "all";
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return partners.filter((p) => {
       if (
-        q &&
-        !(
-          p.name.toLowerCase().includes(q) ||
-          p.slug.toLowerCase().includes(q) ||
-          (p.description?.toLowerCase().includes(q) ?? false)
-        )
+        !fieldSearchMatch(p, search, prefs.searchField, {
+          name: (row) => row.name,
+          slug: (row) => row.slug,
+          description: (row) => row.description,
+        })
       ) {
         return false;
       }
@@ -135,7 +141,11 @@ function PartnersPageContent() {
       if (logoFilter === "noLogo" && p.logo_url) return false;
       return true;
     });
-  }, [partners, search, driversFilter, logoFilter]);
+  }, [partners, search, prefs.searchField, driversFilter, logoFilter]);
+  const grouped = useMemo(
+    () => groupRows(visible, "none", {}, {}, "—"),
+    [visible],
+  );
 
   const invalidatePartners = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.partners.all() });
@@ -317,38 +327,27 @@ function PartnersPageContent() {
       />
       <AppListCard
         toolbar={
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("searchPlaceholder")}
-                className="h-9 rounded-lg bg-background ps-9 pe-9"
-                aria-label={t("searchPlaceholder")}
-              />
-              {search ? (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute end-2 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
-                  aria-label={t("clearSearch")}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {filterMenu}
-              <div
-                className="hidden h-6 w-px shrink-0 bg-border sm:block"
-                aria-hidden
-              />
+          <AppListControls
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder={t("searchPlaceholder")}
+            searchAriaLabel={t("searchPlaceholder")}
+            clearSearchLabel={labels.clearSearch}
+            searchFields={[labels.field.all, labels.field.name]}
+            searchField={prefs.searchField}
+            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
+            searchFieldLabel={labels.searchBy}
+            viewMode={prefs.viewMode}
+            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
+            tableViewLabel={labels.viewTable}
+            cardsViewLabel={labels.viewCards}
+            filterSlot={filterMenu}
+            trailing={
               <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
                 {countLabel}
               </p>
-            </div>
-          </div>
+            }
+          />
         }
         filterChips={
           hasActiveFilters ? (
@@ -410,6 +409,38 @@ function PartnersPageContent() {
               </Button>
             ) : null}
           </div>
+        ) : prefs.viewMode === "cards" ? (
+          <CardContent className="p-4">
+            {showEmptySearch ? (
+              <AppEmptyState
+                title={t("emptySearchTitle")}
+                description={t("emptySearchDescription")}
+              />
+            ) : (
+              <GroupedSections groups={grouped}>
+                {(rows) => (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {rows.map((partner) => (
+                      <button
+                        type="button"
+                        key={partner.id}
+                        className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                        onClick={() => canManage && handleEdit(partner)}
+                      >
+                        <p className="truncate text-sm font-semibold">{partner.name}</p>
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">
+                          {partner.slug}
+                        </p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {t("driversCount", { count: partner.driver_count })}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </GroupedSections>
+            )}
+          </CardContent>
         ) : (
           <CardContent className="p-0">
             <AppDataTable
@@ -426,7 +457,8 @@ function PartnersPageContent() {
               }
             >
               {!showEmptySearch
-                ? visible.map((partner) => (
+                ? grouped.flatMap((group) =>
+                    group.rows.map((partner) => (
                     <AppDataTableRow
                       key={partner.id}
                       role={canManage ? "button" : undefined}
@@ -504,7 +536,7 @@ function PartnersPageContent() {
                         </TableCell>
                       ) : null}
                     </AppDataTableRow>
-                  ))
+                  )))
                 : null}
             </AppDataTable>
           </CardContent>
