@@ -1526,6 +1526,7 @@ async function executeNotificationDispatch(
       import_vars: personalized?.vars ?? null,
       dismissed_at: null,
       opened_at: null,
+      created_at: new Date().toISOString(),
     };
   });
   const { data: insertedItems, error: insertError } = await service

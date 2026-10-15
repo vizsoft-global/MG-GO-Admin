@@ -271,7 +271,7 @@ When admin sets `status = verified`, Postgres runs `recalculate_driver_earnings(
 
 - `driver_check_order_id_available(p_external_order_id, p_pickup_lat?, p_pickup_lng?)` → `boolean` — optional GPS; one-arg calls still work. Resolves the store via `driver_resolve_pickup_restaurant` (unique published assignment, else geofence/nearest when GPS is present). If no store can be resolved, returns `true` (does **not** scan the whole table). Otherwise `false` only when that store already has the same Order ID today (Kuwait, not cancelled). Same-store collision still fails in `driver_create_pickup` if the pre-check is skipped.
 - `driver_get_delivery_proximity_context()` → JSON: `proximity_meters`, driver `zone_id`, `zone_type`, `zone_geometry`, assigned `restaurants[]` with lat/lng
-- `driver_create_delivery(p_external_order_id, p_order_proof_url?, p_delivered_lat?, p_delivered_lng?)` → `deliveries` row (`status = pending`, copies `partner_id` / `zone_id` from `drivers`). Raises `delivery_out_of_range` when proximity gate fails.
+- `driver_create_delivery(p_external_order_id, p_order_proof_url?, p_delivered_lat?, p_delivered_lng?)` → `deliveries` row (`status = pending`, copies `partner_id` / `zone_id` from `drivers`). `driverCreatePickup` raises `no_restaurants_assigned` when the rider has no published assigned restaurant (a zone alone does not allow pickup), then `delivery_out_of_range` when the proximity gate fails.
 
 **Delivery proximity gate** (`app_settings.driver_app_delivery_proximity_meters`, default 500; `0` disables):
 
