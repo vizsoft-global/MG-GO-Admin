@@ -16,8 +16,8 @@ import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import {
   applyTransactionalPushResult,
-  inboxOpenFields,
   sendTransactionalPushToDriver,
+  transactionalInboxItemFields,
 } from "./driver-push-tokens";
 
 const DAY_MS = 86_400_000;
@@ -660,7 +660,11 @@ export async function notifyDriverTransactional(
     delivered_at: now,
     sent_at: now,
     created_at: now,
-    ...inboxOpenFields(),
+    ...transactionalInboxItemFields({
+      title,
+      body: textBody,
+      actionParams,
+    }),
   });
   await batch.commit();
 

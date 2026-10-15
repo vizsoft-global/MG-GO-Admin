@@ -12,6 +12,7 @@ import { kuwaitDayString } from "../core/kuwait";
 import { applyDeliveryRollup } from "../core/rollups";
 import { stampStoredRow } from "../core/search-text";
 import { notifyDriverTransactional as writeTransactionalNotification } from "./visits-shared";
+import { mapInboxListItem } from "./driver-push-tokens";
 
 /**
  * Firestore caps a batched write at 500 operations and an `in` filter at 30.
@@ -147,20 +148,7 @@ export const driverListNotifications = onCall(async (request) => {
     const campaign = campaignById.get(String(item.campaign_id)) ?? {};
     return {
       dispatch_item_id: doc.id,
-      campaign_id: item.campaign_id ?? null,
-      delivered_at: item.delivered_at ?? null,
-      opened_at: item.opened_at ?? null,
-      clicked_at: item.clicked_at ?? null,
-      received_at: item.created_at ?? null,
-      title: item.resolved_title ?? campaign.title ?? null,
-      body: item.resolved_body ?? campaign.body ?? null,
-      category: campaign.category ?? null,
-      priority: campaign.priority ?? null,
-      action_type: campaign.action_type ?? null,
-      action_params: campaign.action_params ?? null,
-      media: campaign.media ?? null,
-      payload_version: campaign.payload_version ?? null,
-      screenshot_restricted: campaign.screenshot_restricted ?? false,
+      ...mapInboxListItem(item, campaign),
     };
   });
 
