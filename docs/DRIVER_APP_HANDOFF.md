@@ -633,7 +633,7 @@ select id, log_date, check_in_at, check_out_at, check_out_reason, status, zone_c
 select public.driver_set_duty_state(p_is_on_duty := true, p_is_online := true);  -- check in
 select public.driver_set_duty_state(p_is_on_duty := false, p_is_online := false); -- check out (manual)
 ```
-Returns full home dashboard payload (`driver_get_home_dashboard()` shape). `shift_adherence.minutes_early_out` is minutes before **shift end**, clamped to the scheduled window **and** `LEAST`'d against `scheduled_seconds / 60` — clocking out before shift start is the remaining shift length, not start-to-end plus the pre-shift gap (11:30–16:30 / 09:35 out is 300, never 415). The app and admin parsers apply the same cap so a stale payload cannot paint more early-out than the shift itself. Do not recompute early-out from ISO strings on the device clock.
+Returns full home dashboard payload (`driver_get_home_dashboard()` shape). `today_online_seconds` is always present (stored `driver_attendance` ∪ closed `driver_sessions` for the Kuwait day) even when `shift_adherence` has no scheduled window — bind Time In Today to that field, not only `shift_adherence.online_seconds`. `shift_adherence.minutes_early_out` is minutes before **shift end**, clamped to the scheduled window **and** `LEAST`'d against `scheduled_seconds / 60` — clocking out before shift start is the remaining shift length, not start-to-end plus the pre-shift gap (11:30–16:30 / 09:35 out is 300, never 415). The app and admin parsers apply the same cap so a stale payload cannot paint more early-out than the shift itself. Do not recompute early-out from ISO strings on the device clock.
 
 Optional `banner` is the first matching `driver_home_banners` row (active, in date window, empty target arrays = everyone). Shape: `{ image_url, caption_en, caption_ar, deep_link }`. Render after the shift / zone banners and before the on-duty block. Ignore a missing or empty `image_url`. Images live in the public `branding` bucket at `home-banners/{id}.{ext}`.
 
@@ -875,7 +875,7 @@ When admin sends via **Import from spreadsheet** target mode, the campaign store
 | `import_row_index` | 0-based row index from the uploaded sheet |
 | `import_vars` | JSON object of column → value used for that row |
 
-The driver inbox RPC `driver_list_notifications` returns `COALESCE(dispatch_item.resolved_title, campaign.title)` and the same for body — **the mobile app must display these fields**, not the raw campaign template, when present.
+The driver inbox RPC `driver_list_notifications` returns `COALESCE(dispatch_item.resolved_title, campaign.title)` and the same for body, plus `action_type` / `action_params` from the item first — **the mobile app must display these fields**, not the raw campaign template, when present. Transactional writers (`notifyDriverTransactional`) now stamp `resolved_title` / `resolved_body` / `action_params` on the dispatch item so a missed campaign join cannot blank a delivery row. Timestamps on the list are ISO strings.
 
 FCM push at send time also uses the resolved title/body per recipient (not the template strings).
 
@@ -1324,7 +1324,7 @@ Migration: `20260729100000_ops_audit_backend_fixes.sql`
 
 ---
 
-*Last synced: 2026-10-15 — [admin+app] Rider request create / clarify / ack attachments use `/api/driver-uploads/*` (`entityType: request_attachment`) on R2 `dpd-private-prod`. Fuel fills stay GCS. **Play required** for phones to leave `driverGetUploadUrl`. Admin Vercel must serve the new entity.
+*Last synced: 2026-10-15 — [admin+app] Six rider QA tickets: request create stays R2 `request_attachment` (Play still required); shell Add Delivery FAB; transactional inbox items stamp title/body/action; Home `daily_dpd` when named targets are `[]`; `today_online_seconds` on home + no duplicate attendance row; sign-out cleanup 2s-capped. No Play this pass.
 
 *Prior: 2026-10-10 — [admin+app] Plan 1 rider backend paste is **§1b**. Flutter is off live Supabase onto Firebase Auth custom token + Firestore named `default` (`me-central2`) + 55 gen2 rider callables (`me-central1`). Worker `ecb39c9a-12eb-426c-b95e-031556e226b8` verifies Firebase ID tokens and `worker-port` is live: snapshot, flush, and Class B events go to `me-central1` HTTPS (`workerFleetRead`, `adminIngestDriverPositions`, `adminRecordFleetEvents`); the Supabase broadcast mirror is dropped. Cutover SMS/WhatsApp copy is in §1b and **unsent** (dump ongoing; Play blocked — no `android/key.properties`). Vercel prod withheld. **Do not claim Play shipped.**
 

@@ -1,7 +1,7 @@
 import { onCall } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
-import { kuwaitDayString, kuwaitDayStart } from "../core/kuwait";
+import { kuwaitDayString } from "../core/kuwait";
 import { kuwaitWeekStart } from "../core/money";
 import { loadAppSettings } from "../core/settings";
 import { requireRider, riderError } from "../core/rider";
@@ -22,6 +22,11 @@ import {
   shiftSessionInstant,
   type ShiftRow,
 } from "./driver-shift";
+import {
+  attendanceDateKey,
+  mergeTodayOnlineSeconds,
+  pickAttendanceDayRow,
+} from "./attendance-day";
 
 const DRIVER_ATTENDANCE = "driver_attendance";
 const HOME_BANNERS = "home_banners";
@@ -170,14 +175,23 @@ async function attendanceLogOn(driverId: string, day: string): Promise<{ id: str
 }
 
 async function attendanceDayOn(driverId: string, day: string): Promise<{ id: string; data: Dict } | null> {
-  const snap = await getFirestore()
-    .collection(DRIVER_ATTENDANCE)
-    .where("driver_id", "==", driverId)
-    .where("attendance_date", "==", day)
-    .limit(1)
-    .get();
-  if (snap.empty) return null;
-  return { id: snap.docs[0].id, data: (snap.docs[0].data() ?? {}) as Dict };
+  const db = getFirestore();
+  const [byString, scanned] = await Promise.all([
+    db
+      .collection(DRIVER_ATTENDANCE)
+      .where("driver_id", "==", driverId)
+      .where("attendance_date", "==", day)
+      .limit(10)
+      .get(),
+    db.collection(DRIVER_ATTENDANCE).where("driver_id", "==", driverId).limit(80).get(),
+  ]);
+  const byId = new Map<string, { id: string; data: Dict }>();
+  for (const snap of [byString, scanned]) {
+    for (const doc of snap.docs) {
+      byId.set(doc.id, { id: doc.id, data: (doc.data() ?? {}) as Dict });
+    }
+  }
+  return pickAttendanceDayRow([...byId.values()], day);
 }
 
 async function locationOf(driverId: string): Promise<Dict> {
@@ -261,13 +275,14 @@ async function weekOnlineSeconds(
   const snap = await getFirestore()
     .collection(DRIVER_ATTENDANCE)
     .where("driver_id", "==", driverId)
-    .where("attendance_date", ">=", weekStart)
-    .where("attendance_date", "<=", today)
-    .limit(40)
+    .limit(80)
     .get();
   let seconds = 0;
   for (const doc of snap.docs) {
-    seconds += Math.max(0, Math.trunc(numberOrNull((doc.data() ?? {})["online_seconds"]) ?? 0));
+    const raw = (doc.data() ?? {}) as Dict;
+    const day = attendanceDateKey(raw["attendance_date"]);
+    if (!day || day < weekStart || day > today) continue;
+    seconds += Math.max(0, Math.trunc(numberOrNull(raw["online_seconds"]) ?? 0));
   }
   const open = await openOnlineSession(driverId);
   const wentOnline = open ? asDate(open.data["went_online_at"]) : null;
@@ -574,13 +589,9 @@ async function shiftOnDate(driverId: string, day: string): Promise<ShiftRow | nu
 }
 
 async function closedSessionSeconds(driverId: string, day: string): Promise<number> {
-  const start = kuwaitDayStart(day);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const snap = await getFirestore()
     .collection(COLLECTIONS.driverSessions)
     .where("driver_id", "==", driverId)
-    .where("went_online_at", ">=", Timestamp.fromDate(start))
-    .where("went_online_at", "<", Timestamp.fromDate(end))
     .limit(SCAN)
     .get();
   let seconds = 0;
@@ -589,14 +600,26 @@ async function closedSessionSeconds(driverId: string, day: string): Promise<numb
     const online = asDate(raw["went_online_at"]);
     const offline = asDate(raw["went_offline_at"]);
     if (!online || !offline) continue;
+    if (kuwaitDayString(online) !== day) continue;
     seconds += Math.max(0, Math.floor((offline.getTime() - online.getTime()) / 1000));
   }
   return seconds;
 }
 
+async function todayOnlineFromSources(driverId: string, day: string): Promise<number> {
+  const [dayRow, sessionSeconds] = await Promise.all([
+    attendanceDayOn(driverId, day),
+    closedSessionSeconds(driverId, day),
+  ]);
+  const stored = dayRow ? Math.trunc(numberOrNull(dayRow.data["online_seconds"]) ?? 0) : 0;
+  return mergeTodayOnlineSeconds(stored, sessionSeconds);
+}
+
 async function shiftAdherence(driverId: string, today: string): Promise<Dict> {
   const shift = await shiftOnDate(driverId, today);
-  if (!shift) return {};
+  if (!shift) {
+    return { online_seconds: await todayOnlineFromSources(driverId, today) };
+  }
 
   const s1Start = parseShiftTime(shift.session1_start);
   const s1End = parseShiftTime(shift.session1_end);
@@ -798,6 +821,10 @@ export async function loadRiderHomeDashboard(args: {
     primary_weekly_incentive: incentive,
     delivery_rules: rules,
     shift_adherence: adherence,
+    today_online_seconds:
+      typeof adherence["online_seconds"] === "number"
+        ? adherence["online_seconds"]
+        : 0,
     performance,
     banner,
     force_app_update: forceAppUpdate,
@@ -842,13 +869,26 @@ export async function applyRiderCheckout(args: {
       { merge: true },
     );
     const dayRow = await attendanceDayOn(args.driverId, today);
-    if (dayRow && elapsed > 0) {
-      const previous = Math.trunc(numberOrNull(dayRow.data["online_seconds"]) ?? 0);
-      batch.set(
-        db.collection(DRIVER_ATTENDANCE).doc(dayRow.id),
-        { online_seconds: previous + elapsed, last_online_at: stamp, updated_at: stamp },
-        { merge: true },
-      );
+    if (elapsed > 0) {
+      if (dayRow) {
+        const previous = Math.trunc(numberOrNull(dayRow.data["online_seconds"]) ?? 0);
+        batch.set(
+          db.collection(DRIVER_ATTENDANCE).doc(dayRow.id),
+          { online_seconds: previous + elapsed, last_online_at: stamp, updated_at: stamp },
+          { merge: true },
+        );
+      } else {
+        batch.set(db.collection(DRIVER_ATTENDANCE).doc(), {
+          driver_id: args.driverId,
+          attendance_date: today,
+          first_online_at: stamp,
+          last_online_at: stamp,
+          online_seconds: elapsed,
+          status: "online_unvalidated",
+          created_at: stamp,
+          updated_at: stamp,
+        });
+      }
     }
   }
   if (log) {
@@ -1006,18 +1046,31 @@ export const driverSetDutyState = onCall(async (request) => {
       { merge: true },
     );
     const dayRow = await attendanceDayOn(ctx.uid, today);
-    if (dayRow && dayRow.data["first_online_at"] != null) {
-      const previous = Math.trunc(numberOrNull(dayRow.data["online_seconds"]) ?? 0);
-      const keepPresent = dayRow.data["status"] === "present";
-      await db.collection(DRIVER_ATTENDANCE).doc(dayRow.id).set(
-        {
-          online_seconds: previous + elapsed,
+    if (elapsed > 0) {
+      if (dayRow) {
+        const previous = Math.trunc(numberOrNull(dayRow.data["online_seconds"]) ?? 0);
+        const keepPresent = dayRow.data["status"] === "present";
+        await db.collection(DRIVER_ATTENDANCE).doc(dayRow.id).set(
+          {
+            online_seconds: previous + elapsed,
+            last_online_at: stamp,
+            status: keepPresent ? "present" : "online_unvalidated",
+            updated_at: stamp,
+          },
+          { merge: true },
+        );
+      } else {
+        await db.collection(DRIVER_ATTENDANCE).add({
+          driver_id: ctx.uid,
+          attendance_date: today,
+          first_online_at: stamp,
           last_online_at: stamp,
-          status: keepPresent ? "present" : "online_unvalidated",
+          online_seconds: elapsed,
+          status: "online_unvalidated",
+          created_at: stamp,
           updated_at: stamp,
-        },
-        { merge: true },
-      );
+        });
+      }
     }
   }
 

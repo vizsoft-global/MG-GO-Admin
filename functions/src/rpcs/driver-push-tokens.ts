@@ -76,6 +76,60 @@ export function inboxOpenFields(): { dismissed_at: null; opened_at: null } {
   return { dismissed_at: null, opened_at: null };
 }
 
+export function inboxInstant(value: unknown): string | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  if (typeof value === "string" && value.trim() !== "") return value.trim();
+  if (value && typeof value === "object") {
+    const rec = value as Record<string, unknown>;
+    if (typeof rec.toDate === "function") {
+      try {
+        const date = (rec.toDate as () => Date)();
+        return date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
+      } catch {
+        return null;
+      }
+    }
+    const seconds = rec._seconds ?? rec.seconds;
+    if (typeof seconds === "number" && Number.isFinite(seconds)) {
+      return new Date(seconds * 1000).toISOString();
+    }
+  }
+  return null;
+}
+
+export function transactionalInboxItemFields(args: {
+  title: string;
+  body: string;
+  actionParams: Record<string, unknown>;
+}): Dict {
+  return {
+    resolved_title: args.title,
+    resolved_body: args.body,
+    action_type: "open_record",
+    action_params: args.actionParams,
+    ...inboxOpenFields(),
+  };
+}
+
+export function mapInboxListItem(item: Dict, campaign: Dict): Dict {
+  return {
+    campaign_id: item["campaign_id"] ?? null,
+    delivered_at: inboxInstant(item["delivered_at"]),
+    opened_at: inboxInstant(item["opened_at"]),
+    clicked_at: inboxInstant(item["clicked_at"]),
+    received_at: inboxInstant(item["created_at"]) ?? inboxInstant(item["delivered_at"]),
+    title: item["resolved_title"] ?? campaign["title"] ?? null,
+    body: item["resolved_body"] ?? campaign["body"] ?? null,
+    category: item["category"] ?? campaign["category"] ?? null,
+    priority: item["priority"] ?? campaign["priority"] ?? null,
+    action_type: item["action_type"] ?? campaign["action_type"] ?? null,
+    action_params: item["action_params"] ?? campaign["action_params"] ?? null,
+    media: campaign["media"] ?? null,
+    payload_version: campaign["payload_version"] ?? null,
+    screenshot_restricted: campaign["screenshot_restricted"] ?? false,
+  };
+}
+
 export function isInboxVisible(data: { dismissed_at?: unknown }): boolean {
   return data.dismissed_at == null;
 }

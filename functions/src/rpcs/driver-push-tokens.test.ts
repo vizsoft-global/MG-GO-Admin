@@ -2,13 +2,16 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildTransactionalFcmData,
+  inboxInstant,
   inboxOpenFields,
   isDeadFcmCode,
   isInboxUnread,
   isInboxVisible,
+  mapInboxListItem,
   normalizePushPlatform,
   pickLatestActivePushToken,
   pushTokenDocId,
+  transactionalInboxItemFields,
 } from "./driver-push-tokens";
 
 describe("pushTokenDocId", () => {
@@ -93,6 +96,50 @@ describe("isDeadFcmCode", () => {
     assert.equal(isDeadFcmCode("messaging/sender-id-mismatch"), true);
     assert.equal(isDeadFcmCode("messaging/unavailable"), false);
     assert.equal(isDeadFcmCode("unknown"), false);
+  });
+});
+
+describe("transactionalInboxItemFields", () => {
+  it("stamps title, body and action onto the dispatch item", () => {
+    const fields = transactionalInboxItemFields({
+      title: "Delivery verified — 998877",
+      body: "Order 998877 has been verified.",
+      actionParams: { record_type: "delivery", record_id: "abc12345-uuid" },
+    });
+    assert.equal(fields.resolved_title, "Delivery verified — 998877");
+    assert.equal(fields.resolved_body, "Order 998877 has been verified.");
+    assert.equal(fields.action_type, "open_record");
+    assert.equal((fields.action_params as { record_type: string }).record_type, "delivery");
+    assert.equal(fields.dismissed_at, null);
+    assert.equal(fields.opened_at, null);
+  });
+});
+
+describe("mapInboxListItem", () => {
+  it("keeps a delivery row when the campaign join is empty", () => {
+    const row = mapInboxListItem(
+      {
+        campaign_id: "c1",
+        resolved_title: "Delivery verified — 998877",
+        resolved_body: "Order 998877 has been verified.",
+        action_type: "open_record",
+        action_params: { record_type: "delivery", record_id: "abc" },
+        created_at: { _seconds: 1760500000, _nanoseconds: 0 },
+        delivered_at: { _seconds: 1760500000, _nanoseconds: 0 },
+      },
+      {},
+    );
+    assert.equal(row.title, "Delivery verified — 998877");
+    assert.equal(row.body, "Order 998877 has been verified.");
+    assert.equal((row.action_params as { record_type: string }).record_type, "delivery");
+    assert.equal(row.action_type, "open_record");
+    assert.equal(row.received_at, new Date(1760500000 * 1000).toISOString());
+  });
+});
+
+describe("inboxInstant", () => {
+  it("reads callable Timestamp maps", () => {
+    assert.equal(inboxInstant({ _seconds: 1760500000, _nanoseconds: 0 }), new Date(1760500000 * 1000).toISOString());
   });
 });
 
