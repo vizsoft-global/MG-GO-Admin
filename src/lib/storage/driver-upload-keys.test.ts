@@ -25,6 +25,40 @@ describe("validateDriverUploadRequest esign_signature", () => {
   });
 });
 
+describe("validateDriverUploadRequest request_attachment", () => {
+  it("accepts a JPEG under 10 MB", () => {
+    const result = validateDriverUploadRequest({
+      entityType: "request_attachment",
+      contentType: "image/jpeg",
+      sizeBytes: 1024,
+    });
+    assert.deepEqual(result, { ok: true, entityType: "request_attachment" });
+  });
+
+  it("accepts a PDF", () => {
+    const result = validateDriverUploadRequest({
+      entityType: "request_attachment",
+      contentType: "application/pdf",
+      sizeBytes: 2048,
+    });
+    assert.deepEqual(result, { ok: true, entityType: "request_attachment" });
+  });
+});
+
+describe("buildDriverObjectKey request_attachment", () => {
+  it("uses the drivers request_attachment prefix", () => {
+    const key = buildDriverObjectKey({
+      driverId: "rider-1",
+      entityType: "request_attachment",
+      originalFilename: "invoice.jpg",
+    });
+    assert.match(
+      key ?? "",
+      /^drivers\/rider-1\/request_attachment\/\d{4}-\d{2}-\d{2}\/[0-9a-f-]+\.jpg$/,
+    );
+  });
+});
+
 describe("buildDriverObjectKey esign_signature", () => {
   it("uses the stored rider key", () => {
     assert.equal(

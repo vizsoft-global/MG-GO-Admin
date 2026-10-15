@@ -205,6 +205,7 @@ Migrations: `20260518000000_dpd_core_schema.sql`, `20260518120000_app_settings.s
 | `drivers/{driver_id}/` | `{doc_type}.{ext}` — post OTP link |
 | `partners/{partner_id}/` | `logo.{ext}` — `partners.logo_url` stores object key |
 | `esign-documents/` | `admin/{uuid}.{ext}` unsigned send PDFs; `{uid}/{requestId}/signature.png` rider stamp — prefix is a folder on `dpd-private-prod`, not a GCS bucket |
+| `drivers/{driver_id}/request_attachment/` | `{date}/{uuid}.{ext}` — rider request create / clarify / ack |
 
 Presigned GET for staff UI; see `src/lib/storage/r2-client.ts`.
 
@@ -240,6 +241,8 @@ Change-log format:
 ---
 
 ## Change log
+
+- `[admin+app] 2026-10-15` — **Fuel / refund / asset / sick / document create never reached `driverCreateRequest` after the Firebase cutover.** Those types upload photos first via GCS `driverGetUploadUrl`; `{project}.firebasestorage.app` was never created, so the PUT threw and leave / loan / complaint / salary (no required files) were the only successes after Oct 14. Create / clarify / ack now use admin R2 `/api/driver-uploads/*` (`entityType: request_attachment`, key `drivers/{uid}/request_attachment/{date}/{uuid}.{ext}`). `fetchRequestAttachmentUrl` already prefers `drivers/` on R2. Fuel-fill stills stay GCS. Play required. No CF `--force`.
 
 - `[admin only] 2026-10-14` — **Launcher hub hover, individual eSign preview left, Sent lists unified.** Dashboard tiles zoom the glyph 1.4× on fine-pointer hover (30% under the first 2× pass). The tile stays `overflow-visible` so the EmployeeDesk pending counter is not clipped. V2 send puts the A4 iframe on the left and scales it to the pane; the request detail iframe fills the leftover viewport. Sent requests redirects to `/employeedesk/esign/batches` with All / Batch / Individual scope chips and vertical filter rails. No CF deploy. No Play.
 
