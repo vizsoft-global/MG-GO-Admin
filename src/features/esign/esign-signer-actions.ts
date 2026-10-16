@@ -226,7 +226,7 @@ export async function fetchMyEsignSignatures(readyOnly = true): Promise<{
         ready: Boolean(r.ready),
         declined_reason: r.declined_reason != null ? String(r.declined_reason) : null,
       };
-    }),
+    }).filter((row) => row.signer_status === "pending"),
   };
 }
 
@@ -254,7 +254,13 @@ export async function submitMyEsignSignature(input: {
   });
   if (error) return { ok: false, error: error.message };
   const payload = asRecord(data);
-  if (payload.ok === false) return { ok: false, error: String(payload.error ?? "failed") };
+  if (payload.ok === false) {
+    const code = String(payload.error ?? "failed");
+    if (code === "already_signed") {
+      return { ok: true, counter_signature_state: "signed" };
+    }
+    return { ok: false, error: code };
+  }
   const counterSignatureState = String(
     payload.counter_signature_state ?? "signed",
   ) as EsignCounterSignatureState;

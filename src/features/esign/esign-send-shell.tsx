@@ -697,7 +697,7 @@ export function EsignSendShell({
   const previewCard = (
     <AppListCard
       className={cn(
-        isV2 ? "flex h-full min-h-0 flex-col overflow-hidden p-0" : "space-y-3 p-4",
+        isV2 ? "flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-0" : "space-y-3 p-4",
       )}
     >
       <div
@@ -735,7 +735,7 @@ export function EsignSendShell({
         <LegendDot color="bg-[#0A0A0A]" label={t("sourceFixed")} />
         <LegendDot color={isV2 ? "bg-[#7C3AED]" : "bg-[#EA580C]"} label={t("sourceSigned")} />
       </div>
-      <div className={isV2 ? "min-h-0 flex-1 overflow-hidden px-2 pb-2" : undefined}>
+      <div className={isV2 ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
         {renderPreview(isV2)}
       </div>
     </AppListCard>
@@ -798,12 +798,12 @@ export function EsignSendShell({
         className={cn(
           "grid gap-2",
           isV2
-            ? "min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] lg:items-stretch"
+            ? "min-h-0 flex-1 lg:grid-cols-2 lg:items-stretch"
             : "lg:grid-cols-2 lg:items-start",
         )}
       >
         {isV2 ? previewCard : null}
-        <AppListCard className={cn("space-y-3 p-4", isV2 && "h-full min-h-0 overflow-y-auto")}>
+        <AppListCard className={cn("space-y-3 p-4", isV2 && "h-full min-h-0 min-w-0 overflow-y-auto")}>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>

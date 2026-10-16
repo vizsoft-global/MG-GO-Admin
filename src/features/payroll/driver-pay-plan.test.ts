@@ -227,3 +227,41 @@ describe("parseDriverPayPlan", () => {
     assert.deepEqual(parseDriverPayPlan(stored), plan);
   });
 });
+
+describe("stored plan schema", () => {
+  it("writes the ladder under invalid_ladder, the key the deployed reader uses", () => {
+    const stored = payPlanToFirestore(DEFAULT_DRIVER_PAY_PLAN);
+    assert.deepEqual(stored.invalid_ladder, [7, 21, 120]);
+    assert.equal(
+      "invalid_days_ladder" in stored,
+      false,
+      "the functions reader never looks at invalid_days_ladder",
+    );
+  });
+
+  it("writes the snake_case keys the reader reads", () => {
+    const stored = payPlanToFirestore(DEFAULT_DRIVER_PAY_PLAN);
+    assert.deepEqual(Object.keys(stored).sort(), [
+      "bands",
+      "base_kwd",
+      "floor_kwd",
+      "invalid_ladder",
+      "low_base_kwd",
+      "penalty_bike",
+      "penalty_car",
+      "threshold",
+    ]);
+  });
+
+  it("still reads a plan stored under the legacy camelCase invalidLadder", () => {
+    const { invalid_ladder: _dropped, ...rest } = payPlanToFirestore(DEFAULT_DRIVER_PAY_PLAN);
+    const parsed = parseDriverPayPlan({ ...rest, invalidLadder: [13, 39, 220] });
+    assert.deepEqual(parsed.invalidLadder, [13, 39, 220]);
+  });
+
+  it("ignores an unknown ladder key rather than half-reading it", () => {
+    const { invalid_ladder: _dropped, ...rest } = payPlanToFirestore(DEFAULT_DRIVER_PAY_PLAN);
+    const parsed = parseDriverPayPlan({ ...rest, invalid_days_ladder: [13, 39, 220] });
+    assert.deepEqual(parsed.invalidLadder, DEFAULT_DRIVER_PAY_PLAN.invalidLadder);
+  });
+});

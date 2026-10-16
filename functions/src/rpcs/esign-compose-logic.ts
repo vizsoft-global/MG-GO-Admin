@@ -150,6 +150,157 @@ function resolveStampSlot(input: {
   });
 }
 
+export const STAMP_CORE_IDS = ["signature", "name", "date", "code"] as const;
+export const STAMP_EXTRA_IDS = ["employee_id", "company", "position", "civil_id", "zone"] as const;
+export const STAMP_PIECE_IDS = [...STAMP_CORE_IDS, ...STAMP_EXTRA_IDS] as const;
+export type StampPieceId = (typeof STAMP_PIECE_IDS)[number];
+
+export type StampTextLabels = {
+  name: string;
+  date: string;
+  code: string;
+  employeeId?: string;
+  company?: string;
+  position?: string;
+  civilId?: string;
+  zone?: string;
+};
+
+export type StampPiece = {
+  id: StampPieceId;
+  page: number;
+  xPt: number;
+  yPt: number;
+  wPt: number;
+  hPt: number;
+};
+
+export type StampLayout = { pieces: StampPiece[] };
+
+export type StampTextPlacement = {
+  xPt: number;
+  yPt: number;
+  wPt: number;
+  hPt: number;
+  text: string;
+};
+
+export type StampPlacement = {
+  signature: SignSlot;
+  texts: StampTextPlacement[];
+};
+
+function finiteNumber(value: unknown): number | null {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+/** Saved drag positions. Null when the row has never been placed by hand. */
+export function parseStampLayout(raw: unknown): StampLayout | null {
+  if (!raw || typeof raw !== "object") return null;
+  const piecesRaw = (raw as { pieces?: unknown }).pieces;
+  if (
+    !Array.isArray(piecesRaw) ||
+    piecesRaw.length < STAMP_CORE_IDS.length ||
+    piecesRaw.length > STAMP_PIECE_IDS.length
+  ) {
+    return null;
+  }
+  const pieces: StampPiece[] = [];
+  const seen = new Set<string>();
+  for (const item of piecesRaw) {
+    if (!item || typeof item !== "object") return null;
+    const row = item as Record<string, unknown>;
+    const id = String(row.id ?? "");
+    if (!(STAMP_PIECE_IDS as readonly string[]).includes(id) || seen.has(id)) return null;
+    seen.add(id);
+    const xPt = finiteNumber(row.xPt ?? row.x_pt);
+    const yPt = finiteNumber(row.yPt ?? row.y_pt);
+    const wPt = finiteNumber(row.wPt ?? row.w_pt);
+    const hPt = finiteNumber(row.hPt ?? row.h_pt);
+    const page = finiteNumber(row.page) ?? 1;
+    if (xPt == null || yPt == null || wPt == null || hPt == null) return null;
+    if (wPt < 8 || hPt < 8 || xPt < 0 || yPt < 0 || page < 1) return null;
+    pieces.push({ id: id as StampPieceId, page, xPt, yPt, wPt, hPt });
+  }
+  for (const id of STAMP_CORE_IDS) {
+    if (!seen.has(id)) return null;
+  }
+  return { pieces };
+}
+
+function labelForPiece(id: StampPieceId, labels: StampTextLabels): string {
+  switch (id) {
+    case "signature":
+      return "";
+    case "name":
+      return labels.name;
+    case "date":
+      return labels.date;
+    case "code":
+      return labels.code;
+    case "employee_id":
+      return labels.employeeId ?? "";
+    case "company":
+      return labels.company ?? "";
+    case "position":
+      return labels.position ?? "";
+    case "civil_id":
+      return labels.civilId ?? "";
+    case "zone":
+      return labels.zone ?? "";
+    default: {
+      const exhaustive: never = id;
+      return exhaustive;
+    }
+  }
+}
+
+export function placementFromLayout(
+  layout: StampLayout,
+  labels: StampTextLabels,
+): StampPlacement | null {
+  const signature = layout.pieces.find((piece) => piece.id === "signature");
+  if (!signature) return null;
+  const slot: SignSlot = {
+    id: "employee",
+    role: "employee",
+    page: signature.page,
+    xPt: signature.xPt,
+    yPt: signature.yPt,
+    wPt: signature.wPt,
+    hPt: signature.hPt,
+  };
+  if (!isUsableSlot(slot)) return null;
+  return {
+    signature: slot,
+    texts: layout.pieces
+      .filter((piece) => piece.id !== "signature")
+      .map((piece) => ({
+        xPt: piece.xPt,
+        yPt: piece.yPt,
+        wPt: piece.wPt,
+        hPt: piece.hPt,
+        text: labelForPiece(piece.id, labels),
+      })),
+  };
+}
+
+function clampToPage(
+  box: { xPt: number; yPt: number; wPt: number; hPt: number },
+  pageWidth: number,
+  pageHeight: number,
+) {
+  const wPt = Math.min(Math.max(box.wPt, 8), pageWidth);
+  const hPt = Math.min(Math.max(box.hPt, 8), pageHeight);
+  return {
+    xPt: Math.min(Math.max(0, box.xPt), Math.max(0, pageWidth - wPt)),
+    yPt: Math.min(Math.max(0, box.yPt), Math.max(0, pageHeight - hPt)),
+    wPt,
+    hPt,
+  };
+}
+
 function drawStampInSlot(
   page: PDFPage,
   signature: PDFImage,
@@ -210,6 +361,7 @@ export async function composeSignedPdf(input: {
   slot?: SignSlot;
   kind?: unknown;
   persistedSlots?: unknown;
+  placement?: StampPlacement | null;
 }): Promise<{ pdfBytes: Uint8Array; pageCount: number }> {
   const pdf = await loadDocument(input.sourceBytes, input.sourceKind);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -222,10 +374,48 @@ export async function composeSignedPdf(input: {
   if (pageCount === 0) {
     throw new Error("empty_document");
   }
-  const slot = resolveStampSlot(input);
+  const placement = input.placement ?? null;
+  const slot = placement ? placement.signature : resolveStampSlot(input);
   const pageIndex = Math.min(Math.max(slot.page, 1), pageCount) - 1;
   const page = pages[pageIndex];
-  const captions = input.captions.filter((line) => line.length > 0 && canEncodeWinAnsi(font, line));
-  drawStampInSlot(page, signature, captions, font, slot);
+  if (placement) {
+    drawPlacement(page, signature, font, placement);
+  } else {
+    const captions = input.captions.filter((line) => line.length > 0 && canEncodeWinAnsi(font, line));
+    drawStampInSlot(page, signature, captions, font, slot);
+  }
   return { pdfBytes: await pdf.save(), pageCount };
+}
+
+function drawPlacement(
+  page: PDFPage,
+  signature: PDFImage,
+  font: PDFFont,
+  placement: StampPlacement,
+) {
+  const size = page.getSize();
+  const clamped = clampToPage(placement.signature, size.width, size.height);
+  const slot: SignSlot = { ...placement.signature, ...clamped };
+  if (!isUsableSlot(slot)) throw new Error(INVALID_SIGNATURE_SLOT);
+  const fitted = fitImageInSlot(signature.width, signature.height, slot);
+  page.drawImage(signature, {
+    x: fitted.x,
+    y: fitted.y,
+    width: fitted.w,
+    height: fitted.h,
+  });
+  for (const text of placement.texts) {
+    const line = text.text.trim();
+    if (!line || !canEncodeWinAnsi(font, line)) continue;
+    const box = clampToPage(text, size.width, size.height);
+    const fontSize = Math.min(8, Math.max(6, box.hPt - 3));
+    page.drawText(line, {
+      x: box.xPt,
+      y: box.yPt + Math.max(1, (box.hPt - fontSize) / 2),
+      size: fontSize,
+      font,
+      color: rgb(0.12, 0.14, 0.18),
+      maxWidth: box.wPt,
+    });
+  }
 }

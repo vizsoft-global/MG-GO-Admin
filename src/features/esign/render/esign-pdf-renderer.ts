@@ -88,3 +88,25 @@ export async function renderEsignPdf(
     await page.close();
   }
 }
+
+/** Prints HTML the operator edited, instead of rebuilding it from the template. */
+export async function renderStoredSheetPdf(
+  html: string,
+  browser: Awaited<ReturnType<typeof launchEsignBrowser>>,
+): Promise<Uint8Array> {
+  const page = await browser.newPage();
+  try {
+    await page.setJavaScriptEnabled(false);
+    await page.setContent(html, { waitUntil: "load" });
+    await page.evaluate(fitEsignSinglePage);
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+      pageRanges: "1",
+    });
+    return new Uint8Array(pdf);
+  } finally {
+    await page.close();
+  }
+}

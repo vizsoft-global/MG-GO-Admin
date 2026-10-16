@@ -219,15 +219,17 @@ export function EsignDocumentPreview({
 
   const scale =
     fill && box.w > 0 && box.h > 0
-      ? Math.min(box.w / A4_CSS_WIDTH, box.h / A4_CSS_HEIGHT)
+      ? Math.max(box.w / A4_CSS_WIDTH, box.h / A4_CSS_HEIGHT)
       : FIGMA_PREVIEW_SCALE;
+  const shiftX = fill && box.w > 0 ? (box.w - A4_CSS_WIDTH * scale) / 2 : 0;
+  const shiftY = fill && box.h > 0 ? (box.h - A4_CSS_HEIGHT * scale) / 2 : 0;
 
   return (
     <div
       ref={fillRef}
       className={cn(
         "relative w-full overflow-hidden",
-        fill ? "h-full min-h-0 max-w-none" : "mx-auto max-w-[620px]",
+        fill ? "absolute inset-0 h-full min-h-0 max-w-none" : "mx-auto max-w-[620px]",
         className,
       )}
       style={fill ? undefined : { height: A4_CSS_HEIGHT * FIGMA_PREVIEW_SCALE }}
@@ -239,7 +241,7 @@ export function EsignDocumentPreview({
         style={{
           width: A4_CSS_WIDTH,
           height: A4_CSS_HEIGHT,
-          transform: `scale(${scale})`,
+          transform: `translate(${shiftX}px, ${shiftY}px) scale(${scale})`,
           transformOrigin: "top left",
         }}
         onLoad={(event) => {

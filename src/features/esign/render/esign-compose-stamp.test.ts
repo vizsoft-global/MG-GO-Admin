@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { PDFDocument } from "pdf-lib";
+import { decodePDFRawStream, PDFArray, PDFDocument, PDFRawStream } from "pdf-lib";
 import {
   composeSignedPdf,
   normalizeEsignObjectKey,
@@ -41,8 +41,8 @@ describe("stampSignatureOnLastPage", () => {
     });
     assert.equal(out.pageCount, 1);
     assert.equal(out.droppedCaptions.length, 0);
-    assert.ok(out.stamp.y > 80);
-    assert.ok(out.stamp.x < 400);
+    assert.ok(out.stamp.y > 150);
+    assert.ok(out.stamp.x > 400);
     const loaded = await PDFDocument.load(out.pdfBytes);
     assert.equal(loaded.getPageCount(), 1);
   });
@@ -95,6 +95,54 @@ describe("esign compose image gate", () => {
     const key = "esign-documents/admin/abc.pdf";
     assert.equal(normalizeEsignObjectKey(key), normalizeEsignStorageKey(key));
     assert.equal(normalizeEsignObjectKey(key), "admin/abc.pdf");
+  });
+
+  it("draws a dragged name and date, and skips Arabic text", async () => {
+    const src = await blankPdf();
+    const out = await composeSignedPdf({
+      sourceBytes: src,
+      sourceKind: "pdf",
+      signatureBytes: tinyPng(),
+      signatureKind: "png",
+      captions: [],
+      placement: {
+        signature: {
+          id: "employee",
+          role: "employee",
+          page: 1,
+          xPt: 80,
+          yPt: 700,
+          wPt: 119,
+          hPt: 23,
+        },
+        texts: [
+          { xPt: 80, yPt: 680, wPt: 160, hPt: 11, text: "Sam Test" },
+          { xPt: 80, yPt: 664, wPt: 180, hPt: 11, text: "2026-10-16 07:15 UTC" },
+          { xPt: 80, yPt: 648, wPt: 160, hPt: 11, text: "أحمد" },
+        ],
+      },
+    });
+    const loaded = await PDFDocument.load(out.pdfBytes);
+    const page = loaded.getPages()[0];
+    assert.ok(page);
+    const contents = page.node.Contents();
+    assert.ok(contents);
+    const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
+    const text = refs
+      .map((item) => loaded.context.lookup(item))
+      .filter((stream): stream is PDFRawStream => stream instanceof PDFRawStream)
+      .map((stream) => Buffer.from(decodePDFRawStream(stream).decode()).toString("latin1"))
+      .join("\n");
+    const visible = text.replace(/<([0-9A-Fa-f]+)>/g, (_match, hex: string) => {
+      let decoded = "";
+      for (let i = 0; i < hex.length; i += 2) {
+        decoded += String.fromCharCode(Number.parseInt(hex.slice(i, i + 2), 16));
+      }
+      return decoded;
+    });
+    assert.match(visible, /Sam Test/);
+    assert.match(visible, /2026-10-16 07:15 UTC/);
+    assert.equal(visible.includes("أحمد"), false);
   });
 
   it("stamps a one-page PDF without adding a page", async () => {

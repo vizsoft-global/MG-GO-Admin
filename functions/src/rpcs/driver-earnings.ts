@@ -8,7 +8,9 @@ import {
   computeIncentiveAmount,
   deliveryMatchesRules,
   incentiveBandStart,
+  partnerDailyDpdTarget,
   restaurantDailyDpdTarget,
+  zoneDailyDpdTarget,
   type IncentiveTier,
   type SourceCompanyConfig,
 } from "../core/incentive";
@@ -477,34 +479,91 @@ function restaurantOwnTarget(
   return Math.ceil(sorted[0].dpd_target as number);
 }
 
+/**
+ * Zones that can carry this rider's target: their assigned zone first, then the
+ * zones of the stores they deliver for.
+ *
+ * The second half is the fallback that lets a zone-scoped rule reach a rider
+ * whose own `zone_id` was never filled in. The admin writes the rule against a
+ * zone, not against a rider, so the rider has to be resolved from where they
+ * actually work.
+ */
+function zoneCandidates(
+  driver: Dict,
+  restaurantIds: readonly string[],
+  context: IncentiveContext,
+): string[] {
+  const ids = new Set<string>();
+  const assigned = asString(driver["zone_id"]);
+  if (assigned) ids.add(assigned);
+  const fromStores = [...new Set(restaurantIds)]
+    .map((id) => context.restaurantZoneById.get(id) ?? null)
+    .filter((id): id is string => Boolean(id))
+    .sort();
+  for (const id of fromStores) ids.add(id);
+  return [...ids];
+}
+
+/** The same chain for partner-scoped rules: own partner first, then the stores'. */
+function partnerCandidates(
+  driver: Dict,
+  restaurantIds: readonly string[],
+  context: IncentiveContext,
+): string[] {
+  const ids = new Set<string>();
+  const assigned = asString(driver["partner_id"]);
+  if (assigned) ids.add(assigned);
+  const fromStores = [...new Set(restaurantIds)]
+    .map((id) => context.restaurantPartnerById.get(id) ?? null)
+    .filter((id): id is string => Boolean(id))
+    .sort();
+  for (const id of fromStores) ids.add(id);
+  return [...ids];
+}
+
+/** The first candidate id that resolves a daily target, or null when none does. */
+function firstTarget(
+  ids: readonly string[],
+  resolve: (id: string) => number | null,
+): { id: string; target: number } | null {
+  for (const id of ids) {
+    const target = resolve(id);
+    if (target !== null && target > 0) return { id, target };
+  }
+  return null;
+}
+
 function zoneOwnTarget(zoneId: string, onDate: string, context: IncentiveContext): number | null {
-  const candidates = context.deliveryRules.filter((rule) => {
-    if (rule.status !== "active" || rule.scope_type !== "zone") return false;
-    if ((rule.dpd_target ?? 0) <= 0) return false;
-    if (rule.dpd_period !== null && rule.dpd_period !== undefined && rule.dpd_period !== "daily") {
-      return false;
-    }
-    if (onDate < rule.start_date || onDate > rule.end_date) return false;
-    if (rule.zone_id === zoneId) return true;
-    return (context.deliveryScopesByRule.get(rule.id) ?? []).some((scope) => scope.zone_id === zoneId);
+  return zoneDailyDpdTarget({
+    zoneId,
+    onDate,
+    deliveryRules: context.deliveryRules,
+    deliveryScopesByRule: context.deliveryScopesByRule,
   });
-  if (candidates.length === 0) return null;
-  const sorted = [...candidates].sort((a, b) => {
-    if (a.priority !== b.priority) return b.priority - a.priority;
-    return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
+}
+
+function partnerOwnTarget(
+  partnerId: string,
+  onDate: string,
+  context: IncentiveContext,
+): number | null {
+  return partnerDailyDpdTarget({
+    partnerId,
+    onDate,
+    deliveryRules: context.deliveryRules,
+    deliveryScopesByRule: context.deliveryScopesByRule,
   });
-  return Math.ceil(sorted[0].dpd_target as number);
 }
 
 async function buildDailyDpdTargets(args: {
   driverId: string;
+  driver: Dict;
   today: string;
-  zoneId: string | null;
   restaurantIds: readonly string[];
   deliveries: readonly RawDelivery[];
   context: IncentiveContext;
 }): Promise<Dict[]> {
-  const { driverId, today, zoneId, restaurantIds, deliveries, context } = args;
+  const { driverId, driver, today, restaurantIds, deliveries, context } = args;
   const restaurantMap = await loadDocMap(COLLECTIONS.restaurants, restaurantIds);
   const cards: Dict[] = [];
 
@@ -531,30 +590,71 @@ async function buildDailyDpdTargets(args: {
     });
   }
 
-  if (zoneId) {
-    const target = zoneOwnTarget(zoneId, today, context);
-    if (target !== null && target > 0) {
-      const zoneDoc = (await loadDocMap(COLLECTIONS.zones, [zoneId])).get(zoneId);
-      const zoneName = asString(zoneDoc?.["name"]);
-      if (zoneName) {
-        const completed = deliveries.filter((delivery) => {
-          if (delivery.status !== "verified" || !inDriverDay(delivery, today, false)) return false;
-          const deliveryZone = delivery.zone_id ?? context.restaurantZoneById.get(delivery.restaurant_id ?? "") ?? null;
-          return deliveryZone === zoneId;
-        }).length;
-        const progress = deliveries.filter((delivery) => {
-          if (!PROGRESS_STATUSES.has(delivery.status) || !inDriverDay(delivery, today, true)) return false;
-          const deliveryZone = delivery.zone_id ?? context.restaurantZoneById.get(delivery.restaurant_id ?? "") ?? null;
-          return deliveryZone === zoneId;
-        }).length;
-        cards.push({
-          kind: "zone",
-          name: zoneName,
-          target,
-          completed_today: completed,
-          progress_today: progress,
-        });
-      }
+  // Zone, then partner: two rule scopes the rider inherits rather than owns.
+  // Both resolve through the rider's own assignment first and fall back to the
+  // stores they deliver for, so a rule written above the store level still
+  // reaches the phone (QA: "Delivery rule > Target").
+  const zone = firstTarget(zoneCandidates(driver, restaurantIds, context), (id) =>
+    zoneOwnTarget(id, today, context),
+  );
+  if (zone) {
+    const zoneDoc = (await loadDocMap(COLLECTIONS.zones, [zone.id])).get(zone.id);
+    const zoneName = asString(zoneDoc?.["name"]);
+    if (zoneName) {
+      const zoneOf = (delivery: RawDelivery) =>
+        delivery.zone_id ?? context.restaurantZoneById.get(delivery.restaurant_id ?? "") ?? null;
+      const completed = deliveries.filter(
+        (delivery) =>
+          delivery.status === "verified" &&
+          inDriverDay(delivery, today, false) &&
+          zoneOf(delivery) === zone.id,
+      ).length;
+      const progress = deliveries.filter(
+        (delivery) =>
+          PROGRESS_STATUSES.has(delivery.status) &&
+          inDriverDay(delivery, today, true) &&
+          zoneOf(delivery) === zone.id,
+      ).length;
+      cards.push({
+        kind: "zone",
+        name: zoneName,
+        target: zone.target,
+        completed_today: completed,
+        progress_today: progress,
+      });
+    }
+  }
+
+  const partner = firstTarget(partnerCandidates(driver, restaurantIds, context), (id) =>
+    partnerOwnTarget(id, today, context),
+  );
+  if (partner) {
+    const partnerDoc = (await loadDocMap(COLLECTIONS.partners, [partner.id])).get(partner.id);
+    const partnerName = asString(partnerDoc?.["name"]);
+    if (partnerName) {
+      const partnerOf = (delivery: RawDelivery) =>
+        delivery.partner_id ??
+        context.restaurantPartnerById.get(delivery.restaurant_id ?? "") ??
+        null;
+      const completed = deliveries.filter(
+        (delivery) =>
+          delivery.status === "verified" &&
+          inDriverDay(delivery, today, false) &&
+          partnerOf(delivery) === partner.id,
+      ).length;
+      const progress = deliveries.filter(
+        (delivery) =>
+          PROGRESS_STATUSES.has(delivery.status) &&
+          inDriverDay(delivery, today, true) &&
+          partnerOf(delivery) === partner.id,
+      ).length;
+      cards.push({
+        kind: "partner",
+        name: partnerName,
+        target: partner.target,
+        completed_today: completed,
+        progress_today: progress,
+      });
     }
   }
 
@@ -572,7 +672,7 @@ async function buildDailyDpd(args: {
   deliveries: readonly RawDelivery[];
   context: IncentiveContext;
 }): Promise<Dict | null> {
-  const { driverId, today, restaurantIds, company, companyApplies, deliveries, context } = args;
+  const { driverId, driver, today, restaurantIds, company, companyApplies, deliveries, context } = args;
 
   if (companyApplies) {
     const target = company?.dpd_target ?? null;
@@ -660,6 +760,7 @@ async function buildDailyDpd(args: {
           restaurantId: id,
           onDate: today,
           restaurantZoneId: context.restaurantZoneById.get(id) ?? null,
+          restaurantPartnerId: context.restaurantPartnerById.get(id) ?? null,
           deliveryRules: context.deliveryRules,
           deliveryScopesByRule: context.deliveryScopesByRule,
         }) === target,
@@ -684,6 +785,7 @@ async function buildDailyDpd(args: {
       restaurantId,
       onDate: today,
       restaurantZoneId: context.restaurantZoneById.get(restaurantId) ?? null,
+      restaurantPartnerId: context.restaurantPartnerById.get(restaurantId) ?? null,
       deliveryRules: context.deliveryRules,
       deliveryScopesByRule: context.deliveryScopesByRule,
     });
@@ -707,6 +809,83 @@ async function buildDailyDpd(args: {
       restaurant_name: asString(restaurantMap.get(restaurantId)?.["name"]),
       shift_date: today,
     };
+  }
+
+  // Nothing at store level, so the scopes above the store get their say: a rider
+  // with no store rule — or no store at all — still resolves the target their
+  // zone or partner was given, which keeps an active rule visible on the phone
+  // (QA: "Delivery rule > Target").
+  const dailyRow = (
+    target: number,
+    of: (delivery: RawDelivery) => boolean,
+    names: Dict,
+  ): Dict => {
+    const completed = deliveries.filter(
+      (delivery) =>
+        delivery.status === "verified" && inDriverDay(delivery, today, false) && of(delivery),
+    ).length;
+    const progress = deliveries.filter(
+      (delivery) =>
+        PROGRESS_STATUSES.has(delivery.status) && inDriverDay(delivery, today, true) && of(delivery),
+    ).length;
+    return {
+      target,
+      completed_today: completed,
+      progress_today: progress,
+      remaining: Math.max(0, target - completed),
+      achieved: completed >= target,
+      rule_id: null,
+      ...names,
+      shift_date: today,
+    };
+  };
+
+  const zone = firstTarget(zoneCandidates(driver, restaurantIds, context), (id) =>
+    zoneOwnTarget(id, today, context),
+  );
+  if (zone) {
+    const zoneName = asString(
+      (await loadDocMap(COLLECTIONS.zones, [zone.id])).get(zone.id)?.["name"],
+    );
+    if (zoneName) {
+      return dailyRow(
+        zone.target,
+        (delivery) =>
+          (delivery.zone_id ??
+            context.restaurantZoneById.get(delivery.restaurant_id ?? "") ??
+            null) === zone.id,
+        {
+          restaurant_id: null,
+          restaurant_name: null,
+          zone_id: zone.id,
+          zone_name: zoneName,
+        },
+      );
+    }
+  }
+
+  const partner = firstTarget(partnerCandidates(driver, restaurantIds, context), (id) =>
+    partnerOwnTarget(id, today, context),
+  );
+  if (partner) {
+    const partnerName = asString(
+      (await loadDocMap(COLLECTIONS.partners, [partner.id])).get(partner.id)?.["name"],
+    );
+    if (partnerName) {
+      return dailyRow(
+        partner.target,
+        (delivery) =>
+          (delivery.partner_id ??
+            context.restaurantPartnerById.get(delivery.restaurant_id ?? "") ??
+            null) === partner.id,
+        {
+          restaurant_id: null,
+          restaurant_name: null,
+          partner_id: partner.id,
+          partner_name: partnerName,
+        },
+      );
+    }
   }
 
   return null;
@@ -963,8 +1142,8 @@ export const driverGetExtraEarnings = onCall(async (request) => {
     }),
     buildDailyDpdTargets({
       driverId: ctx.uid,
+      driver: ctx.driver as Dict,
       today,
-      zoneId: asString(ctx.driver["zone_id"]),
       restaurantIds,
       deliveries,
       context,

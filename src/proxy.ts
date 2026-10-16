@@ -16,6 +16,7 @@ const protectedPrefixes = [
   "/live-tracking",
   "/requests",
   "/wrong-actions",
+  "/compliance",
   "/earnings",
   "/delivery-rules",
   "/incentive-rules",

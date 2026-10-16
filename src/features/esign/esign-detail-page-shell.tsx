@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
@@ -17,6 +18,8 @@ import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { esignDocumentHref } from "./esign-storage-key";
 import { EsignSignersEditor } from "./esign-signers-editor";
+import { formatStampInstant } from "./esign-stamp-layout";
+import { EsignStampPlacer, type EsignStampPlacerHandle } from "./esign-stamp-placer";
 import { useEsignDocumentLinks, useEsignRequestDetail } from "./use-esign";
 import type { EsignRequestStatus } from "./types";
 
@@ -94,6 +97,7 @@ function Row({ label, value }: { label: string; value: string }) {
 export function EsignDetailPageShell({ requestId }: { requestId: string }) {
   const t = useTranslations("pages.requests.esign.detail");
   const tCommon = useTranslations("pages.requests.esign");
+  const placerRef = useRef<EsignStampPlacerHandle>(null);
   const { data, isLoading } = useEsignRequestDetail(requestId);
   const { data: links, isLoading: linksLoading } = useEsignDocumentLinks(requestId);
   const request = data?.request;
@@ -130,11 +134,26 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
       ? String(meta.declined_reason)
       : null;
 
-  // Client decision: once a request is signed, the preview shows the stamped copy, the same
-  // one print and download serve. Falling back to the original is still correct while the
-  // composer runs or after it fails — the sidebar says which of the two happened.
+  // A signed request is placed on the filled template stored with the request.
+  // Print and download wait for that placement to be written into the signed PDF.
   const previewUrl = links?.signedDocumentUrl ?? links?.documentUrl ?? null;
   const previewIsSignedCopy = Boolean(links?.signedDocumentUrl);
+  const canPlace =
+    request.status === "signed" && Boolean(links?.documentUrl && links?.signatureUrl);
+  const documentRequestId = request.id;
+
+  async function openSigned(disposition: "inline" | "attachment") {
+    if (canPlace) {
+      const saved = await placerRef.current?.flush();
+      if (!saved) return;
+    }
+    const kind = links?.signedDocumentUrl || canPlace ? "signed" : "document";
+    window.open(
+      `${esignDocumentHref(documentRequestId, kind, disposition)}&v=${Date.now()}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }
 
   return (
     <AppPage>
@@ -153,20 +172,10 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               variant="outline"
               size="sm"
               className="h-9"
-              disabled={!links?.signedDocumentUrl && !links?.documentUrl}
-              // Opens the document itself (signed copy first) — printing this page would only
-              // capture the admin chrome, and the preview iframe is cross-origin.
-              onClick={() =>
-                window.open(
-                  esignDocumentHref(
-                    request.id,
-                    links?.signedDocumentUrl ? "signed" : "document",
-                    "inline",
-                  ),
-                  "_blank",
-                  "noopener",
-                )
-              }
+              disabled={!canPlace && !links?.signedDocumentUrl && !links?.documentUrl}
+              onClick={() => {
+                void openSigned("inline");
+              }}
             >
               <Printer className="me-1.5 h-3.5 w-3.5" />
               {t("print")}
@@ -187,7 +196,26 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
 
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch">
         <AppListCard className="flex min-h-0 flex-col gap-3 bg-muted/30 p-2 lg:h-[calc(100dvh-8rem)]">
-          {previewUrl ? (
+          {canPlace && links?.documentUrl && links.signatureUrl ? (
+            <EsignStampPlacer
+              ref={placerRef}
+              requestId={request.id}
+              signatureUrl={links.signatureUrl}
+              documentKind={request.document_kind}
+              signatureSlots={request.signature_slots}
+              stampLayout={request.stamp_layout}
+              labels={{
+                name: request.signer_display_name?.trim() || "Signed by driver",
+                date: formatStampInstant(request.signed_at),
+                code: request.request_code,
+                employeeId: request.employee_id ?? "",
+                company: request.company_name ?? "",
+                position: request.position ?? "",
+                civilId: request.civil_id ?? "",
+                zone: request.zone_name ?? "",
+              }}
+            />
+          ) : previewUrl ? (
             <div className="flex min-h-0 flex-1 flex-col gap-1">
               <iframe
                 src={previewUrl}
@@ -334,17 +362,13 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             ) : null}
           </AppListCard>
 
-          {links?.signedDocumentUrl ? (
+          {links?.signedDocumentUrl || canPlace ? (
             <Button
               type="button"
               className="h-9 w-full"
-              render={
-                <a
-                  href={esignDocumentHref(request.id, "signed", "attachment")}
-                  target="_blank"
-                  rel="noreferrer"
-                />
-              }
+              onClick={() => {
+                void openSigned("attachment");
+              }}
             >
               <Download className="me-1.5 h-3.5 w-3.5" />
               {t("downloadSignedCopy")}

@@ -125,6 +125,8 @@ export type BuildLayoutInput = {
   employee: EsignEmployeeSnapshot;
   company?: string;
   dateLabel?: string;
+  /** eSign request code (SIG-####). This is the Document ID on every sheet. */
+  requestCode?: string;
 };
 
 /**
@@ -1099,7 +1101,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     title,
     masthead: {
       company: input.company || values.company_name || "MG GO",
-      ref: values.employee_id || "—",
+      ref: input.requestCode?.trim() || "—",
       date: input.dateLabel || "",
     },
     employeeRows,

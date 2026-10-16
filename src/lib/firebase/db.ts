@@ -31,6 +31,8 @@ export const COLLECTIONS = {
   driverLocations: "driver_locations",
   fleetEvents: "fleet_events",
   driverEarningsDaily: "driver_earnings_daily",
+  /** Operations-uploaded Invalid / Rejected / Cancelled rows, keyed `{driverId}_{day}`. */
+  riderComplianceDaily: "rider_compliance_daily",
   driverPayouts: "driver_payouts",
   driverWalletEntries: "driver_wallet_entries",
   notifications: "notifications",

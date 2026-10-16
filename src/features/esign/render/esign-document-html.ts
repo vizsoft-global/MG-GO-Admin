@@ -52,6 +52,8 @@ export type EsignDocumentInput = {
   kind?: unknown;
   company?: string;
   dateLabel?: string;
+  /** eSign request code (SIG-####). Printed as Document ID. Empty until the request exists. */
+  requestCode?: string;
   fontCss?: string;
   logoUrl?: string | null;
   staffLabel?: string;
@@ -114,6 +116,7 @@ export function documentInputToLayout(input: EsignDocumentInput): EsignDocumentL
     employee: input.employee,
     company: input.company,
     dateLabel: input.dateLabel,
+    requestCode: input.requestCode,
   } satisfies BuildLayoutInput);
 }
 
