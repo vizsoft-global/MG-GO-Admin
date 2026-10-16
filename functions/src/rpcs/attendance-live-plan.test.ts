@@ -45,6 +45,12 @@ describe("attendance live plan", () => {
     assert.equal(minutesLateOf(checkIn, start, 30), 0);
     assert.equal(dutyIsOn(true, checkIn, null, "2026-10-13", "2026-10-13"), true);
     assert.equal(dutyIsOn(true, checkIn, new Date(), "2026-10-13", "2026-10-13"), false);
+    assert.equal(dutyIsOn(true, null, null, "2026-10-13", "2026-10-13"), false);
+    // A stale log-date (yesterday's open log) is not on duty today.
+    assert.equal(dutyIsOn(true, checkIn, null, "2026-10-12", "2026-10-13"), false);
+    // The stored flag is ignored: an open check-in reads on-duty even if the
+    // document's cached flag was never refreshed.
+    assert.equal(dutyIsOn(false, checkIn, null, "2026-10-13", "2026-10-13"), true);
     assert.equal(ATTENDANCE_PROJECTION.includes("check_in_at"), true);
     assert.equal(ATTENDANCE_PROJECTION.includes("is_on_duty"), true);
   });

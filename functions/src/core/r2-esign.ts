@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export type FunctionsR2Config = {
   accessKeyId: string;
@@ -96,5 +97,44 @@ export async function putR2Object(
       Body: body,
       ContentType: contentType,
     }),
+  );
+}
+
+/**
+ * Presigned R2 PUT for a rider upload (QA #28).
+ *
+ * The project has no GCS bucket any more — the storage migration moved rider
+ * objects to R2 — so the old `getSignedUrl` on `storage.bucket()` always failed
+ * and every fuel photo reported `upload_failed`. These two helpers hand the app
+ * the same short-lived URL shape it already PUTs to, with no app change.
+ */
+export async function presignR2Put(
+  key: string,
+  contentType: string,
+  expiresInSeconds: number,
+): Promise<string> {
+  const config = r2ConfigFromEnv();
+  if (!config) throw new Error("r2 is not configured");
+  return getSignedUrl(
+    clientFor(config),
+    new PutObjectCommand({
+      Bucket: config.bucketName,
+      Key: key,
+      ContentType: contentType,
+    }),
+    { expiresIn: expiresInSeconds },
+  );
+}
+
+export async function presignR2Get(
+  key: string,
+  expiresInSeconds: number,
+): Promise<string> {
+  const config = r2ConfigFromEnv();
+  if (!config) throw new Error("r2 is not configured");
+  return getSignedUrl(
+    clientFor(config),
+    new GetObjectCommand({ Bucket: config.bucketName, Key: key }),
+    { expiresIn: expiresInSeconds },
   );
 }

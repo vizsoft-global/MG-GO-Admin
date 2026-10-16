@@ -371,19 +371,19 @@ function DeliveriesPageContent() {
     }
     if (status === "verified") {
       toast.success(
-        result.skipped > 0
+        result.failed > 0
           ? t("bulk.verifyPartial", {
               done: `${result.updated}`,
-              skipped: `${result.skipped}`,
+              skipped: `${result.failed}`,
             })
           : t("bulk.verifyDone", { count: `${result.updated}` }),
       );
     } else {
       toast.success(
-        result.skipped > 0
+        result.failed > 0
           ? t("bulk.rejectPartial", {
               done: `${result.updated}`,
-              skipped: `${result.skipped}`,
+              skipped: `${result.failed}`,
             })
           : t("bulk.rejectDone", { count: `${result.updated}` }),
       );

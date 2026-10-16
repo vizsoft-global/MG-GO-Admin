@@ -1,7 +1,7 @@
 import { onCall } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "../core/fs";
-import { COLLECTIONS } from "../core/collections";
-import { kuwaitDayString } from "../core/kuwait";
+import { COLLECTIONS, FIELDS } from "../core/collections";
+import { kuwaitDayRange, kuwaitDayString } from "../core/kuwait";
 import { kuwaitWeekStart } from "../core/money";
 import { loadAppSettings } from "../core/settings";
 import { requireRider, riderError } from "../core/rider";
@@ -19,15 +19,20 @@ import {
 import {
   findActiveShift,
   parseShiftTime,
+  shiftEndAt,
   shiftSessionInstant,
+  shiftStartAt,
   type ShiftRow,
 } from "./driver-shift";
+import { pickMissingAttendanceDenorm, stampAttendanceLogDenorm } from "./attendance-stamp";
 import {
   attendanceDateKey,
   mergeTodayOnlineSeconds,
   pickAttendanceDayRow,
 } from "./attendance-day";
 
+/** `attendance_logs` field names, kept beside the collection constants. */
+const ATT = FIELDS.attendanceLogs;
 const DRIVER_ATTENDANCE = "driver_attendance";
 const HOME_BANNERS = "home_banners";
 const DRIVER_HOME_BANNERS = "driver_home_banners";
@@ -56,6 +61,11 @@ function asDate(value: unknown): Date | null {
 
 function asBool(value: unknown): boolean {
   return value === true;
+}
+
+/** A compliance counter. A missing or non-numeric field is a zero. */
+function asCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
 
 async function assignedRestaurantIds(driverId: string, driver: Dict): Promise<string[]> {
@@ -264,6 +274,41 @@ async function weekDeliveryCount(driverId: string, weekStart: string, today: str
     }
   }
   return count;
+}
+
+type WeekCompliance = { invalid_days: number; rejected_orders: number; cancelled_orders: number };
+
+/**
+ * `rider_compliance_daily/{driverId}_{day}` summed over the Kuwait week.
+ *
+ * Operations upload this after the week is over, so a missing collection or an
+ * empty week is a zero rather than an error — the rider sees 0, not a failed Home.
+ */
+async function weekCompliance(
+  driverId: string,
+  weekStart: string,
+  today: string,
+): Promise<WeekCompliance> {
+  const empty: WeekCompliance = { invalid_days: 0, rejected_orders: 0, cancelled_orders: 0 };
+  try {
+    const days = kuwaitDayRange(weekStart, today);
+    if (days.length === 0) return empty;
+    const col = getFirestore().collection(COLLECTIONS.riderComplianceDaily);
+    const snaps = await getFirestore().getAll(
+      ...days.map((day) => col.doc(`${driverId}_${day}`)),
+    );
+    const totals: WeekCompliance = { ...empty };
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      const raw = (snap.data() ?? {}) as Dict;
+      totals.invalid_days += asCount(raw["invalid_days"]);
+      totals.rejected_orders += asCount(raw["rejected_orders"]);
+      totals.cancelled_orders += asCount(raw["cancelled_orders"]);
+    }
+    return totals;
+  } catch {
+    return empty;
+  }
 }
 
 async function weekOnlineSeconds(
@@ -770,8 +815,17 @@ export async function loadRiderHomeDashboard(args: {
   const restaurantIds = await assignedRestaurantIds(args.uid, args.driver);
   const hideWeekly = await companyHidesWeeklyIncentive(args.driver);
 
-  const [partnerSnap, session, location, earnings, deliveries, onlineSeconds, performance, adherence] =
-    await Promise.all([
+  const [
+    partnerSnap,
+    session,
+    location,
+    earnings,
+    deliveries,
+    onlineSeconds,
+    performance,
+    adherence,
+    compliance,
+  ] = await Promise.all([
       partnerId
         ? getFirestore().collection(COLLECTIONS.partners).doc(partnerId).get()
         : Promise.resolve(null),
@@ -782,6 +836,7 @@ export async function loadRiderHomeDashboard(args: {
       weekOnlineSeconds(args.uid, weekStart, today, now),
       performanceCounts(args.uid),
       shiftAdherence(args.uid, today),
+      weekCompliance(args.uid, weekStart, today),
     ]);
 
   const partner = partnerSnap?.exists ? ((partnerSnap.data() ?? {}) as Dict) : {};
@@ -817,6 +872,9 @@ export async function loadRiderHomeDashboard(args: {
       earnings_kwd: earnings,
       deliveries_count: deliveries,
       online_seconds: onlineSeconds,
+      invalid_days: compliance.invalid_days,
+      rejected_orders: compliance.rejected_orders,
+      cancelled_orders: compliance.cancelled_orders,
     },
     primary_weekly_incentive: incentive,
     delivery_rules: rules,
@@ -841,10 +899,12 @@ export async function applyRiderCheckout(args: {
   const db = getFirestore();
   const today = kuwaitDayString(args.now);
   const stamp = Timestamp.fromDate(args.now);
-  const [log, open, location] = await Promise.all([
+  const [log, open, location, driverSnap, profileSnap] = await Promise.all([
     attendanceLogOn(args.driverId, today),
     openOnlineSession(args.driverId),
     locationOf(args.driverId),
+    db.collection(COLLECTIONS.drivers).doc(args.driverId).get(),
+    db.collection(COLLECTIONS.profiles).doc(args.driverId).get(),
   ]);
   const batch = db.batch();
   if (args.keepDutyWrite !== false) {
@@ -892,14 +952,26 @@ export async function applyRiderCheckout(args: {
     }
   }
   if (log) {
+    const old = log.data ?? {};
     batch.set(
       db.collection(COLLECTIONS.attendanceLogs).doc(log.id),
       {
+        // Clocking out is a duty change and the last chance to repair a log
+        // that was written before the identity denorm existed.
+        ...pickMissingAttendanceDenorm(
+          old,
+          stampAttendanceLogDenorm({
+            driver: (driverSnap.data() ?? {}) as Dict,
+            profile: profileSnap.exists ? ((profileSnap.data() ?? {}) as Dict) : null,
+            isOnDuty: false,
+          }),
+        ),
+        [ATT.isOnDuty]: false,
         check_out_at: stamp,
         check_out_reason: args.reason,
         updated_at: stamp,
         distance_meters:
-          numberOrNull(location["distance_today_meters"]) ?? log.data["distance_meters"] ?? null,
+          numberOrNull(location["distance_today_meters"]) ?? old["distance_meters"] ?? null,
       },
       { merge: true },
     );
@@ -930,6 +1002,7 @@ export const driverSetDutyState = onCall(async (request) => {
   const archivedAt = driver["archived_at"];
   const status = asString(driver["status"]);
 
+  let activeShift: ShiftRow | null = null;
   if (isOnDuty || isOnline) {
     if (archivedAt != null) {
       throw riderError("failed-precondition", "driver_archived");
@@ -937,8 +1010,8 @@ export const driverSetDutyState = onCall(async (request) => {
     if (status !== "active") {
       throw riderError("failed-precondition", "inactive");
     }
-    const shift = await findActiveShift(ctx.uid, now);
-    if (!shift) {
+    activeShift = await findActiveShift(ctx.uid, now);
+    if (!activeShift) {
       throw riderError("failed-precondition", "shift_required");
     }
   }
@@ -958,15 +1031,27 @@ export const driverSetDutyState = onCall(async (request) => {
       updated_at: stamp,
     };
     const zoneId = asString(driver["zone_id"]);
+    // Identity and the shift window are denormalised at clock-in so the admin
+    // Attendance list never joins `profiles` just to print a rider's name.
+    const denorm = stampAttendanceLogDenorm({
+      driver,
+      profile: ctx.profile,
+      isOnDuty: true,
+      scheduledStart: activeShift ? shiftStartAt(activeShift) : null,
+      scheduledEnd: activeShift ? shiftEndAt(activeShift) : null,
+    });
     if (existing) {
-      const keepLeave = existing.data["status"] === "on_leave";
+      const old = existing.data ?? {};
+      const keepLeave = old["status"] === "on_leave";
       await db
         .collection(COLLECTIONS.attendanceLogs)
         .doc(existing.id)
         .set(
           {
             ...payload,
-            check_in_at: existing.data["check_in_at"] ?? stamp,
+            ...pickMissingAttendanceDenorm(old, denorm),
+            [ATT.isOnDuty]: true,
+            check_in_at: old["check_in_at"] ?? stamp,
             status: keepLeave ? "on_leave" : "present",
           },
           { merge: true },
@@ -981,6 +1066,7 @@ export const driverSetDutyState = onCall(async (request) => {
     } else {
       const created = await db.collection(COLLECTIONS.attendanceLogs).add({
         ...payload,
+        ...denorm,
         check_in_at: stamp,
         status: "present",
         created_at: stamp,

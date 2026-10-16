@@ -36,6 +36,11 @@ import {
   type AttendanceRow,
 } from "./attendance-shared";
 import { applyAttendanceRollup } from "../core/rollups";
+import {
+  attendanceIdentityMissing,
+  pickMissingAttendanceDenorm,
+  stampAttendanceLogDenorm,
+} from "./attendance-stamp";
 
 const ATT = FIELDS.attendanceLogs;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -212,6 +217,24 @@ function serializeLog(id: string, raw: Dict): Dict {
   return out;
 }
 
+async function missingAttendanceDenorm(driverId: unknown, existing: Dict): Promise<Dict> {
+  if (typeof driverId !== "string" || driverId.length === 0) return {};
+  if (!attendanceIdentityMissing(existing)) return {};
+  const db = getFirestore();
+  const [driverSnap, profileSnap] = await Promise.all([
+    db.collection(COLLECTIONS.drivers).doc(driverId).get(),
+    db.collection(COLLECTIONS.profiles).doc(driverId).get(),
+  ]);
+  return pickMissingAttendanceDenorm(
+    existing,
+    stampAttendanceLogDenorm({
+      driver: (driverSnap.data() ?? {}) as Dict,
+      profile: (profileSnap.data() ?? {}) as Dict,
+      isOnDuty: false,
+    }),
+  );
+}
+
 export const adminCorrectAttendance = onCall(async (request) => {
   const staff = await requireStaff(request, "attendance.manage");
   const data = (request.data ?? {}) as Data;
@@ -246,6 +269,7 @@ export const adminCorrectAttendance = onCall(async (request) => {
       throw new HttpsError("invalid-argument", "invalid_times");
     }
     const patch: Dict = {
+      ...(await missingAttendanceDenorm(old[ATT.driverId], old)),
       [ATT.checkInAt]: effectiveIn ? Timestamp.fromDate(effectiveIn) : null,
       [ATT.checkOutAt]: checkOut ? Timestamp.fromDate(checkOut) : null,
       [ATT.checkOutReason]: checkOut
@@ -290,6 +314,7 @@ export const adminCorrectAttendance = onCall(async (request) => {
       throw new HttpsError("invalid-argument", "invalid_times");
     }
     const patch: Dict = {
+      ...(await missingAttendanceDenorm(driverId, old)),
       [ATT.checkInAt]: effectiveIn ? Timestamp.fromDate(effectiveIn) : null,
       [ATT.checkOutAt]: checkOut ? Timestamp.fromDate(checkOut) : null,
       [ATT.checkOutReason]: checkOut
@@ -313,15 +338,13 @@ export const adminCorrectAttendance = onCall(async (request) => {
   const driver = (driverSnap.data() ?? {}) as Dict;
   const ref = logs.doc();
   const row: Dict = {
+    ...(await missingAttendanceDenorm(driverId, {})),
     [ATT.driverId]: driverId,
     [ATT.logDate]: logDate,
     [ATT.checkInAt]: checkIn ? Timestamp.fromDate(checkIn) : null,
     [ATT.checkOutAt]: checkOut ? Timestamp.fromDate(checkOut) : null,
     [ATT.checkOutReason]: reason,
     [ATT.status]: status ?? "present",
-    [ATT.driverName]: driver[FIELDS.drivers.name] ?? null,
-    [ATT.driverCode]: driver[FIELDS.drivers.driverCode] ?? null,
-    [ATT.employeeId]: driver[FIELDS.drivers.employeeId] ?? null,
     [ATT.zoneId]: driver[FIELDS.drivers.zoneId] ?? null,
     [ATT.zoneName]: driver[FIELDS.drivers.zoneName] ?? null,
     [ATT.partnerId]: driver[FIELDS.drivers.partnerId] ?? null,

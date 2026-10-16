@@ -80,7 +80,7 @@ async function loadLiveDrivers(): Promise<DriverRow[]> {
   return rows;
 }
 
-/** The union of `driver_groups.member_ids` — the mirror of `driver_group_members`. */
+/** The union of `driver_groups.member_ids` and the `driver_group_members` junction. */
 async function loadGroupMemberIds(groupIds: string[]): Promise<Set<string>> {
   const members = new Set<string>();
   const ids = [...new Set(groupIds.filter(isDocumentId))];
@@ -98,6 +98,20 @@ async function loadGroupMemberIds(groupIds: string[]): Promise<Set<string>> {
       for (const value of raw) {
         if (typeof value === "string" && value.length) members.add(value);
       }
+    }
+  }
+
+  // QA #37: `member_ids` is a mirror the panel used to leave stale, which made a
+  // group resolve to no recipients. The junction is the source of truth, so it
+  // is unioned in and a group whose mirror was never written still compiles.
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const snap = await db
+      .collection(COLLECTIONS.driverGroupMembers)
+      .where("group_id", "in", ids.slice(i, i + ID_CHUNK))
+      .get();
+    for (const doc of snap.docs) {
+      const driverId = doc.data()["driver_id"];
+      if (typeof driverId === "string" && driverId.length) members.add(driverId);
     }
   }
   return members;

@@ -6216,7 +6216,11 @@
           "medical_documents_required": "Medical documents are required for sick / accident requests",
           "invalid_option": "Choose a valid {field}",
           "field_required": "{field} is required",
+          "number_too_large": "{field} is too large",
+          "number_too_small": "{field} is too small",
+          "quantity_too_large": "Quantity cannot exceed 100",
           "date_in_past": "Needed-by cannot be earlier than today",
+          "salary_amount_required": "Enter at least one amount — expected or received",
           "kind_required": "Please upload the required attachment.",
           "invalid_attachment_type": "Use a JPEG, PNG, WebP, or PDF attachment",
           "invalid_attachment_size": "Each attachment must be 10 MB or smaller",
@@ -7433,6 +7437,7 @@
       },
       "errors": {
         "saveFailed": "Could not save campaign.",
+        "templateSaveFailed": "Could not save the template. Please try again.",
         "not_authorized": "You do not have permission for this action.",
         "approval_required": "This campaign requires approval before sending.",
         "empty_audience": "No recipients matched the selected filters.",
@@ -8596,6 +8601,91 @@
       "back": "Back to dashboard"
     },
     "payroll": {
+      "payPlan": {
+        "title": "Driver pay plan",
+        "hint": "The base, band rates and penalties the rider app's Pay calculator reads. Saved per driver; the phone recalculates locally.",
+        "loading": "Loading the pay plan…",
+        "readOnly": "You have read-only access to the pay plan.",
+        "currency": "KWD",
+        "actions": {
+          "save": "Save",
+          "saving": "Saving…",
+          "saved": "Saved",
+          "reset": "Discard changes"
+        },
+        "plan": {
+          "title": "Base and floor",
+          "hint": "Everyone earns the base. Riders below the threshold drop to the low base, and the floor is the smallest payable amount.",
+          "base": "Base (KWD)",
+          "lowBase": "Base under threshold (KWD)",
+          "threshold": "Orders for the full base",
+          "thresholdHint": "Below this many orders the low base applies.",
+          "floor": "Floor (KWD)",
+          "floorHint": "Final pay never goes below this."
+        },
+        "bands": {
+          "title": "Order bands",
+          "hint": "Per-order rates above the threshold. Bands must be contiguous and only the last one stays open.",
+          "from": "From",
+          "to": "To",
+          "rate": "Rate",
+          "add": "Add band",
+          "remove": "Remove band",
+          "open": "Open"
+        },
+        "penalties": {
+          "title": "Vehicle penalties",
+          "hint": "Deducted per band order for the rider's vehicle type.",
+          "bike": "Bike (KWD)",
+          "car": "Car (KWD)"
+        },
+        "ladder": {
+          "title": "Invalid-day ladder",
+          "hint": "Deduction by the number of invalid days in the month.",
+          "one": "1–6 invalid days (KWD)",
+          "two": "7–20 invalid days (KWD)",
+          "three": "21 or more invalid days (KWD)"
+        },
+        "vehicle": {
+          "bike": "Bike",
+          "car": "Car"
+        },
+        "preview": {
+          "title": "Preview",
+          "hint": "A worked example. The phone recalculates from these values for whichever month the rider opens.",
+          "referenceHint": "The saved orders stay as the calculator's starting point.",
+          "orders": "Orders",
+          "ordersToNext": "{count} orders to the next band",
+          "vehicle": "Vehicle",
+          "gross": "Gross (KWD)",
+          "orderPenalty": "Order penalty (KWD)",
+          "invalidDays": "Invalid days",
+          "invalidPenalty": "Invalid-day penalty (KWD)",
+          "rejected": "Rejected orders",
+          "cancelled": "Cancelled orders",
+          "notTaken": "Orders not taken",
+          "base": "Base (KWD)",
+          "final": "Final pay (KWD)"
+        },
+        "errors": {
+          "load_failed": "Could not load the pay plan.",
+          "unknown": "Could not save the pay plan.",
+          "overlap": "Two bands overlap.",
+          "gap": "There is a gap between bands.",
+          "threshold": "The first band must start at the threshold.",
+          "open_end": "Only the last band may stay open.",
+          "rate": "Enter a rate for every band.",
+          "ladder": "Invalid-day deductions must increase down the ladder.",
+          "not_authorized": "You do not have permission to edit the pay plan.",
+          "not_configured": "The pay plan store is not configured.",
+          "save_failed": "Could not save the pay plan."
+        },
+        "warnings": {
+          "low_performance": "Below the full-base threshold, so the low base applies.",
+          "termination_next_month": "Low performance with invalid days — the app warns about termination next month.",
+          "floor": "The floor limited the deduction."
+        }
+      },
       "title": "Payroll",
       "subtitle": "Monthly attendance, efficiency and the request approvals behind them",
       "tabPayroll": "Payroll",

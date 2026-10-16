@@ -307,6 +307,10 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "driverGetTodayShift",
     "driverSubmitDailyShift"
   ],
+  "./rpcs/driver-pay": [
+    "driverGetPayCalculator",
+    "adminNotifyComplianceRefresh"
+  ],
   "./rpcs/driver-deliveries": [
     "driverGetActivePickup",
     "driverCreatePickup",

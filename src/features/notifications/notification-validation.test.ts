@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   getAudienceStepBlockReason,
+  isActionStepValid,
   isAudienceStepValid,
   type AudienceStepInput,
 } from "./notification-validation";
@@ -83,11 +84,31 @@ describe("isAudienceStepValid group mode", () => {
   });
 });
 
+describe("isActionStepValid", () => {
+  it("accepts a plain screen jump and rejects a half-configured one", () => {
+    assert.equal(isActionStepValid({ preset: "open_home", screen: "home" }), true);
+    assert.equal(isActionStepValid({ preset: "open_deliveries", screen: "deliveries" }), true);
+    // open_record needs both halves of the target.
+    assert.equal(isActionStepValid({ preset: "open_record", module: "deliveries" }), false);
+    assert.equal(
+      isActionStepValid({ preset: "open_record", module: "deliveries", recordId: "d-1" }),
+      true,
+    );
+    // open_url needs an absolute URL.
+    assert.equal(isActionStepValid({ preset: "open_url", url: "dpd.com" }), false);
+    assert.equal(isActionStepValid({ preset: "open_url", url: "https://dpd.com" }), true);
+    // advanced payload must parse when present, and may be absent.
+    assert.equal(isActionStepValid({ preset: "advanced" }), true);
+    assert.equal(isActionStepValid({ preset: "advanced", payload: "[1,2]" }), false);
+    assert.equal(isActionStepValid({ preset: "advanced", payload: '{"a":1}' }), true);
+    assert.equal(isActionStepValid({ preset: "advanced", payload: "nope" }), false);
+  });
+});
+
 describe("getAudienceStepBlockReason", () => {
   it("asks to select a target when no group is chosen", () => {
     assert.equal(getAudienceStepBlockReason(audience()), "select_target");
   });
-
   it("asks to select a target when selected ids are unknown", () => {
     assert.equal(
       getAudienceStepBlockReason(audience({ groupIds: ["missing"] })),

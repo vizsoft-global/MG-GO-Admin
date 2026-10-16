@@ -76,7 +76,7 @@ export function TemplatesListPageShell() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Link
                           href={`/${locale}/notifications/templates/${tpl.id}`}
-                          className="font-medium text-accent hover:underline"
+                          className="font-medium text-foreground hover:underline"
                         >
                           {tpl.name}
                         </Link>

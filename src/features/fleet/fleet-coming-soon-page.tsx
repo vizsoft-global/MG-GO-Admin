@@ -1,6 +1,9 @@
 "use client";
 
+"use client";
+
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 
 export function FleetComingSoonPage({
   title,
@@ -9,9 +12,14 @@ export function FleetComingSoonPage({
   title: string;
   subtitle: string;
 }) {
+  const withHub = useFleetBreadcrumbs();
   return (
     <AppPage>
-      <AppPageHeader title={title} description={subtitle} />
+      <AppPageHeader
+        breadcrumbs={withHub({ label: title })}
+        title={title}
+        description={subtitle}
+      />
       <AppListCard>
         <AppEmptyState
           title={title}

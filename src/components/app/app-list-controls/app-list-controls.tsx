@@ -13,6 +13,7 @@ import {
 import { SegmentOption } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
 import type { ListGroupByOption, ListSearchFieldOption, ListViewMode } from "./types";
+import { searchClearVisible } from "./search-match";
 
 export function AppListControls({
   searchValue,
@@ -98,14 +99,15 @@ export function AppListControls({
               className="h-9 rounded-lg bg-background ps-8 pe-8 text-xs"
               aria-label={searchAriaLabel ?? searchPlaceholder}
             />
-            {searchValue ? (
+            {searchClearVisible(searchValue) ? (
               <button
                 type="button"
                 onClick={() => onSearchChange("")}
-                className="absolute end-1.5 top-1/2 z-10 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted"
+                className="absolute end-1.5 top-1/2 z-10 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label={clearSearchLabel ?? "Clear"}
+                title={clearSearchLabel ?? "Clear"}
               >
-                <X className="h-3 w-3" />
+                <X className="h-3.5 w-3.5" />
               </button>
             ) : null}
           </div>

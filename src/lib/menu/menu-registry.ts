@@ -465,7 +465,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   },
   {
     id: "fleet-rj",
-    defaultLabel: "RJ",
+    defaultLabel: "RJ – Rejected Requests",
     defaultIcon: "FileText",
     href: "/fleet/rj",
     defaultGroup: "Fleet",

@@ -70,7 +70,7 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
       ),
     ),
   ];
-  if (ids.length === 0) return { updated: 0, skipped: 0, failed: 0 };
+  if (ids.length === 0) return { updated: 0, skipped: 0, already: 0, failed: 0 };
   if (ids.length > MAX_IDS) throw new HttpsError("invalid-argument", "too_many");
 
   const db = getFirestore();
@@ -145,17 +145,27 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
       orderId: string | null;
     }> = [];
     let updated = 0;
+    let already = 0;
+    let failed = 0;
 
     for (const snap of snaps) {
-      if (!snap.exists) continue;
+      if (!snap.exists) {
+        failed += 1;
+        continue;
+      }
       const raw = snap.data() ?? {};
       const current = asString(raw[FIELDS.deliveries.status]);
       const isDecidable = current !== null && DECIDABLE_STATUSES.includes(current);
+      const isAlready = current === status;
 
-      // A row that is neither decidable nor already at the target keeps its own
-      // status, so it contributes nothing here — matching the SQL's WHERE.
-      const resultingStatus: string | null = isDecidable ? status : current;
-      if (resultingStatus !== status) continue;
+      if (!isDecidable && !isAlready) {
+        failed += 1;
+        continue;
+      }
+
+      if (isAlready) {
+        already += 1;
+      }
 
       if (isDecidable) {
         const patch: Record<string, unknown> = {
@@ -195,7 +205,7 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
       }
     }
 
-    return { updated, dayKeys, touches };
+    return { updated, already, failed, dayKeys, touches };
   });
 
   if (status === "verified" && changed.dayKeys.size > 0) {
@@ -263,7 +273,8 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
 
   return {
     updated: changed.updated,
-    skipped: Math.max(0, ids.length - changed.updated),
-    failed: 0,
+    skipped: changed.already,
+    already: changed.already,
+    failed: changed.failed,
   };
 });

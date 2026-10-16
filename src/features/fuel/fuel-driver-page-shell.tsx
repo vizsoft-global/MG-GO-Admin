@@ -14,6 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -45,6 +46,7 @@ type DriverFuelTab = "transactions" | "fuel" | "fuel_refund";
 
 export function FuelDriverPageShell({ driverId }: { driverId: string }) {
   const t = useTranslations("pages.fuel");
+  const withHub = useFleetBreadcrumbs();
   const statusT = useTranslations("pages.requests.status");
   const router = useRouter();
   const [mode, setMode] = useState<FuelRangeMode>("monthly");
@@ -154,7 +156,7 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
       <AppPageHeader
         title={driverName}
         description={[employeeId, plate, zone].filter(Boolean).join(" · ") || t("driver.subtitle")}
-        breadcrumbs={[{ label: t("title"), href: "/fuel" }, { label: driverName }]}
+        breadcrumbs={[...withHub({ label: t("title"), href: "/fuel" }), { label: driverName }]}
         actions={
           <div className="flex items-center gap-2">
             <ProjectBadge value={projectKey} />

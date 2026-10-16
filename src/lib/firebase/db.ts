@@ -39,6 +39,8 @@ export const COLLECTIONS = {
   deliveryVerifications: "delivery_verifications",
   driverLocationEvents: "driver_location_events",
   driverRestaurants: "driver_restaurants",
+  /** Add Driver / intake mappings. Live linked riders use `driver_restaurants`. */
+  driverIntakeRestaurants: "driver_intake_restaurants",
   driverGroups: "driver_groups",
   sourceCompanies: "source_companies",
   fuelFills: "fuel_fills",

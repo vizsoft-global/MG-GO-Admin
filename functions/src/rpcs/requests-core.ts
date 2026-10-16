@@ -608,6 +608,56 @@ export const adminListRequests = measureOnCall("adminListRequests", async (reque
 // ---------------------------------------------------------------------------
 
 /**
+ * The vehicle a request is about, resolved the way the Fleet drawer resolves it
+ * (QA #29 / #40): the vehicle stamped on the request, else the rider's assigned
+ * vehicle, else the newest vehicle on their fuel fills. Without this the detail
+ * panel printed a hardcoded "—" for plate, model and company.
+ */
+async function loadRequestVehicle(input: {
+  requestVehicleId: string | null;
+  driverVehicleId: string | null;
+  driverId: string | null;
+}): Promise<Dict | null> {
+  const db = getFirestore();
+  let vehicleId = input.requestVehicleId ?? input.driverVehicleId;
+
+  if (!vehicleId && input.driverId) {
+    const fills = await db
+      .collection(COLLECTIONS.fuelFills)
+      .where("driver_id", "==", input.driverId)
+      .limit(50)
+      .get();
+    let newest: { id: string; at: string } | null = null;
+    for (const doc of fills.docs) {
+      const raw = dataOf(doc);
+      const id = textOf(raw["vehicle_id"]);
+      if (id === null) continue;
+      const at = textOf(raw["filled_at"]) ?? "";
+      if (newest === null || at > newest.at) newest = { id, at };
+    }
+    vehicleId = newest?.id ?? null;
+  }
+  if (vehicleId === null) return null;
+
+  const snap = await db.collection(COLLECTIONS.vehicles).doc(vehicleId).get();
+  if (!snap.exists) return null;
+  const row = dataOf(snap);
+  const ownerId = textOf(row["owner_partner_id"]);
+  const ownerSnap = ownerId ? await db.collection(COLLECTIONS.partners).doc(ownerId).get() : null;
+  const owner = ownerSnap?.exists ? dataOf(ownerSnap) : null;
+
+  return {
+    id: vehicleId,
+    plate: textOf(row["reg_number"]),
+    make: textOf(row["make"]),
+    model: textOf(row["model"]),
+    company: textOf(owner?.["name"]) ?? textOf(owner?.["name_en"]),
+    car_type: textOf(row["car_type"]),
+    fuel_company: textOf(row["fuel_company"]),
+  };
+}
+
+/**
  * `admin_get_request` — clears the attention badge, records the reveal of a
  * confidential sender, and returns the request with its staff-only comments,
  * forwards, steps (plus the template's allowed actions), clarifications and
@@ -679,6 +729,12 @@ export const adminGetRequest = onCall(async (request) => {
   ]);
   const zone = zoneSnap?.exists ? dataOf(zoneSnap) : null;
 
+  const vehicle = await loadRequestVehicle({
+    requestVehicleId: textOf(req["vehicle_id"]),
+    driverVehicleId: driver ? textOf(driver["vehicle_id"]) : null,
+    driverId,
+  });
+
   const comments = commentsSnap.docs.map((doc): Dict => ({ id: doc.id, ...dataOf(doc) }));
   comments.sort(byInstant("created_at"));
   const authors = await loadDocMap(
@@ -732,6 +788,7 @@ export const adminGetRequest = onCall(async (request) => {
       project_key: driver ? textOf(driver.project_key) : null,
     },
     confidential_revealed: confidential,
+    vehicle,
     comments: comments.map((c) => {
       const authorId = textOf(c.author_id);
       return {
@@ -929,6 +986,15 @@ export async function validateRequestInput(input: RequestInput): Promise<string 
     trimmedOrNull(jsonText(input.payload.leave_subtype_other)) === null
   ) {
     return "field_required:leave_subtype_other";
+  }
+
+  // Salary justification (QA #25): the two amounts are alternatives. Demanding
+  // both blocked riders who only had one figure; demanding neither let an empty
+  // claim through. At least one, and the field defs no longer mark either.
+  if (input.type === "salary_justification") {
+    const received = trimmedOrNull(jsonText(input.payload.received_amount));
+    const expected = trimmedOrNull(jsonText(input.payload.expected_amount));
+    if (received === null && expected === null) return "salary_amount_required";
   }
 
   const minAttachments = numberOrNull(def.min_attachments);

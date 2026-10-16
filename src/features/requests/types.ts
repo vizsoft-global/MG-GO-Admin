@@ -208,6 +208,22 @@ export type RequestRequester = {
   project_key: string | null;
 };
 
+/**
+ * The vehicle a request is about, resolved the same way the Fleet drawer does:
+ * the stamped request vehicle, else the rider's assigned vehicle, else their
+ * latest fuel fill's. `admin_get_request` enriches it so the detail page no
+ * longer prints a hardcoded "—" (QA #29 / #40).
+ */
+export type RequestVehicle = {
+  id: string;
+  plate: string | null;
+  make: string | null;
+  model: string | null;
+  company: string | null;
+  car_type: string | null;
+  fuel_company: string | null;
+};
+
 export type RequestDetail = {
   id: string;
   request_code: string;
@@ -218,6 +234,8 @@ export type RequestDetail = {
   current_step_order: number | null;
   driver_id: string;
   requester: RequestRequester | null;
+  /** Absent on legacy payloads; the drawer falls back to "—" per row. */
+  vehicle: RequestVehicle | null;
   amount_kwd: number | null;
   start_date: string | null;
   end_date: string | null;

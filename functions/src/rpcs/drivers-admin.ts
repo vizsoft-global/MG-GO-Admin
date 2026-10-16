@@ -41,6 +41,7 @@ import {
   textOrNull,
   type Dict,
 } from "./_shared";
+import { intakeAssigned, restaurantIdsFromEdges } from "./drivers-assignment";
 
 const DRIVER_CODE_COUNTER = "driver_code_seq";
 const DRIVER_CODE_FLOOR = 10000;
@@ -135,28 +136,38 @@ async function pickFreePasscode(db: Firestore, reader: Reader): Promise<string> 
   throw new HttpsError("resource-exhausted", "driver_passcode_collision_retry_exceeded");
 }
 
-/** `intake_has_ops_assignment` — a zone, or at least one active restaurant mapping. */
+/** `intake_has_ops_assignment` — a zone, or at least one published active restaurant. */
 async function intakeOpsAssignment(
   db: Firestore,
   reader: Reader,
   intakeId: string,
   intake: Dict,
 ): Promise<{ assigned: boolean; restaurantIds: string[] }> {
-  const edges = await reader.query(
-    db.collection(COLLECTIONS.driverRestaurants).where("intake_id", "==", intakeId),
-  );
-  const restaurantIds = [
-    ...new Set(
-      edges.docs
-        .map((doc) => textOrNull(dataOf(doc)["restaurant_id"]))
-        .filter((id): id is string => id !== null),
+  const [liveEdges, intakeEdges] = await Promise.all([
+    reader.query(
+      db.collection(COLLECTIONS.driverRestaurants).where("intake_id", "==", intakeId),
     ),
-  ];
-  if (textOrNull(intake["zone_id"]) !== null) return { assigned: true, restaurantIds };
+    reader.query(
+      db.collection(COLLECTIONS.driverIntakeRestaurants).where("intake_id", "==", intakeId),
+    ),
+  ]);
+  const restaurantIds = restaurantIdsFromEdges(
+    [...liveEdges.docs, ...intakeEdges.docs].map((doc) => dataOf(doc)),
+  );
+  const zoneId = textOrNull(intake["zone_id"]);
+  if (zoneId !== null) return { assigned: true, restaurantIds };
+  if (restaurantIds.length === 0) return { assigned: false, restaurantIds };
   const restaurants = await reader.getAll(
     restaurantIds.map((id) => db.collection(COLLECTIONS.restaurants).doc(id)),
   );
-  const assigned = restaurants.some((snap) => snap.exists && dataOf(snap)["is_active"] === true);
+  const assigned = intakeAssigned({
+    zoneId,
+    restaurants: restaurants.map((snap) => ({
+      exists: snap.exists,
+      is_active: dataOf(snap)["is_active"],
+      status: dataOf(snap)["status"],
+    })),
+  });
   return { assigned, restaurantIds };
 }
 

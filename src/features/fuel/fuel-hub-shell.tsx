@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Fuel, ReceiptText, Undo2 } from "lucide-react";
 import { AppPage, AppPageHeader } from "@/components/app";
+import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
@@ -21,6 +22,7 @@ function parseFuelTab(value: string | null): FuelHubTab | null {
 
 export function FuelHubShell({ initialAnchor }: { initialAnchor: string }) {
   const t = useTranslations("pages.fuel");
+  const withHub = useFleetBreadcrumbs();
   const { can } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,6 +39,7 @@ export function FuelHubShell({ initialAnchor }: { initialAnchor: string }) {
   return (
     <AppPage>
       <AppPageHeader
+        breadcrumbs={withHub({ label: t("title") })}
         title={t("title")}
         description={t("subtitle")}
         actions={tab === "log" ? <ClearAllModuleButton entity="fuel" /> : undefined}

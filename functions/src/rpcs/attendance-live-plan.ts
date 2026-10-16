@@ -32,6 +32,15 @@ export function minutesLateOf(
   return Math.max(0, Math.floor((checkIn.getTime() - scheduledStart.getTime()) / 60_000) - graceMinutes);
 }
 
+/**
+ * On duty means: checked in today and not checked out yet.
+ *
+ * `storedOnDuty` is the `is_on_duty` copy denormalised onto the log at
+ * clock-in / clock-out. It is accepted for call-site symmetry but deliberately
+ * not consulted: a log whose flag was never refreshed made the page read
+ * "Off Duty" for a rider the app had clocked in. The check-in pair is the fact;
+ * the flag is only a cache of the same fact.
+ */
 export function dutyIsOn(
   storedOnDuty: boolean,
   checkIn: Date | null,
@@ -39,7 +48,8 @@ export function dutyIsOn(
   logDate: string,
   today: string,
 ): boolean {
-  return storedOnDuty && Boolean(checkIn) && !checkOut && logDate === today;
+  void storedOnDuty;
+  return Boolean(checkIn) && !checkOut && logDate === today;
 }
 
 /**

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Calendar, CalendarDays, CalendarRange, ChevronLeft, ChevronRight, ExternalLink, Loader2, Pencil, SlidersHorizontal } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
   AppListControls,
   fieldSearchMatch,
@@ -45,6 +46,7 @@ export function FuelPageShell({
   embedded?: boolean;
 }) {
   const t = useTranslations("pages.fuel");
+  const withHub = useFleetBreadcrumbs();
   const labels = useListControlLabels();
   const { prefs, update: updateListPrefs } = useListViewPrefs("fuel");
   const { can } = useAuth();
@@ -354,6 +356,7 @@ export function FuelPageShell({
   return (
     <AppPage>
       <AppPageHeader
+        breadcrumbs={withHub({ label: t("title") })}
         title={t("title")}
         description={t("subtitle")}
         actions={<ClearAllModuleButton entity="fuel" />}

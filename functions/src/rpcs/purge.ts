@@ -227,7 +227,7 @@ export async function countCollection(
  */
 export const adminPurgeFilterColumns = onCall(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
-  const entity = typeof data.entity === "string" ? data.entity.trim() : "";
+  const entity = purgeEntityOf(data);
 
   // The catalogue is gated by the entity's own purge slug: a caller who cannot
   // clear the module has no reason to enumerate its filterable columns.
@@ -245,7 +245,7 @@ export const adminPurgeFilterColumns = onCall(async (request) => {
  */
 export const adminPurgePreviewAll = onCall(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
-  const entity = typeof data.entity === "string" ? data.entity.trim() : "";
+  const entity = purgeEntityOf(data);
 
   await requireStaff(request, purgeSlugForEntity(entity));
 
@@ -620,6 +620,14 @@ export function canonicalPurgeEntity(entity: string): string {
     default:
       return entity;
   }
+}
+
+/** Panel Clear-all / filtered purge send `p_entity`; older callers send `entity`. */
+export function purgeEntityOf(data: Record<string, unknown>): string {
+  const raw =
+    (typeof data.entity === "string" ? data.entity.trim() : "") ||
+    (typeof data.p_entity === "string" ? data.p_entity.trim() : "");
+  return canonicalPurgeEntity(raw);
 }
 
 async function requireSuperAdminPurge(request: CallableRequest<unknown>): Promise<void> {
@@ -1179,7 +1187,7 @@ function purgeFilterColumns(entity: string): readonly PurgeFilterColumn[] {
  */
 export const adminPurgeFilteredValues = onCall(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
-  const entity = canonicalPurgeEntity(textOf(data.entity));
+  const entity = purgeEntityOf(data);
   const column = textOf(data.column);
   const filters = filterObjectOf(data.filters);
 
@@ -1212,7 +1220,7 @@ export const adminPurgeFilteredValues = onCall(async (request) => {
 /** `admin_purge_filtered_preview` — the count, the breakdown and a short sample. */
 export const adminPurgeFilteredPreview = onCall(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
-  const entity = canonicalPurgeEntity(textOf(data.entity));
+  const entity = purgeEntityOf(data);
   const filters = filterObjectOf(data.filters);
 
   await requireSuperAdminPurge(request);
@@ -1235,7 +1243,7 @@ export const adminPurgeFilteredPreview = onCall(async (request) => {
 /** `admin_purge_filtered_page` — the review list, ordered deterministically. */
 export const adminPurgeFilteredPage = onCall(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
-  const entity = canonicalPurgeEntity(textOf(data.entity));
+  const entity = purgeEntityOf(data);
   const filters = filterObjectOf(data.filters);
   const offset = Math.max(0, Math.trunc(numberOf(data.offset) ?? 0));
   const limit = Math.min(PURGE_PAGE_MAX, Math.max(1, Math.trunc(numberOf(data.limit) ?? 50)));

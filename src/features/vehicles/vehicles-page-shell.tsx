@@ -22,6 +22,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
   AppListControls,
   GroupedSections,
@@ -144,6 +145,7 @@ export function VehiclesPageShell({
   tab?: string;
 }) {
   const t = useTranslations("pages.vehicles");
+  const withHub = useFleetBreadcrumbs();
   const locale = useLocale();
   const { can } = useAuth();
   const canCreate = can("vehicles.create");
@@ -409,6 +411,7 @@ export function VehiclesPageShell({
   return (
     <AppPage>
       <AppPageHeader
+        breadcrumbs={withHub({ label: t("title") })}
         title={t("title")}
         description={t("subtitle")}
         actions={<ClearAllModuleButton entity="vehicles" />}

@@ -78,7 +78,7 @@ export function AutomationsListPageShell() {
                     <TableCell>
                       <Link
                         href={`/${locale}/notifications/automations/${row.id}`}
-                        className="font-medium text-accent hover:underline"
+                        className="font-medium text-foreground hover:underline"
                       >
                         {row.name}
                       </Link>

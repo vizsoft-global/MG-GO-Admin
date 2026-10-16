@@ -3,6 +3,7 @@ import { getStorage } from "firebase-admin/storage";
 import { getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireRider, riderError } from "../core/rider";
+import { presignR2Get, presignR2Put, r2ConfigFromEnv } from "../core/r2-esign";
 import { pickText, type Dict } from "./_shared";
 
 const STORAGE_BUCKETS = ["fuel-fills", "request-attachments", "esign-documents"] as const;
@@ -45,6 +46,14 @@ function storagePath(bucket: StorageBucket, objectKey: string): string {
   return `${bucket}/${objectKey}`;
 }
 
+/**
+ * A GCS V4 signed URL, plus the reason when signing is not available (QA #28).
+ *
+ * The rider app saw a bare `upload_failed` for every fuel photo, which could not
+ * be told apart from a dead bucket, a missing `iam.serviceAccounts.signBlob`
+ * grant, or a rejected PUT. The stage is logged here and carried in the error
+ * details so the next report names the cause instead of guessing at it.
+ */
 async function signObject(
   action: "read" | "write",
   path: string,
@@ -53,7 +62,8 @@ async function signObject(
   let storage: ReturnType<typeof getStorage>;
   try {
     storage = driverStorageDeps.getStorage();
-  } catch {
+  } catch (error) {
+    console.error("[driver-storage] getStorage failed:", error);
     throw riderError("failed-precondition", "storage_unavailable");
   }
   if (!storage) throw riderError("failed-precondition", "storage_unavailable");
@@ -61,7 +71,8 @@ async function signObject(
   let bucket: ReturnType<typeof storage.bucket>;
   try {
     bucket = storage.bucket();
-  } catch {
+  } catch (error) {
+    console.error("[driver-storage] storage.bucket() failed:", error);
     throw riderError("failed-precondition", "storage_unavailable");
   }
   if (!bucket) throw riderError("failed-precondition", "storage_unavailable");
@@ -76,7 +87,8 @@ async function signObject(
     });
     if (!url) throw new Error("empty_url");
     return { url, expires_in: SIGNED_URL_EXPIRES_IN };
-  } catch {
+  } catch (error) {
+    console.error(`[driver-storage] getSignedUrl(${action}) failed for ${path}:`, error);
     throw riderError("failed-precondition", "storage_unavailable");
   }
 }
@@ -133,7 +145,27 @@ export const driverGetUploadUrl = onCall(async (request) => {
     throw riderError("invalid-argument", "invalid_object_key");
   }
 
-  const signed = await signObject("write", storagePath(bucket, objectKey), contentType);
+  // QA #28: rider storage lives in R2 — this project has no GCS bucket left, so
+  // the old signed URL always failed. The app only needs a URL to PUT to, and an
+  // R2 presigned PUT is exactly that shape, so no app change is required.
+  const storagePathKey = storagePath(bucket, objectKey);
+  if (r2ConfigFromEnv()) {
+    try {
+      const url = await presignR2Put(storagePathKey, contentType, SIGNED_URL_EXPIRES_IN);
+      return {
+        ok: true,
+        url,
+        object_key: objectKey,
+        expires_in: SIGNED_URL_EXPIRES_IN,
+        storage: "r2" as const,
+      };
+    } catch (error) {
+      console.error("[driver-storage] r2 presign(write) failed:", error);
+      throw riderError("failed-precondition", "storage_unavailable");
+    }
+  }
+
+  const signed = await signObject("write", storagePathKey, contentType);
   return { ok: true, url: signed.url, object_key: objectKey, expires_in: signed.expires_in };
 });
 
@@ -147,6 +179,17 @@ export const driverGetDownloadUrl = onCall(async (request) => {
     objectKeyOwnedByRider(ctx.uid, objectKey) || (await riderOwnsForeignKey(ctx.uid, objectKey));
   if (!owned) throw riderError("permission-denied", "not_authorized");
 
-  const signed = await signObject("read", storagePath(bucket, objectKey));
+  const storagePathKey = storagePath(bucket, objectKey);
+  if (r2ConfigFromEnv()) {
+    try {
+      const url = await presignR2Get(storagePathKey, SIGNED_URL_EXPIRES_IN);
+      return { ok: true, url, expires_in: SIGNED_URL_EXPIRES_IN, storage: "r2" as const };
+    } catch (error) {
+      console.error("[driver-storage] r2 presign(read) failed:", error);
+      throw riderError("failed-precondition", "storage_unavailable");
+    }
+  }
+
+  const signed = await signObject("read", storagePathKey);
   return { ok: true, url: signed.url, expires_in: signed.expires_in };
 });

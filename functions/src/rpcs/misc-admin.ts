@@ -132,7 +132,7 @@ export const driverListNotifications = onCall(async (request) => {
     id: doc.id,
     data: (doc.data() ?? {}) as Dict,
   }));
-  if (before) rows = rows.filter((row) => inboxMatchesBefore(row.data, before));
+  if (before) rows = rows.filter((row) => inboxMatchesBefore(row.data, before.toISOString()));
   if (unreadOnly) rows = rows.filter((row) => !row.data["opened_at"]);
   rows.sort((a, b) => inboxListMillis(b.data) - inboxListMillis(a.data));
   rows = rows.slice(0, limit);

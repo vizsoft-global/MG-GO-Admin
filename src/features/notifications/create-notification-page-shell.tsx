@@ -198,11 +198,11 @@ export function CreateNotificationPageShell() {
     return STEPS.slice(0, currentIdx).filter((stepId) => {
       if (stepId === "audience") return isAudienceStepValid(audienceInput);
       if (stepId === "content") return isContentStepValid(title, body);
-      if (stepId === "action") return isActionStepValid();
+      if (stepId === "action") return isActionStepValid(actionFields);
       if (stepId === "delivery") return isDeliveryStepValid(scheduleMode, scheduledFor);
       return false;
     });
-  }, [step, audienceInput, title, body, scheduleMode, scheduledFor]);
+  }, [step, audienceInput, title, body, actionFields, scheduleMode, scheduledFor]);
 
   const canProceed =
     step === "audience"
@@ -210,7 +210,7 @@ export function CreateNotificationPageShell() {
       : step === "content"
         ? isContentStepValid(title, body)
         : step === "action"
-          ? isActionStepValid()
+          ? isActionStepValid(actionFields)
           : step === "delivery"
             ? isDeliveryStepValid(scheduleMode, scheduledFor)
             : true;
@@ -218,9 +218,13 @@ export function CreateNotificationPageShell() {
   const audienceBlockReason =
     step === "audience" && !canProceed ? getAudienceStepBlockReason(audienceInput) : null;
 
+  // QA #6: the Action step used to be optional, so a campaign could be sent with
+  // whatever preset happened to be selected — and the preset itself was reset to
+  // Home by the action-type change, so the label rarely matched the choice.
   const canSubmit =
     completedSteps.includes("audience") &&
     completedSteps.includes("content") &&
+    completedSteps.includes("action") &&
     completedSteps.includes("delivery");
 
   function buildInput() {
@@ -457,7 +461,7 @@ export function CreateNotificationPageShell() {
                     <SelectItem value="__none__">{t("noTemplate")}</SelectItem>
                     {(templates ?? []).map((tpl) => (
                       <SelectItem key={tpl.id} value={tpl.id}>
-                        {tpl.name}
+                        {tpl.name || tpl.title_template || tpl.id}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -520,7 +524,11 @@ export function CreateNotificationPageShell() {
               fields={actionFields}
               onActionTypeChange={(next) => {
                 setActionType(next);
-                setActionFields(parseActionFields(next, {}));
+                // Merge, never replace: the preset picker writes `preset` (and the
+                // preset's own fields) in the same tick. Replacing reset them to the
+                // action type's default — `open_screen` → Home — which is why a
+                // "Deliveries" choice kept previewing as "Home" (QA #6).
+                setActionFields((prev) => ({ ...parseActionFields(next, {}), ...prev }));
               }}
               onFieldChange={(key, value) =>
                 setActionFields((prev) => ({ ...prev, [key]: value }))
