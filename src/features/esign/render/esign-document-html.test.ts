@@ -206,7 +206,7 @@ describe("buildEsignDocumentHtml", () => {
     assert.match(html, /Management Use Only/);
     assert.match(html, /HR \/ Admin Department/);
     assert.match(html, /General Manager/);
-    assert.match(html, /Form Ref\.: MG HR Ref Emp\. 0011/);
+    assert.match(html, /Form Ref: 10421/);
     assert.doesNotMatch(html, /max-width: 56%/);
   });
 
@@ -231,9 +231,8 @@ describe("buildEsignDocumentHtml", () => {
       employee: sampleEmployee(),
     });
     assert.match(html, /data-section="opening"/);
-    assert.match(html, /class="tail"/);
-    assert.match(html, /class="tail-fit"/);
-    assert.match(html, /height: 841\.89pt/);
+    assert.match(html, /class="page-fit"/);
+    assert.match(html, /297mm/);
     assert.doesNotMatch(html, /min-height: 841\.89pt/);
     assert.match(html, /Opening paragraph/);
     assert.match(html, /Please read this notice\./);
@@ -262,7 +261,7 @@ describe("buildEsignDocumentHtml", () => {
     });
     assert.match(html, /data-check-key="written_warning"/);
     assert.match(html, /data-check-key="others"/);
-    assert.match(html, /tick on/);
+    assert.match(html, /class="cb on"/);
     assert.doesNotMatch(html, /One day deduction/);
     assert.doesNotMatch(html, /figma_geom_mismatch/);
   });
@@ -283,10 +282,10 @@ describe("buildEsignDocumentHtml", () => {
       ],
       employee: sampleEmployee(),
     });
-    assert.match(html, /tick on" data-check-key="written_warning"/);
-    assert.match(html, /tick on" data-check-key="deduct_1_day"/);
+    assert.match(html, /class="cb on" data-check-key="written_warning"/);
+    assert.match(html, /class="cb on" data-check-key="deduct_1_day"/);
     assert.match(html, /data-check-key="others"/);
-    assert.doesNotMatch(html, /tick on" data-check-key="others"/);
+    assert.doesNotMatch(html, /class="cb on" data-check-key="others"/);
     assert.doesNotMatch(html, /figma_geom_mismatch/);
   });
 
@@ -309,8 +308,8 @@ describe("buildEsignDocumentHtml", () => {
       employee: sampleEmployee(),
     });
     assert.match(html, /data-section="opening"/);
-    assert.match(html, /sheet-body-fit/);
-    assert.match(html, /height: 841\.89pt/);
+    assert.match(html, /page-fit/);
+    assert.match(html, /297mm/);
     assert.doesNotMatch(html, /min-height: 841\.89pt/);
     assert.match(html, /Leave starts Monday\./);
     assert.match(html, /I confirm\./);
@@ -337,11 +336,11 @@ describe("buildEsignDocumentHtml", () => {
       fields: [],
       employee: sampleEmployee(),
     });
-    assert.match(html, /Employee Authorized signature/);
+    assert.match(html, /Employee Signature/);
     assert.match(html, /Management Use Only/);
-    assert.match(html, /CEO Decision/);
+    assert.match(html, /HR \/ Admin Department/);
     assert.match(html, /للاستخدام الإداري فقط/);
-    assert.match(html, /قرار الرئيس التنفيذي/);
+    assert.doesNotMatch(html, /CEO Decision/);
   });
 
   it("prints a payslip identity grid and amount table without a bottom stamp", () => {
@@ -366,8 +365,8 @@ describe("buildEsignDocumentHtml", () => {
     });
     assert.match(html, /data-payslip="identity"/);
     assert.match(html, /data-payslip="sheet"/);
-    assert.match(html, /Code \/ Name/);
-    assert.match(html, /الرمز \/ الاسم/);
+    assert.match(html, /Description/);
+    assert.match(html, /البيان/);
     assert.match(html, /MGGO Logistics LLC/);
     assert.match(html, /KW81…1041/);
     assert.match(html, /data-payslip-line="actual_working_days"/);
@@ -377,10 +376,10 @@ describe("buildEsignDocumentHtml", () => {
     assert.doesNotMatch(html, /data-section="opening"/);
     assert.doesNotMatch(html, /data-section="declaration"/);
     assert.match(html, /data-signature-band="1"/);
-    assert.match(html, /Employee Sign/);
-    assert.match(html, /Management Sign/);
+    assert.match(html, /Employee Signature/);
+    assert.match(html, /Authorised Signatory/);
     assert.match(html, /توقيع الموظف/);
-    assert.match(html, /توقيع الإدارة/);
+    assert.match(html, /المفوض بالتوقيع/);
   });
 
   it("prints the payslip opening paragraph, declaration, extra fields, and named sign boxes", () => {
@@ -428,14 +427,14 @@ describe("buildEsignDocumentHtml", () => {
       ],
       employee: sampleEmployee(),
     });
-    assert.match(html, /sheet-body-fit/);
+    assert.match(html, /page-fit/);
     assert.match(html, /data-section="opening"/);
     assert.match(html, /This slip covers the month/);
     assert.match(html, /data-section="declaration"/);
     assert.match(html, /I received this payslip/);
     assert.match(html, /data-section="payslip_extra"/);
     assert.match(html, /Night shift/);
-    assert.match(html, /data-logo="1"/);
+    assert.doesNotMatch(html, /data-logo="1"/);
     assert.match(html, /data-payslip-line="deduction_amount_kwd"/);
     assert.match(html, /12\.000/);
     assert.match(html, /data-slot-role="employee"/);
@@ -457,12 +456,11 @@ describe("buildEsignDocumentHtml", () => {
       ],
       employee: sampleEmployee(),
     });
-    assert.match(html, /data-logo="1"/);
-    assert.match(html, /class="logo-img"/);
-    assert.match(html, /grid-template-columns: 140pt 140pt/);
+    assert.doesNotMatch(html, /data-logo="1"/);
+    assert.doesNotMatch(html, /class="logo-img"/);
     assert.match(html, /HR \/ Admin Department/);
     assert.match(html, /إدارة الموارد البشرية \/ الإدارة/);
-    assert.match(html, /Form Ref\.: MG HR Ref Emp\. 0011/);
+    assert.match(html, /Form Ref: 10421/);
     assert.doesNotMatch(html, />Logo</);
     assert.doesNotMatch(html, /Others amount/);
     assert.doesNotMatch(html, /Optional remark/);
@@ -485,10 +483,9 @@ describe("buildEsignDocumentHtml", () => {
     });
     assert.match(html, /data-management="1"/);
     assert.match(html, /data-sheet-foot="1"/);
-    assert.match(html, /data-logo="1"/);
+    assert.doesNotMatch(html, /data-logo="1"/);
     assert.match(html, /mgmt-signs/);
-    assert.match(html, /grid-template-columns: 140pt 140pt/);
-    assert.match(html, /Form Ref\.: MG HR Ref Emp\./);
+    assert.match(html, /Form Ref: 10421/);
     assert.doesNotMatch(html, />Logo</);
     assert.doesNotMatch(html, /Empty note/);
     assert.doesNotMatch(html, /Title echo/);
@@ -504,8 +501,8 @@ describe("buildEsignDocumentHtml", () => {
       employee: sampleEmployee(),
     });
     assert.match(html, /data-sheet-foot="1"/);
-    assert.match(html, /data-logo="1"/);
-    assert.match(html, /Form Ref\.: MG HR Ref Emp\. 0011/);
+    assert.doesNotMatch(html, /data-logo="1"/);
+    assert.match(html, /Form Ref: 10421/);
     assert.doesNotMatch(html, />Logo</);
   });
 
@@ -517,7 +514,7 @@ describe("buildEsignDocumentHtml", () => {
       employee: sampleEmployee(),
     });
     assert.match(html, /data-sheet-foot="1"/);
-    assert.match(html, /data-logo="1"/);
+    assert.doesNotMatch(html, /data-logo="1"/);
     assert.match(html, /payslip-page-foot/);
     assert.doesNotMatch(html, /data-management="1"/);
     assert.doesNotMatch(html, />Logo</);
@@ -534,7 +531,7 @@ describe("buildEsignDocumentHtml", () => {
     assert.match(html, /Sara Ahmed/);
   });
 
-  it("uses a supplied logo url on every document kind", () => {
+  it("never prints a company logo on any document kind", () => {
     for (const kind of ["penalty", "loan", "payslip", "general"] as const) {
       const html = buildEsignDocumentHtml({
         language: "en",
@@ -542,8 +539,9 @@ describe("buildEsignDocumentHtml", () => {
         logoUrl: "https://cdn.example/brand.png",
         employee: sampleEmployee(),
       });
-      assert.match(html, /src="https:\/\/cdn.example\/brand.png"/, kind);
-      assert.match(html, /data-logo="1"/, kind);
+      assert.doesNotMatch(html, /cdn\.example\/brand\.png/, kind);
+      assert.doesNotMatch(html, /data-logo="1"/, kind);
+      assert.doesNotMatch(html, /class="logo-img"/, kind);
     }
   });
 });

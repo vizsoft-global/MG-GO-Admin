@@ -27,17 +27,21 @@ function detectChrome(): string | null {
   return candidates.find((p) => existsSync(p)) ?? null;
 }
 
-function fontFace(family: string, file: string): string {
+function fontFace(family: string, file: string, weight = "400 700"): string {
   const full = path.join(FONT_DIR, file);
   if (!existsSync(full)) return "";
   const b64 = readFileSync(full).toString("base64");
-  return `@font-face{font-family:"${family}";src:url(data:font/ttf;base64,${b64}) format("truetype");font-weight:400 700;font-style:normal;font-display:block;}`;
+  return `@font-face{font-family:"${family}";src:url(data:font/ttf;base64,${b64}) format("truetype");font-weight:${weight};font-style:normal;font-display:block;}`;
 }
 
 export function embeddedFontCss(): string {
   return [
     fontFace("Noto Sans", "NotoSans-Regular.ttf"),
     fontFace("Noto Sans Arabic", "NotoSansArabic-Regular.ttf"),
+    fontFace("Plex", "IBMPlexSansArabic-Regular.ttf", "400"),
+    fontFace("Plex", "IBMPlexSansArabic-Medium.ttf", "500"),
+    fontFace("Plex", "IBMPlexSansArabic-SemiBold.ttf", "600"),
+    fontFace("Plex", "IBMPlexSansArabic-Bold.ttf", "700"),
   ].join("");
 }
 
